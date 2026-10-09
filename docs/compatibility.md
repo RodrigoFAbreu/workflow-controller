@@ -1,6 +1,6 @@
 # Compatibility
 
-> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 This page is the one place that says which Controller release admits which
 Workflow release. Other pages and other repositories link here instead of
@@ -10,7 +10,7 @@ repeating the table.
 
 | Controller | Workflow releases admitted | How |
 |---|---|---|
-| 1.7.0 and later | 2.5.1 and 2.6.0; 2.7.0 and any later release that ships the protocol | 2.5.1 and 2.6.0 by exact release, in legacy mode; every other release by capability, in protocol mode |
+| 1.7.0 and later | 2.5.1 and 2.6.0; 2.7.0 and any later release that ships the protocol (2.8.0 and 2.9.0 are checked; 1.7.1 is the first release that accepts a `warn` check) | 2.5.1 and 2.6.0 by exact release, in legacy mode; every other release by capability, in protocol mode |
 | 1.3.0 to 1.6.x | 2.5.1 and 2.6.0 | by exact release |
 | 1.2.1 and earlier | 2.5.1 | by exact release |
 
@@ -18,7 +18,14 @@ Under 1.7.0 and later, a release is admitted by capability when its installation
 record lists `scripts/workflow_protocol.py` and that script's `describe` answers
 protocol major 1. Workflow 2.7.0 is the first release that does. Controller 1.7.0
 admits 2.8.0 this way, with an advisory about action ids it does not know, and stops
-at the 2.8 automatic gates (see [run](run.md)). It also refuses `explain`, `step` and `run` (exit 20) on a 2.8.0 repository whenever the Workflow's `verify` reports `warn`: for example an unadopted gate policy file, or, while it is the newest adoption, one that lowers a gate. A later Controller release will accept it. Any other release
+at the 2.8 automatic gates (see [run](run.md)). Controller 1.7.1 also admits 2.9.0 and
+accepts the Workflow's `warn` check status as advisory: `explain` shows it and nothing is
+refused. The advisory lists the action ids it cannot launch (`acceptance.satisfy`,
+`implementation.satisfy`, `plan.satisfy` and `pr.apply_review`) and any invented id, and
+stays silent for the four gates it never launches. Controller 1.7.0 refuses `explain`,
+`step` and `run` (exit 20) on a repository whose `verify` reports `warn`: for example an
+unadopted gate policy file, or, while it is the newest adoption, one that lowers a gate.
+Upgrade to 1.7.1. Any other release
 is refused: 2.5.0 and 2.6.1 as not validated, a release older than the 2.5
 line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as

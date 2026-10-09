@@ -15,7 +15,20 @@ Plan revision 2 approved. Implementing under Workflow 2.6.0, one checkpoint per 
   decision's evidence. The unhealthy gate lists the `warn` checks after the failing ones. An unknown status
   still refuses (exit 20). Verified: the CP2 acceptance modules (398 tests), `tests.test_protocol_equivalence`,
   `tests.test_observation_equivalence`, `tests.test_write_containment` and `tests.test_docs` pass.
-- CP3 (documentation, real 2.9.0 check) pending.
+- **CP3 COMPLETE** -- documentation says what 1.7.1 does. Edited: `docs/run.md`, `docs/common-problems.md`,
+  `docs/compatibility.md` (2.9.0 and 1.7.1), `docs/glossary.md`, `docs/guide/troubleshooting.md`; their headers and
+  `tests/test_docs.py` HEADER read "Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0". D1's wording notes
+  applied ("some causes"; `warn` beside the not-admitted exit 20; the adoption-timing advice linked).
+  `docs/guide/commands.md` and `docs/guide/automation.md` agree with D5 and are unchanged.
+  **Real-release check (2026-10-09).** Scratch `git clone` of this branch (1431d15), updated to Workflow 2.9.0 with
+  `workflow-manager --release-version 2.9.0 update .`, plus a committed, unadopted
+  `docs/ai-workflow/GATE_POLICY.json` containing exactly `{"schema_version": 1, "human_approval": true}`. The real
+  `verify` (protocol 1.2) answered `healthy: true` with `gate_policy` status `warn`, detail "...is not adopted and
+  tightens the policy; it takes effect now ...". `explain .` (the plan's `--work-item` flag does not exist; the
+  active item resolves by itself): (a) this branch exited 0 and showed `verify gate_policy: warn: ...` in the
+  decision's evidence, next action `/milestone-implement`; (b) the shared 1.7.0 install exited 20 with
+  "protocol verify gave an answer outside the protocol: $.result.checks[7].status: 'warn' is not one of ['pass',
+  'fail', 'skip']".
 
 The sections below describe the previous milestone and are superseded as CP3 lands.
 

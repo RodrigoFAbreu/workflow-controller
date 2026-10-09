@@ -1,6 +1,6 @@
 # Glossary
 
-> For: anyone reading the Workflow or Controller documentation. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone reading the Workflow or Controller documentation. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 The words these projects use. The first group belongs to the Workflow and is
 worded so that another repository can reuse it unchanged. The second group is
@@ -47,7 +47,7 @@ repository that turns `human_approval` on (all three gates), or sets
 `human: true` for one gate under `gates.<gate>` (for example
 `gates.plan_approval`), gets the person-decides behavior back for those gates.
 Commit the policy file (`docs/ai-workflow/GATE_POLICY.json`), then run `/adopt-gate-policy` in a Claude session; until it is
-adopted, Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20, see [run](run.md#steps)). The Workflow's
+adopted, the Workflow reports `warn`: Controller 1.7.1 and later show it as advisory, and 1.7.0 refuses `explain`, `step` and `run` (exit 20, see [run](run.md#steps), which also has the adoption timing). The Workflow's
 [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it. Two kinds of work item keep a person:
 
 - a version 1 item always has a person for plan and implementation approval;

@@ -1,6 +1,6 @@
 # Run the Controller on a repository
 
-> For: anyone driving a Workflow-managed repository with the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone driving a Workflow-managed repository with the Controller. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 Goal: run the Workflow lifecycle on a [target](glossary.md#target) until the next step only a person may take.
 
@@ -14,7 +14,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
 
 ## Steps
 
-1. Look first. `explain` is read-only and exits 0, including at a gate (it refuses with exit 20, like every command, when the repository is not admitted): it names the pending job files, the next decision with its evidence and, at a gate, what you must do. `inspect` verifies the repository and summarises its Workflow state.
+1. Look first. `explain` is read-only and exits 0, including at a gate (it refuses with exit 20, like every command, when the repository is not admitted, and under Controller 1.7.0 also when `verify` reports `warn`): it names the pending job files, the next decision with its evidence and, at a gate, what you must do. `inspect` verifies the repository and summarises its Workflow state.
 
    ```bash
    workflow-controller inspect .
@@ -61,12 +61,13 @@ Global options go before the subcommand and the repository goes last, as in `wor
      the policy file (`docs/ai-workflow/GATE_POLICY.json`), then run `/adopt-gate-policy` in a
      Claude session, best before a review bundle is generated, for example between milestones
      (adopting at a plan-stage stop makes the plan bundle stale; the adoption preview lists
-     what it will stale). Until it is adopted, Controller 1.7.0 refuses `explain`, `step` and
-     `run` with exit 20 and "protocol verify gave an answer outside the protocol ... 'warn'":
-     the Workflow reports an unadopted policy that tightens as `warn`, which this Controller
-     does not know. Returning a gate to automatic is a lowering adoption. While an adoption
-     that lowers a gate is the newest adoption, Workflow 2.8.0 reports `warn` and Controller
-     1.7.0 refuses the same way; a later Controller release will accept it. The
+     what it will stale). Until it is adopted the Workflow reports the unadopted policy as
+     `warn`. Controller 1.7.1 and later treat a `warn` check as advisory: nothing is refused
+     and `explain` shows the detail as a `verify <check>: warn: ...` line in its evidence.
+     Controller 1.7.0 does not know `warn` and refuses `explain`, `step` and `run` with
+     exit 20 and "protocol verify gave an answer outside the protocol ... 'warn'"; upgrade
+     it. Returning a gate to automatic is a lowering adoption, and while it is the newest
+     adoption Workflow 2.8.0 and later report `warn` too. The
      [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it.
    - At any other gate stop, do what `explain` says, then run again.
 

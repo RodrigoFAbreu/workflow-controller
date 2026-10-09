@@ -29,7 +29,7 @@ check_docs = importlib.util.module_from_spec(_spec)
 sys.modules["check_docs"] = check_docs
 _spec.loader.exec_module(check_docs)
 
-HEADER = "> For: operators. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0."
+HEADER = "> For: operators. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0."
 
 
 class Tree:

@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> For: anyone whose run stopped and the quick fix in common problems was not enough. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone whose run stopped and the quick fix in common problems was not enough. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 [Back to the documentation map](../README.md)
 
@@ -404,8 +404,9 @@ disposition and action beside it.
   <id>` yourself in a Claude session, then run again. To switch the
   repository to human gates, see the Workflow's [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md).
   Commit the policy file, then run `/adopt-gate-policy` in a Claude session; until it is
-  adopted, Controller 1.7.0 refuses `explain`, `step` and `run` (exit 20; see the `'warn'`
-  paragraph below the list). The Workflow's
+  adopted, the Workflow reports `warn`: Controller 1.7.1 and later show it as advisory, and
+  1.7.0 refuses `explain`, `step` and `run` (exit 20; see the `'warn'` paragraph below the
+  list). The adoption timing is under Human gates in [run](../run.md#steps). The Workflow's
   [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it.
 - `functional_evidence_needed`, `pr_evidence_needed`: at a Workflow 2.8 automatic
   acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
@@ -430,15 +431,18 @@ disposition and action beside it.
   job that made progress, or a gate, also resets it.
 
 `protocol verify gave an answer outside the protocol ... 'warn'` (exit 20) is a refusal, not a
-gate: `explain`, `step` and `run` refuse, and nothing is launched. The Workflow's `verify`
-reported a check as `warn`, which Controller 1.7.0 does not know. For example, the gate policy
+gate, and only Controller 1.7.0 gives it: `explain`, `step` and `run` refuse, and nothing is
+launched. The Workflow's `verify` reported a check as `warn`, which 1.7.0 does not know.
+Controller 1.7.1 and later treat `warn` as advisory: they carry on, `explain` shows
+`verify <check>: warn: <detail>` in its evidence, the job record keeps it, and the
+unhealthy gate lists the `warn` checks after the failing ones. A status the protocol has not
+defined is still refused with exit 20. For example, the gate policy
 file (`docs/ai-workflow/GATE_POLICY.json`) is present, committed or not, and not adopted yet:
-commit it, then run `/adopt-gate-policy` in a Claude session, then run again. Two other causes
+commit it, then run `/adopt-gate-policy` in a Claude session, then run again. Some causes
 differ. A review verdict recorded without `--run-ref` is not cleared by any adoption. A
 gate-lowering `warn` lasts while the adoption that lowers the gate is the newest adoption; a
 later adoption that lowers nothing clears it, but do not adopt again only to hide it, because the
-Workflow treats it as the expected signal of a lowered gate. A later Controller release will
-accept the `warn`. To see which check it is, run
+Workflow treats it as the expected signal of a lowered gate. To see which check it is, run
 `python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root . verify` and read the
 `gate_policy` check's detail. See [common problems](../common-problems.md#the-run-refuses-with-protocol-verify-gave-an-answer-outside-the-protocol-and-warn-exit-20).
 

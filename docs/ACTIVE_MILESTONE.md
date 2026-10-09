@@ -16,8 +16,8 @@ follow-up 16), plan revision 2, base commit `5532cdd`. The plan is
   unsupported profile each refused, on a disposable installation. Checked with `tests/workflow_releases/2.9.0/`
   deleted from a copy: the new tests pass, the old ones fail. `python3 -m unittest tests.test_workflow_releases
   tests.test_managed_repo` passes (the live-Manager test is skipped here).
-- **CP2 -- pending.** Documentation and roadmap.
+- **CP2 -- complete (verified).** `docs/guide/development.md` now says the installed tree needs no vendored tree and is checked by capability and `installation.json`; `docs/ROADMAP.md` marks C9d and follow-up 16 complete and the Next list names C8. `docs/compatibility.md` and `docs/update.md` state no vendored-tree requirement, so are unchanged. `tools/check_docs.py` passes; the full suite (`tools/run_tests.py --jobs 2`, 3095 tests) fails only the two Git 2.56 trailer tests (follow-up 12).
 
 ## Next action
 
-`/milestone-implement workflow-controller-installed-release-test-agnostic` for CP2.
+`/milestone-implement workflow-controller-installed-release-test-agnostic` to enter self-review.

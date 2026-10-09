@@ -279,13 +279,14 @@ file's sha256 and executable flag, equal to the Manager's manifest. The
 Workflow-derived inventories (the phase set, the command partition, the
 user-only set, property 5), the decision goldens, the query tests and the
 migration tests all run against these trees, once per admitted release.
-This repository's installed tree is only checked for equality with the
-vendored tree of the release it declares. `InstalledReleaseTest` admits that
-release by capability: either it is validated for legacy mode, or its vendored
-tree lists `scripts/workflow_protocol.py`. Protocol major 1 itself is pinned by
-a separate test that installs every vendored protocol tree into a disposable
-repository. So updating the installed tree through Workflow Manager needs no
-code change once the release's tree is vendored.
+This repository's own installed Workflow needs no vendored tree.
+`InstalledReleaseTest` admits it through the Controller's own capability rule
+(the release manifest, the release contract and the profile check that
+`managed_repo` applies), with no version literal, and checks the installed
+files against the digests and modes in `installation.json`; a modified, missing
+or extra file fails by name. Protocol major 1 itself is pinned by a separate
+test that installs every vendored protocol tree into a disposable repository.
+So updating the installed tree through Workflow Manager needs no code change.
 
 Only `tools/workflow_releases.py` (stdlib only) writes these trees:
 

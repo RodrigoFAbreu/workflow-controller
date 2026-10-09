@@ -917,11 +917,11 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     if target.target_protocol is not None:
         # A protocol target is decided by the Workflow's own `next-action`
         # (orchestration-protocol-v1 C.1), read-only like `evidence.decide`.
-        decision = (protocol_decision.health_gate(target, work_item)
-                    or protocol_decision.decide(target, work_item, base=base))
+        decision, advisories = protocol_decision.decide_after_preflight(target, work_item, base=base)
         if decision.protocol is not None and decision.automatic:
             # The loop guard `step` applies to the decision that stands.
-            decision = job._no_progress_gate(runtime_root, target, work_item, decision) or decision
+            decision = job._no_progress_gate(runtime_root, target, work_item, decision,
+                                             advisories=advisories) or decision
     elif work_item is target_state.NoWorkItemYet:
         decision = decide_no_work_item(target, base=base)
     else:

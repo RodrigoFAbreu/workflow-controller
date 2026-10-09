@@ -461,6 +461,109 @@ class StaticTest(unittest.TestCase):
         self.assertEqual(imported, {"evidence", "protocol", "target_state"})
 
 
+def _verify(healthy: bool, *checks: tuple[str, str, str]) -> protocol.Verify:
+    return protocol.Verify(healthy, tuple(protocol.Check(*check) for check in checks))
+
+
+class WarnAdvisoryTest(_Case):
+    """A ``warn`` check is advisory (warn-status plan D1, D4): shown and
+    recorded, never a gate and never a change to ``healthy``."""
+
+    WARN = ("gate_policy", "warn", "policy not adopted")
+
+    def _preflight(self, health: protocol.Verify):
+        with mock.patch.object(protocol, "verify", return_value=health):
+            return protocol_decision.preflight(self.repo, _item())
+
+    def test_warn_on_a_healthy_repository_is_no_gate_and_one_advisory(self) -> None:
+        gate, advisories = self._preflight(_verify(True, ("state_valid", "pass", "ok"), self.WARN))
+        self.assertIsNone(gate)
+        self.assertEqual(advisories, ("verify gate_policy: warn: policy not adopted",))
+
+    def test_decide_after_preflight_carries_the_advisory_in_the_decision_evidence(self) -> None:
+        answer = protocol.parse_decision(_result(action=_action("plan.author")))
+        with mock.patch.object(protocol, "verify", return_value=_verify(True, self.WARN)), \
+                mock.patch.object(protocol, "next_action", return_value=answer):
+            got, advisories = protocol_decision.decide_after_preflight(self.repo, _item())
+        self.assertTrue(got.automatic)
+        self.assertIn("verify gate_policy: warn: policy not adopted", got.evidence)
+        self.assertEqual(advisories, ("verify gate_policy: warn: policy not adopted",))
+
+    def test_without_a_warn_the_evidence_is_unchanged(self) -> None:
+        answer = protocol.parse_decision(_result(action=_action("plan.author")))
+        plain = protocol_decision.from_answer(self.repo, _item(), answer)
+        with mock.patch.object(protocol, "verify", return_value=_verify(True, ("state_valid", "pass", "ok"))), \
+                mock.patch.object(protocol, "next_action", return_value=answer):
+            got, advisories = protocol_decision.decide_after_preflight(self.repo, _item())
+        self.assertEqual((advisories, got.evidence), ((), plain.evidence))
+
+    def test_the_unhealthy_gate_lists_the_failing_then_the_warn_checks(self) -> None:
+        gate, advisories = self._preflight(_verify(
+            False, ("state_valid", "fail", "bad state"), self.WARN, ("other", "warn", "second")))
+        what = gate.gate.what_is_required
+        self.assertIn("(state_valid: bad state; gate_policy: warn: policy not adopted; other: warn: second)", what)
+        self.assertEqual(len(advisories), 2)
+        self.assertEqual(gate.evidence[-2:], advisories)
+        self.assertEqual(health_gate_text(self.repo, _verify(False, ("state_valid", "fail", "bad state"))),
+                         "(state_valid: bad state)")
+
+    def test_unhealthy_with_only_warn_checks_reads_without_empty_parentheses(self) -> None:
+        gate, _ = self._preflight(_verify(False, ("state_valid", "pass", "ok"), self.WARN))
+        what = gate.gate.what_is_required
+        self.assertIn("unhealthy (gate_policy: warn: policy not adopted)", what)
+        self.assertNotIn("()", what)
+
+    def test_unhealthy_with_nothing_to_name_has_a_readable_gate(self) -> None:
+        gate, advisories = self._preflight(_verify(False, ("state_valid", "pass", "ok")))
+        self.assertEqual(advisories, ())
+        self.assertNotIn("()", gate.gate.what_is_required)
+        self.assertIn("no check names a cause", gate.gate.what_is_required)
+
+    def test_health_gate_is_the_preflight_gate_alone(self) -> None:
+        with mock.patch.object(protocol, "verify", return_value=_verify(True, self.WARN)):
+            self.assertIsNone(protocol_decision.health_gate(self.repo, _item()))
+
+    def test_every_standing_decision_constructor_carries_the_advisories(self) -> None:
+        advisories = ("verify gate_policy: warn: policy not adopted",)
+        for disposition, action in (
+            ("human_gate", _action("plan.approve", role="user", user_only=True, invocation="/approve-review plan wi-1")),
+            ("blocked", None), ("complete", None),
+        ):
+            with self.subTest(disposition=disposition):
+                got = protocol_decision.from_answer(
+                    self.repo, _item(), protocol.parse_decision(_result(disposition=disposition, action=action)),
+                    advisories=advisories)
+                self.assertEqual(got.evidence[-1], advisories[0])
+        automatic = protocol_decision.from_answer(
+            self.repo, _item(), protocol.parse_decision(_result(action=_action("plan.author"))), advisories=advisories)
+        stale = protocol_decision.gate_for(self.repo, _item(), automatic, protocol_decision.DECISION_UNSTABLE, "text",
+                                           advisories=advisories)
+        self.assertEqual(stale.evidence[-1], advisories[0])
+        guard = job._unstable_gate(self.repo, _item(), automatic, ["a", "b", "c"], advisories)
+        self.assertEqual((guard.protocol.row, guard.evidence[-1]), (automatic.protocol.row, advisories[0]))
+
+    def test_explain_shows_the_advisory_in_text_and_json(self) -> None:
+        from tests.test_cli import _Args
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = JobWiringTest()._target(td, with_item=True)
+            runtime = Path(td) / "runtime"
+            runtime.mkdir()
+            warn = protocol.Verify(True, (protocol.Check("gate_policy", "warn", "policy not adopted"),))
+            for as_json in (False, True):
+                out = io.StringIO()
+                with mock.patch.object(protocol, "verify", return_value=warn), contextlib.redirect_stdout(out):
+                    code = cli.cmd_explain(_Args(str(root), workflow_manager=str(stub), json_out=as_json), runtime,
+                                           IDENTITY)
+                self.assertEqual(code, cli.EXIT_OK)
+                self.assertIn("verify gate_policy: warn: policy not adopted", out.getvalue())
+
+
+def health_gate_text(repo, health: protocol.Verify) -> str:
+    with mock.patch.object(protocol, "verify", return_value=health):
+        gate, _ = protocol_decision.preflight(repo, _item())
+    return gate.gate.what_is_required[gate.gate.what_is_required.index("("):].split(")")[0] + ")"
+
+
 class JobWiringTest(unittest.TestCase):
     """A protocol target reaches ``protocol_decision``, never
     ``evidence.decide``; a launched protocol job's outcome is read from the
@@ -573,6 +676,16 @@ class JobWiringTest(unittest.TestCase):
                                            IDENTITY)
             self.assertEqual(code, cli.EXIT_OK)
             self.assertIn(protocol_decision.WORKFLOW_UNHEALTHY, out.getvalue())
+
+    def test_a_warn_check_does_not_stop_a_step_and_is_recorded_in_the_job(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = self._target(td, with_item=True)
+            warn = protocol.Verify(True, (protocol.Check("gate_policy", "warn", "policy not adopted"),))
+            with mock.patch.object(protocol, "verify", return_value=warn):
+                record, diag, _runtime = self._step(td, root, stub)
+            self.assertEqual(record["status"], job.STATUS_FINISHED)
+            self.assertTrue(diag.exists())
+            self.assertIn("verify gate_policy: warn: policy not adopted", record["selected_action"]["evidence"])
 
     def test_a_protocol_worker_is_routed_by_its_route_key(self) -> None:
         for action_id, entry in protocol_decision.PROTOCOL_ACTIONS.items():

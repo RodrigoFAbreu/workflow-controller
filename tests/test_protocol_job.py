@@ -396,7 +396,7 @@ class LoopGuardTest(unittest.TestCase):
         repo = target.inspect()
         item = target_state.NoWorkItemYet if work_item is None else type("W", (), {"work_item_id": work_item})()
         decision = type("D", (), {"protocol": type("P", (), {"action_id": action, "state_identity": state_identity})()})()
-        with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a: a[3:]):
+        with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a, **k: a[3:]):
             return job._no_progress_gate(target.runtime, repo, item, decision)
 
     def _jobs(self, target: _Target, *shapes) -> list[str]:

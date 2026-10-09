@@ -8,7 +8,14 @@ Plan revision 2 approved. Implementing under Workflow 2.6.0, one checkpoint per 
   members; `protocol_decision.UNLAUNCHED_AUTOMATIC_ACTION_IDS` keeps `inspect` advising about the four automatic ids
   this Controller cannot launch. Verified: `tests.test_protocol_schema`, `tests.test_protocol`,
   `tests.test_protocol_decision`, `tests.test_cli`, `tests.test_protocol_lifecycle`, `tests.test_docs` pass.
-- CP2 (warn is advisory) and CP3 (documentation, real 2.9.0 check) pending.
+- **CP2 COMPLETE** -- a `warn` check is advisory. `Verify.warnings`; `protocol_decision.preflight` returns
+  `(gate, advisories)` with `health_gate` as a wrapper; `decide_after_preflight` is the one call `explain` and
+  `job._decide_protocol_current` make; an `advisories` keyword on `decide`/`from_answer`/`gate_for`,
+  `_unstable_gate` and `_no_progress_gate` puts the `verify <id>: warn: <detail>` lines in every standing
+  decision's evidence. The unhealthy gate lists the `warn` checks after the failing ones. An unknown status
+  still refuses (exit 20). Verified: the CP2 acceptance modules (398 tests), `tests.test_protocol_equivalence`,
+  `tests.test_observation_equivalence`, `tests.test_write_containment` and `tests.test_docs` pass.
+- CP3 (documentation, real 2.9.0 check) pending.
 
 The sections below describe the previous milestone and are superseded as CP3 lands.
 

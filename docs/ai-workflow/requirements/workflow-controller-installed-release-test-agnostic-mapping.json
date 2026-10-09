@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-installed-release-test-agnostic",
+  "requirements": {
+    "R1": {
+      "description": "the repository's own installed release is admitted through the Controller's capability rule (every non-Manager step of inspect) with no vendored tree and no version literal, and a non-protocol release, a protocol-major-2 release or an unsupported profile is refused by the same admission",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "the installed Workflow files are checked against the digests and modes in installation.json, and a modified, missing or extra file fails by name",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "no test requires a vendored tree for the installed release; the vendored-tree tests are unchanged and pass",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "the guide, compatibility and roadmap pages agree, and check_docs and the full suite are green",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

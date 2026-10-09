@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-installed-release-test-agnostic",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The installed-release test admits the repository's own Workflow through the Controller's capability rule and checks its files against installation.json, with no vendored tree and no version literal; modified, missing, extra, non-protocol, protocol-major-2 and unsupported-profile cases are refused by name",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Documentation and roadmap: development, compatibility and update pages no longer imply a vendored tree is needed before a Workflow move, C9d and follow-up 16 are marked complete, check_docs and the full suite green",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

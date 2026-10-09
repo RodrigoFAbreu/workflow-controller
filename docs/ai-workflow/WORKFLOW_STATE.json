@@ -6849,7 +6849,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-protocol-warn-status-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-protocol-warn-status-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -6903,7 +6903,139 @@
         "waived_guarantees": [],
         "recorded_at": "2026-10-09T00:45:15Z"
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "EXTERNAL_APPROVE",
+        "reviewed_bundle_id": "84969eccc39fc91a371115918ef5d474c169564f004283d40057d21bf0b1e299",
+        "approved_review_content_id": "42f8912cb53f5a9464cedc8f6ca64091f9c535fbae4392fa65413c61363e5cfe",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d142e2e0129f500dde025c425da09a07dad48b73"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8a66c7a4c25449c6c2f5487a518e22367232dce0"
+          },
+          {
+            "path": "controller/protocol.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6a188ca2d72bde27edf039c6b7789f128d0ff78d"
+          },
+          {
+            "path": "controller/protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cb6c9d550fdaa6ddd3ab5a0db4e918a4caf836d9"
+          },
+          {
+            "path": "controller/protocol_schema.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "22cd7b89f36c0e2da8eaffbda0d77ffc8009683c"
+          },
+          {
+            "path": "controller/protocol_schema.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "809ca58e02a295851087aab2b42678ff399372a5"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-protocol-warn-status-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f2687e4bb60a38a94aacd65192a012692a1005e3"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "90c3634596365250a468a0a61ef0d01feb872131"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e8a692d152330d6eb47ccfe6f204611ea6235421"
+          },
+          {
+            "path": "docs/glossary.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5ff6d709f0f2dc85b3503ad9ff6d85a3665c7882"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "256f93bf0fde30312105cfa3be93222596c2b337"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "567ad685ecabcc4594cc9a9b6f1d1fde9b7e6a5c"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "abcdff75b5bf41bc9f1e67c59f6021a7a2db321a"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57942d8faa7ba5860f4aeda48577670af4faf0bf"
+          },
+          {
+            "path": "tests/protocol_schemas/workflow-2.9.0.schema.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "22cd7b89f36c0e2da8eaffbda0d77ffc8009683c"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca49ea41fea7de339211833423582864546c752b"
+          },
+          {
+            "path": "tests/test_protocol.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "48e09b4e0afd30141719816c2ff4f5563607c552"
+          },
+          {
+            "path": "tests/test_protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0cbac4748fc7fe1e479544c16d2bb2aec40a8ca1"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cced264b40466856e87f291f4b7e40fe1c674037"
+          },
+          {
+            "path": "tests/test_protocol_schema.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "78ca97b8869c5cd480ad173d9b0cb83830256761"
+          }
+        ],
+        "reviewed_content_commit": "56a8f3598f8b8126f576ccd8b432c8e42d14e6d3",
+        "legacy_evidence": null,
+        "user_confirmation": "/approve-review implementation workflow-controller-protocol-warn-status",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-09T08:12:11Z"
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "2ffb65b244c9a2a20acfff5a12a48d239573a5b3a6a42e2a8dfd447ffee242ec",
@@ -6922,8 +7054,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 19,
-      "last_transition": "2026-10-09T03:08:30Z",
+      "state_revision": 22,
+      "last_transition": "2026-10-09T08:12:11Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -6944,14 +7076,19 @@
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "540e8a0ce579290560ef2d39418ba73f700475eebf5d2879ce6e6102e72c65fb",
+        "review_content_id": "42f8912cb53f5a9464cedc8f6ca64091f9c535fbae4392fa65413c61363e5cfe",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "610f88541a12d5949c6ff7079bafa5d5828f324d8ea76d58e54c94ff12ee4d04",
+          "bundle_id": "84969eccc39fc91a371115918ef5d474c169564f004283d40057d21bf0b1e299",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-10-09T02:24:28Z"
+          "round": 2,
+          "completed_at": "2026-10-09T06:20:18Z"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "84969eccc39fc91a371115918ef5d474c169564f004283d40057d21bf0b1e299",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-09T06:30:55Z"
+        }
       }
     }
   }

@@ -1,6 +1,6 @@
 # Update, roll back and move a repository to a newer Workflow
 
-> For: anyone who already runs the Controller. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone who already runs the Controller. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 Goal: change the Controller's version safely, or move a repository to another Workflow release.
 
@@ -75,7 +75,7 @@ If you update the trunk while a milestone branch stays on the old release, the b
 
 ## What you should see
 
-After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal. On Workflow 2.8.0 `inspect` also prints an `advisory:` line about action ids this Controller release cannot launch; that is expected (see [compatibility](compatibility.md)).
+After an update, `workflow-controller --version` prints the new version. After a Workflow move, `workflow-manager verify .` succeeds and `workflow-controller inspect .` prints the new release (`repository: ... (Workflow <release>, ...)`) and no refusal. On Workflow 2.8.0 and later `inspect` also prints an `advisory:` line about action ids this Controller release cannot launch; that is expected (see [compatibility](compatibility.md)).
 
 ## If it fails
 

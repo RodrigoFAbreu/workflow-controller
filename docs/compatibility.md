@@ -21,7 +21,7 @@ admits 2.8.0 this way, with an advisory about action ids it does not know, and s
 at the 2.8 automatic gates (see [run](run.md)). Controllers 1.7.0 and 1.7.1 both admit
 2.9.0, and 1.7.0 refuses it only when `verify` reports `warn`. Controller 1.7.1
 accepts the Workflow's `warn` check status as advisory: `explain` shows it and nothing is
-refused. The advisory lists the action ids it cannot launch (`acceptance.satisfy`,
+refused. An undefined status is still refused with exit 20. The advisory lists the action ids it cannot launch (`acceptance.satisfy`,
 `implementation.satisfy`, `plan.satisfy` and `pr.apply_review`) and any invented id, and
 stays silent for the four gates it never launches. Controller 1.7.0 refuses `explain`,
 `step` and `run` (exit 20) on a repository whose `verify` reports `warn`: for example an

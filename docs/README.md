@@ -1,6 +1,6 @@
 # Documentation map
 
-> For: anyone looking for the right page. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone looking for the right page. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 Where to find what. Start with the [project README](../README.md) if you are
 new: it explains how Workflow, Workflow Manager and the Controller fit
@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.7.1](releases/1.7.1.md) | a Workflow `verify` check with status `warn` is advisory, not a refusal; the Workflow 2.9.0 protocol schema (protocol 1.2) is vendored |
 | [1.7.0](releases/1.7.0.md) | the Controller on Workflow Orchestration Protocol v1: admission by capability, decisions from `next-action`, outcomes from `reconcile`, fail-closed gates and drift-tolerant resume, with 2.5.1/2.6.0 targets unchanged |
 | [1.6.0](releases/1.6.0.md) | auto-merge after acceptance (opt-in policy key `auto_merge`; one head-bound squash merge of the accepted commit, never GitHub's auto-merge), the wait for the release, close-out then stop, and `run`'s bounded wait |
 | [1.5.0](releases/1.5.0.md) | the settings file, telemetry v0 (tokens, cache, cost and time per job) and the `telemetry` command, release notes that follow the milestone, and the 1.4 cleanup patches |

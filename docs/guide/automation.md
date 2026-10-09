@@ -1,6 +1,6 @@
 # What the Controller automates, and how it stays safe
 
-> For: anyone who wants to know what the Controller launches by itself and how it stays safe. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone who wants to know what the Controller launches by itself and how it stays safe. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 [Back to the documentation map](../README.md)
 

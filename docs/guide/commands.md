@@ -1,6 +1,6 @@
 # Commands, options and worker routing
 
-> For: anyone using the command line, and anyone choosing worker models. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone using the command line, and anyone choosing worker models. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 [Back to the documentation map](../README.md)
 

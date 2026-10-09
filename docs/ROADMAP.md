@@ -15,10 +15,11 @@ on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was rel
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
 that releases nothing. C9b, the patch that accepts the protocol's `warn` check status and protocol
-1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. Next (user
-decisions, 2026-10-09):
-1. C9c, a small milestone that moves this repository to the latest compatible Workflow at the time
-   of the move (2.9.0 today), with automatic gates.
+1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. C9c, which
+prepares this repository's move to Workflow 2.9.0 (follow-up 15, accepted 2026-10-09), is complete
+and merges as a `test:` pull request that releases nothing. Next (user decisions, 2026-10-09):
+1. The `chore:` pull request that runs `workflow-manager --release-version 2.9.0 update .`, so that
+   later milestones run with automatic gates.
 2. C8.
 Workflow Manager also runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -51,7 +52,7 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C4 | Auto-merge after acceptance: the Controller squash-merges the accepted commit (never GitHub's auto-merge), waits for the release, closes out and stops (complete) | C1, C1b, C2 | [11.3](#113-auto-merge-and-release-wait) |
 | C9 | The Controller on Orchestration Protocol v1: decisions first, then outcomes (complete) | W1 | [1.7](#17-workflowcontroller-orchestration-protocol-decoupling) |
 | C9b | Protocol 1.1 and 1.2: accept the `warn` check status as advisory, vendor the Workflow 2.9.0 schema, document 2.9.0 (a patch release) (complete) | — | [follow-up 11](#known-follow-ups-carried-forward) |
-| C9c | Move this repository to the latest compatible Workflow (2.9.0 today) with automatic gates: vendor that release's tree under `tests/workflow_releases/`, let the installed-release test admit a protocol release by capability, then run the Workflow Manager update (a `chore:` pull request, no release); once the milestone is merged the update is the next action | C9b | [follow-up 15](#known-follow-ups-carried-forward) |
+| C9c | Move this repository to the latest compatible Workflow (2.9.0 today) with automatic gates: vendor that release's tree under `tests/workflow_releases/`, let the installed-release test admit a protocol release by capability, then run the Workflow Manager update (a `chore:` pull request, no release); once the milestone is merged the update is the next action (complete) | C9b | [follow-up 15](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
@@ -208,6 +209,10 @@ These are not blockers for the baseline, but should remain visible in later mile
    `workflow-manager --release-version 2.9.0 update .`. A scratch rehearsal showed that the
    protocol `verify` passes all eight checks after the update, and that Controller 1.7.0 admits
    the repository. The move runs as a milestone, C9c (user decision, 2026-10-09); the `workflow-manager update` as a `chore:` pull request is the next action after that milestone is merged.
+   **Done in C9c** (`workflow-controller-workflow-2-9-0-move`, accepted 2026-10-09, a `test:` pull
+   request that releases nothing): the 2.9.0 tree is vendored with the gate-policy scripts, the
+   installed-release and live-repository admission tests admit a protocol release by capability, and
+   every vendored protocol tree is shown to run. The `chore:` update is next.
 
 ---
 

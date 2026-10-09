@@ -1,5 +1,17 @@
 # Active Milestone
 
+## In progress: `workflow-controller-protocol-warn-status` (ROADMAP step C9b)
+
+Plan revision 2 approved. Implementing under Workflow 2.6.0, one checkpoint per invocation.
+- **CP1 COMPLETE** -- Workflow 2.9.0's schema (protocol 1.2, sha256 `c203f2b2...`) vendored byte for byte with a
+  published copy at `tests/protocol_schemas/workflow-2.9.0.schema.json`; the eight new action ids are catalogue
+  members; `protocol_decision.UNLAUNCHED_AUTOMATIC_ACTION_IDS` keeps `inspect` advising about the four automatic ids
+  this Controller cannot launch. Verified: `tests.test_protocol_schema`, `tests.test_protocol`,
+  `tests.test_protocol_decision`, `tests.test_cli`, `tests.test_protocol_lifecycle`, `tests.test_docs` pass.
+- CP2 (warn is advisory) and CP3 (documentation, real 2.9.0 check) pending.
+
+The sections below describe the previous milestone and are superseded as CP3 lands.
+
 ## Status
 
 **Complete.** `workflow-controller-documentation-reorganisation` (`docs/ROADMAP.md` step D1, section

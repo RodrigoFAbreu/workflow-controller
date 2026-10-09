@@ -107,15 +107,27 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
 PLAN_START = "plan.start"
 
 
+#: The catalogue ids of Workflow 2.9.0 that are automatic or validation
+#: actions this Controller has no :data:`PROTOCOL_ACTIONS` entry for. They are
+#: catalogue members (so the schema accepts them) but ``inspect`` still
+#: advises about them: unlike the gates and user-only ids, they could become
+#: the next action and would then be blocked.
+UNLAUNCHED_AUTOMATIC_ACTION_IDS = frozenset({
+    "plan.satisfy", "implementation.satisfy", "acceptance.satisfy", "pr.apply_review",
+})
+
+
 def unknown_action_ids(listed: Any) -> list[str]:
-    """The action ids ``describe`` lists that this Controller release does
-    not know (plan C.3): neither in :data:`PROTOCOL_ACTIONS` nor in the
-    catalogue of the vendored schema (whose other ids are gates the
-    Controller never launches by design). An advisory for ``inspect``, never
-    a refusal: a minor protocol bump adds ids, and one is blocked only if it
-    actually becomes the next action."""
-    return sorted({str(action_id) for action_id in listed or ()}
-                  - set(PROTOCOL_ACTIONS) - protocol.KNOWN_ACTION_IDS)
+    """The action ids ``describe`` lists that this Controller release cannot
+    launch and does not treat as a gate (plan C.3): neither in
+    :data:`PROTOCOL_ACTIONS` nor a catalogue id of the vendored schema,
+    except the four of :data:`UNLAUNCHED_AUTOMATIC_ACTION_IDS` (automatic or
+    validation actions with no command here). The other catalogue ids are
+    gates or user-only actions the Controller never launches by design. An
+    advisory for ``inspect``, never a refusal: a minor protocol bump adds
+    ids, and one is blocked only if it actually becomes the next action."""
+    known = protocol.KNOWN_ACTION_IDS - UNLAUNCHED_AUTOMATIC_ACTION_IDS
+    return sorted({str(action_id) for action_id in listed or ()} - set(PROTOCOL_ACTIONS) - known)
 
 
 def bare_invocation(action_id: str, work_item_id: str | None) -> str:

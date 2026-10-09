@@ -243,6 +243,14 @@ class ActionTableTest(_Case):
         self.assertIn("advisory: the Workflow lists action ids this Controller release does not know: "
                       "forge.open_pr, gate.policy", out.getvalue())
 
+    def test_a_2_9_0_listing_advises_of_exactly_the_four_unlaunched_automatic_ids(self) -> None:
+        listed = sorted(protocol.KNOWN_ACTION_IDS)
+        self.assertEqual(protocol_decision.unknown_action_ids(listed),
+                         ["acceptance.satisfy", "implementation.satisfy", "plan.satisfy", "pr.apply_review"])
+        self.assertEqual(protocol_decision.unknown_action_ids([*listed, "future.action"]),
+                         ["acceptance.satisfy", "future.action", "implementation.satisfy", "plan.satisfy",
+                          "pr.apply_review"])
+
     def test_an_automatic_id_the_table_lacks_is_blocked(self) -> None:
         got = self.decide(_result(action=_action("plan.withdraw", invocation="/milestone-plan wi-1")))
         self.assertFalse(got.automatic)

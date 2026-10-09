@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-workflow-2-9-0-move",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Vendor Workflow 2.9.0's release tree from its published archive: the sync tool's subset gains the optional forge and gate-policy scripts, the 2.5.1, 2.6.0 and 2.7.0 trees stay byte-unchanged, and the per-release subset test and sync tests cover the new paths",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The installed-release test and the live-repository admission test admit a legacy-validated release or a protocol release by capability and nothing else, and the vendored 2.9.0 tree is runnable: installed into a disposable repository the Controller admits it in protocol mode and its verify is healthy",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Documentation and the move rehearsal: development and compatibility pages say what is vendored and that the update follows as a chore pull request, a real Workflow Manager update of a scratch clone to 2.9.0 passes the complete CI selection (Controller tests, live admission test, every installed conformance suite) with these tests and fails InstalledReleaseTest without them, check_docs and the full suite green",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

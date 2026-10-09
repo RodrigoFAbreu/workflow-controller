@@ -32,6 +32,9 @@ line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as
 `unsupported_protocol_major`.
 
+This repository itself moves to 2.9.0 in a `chore:` update pull request after the
+milestone that vendors that release's test tree, and not before.
+
 ## What admitted means
 
 A target is admitted when Workflow Manager verifies its installation and the

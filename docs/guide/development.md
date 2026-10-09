@@ -1,6 +1,6 @@
 # Development and the test runner
 
-> For: contributors and maintainers working from a checkout. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: contributors and maintainers working from a checkout. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0 and 2.9.0.
 
 [Back to the documentation map](../README.md)
 
@@ -129,8 +129,10 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
 ```
 
 - **Selection.** With no names the selection is every test
-  `python3 -m unittest discover -s tests -t .` loads plus the seven frozen
-  Workflow conformance suites. A name is a unittest dotted name (`tests`,
+  `python3 -m unittest discover -s tests -t .` loads plus the frozen
+  Workflow conformance suites of the installed release (seven up to 2.7.0; nine
+  from 2.9.0, which adds `workflow_protocol_test.py` and
+  `workflow_gate_policy_test.py`). A name is a unittest dotted name (`tests`,
   a module, a class or a test), `conformance` (every suite) or
   `conformance:<file>`. A name that matches nothing is refused.
 - **Shards.** A class is the smallest unit of placement (a whole module
@@ -261,22 +263,29 @@ purpose. `tests/test_fixtures_git_hygiene.py` fails on any other
 
 The Controller's tests never read this repository's own installed
 Workflow. Every Workflow release the Controller admits
-(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`, and 2.7.0 for
-protocol mode) is vendored under
-`tests/workflow_releases/<release>/`: the seventeen `.claude/commands/*.md`
-files, `scripts/workflow_state.py`, `scripts/workflow_fingerprint.py` and
+(`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`, and each protocol-mode
+release that is checked: 2.7.0 and 2.9.0) is vendored under
+`tests/workflow_releases/<release>/`: the `.claude/commands/*.md` files (seventeen
+up to 2.7.0, twenty-two for 2.9.0),
+`scripts/workflow_state.py`, `scripts/workflow_fingerprint.py` and
 `scripts/prepare-ai-review.sh`, at their target paths and modes, and, for a
 release that ships the protocol, `scripts/workflow_protocol.py`, its sibling
 `scripts/workflow_test_harness.py` and
-`docs/ai-workflow/orchestration-protocol-v1.schema.json`. Each tree's
+`docs/ai-workflow/orchestration-protocol-v1.schema.json`. A release that ships
+gate policy (2.9.0) adds `scripts/workflow_forge.py` and
+`scripts/workflow_gate_policy.py`; without them the tree could not import. Each tree's
 `RELEASE.json` records the Workflow Manager commit it was taken from and each
 file's sha256 and executable flag, equal to the Manager's manifest. The
 Workflow-derived inventories (the phase set, the command partition, the
 user-only set, property 5), the decision goldens, the query tests and the
 migration tests all run against these trees, once per admitted release.
 This repository's installed tree is only checked for equality with the
-vendored tree of the release it declares, so updating it through Workflow
-Manager needs no code change.
+vendored tree of the release it declares. `InstalledReleaseTest` admits that
+release by capability: either it is validated for legacy mode, or its vendored
+tree lists `scripts/workflow_protocol.py`. Protocol major 1 itself is pinned by
+a separate test that installs every vendored protocol tree into a disposable
+repository. So updating the installed tree through Workflow Manager needs no
+code change once the release's tree is vendored.
 
 Only `tools/workflow_releases.py` (stdlib only) writes these trees:
 

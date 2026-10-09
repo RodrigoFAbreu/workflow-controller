@@ -489,6 +489,23 @@ class WarnAdvisoryTest(_Case):
         self.assertIn("verify gate_policy: warn: policy not adopted", got.evidence)
         self.assertEqual(advisories, ("verify gate_policy: warn: policy not adopted",))
 
+    def test_a_step_and_explain_both_decide_through_the_shared_entry_point(self) -> None:
+        # D4: one preflight per step, through `decide_after_preflight`, for the job path as for `explain`.
+        stub = protocol_decision.Decision(
+            observed_phase=None, evidence=(), action=None, automatic=False, gate=None, declined=False, reason="x")
+        with mock.patch.object(protocol_decision, "decide_after_preflight", return_value=(stub, ())) as shared, \
+                mock.patch.object(protocol_decision, "preflight") as direct, \
+                mock.patch.object(protocol_decision, "decide") as plain:
+            got = job._decide_protocol_current(
+                self.repo, runtime=Path("."), snapshot=None, work_item=_item(), work_item_id=None,
+                pre_state={}, base=None)
+        self.assertIs(got[0], stub)
+        shared.assert_called_once()
+        direct.assert_not_called()
+        plain.assert_not_called()
+        src = Path(cli.__file__).read_text(encoding="utf-8")
+        self.assertIn("protocol_decision.decide_after_preflight(target, work_item, base=base)", src)
+
     def test_without_a_warn_the_evidence_is_unchanged(self) -> None:
         answer = protocol.parse_decision(_result(action=_action("plan.author")))
         plain = protocol_decision.from_answer(self.repo, _item(), answer)

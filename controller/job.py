@@ -4960,12 +4960,15 @@ def _decide_protocol_current(
     nothing, so it is returned as the Workflow gave it."""
     # Plan A.3: the Workflow's own `verify` is the step's protocol preflight;
     # an unhealthy answer is a gate, and nothing is decided.
-    unhealthy, advisories = protocol_decision.preflight(managed_repo, work_item)
-    if unhealthy is not None:
-        return unhealthy, work_item, pre_state
+    # The first decision is the shared entry point `explain` also uses
+    # (D4): one preflight per step; a retry re-decides with its advisories.
     seen: list = []
+    advisories: tuple[str, ...] = ()
     for _attempt in range(protocol_decision.MAX_DECISIONS_PER_STEP):
-        decision = protocol_decision.decide(managed_repo, work_item, base=base, advisories=advisories)
+        if _attempt == 0:
+            decision, advisories = protocol_decision.decide_after_preflight(managed_repo, work_item, base=base)
+        else:
+            decision = protocol_decision.decide(managed_repo, work_item, base=base, advisories=advisories)
         if decision.protocol is None or not decision.automatic:
             return decision, work_item, pre_state
         info = decision.protocol

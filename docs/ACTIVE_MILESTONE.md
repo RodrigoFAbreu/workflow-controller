@@ -16,6 +16,17 @@ Plan revision 3, base `e6ff30b`. Implementing one checkpoint per invocation.
   healthy `verify` (every check `pass`); the live-repository admission test accepts a legacy-validated
   release or a protocol result. `tests.test_workflow_releases`, `test_managed_repo`, `test_protocol` and
   `test_protocol_lifecycle` pass (the live-Manager test skips here; CP3's rehearsal runs it).
+- **CP3 complete.** `docs/guide/development.md` and `docs/compatibility.md` state the per-release command
+  count, the gate-policy scripts, capability admission and that this repository moves to 2.9.0 in a later
+  `chore:` pull request; the roadmap C9c row and follow-up 15 name that update as the next action.
+  Rehearsal (scratch clone of this branch, scratch bare origin, real Workflow Manager 1.5.0
+  `--release-version 2.9.0 update`, committed): `tools/workflow_releases.py check` exit 0;
+  `tests.test_workflow_releases` OK; complete CI selection `tools/run_tests.py --serial` ran 3087 tests
+  including the nine installed conformance suites (all exit 0) and
+  `test_real_workflow_manager_admits_this_repository` (ran, ok); the only failures are the two Git 2.56
+  trailer tests (follow-up 12). The same update on `main` fails `InstalledReleaseTest` (reproducing
+  PR #30). `explain` of the updated clone admits in protocol mode, exit 0. On this branch itself:
+  `check_docs` exit 0 and the full serial selection fails only the same two tests.
 
 ---
 

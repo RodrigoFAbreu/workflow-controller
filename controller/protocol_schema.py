@@ -2,7 +2,7 @@
 the keyword subset it uses
 (``docs/ai-workflow/CONTROLLER_ORCHESTRATION_PROTOCOL_V1_PLAN.md``, A.2).
 
-``protocol_schema.json`` is the schema Workflow 2.7.0 publishes, vendored
+``protocol_schema.json`` is the schema Workflow 2.9.0 publishes (protocol 1.2), vendored
 byte for byte (its sha256 is pinned by a test) and read once, at import.
 
 The validator checks a *document* the way the protocol's "a minor bump only

@@ -266,6 +266,20 @@ class EnvelopeHandlingTest(_TargetCase):
                     self.run_with(completed(stdout))
                 self.assertIn(raised.exception.evidence["reason"], ("protocol_no_document", "protocol_envelope_invalid"))
 
+    def test_verify_warnings_are_the_warn_checks_in_order_and_healthy_is_the_workflows(self) -> None:
+        checks = [{"id": "a", "status": "pass", "detail": "ok"}, {"id": "gate_policy", "status": "warn", "detail": "w1"},
+                  {"id": "b", "status": "skip", "detail": "s"}, {"id": "other", "status": "warn", "detail": "w2"}]
+        with self.fake(completed(envelope("verify", {"healthy": True, "checks": checks}))):
+            verified = protocol.verify(self.root)
+        self.assertTrue(verified.healthy)
+        self.assertEqual([(c.id, c.detail) for c in verified.warnings], [("gate_policy", "w1"), ("other", "w2")])
+
+    def test_an_unknown_check_status_still_fails_closed(self) -> None:
+        checks = [{"id": "gate_policy", "status": "error", "detail": "x"}]
+        with self.fake(completed(envelope("verify", {"healthy": True, "checks": checks}))):
+            with self.assertRaises(WorkflowProtocolFailedError):
+                protocol.verify(self.root)
+
     def test_the_operation_must_be_the_one_asked(self) -> None:
         with self.assertRaisesRegex(WorkflowProtocolFailedError, "answers 'verify'"):
             self.run_with(completed(envelope("verify", {"healthy": True, "checks": []})))

@@ -4928,7 +4928,8 @@ def _protocol_block(decision: Decision) -> dict:
     }
 
 
-def _unstable_gate(managed_repo: Any, work_item: Any, decision: Decision, seen: list) -> Decision:
+def _unstable_gate(managed_repo: Any, work_item: Any, decision: Decision, seen: list,
+                   advisories: tuple[str, ...] = ()) -> Decision:
     """The ``decision_unstable`` gate after :data:`protocol_decision.
     MAX_DECISIONS_PER_STEP` stale answers in one step, naming the last two
     state identities (or, for ``plan.start``, the last two
@@ -4939,7 +4940,7 @@ def _unstable_gate(managed_repo: Any, work_item: Any, decision: Decision, seen: 
         managed_repo, work_item, decision, protocol_decision.DECISION_UNSTABLE,
         f"the Workflow's state changed under {len(seen)} consecutive decisions, so none was launched; the last "
         f"{what} were {' and '.join(str(value) for value in last)}. Something else is writing the target "
-        "repository's state; stop it, then re-run")
+        "repository's state; stop it, then re-run", advisories=advisories)
 
 
 def _decide_protocol_current(
@@ -4959,24 +4960,27 @@ def _decide_protocol_current(
     nothing, so it is returned as the Workflow gave it."""
     # Plan A.3: the Workflow's own `verify` is the step's protocol preflight;
     # an unhealthy answer is a gate, and nothing is decided.
-    unhealthy = protocol_decision.health_gate(managed_repo, work_item)
-    if unhealthy is not None:
-        return unhealthy, work_item, pre_state
+    # The first decision is the shared entry point `explain` also uses
+    # (D4): one preflight per step; a retry re-decides with its advisories.
     seen: list = []
+    advisories: tuple[str, ...] = ()
     for _attempt in range(protocol_decision.MAX_DECISIONS_PER_STEP):
-        decision = protocol_decision.decide(managed_repo, work_item, base=base)
+        if _attempt == 0:
+            decision, advisories = protocol_decision.decide_after_preflight(managed_repo, work_item, base=base)
+        else:
+            decision = protocol_decision.decide(managed_repo, work_item, base=base, advisories=advisories)
         if decision.protocol is None or not decision.automatic:
             return decision, work_item, pre_state
         info = decision.protocol
         seen.append(info.state_identity if info.state_identity is not None
                     else tuple((info.document.get("snapshot") or {}).get("work_item_ids") or ()))
         if protocol_decision.check_currency(managed_repo, decision).current:
-            gate = _no_progress_gate(runtime, managed_repo, work_item, decision)
+            gate = _no_progress_gate(runtime, managed_repo, work_item, decision, advisories=advisories)
             return (decision if gate is None else gate), work_item, pre_state
         snapshot = target_state.read(managed_repo)
         work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
         pre_state = _capture_pre_state(managed_repo, snapshot, work_item)
-    return _unstable_gate(managed_repo, work_item, decision, seen), work_item, pre_state
+    return _unstable_gate(managed_repo, work_item, decision, seen, advisories), work_item, pre_state
 
 
 def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None, action_id: str) -> tuple | None:
@@ -5007,7 +5011,8 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
     return key, None, None, None
 
 
-def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> Decision | None:
+def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,
+                      advisories: tuple[str, ...] = ()) -> Decision | None:
     """The loop guard of a protocol target (plan D.3): the ``no_progress_repeated``
     gate when the two most recent protocol jobs for this ``(work item,
     action id)`` pair both ended ``no_progress``, else ``None``. A job that
@@ -5057,7 +5062,8 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
         f"the last two jobs for {info.action_id}"
         + ("" if work_item_id is None else f" on {work_item_id}")
         + f" ({jobs}) both ended without progress, so a third is not launched; read their records, then "
-        "change the work item (take the action by hand, or fix what stops it) and the count restarts")
+        "change the work item (take the action by hand, or fix what stops it) and the count restarts",
+        advisories=advisories)
 
 
 def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOptions) -> routing.ResolvedRoute:

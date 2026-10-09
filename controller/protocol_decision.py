@@ -107,15 +107,27 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
 PLAN_START = "plan.start"
 
 
+#: The catalogue ids of Workflow 2.9.0 that are automatic or validation
+#: actions this Controller has no :data:`PROTOCOL_ACTIONS` entry for. They are
+#: catalogue members (so the schema accepts them) but ``inspect`` still
+#: advises about them: unlike the gates and user-only ids, they could become
+#: the next action and would then be blocked.
+UNLAUNCHED_AUTOMATIC_ACTION_IDS = frozenset({
+    "plan.satisfy", "implementation.satisfy", "acceptance.satisfy", "pr.apply_review",
+})
+
+
 def unknown_action_ids(listed: Any) -> list[str]:
-    """The action ids ``describe`` lists that this Controller release does
-    not know (plan C.3): neither in :data:`PROTOCOL_ACTIONS` nor in the
-    catalogue of the vendored schema (whose other ids are gates the
-    Controller never launches by design). An advisory for ``inspect``, never
-    a refusal: a minor protocol bump adds ids, and one is blocked only if it
-    actually becomes the next action."""
-    return sorted({str(action_id) for action_id in listed or ()}
-                  - set(PROTOCOL_ACTIONS) - protocol.KNOWN_ACTION_IDS)
+    """The action ids ``describe`` lists that this Controller release cannot
+    launch and does not treat as a gate (plan C.3): neither in
+    :data:`PROTOCOL_ACTIONS` nor a catalogue id of the vendored schema,
+    except the four of :data:`UNLAUNCHED_AUTOMATIC_ACTION_IDS` (automatic or
+    validation actions with no command here). The other catalogue ids are
+    gates or user-only actions the Controller never launches by design. An
+    advisory for ``inspect``, never a refusal: a minor protocol bump adds
+    ids, and one is blocked only if it actually becomes the next action."""
+    known = protocol.KNOWN_ACTION_IDS - UNLAUNCHED_AUTOMATIC_ACTION_IDS
+    return sorted({str(action_id) for action_id in listed or ()} - set(PROTOCOL_ACTIONS) - known)
 
 
 def bare_invocation(action_id: str, work_item_id: str | None) -> str:
@@ -141,53 +153,87 @@ def _admitted_digests(managed_repo: Any) -> dict[str, str] | None:
     return None if digests is None else dict(digests)
 
 
-def decide(managed_repo: Any, work_item: Any, *, base: str | None = None, timeout: float | None = None) -> Decision:
+def decide(managed_repo: Any, work_item: Any, *, base: str | None = None, timeout: float | None = None,
+           advisories: tuple[str, ...] = ()) -> Decision:
     """The :class:`Decision` for ``work_item`` (or, for
     :data:`target_state.NoWorkItemYet`, for the repository that has none)
     from the Workflow's ``next-action``. ``base`` is the trunk tip of
-    ``/milestone-plan <base>`` (plan C.4)."""
+    ``/milestone-plan <base>`` (plan C.4). ``advisories`` are the ``verify``
+    ``warn`` lines of :func:`preflight`, carried in the decision's evidence."""
     no_item = work_item is target_state.NoWorkItemYet
     work_item_id = None if no_item else work_item.work_item_id
     answer = protocol.next_action(managed_repo.root, work_item_id, timeout=timeout,
                                  expected_digests=_admitted_digests(managed_repo))
-    return from_answer(managed_repo, work_item, answer, base=base)
+    return from_answer(managed_repo, work_item, answer, base=base, advisories=advisories)
 
 
-def health_gate(managed_repo: Any, work_item: Any, *, timeout: float | None = None) -> Decision | None:
-    """The ``verify`` preflight of a step (plan A.3): ``None`` when the
-    Workflow reports the repository healthy, else the
-    :data:`WORKFLOW_UNHEALTHY` gate naming each failing check and its detail
-    verbatim. A gate, not a refusal of the repository: a failing
-    ``state_valid`` can be transient (a planning worker interrupted after
-    routing the item and before writing its registry)."""
+def _advisory_lines(checks: Any) -> tuple[str, ...]:
+    return tuple(f"verify {check.id}: {check.status}: {check.detail}" for check in checks)
+
+
+def preflight(managed_repo: Any, work_item: Any, *,
+              timeout: float | None = None) -> tuple[Decision | None, tuple[str, ...]]:
+    """The ``verify`` preflight of a step (plan A.3): ``(gate, advisories)``.
+    ``gate`` is ``None`` when the Workflow reports the repository healthy,
+    else the :data:`WORKFLOW_UNHEALTHY` gate naming each failing check and its
+    detail verbatim, then the ``warn`` checks. ``advisories`` are the ``warn``
+    checks as ``verify <id>: warn: <detail>`` lines, in the Workflow's order;
+    a ``warn`` never gates a step and never changes ``healthy``. A gate, not a
+    refusal of the repository: a failing ``state_valid`` can be transient (a
+    planning worker interrupted after routing the item and before writing its
+    registry)."""
     health = protocol.verify(managed_repo.root, timeout=timeout, expected_digests=_admitted_digests(managed_repo))
+    warned = health.warnings
+    advisories = _advisory_lines(warned)
     if health.healthy:
-        return None
+        return None, advisories
     root = managed_repo.root
     no_item = work_item is target_state.NoWorkItemYet
     work_item_id = None if no_item else work_item.work_item_id
     phase = NO_PHASE if no_item else work_item.phase
     phase_text = phase if isinstance(phase, str) else "NO_PHASE"
     failing = [check for check in health.checks if check.status == "fail"]
-    details = "; ".join(f"{check.id}: {check.detail}" for check in failing)
+    # Failing checks first, then the `warn` ones, so the operator sees every
+    # check the Workflow reported even when none failed.
+    details = "; ".join([f"{check.id}: {check.detail}" for check in failing]
+                        + [f"{check.id}: warn: {check.detail}" for check in warned])
+    if not details:
+        details = "no check names a cause"
     gate = HumanGate(
         repository=str(root), work_item_id=work_item_id or "", phase=phase_text,
         what_is_required=(
             f"{WORKFLOW_UNHEALTHY}: the Workflow's verify reports the repository unhealthy ({details}); "
             "nothing is launched. A failing state_valid can be transient (a planning worker interrupted "
             "after routing the item and before writing its registry); installation_release_matches is "
-            "expected to pass on a real target, whose scripts and installation record agree. Repair what "
-            "the checks name, then re-run"),
+            "expected to pass on a real target, whose scripts and installation record agree. Repair the "
+            "failing checks it names (the `warn` checks are advisory), then re-run"),
         artifact_path=None, safe_resume_command=explain_gate_command(root, work_item_id or ""))
     return Decision(
         observed_phase=phase,
         evidence=(f"protocol verify ({WORKFLOW_UNHEALTHY})",)
-        + tuple(f"verify {check.id}: {check.status}: {check.detail}" for check in failing),
+        + tuple(f"verify {check.id}: {check.status}: {check.detail}" for check in failing) + advisories,
         action=None, automatic=False, gate=gate, declined=False,
-        reason=f"{phase_text}: {WORKFLOW_UNHEALTHY}: {details}")
+        reason=f"{phase_text}: {WORKFLOW_UNHEALTHY}: {details}"), advisories
 
 
-def from_answer(managed_repo: Any, work_item: Any, answer: protocol.Decision, *, base: str | None = None) -> Decision:
+def health_gate(managed_repo: Any, work_item: Any, *, timeout: float | None = None) -> Decision | None:
+    """:func:`preflight`'s gate alone (``None`` when healthy)."""
+    return preflight(managed_repo, work_item, timeout=timeout)[0]
+
+
+def decide_after_preflight(managed_repo: Any, work_item: Any, *,
+                           base: str | None = None) -> tuple[Decision, tuple[str, ...]]:
+    """``(decision, advisories)``: the unhealthy gate when :func:`preflight`
+    gives one, else :func:`decide` with the advisories. The one call both
+    ``explain`` and a step make, so the two cannot drift."""
+    gate, advisories = preflight(managed_repo, work_item)
+    if gate is not None:
+        return gate, advisories
+    return decide(managed_repo, work_item, base=base, advisories=advisories), advisories
+
+
+def from_answer(managed_repo: Any, work_item: Any, answer: protocol.Decision, *, base: str | None = None,
+                advisories: tuple[str, ...] = ()) -> Decision:
     """:func:`decide` for an answer already received (a validated
     ``next-action`` result)."""
     no_item = work_item is target_state.NoWorkItemYet
@@ -201,7 +247,7 @@ def from_answer(managed_repo: Any, work_item: Any, answer: protocol.Decision, *,
             evidence={"reason": "protocol_decision_invalid", "asked": work_item_id,
                       "answered": None if basis is None else basis.work_item_id, "row": answer.row})
     phase = NO_PHASE if basis is None else basis.phase
-    context = _Context(managed_repo, work_item, work_item_id, phase, answer)
+    context = _Context(managed_repo, work_item, work_item_id, phase, answer, advisories)
 
     disposition = answer.disposition
     if disposition == "automatic":
@@ -332,7 +378,8 @@ def _resume_invocation(answer: protocol.Decision, root: Any, work_item_id: str |
 
 class _Context:
     def __init__(self, managed_repo: Any, work_item: Any, work_item_id: str | None, phase: Any,
-                 answer: protocol.Decision) -> None:
+                 answer: protocol.Decision, advisories: tuple[str, ...] = ()) -> None:
+        self.advisories = advisories
         self.managed_repo = managed_repo
         self.work_item = work_item
         self.work_item_id = work_item_id
@@ -346,7 +393,7 @@ class _Context:
         lines = [f"protocol row {self.answer.row}: {self.answer.reason.code} ({label})"]
         if action_id is not None:
             lines.append(f"protocol action: {action_id}")
-        return tuple(lines)
+        return tuple(lines) + self.advisories
 
     def info(self, route: str | None) -> ProtocolInfo:
         answer = self.answer
@@ -467,12 +514,14 @@ def check_currency(managed_repo: Any, decision: Decision, *, timeout: float | No
     return Currency(True, None, answer)
 
 
-def gate_for(managed_repo: Any, work_item: Any, decision: Decision, code: str, text: str) -> Decision:
+def gate_for(managed_repo: Any, work_item: Any, decision: Decision, code: str, text: str, *,
+             advisories: tuple[str, ...] = ()) -> Decision:
     """A blocked gate over ``decision``'s own answer: ``code`` and ``text``
-    are the Controller's, the rest (row, route-less info) the Workflow's."""
+    are the Controller's, the rest (row, route-less info) the Workflow's.
+    ``advisories`` are the preflight's ``warn`` lines."""
     info = decision.protocol
     answer = protocol.parse_decision(dict(info.document))
     no_item = work_item is target_state.NoWorkItemYet
     context = _Context(managed_repo, work_item, None if no_item else work_item.work_item_id,
-                       decision.observed_phase, answer)
+                       decision.observed_phase, answer, advisories)
     return context.blocked(code, text)

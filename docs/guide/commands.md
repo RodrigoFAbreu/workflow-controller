@@ -1,6 +1,6 @@
 # Commands, options and worker routing
 
-> For: anyone using the command line, and anyone choosing worker models. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone using the command line, and anyone choosing worker models. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 [Back to the documentation map](../README.md)
 
@@ -8,7 +8,7 @@
 
 | Command | Behaviour |
 |---|---|
-| `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version, the managed-script digest map and, as an advisory, any action id `describe` lists that this release does not know (`unknown_action_ids`) |
+| `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version, the managed-script digest map and, as an advisory, any action id `describe` lists that this release cannot launch (`unknown_action_ids`): an invented id, or one of the four catalogue ids it has no command for |
 | `workflow-controller explain <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; for a protocol-mode target also the Workflow's row, disposition and action (a `protocol` block with `--json`); read-only; exits 0, but refuses (exit `20`) like every other command when the repository is not admitted |
 | `workflow-controller step [--follow] <repo>` | execute exactly one automatic action, validate the transition, stop |
 | `workflow-controller run [--follow] [--max-steps N] <repo>` | repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |

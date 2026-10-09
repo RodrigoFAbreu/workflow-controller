@@ -16,9 +16,12 @@ from controller import protocol, protocol_schema  # noqa: E402
 from controller.protocol_schema import Schema, SchemaError, SchemaViolation  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-VENDORED = REPO_ROOT / "tests" / "workflow_releases" / "2.7.0" / "docs" / "ai-workflow" / "orchestration-protocol-v1.schema.json"
-#: The sha256 of Workflow 2.7.0's published schema.
-SCHEMA_SHA256 = "aba31a7afdfa94246f1f28db5619a6ebe4b4ff06a923e6d00cc9102c2d59fc5a"
+VENDORED = REPO_ROOT / "tests" / "protocol_schemas" / "workflow-2.9.0.schema.json"
+#: The sha256 of Workflow 2.9.0's published schema (protocol 1.2).
+SCHEMA_SHA256 = "c203f2b263a3060be1e1f41d478bebd60c1a40302de9daecf7fe7cc97d5af52c"
+NEW_ACTION_IDS = frozenset({
+    "acceptance.satisfy", "functional.evidence.external", "implementation.resume", "implementation.satisfy",
+    "legacy.retire", "plan.satisfy", "pr.apply_review", "pr.review.external"})
 
 BASIS = {"work_item_id": "wi", "state_revision": 3, "state_identity": "a" * 64, "phase": "PLANNING",
          "head": "b" * 40, "checkpoints": {"CP1": "COMPLETE"}}
@@ -48,6 +51,19 @@ class VendoredSchemaTest(unittest.TestCase):
         data = protocol_schema.SCHEMA_PATH.read_bytes()
         self.assertEqual(hashlib.sha256(data).hexdigest(), SCHEMA_SHA256)
         self.assertEqual(data, VENDORED.read_bytes())
+
+    def test_the_eight_protocol_1_2_action_ids_are_catalogue_members(self) -> None:
+        self.assertLessEqual(NEW_ACTION_IDS, protocol.KNOWN_ACTION_IDS)
+
+    def test_status_accepts_warn_and_stays_strict(self) -> None:
+        pointer = "#/$defs/results/properties/verify/properties/checks/items/properties/status"
+        self.assertEqual(set(protocol_schema.SCHEMA.enum_at(pointer)), {"pass", "warn", "fail", "skip"})
+        self.assertNotIn(pointer, protocol_schema.OPEN_ENUMS)
+
+    def test_no_controller_module_names_record_external_result(self) -> None:
+        for path in (REPO_ROOT / "controller").glob("*.py"):
+            with self.subTest(path.name):
+                self.assertNotIn("record-external-result", path.read_text())
 
     def test_the_schema_is_packaged(self) -> None:
         text = (REPO_ROOT / "pyproject.toml").read_text()

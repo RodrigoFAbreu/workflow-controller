@@ -1,8 +1,8 @@
 # Common problems
 
-> For: anyone whose run stopped and wants the quick fix. Last checked with: Controller 1.7.0; Workflow 2.6.0, 2.7.0 and 2.8.0.
+> For: anyone whose run stopped and wants the quick fix. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
-Start with `workflow-controller explain <repo>`. It is read-only, exits 0 (but refuses with exit 20 when the repository is not admitted, as on an unmanaged one), and prints the pending job files with the command that clears each one, the next decision with its evidence and, at a gate, exactly what a person must do. Each entry below is the symptom, the one-line fix and where the detail is. What each exit status means is in [exit codes](exit-codes.md); the long account of every stop is the [troubleshooting guide](guide/troubleshooting.md).
+Start with `workflow-controller explain <repo>`. It is read-only, exits 0 (but refuses with exit 20 when the repository is not admitted, as on an unmanaged one, and under Controller 1.7.0 also when `verify` reports `warn`), and prints the pending job files with the command that clears each one, the next decision with its evidence and, at a gate, exactly what a person must do. Each entry below is the symptom, the one-line fix and where the detail is. What each exit status means is in [exit codes](exit-codes.md); the long account of every stop is the [troubleshooting guide](guide/troubleshooting.md).
 
 ## The run stopped and exited 10
 
@@ -14,9 +14,9 @@ Not a failure: it is a [gate stop](glossary.md#gate-stop), the Controller waitin
 
 ## The run refuses with "protocol verify gave an answer outside the protocol" and `'warn'` (exit 20)
 
-The Workflow's `verify` reported a check as `warn`, which Controller 1.7.0 does not know, so it refuses `explain`, `step` and `run` (`inspect` still works). For example, the gate policy file (`docs/ai-workflow/GATE_POLICY.json`) is present, committed or not, and not adopted yet. Commit the policy file, then run `/adopt-gate-policy` in a Claude session, then run again. Other causes exist. To see which one, run `python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root . verify` in the repository and read the `gate_policy` check's detail.
+Fixed in Controller 1.7.1: it treats a `warn` check as advisory, so `explain`, `step` and `run` carry on and `explain` shows the check's detail as a `verify <check>: warn: ...` line. Controller 1.7.0 does not know `warn`: the Workflow's `verify` reported a check as `warn`, so it refuses `explain`, `step` and `run` (`inspect` still works); upgrade to 1.7.1 or later. The `warn` itself has a cause to clear: for example, the gate policy file (`docs/ai-workflow/GATE_POLICY.json`) is present, committed or not, and not adopted yet. Commit the policy file, then run `/adopt-gate-policy` in a Claude session (the timing advice is under Human gates in [run](run.md#steps)). Some causes are not cleared by adoption. To see which one, run `python3 scripts/workflow_protocol.py --protocol-major 1 --repo-root . verify` in the repository and read the `gate_policy` check's detail.
 
-A lowered gate is such a cause. While an adoption that lowers a gate (for example, switching a gate back to automatic) is the newest adoption, Workflow 2.8.0 reports `warn` and Controller 1.7.0 refuses. The warning stays until a later adoption that lowers nothing becomes the newest. Do not adopt again only to hide it: the Workflow treats the warning as the expected signal of a lowered gate. A later Controller release will accept it. See the [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) and [compatibility](compatibility.md).
+A lowered gate is such a cause. While an adoption that lowers a gate (for example, switching a gate back to automatic) is the newest adoption, Workflow 2.8.0 and later report `warn`; Controller 1.7.1 shows it and carries on, and 1.7.0 refuses. The warning stays until a later adoption that lowers nothing becomes the newest. Do not adopt again only to hide it: the Workflow treats the warning as the expected signal of a lowered gate. See the [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) and [compatibility](compatibility.md).
 
 ## The run exited 16
 

@@ -396,7 +396,7 @@ class LoopGuardTest(unittest.TestCase):
         repo = target.inspect()
         item = target_state.NoWorkItemYet if work_item is None else type("W", (), {"work_item_id": work_item})()
         decision = type("D", (), {"protocol": type("P", (), {"action_id": action, "state_identity": state_identity})()})()
-        with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a: a[3:]):
+        with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a, **k: a[3:]):
             return job._no_progress_gate(target.runtime, repo, item, decision)
 
     def _jobs(self, target: _Target, *shapes) -> list[str]:
@@ -414,6 +414,19 @@ class LoopGuardTest(unittest.TestCase):
         self.assertEqual(code, protocol_decision.NO_PROGRESS_REPEATED)
         for job_id in ids:
             self.assertIn(job_id, text)
+
+    def test_the_guard_carries_the_preflight_advisories(self) -> None:
+        target = _Target(self)
+        self._jobs(target, (job.STATUS_FINISHED, "no_progress", {}), (job.STATUS_FINISHED, "no_progress", {}))
+        repo = target.inspect()
+        item = type("W", (), {"work_item_id": "demo"})()
+        decision = type("D", (), {"protocol": type("P", (), {"action_id": "implementation.checkpoint",
+                                                             "state_identity": None})()})()
+        advisories = ("verify gate_policy: warn: policy not adopted",)
+        with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a, **k: k) as gate_for:
+            got = job._no_progress_gate(target.runtime, repo, item, decision, advisories=advisories)
+        self.assertEqual(gate_for.call_count, 1)
+        self.assertEqual(got, {"advisories": advisories})
 
     def test_a_progressing_pair_does_not_trip_it(self) -> None:
         target = _Target(self)

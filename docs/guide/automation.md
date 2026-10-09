@@ -1,6 +1,6 @@
 # What the Controller automates, and how it stays safe
 
-> For: anyone who wants to know what the Controller launches by itself and how it stays safe. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: anyone who wants to know what the Controller launches by itself and how it stays safe. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 [Back to the documentation map](../README.md)
 
@@ -288,9 +288,13 @@ committed-state gate of legacy mode still applies before a launch.
 `explain` shows the Workflow's row, disposition and action, and with
 `--json` a `protocol` block; a legacy target's output is unchanged.
 `inspect` lists, as an advisory, any action id the Workflow's `describe`
-reports that this Controller release does not know (`unknown_action_ids`
-with `--json`). Such an id is never a refusal; it is blocked
-(`workflow_unknown_action`) only if it becomes the next action.
+reports that this Controller release cannot launch (`unknown_action_ids`
+with `--json`): an invented id, or one of the four catalogue ids it has no
+command for (`plan.satisfy`, `implementation.satisfy`, `acceptance.satisfy`,
+`pr.apply_review`). Such an id is never a refusal; it is blocked only if it
+becomes the next action: an invented or `pr.apply_review` id as
+`workflow_unknown_action`, a `*.satisfy` action (whose disposition is
+`validation`) as `workflow_unknown_disposition`.
 
 **Before a launch.** A decision is checked again against the Workflow
 before the job is recorded and once more immediately before the worker

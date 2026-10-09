@@ -276,6 +276,13 @@ class Verify:
     healthy: bool
     checks: tuple[Check, ...]
 
+    @property
+    def warnings(self) -> tuple[Check, ...]:
+        """The checks the Workflow reported as ``warn``: advisory, shown and
+        recorded, never a reason to stop. ``healthy`` stays the Workflow's own
+        boolean; it is not recomputed from the statuses."""
+        return tuple(check for check in self.checks if check.status == "warn")
+
 
 @dataclasses.dataclass(frozen=True)
 class PhaseIdentity:

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-protocol-warn-status",
+  "requirements": {
+    "R1": {
+      "description": "vendored schema is Workflow 2.9.0's, byte for byte, hash-pinned, loads under the keyword subset",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "the eight new 2.9.0 action ids are catalogue members, the user-only and external ones stay blocked or gates, and inspect still advises on the four automatic/validation ids this Controller cannot launch and on invented ids",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "a warn check is advisory: never gates a step, never changes healthy, detail shown and recorded",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "an unknown status still fails closed; behaviour without warn is byte-identical",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "every page that documents the refusal, the compatibility table and the edited pages' headers say what 1.7.1 does; D1's wording notes are applied",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "a real Workflow 2.9.0 warn is accepted by the branch and refused by 1.7.0; full suite and check_docs green; released as a fix: patch",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

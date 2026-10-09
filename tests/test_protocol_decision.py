@@ -528,6 +528,7 @@ class WarnAdvisoryTest(_Case):
         gate, _ = self._preflight(_verify(False, ("state_valid", "pass", "ok"), self.WARN))
         what = gate.gate.what_is_required
         self.assertIn("unhealthy (gate_policy: warn: policy not adopted)", what)
+        self.assertIn("the `warn` checks are advisory", what)
         self.assertNotIn("()", what)
 
     def test_unhealthy_with_nothing_to_name_has_a_readable_gate(self) -> None:

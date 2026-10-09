@@ -29,6 +29,10 @@ Plan revision 2 approved. Implementing under Workflow 2.6.0, one checkpoint per 
   decision's evidence, next action `/milestone-implement`; (b) the shared 1.7.0 install exited 20 with
   "protocol verify gave an answer outside the protocol: $.result.checks[7].status: 'warn' is not one of ['pass',
   'fail', 'skip']".
+- **Self-review (SELF_REVIEWING_IMPLEMENTATION).** No Blocking findings. Important: no test pinned that
+  `_no_progress_gate` hands the advisories to `gate_for` (plan CP2's "warn plus the no-progress gate");
+  `tests.test_protocol_job.LoopGuardTest` adds it. Wording: `docs/common-problems.md`'s `warn` entry no longer
+  puts "For example" straight after "Upgrade to 1.7.1", where it read as an example of upgrading.
 
 The sections below describe the previous milestone and are superseded as CP3 lands.
 

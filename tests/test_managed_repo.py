@@ -60,8 +60,9 @@ class CleanManagedRepositoryTest(unittest.TestCase):
         # Workflow managed repository -- the disposable integration fixture
         # every other case in this file avoids needing. Its release is
         # whatever its own installation.json declares, never a literal:
-        # an admitted one, and the one whose vendored tree
-        # tests/test_workflow_releases.py checks its installed files against.
+        # an admitted one. tests/test_workflow_releases.py checks the same
+        # admission, and the installed files against that record, without
+        # Workflow Manager.
         declared = json.loads(
             (fixtures.REPO_ROOT / ".workflow-manager" / "installation.json").read_text(),
         )["workflow_version"]

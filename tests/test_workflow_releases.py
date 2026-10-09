@@ -25,7 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import managed_repo  # noqa: E402
+from controller import managed_repo, workflow_contract  # noqa: E402
+from controller.errors import UnsupportedInstallProfileError, UnsupportedWorkflowVersionError  # noqa: E402
 from tests import fixtures  # noqa: E402
 
 WORKFLOW_RELEASES_PY = fixtures.REPO_ROOT / "tools" / "workflow_releases.py"
@@ -136,22 +137,57 @@ class CheckTest(unittest.TestCase):
             self.assertIn(f"admitted release {release} has no vendored tree", result.stderr)
 
 
-class InstalledReleaseTest(unittest.TestCase):
-    """This repository's own installed Workflow: an admitted release, and
-    byte-identical to that release's vendored tree. The release is read from
-    its ``installation.json``, never written here as a literal, so the same
-    test holds after the post-release update to another admitted release."""
+def _admit_installation(root: Path) -> dict:
+    """The non-Manager steps of ``managed_repo.inspect``, in its order: the
+    record is read, the version gate runs (the legacy arm for a release in
+    ``RELEASE_CONTRACTS``, the capability arm for any other), then the
+    profile check. Returns the record; raises the production refusal."""
+    manifest = managed_repo._read_manifest(root)
+    release = manifest["workflow_version"]
+    if release in workflow_contract.RELEASE_CONTRACTS:
+        managed_repo._check_workflow_version(release, root)
+    else:
+        managed_repo._check_protocol_admission(release, root, manifest)
+    if manifest["profile"] not in managed_repo.SUPPORTED_PROFILES:
+        raise UnsupportedInstallProfileError(
+            f"{root} runs profile {manifest['profile']!r}, outside "
+            f"{sorted(managed_repo.SUPPORTED_PROFILES)}",
+            evidence={"observed_profile": manifest["profile"]},
+        )
+    return manifest
 
-    def setUp(self) -> None:
-        manifest = fixtures.REPO_ROOT / ".workflow-manager" / "installation.json"
-        self.release = json.loads(manifest.read_text())["workflow_version"]
+
+def _installation_problems(root: Path, manifest: dict) -> list[str]:
+    """Every way ``root``'s Workflow files differ from what ``manifest``'s
+    ``managed`` map records for them, each naming the path."""
+    managed = manifest["managed"]
+    problems = []
+    for rel_path, entry in sorted(managed.items()):
+        installed = root / rel_path
+        if not installed.is_file():
+            problems.append(f"{rel_path}: missing")
+            continue
+        if hashlib.sha256(installed.read_bytes()).hexdigest() != entry["sha256"]:
+            problems.append(f"{rel_path}: digest differs from the installation record")
+        if bool(installed.stat().st_mode & 0o100) != entry["executable"]:
+            problems.append(f"{rel_path}: mode differs from the installation record")
+    commands_dir = root / ".claude" / "commands"
+    installed_commands = {path.relative_to(root).as_posix() for path in commands_dir.glob("*.md")}
+    recorded_commands = {path for path in managed if path.startswith(".claude/commands/")}
+    for rel_path in sorted(installed_commands - recorded_commands):
+        problems.append(f"{rel_path}: installed but not in the installation record")
+    return problems
+
+
+class InstalledReleaseTest(unittest.TestCase):
+    """This repository's own installed Workflow: admitted the way the
+    Controller admits any managed repository, and equal to what its
+    ``installation.json`` records. The release is read from that record, never
+    written here as a literal and never matched to a vendored tree, so a
+    Workflow move needs no change here."""
 
     def test_the_installed_release_is_admitted(self) -> None:
-        """A legacy release is admitted by exact validation; a protocol
-        release by capability. The predicate checks the vendored listing
-        only: protocol major 1 is pinned per vendored protocol release by
-        ``ProtocolAdmissionTest.test_every_vendored_protocol_release_is_runnable``."""
-        self.assertTrue(_is_admitted(self.release), f"{self.release} is neither validated nor a protocol release")
+        _admit_installation(fixtures.REPO_ROOT)
 
     def test_every_vendored_tree_is_validated_or_ships_the_protocol(self) -> None:
         for release in _vendored_releases():
@@ -161,17 +197,69 @@ class InstalledReleaseTest(unittest.TestCase):
     def test_a_tree_that_is_neither_is_not_admitted(self) -> None:
         self.assertFalse(_is_admitted("9.9.9", files={"scripts/workflow_state.py": {}}))
 
-    def test_the_installed_files_equal_the_vendored_tree(self) -> None:
-        tree = fixtures.workflow_release_tree(self.release)
-        files = fixtures.workflow_release_files(self.release)
-        installed_commands = {path.relative_to(fixtures.REPO_ROOT).as_posix()
-                              for path in (fixtures.REPO_ROOT / ".claude" / "commands").glob("*.md")}
-        self.assertEqual(installed_commands, {path for path in files if path.startswith(".claude/commands/")})
-        for rel_path, entry in sorted(files.items()):
-            with self.subTest(path=rel_path):
-                installed = fixtures.REPO_ROOT / rel_path
-                self.assertEqual(installed.read_bytes(), (tree / rel_path).read_bytes())
-                self.assertEqual(bool(installed.stat().st_mode & 0o100), entry["executable"])
+    def test_the_installed_files_equal_the_installation_record(self) -> None:
+        manifest = managed_repo._read_manifest(fixtures.REPO_ROOT)
+        self.assertEqual([], _installation_problems(fixtures.REPO_ROOT, manifest))
+
+
+class InstalledReleaseRefusalTest(unittest.TestCase):
+    """The two checks above on a disposable installation, so each refusal is
+    shown to fire (the real installation is always valid)."""
+
+    def setUp(self) -> None:
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.root = Path(self._td.name) / "repo"
+        fixtures.git_init(self.root)
+        fixtures.install_workflow_release(self.root, "2.7.0")
+        fixtures.commit_all(self.root, "install")
+
+    def test_an_untouched_installation_is_admitted_and_matches_its_record(self) -> None:
+        manifest = _admit_installation(self.root)
+        self.assertEqual([], _installation_problems(self.root, manifest))
+
+    def test_a_modified_file_is_reported_by_name(self) -> None:
+        _append(self.root / "scripts" / "workflow_state.py", b"# edited\n")
+        problems = _installation_problems(self.root, managed_repo._read_manifest(self.root))
+        self.assertEqual(["scripts/workflow_state.py: digest differs from the installation record"], problems)
+
+    def test_a_missing_file_is_reported_by_name(self) -> None:
+        (self.root / ".claude" / "commands" / "review-plan.md").unlink()
+        problems = _installation_problems(self.root, managed_repo._read_manifest(self.root))
+        self.assertEqual([".claude/commands/review-plan.md: missing"], problems)
+
+    def test_an_extra_command_file_is_reported_by_name(self) -> None:
+        (self.root / ".claude" / "commands" / "stray.md").write_text("x\n")
+        problems = _installation_problems(self.root, managed_repo._read_manifest(self.root))
+        self.assertEqual([".claude/commands/stray.md: installed but not in the installation record"], problems)
+
+    def test_a_changed_mode_is_reported_by_name(self) -> None:
+        script = self.root / "scripts" / "workflow_state.py"
+        script.chmod(script.stat().st_mode ^ 0o100)
+        problems = _installation_problems(self.root, managed_repo._read_manifest(self.root))
+        self.assertEqual(["scripts/workflow_state.py: mode differs from the installation record"], problems)
+
+    def test_a_release_without_the_protocol_script_is_refused(self) -> None:
+        fixtures.write_installation_manifest(self.root, workflow_version="9.9.9",
+                                             managed={"scripts/workflow_state.py": {}})
+        with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+            _admit_installation(self.root)
+        self.assertEqual("no_protocol", ctx.exception.evidence["reason"])
+
+    def test_protocol_major_2_is_refused(self) -> None:
+        script = self.root / "scripts" / "workflow_protocol.py"
+        script.write_text(script.read_text().replace("PROTOCOL_MAJOR = 1", "PROTOCOL_MAJOR = 2"))
+        with self.assertRaises(UnsupportedWorkflowVersionError) as ctx:
+            _admit_installation(self.root)
+        self.assertEqual("unsupported_protocol_major", ctx.exception.evidence["reason"])
+
+    def test_an_unsupported_profile_is_refused(self) -> None:
+        record = self.root / ".workflow-manager" / "installation.json"
+        data = json.loads(record.read_text())
+        data["profile"] = "minimal-nonexistent"
+        record.write_text(json.dumps(data))
+        with self.assertRaises(UnsupportedInstallProfileError):
+            _admit_installation(self.root)
 
 
 @unittest.skipUnless(_DISTRIBUTION.is_dir(),

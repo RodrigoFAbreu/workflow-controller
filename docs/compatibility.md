@@ -26,12 +26,14 @@ refused. An undefined status is still refused with exit 20. The advisory lists t
 stays silent for the four gates it never launches. Controller 1.7.0 refuses `explain`,
 `step` and `run` (exit 20) on a repository whose `verify` reports `warn`: for example an
 unadopted gate policy file, or, while it is the newest adoption, one that lowers a gate.
-Upgrade to 1.7.1. This repository itself moves to 2.9.0 in a `chore:` update pull request
-after the milestone that vendors that release's test tree, and not before. Any other release
+Upgrade to 1.7.1. Any other release
 is refused: 2.5.0 and 2.6.1 as not validated, a release older than the 2.5
 line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as
 `unsupported_protocol_major`.
+
+This repository itself moves to 2.9.0 in a `chore:` update pull request after the
+milestone that vendors that release's test tree, and not before.
 
 ## What admitted means
 

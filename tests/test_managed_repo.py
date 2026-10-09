@@ -454,7 +454,7 @@ class ProtocolAdmissionTest(unittest.TestCase):
         Controller admits it in protocol mode, and its ``verify`` is healthy."""
         releases = [release for release in sorted(p.name for p in fixtures.WORKFLOW_RELEASES_DIR.iterdir() if p.is_dir())
                     if "scripts/workflow_protocol.py" in fixtures.workflow_release_files(release)]
-        self.assertIn("2.7.0", releases)
+        self.assertLessEqual({"2.7.0", "2.9.0"}, set(releases))
         for release in releases:
             with self.subTest(release=release), tempfile.TemporaryDirectory() as td:
                 root = Path(td) / "repo"

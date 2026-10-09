@@ -636,7 +636,8 @@ def build_work_item_view(*, work_item_id: str = "wi-1", phase: str = "PLANNING",
 def workflow_release_tree(release: str = REFERENCE_WORKFLOW_RELEASE) -> Path:
     """The vendored tree of the released Workflow ``release``: its
     command files and scripts (plus the protocol and gate-policy scripts
-    a release ships) at their target-relative paths, hash-pinned by its ``RELEASE.json``. Read it, never write it."""
+    a release ships) at their target-relative paths, hash-pinned by its
+    ``RELEASE.json``. Read it, never write it."""
     tree = WORKFLOW_RELEASES_DIR / release
     if not (tree / "RELEASE.json").is_file():
         raise FileNotFoundError(f"no vendored Workflow tree for {release!r} under {WORKFLOW_RELEASES_DIR}")

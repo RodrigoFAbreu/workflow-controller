@@ -5,9 +5,10 @@ Stdlib only.
 ``tests/workflow_releases/<release>/`` holds, at their target-relative paths,
 exactly the part of a released Workflow payload the Controller's checks and
 disposable-repository tests read: the release's ``.claude/commands/*.md``
-files (seventeen up to 2.7.0, twenty-two for 2.9.0), ``scripts/workflow_state.py``,
-``scripts/workflow_fingerprint.py`` and ``scripts/prepare-ai-review.sh``, plus
-the optional protocol and gate-policy scripts a release ships. A ``RELEASE.json`` beside them records the
+files (seventeen up to 2.7.0, twenty-two for 2.9.0),
+``scripts/workflow_state.py``, ``scripts/workflow_fingerprint.py`` and
+``scripts/prepare-ai-review.sh``, plus the optional protocol and gate-policy
+scripts a release ships. A ``RELEASE.json`` beside them records the
 release, the Workflow Manager source and commit the files were taken from,
 and each file's ``sha256`` and executable flag, both equal to the Manager
 manifest's entry for that ``target_path``. Tests read these trees, never
@@ -73,7 +74,8 @@ _RELEASE_RE = re.compile(r"\d+\.\d+\.\d+")
 
 def is_vendored_path(target_path: str) -> bool:
     """Whether a Manager manifest ``target_path`` belongs to the vendored
-    subset: a command file or one of :data:`VENDORED_SCRIPTS`."""
+    subset: a command file, one of :data:`VENDORED_SCRIPTS`, or one of the
+    optional :data:`PROTOCOL_PATHS` and :data:`GATE_POLICY_PATHS`."""
     return (
         target_path in VENDORED_SCRIPTS
         or target_path in PROTOCOL_PATHS

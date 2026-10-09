@@ -27,6 +27,11 @@ Plan revision 3, base `e6ff30b`. Implementing one checkpoint per invocation.
   trailer tests (follow-up 12). The same update on `main` fails `InstalledReleaseTest` (reproducing
   PR #30). `explain` of the updated clone admits in protocol mode, exit 0. On this branch itself:
   `check_docs` exit 0 and the full serial selection fails only the same two tests.
+- **Self-review (SELF_REVIEWING_IMPLEMENTATION).** No blocking findings. Fixed: `docs/compatibility.md`
+  no longer puts the move sentence between the admitted releases and "Any other release is refused";
+  the runnable-tree test asserts both 2.7.0 and 2.9.0 are among the protocol trees it installs (R3);
+  the `is_vendored_path`, module and `workflow_release_tree` docstrings name the optional paths and
+  are rewrapped.
 
 ---
 

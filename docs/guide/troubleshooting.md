@@ -393,8 +393,8 @@ disposition and action beside it.
   interrupted between routing the item and writing its registry);
   `installation_release_matches` fails when the installation record names
   a release other than the installed scripts', which the Workflow
-  Manager's `update` or `repair` puts right. Repair what the checks name,
-  then run again.
+  Manager's `update` or `repair` puts right. Repair the failing checks it names (the `warn`
+  checks are advisory), then run again.
 - `workflow_unknown_disposition`, `workflow_unknown_action`,
   `workflow_unknown_worker_role`: the Workflow answered a value this
   Controller release does not know (a later protocol minor may add one).

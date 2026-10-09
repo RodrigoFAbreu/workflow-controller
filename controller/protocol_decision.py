@@ -205,8 +205,8 @@ def preflight(managed_repo: Any, work_item: Any, *,
             f"{WORKFLOW_UNHEALTHY}: the Workflow's verify reports the repository unhealthy ({details}); "
             "nothing is launched. A failing state_valid can be transient (a planning worker interrupted "
             "after routing the item and before writing its registry); installation_release_matches is "
-            "expected to pass on a real target, whose scripts and installation record agree. Repair what "
-            "the checks name, then re-run"),
+            "expected to pass on a real target, whose scripts and installation record agree. Repair the "
+            "failing checks it names (the `warn` checks are advisory), then re-run"),
         artifact_path=None, safe_resume_command=explain_gate_command(root, work_item_id or ""))
     return Decision(
         observed_phase=phase,

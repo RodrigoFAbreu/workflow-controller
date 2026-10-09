@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-protocol-warn-status",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Vendor Workflow 2.9.0's protocol schema (protocol 1.2) byte for byte with a pinned sha256 and a published copy under tests/protocol_schemas; the eight new action ids become catalogue members and the inspect advisory keeps naming the four this Controller cannot launch; the status enum stays strict; protocol_schema tests and the unknown-action-id tests updated",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "A warn check is advisory: Verify.warnings, protocol_decision.preflight with health_gate as a wrapper, an advisories keyword on decide/from_answer/gate_for (no .replace calls), explain and execute_step thread the advisory lines into every standing decision's evidence including the no-progress and unstable gates, the unhealthy gate lists warn checks, and an unknown status still refuses with exit 20",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Documentation and release readiness: run, common-problems, compatibility (2.9.0 and 1.7.1), glossary and troubleshooting pages say what 1.7.1 does, D1's wording notes applied, edited pages' headers and test_docs HEADER updated, a real Workflow 2.9.0 warn checked against the branch and the 1.7.0 install, check_docs and the full suite green",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

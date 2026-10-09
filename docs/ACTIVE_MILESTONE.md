@@ -68,7 +68,7 @@ Add and commit `docs/ai-workflow/GATE_POLICY.json` containing exactly `{"schema_
 4. Make a check `fail` in the scratch repo. Deleting or editing a managed script trips `workflow-manager verify` first, so
    instead edit the `base_commit` of the active work item in `$S/repo`'s `WORKFLOW_STATE.json`, or run with a scratch
    always-succeeding `--workflow-manager` wrapper script. `explain` shows the unhealthy gate
-   listing the failing checks first, then the `warn` checks.
+   listing the failing checks first, then the `warn` checks; its text says "the `warn` checks are advisory".
 5. An undefined status still refuses, exit 20. Use the scratch `--workflow-manager` wrapper above (or a stub of the protocol
    script's answer) so that `verify` says `"status": "maybe"`; editing a managed script trips `workflow-manager verify` first.
 6. With a repeated no-progress step, the no-progress gate's evidence also carries the `verify ...: warn:` line.

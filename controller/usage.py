@@ -1117,10 +1117,13 @@ def complete(runtime_root: str | os.PathLike, token: str, end_readings: Mapping 
         stored = record["readings"].get(provider, {}).get(FIVE_HOUR)
         current_resets = stored["resets_at"] if stored and stored["resets_at"] > now else None
         if current_resets is None:
-            # The reservation was rolled over by the maintenance above: its
-            # component already names the window that is current now.
-            rolled = reservation[FIVE_HOUR]["window_resets_at"]
-            current_resets = rolled if rolled is not None and rolled > now else None
+            # No shared reading names the window now current: step the
+            # reservation's known window (its component, rolled if it was live,
+            # else the one it lapsed with, else the baseline's) forward to now.
+            known = reservation[FIVE_HOUR]["window_resets_at"]
+            if known is None:
+                known = baseline[FIVE_HOUR]["window_resets_at"]
+            current_resets = _new_window(record, provider, FIVE_HOUR, known, now)[1]
         ended = end_resets
         if ended is None:
             ended = current_resets if current_resets is not None else baseline[FIVE_HOUR]["window_resets_at"]

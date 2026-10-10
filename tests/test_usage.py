@@ -816,6 +816,43 @@ class ReplayEquivalenceTest(TempRootCase):
         third = admit(self.root, now=after + 60, run_id="run-3", limits=Limits(repository_cap_percent=18))
         self.assertEqual(third.hold.window, "repository_cap")
 
+    def _lapse_before_the_reset(self) -> tuple[str, float]:
+        """A token whose reservation lapsed before the five-hour reset, and a
+        time after that reset."""
+        seed(self.root, five=10, weekly=2)
+        token = admit(self.root, limits=Limits(repository_cap_percent=18, reservation_seconds=H)).token
+        # another lane's admission, elsewhere, lapses the first reservation
+        admit(self.root, now=FIVE_RESETS - H, run_id="run-other", repository="/other")
+        self.assertIn(token, self.record()["lapsed"])
+        return token, FIVE_RESETS + 600
+
+    def _assert_later_measured_charge_adds(self, after: float) -> None:
+        entry = self.record()["spend"]["repository"]["claude"]["/repo"]
+        self.assertTrue(usage.same_window(entry["window_resets_at"], FIVE_RESETS + 5 * H))
+        window = FIVE_RESETS + 5 * H
+        token2 = admit(self.root, now=after, run_id="run-2", limits=Limits(repository_cap_percent=100),
+                       readings=[reading(FIVE_HOUR, 0, window, after), reading(WEEKLY, 2, WEEK_RESETS, after)]).token
+        usage.complete(self.root, token2, {FIVE_HOUR: reading(FIVE_HOUR, 8, window, after + 60),
+                                           WEEKLY: reading(WEEKLY, 3, WEEK_RESETS, after + 60)},
+                       usage.OUTCOME_OK, now=after + 60)
+        self.assertEqual(usage.repository_spent(self.record(), "claude", "/repo", after + 60), 16.0)
+        third = admit(self.root, now=after + 60, run_id="run-3", limits=Limits(repository_cap_percent=18))
+        self.assertEqual(third.hold.window, "repository_cap")
+
+    def test_an_unknown_completion_of_a_lapsed_reservation_keeps_the_current_window(self) -> None:
+        token, after = self._lapse_before_the_reset()
+        usage.complete(self.root, token, {}, usage.OUTCOME_OK, now=after)
+        self._assert_later_measured_charge_adds(after)
+
+    def test_a_replayed_lapsed_reservation_keeps_the_current_window(self) -> None:
+        token, after = self._lapse_before_the_reset()
+        usage.bind_job(self.root, token, "j1", now=NOW)
+        jobs = {"j1": {"status": "FAILED", "expected_transition": {}, "usage": {"accounting": "open"}}}
+        settled = usage.settle_pending(self.root, jobs.get, lambda r: "expected_transition" not in r, now=after,
+                                       is_terminal=lambda r: r["status"] == "FAILED")
+        self.assertEqual([s.action for s in settled], ["unknown"])
+        self._assert_later_measured_charge_adds(after)
+
     def test_a_legacy_block_without_the_weekly_identity_is_not_a_weekly_sample(self) -> None:
         legacy = {"five_hour_end": 12.0, "end_window_resets_at": FIVE_RESETS, "end_observed_at": NOW + 600,
                   "weekly_end": 20.0}

@@ -346,6 +346,67 @@ def _empty_record() -> dict:
             "settled": {}, "spend": {"run": {}, "repository": {}}}
 
 
+def _shape(condition: bool, what: str) -> None:
+    if not condition:
+        raise ValueError(f"{what} is malformed")
+
+
+def _number_or_none(value: object) -> bool:
+    return value is None or _is_number(value)
+
+
+def _validate_component(component: object, what: str) -> None:
+    _shape(isinstance(component, dict), what)
+    _shape(_is_number(component.get("amount", 0.0)) or "amount" not in component, f"{what}.amount")
+    for key in ("start", "window_resets_at"):
+        _shape(_number_or_none(component.get(key)), f"{what}.{key}")
+
+
+def _validate_reservation(token: object, entry: object, section: str) -> None:
+    what = f"{section}[{token!r}]"
+    _shape(isinstance(entry, dict) and isinstance(entry.get("provider"), str), what)
+    for key in ("created_at", "expires_at") + (("lapsed_at",) if section == "lapsed" else ()):
+        _shape(_is_number(entry.get(key)), f"{what}.{key}")
+    for window in WINDOWS:
+        _validate_component(entry.get(window), f"{what}.{window}")
+        _shape(_is_number(entry[window].get("amount")), f"{what}.{window}.amount")
+    baseline = entry.get("baseline")
+    _shape(isinstance(baseline, dict), f"{what}.baseline")
+    for window in WINDOWS:
+        _validate_component(baseline.get(window), f"{what}.baseline.{window}")
+
+
+def _validate_record(record: dict) -> None:
+    """Raise ``ValueError`` when a section or an accounting entry of a
+    version-2 record is not the shape this release reads, so the caller
+    reports an unreadable record instead of crashing on it."""
+    for key in ("readings", "reservations", "lapsed", "settled", "spend"):
+        _shape(isinstance(record[key], dict), key)
+    _shape(isinstance(record["ledger"], list), "ledger")
+    for provider, windows in record["readings"].items():
+        _shape(isinstance(windows, dict), f"readings[{provider!r}]")
+        for window, reading in windows.items():
+            _shape(isinstance(reading, dict) and _is_number(reading.get("percent"))
+                   and _is_number(reading.get("resets_at")) and _number_or_none(reading.get("observed_at")),
+                   f"readings[{provider!r}][{window!r}]")
+    for section in ("reservations", "lapsed"):
+        for token, entry in record[section].items():
+            _validate_reservation(token, entry, section)
+    for token, at in record["settled"].items():
+        _shape(_is_number(at), f"settled[{token!r}]")
+    for entry in record["ledger"]:
+        _shape(isinstance(entry, dict) and _is_number(entry.get("finished_at")) and isinstance(entry.get("provider"), str),
+               "ledger entry")
+    spend = record["spend"]
+    for scope, fields in (("run", ("charged", "updated_at")), ("repository", ("charged", "window_resets_at"))):
+        _shape(isinstance(spend.setdefault(scope, {}), dict), f"spend.{scope}")
+        for provider, entries in spend[scope].items():
+            _shape(isinstance(entries, dict), f"spend.{scope}[{provider!r}]")
+            for name, entry in entries.items():
+                _shape(isinstance(entry, dict) and all(_is_number(entry.get(f)) for f in fields),
+                       f"spend.{scope}[{provider!r}][{name!r}]")
+
+
 def load_record(runtime_root: str | os.PathLike) -> dict:
     """The shared record (a fresh empty one when absent). A file that is not
     a JSON object of a version this release knows is an
@@ -367,6 +428,12 @@ def load_record(runtime_root: str | os.PathLike) -> dict:
     for key in record:
         if key in raw:
             record[key] = raw[key]
+    try:
+        _validate_record(record)
+    except ValueError as exc:
+        raise UsageRecordError(f"the usage record at {path} cannot be read: {exc}; repair or remove it, or set "
+                               f"usage.enabled=false to run without the budget",
+                               evidence={"path": str(path)}) from exc
     record["spend"].setdefault("run", {})
     record["spend"].setdefault("repository", {})
     return record
@@ -911,9 +978,27 @@ def _end_readings_from_block(block: Mapping | None) -> dict:
         value = block.get(figure)
         if not _is_number(value):
             continue
-        resets = block.get("end_window_resets_at") if window == FIVE_HOUR else None
+        resets = block.get("end_window_resets_at" if window == FIVE_HOUR else "weekly_end_resets_at")
+        if not _is_number(resets):
+            resets = None
         out[window] = {"provider": None, "window": window, "percent": float(value), "resets_at": resets,
                        "observed_at": observed, "source": "job-record"}
+    return out
+
+
+def _first_readings_from_block(block: Mapping | None) -> dict:
+    """The stream's first readings, rebuilt from the figures a job record's
+    ``usage`` block carries (``five_hour_first``, ``weekly_first`` and their
+    ``*_resets_at``), so a replay lowers the baseline exactly as the
+    uninterrupted completion did."""
+    if not block:
+        return {}
+    out: dict = {}
+    for window, prefix in ((FIVE_HOUR, "five_hour"), (WEEKLY, "weekly")):
+        value, resets = block.get(f"{prefix}_first"), block.get(f"{prefix}_first_resets_at")
+        if _is_number(value) and _is_number(resets):
+            out[window] = {"provider": None, "window": window, "percent": float(value), "resets_at": resets,
+                           "observed_at": None, "source": "job-record"}
     return out
 
 
@@ -980,7 +1065,7 @@ def complete(runtime_root: str | os.PathLike, token: str, end_readings: Mapping 
             return CompleteResult(COMPLETE_NOT_STARTED)
         baseline = reservation["baseline"]
         end = _by_window(end_readings) if end_readings is not None else _end_readings_from_block(usage_block)
-        first = _by_window(stream_start)
+        first = _by_window(stream_start) if stream_start is not None else _first_readings_from_block(usage_block)
         provider = reservation["provider"]
         kinds: dict = {}
         for window in WINDOWS:
@@ -1011,11 +1096,15 @@ def complete(runtime_root: str | os.PathLike, token: str, end_readings: Mapping 
             charged=charged, delta=kind)
         _append_ledger(record, entry)
         _charge_run(record, provider, reservation.get("run_id"), charged, now)
+        stored = record["readings"].get(provider, {}).get(FIVE_HOUR)
+        current_resets = stored["resets_at"] if stored and stored["resets_at"] > now else None
         ended = end_resets
         if ended is None:
-            stored = record["readings"].get(provider, {}).get(FIVE_HOUR)
-            ended = stored["resets_at"] if stored and stored["resets_at"] > now \
-                else baseline[FIVE_HOUR]["window_resets_at"]
+            ended = current_resets if current_resets is not None else baseline[FIVE_HOUR]["window_resets_at"]
+        if kind != "measured" and ended is not None and ended <= now:
+            # Unmeasured work spanning a reset: its forecast replaces the
+            # liability in the window that is current now, never the expired one.
+            ended = current_resets
         start_window = baseline[FIVE_HOUR]["window_resets_at"]
         if start_window is not None and ended is not None and same_window(start_window, ended):
             repo_amount = charged

@@ -729,6 +729,114 @@ class CompleteTest(TempRootCase):
         self.assertEqual(record["spend"]["repository"]["claude"]["/repo"]["charged"], 2.0)
 
 
+class ReplayEquivalenceTest(TempRootCase):
+    """Review round 3 (I1-I3): an unmeasured completion after a reset keeps its
+    repository liability, and a replay from the job record's durable figures
+    charges exactly what the uninterrupted completion did."""
+
+    def _admit_and_roll(self, **limits):
+        seed(self.root, five=10, weekly=2)
+        token = admit(self.root, limits=Limits(repository_cap_percent=10, reservation_seconds=5 * H, **limits)).token
+        after = FIVE_RESETS + 60
+        usage.renew(self.root, token, reservation_seconds=5 * H, now=after)
+        self.assertEqual(usage.repository_outstanding(self.record(), "claude", "/repo", after), 8.0)
+        return token, after
+
+    def _assert_liability_replaced(self, after: float) -> None:
+        record = self.record()
+        self.assertEqual(usage.repository_outstanding(record, "claude", "/repo", after), 0.0)
+        self.assertEqual(usage.repository_spent(record, "claude", "/repo", after), 8.0)
+        second = admit(self.root, now=after, limits=Limits(repository_cap_percent=10), run_id="run-2")
+        self.assertEqual(second.hold.window, "repository_cap")
+
+    def test_an_unknown_completion_after_a_reset_charges_the_current_window(self) -> None:
+        token, after = self._admit_and_roll()
+        entry = usage.complete(self.root, token, {}, usage.OUTCOME_OK, now=after).entry
+        self.assertEqual(entry["delta"], "unknown")
+        self._assert_liability_replaced(after)
+
+    def test_a_cached_expired_end_reading_charges_the_current_window(self) -> None:
+        token, after = self._admit_and_roll()
+        cached = {FIVE_HOUR: reading(FIVE_HOUR, 12, FIVE_RESETS, NOW)}
+        entry = usage.complete(self.root, token, cached, usage.OUTCOME_OK, now=after).entry
+        self.assertEqual(entry["delta"], "unknown")
+        self._assert_liability_replaced(after)
+
+    def _both(self, first, last, block_extra=None, **seed_args):
+        """``(normal entry, replay entry)`` for the same job."""
+        entries = []
+        for replay in (False, True):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                seed(root, **seed_args)
+                token = admit(root).token
+                if replay:
+                    block = {"five_hour_end": last[FIVE_HOUR]["percent"], "end_window_resets_at": last[FIVE_HOUR]["resets_at"],
+                             "end_observed_at": last[FIVE_HOUR]["observed_at"],
+                             "weekly_end": last[WEEKLY]["percent"], "weekly_end_resets_at": last[WEEKLY]["resets_at"]}
+                    for window, prefix in ((FIVE_HOUR, "five_hour"), (WEEKLY, "weekly")):
+                        if window in first:
+                            block[f"{prefix}_first"] = first[window]["percent"]
+                            block[f"{prefix}_first_resets_at"] = first[window]["resets_at"]
+                    result = usage.complete(root, token, None, usage.OUTCOME_OK, now=NOW + 600, usage_block=block)
+                else:
+                    result = usage.complete(root, token, last, usage.OUTCOME_OK, now=NOW + 600, stream_start=first)
+                entries.append(result.entry)
+        return entries
+
+    def test_replay_keeps_the_streams_lower_starting_reading(self) -> None:
+        first = {FIVE_HOUR: reading(FIVE_HOUR, 10, FIVE_RESETS, NOW + 10)}
+        normal, replay = self._both(first, end(25, 21), five=20, weekly=20)
+        self.assertEqual(normal["charged"], 15.0)
+        self.assertEqual(replay["charged"], normal["charged"])
+        self.assertEqual((replay["five_hour"], replay["delta"]), (normal["five_hour"], normal["delta"]))
+
+    def test_replay_identifies_an_independent_weekly_reset(self) -> None:
+        last = end(12, 3, week_resets=WEEK_RESETS + 7 * 86400)
+        normal, replay = self._both({}, last, five=10, weekly=2)
+        self.assertEqual((normal["weekly"], normal["weekly_after_reset"]), (None, 3.0))
+        for key in ("five_hour", "weekly", "five_hour_after_reset", "weekly_after_reset", "charged", "delta"):
+            self.assertEqual(replay[key], normal[key], key)
+
+
+class MalformedRecordTest(TempRootCase):
+    def _write(self, text: str) -> Path:
+        path = self.root / usage.USAGE_FILE
+        path.write_text(text)
+        return path
+
+    def test_structurally_corrupt_version_2_records_are_unreadable(self) -> None:
+        seed(self.root, five=10)
+        token = admit(self.root).token
+        good = self.record()
+        corrupt = [
+            {"version": 2, "spend": []},
+            {"version": 2, "readings": []},
+            {"version": 2, "ledger": {}},
+            {"version": 2, "reservations": {"t": 5}},
+            {"version": 2, "settled": {"t": "now"}},
+            {"version": 2, "spend": {"run": {"claude": {"r": []}}}},
+            {"version": 2, "readings": {"claude": {FIVE_HOUR: {"percent": "x"}}}},
+            {**good, "reservations": {token: {**good["reservations"][token], "baseline": {}}}},
+            {**good, "reservations": {token: {k: v for k, v in good["reservations"][token].items() if k != FIVE_HOUR}}},
+        ]
+        for raw in corrupt:
+            with self.subTest(raw=raw):
+                text = json.dumps(raw)
+                path = self._write(text)
+                with self.assertRaises(UsageRecordError):
+                    usage.load_record(self.root)
+                with self.assertRaises(UsageRecordError):
+                    usage.complete(self.root, token, {}, usage.OUTCOME_OK, now=NOW)
+                self.assertEqual(path.read_text(), text)
+
+    def test_a_valid_record_still_loads(self) -> None:
+        seed(self.root, five=10)
+        admit(self.root)
+        usage.complete(self.root, next(iter(self.record()["reservations"])), end(14, 2), usage.OUTCOME_OK, now=NOW + 600)
+        self.assertEqual(usage.load_record(self.root)["version"], usage.RECORD_VERSION)
+
+
 class ForecastTest(TempRootCase):
     def complete_job(self, five: float, weekly: float, i: int, role: str = "implement") -> None:
         token = admit(self.root, role=role, run_id=f"r{i}", repository=None).token

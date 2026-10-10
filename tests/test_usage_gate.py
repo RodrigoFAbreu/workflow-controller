@@ -435,6 +435,38 @@ class ReplayTest(_UsageCase):
         [entry] = self.shared()["ledger"]
         self.assertEqual((entry["delta"], entry["charged"]), ("measured", 5.0))
 
+    def test_resume_with_a_structurally_corrupt_record_keeps_the_outcome_and_the_bytes(self) -> None:
+        self.reading(10)
+        with unittest.mock.patch.object(job, "_observe_post_phase", side_effect=RuntimeError("crash")), \
+                self.assertRaises(RuntimeError):
+            self.ustep(self.stream_env(self.rate_limit(15)))
+        readable = (self.runtime_root / usage.USAGE_FILE).read_text()
+        for text in (json.dumps({"version": usage.RECORD_VERSION, "spend": []}),
+                     json.dumps({"version": usage.RECORD_VERSION, "reservations": {"t": 5}})):
+            with self.subTest(text=text):
+                (self.runtime_root / usage.USAGE_FILE).write_text(text)
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    [reported] = self.resume()
+                self.assertIn("usage record cannot be read", err.getvalue())
+                self.assertIn(reported["status"], job.TERMINAL_STATUSES)
+                self.assertEqual(self.record_on_disk()["usage"]["accounting"], "pending")
+                self.assertEqual((self.runtime_root / usage.USAGE_FILE).read_text(), text)
+        (self.runtime_root / usage.USAGE_FILE).write_text(readable)
+        [settled] = self.resume()
+        self.assertEqual(settled["usage"]["accounting"], "done")
+
+    def test_the_pending_block_carries_the_streams_first_readings_and_the_weekly_reset(self) -> None:
+        path = self.root / "stream.jsonl"
+        path.write_text("".join(json.dumps(e) + "\n" for e in (
+            {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "rateLimitType": "five_hour", "unifiedWindows": {
+                "five_hour": {"utilization": 0.1, "resetsAt": 1000}, "seven_day": {"utilization": 0.02, "resetsAt": 2000}}}},
+            {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "rateLimitType": "five_hour", "unifiedWindows": {
+                "five_hour": {"utilization": 0.25, "resetsAt": 1000}, "seven_day": {"utilization": 0.03, "resetsAt": 2000}}}})))
+        block, _first, _last = job._usage_end_block({"token": "t"}, str(path))
+        self.assertEqual((block["five_hour_first"], block["five_hour_first_resets_at"]), (10.0, 1000))
+        self.assertEqual((block["weekly_first"], block["weekly_first_resets_at"]), (2.0, 2000))
+        self.assertEqual((block["five_hour_end"], block["weekly_end"], block["weekly_end_resets_at"]), (25.0, 3.0, 2000))
+
     def test_a_step_whose_record_turns_unreadable_while_the_job_runs_returns_the_outcome_and_settles_later(self) -> None:
         self.reading(10)
         readable: list[str] = []

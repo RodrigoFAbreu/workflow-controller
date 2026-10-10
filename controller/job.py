@@ -5250,11 +5250,18 @@ def _usage_end_block(block: Mapping, stdout_path: str) -> tuple[dict, dict, dict
     except Exception:  # noqa: BLE001 -- the completion write never fails on usage
         first, last = {}, {}
     five, weekly = last.get(usage.FIVE_HOUR), last.get(usage.WEEKLY)
+    first_five, first_weekly = first.get(usage.FIVE_HOUR), first.get(usage.WEEKLY)
     ended = {
         **block,
         "five_hour_end": five["percent"] if five else None,
         "weekly_end": weekly["percent"] if weekly else None,
         "end_window_resets_at": five["resets_at"] if five else None,
+        "weekly_end_resets_at": weekly["resets_at"] if weekly else None,
+        # The stream's first readings: a replay lowers the baseline with them.
+        "five_hour_first": first_five["percent"] if first_five else None,
+        "five_hour_first_resets_at": first_five["resets_at"] if first_five else None,
+        "weekly_first": first_weekly["percent"] if first_weekly else None,
+        "weekly_first_resets_at": first_weekly["resets_at"] if first_weekly else None,
         "end_observed_at": (five or weekly or {}).get("observed_at"),
         "accounting": "pending",
     }

@@ -57,36 +57,36 @@ tests (follow-up 12), which also fail on the base.
 
 ## Functional review checklist
 
-### Functional review round 1 -- disposition (implementation revision 14)
+### Functional review round 2 (implementation revision 15)
 
-Flows F0-F9 passed at revision 13. The six findings were all bounded; fixed in `a03307a`, bundle regenerated as
-revision 14, a fresh implementation review is required before this checklist is re-run.
+Round 1 ran F0-F9 at revision 13 (evidence `320b77b`); all flows passed and the six findings
+(`.ai-review/archive/workflow-controller-usage-budget/functional-review-round1.md`) were bounded. They were fixed in
+`a03307a` (revisions 14 and 15, the latter saying the unreadable-record warning is printed once per sweep). This round
+re-tests each fix. Every fixed behaviour has an explicit step marked **[round 1 Fn]** below; run those first, then the
+remaining flows (all of F0-F9 keep their ids).
 
-- **F1 (defect)**: an unnamed run/repository cap held although the output said it was not evaluated. Fixed in
-  `usage.evaluate`/`admit` (a cap counts only a named scope); regressions in `tests/test_usage.py` and
-  `tests/test_usage_command.py`. Re-test: F4/F5 with a run cap below the forecast and no `--run-id` now exit 0.
-- **F2 (docs)**: `--release` idempotence paragraph in `docs/guide/commands.md` now says a repeated `not_started`
-  release exits 1.
-- **F3 (docs)**: `docs/common-problems.md` and `docs/guide/runtime.md` say deleting a damaged record leaves pending
-  jobs unaccounted; repair or restore it in place to settle them.
-- **F4 (usability)**: the "accounting is skipped" line is no longer printed by the `usage` commands (they report the
-  error and exit 20) and is printed once per `resume`; regressions added. Re-test F7: `usage`, `usage --json`,
-  `usage --check` on a damaged record print no skip line; `resume` prints it once.
-- **F5 (checklist wording)**: in F1, `CODEX_HOME=$W/nocodex ... --provider codex` shows `no reading` only with a fresh
-  runtime root (an earlier root still shows its stored Codex reading); in F7 the `usage` commands also reported the
-  warning at revision 13 and no longer do.
-- **F6 (optional)**: a five-hour-only reading prints `no reading: claude weekly` on every check; correct, no change.
+- **F1 (defect)**: an unnamed run/repository cap is no longer evaluated, even below the 8% forecast. Re-test: **F3
+  step 8** (and **F3 step 9**, the named counterpart). `step` and `run` name both scopes, so **F5** still holds.
+- **F2 (docs)**: a repeated `--outcome not_started` release exits 1 (the token was forgotten). Re-test: **F6**.
+- **F3 (docs)**: deleting a damaged record leaves its pending jobs unaccounted; repair or restore it in place to
+  settle them. Re-test: **F7** last-but-one bullet and **F9** (`common-problems.md`, `runtime.md`).
+- **F4 (usability)**: the "accounting is skipped" warning is not printed by `usage`, `usage --json` or `usage --check`
+  (they report the error and exit 20) and is printed once per `resume` sweep. Re-test: **F7**.
+- **F5 (checklist wording)**: F1's `no reading` case needs a fresh runtime root; F7 now says which commands print the
+  warning. Re-test: **F1**, **F7**.
+- **F6 (optional)**: a five-hour-only reading prints `no reading: claude weekly` on every check; correct. See **F4**.
 - No finding was deferred to a remediation child.
 
-Milestone `workflow-controller-usage-budget` (C8), implementation revision 13. Every flow runs in scratch
+Milestone `workflow-controller-usage-budget` (C8), implementation revision 15. Every flow runs in scratch
 clones and scratch directories only; nothing touches `~/.config/workflow-controller`,
 `~/.local/state/workflow-controller`, `~/.codex`, the real repository's runtime root, or a real `claude`, `codex`
-or `gh`. Each flow below was run once by the preparer against this branch; the expected output is what it printed
+or `gh`. Each flow below was run once by the preparer against this branch (the round-1 re-tests again at revision 15); the expected output is what it printed
 (times, epochs and paths differ). `F0` is the setup every other flow depends on.
 
 ### Setup (F0)
 
 ```bash
+set -u                                                 # an unset variable aborts instead of expanding to nothing
 SRC=/home/rodrigo/Workspace/workflow-controller        # read-only source; never run step/run in it
 W=$(mktemp -d)                                         # everything lives under $W
 git clone -q --branch milestone/workflow-controller-usage-budget "$SRC" "$W/clone"
@@ -96,8 +96,15 @@ export W CLONE=$W/clone
 git init -q --bare "$W/origin.git" && git -C "$CLONE" remote set-url origin "$W/origin.git"
 # a fake gh first on PATH (the flows never reach the forge; this is a guard)
 mkdir -p "$W/bin" && printf '#!/bin/sh\nexec python3 %s/tests/fake_gh.py "$@"\n' "$CLONE" > "$W/bin/gh" && chmod +x "$W/bin/gh"
-export PATH=$W/bin:$PATH
+# guard stubs: a scratch claude and codex that refuse, so a mistake can never reach the real binaries
+for b in claude codex; do printf '#!/bin/sh\necho "scratch guard: real %s must not run" >&2\nexit 99\n' "$b" > "$W/bin/$b"; chmod +x "$W/bin/$b"; done
+export PATH=$W/bin:$PATH      # the scratch directory comes first
 ```
+
+Rules for every script and shell below: start with `set -u`, `export` every variable a child process needs (`W`,
+`CLONE`, `RT`, `T`, `ST`, `CODEX_HOME`, `PATH`; an unexported variable once let a first script reach the real
+`claude` and `codex`), and keep `$W/bin` first on `PATH`. Check with `command -v claude codex gh` (all three under
+`$W/bin`) before the first flow. `ctl` passes `--claude-binary` explicitly, so the Controller itself never uses the stubs.
 
 Three helper files (copy them verbatim). `env.sh` isolates the environment and defines `ctl`; `harness.py` builds a
 managed scratch target (a `PLANNING` work item and a stub `workflow-manager`, using the repository's own test
@@ -167,8 +174,9 @@ provider default (no jobs recorded)`; `run cap: not evaluated (no --run-id)`; `r
 Then `ctl --json usage | python3 -m json.tool` (also `ctl usage --json`): one object with `at` and
 `providers.claude|codex`, each with `windows.five_hour|weekly` (`percent`, `resets_at`, `observed_at`,
 `age_seconds`, `source`), `thresholds` (85/95), `forecast` (8.0/1.0), `reservations: []`, `run: null`,
-`repository: null`. `ctl usage --provider codex` shows only the Codex block. With no Codex rollout
-(`CODEX_HOME=$W/nocodex ctl usage --provider codex`) both windows say `no reading` and the exit is still 0.
+`repository: null`. `ctl usage --provider codex` shows only the Codex block. With no Codex rollout and **a fresh runtime root** (**[round 1 F5]** `RT=$W/rt1n CODEX_HOME=$W/nocodex ctl usage
+--provider codex`) both windows say `no reading` and the exit is still 0; on the earlier root `$W/rt1` the stored Codex
+reading is still shown, which is correct.
 
 **F2 -- settings generation 4: the sixteen rows and the flags.**
 `ctl settings show | grep '^usage'` prints sixteen `usage.*` rows, all `(default)`: `enabled=true`,
@@ -207,15 +215,22 @@ sentence and the exit is **17**:
    `codex_repository_cap_percent`, which do not affect the Claude check.
 7. With several limits set at once (pause 45, run cap 7, repository cap 6) and both `--repo $T --run-id R1`
    named, a cap dominates a timed hold: the printed reason is a cap (never "a timed pause").
-8. A cap only counts what you name: with `{"usage":{"run_cap_percent":9}}` and no `--run-id`, `ctl usage --check`
-   prints `run cap not evaluated (no --run-id)` and `go` (0).
-Observed while preparing (flag for the tester): with a cap *below the 8% default forecast* (e.g. a run cap of 5 or
-7) and the cap **not** named, the hold still fires although stderr says `run cap not evaluated`, because the
-evaluation compares forecast alone to the cap. Caps of 9 or more behave as documented. Record what you see; it
-is not a flow failure unless the plan says otherwise (plan D5, `controller.usage.evaluate`).
+8. **[round 1 F1]** A cap counts only the scope you name, even below the forecast. Seed as above. With
+   `{"usage":{"run_cap_percent":5}}` and no `--run-id`, `ctl usage --check` prints on stderr `run cap not evaluated
+   (no --run-id)` (and `repository cap not evaluated (no --repo)`), then `go` on stdout, exit **0**; the same with a
+   run cap of 7 (below the 8% forecast) and with `{"usage":{"repository_cap_percent":5}}` and no `--repo`. A run cap
+   of 9 or more is likewise `go`. Nothing is held by a cap that is not evaluated.
+9. **[round 1 F1]** The named counterpart still holds. `{"usage":{"run_cap_percent":7}}` and `ctl usage --check
+   --run-id R1`: stderr `run cap evaluated for run R1`, exit **17**, `the run's claude spend 0% + outstanding 0% +
+   forecast 8% exceeds the run cap 7%`. `{"usage":{"repository_cap_percent":5}}` and `ctl usage --check --repo $T`:
+   `repository cap evaluated for <T>`, exit 17, `the repository's claude spend ... exceeds the repository cap 5%`.
+   `step` and `run` name both scopes themselves, so `{"usage":{"run_cap_percent":5}}` and `ctl step $T </dev/null`
+   exit **17** with the run-cap line and create no `jobs/` (also F5).
 
 **F4 -- `usage --check` and `--wait`.**
 `RT=$W/rt4; rm -f $ST; $S claude $RT 90 6` (90% used, resets in 6 s).
+- **[round 1 F6]** A reading with only the five-hour window (`$S claude $RT 90 6` has no weekly figure) prints
+  `no reading: claude weekly` on stderr on every check and `--wait`; that is correct and not a failure.
 - `ctl usage --check; echo $?` prints the `claude five-hour usage 90% + reserved 0% + forecast 8% reaches the 85%
   threshold -- a timed pause ...` line and exits **17**; `ls $RT` shows `usage.json`, `usage.lock` and no `jobs/`.
   `ctl usage --check --reserve` held: no token on stdout.
@@ -253,10 +268,11 @@ is not a flow failure unless the plan says otherwise (plan D5, `controller.usage
 - Two parallel reserves never both take the last headroom: with `{"usage":{"pause_at_percent":55}}` (40% + 8% fits
   once, not twice) two `ctl usage --check --reserve` in a row give a token then exit 17.
 - Release without charge: `ctl usage --release $TOK --outcome not_started; echo $?` prints `released; nothing
-  charged`, exit 0; the reservation is gone from the view and nothing is spent. A second release of that token
-  exits **1** (`error: the token ... is unknown; nothing was accounted`), as does `--release deadbeef` and a
-  `--renew` of a released token. (Observed: a `not_started` release forgets the token, so the repeat is "unknown"
-  rather than "already accounted"; the guide says release is idempotent -- record this for the reviewer.)
+  charged`, exit 0; the reservation is gone from the view and nothing is spent. **[round 1 F2]** A second release of that
+  token with `--outcome not_started` exits **1** (`error: the token ... is unknown; nothing was accounted`): a
+  `not_started` release forgets the token, so the repeat is an unknown token, and `docs/guide/commands.md` and
+  `docs/exit-codes.md` now say so. So do `--release deadbeef` and a `--renew` of a released token. (Repeating a
+  release that carried a measurement or `ok` is the idempotent case, below: exit 0.)
 - Release with a measured stream: reserve a new token, then build a stream whose rate-limit event matches the
   seeded window and release with it:
   ```bash
@@ -279,23 +295,29 @@ is not a flow failure unless the plan says otherwise (plan D5, `controller.usage
 **F7 -- a damaged or unreadable usage record.**
 `RT=$W/rt7; rm -f $ST; $S claude $RT 10 3600; printf '{"version": 2, "garbage"' > $RT/usage.json; sha256sum
 $RT/usage.json` (note the hash).
-- `ctl step $T </dev/null; echo $?`, `ctl run --max-steps 1 $T </dev/null`, `ctl usage`, `ctl --json usage` and
-  `ctl usage --check` each print `error: the usage record at <RT>/usage.json cannot be read: ...; repair or
-  remove it, or set usage.enabled=false to run without the budget` and exit **20** (the first two also print the
-  one-line `workflow-controller: the usage record cannot be read, so usage accounting is skipped (...)` warning
-  first). No job record is created by `step` here (`ls $RT/jobs` fails), and `sha256sum` shows the file
-  **unchanged** after all of them.
+- **[round 1 F4]** `ctl usage`, `ctl --json usage` (also `ctl usage --json`) and `ctl usage --check` each print
+  exactly one stderr line, `error: the usage record at <RT>/usage.json cannot be read: ...; repair or remove it, or
+  set usage.enabled=false to run without the budget`, and exit **20**; they print **no** `usage accounting is
+  skipped` line (the command itself fails, so nothing is "skipped"). `ctl step $T </dev/null` and `ctl run
+  --max-steps 1 $T </dev/null` print the one-line `workflow-controller: the usage record cannot be read, so usage
+  accounting is skipped (...)` warning first, then the same `error:` line, exit **20**. No job record is created by
+  `step` here (`ls $RT/jobs` fails), and `sha256sum` shows the file **unchanged** after all of them.
 - The job outcome survives damage that happens while a job runs: `RT=$W/rt7b; $S claude $RT 10 3600;
   FAKE_CLAUDE_WRITE_PATH=$RT/usage.json FAKE_CLAUDE_WRITE_TEXT='{"version": 2, "garbage"' ctl step $T
   </dev/null; echo $?`. The fake worker overwrites the record while the job runs. Expect the warning line on stderr,
-  exit **30** (the worker outcome, not a usage error), one job record with `status` `FAILED` and
+  exit **30** (the worker outcome, not a usage error; the warning appears once), one job record with `status` `FAILED` and
   `usage.accounting` `pending` (left unaccounted), the bytes of `usage.json` exactly what the worker wrote, and
   `$RT/usage-events.jsonl` containing a `usage_record_unreadable` line. `ctl usage` then exits 20 as above.
-- `ctl resume $T </dev/null` on that root (`ctl resume`'s exit is 0, it prints the existing job as `FAILED`), and
-  a further `ctl run --max-steps 1 $T`, keep the job's outcome: the warning is printed, the record's status does
-  not change, `usage.json` is still byte-identical (`sha256sum`).
+- **[round 1 F4]** `ctl resume $T </dev/null` on that root (`ctl resume`'s exit is 0, it prints the existing job as
+  `FAILED`) prints the skip warning **exactly once** for the whole sweep (`ctl resume $T </dev/null 2>&1 >/dev/null |
+  grep -c 'accounting is skipped'` prints `1`). A further `ctl run --max-steps 1 $T` keeps the job's outcome too: the
+  warning is printed, the record's status does not change, `usage.json` is still byte-identical (`sha256sum`).
 - `usage.enabled:false` is the documented way through: `echo '{"usage":{"enabled":false}}' > $ST; ctl step $T
   </dev/null; echo $?` runs the job (exit 30) without reading the record, which stays untouched.
+- **[round 1 F3]** Deleting a damaged record does not settle a job it left `pending`: after `rm $RT/usage.json`,
+  `ctl usage` creates a fresh record and the F7b job stays `FAILED` with `usage.accounting` `pending` and no charge;
+  restoring the original bytes (or repairing the file in place) is what lets the replay settle it. This is what
+  `docs/common-problems.md` and `docs/guide/runtime.md` now say (check them in F9).
 - A record written by a newer release is also never replaced: `printf '{"version": 3}' > $RT/usage.json`; `ctl
   usage` exits 20 with `... is not a version 2 object; repair or remove it ...` and the file is unchanged.
 
@@ -322,13 +344,17 @@ afterwards at `_table_generation` 4 with a `usage` section holding the defaults 
 In the clone: `python3 tools/check_docs.py` exits 0. Read `docs/guide/commands.md#usage`, `docs/run.md#pausing-for-usage-limits`,
 `docs/guide/runtime.md` (usage rows, the shared record, "A `usage.json` this release cannot read"),
 `docs/exit-codes.md` (rows 1 and 17), `docs/common-problems.md` (exit 17 and "The usage record cannot be read")
-and `docs/adr/0011-usage-budget.md`; each statement you exercised in F1-F8 should be true. Note any that is not.
+and `docs/adr/0011-usage-budget.md`; each statement you exercised in F1-F8 should be true. Note any that is not. Round 1 fixes: `commands.md` (a repeated
+`not_started` release exits 1; the unnamed-cap rule), `common-problems.md` and `runtime.md` (deleting a damaged record
+leaves its pending jobs unaccounted; repair or restore it in place), `runtime.md` (the warning is printed once per sweep).
 
 ### Known limitations and out of scope
 
 - Recognising a usage-limit result *inside a worker stream* (a `rejected`/429 result mid-job) and waiting for it
   automatically is **C8b** and is not built: such a job fails (exit 30) as before; `common-problems.md` says so.
 - The accumulator totals at the absolute numeric limit are an accepted optional follow-up (not a defect here).
+- When `resume` re-attaches to a still-running job, the unreadable-record warning can be printed a second time (once
+  for the sweep, once by the re-attach); an accepted optional follow-up, not a defect.
 - The budget forecasts; it cannot stop a job that exceeds its forecast.
 - Codex is gated only for workers you start yourself (`usage --provider codex ...`); the Controller does not launch
   Codex workers in this milestone.
@@ -337,7 +363,7 @@ and `docs/adr/0011-usage-budget.md`; each statement you exercised in F1-F8 shoul
   forgotten by design, see `runtime.md`).
 - Two Git 2.56 trailer-rule tests fail in the full suite on this branch and on its base (follow-up 12, unrelated).
 - Automated evidence: `python3 tools/check_docs.py` exit 0; `python3 tools/run_tests.py`: 3300 tests, coverage
-  exact, only those two failures (last full run at this content, by the local implementation review).
+  exact, only those two failures (last full run at revision 15, by the local implementation review).
 
 ### Where to put findings
 

@@ -21,7 +21,7 @@ and merged as a `test:` pull request that released nothing (PR #32); a `chore:` 
 moved this repository to Workflow 2.9.0. C9d, the installed-release test made version-agnostic
 (follow-up 16, accepted 2026-10-10 by gate policy), is complete and merged as a `test:` pull
 request (#34). It is the first milestone whose approvals and acceptance were all given by the gate
-policy. Next (user decisions, 2026-10-09 and 2026-10-10): C5 (C8, the usage budget, is complete), C6, C7, C10 (with the automated
+policy. Next (user decisions, 2026-10-09 and 2026-10-10): C5 (C8, the usage budget, accepted 2026-10-10 by gate policy, is complete), C6, C7, C10 (with the automated
 functional review), C12 (self-recovery), C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -1415,7 +1415,7 @@ needs no special case.
 
 ## 11.6 Usage budget
 
-**Status:** Complete (`workflow-controller-usage-budget`, plan
+**Status:** Complete, accepted 2026-10-10 by gate policy (`workflow-controller-usage-budget`, plan
 `docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md`, ADR `docs/adr/0011-usage-budget.md`). Ships as
 1.8.0. The Controller reads the Claude and Codex windows itself, forecasts a job, admits it
 atomically against the other lanes' reservations, pauses before a job that would not fit, and

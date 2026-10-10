@@ -1469,6 +1469,9 @@ and `.../20260924T211904Z-73845184/worker.stdout`: each ends in a `rate_limit_ev
   that ended this way, so the step is repeated and not left failed. The wait is a pause in the sense of
   C8: it holds no lock and records `usage_paused`.
 - It needs C8.
+- Follow-up from C8 review: the first job after a window reset is never measured, because an expired
+  stored reading is not baselined as an unknown window (`usage._component`/`_window_delta`). The
+  effect is a conservative over-charge and one fewer forecast sample per window.
 
 ### 11.6.2 Step C8c: per-repository caps and per-lane budgets
 

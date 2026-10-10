@@ -683,7 +683,7 @@ class CompleteTest(TempRootCase):
     def test_the_usage_block_supplies_only_the_end_figures(self) -> None:
         seed(self.root, five=10, weekly=20)
         token = admit(self.root).token
-        block = {"five_hour_end": 15.0, "weekly_end": 22.0, "end_window_resets_at": FIVE_RESETS,
+        block = {"five_hour_end": 15.0, "weekly_end": 22.0, "end_window_resets_at": FIVE_RESETS, "weekly_end_resets_at": WEEK_RESETS,
                  "end_observed_at": NOW + 300, "five_hour_start": 99.0}
         entry = usage.complete(self.root, token, None, usage.OUTCOME_OK, now=NOW + 600, usage_block=block).entry
         # the baseline is the reservation's (10), never the block's
@@ -798,12 +798,48 @@ class ReplayEquivalenceTest(TempRootCase):
         for key in ("five_hour", "weekly", "five_hour_after_reset", "weekly_after_reset", "charged", "delta"):
             self.assertEqual(replay[key], normal[key], key)
 
+    def test_an_unknown_completion_with_an_expired_shared_reading_keeps_the_window_for_later_charges(self) -> None:
+        seed(self.root, five=10, weekly=2)
+        token = admit(self.root, limits=Limits(repository_cap_percent=18, reservation_seconds=5 * H)).token
+        after = FIVE_RESETS + 600
+        usage.complete(self.root, token, {}, usage.OUTCOME_OK, now=after)
+        entry = self.record()["spend"]["repository"]["claude"]["/repo"]
+        self.assertTrue(usage.same_window(entry["window_resets_at"], FIVE_RESETS + 5 * H))
+        # a later worker supplies the actual current window and measures 8%
+        window = FIVE_RESETS + 5 * H
+        token2 = admit(self.root, now=after, run_id="run-2", limits=Limits(repository_cap_percent=100),
+                       readings=[reading(FIVE_HOUR, 0, window, after), reading(WEEKLY, 2, WEEK_RESETS, after)]).token
+        usage.complete(self.root, token2, {FIVE_HOUR: reading(FIVE_HOUR, 8, window, after + 60),
+                                           WEEKLY: reading(WEEKLY, 3, WEEK_RESETS, after + 60)},
+                       usage.OUTCOME_OK, now=after + 60)
+        self.assertEqual(usage.repository_spent(self.record(), "claude", "/repo", after + 60), 16.0)
+        third = admit(self.root, now=after + 60, run_id="run-3", limits=Limits(repository_cap_percent=18))
+        self.assertEqual(third.hold.window, "repository_cap")
+
+    def test_a_legacy_block_without_the_weekly_identity_is_not_a_weekly_sample(self) -> None:
+        legacy = {"five_hour_end": 12.0, "end_window_resets_at": FIVE_RESETS, "end_observed_at": NOW + 600,
+                  "weekly_end": 20.0}
+        seed(self.root, five=10, weekly=2)
+        token = admit(self.root).token
+        entry = usage.complete(self.root, token, None, usage.OUTCOME_OK, now=NOW + 600, usage_block=legacy).entry
+        self.assertIsNone(entry["weekly"])
+        self.assertIsNone(entry["weekly_after_reset"])
+        self.assertEqual(entry["five_hour"], 2.0)
+        self.assertEqual(usage.forecast(self.record(), "claude", "implement", "opus", Limits())[1],
+                         Limits().default_job_weekly_percent)
+
 
 class MalformedRecordTest(TempRootCase):
     def _write(self, text: str) -> Path:
         path = self.root / usage.USAGE_FILE
         path.write_text(text)
         return path
+
+    @staticmethod
+    def _nested(good: dict, token: str, change) -> dict:
+        raw = json.loads(json.dumps(good))
+        change(raw["reservations"][token])
+        return raw
 
     def test_structurally_corrupt_version_2_records_are_unreadable(self) -> None:
         seed(self.root, five=10)
@@ -819,6 +855,12 @@ class MalformedRecordTest(TempRootCase):
             {"version": 2, "readings": {"claude": {FIVE_HOUR: {"percent": "x"}}}},
             {**good, "reservations": {token: {**good["reservations"][token], "baseline": {}}}},
             {**good, "reservations": {token: {k: v for k, v in good["reservations"][token].items() if k != FIVE_HOUR}}},
+            self._nested(good, token, lambda r: r.update({FIVE_HOUR: {"amount": 8}})),
+            self._nested(good, token, lambda r: r["baseline"].update({FIVE_HOUR: {}})),
+            self._nested(good, token, lambda r: r.update({"run_id": ["x"]})),
+            self._nested(good, token, lambda r: r.update({"repository": 5})),
+            {**good, "ledger": [{"provider": "claude", "finished_at": NOW, "five_hour": "9"}]},
+            {**good, "ledger": [{"provider": "claude", "finished_at": NOW, "model": []}]},
         ]
         for raw in corrupt:
             with self.subTest(raw=raw):
@@ -1011,7 +1053,7 @@ class SweepTest(TempRootCase):
                                     is_terminal=lambda r: r["status"] in TERMINAL)
 
     def test_a_pending_terminal_record_is_charged_once_even_if_swept_twice(self) -> None:
-        block = {"five_hour_end": 16.0, "weekly_end": 21.0, "end_window_resets_at": FIVE_RESETS,
+        block = {"five_hour_end": 16.0, "weekly_end": 21.0, "end_window_resets_at": FIVE_RESETS, "weekly_end_resets_at": WEEK_RESETS,
                  "end_observed_at": NOW + 300}
         token = self.bound("j1", job_record("FINISHED", "pending", launched=True, block=block))
         settled = self.sweep()

@@ -355,11 +355,17 @@ def _number_or_none(value: object) -> bool:
     return value is None or _is_number(value)
 
 
-def _validate_component(component: object, what: str) -> None:
+def _string_or_none(value: object) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _validate_component(component: object, what: str, *, amount: bool) -> None:
+    """A window component; every key the readers index must be present."""
     _shape(isinstance(component, dict), what)
-    _shape(_is_number(component.get("amount", 0.0)) or "amount" not in component, f"{what}.amount")
+    if amount:
+        _shape(_is_number(component.get("amount")), f"{what}.amount")
     for key in ("start", "window_resets_at"):
-        _shape(_number_or_none(component.get(key)), f"{what}.{key}")
+        _shape(key in component and _number_or_none(component[key]), f"{what}.{key}")
 
 
 def _validate_reservation(token: object, entry: object, section: str) -> None:
@@ -367,13 +373,15 @@ def _validate_reservation(token: object, entry: object, section: str) -> None:
     _shape(isinstance(entry, dict) and isinstance(entry.get("provider"), str), what)
     for key in ("created_at", "expires_at") + (("lapsed_at",) if section == "lapsed" else ()):
         _shape(_is_number(entry.get(key)), f"{what}.{key}")
+    for key in ("role", "model", "repository", "run_id", "job_id"):
+        _shape(_string_or_none(entry.get(key)), f"{what}.{key}")
+    _shape(_is_number(entry.get("rolled_over", 0)), f"{what}.rolled_over")
     for window in WINDOWS:
-        _validate_component(entry.get(window), f"{what}.{window}")
-        _shape(_is_number(entry[window].get("amount")), f"{what}.{window}.amount")
+        _validate_component(entry.get(window), f"{what}.{window}", amount=True)
     baseline = entry.get("baseline")
     _shape(isinstance(baseline, dict), f"{what}.baseline")
     for window in WINDOWS:
-        _validate_component(baseline.get(window), f"{what}.baseline.{window}")
+        _validate_component(baseline.get(window), f"{what}.baseline.{window}", amount=False)
 
 
 def _validate_record(record: dict) -> None:
@@ -397,6 +405,11 @@ def _validate_record(record: dict) -> None:
     for entry in record["ledger"]:
         _shape(isinstance(entry, dict) and _is_number(entry.get("finished_at")) and isinstance(entry.get("provider"), str),
                "ledger entry")
+        for key in ("role", "model", "repository", "run_id"):
+            _shape(_string_or_none(entry.get(key)), f"ledger entry.{key}")
+        for key in ("started_at", "start_window_resets_at", "end_window_resets_at", "five_hour", "weekly",
+                    "five_hour_after_reset", "weekly_after_reset", "reserved_five_hour", "reserved_weekly", "charged"):
+            _shape(_number_or_none(entry.get(key)), f"ledger entry.{key}")
     spend = record["spend"]
     for scope, fields in (("run", ("charged", "updated_at")), ("repository", ("charged", "window_resets_at"))):
         _shape(isinstance(spend.setdefault(scope, {}), dict), f"spend.{scope}")
@@ -978,6 +991,11 @@ def _end_readings_from_block(block: Mapping | None) -> dict:
         value = block.get(figure)
         if not _is_number(value):
             continue
+        if window == WEEKLY and "weekly_end_resets_at" not in block:
+            # A block written before the weekly identity was recorded cannot
+            # tell a reset from growth; replay it conservatively as unknown
+            # (charged at the forecast, never a forecast sample).
+            continue
         resets = block.get("end_window_resets_at" if window == FIVE_HOUR else "weekly_end_resets_at")
         if not _is_number(resets):
             resets = None
@@ -1098,6 +1116,11 @@ def complete(runtime_root: str | os.PathLike, token: str, end_readings: Mapping 
         _charge_run(record, provider, reservation.get("run_id"), charged, now)
         stored = record["readings"].get(provider, {}).get(FIVE_HOUR)
         current_resets = stored["resets_at"] if stored and stored["resets_at"] > now else None
+        if current_resets is None:
+            # The reservation was rolled over by the maintenance above: its
+            # component already names the window that is current now.
+            rolled = reservation[FIVE_HOUR]["window_resets_at"]
+            current_resets = rolled if rolled is not None and rolled > now else None
         ended = end_resets
         if ended is None:
             ended = current_resets if current_resets is not None else baseline[FIVE_HOUR]["window_resets_at"]

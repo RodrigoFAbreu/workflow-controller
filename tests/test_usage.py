@@ -92,6 +92,13 @@ class ClaudeReaderTest(unittest.TestCase):
         named["rate_limit_info"].update({"utilization": -0.5, "resetsAt": 1000})
         self.assertEqual(usage.read_claude_stream(stream(named)), [])
 
+    def test_an_oversized_utilization_is_not_a_reading(self) -> None:
+        # The percent as computed (x100) is bounded, not only the raw field.
+        self.assertEqual(usage.read_claude_stream(stream(rate_event(five=1e10, weekly=2.6e9))), [])
+        named = rate_event(kind="five_hour")
+        named["rate_limit_info"].update({"utilization": 1e10, "resetsAt": 1000})
+        self.assertEqual(usage.read_claude_stream(stream(named)), [])
+
     def test_rejected_golden_reads_100_for_the_named_window(self) -> None:
         got = {r["window"]: r for r in usage.read_claude_stream(GOLDEN / "claude_stream_usage_limit_rejected.jsonl")}
         self.assertEqual(got[FIVE_HOUR]["percent"], 100.0)
@@ -168,6 +175,10 @@ class CodexReaderTest(unittest.TestCase):
 
     def test_a_negative_used_percent_is_not_a_reading(self) -> None:
         self.rollout("neg", [self.limits("2026-10-09T21:50:53.039Z", -1.0, -0.5)], 100)
+        self.assertEqual(usage.read_codex_home(self.home), [])
+
+    def test_an_oversized_used_percent_is_not_a_reading(self) -> None:
+        self.rollout("big", [self.limits("2026-10-09T21:50:53.039Z", 1e10, 2e6)], 100)
         self.assertEqual(usage.read_codex_home(self.home), [])
 
     def test_primary_and_secondary_by_window_minutes(self) -> None:
@@ -675,6 +686,24 @@ class CompleteTest(TempRootCase):
                     self.assertGreaterEqual(entry["charged"], 0)
                     self.assertGreaterEqual(usage.repository_spent(self.record(), "claude", "/repo", after), 0)
 
+    def test_an_oversized_stream_figure_across_a_reset_leaves_a_readable_record(self) -> None:
+        after = FIVE_RESETS + 60
+        event = {"type": "rate_limit_event", "rate_limit_info": {
+            "status": "allowed", "rateLimitType": "five_hour", "utilization": 1e10, "resetsAt": FIVE_RESETS + 5 * H}}
+        blocks = {"stream": None, "block": {"five_hour_end": 1e12, "end_window_resets_at": FIVE_RESETS + 5 * H,
+                                            "end_observed_at": after, "weekly_end": 1e12,
+                                            "weekly_end_resets_at": WEEK_RESETS}}
+        for variant, block in blocks.items():
+            with self.subTest(variant=variant):
+                with tempfile.TemporaryDirectory() as tmp:
+                    self.root = Path(tmp)
+                    seed(self.root, five=10, weekly=20)
+                    token = admit(self.root).token
+                    readings = usage._claude_event_readings(event, after, "test") if block is None else None
+                    usage.complete(self.root, token, readings, usage.OUTCOME_OK, now=after, usage_block=block)
+                    entry = self.record()["ledger"][-1]
+                    self.assertLessEqual(entry["charged"], usage.PERCENT_LIMIT)
+
     def test_a_manual_worker_spanning_a_reset_is_rolled_over_then_after_reset(self) -> None:
         seed(self.root, five=10)
         token = admit(self.root).token
@@ -953,6 +982,14 @@ class MalformedRecordTest(TempRootCase):
     def test_a_stored_reading_with_a_negative_percent_is_unreadable(self) -> None:
         seed(self.root, five=10)
         text = json.dumps(self._stored_reading(lambda r: r.update({"percent": -0.5})))
+        path = self._write(text)
+        with self.assertRaises(UsageRecordError):
+            usage.load_record(self.root)
+        self.assertEqual(path.read_text(), text)
+
+    def test_a_stored_reading_above_the_percent_limit_is_unreadable(self) -> None:
+        seed(self.root, five=10)
+        text = json.dumps(self._stored_reading(lambda r: r.update({"percent": usage.PERCENT_LIMIT * 2})))
         path = self._write(text)
         with self.assertRaises(UsageRecordError):
             usage.load_record(self.root)

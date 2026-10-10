@@ -165,10 +165,17 @@ def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and abs(value) <= _NUMBER_LIMIT
 
 
+# A reading's figure may exceed 100 but never this, far below ``_NUMBER_LIMIT``
+# so a charge or a same-window sum stays readable across any realistic number
+# of jobs.
+PERCENT_LIMIT = 1e6
+
+
 def _is_percent(value: object) -> bool:
-    """A reading's figure: a real number, never below zero, so no reading a
-    writer takes can make a ledger or spend figure the reader refuses."""
-    return _is_number(value) and value >= 0
+    """A reading's figure: a real number within ``0..PERCENT_LIMIT``, so no
+    reading a writer takes can make a ledger or spend figure the reader
+    refuses. Applied to the percent as computed, never to a raw field."""
+    return _is_number(value) and 0 <= value <= PERCENT_LIMIT
 
 
 def same_window(a: float, b: float) -> bool:
@@ -232,6 +239,15 @@ def _by_window(readings: Mapping | Iterable | None) -> dict:
     return out
 
 
+def _claude_percent(utilization: object) -> float | None:
+    """The percent a Claude ``utilization`` fraction reads as, or ``None`` when
+    the figure as computed (after scaling) is not a percent."""
+    if not _is_number(utilization):
+        return None
+    percent = round(100 * utilization, 6)
+    return percent if _is_percent(percent) else None
+
+
 def _claude_event_readings(event: dict, observed_at: float, source: str) -> dict:
     """The readings one ``rate_limit_event`` carries, by window. A
     ``rejected`` status reads 100% for the window ``rateLimitType`` names and
@@ -244,13 +260,13 @@ def _claude_event_readings(event: dict, observed_at: float, source: str) -> dict
     if isinstance(windows, dict):
         for key, window in _CLAUDE_WINDOW_KEYS.items():
             entry = windows.get(key)
-            if isinstance(entry, dict) and _is_percent(entry.get("utilization")) and _is_number(entry.get("resetsAt")):
-                out[window] = make_reading(PROVIDER_CLAUDE, window, round(100 * entry["utilization"], 6),
-                                           entry["resetsAt"], observed_at, source)
+            percent = _claude_percent(entry.get("utilization")) if isinstance(entry, dict) else None
+            if percent is not None and _is_number(entry.get("resetsAt")):
+                out[window] = make_reading(PROVIDER_CLAUDE, window, percent, entry["resetsAt"], observed_at, source)
     named = _CLAUDE_WINDOW_KEYS.get(info.get("rateLimitType"))
-    if named and named not in out and _is_percent(info.get("utilization")) and _is_number(info.get("resetsAt")):
-        out[named] = make_reading(PROVIDER_CLAUDE, named, round(100 * info["utilization"], 6),
-                                  info["resetsAt"], observed_at, source)
+    percent = _claude_percent(info.get("utilization"))
+    if named and named not in out and percent is not None and _is_number(info.get("resetsAt")):
+        out[named] = make_reading(PROVIDER_CLAUDE, named, percent, info["resetsAt"], observed_at, source)
     if info.get("status") == "rejected" and named:
         resets = out[named]["resets_at"] if named in out else info.get("resetsAt")
         if _is_number(resets):

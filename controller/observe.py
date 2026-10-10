@@ -305,11 +305,15 @@ def _clock(at: Any) -> str:
 
 
 def _epoch_text(epoch: Any) -> str:
-    """An epoch (the usage events' times) in local time with the epoch, or
-    the value as given when it is not a number."""
+    """An epoch (the usage events' times) in local time with the epoch, the
+    bare epoch when no local date exists for it, or the value as given when
+    it is not a number."""
     if not isinstance(epoch, (int, float)) or isinstance(epoch, bool):
         return str(epoch)
-    local = datetime.datetime.fromtimestamp(epoch).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    try:
+        local = datetime.datetime.fromtimestamp(epoch).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (ValueError, OverflowError, OSError):
+        return f"epoch {int(epoch)}"  # beyond the calendar: the raw epoch, never a traceback
     return f"{local} (epoch {int(epoch)})"
 
 

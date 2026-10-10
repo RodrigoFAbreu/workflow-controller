@@ -1251,9 +1251,9 @@ def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run:
 
 
 def _local_time(epoch: float) -> str:
-    """``epoch`` in local time, with the epoch itself (D7, D10)."""
-    local = datetime.datetime.fromtimestamp(epoch).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
-    return f"{local} (epoch {int(epoch)})"
+    """``epoch`` in local time, with the epoch itself (D7, D10); a stored
+    figure beyond the calendar shows as the bare epoch."""
+    return observe._epoch_text(epoch)
 
 
 def usage_hold_message(hold: job.UsageHold, *, max_wait_seconds: int | None = None) -> str:

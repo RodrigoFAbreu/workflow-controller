@@ -25,7 +25,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from controller import cli, job, usage
+from controller import cli, job, observe, usage
 from tests import fake_claude, fixtures
 
 FIVE, WEEKLY = usage.FIVE_HOUR, usage.WEEKLY
@@ -282,6 +282,31 @@ class UsageShowTest(_UsageCommandCase):
 # ---------------------------------------------------------------------------
 # --check
 # ---------------------------------------------------------------------------
+
+
+class UsageUncalendarTimeTest(_UsageCommandCase):
+    """An accepted timestamp beyond the calendar shows as the bare epoch,
+    never a traceback, in the view, the check and the hold message."""
+
+    def test_a_timestamp_at_either_end_renders_as_the_epoch(self) -> None:
+        for resets_at in (usage._NUMBER_LIMIT, -usage._NUMBER_LIMIT):
+            with self.subTest(resets_at=resets_at):
+                (self.runtime_root / usage.USAGE_FILE).unlink(missing_ok=True)
+                usage.record_reading(self.runtime_root, [
+                    usage.make_reading("claude", FIVE, 95, resets_at, self.now, "test")])
+                self.assertEqual(self.shared()["readings"]["claude"][FIVE]["resets_at"], resets_at)
+                code, out, err = self.run_cmd("usage")
+                self.assertEqual((code, err), (cli.EXIT_OK, ""))
+                self.assertIn(f"epoch {resets_at}", out)
+                code, out, err = self.run_cmd("usage", "--json")
+                self.assertEqual((code, err), (cli.EXIT_OK, ""))
+                code, out, err = self.run_cmd("usage", "--check", "--provider", "claude")
+                self.assertNotIn("Traceback", err)
+
+    def test_the_epoch_text_never_raises(self) -> None:
+        for epoch in (usage._NUMBER_LIMIT, -usage._NUMBER_LIMIT, 0):
+            self.assertIn(f"epoch {epoch}", cli._local_time(epoch))
+            self.assertIn(f"epoch {epoch}", observe._epoch_text(epoch))
 
 
 class UsageCheckTest(_UsageCommandCase):

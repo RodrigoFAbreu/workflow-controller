@@ -153,8 +153,9 @@ def make_reading(provider: str, window: str, percent: float, resets_at: float, o
             "observed_at": observed_at, "source": source}
 
 
-# The largest magnitude a figure may have: the last second of year 9999, so a
-# timestamp always converts to a date and no figure overflows a float.
+# The largest magnitude a figure may have, so no figure overflows a float. A
+# timestamp near either end has no local date; the formatters
+# (``observe._epoch_text``) show such a one as the bare epoch.
 _NUMBER_LIMIT = 253402300799
 
 
@@ -420,6 +421,10 @@ def _validate_record(record: dict) -> None:
                    f"readings[{provider!r}][{window!r}]")
             # A reading's identity is the keys it is stored under.
             reading["provider"], reading["window"] = provider, window
+            # Only a pending block's reading is job-record; a shared one never
+            # measures without a time.
+            if reading.get("source") == "job-record":
+                reading["source"] = "shared-record"
     for section in ("reservations", "lapsed"):
         for token, entry in record[section].items():
             _validate_reservation(token, entry, section)

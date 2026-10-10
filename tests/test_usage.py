@@ -943,6 +943,18 @@ class MalformedRecordTest(TempRootCase):
                     self.assertEqual((again.status, again.reason), (usage.COMPLETE_NOOP, "already_settled"))
                     self.assertEqual(usage.run_spent(self.record(), "claude", "run-1"), 8.0)
 
+    def test_a_shared_reading_claiming_the_job_record_source_is_not_measured_untimed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.root = Path(tmp)
+            seed(self.root, five=10)
+            token = admit(self.root).token
+            raw = self._stored_reading(lambda r: (r.pop("observed_at"), r.update({"source": "job-record"})))
+            (self.root / usage.USAGE_FILE).write_text(json.dumps(raw))
+            self.assertEqual(self.record()["readings"]["claude"][FIVE_HOUR]["source"], "shared-record")
+            readings = list(usage.current_readings(usage.snapshot(self.root, now=NOW + 60), "claude").values())
+            entry = usage.complete(self.root, token, readings, usage.OUTCOME_OK, now=NOW + 60).entry
+            self.assertEqual((entry["delta"], entry["charged"]), ("unknown", 8.0))
+
     def test_a_job_record_reading_without_a_time_is_still_measured(self) -> None:
         seed(self.root, five=10)
         token = admit(self.root).token

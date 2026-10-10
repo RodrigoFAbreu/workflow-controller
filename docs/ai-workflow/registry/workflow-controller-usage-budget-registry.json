@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-usage-budget",
+  "plan_revision": 11,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "controller/usage.py: Claude and Codex readers, the shared usage record with its deterministic merge, reservations with per-window rollover, renewal and lapse, the fully pinned ledger, authoritative spend totals and outstanding liabilities, atomic admission, per-provider five-hour and weekly forecast, and the pure strictest-wins decision, with tests on real captured streams and synthetic Codex files",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Settings generation 4: the usage rows for Claude and Codex, bounds, fill without moving values, an older release ignoring them, every generation-dependent fixture updated, and the --usage-cap flags",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The gate before a job record exists returning a UsageHold, reservation renewal and ledger accounting on every completion path with a crash-safe replay sweep, including _reattach after a lapse, the run loop that waits and re-enters the full boundary without consuming a step, usage_paused and usage_resumed run events, and exit code 17",
+      "depends_on": [
+        "CP1",
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The usage subcommand and manual-worker gate: --check, --wait with renewed admission, --reserve, --renew and --release (with --stream), role/model/repo/run context, independent provider caps, and durable usage-events.jsonl",
+      "depends_on": [
+        "CP1",
+        "CP2",
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documentation and roadmap: runtime and commands guides, exit codes, ADR 0011, common problems, C8 complete with C8b, C8c, C7 and C5 follow-ups recorded, check_docs and the full suite green",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

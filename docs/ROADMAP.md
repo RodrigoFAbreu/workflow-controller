@@ -96,7 +96,9 @@ user decisions, 2026-10-09 and 2026-10-10).
 | O7 | The control room: every run in every lane and repository, open escalations with decide or continue-in-the-CLI, the decision history, and the routing settings ([7.5](#75-observation-api-structured-event-store-and-web-dashboard), [8](#8-routing-and-costefficiency-improvements)) | O2, O6 |
 
 **Deferred** because they do not unlock that operating model: concurrency and multi-worktree (6),
-other forges (7.6), hot-reloadable routing (8, except what O7 needs), and assurance tiers. RepFlow (3, 4) migrates once, directly to a protocol-capable Workflow.
+other forges (7.6), hot-reloadable routing (8, except what O7 needs), and assurance tiers.
+A hosted platform in the user's homelab is a direction still being refined, not a step
+([11.12](#1112-direction-a-hosted-platform-not-a-step-yet)). RepFlow (3, 4) migrates once, directly to a protocol-capable Workflow.
 
 The numbered sections below keep their historical numbers; these tables are the current order.
 
@@ -1611,6 +1613,55 @@ remote access covers the phone (user decision, 2026-10-10).
 **Dependencies outside this repository.** O2's phone answers need a reply path in SignalHub. The
 SignalHub lane has the request, together with user-based producers and subscriptions (2026-10-10).
 O6 needs the Manager lane's M3.
+
+## 11.12 Direction: a hosted platform (not a step yet)
+
+**An idea to refine, not a roadmap item** (user, 2026-10-10). Nothing here is planned until the idea
+is refined and the user turns it into steps.
+
+The idea: the Controller runs as a hosted service in the user's homelab. A person logs in to a
+Controller page, sets up their Claude and Codex subscriptions (API keys and other providers much
+later), and then sees every run and lane, starts new ones and manages each run's settings. Work
+continues while their own computer is off. Several people could use it, each with their own runs.
+
+The homelab today is a switch, a desktop and a Raspberry Pi 5. Later it gains compute nodes and a
+networking board acting as a firewall in front of the homelab network, with VLANs to keep things
+contained.
+
+What is known so far (2026-10-10):
+- **It fits a homelab.** The models run at the providers, so a worker node runs only the harness,
+  git and the repository's own tests and builds. A Pi suits the control side (the page, login, the
+  database, the event store, the job queue). Workers want x86 nodes with plenty of memory: Android
+  builds need 8 to 16 GB per run and run poorly on ARM.
+- **The Workflow changes less than it seems.** The Controller already works inside a checkout,
+  makes branches, commits, opens pull requests and merges. New: a job queue and scheduler across
+  nodes, a run's state surviving a worker restart, several worktrees at once (6), and the forge
+  adapter (7.6).
+- **The hard parts are isolation and credentials, not compute.** An agent running commands on a
+  cloned repository is running untrusted code, and a repository can carry instructions aimed at the
+  agent. Each run needs its own sandbox (a container, or better a lightweight virtual machine),
+  network access only to what it needs, and no sight of another user's credentials or files. Each
+  user's logins and repository access are stored encrypted and handed only to that user's runs; a
+  GitHub App installed per repository is the likely route to GitHub.
+- **Subscription terms come first.** Subscription plans are generally meant for individual use.
+  Running other people's subscription logins on a shared server needs checking against the
+  providers' terms before any multi-user work; API keys are the clearly supported route for a
+  hosted service, so the order (subscriptions first, API keys later) may need reversing once other
+  people use it.
+- **Access from outside** goes through a tunnel or a VPN with a proper login, not open ports.
+
+A possible path, to refine:
+
+| Stage | What it gives |
+|---|---|
+| 1. One user, always on | The Controller and the orchestrator run on an always-on homelab node, so work continues with the desktop off. Mostly setup. |
+| 2. The control room | O7 for the user's own runs: see everything, start runs, change settings, answer escalations. |
+| 3. Sandboxed workers | Each run in its own container or virtual machine, a job queue, several worker nodes. |
+| 4. Several users | Accounts, encrypted credentials per user, a GitHub App, per-user budgets (C8's levels), hardened isolation. |
+| 5. API keys and other providers | Builds on harness portability (5). |
+
+The roadmap already builds towards it: the orchestrator series (11.11), concurrency (6), the forge
+adapter (7.6) and harness portability (5).
 
 # Execution order
 

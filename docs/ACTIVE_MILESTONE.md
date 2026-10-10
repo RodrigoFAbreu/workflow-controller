@@ -57,6 +57,27 @@ tests (follow-up 12), which also fail on the base.
 
 ## Functional review checklist
 
+### Functional review round 1 -- disposition (implementation revision 14)
+
+Flows F0-F9 passed at revision 13. The six findings were all bounded; fixed in `a03307a`, bundle regenerated as
+revision 14, a fresh implementation review is required before this checklist is re-run.
+
+- **F1 (defect)**: an unnamed run/repository cap held although the output said it was not evaluated. Fixed in
+  `usage.evaluate`/`admit` (a cap counts only a named scope); regressions in `tests/test_usage.py` and
+  `tests/test_usage_command.py`. Re-test: F4/F5 with a run cap below the forecast and no `--run-id` now exit 0.
+- **F2 (docs)**: `--release` idempotence paragraph in `docs/guide/commands.md` now says a repeated `not_started`
+  release exits 1.
+- **F3 (docs)**: `docs/common-problems.md` and `docs/guide/runtime.md` say deleting a damaged record leaves pending
+  jobs unaccounted; repair or restore it in place to settle them.
+- **F4 (usability)**: the "accounting is skipped" line is no longer printed by the `usage` commands (they report the
+  error and exit 20) and is printed once per `resume`; regressions added. Re-test F7: `usage`, `usage --json`,
+  `usage --check` on a damaged record print no skip line; `resume` prints it once.
+- **F5 (checklist wording)**: in F1, `CODEX_HOME=$W/nocodex ... --provider codex` shows `no reading` only with a fresh
+  runtime root (an earlier root still shows its stored Codex reading); in F7 the `usage` commands also reported the
+  warning at revision 13 and no longer do.
+- **F6 (optional)**: a five-hour-only reading prints `no reading: claude weekly` on every check; correct, no change.
+- No finding was deferred to a remediation child.
+
 Milestone `workflow-controller-usage-budget` (C8), implementation revision 13. Every flow runs in scratch
 clones and scratch directories only; nothing touches `~/.config/workflow-controller`,
 `~/.local/state/workflow-controller`, `~/.codex`, the real repository's runtime root, or a real `claude`, `codex`

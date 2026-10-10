@@ -86,6 +86,12 @@ OFFSET_KEYS = frozenset({"offset", "ending_point"})
 #: seconds that a slower, followed run can round differently.
 WALL_TIME_KEYS = frozenset({"job_seconds", "worker_seconds"})
 
+#: The usage budget's per-job values (usage-budget CP3): the reservation
+#: token is random and ``started_at`` is the admission's epoch, so they
+#: differ between two runs of one lifecycle. (A run record's ISO
+#: ``started_at`` is normalised away too, in every leg alike.)
+USAGE_KEYS = frozenset({"token", "started_at"})
+
 #: What a ``worker_<state>`` event snapshots at the instant the supervisor
 #: publishes it: which tasks, wakeups and command lifecycles its last poll
 #: of the stream had parsed, and how many owned processes its last
@@ -395,6 +401,7 @@ def _normalise(value, names: dict[str, str]):
         return {key: "<N>" if (key in PROCESS_KEYS or key in OFFSET_KEYS or key in WALL_TIME_KEYS
                                or key.endswith("_offset"))
                 and isinstance(item, int) else
+                "<USAGE>" if key in USAGE_KEYS and item is not None else
                 ["<N>"] * len(item) if key == "remaining_pids" and isinstance(item, list) else
                 _normalise(item, names) for key, item in value.items()}
     if isinstance(value, list):

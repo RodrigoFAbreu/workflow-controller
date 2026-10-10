@@ -26,6 +26,24 @@ checkout resolved to `<site-packages>/.controller`. Every acting command
 from such an install failed, so that directory holds no job history, and
 it can be deleted. `status` prints the resolved root and its ladder row.
 
+Two files at the root belong to the usage budget and are shared by every
+lane and repository that uses the root: `usage.json`, the readings,
+reservations, ledger and spend, and `usage-events.jsonl`, the pauses,
+resumes and releases (see [`usage`](commands.md#usage)). Unlike `runs/`,
+`usage.json` is read by admission: deleting it forgets the other lanes'
+reservations and every run's and repository's spend, so a cap restarts
+from zero. Back it up with the rest of the root.
+
+A `usage.json` this release cannot read (corrupt, or written by a newer
+release with a higher `version`) is never replaced. With
+`usage.enabled: false`, `step` and `run` neither read nor sweep it. With the
+budget on, admission fails closed and its message names
+`usage.enabled: false` as the way to keep running. The replay sweep that
+`step`, `run`, `resume` and `usage` perform skips the record with a
+one-line warning and a `usage_record_unreadable` event, leaving every job's
+`accounting` as it is; a release that can read the record settles it later,
+exactly once.
+
 This tree is disposable by design. It is never part of any managed
 target repository's own state, and the Controller never writes into a
 target repository's `WORKFLOW_STATE.json` -- only a worker running a
@@ -163,6 +181,22 @@ file is never an error: every setting then takes its built-in default.
 | `merge.auto` | boolean | `true` | -- | none |
 | `merge.wait_seconds` | integer | `3600` | 0 to 86400 | none |
 | `merge.poll_seconds` | integer | `30` | 10 to 600 | none |
+| `usage.enabled` | boolean | `true` | -- | none |
+| `usage.pause_at_percent` | integer | `85` | 1 to 100 | none |
+| `usage.weekly_pause_at_percent` | integer | `95` | 1 to 100 | none |
+| `usage.codex_pause_at_percent` | integer | `85` | 1 to 100 | none |
+| `usage.codex_weekly_pause_at_percent` | integer | `95` | 1 to 100 | none |
+| `usage.resume_grace_seconds` | integer | `180` | 0 to 3600 | none |
+| `usage.max_wait_seconds` | integer | `21600` | 0 to 604800 | none |
+| `usage.reservation_seconds` | integer | `7200` | 60 to 86400 | none |
+| `usage.default_job_percent` | integer | `8` | 0 to 100 | none |
+| `usage.default_job_weekly_percent` | integer | `1` | 0 to 100 | none |
+| `usage.codex_default_job_percent` | integer | `8` | 0 to 100 | none |
+| `usage.codex_default_job_weekly_percent` | integer | `1` | 0 to 100 | none |
+| `usage.run_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | `--usage-cap` |
+| `usage.repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
+| `usage.codex_run_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | `usage --usage-codex-cap` |
+| `usage.codex_repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
 
 Each default is the value the Controller used before the file existed,
@@ -186,13 +220,48 @@ opts in to auto-merge (see
   makes a few `gh` calls, so the 10-second lower bound keeps a waiting
   `run` to at most 360 polls an hour, inside GitHub's API limits.
 
+The sixteen `usage` rows (1.8.0) are the usage budget. The Controller
+reads the Claude five-hour and weekly windows from its own workers'
+streams and the Codex ones from Codex's session files, forecasts what a
+job will cost, and does not start a job that would not fit. Everything
+is in percent of the account's window, and Claude and Codex are
+separately configurable:
+
+- `usage.enabled: false` turns the gate off for every `run` and `step`,
+  which then do not read or sweep the shared record (the `usage` subcommand still shows the readings);
+- `pause_at_percent` and `weekly_pause_at_percent` (and the `codex_`
+  pair) are the account thresholds: a job is held when the window's
+  reading, plus the forecasts other lanes have reserved, plus this job's
+  forecast, would reach the threshold;
+- `resume_grace_seconds` is added to a window's reset time before a
+  paused run goes on, and `max_wait_seconds` bounds how long one `run`
+  step (or one `usage --wait`) sleeps before it stops with exit `17`;
+- `reservation_seconds` is the lease of a reservation. A running job
+  renews it, so it only lapses when its holder is gone;
+- the `default_job_*` rows are the forecast for a `(role, model)` with
+  no earlier job; after that the forecast is the mean of earlier jobs;
+- the four `*_cap_percent` rows are optional ceilings on what one run
+  (`usage.run_cap_percent`, or `--usage-cap` for one invocation) or one
+  repository may spend, counting work still outstanding. A repository
+  cap is one number applied to the repository being driven; set it in
+  that repository's settings file (`--settings`). A cap has no reset
+  time, so a run never waits for it.
+
+The strictest limit wins. A missing reading (a fresh machine, or a
+provider that has not reported) disables only that provider's account
+check for that window, never a cap. How the decision is made and what
+the shared record holds is in
+[ADR 0011](../adr/0011-usage-budget.md); the stop it produces is exit
+`17` ([exit codes](../exit-codes.md)), and the operator's view is
+[`usage`](commands.md#usage).
+
 A file filled by this release looks like this (the `_defaults_written`
 entries are shortened):
 
 ```json
 {
   "_defaults_written": {"merge.auto": {"generation": 2, "value": true}, "...": "..."},
-  "_table_generation": 3,
+  "_table_generation": 4,
   "follow": {"heartbeat_seconds": 30, "replay_events": 20},
   "forge": {"pr_list_limit": 200},
   "merge": {"auto": true, "poll_seconds": 30, "wait_seconds": 3600},
@@ -200,6 +269,7 @@ entries are shortened):
   "run": {"max_steps": 20},
   "schema_version": 1,
   "timeouts": {"git_seconds": 600, "release_command_seconds": 1800, "workflow_query_seconds": 120},
+  "usage": {"enabled": true, "pause_at_percent": 85, "run_cap_percent": null, "...": "..."},
   "worker": {"drain_detach_seconds": 10800, "timeout_seconds": null}
 }
 ```
@@ -253,6 +323,11 @@ adds two routing roles (`prepare-functional-review`,
 uses it as before; it warns only about a key it does not know, such as an
 entry for one of the two roles under `routing.roles`, which it ignores,
 and its `settings clean` refuses.
+
+1.8.0 is table generation 4: it adds the sixteen `usage` rows to a file
+filled by 1.7.x, and moves nothing else. A 1.7.x Controller sharing the
+file afterwards warns about the unknown `usage` section, ignores it, and
+its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

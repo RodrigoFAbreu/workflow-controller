@@ -156,5 +156,25 @@ class WriteJsonTest(unittest.TestCase):
             self.assertIsNone(runtime.read_json(Path(td) / "nope.json"))
 
 
+class UsageLockTest(unittest.TestCase):
+    def test_usage_lock_is_exclusive_and_released_on_exit(self) -> None:
+        import fcntl
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            with runtime.usage_lock(root) as lock_path:
+                self.assertEqual(lock_path, root / runtime.USAGE_LOCK_NAME)
+                probe = os.open(lock_path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(probe)
+            probe = os.open(root / runtime.USAGE_LOCK_NAME, os.O_RDWR)
+            try:
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(probe)
+
+
 if __name__ == "__main__":
     unittest.main()

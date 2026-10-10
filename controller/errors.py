@@ -868,3 +868,19 @@ class InvalidTitleError(ControllerError):
     """
 
     code = "INVALID_TITLE"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-usage-budget CP1 -- the shared usage record
+# (``controller.usage``).
+# ---------------------------------------------------------------------------
+
+
+class UsageRecordError(ControllerError):
+    """The shared usage record (``<runtime_root>/usage.json``) is not one
+    this release can read: not a JSON object, or a ``version`` it does not
+    know. The record is never overwritten in that state -- an operator
+    removes or repairs it.
+    """
+
+    code = "USAGE_RECORD_UNREADABLE"

@@ -34,9 +34,22 @@ A previous [job](glossary.md#job) was never reconciled. Run `workflow-controller
 
 The worktree is held: another Controller, a `run` waiting for checks or a merge, or a worker that may still be running holds its lock. Nothing is wrong. Wait, or follow the message; after a Ctrl-C or a drain timeout, `workflow-controller resume <repo>` re-attaches. See [restart](guide/workers.md#restart-resume-re-attaches) and [the drain bound](guide/workers.md#owned-processes-the-daemon-list-and-the-drain-bound).
 
-## I hit a usage limit
+## The command exited 17 and nothing was started
 
-The Controller has no usage-limit pause of its own yet. Bound the work with `run --max-steps 1`, check your usage between steps, and run again. See [pausing for usage limits](run.md#pausing-for-usage-limits).
+The usage budget held the job back before it started, so there is no job to resume. The message says which of two causes it was:
+
+- **A timed pause**: the Claude or Codex window would pass its threshold (`usage.pause_at_percent`, `usage.weekly_pause_at_percent`). `run` normally waits for it by itself; `step`, or a wait longer than `usage.max_wait_seconds`, stops instead. Run again after the resume time the message names (in local time).
+- **A cap**: the run or the repository has spent `usage.run_cap_percent` or `usage.repository_cap_percent`, counting work still outstanding. No reset time is waited for. Raise the cap or `--usage-cap`, start a new run for a run cap, or for a repository cap run again after the five-hour window resets, when its spending falls.
+
+`workflow-controller usage` shows the readings and reservations. See [pausing for usage limits](run.md#pausing-for-usage-limits), [`usage`](guide/commands.md#usage) and [exit codes](exit-codes.md).
+
+## The usage record cannot be read
+
+`step` or `run` stops with "the usage record ... is not a version 2 object" or "cannot be read". `usage.json` in the runtime root is either damaged or was written by a newer Controller release than this one. It is never overwritten. To keep working, set `usage.enabled: false` (the budget is then off and the record is not touched), or install the release that wrote it. Deleting the file also works but forgets every lane's reservations and spend. `step`, `run` and `resume` never lose a job's outcome to it: the accounting is skipped with a warning, the job stays unaccounted, and a release that can read the record settles it later. The `usage` view itself reports the error.
+
+## A worker hit a usage limit while it ran
+
+The budget forecasts, it cannot stop a job that exceeds its forecast. A job that meets the limit mid-way fails (exit 30). Check `workflow-controller usage`, wait for the reset, then run `explain` and run again. Recognising this case and waiting for it automatically is a roadmap item (C8b).
 
 ## I pressed Ctrl-C
 

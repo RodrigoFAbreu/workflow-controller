@@ -124,6 +124,24 @@ TABLE: tuple[Setting, ...] = (
     Setting("merge.auto", TYPE_BOOL, True, None, None, None, 2),
     Setting("merge.wait_seconds", TYPE_INT, 3600, 0, 86400, None, 2),
     Setting("merge.poll_seconds", TYPE_INT, 30, 10, 600, None, 2),
+    # workflow-controller-usage-budget D4: the usage budget. Claude and Codex
+    # are separately configurable at every level; the caps are optional.
+    Setting("usage.enabled", TYPE_BOOL, True, None, None, None, 4),
+    Setting("usage.pause_at_percent", TYPE_INT, 85, 1, 100, None, 4),
+    Setting("usage.weekly_pause_at_percent", TYPE_INT, 95, 1, 100, None, 4),
+    Setting("usage.codex_pause_at_percent", TYPE_INT, 85, 1, 100, None, 4),
+    Setting("usage.codex_weekly_pause_at_percent", TYPE_INT, 95, 1, 100, None, 4),
+    Setting("usage.resume_grace_seconds", TYPE_INT, 180, 0, 3600, None, 4),
+    Setting("usage.max_wait_seconds", TYPE_INT, 21600, 0, 604800, None, 4),
+    Setting("usage.reservation_seconds", TYPE_INT, 7200, 60, 86400, None, 4),
+    Setting("usage.default_job_percent", TYPE_INT, 8, 0, 100, None, 4),
+    Setting("usage.default_job_weekly_percent", TYPE_INT, 1, 0, 100, None, 4),
+    Setting("usage.codex_default_job_percent", TYPE_INT, 8, 0, 100, None, 4),
+    Setting("usage.codex_default_job_weekly_percent", TYPE_INT, 1, 0, 100, None, 4),
+    Setting("usage.run_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, "--usage-cap", 4),
+    Setting("usage.repository_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, None, 4),
+    Setting("usage.codex_run_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, "usage --usage-codex-cap", 4),
+    Setting("usage.codex_repository_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, None, 4),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -131,8 +149,9 @@ TABLE: tuple[Setting, ...] = (
 #: The highest ``generation`` in :data:`TABLE`, raised as well by a release
 #: that adds or retires a key or a routing role. Only ever increases. 3:
 #: the roles ``prepare-functional-review`` and ``apply-functional-review``
-#: (orchestration-protocol-v1 C.3).
-TABLE_GENERATION = 3
+#: (orchestration-protocol-v1 C.3). 4: the ``usage.*`` rows
+#: (workflow-controller-usage-budget D4).
+TABLE_GENERATION = 4
 
 
 def _table() -> dict[str, Setting]:

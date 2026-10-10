@@ -20,6 +20,7 @@
 | `workflow-controller --work-item <id> milestone-binding --abandon <repo>` | retire such a binding, under the preconditions stated there; exactly one of `--new-pr`/`--abandon` is required |
 | `workflow-controller settings show\|path\|clean` | the user settings file (see [`settings`](#settings)); `show` and `path` are read-only |
 | `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by role\|model\|role,model] [<repo>]` | the recorded jobs' turns, tokens, cost and time (see [`telemetry`](#telemetry)); read-only |
+| `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted |
 | `workflow-controller --version` | the version, then the running runtime (see [Runtime identity](runtime.md#runtime-identity)) |
 
 Global options -- declared on the top-level parser, so they are accepted
@@ -153,6 +154,76 @@ What each figure means is in [Telemetry](workers.md#telemetry).
 A job recorded before telemetry existed has no block. Its figures are
 derived from its `worker.stdout` each time, marked `"derived": true`,
 and nothing is written back. A job whose stream is gone has no figures.
+
+## `usage`
+
+`workflow-controller usage` shows the usage budget and gates workers the
+Controller did not start. The settings are in
+[The settings file](runtime.md#what-it-holds); the design is
+[ADR 0011](../adr/0011-usage-budget.md). `run` and `step` need none of
+this: they pass the same gate by themselves before every job, and stop
+with exit `17` when it holds (see [exit codes](../exit-codes.md)).
+
+With no gate option it only shows. For each provider it prints the
+five-hour and weekly windows (percent, reset time in local time as well
+as epoch seconds, and the reading's age), the live reservations, and the
+forecast per `(provider, role, model)` from the ledger. `--provider`
+chooses `claude`, `codex` or `all` (the default for showing; `claude` for
+a gate). `--json` prints one JSON object. It reads Claude's windows from
+the shared record and Codex's from `$CODEX_HOME/sessions` (else
+`~/.codex/sessions`).
+
+To gate a worker, name the context it runs in. The account windows and
+the live reservations are always evaluated; a cap is evaluated only when
+you name what it counts:
+
+- `--role ROLE` and `--model MODEL` select the forecast (else the
+  provider's default);
+- `--repo PATH` selects the repository cap and its spend, and `--run-id
+  ID` the run cap and its spend. Left out, that cap is not evaluated and
+  the output says so;
+- `--usage-cap PERCENT` and `--usage-codex-cap PERCENT` override the run
+  cap for this call.
+
+The modes:
+
+- `--check` evaluates once. It exits `17` on a hold and `0` otherwise,
+  and reserves nothing unless `--reserve` is given;
+- `--wait` loops: on a timed hold it sleeps to the reset plus
+  `usage.resume_grace_seconds`, reads again and re-evaluates, because
+  another lane may have taken the headroom meanwhile. It exits `0` only
+  when the re-evaluation is a go, and `17` on a cap or when
+  `usage.max_wait_seconds` is used up;
+- `--reserve`, with either, reserves the forecast in the same critical
+  section as the go and prints the token as the only line on stdout (the
+  rest goes to stderr);
+- `--renew TOKEN` extends a reservation's lease and revives a lapsed one;
+- `--release TOKEN [--outcome ok|not_started] [--stream PATH]` accounts
+  the worker and releases the reservation. `--stream` measures the
+  worker's stream-json output; `not_started` releases without charging.
+  It is idempotent and works on a lapsed token. A token the record does
+  not know, or `--renew` of one already accounted, exits `1` and changes
+  nothing.
+
+A lane script therefore reads:
+
+```bash
+token=$(workflow-controller usage --wait --reserve --role review --model opus --repo "$PWD" --run-id "$RUN")
+# run the worker, saving its stream to $STREAM
+workflow-controller usage --release "$token" --stream "$STREAM"
+```
+
+`--stream` reads a Claude stream, so it is refused (exit `2`) for a Codex reservation.
+
+A reservation never released lapses after `usage.reservation_seconds`
+without a `--renew`; a lapsed one stops counting against the account
+windows but still counts against the run and repository caps until it is
+released or, after seven days, charged at its forecast. Every pause,
+resume and release is appended to `usage-events.jsonl` in the runtime
+root, so a wait leaves a record without a run. `usage` writes only the
+shared record and that file, apart from the replay sweep it runs first: a
+finished job whose charge a crash left owing is charged then, and its job
+record is marked accounted.
 
 ## Worker routing
 

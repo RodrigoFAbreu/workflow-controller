@@ -2,49 +2,59 @@
 
 ## Status
 
-**Complete.** `workflow-controller-installed-release-test-agnostic` (`docs/ROADMAP.md` step C9d,
-follow-up 16) reached `MILESTONE_COMPLETE` on 2026-10-10. `InstalledReleaseTest` in
-`tests/test_workflow_releases.py` now checks this repository's own installed Workflow through the
-non-Manager steps of `managed_repo.inspect` (the installation record, the `RELEASE_CONTRACTS` arm, the
-profile check) and against the `sha256` and `executable` flag of every file in
-`.workflow-manager/installation.json`, with no vendored tree and no version literal.
-`InstalledReleaseRefusalTest` shows a modified, missing, extra and mode-changed file, a release without
-the protocol script, a protocol-major-2 `describe` and an unsupported profile each refused.
-`docs/guide/development.md` says the installed Workflow needs no vendored tree. Nothing in `controller/`
-changed. A later Workflow release that speaks protocol major 1 needs no test change.
+**Self-reviewed; awaiting the local implementation review.** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6): the
+Controller reads the Claude and Codex usage windows itself, forecasts a job, admits it atomically against
+the readings and the other lanes' reservations, and pauses a run before a limit. Plan:
+`docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md` (revision 11, approved by policy at `03ddec0`; base
+commit `f516e76`; pull request title `feat: a usage budget that pauses a run before a Claude or Codex limit`).
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth for the checkpoint states.
 
-The milestone was accepted **by gate policy, not by a person**: `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`), after functional review
-round 1 (implementation revision 1), checked against evidence commit `294d3a8`, came back clean (flows 1-6
-passed).
-- Plan revision 2 was approved by policy at `fe249ce`. The base commit is `5532cdd`.
-- Technical approval `bb4fa81` was recorded by policy and is `CURRENT`: bundle `05979f51`, review content
-  id `bb49d2bf`, reviewed implementation head `7a13f7d`.
-- The Workflow's own GitHub query found pull request #34 at head `294d3a8` with every check passing and no
-  standing objection.
+| checkpoint | state |
+| --- | --- |
+| CP1 `controller/usage.py` (readers, shared record, merge, admission, forecast, decision) | complete, verified by `tests/test_usage.py` |
+| CP2 settings generation 4 and the `--usage-cap` flags | complete, verified by `tests/test_settings.py` (`UsageRowsTest`), the regenerated no-policy golden and the full suite |
+| CP3 the gate, the reservation and the run loop (exit 17) | complete, verified by `tests/test_usage_gate.py` (38 tests), the regenerated no-policy golden and the full suite |
+| CP4 the `usage` subcommand and the manual-worker gate | complete, verified by `tests/test_usage_command.py` (57 tests) and the full suite |
+| CP5 documentation and roadmap | complete, verified by `tools/check_docs.py` and the full suite (3291 tests; only the two Git 2.56 trailer failures) |
 
-All registry checkpoints (CP1, CP2) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, including its `acceptance_satisfaction` evidence, and
-`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C9d and follow-up 16 complete. The full
-milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-installed-release-test-agnostic.md`.
+CP1 added `controller/usage.py` (a leaf below `job`, `observe` and `cli`), `runtime.usage_lock`,
+`errors.UsageRecordError`, a golden stream (`tests/golden/claude_stream_usage_limit_rejected.jsonl`,
+sanitised from a real `rejected` stream) and `tests/test_usage.py`.
 
-Deferred follow-ups, not conditions of acceptance:
-- **Merge.** Pull request #34, titled
-  `test: check the installed Workflow by capability and installation record, not by a vendored tree`, is
-  merged by the Controller once every check passes; a `test:` pull request releases nothing.
-- **Optional notes from the Codex implementation review:** the module docstring at
-  `tests/test_workflow_releases.py:7-8` still mentions the vendored tree; `docs/guide/development.md`
-  could also mention the installed protocol's `describe`.
-- **Optional notes from functional review round 1** (the checklist's wording, see
-  `.ai-review/archive/workflow-controller-installed-release-test-agnostic/functional-review-round1-CLEAN.md`):
-  flow 2 said the whole module "may fail" without the vendored 2.9.0 tree, but it passes (29 tests OK), so
-  a future checklist should expect it to pass; flow 3 case b (a missing file) fails with one failure and
-  one error, because the admission test also errors on the missing file.
+CP2 added the sixteen `usage.*` rows (table generation 4, `TABLE_GENERATION = 4`; the generation invariant is
+now `>=`), `run --usage-cap` and `step --usage-cap` (`usage --usage-codex-cap` arrived with the `usage`
+subcommand in CP4), and regenerated `tests/golden/no_policy_lifecycle.json` (only the new `controller_settings`
+keys moved, pinned by `tests/test_trunk_preflight.py`). The full suite fails only the two Git 2.56 trailer tests
+that fail on the base too.
+
+CP3 added `UsageHold`, the `usage_gate` argument and the `usage` job-record block in `controller/job.py`
+(bind before publish, renewal ticker, end figures in the `COMPLETED` write, the replay sweep in
+`_execute_step_locked` and `resume`, the `_reattach` accounting), the gate builder, the waiting `run` loop and
+exit 17 in `controller/cli.py`, the `observe` rendering, the `CODEX_HOME` test redirection and the exit-17 rows
+in `docs/exit-codes.md` and ADR 0001. The no-policy golden gained each job's `usage` block. The full suite
+fails only the two Git 2.56 trailer tests.
+
+CP4 added the `usage` subcommand to `controller/cli.py` (dispatched before pinning like `follow`: it writes only
+the shared usage record and `usage-events.jsonl`): the view, `--check`, `--wait` (re-evaluating after every
+wait, bounded by `usage.max_wait_seconds`), `--reserve`, `--renew`, `--release` with `--outcome` and
+`--stream`, the role/model/repository/run context and the `--usage-cap`/`--usage-codex-cap` flags. `usage.admit`
+gained `reserve=False` for a check. Exit status 1 (`usage --renew`/`--release` of an unknown token) is on the exit-code
+page and in ADR 0001.
+
+CP5 documented the budget: the sixteen `usage` rows and the usage files in `docs/guide/runtime.md`, the `usage` command in `docs/guide/commands.md`, `docs/run.md` and `docs/common-problems.md` (exit 17, timed pause versus cap), the exit-17 row in `docs/exit-codes.md`, `docs/adr/0011-usage-budget.md` and its README row, and `docs/ROADMAP.md` (C8 complete; C8b and C8c added with sections 11.6.1 and 11.6.2; C7 and C5 amended; "Next" names C5).
+
+Self-review (`SELF_REVIEWING_IMPLEMENTATION`, 2026-10-10): the full diff from `f516e76` was reviewed against D1-D13.
+No Blocking or Important findings. One Optional finding was fixed: `docs/guide/commands.md` and the `cmd_usage`
+docstring said `usage` writes only the shared record and `usage-events.jsonl`, but the replay sweep it runs first
+(plan D6, "on a `usage` read") also marks a terminal job record a crash left unaccounted `accounting: "done"`. The
+text now says so. Not changed, by design: a Ctrl-C in the pure record-building lines between the gate and
+`bind_job` leaves an unbound reservation. That window is no wider than the one inside `usage.admit` itself, and
+the lapse and seven-day abandonment backstop covers both.
+
+Full verification: `python3 tools/check_docs.py` exit 0; `python3 tools/run_tests.py` (under a reaping subreaper,
+without `FORCE_COLOR`): 3300 tests in 8 shards, coverage exact, 2 failures. Both are the Git 2.56 trailer-rule
+tests (follow-up 12), which also fail on the base.
 
 ## Next action
 
-1. The Controller merges pull request #34 (a `test:` pull request, no release).
-2. A `docs:` roadmap pull request: the orchestrator series O1-O7 after C11, automated functional review,
-   self-recovery, and configurable C8 budgets.
-3. `/milestone-plan` for C8.
+The implementation review bundle (revision 1) is generated; the local implementation review comes next.

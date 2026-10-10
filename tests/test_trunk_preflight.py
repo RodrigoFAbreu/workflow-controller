@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, gitrepo, job, milestone_branch as mb, repo_policy, routing  # noqa: E402
+from controller import cli, gitrepo, job, milestone_branch as mb, repo_policy, routing, settings  # noqa: E402
 from controller.errors import GitOperationError, InvalidRepositoryPolicyError  # noqa: E402
 from tests import fake_gh, fixtures  # noqa: E402
 from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
@@ -90,12 +90,23 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
     """auto-merge-release-wait I1 (revision 6): CP1 regenerated the golden,
     and its only difference from the base's (``854d25c``) is the three
     ``merge.*`` keys added to each job record's ``controller_settings``
-    ``values`` and ``sources``."""
+    ``values`` and ``sources``. ``workflow-controller-usage-budget`` CP2
+    regenerated it again, adding only the sixteen ``usage.*`` keys the same
+    way, so those are removed (and checked) too. Its CP3 added only each
+    launched job's ``usage`` block and the one ``usage_accounted`` write
+    (``event_seq`` + 1), so those are removed (and checked) as well."""
 
     #: The SHA-256 of ``tests/golden/no_policy_lifecycle.json`` at
     #: ``854d25c`` (1.5.0).
     BASE_SHA256 = "41c176990518852a07819071f114e24f4c76411cf66c3ef90b9438c4114817f1"
     MERGE_KEYS = ("merge.auto", "merge.poll_seconds", "merge.wait_seconds")
+    #: Table generation 4's rows, at their defaults (tests/test_settings.py's ``V4_ROWS``).
+    USAGE_KEYS = tuple(f"usage.{name}" for name in (
+        "enabled", "pause_at_percent", "weekly_pause_at_percent", "codex_pause_at_percent",
+        "codex_weekly_pause_at_percent", "resume_grace_seconds", "max_wait_seconds", "reservation_seconds",
+        "default_job_percent", "default_job_weekly_percent", "codex_default_job_percent",
+        "codex_default_job_weekly_percent", "run_cap_percent", "repository_cap_percent",
+        "codex_run_cap_percent", "codex_repository_cap_percent"))
 
     def test_the_golden_differs_from_the_base_only_by_the_merge_rows(self) -> None:
         data = json.loads(golden.GOLDEN_PATH.read_text())
@@ -113,12 +124,25 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
 
         collect(data)
         self.assertEqual(len(blocks), 8)
+        jobs = [record for scenario in data.values()
+                for record in scenario.get("run", scenario.get("step", {})).get("jobs", [])]
+        usage_blocks = [record for record in jobs if "usage" in record]
+        self.assertEqual(len(usage_blocks), 8)
+        for record in usage_blocks:
+            block = record.pop("usage")
+            self.assertEqual((block["accounting"], block["delta"], block["charged"], block["token"]),
+                             ("done", "unknown", 8.0, "<V>"))
+            record["event_seq"] -= 1
         expected = {"values": {"merge.auto": True, "merge.poll_seconds": 30, "merge.wait_seconds": 3600},
                     "sources": dict.fromkeys(self.MERGE_KEYS, "file")}
         for block in blocks:
             for part in ("values", "sources"):
                 self.assertEqual({key: block[part].pop(key) for key in self.MERGE_KEYS}, expected[part])
                 self.assertFalse([key for key in block[part] if key.startswith("merge.")])
+                usage = {key: block[part].pop(key) for key in self.USAGE_KEYS}
+                self.assertEqual(usage, {key: settings.default_value(settings._table()[key])
+                                         if part == "values" else "file" for key in self.USAGE_KEYS})
+                self.assertFalse([key for key in block[part] if key.startswith("usage.")])
         self.assertEqual(hashlib.sha256(golden.render(data).encode("utf-8")).hexdigest(), self.BASE_SHA256)
 
 

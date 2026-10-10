@@ -17,6 +17,7 @@ reconciling a record to ``INTERRUPTED``).
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime
 import json
 import os
@@ -28,7 +29,7 @@ from typing import Any
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, protocol_decision, routing,
-    runtime, settings, target_state, telemetry, worker,
+    runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -38,10 +39,10 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: rather than by a denylist a future command could be added without
 #: updating. ``settings`` is dispatched before pinning, like ``follow``, and
 #: touches only the user settings file, never a target or the runtime root.
-READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry"})
+READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry", "usage"})
 ALL_COMMANDS = frozenset({
     "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
-    "telemetry",
+    "telemetry", "usage",
 })
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
@@ -52,6 +53,13 @@ EXIT_USAGE = 2
 EXIT_GATE = 10
 EXIT_DECLINED = 15
 EXIT_MAX_STEPS = 16
+#: `workflow-controller-usage-budget` CP3 (D10): stopped before starting a
+#: job because of the usage budget -- a timed pause (run again after the
+#: resume time) or an exhausted run or repository cap. Nothing was started.
+EXIT_USAGE_PAUSED = 17
+#: `usage --renew`/`--release` named a token the shared record does not know
+#: (or, for `--renew`, one already accounted): nothing was changed.
+EXIT_TOKEN_UNKNOWN = 1
 EXIT_FAIL_CLOSED = 20
 EXIT_WORKER_FAILED = 30
 EXIT_INCOMPLETE = 35
@@ -73,6 +81,16 @@ SIGINT_EXIT_STATUS = 130
 TEST_HOOKS_ENV = "WORKFLOW_CONTROLLER_TEST_HOOKS"
 
 _PAUSE_POLL_SECONDS = 0.05
+
+#: The longest single sleep of a usage pause, so Ctrl-C and the clock are
+#: honoured promptly (usage-budget CP3, D7).
+USAGE_WAIT_SLICE_SECONDS = 1.0
+
+
+def _usage_sleep(seconds: float) -> None:
+    """One slice of a usage pause; tests replace it (with
+    ``job.usage_now``) to wait on an injected clock."""
+    time.sleep(seconds)
 
 #: The run record the current ``step``/``run`` created
 #: (``workflow-controller-release-runtime-observability`` CP5).
@@ -205,6 +223,19 @@ def _positive_int(text: str) -> int:
     return value
 
 
+def _usage_percent(text: str) -> int:
+    """``--usage-cap``'s ``type=``: an integer from 1 to 100, the bounds of
+    the ``usage.*_cap_percent`` rows; anything else is a usage error
+    (exit 2)."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid percentage: {text!r}") from None
+    if not 1 <= value <= 100:
+        raise argparse.ArgumentTypeError(f"must be from 1 to 100, not {value}")
+    return value
+
+
 def _role_assignment(text: str) -> tuple[str, str]:
     """``--role-model``/``--role-effort``'s ``type=``: ``ROLE=VALUE`` with
     ``ROLE`` one of ``routing.ROLES``. A missing ``=``, an unknown role or
@@ -312,6 +343,9 @@ def build_parser() -> argparse.ArgumentParser:
     step_p.add_argument("repo")
     step_p.add_argument("--follow", action="store_true", default=False,
                         help="render the run's events and worker output on stderr while it runs")
+    step_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
+                        help="cap this run's Claude usage at PERCENT of the account window "
+                             "(default: the usage.run_cap_percent setting, none)")
 
     run_p = subparsers.add_parser("run")
     run_p.add_argument("repo")
@@ -319,6 +353,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="render the run's events and worker output on stderr while it runs")
     run_p.add_argument("--max-steps", type=_positive_int, default=None,
                        help="stop after this many steps (default: the run.max_steps setting, 20)")
+    run_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
+                       help="cap this run's Claude usage at PERCENT of the account window "
+                            "(default: the usage.run_cap_percent setting, none)")
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
@@ -383,7 +420,63 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_p.add_argument("repo", nargs="?", default=None,
                              help="only this target repository's jobs (default: every target)")
 
+    # workflow-controller-usage-budget CP4 (D8): the usage budget's view and
+    # the manual workers' gate. `--model` and `--json` are also global
+    # options, so this subcommand's own dests are `usage_model` and (when
+    # given after the subcommand) `json`, never overriding a global value.
+    usage_p = subparsers.add_parser(
+        "usage", help="show the usage budget, or gate a manual worker on it (check, wait, reserve, renew, release)")
+    usage_p.add_argument("--provider", choices=["claude", "codex", "all"], default=None,
+                         help="the provider to show or gate (default: all to show, claude to gate)")
+    usage_p.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                         help="print one JSON object (also accepted before the subcommand)")
+    usage_mode = usage_p.add_mutually_exclusive_group()
+    usage_mode.add_argument("--check", action="store_true", default=False,
+                            help="evaluate the budget once: exit 17 on a hold, else 0 (reserves nothing "
+                                 "unless --reserve)")
+    usage_mode.add_argument("--wait", action="store_true", default=False,
+                            help="wait while the budget holds, re-evaluating after each wait; exit 0 only on "
+                                 "go, 17 on a cap or when usage.max_wait_seconds is exhausted")
+    usage_p.add_argument("--reserve", action="store_true", default=False,
+                         help="with --check/--wait: reserve the forecast on go and print the token")
+    usage_p.add_argument("--role", default=None, metavar="ROLE", help="the worker's role (selects the forecast)")
+    usage_p.add_argument("--model", dest="usage_model", type=_route_value, default=None, metavar="MODEL",
+                         help="the worker's model (selects the forecast)")
+    usage_p.add_argument("--repo", default=None, metavar="PATH",
+                         help="the target repository (selects the repository cap and its spend)")
+    usage_p.add_argument("--run-id", default=None, metavar="ID",
+                         help="the run (selects the run cap and its spend)")
+    usage_p.add_argument("--renew", default=None, metavar="TOKEN",
+                         help="extend a reservation's lease, reviving a lapsed one")
+    usage_p.add_argument("--release", default=None, metavar="TOKEN",
+                         help="account a reservation and release it")
+    usage_p.add_argument("--outcome", choices=["ok", "not_started"], default="ok",
+                         help="with --release: not_started releases without charging (default: ok)")
+    usage_p.add_argument("--stream", default=None, metavar="PATH",
+                         help="with --release: measure the worker's stream-json output")
+    usage_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
+                         help="cap the run's Claude usage at PERCENT (default: the usage.run_cap_percent setting)")
+    usage_p.add_argument("--usage-codex-cap", type=_usage_percent, default=None, metavar="PERCENT",
+                         help="cap the run's Codex usage at PERCENT (default: the usage.codex_run_cap_percent "
+                              "setting)")
+
     return parser
+
+
+def _validate_usage_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """The ``usage`` option combinations argparse cannot express (a usage
+    error, exit 2, before anything runs)."""
+    gate = args.check or args.wait or args.reserve
+    if args.renew is not None and args.release is not None:
+        parser.error("usage: --renew and --release are mutually exclusive")
+    if (args.renew is not None or args.release is not None) and gate:
+        parser.error("usage: --renew/--release cannot be combined with --check, --wait or --reserve")
+    if args.reserve and not (args.check or args.wait):
+        parser.error("usage: --reserve needs --check or --wait")
+    if (args.stream is not None or args.outcome != "ok") and args.release is None:
+        parser.error("usage: --stream and --outcome are accepted only with --release")
+    if gate and args.provider == "all":
+        parser.error("usage: --check/--wait gate one provider; pass --provider claude or codex")
 
 
 def _since(value: str) -> datetime.datetime:
@@ -581,6 +674,11 @@ def _follow_runtime_root(args: argparse.Namespace) -> Path:
     read-only -- the running code's kind from ``identity.resolve_runtime``
     (or a snapshot's own ``SOURCE_PIN.json``), never ``pin()``,
     materialisation or any write."""
+    return _follow_runtime_root_row(args)[0]
+
+
+def _follow_runtime_root_row(args: argparse.Namespace) -> tuple[Path, int]:
+    """:func:`_follow_runtime_root` with the ladder row that produced it."""
     code_root = Path(identity.__file__).resolve().parent.parent
     pin = runtime.read_json(code_root / identity._SOURCE_PIN_NAME) if (
         code_root / identity._SOURCE_PIN_NAME).is_file() else None
@@ -589,10 +687,9 @@ def _follow_runtime_root(args: argparse.Namespace) -> Path:
         kind = pin.get("runtime_kind", identity.RUNTIME_KIND_SOURCE)
     else:
         origin, kind = code_root, identity.resolve_runtime(code_root).runtime_kind
-    runtime_root, _row = runtime.resolve_runtime_root(
+    return runtime.resolve_runtime_root(
         runtime_dir=args.runtime_dir, origin_source_root=origin, runtime_kind=kind,
     )
-    return runtime_root
 
 
 def _stdout_sink(text: str) -> None:
@@ -1093,11 +1190,490 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
     )
 
 
+class _UsagePause:
+    """One ``run``'s usage-pause state (usage-budget CP3, D7): whether an
+    earlier attempt was held (so the next admission that passes announces
+    ``usage_resumed``), and how long this step has already waited."""
+
+    def __init__(self) -> None:
+        self.held = False
+        self.waited = 0.0
+
+
+class UsageWaitInterrupted(milestone_branch.WaitInterrupted):
+    """Ctrl-C during a usage pause: a ``KeyboardInterrupt`` like the merge
+    wait's, printed as one line. No job record exists."""
+
+    def message(self) -> str:
+        return (f"interrupted while paused for the usage budget (the pause would have ended at {self.deadline}); "
+                "nothing was started")
+
+
+def _usage_event_fields(*, provider: str | None, repository: str, run_id: str | None,
+                        hold: Any = None, token: str | None = None) -> dict:
+    """The fields D8 gives every usage event."""
+    return {
+        "provider": provider, "window": getattr(hold, "window", None), "percent": getattr(hold, "percent", None),
+        "forecast": getattr(hold, "forecast", None), "resume_at": getattr(hold, "resume_at", None),
+        "reason": getattr(hold, "reason", None), "token": token, "repository": repository, "run_id": run_id,
+    }
+
+
+def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run: job.RunRecord | None,
+                effective: settings.EffectiveSettings, pause: _UsagePause | None):
+    """``execute_step``'s ``usage_gate`` from the settings (usage-budget
+    CP3, D7): ``usage.admit`` for a Claude job of the route's role and
+    model, in this repository and run, against the Claude limits. ``None``
+    when ``usage.enabled`` is false. After an earlier hold in this run, the
+    first admission that passes emits ``usage_resumed`` -- never a wake-up
+    alone."""
+    limits = usage.limits_from_values(effective.values, usage.PROVIDER_CLAUDE)
+    if not limits.enabled:
+        return None
+    repository = str(target.root)
+    run_id = None if run is None else run.run_id
+
+    def gate(route: routing.ResolvedRoute) -> Any:
+        admission = usage.admit(runtime_root, provider=usage.PROVIDER_CLAUDE, role=route.role, model=route.model,
+                                repository=repository, run_id=run_id, limits=limits, now=job.usage_now())
+        if admission.hold is not None:
+            return admission.hold
+        if pause is not None and pause.held:
+            pause.held = False
+            fields = _usage_event_fields(provider=usage.PROVIDER_CLAUDE, repository=repository, run_id=run_id,
+                                         token=admission.token)
+            if run is not None:
+                run.event("usage_resumed", **fields)
+            usage.append_event(runtime_root, "usage_resumed", now=job.usage_now(), **fields)
+        return admission.token
+
+    return gate
+
+
+def _local_time(epoch: float) -> str:
+    """``epoch`` in local time, with the epoch itself (D7, D10); a stored
+    figure beyond the calendar shows as the bare epoch."""
+    return observe._epoch_text(epoch)
+
+
+def usage_hold_message(hold: job.UsageHold, *, max_wait_seconds: int | None = None) -> str:
+    """The one stderr line of exit 17 (D10): a timed pause names its resume
+    time; a run cap says no reset lifts it; a repository cap says a new run
+    does not clear it and names the window reset. Outstanding work is named
+    when it is part of what holds a cap."""
+    head = f"workflow-controller: stopped for the usage budget, nothing was started: {hold.reason}"
+    if hold.window == "run_cap":
+        text = f"{head} -- no reset will lift this; raise usage.run_cap_percent or start a new run"
+    elif hold.window == "repository_cap":
+        when = (f"run again after the window resets at {_local_time(hold.resets_at)} (the spending then falls)"
+                if hold.resets_at is not None else
+                "run again after the five-hour window resets (the spending then falls)")
+        text = (f"{head} -- a new run does not clear this repository's spending, which is counted per five-hour "
+                f"window; {when}, or raise usage.repository_cap_percent")
+    elif hold.resume_at is not None:
+        text = f"{head} -- a timed pause: run again after the resume time {_local_time(hold.resume_at)}"
+        if max_wait_seconds is not None:
+            text += f" (waiting for it would exceed usage.max_wait_seconds, {max_wait_seconds} s)"
+    else:
+        text = f"{head} -- the window has no reset left to wait for; run again once a newer reading is recorded"
+    if hold.outstanding:
+        text += "; outstanding work (reservations of jobs not yet accounted) is part of what holds the cap"
+    return text
+
+
+def _usage_paused(runtime_root: Path, run: job.RunRecord | None, target: managed_repo.ManagedRepository,
+                  hold: job.UsageHold, *, waiting_until: float | None = None) -> None:
+    """The ``usage_paused`` event (D8, D9), in the run's log -- with the
+    branch preflight's events of the attempt -- and in
+    ``usage-events.jsonl``."""
+    fields = _usage_event_fields(provider=hold.provider, repository=str(target.root),
+                                 run_id=None if run is None else run.run_id, hold=hold)
+    if run is not None:
+        run.event("usage_paused", **fields, waitable=hold.waitable, waiting_until=waiting_until,
+                  preflight_events=list(hold.preflight_events))
+    usage.append_event(runtime_root, "usage_paused", now=job.usage_now(), **fields)
+
+
+def _usage_wait(args: argparse.Namespace, runtime_root: Path, run: job.RunRecord,
+                target: managed_repo.ManagedRepository, hold: job.UsageHold, pause: _UsagePause) -> bool:
+    """``run``'s pause (D7): for a waitable hold whose resume time plus
+    ``usage.resume_grace_seconds`` keeps this step's cumulative wait within
+    ``usage.max_wait_seconds``, emit ``usage_paused`` and sleep to it in
+    short interruptible slices, with no lock held, and return ``True`` (the
+    loop re-enters the whole boundary). Otherwise -- a cap, a longer wait --
+    emit ``usage_paused``, print the exit-17 line and return ``False``."""
+    limits = usage.limits_from_values(_effective(args).values, usage.PROVIDER_CLAUDE)
+    now = job.usage_now()
+    if hold.waitable and hold.resume_at is not None:
+        until = hold.resume_at + limits.resume_grace_seconds
+        if pause.waited + max(0.0, until - now) <= limits.max_wait_seconds:
+            _usage_paused(runtime_root, run, target, hold, waiting_until=until)
+            pause.held = True
+            try:
+                while (remaining := until - job.usage_now()) > 0:
+                    _usage_sleep(min(remaining, USAGE_WAIT_SLICE_SECONDS))
+            except KeyboardInterrupt:
+                raise UsageWaitInterrupted("usage_paused", _local_time(until)) from None
+            pause.waited += job.usage_now() - now
+            return True
+        _usage_paused(runtime_root, run, target, hold)
+        print(usage_hold_message(hold, max_wait_seconds=limits.max_wait_seconds), file=sys.stderr)
+        return False
+    _usage_paused(runtime_root, run, target, hold)
+    print(usage_hold_message(hold), file=sys.stderr)
+    return False
+
+
+# ---------------------------------------------------------------------------
+# `usage` (workflow-controller-usage-budget CP4, D8): the view and the manual
+# workers' gate
+# ---------------------------------------------------------------------------
+
+
+def _codex_home() -> Path:
+    """The Codex home the Codex readings come from: ``$CODEX_HOME``, else
+    ``~/.codex`` (D3)."""
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+
+
+def _usage_providers(args: argparse.Namespace, *, gate: bool) -> list[str]:
+    """The providers a ``usage`` call looks at: the ``--provider`` given,
+    else every provider to show and Claude to gate (D8)."""
+    if args.provider in usage.PROVIDERS:
+        return [args.provider]
+    return [usage.PROVIDER_CLAUDE] if gate else list(usage.PROVIDERS)
+
+
+def _usage_fresh_readings(provider: str) -> list[dict]:
+    """The readings a provider's own files hold now: Codex's rollouts; none
+    for Claude, whose readings arrive with worker streams (D2, D3)."""
+    return usage.read_codex_home(_codex_home()) if provider == usage.PROVIDER_CODEX else []
+
+
+def _usage_json(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "json", False))
+
+
+def _usage_print_stderr(text: str) -> None:
+    print(text, file=sys.stderr)
+
+
+def _usage_context(args: argparse.Namespace) -> dict:
+    """The repository and run a ``usage`` call evaluates caps for. An
+    absent ``--repo`` or ``--run-id`` leaves that cap unevaluated, and the
+    output says so (D8)."""
+    repository = None
+    if args.repo is not None:
+        repository = str(managed_repo._resolve_repository_root(Path(args.repo)))
+    return {"repository": repository, "run_id": args.run_id}
+
+
+def _usage_view(record: dict, provider: str, limits: usage.Limits, args: argparse.Namespace, context: dict,
+                now: float) -> dict:
+    """One provider's part of the ``usage`` view: each window's percent,
+    reset and reading age, the live and lapsed reservations, the forecast per
+    ``(role, model)`` in the ledger and the spend the caps see."""
+    readings = usage.current_readings(record, provider)
+    windows: dict = {}
+    for window in usage.WINDOWS:
+        reading = readings.get(window)
+        stamp = None if reading is None else usage.observed_stamp(reading)
+        windows[window] = None if reading is None else {
+            "percent": usage.window_percent(reading, now), "stored_percent": reading["percent"],
+            "resets_at": reading["resets_at"], "observed_at": stamp,
+            "age_seconds": None if stamp is None else max(0.0, now - stamp), "source": reading.get("source"),
+        }
+
+    def reservation(token: str, entry: dict, state: str) -> dict:
+        return {"token": token, "state": state, "role": entry.get("role"), "model": entry.get("model"),
+                "repository": entry.get("repository"), "run_id": entry.get("run_id"), "job_id": entry.get("job_id"),
+                "expires_at": entry.get("expires_at"), "five_hour": entry[usage.FIVE_HOUR]["amount"],
+                "weekly": entry[usage.WEEKLY]["amount"]}
+
+    reservations = [reservation(t, r, "live") for t, r in record["reservations"].items() if r["provider"] == provider]
+    reservations += [reservation(t, r, "lapsed") for t, r in record["lapsed"].items() if r["provider"] == provider]
+    groups = sorted({(e.get("role"), e.get("model")) for e in record["ledger"] if e["provider"] == provider},
+                    key=lambda g: (str(g[0]), str(g[1])))
+    forecasts = []
+    for role, model in groups:
+        five, weekly = usage.forecast(record, provider, role, model, limits)
+        samples = sum(1 for e in record["ledger"] if e["provider"] == provider and e.get("role") == role
+                      and e.get("model") == model and e.get("five_hour") is not None)
+        forecasts.append({"role": role, "model": model, "five_hour": five, "weekly": weekly, "samples": samples})
+    default = usage.forecast(record, provider, args.role, args.usage_model, limits)
+    return {
+        "windows": windows, "reservations": reservations, "forecasts": forecasts,
+        "thresholds": {usage.FIVE_HOUR: limits.pause_at_percent, usage.WEEKLY: limits.weekly_pause_at_percent},
+        "forecast": {usage.FIVE_HOUR: default[0], usage.WEEKLY: default[1]},
+        "run": None if context["run_id"] is None else {
+            "run_id": context["run_id"], "cap": limits.run_cap_percent,
+            "spent": usage.run_spent(record, provider, context["run_id"]),
+            "outstanding": usage.run_outstanding(record, provider, context["run_id"])},
+        "repository": None if context["repository"] is None else {
+            "repository": context["repository"], "cap": limits.repository_cap_percent,
+            "spent": usage.repository_spent(record, provider, context["repository"], now),
+            "outstanding": usage.repository_outstanding(record, provider, context["repository"], now)},
+    }
+
+
+def _usage_view_text(view: dict, provider: str) -> list[str]:
+    lines = [f"{provider}:"]
+    for window in usage.WINDOWS:
+        w = view["windows"][window]
+        label = "five-hour" if window == usage.FIVE_HOUR else "weekly"
+        threshold = view["thresholds"][window]
+        if w is None:
+            lines.append(f"  {label}: no reading (threshold {threshold}%)")
+            continue
+        age = "at an unknown time" if w["age_seconds"] is None else f"{int(w['age_seconds'])} s ago"
+        lines.append(f"  {label}: {w['percent']:.0f}% (threshold {threshold}%), resets {_local_time(w['resets_at'])}, "
+                     f"read {age} from {w['source']}")
+    live = [r for r in view["reservations"] if r["state"] == "live"]
+    lapsed = [r for r in view["reservations"] if r["state"] == "lapsed"]
+    lines.append(f"  reservations: {len(live)} live, {len(lapsed)} lapsed")
+    for r in view["reservations"]:
+        lines.append(f"    {r['token'][:8]} {r['state']} {r['role'] or '-'}/{r['model'] or '-'} "
+                     f"{r['five_hour']:.0f}% five-hour, {r['weekly']:.0f}% weekly, repository {r['repository'] or '-'}, "
+                     f"run {r['run_id'] or '-'}")
+    if view["forecasts"]:
+        lines.append("  forecast per role/model:")
+        for f in view["forecasts"]:
+            lines.append(f"    {f['role'] or '-'}/{f['model'] or '-'}: {f['five_hour']:.1f}% five-hour, "
+                         f"{f['weekly']:.1f}% weekly from {f['samples']} measured jobs")
+    else:
+        lines.append("  forecast: the provider default (no jobs recorded)")
+    for key, label in (("run", "run"), ("repository", "repository")):
+        part = view[key]
+        if part is None:
+            lines.append(f"  {label} cap: not evaluated (no --{'run-id' if key == 'run' else 'repo'})")
+        else:
+            cap = "none" if part["cap"] is None else f"{part['cap']}%"
+            lines.append(f"  {label} cap {cap}: spent {part['spent']:.0f}%, outstanding {part['outstanding']:.0f}%")
+    return lines
+
+
+def _usage_show(args: argparse.Namespace, runtime_root: Path, values: dict) -> int:
+    """``usage`` with no mode: each window's percent, reset, reading age, the
+    reservations and the forecasts. Its writes are the Codex readings it
+    merges into the shared record and the replay sweep's ``accounting:
+    "done"`` on a terminal job record a crash left unaccounted."""
+    context = _usage_context(args)
+    now = job.usage_now()
+    job._settle_usage(runtime_root)
+    views: dict = {}
+    for provider in _usage_providers(args, gate=False):
+        fresh = _usage_fresh_readings(provider)
+        if fresh:
+            usage.record_reading(runtime_root, fresh)
+        record = usage.snapshot(runtime_root, now=now)
+        views[provider] = _usage_view(record, provider, usage.limits_from_values(values, provider), args, context, now)
+    if _usage_json(args):
+        print(json.dumps({"at": now, "providers": views}, sort_keys=True))
+        return EXIT_OK
+    for provider, view in views.items():
+        for line in _usage_view_text(view, provider):
+            print(line)
+    return EXIT_OK
+
+
+def _usage_manual_event(runtime_root: Path, name: str, provider: str, context: dict, *, hold: Any = None,
+                        token: str | None = None) -> None:
+    """A manual worker's event in ``usage-events.jsonl`` (D8)."""
+    usage.append_event(runtime_root, name, now=job.usage_now(), **_usage_event_fields(
+        provider=provider, repository=context["repository"], run_id=context["run_id"], hold=hold, token=token))
+
+
+def _usage_gate_output(args: argparse.Namespace, provider: str, admission: usage.Admission | None,
+                       context: dict, *, hold: usage.Hold | None, waited: float,
+                       max_wait_seconds: int | None = None, disabled: bool = False) -> int:
+    """Print the outcome of a ``--check``/``--wait`` and return its exit
+    code: 0 on go, 17 on a hold. With ``--reserve`` in text mode the token is
+    the only line on stdout, so a script can capture it; everything else goes
+    to stderr."""
+    token = None if admission is None else admission.token
+    notes = [] if admission is None else list(admission.notes)
+    forecast = None if admission is None else {usage.FIVE_HOUR: admission.forecast[0],
+                                               usage.WEEKLY: admission.forecast[1]}
+    notes.append("repository cap not evaluated (no --repo)" if context["repository"] is None else
+                 f"repository cap evaluated for {context['repository']}")
+    notes.append("run cap not evaluated (no --run-id)" if context["run_id"] is None else
+                 f"run cap evaluated for run {context['run_id']}")
+    if disabled:
+        notes.insert(0, "usage.enabled is false: nothing was evaluated or reserved")
+    code = EXIT_OK if hold is None else EXIT_USAGE_PAUSED
+    if _usage_json(args):
+        print(json.dumps({
+            "provider": provider, "decision": "go" if hold is None else "hold", "token": token, "forecast": forecast,
+            "waited_seconds": waited, "notes": notes, "hold": None if hold is None else dataclasses.asdict(hold),
+            "message": None if hold is None else usage_hold_message(hold, max_wait_seconds=max_wait_seconds),
+        }, sort_keys=True))
+        return code
+    for note in notes:
+        _usage_print_stderr(f"workflow-controller: usage: {note}")
+    if hold is not None:
+        _usage_print_stderr(usage_hold_message(hold, max_wait_seconds=max_wait_seconds))
+    elif token is not None:
+        print(token)
+    elif not disabled:
+        print("go")
+    return code
+
+
+def _usage_check_or_wait(args: argparse.Namespace, runtime_root: Path, values: dict) -> int:
+    """``usage --check`` and ``--wait`` (D8): evaluate the budget for one
+    provider, once or in a bounded loop that re-evaluates after every wait
+    (another lane may have taken the headroom while this one slept), and
+    reserve the forecast on go with ``--reserve``. ``usage_resumed`` is
+    appended only after the final ``go``."""
+    provider = _usage_providers(args, gate=True)[0]
+    limits = usage.limits_from_values(values, provider)
+    context = _usage_context(args)
+    if not limits.enabled:
+        return _usage_gate_output(args, provider, None, context, hold=None, waited=0.0, disabled=True)
+    started = job.usage_now()
+    paused = False
+    while True:
+        job._settle_usage(runtime_root)
+        now = job.usage_now()
+        admission = usage.admit(
+            runtime_root, provider=provider, role=args.role, model=args.usage_model,
+            repository=context["repository"], run_id=context["run_id"], limits=limits, now=now,
+            readings=_usage_fresh_readings(provider), reserve=args.reserve)
+        hold = admission.hold
+        if hold is None:
+            if paused:
+                _usage_manual_event(runtime_root, "usage_resumed", provider, context, token=admission.token)
+            return _usage_gate_output(args, provider, admission, context, hold=None,
+                                      waited=job.usage_now() - started)
+        waited = now - started
+        if not (args.wait and hold.waitable and hold.resume_at is not None):
+            _usage_manual_event(runtime_root, "usage_paused", provider, context, hold=hold)
+            return _usage_gate_output(args, provider, admission, context, hold=hold, waited=waited)
+        until = hold.resume_at + limits.resume_grace_seconds
+        if waited + max(0.0, until - now) > limits.max_wait_seconds:
+            _usage_manual_event(runtime_root, "usage_paused", provider, context, hold=hold)
+            return _usage_gate_output(args, provider, admission, context, hold=hold, waited=waited,
+                                      max_wait_seconds=limits.max_wait_seconds)
+        _usage_manual_event(runtime_root, "usage_paused", provider, context, hold=hold)
+        paused = True
+        _usage_print_stderr(f"workflow-controller: usage: held ({hold.reason}); waiting until {_local_time(until)}")
+        try:
+            while (remaining := until - job.usage_now()) > 0:
+                _usage_sleep(min(remaining, USAGE_WAIT_SLICE_SECONDS))
+        except KeyboardInterrupt:
+            raise UsageWaitInterrupted("usage_paused", _local_time(until)) from None
+
+
+def _usage_renew(args: argparse.Namespace, runtime_root: Path, values: dict) -> int:
+    """``usage --renew TOKEN``: extend a live reservation, revive a lapsed
+    one; an unknown or already accounted token is exit 1 and changes
+    nothing (D6)."""
+    limits = usage.limits_from_values(values, usage.PROVIDER_CLAUDE)
+    result = usage.renew(runtime_root, args.renew, reservation_seconds=limits.reservation_seconds,
+                         now=job.usage_now())
+    if result == usage.UNKNOWN:
+        message = (f"the token {args.renew} is unknown or already accounted; nothing was renewed, and "
+                   "`usage --release` cannot account an unknown manual token or further work behind an "
+                   "already-settled token")
+        if _usage_json(args):
+            print(json.dumps({"token": args.renew, "result": result, "message": message}, sort_keys=True))
+        else:
+            print(f"error: {message}", file=sys.stderr)
+        return EXIT_TOKEN_UNKNOWN
+    if _usage_json(args):
+        print(json.dumps({"token": args.renew, "result": result}, sort_keys=True))
+    else:
+        print(result)
+    return EXIT_OK
+
+
+def _usage_release(args: argparse.Namespace, runtime_root: Path, values: dict) -> int:
+    """``usage --release TOKEN [--outcome ok|not_started] [--stream PATH]``
+    (D8): account the manual worker's delta, spend and ledger entry once
+    (``usage.complete``) and append ``usage_released``. The end readings are
+    the worker's stream (``--stream``, first event as the start comparison,
+    last as the end) or the readings stored now; a Claude release with none
+    newer is an ``unknown`` delta charged at least the forecast. Idempotent:
+    an already accounted token changes nothing and exits 0; an unknown one
+    exits 1."""
+    now = job.usage_now()
+    if args.stream is not None and not Path(args.stream).is_file():
+        print(f"error: --stream {args.stream} is not a readable file; nothing was accounted", file=sys.stderr)
+        return EXIT_USAGE
+    before = usage.snapshot(runtime_root, now=now)
+    held = before["reservations"].get(args.release) or before["lapsed"].get(args.release)
+    provider = None if held is None else held["provider"]
+    if args.stream is not None and provider not in (None, usage.PROVIDER_CLAUDE):
+        print(f"error: --stream reads a Claude stream and the token {args.release} is a {provider} reservation; "
+              f"nothing was accounted", file=sys.stderr)
+        return EXIT_USAGE
+    stream_start = None
+    if args.outcome == usage.OUTCOME_NOT_STARTED:
+        end = None
+    elif args.stream is not None:
+        first, last = usage.read_claude_stream_span(Path(args.stream))
+        stream_start, end = list(first.values()), list(last.values())
+    else:
+        fresh = _usage_fresh_readings(provider) if provider is not None else []
+        if fresh:
+            usage.record_reading(runtime_root, fresh)
+        end = list(usage.current_readings(usage.snapshot(runtime_root, now=now), provider).values()) \
+            if provider is not None else None
+    result = usage.complete(runtime_root, args.release, end, args.outcome, now=now, stream_start=stream_start)
+    if result.status == usage.COMPLETE_NOOP:
+        known = result.reason == "already_settled"
+        message = ("already accounted; nothing changed" if known else
+                   f"the token {args.release} is unknown; nothing was accounted")
+        if _usage_json(args):
+            print(json.dumps({"token": args.release, "status": result.status, "reason": result.reason,
+                              "message": message}, sort_keys=True))
+        else:
+            print(message if known else f"error: {message}", file=sys.stderr if not known else sys.stdout)
+        return EXIT_OK if known else EXIT_TOKEN_UNKNOWN
+    entry = result.entry
+    context = {"repository": held.get("repository") if held else None, "run_id": held.get("run_id") if held else None}
+    fields = _usage_event_fields(provider=provider, repository=context["repository"], run_id=context["run_id"],
+                                 token=args.release)
+    fields["reason"] = result.status if entry is None else entry["delta"]
+    # `percent` is the charge, `forecast` what the reservation held, `reason`
+    # the delta kind (or the release outcome when nothing was charged).
+    fields["percent"] = None if entry is None else entry["charged"]
+    fields["forecast"] = None if entry is None else entry["reserved_five_hour"]
+    usage.append_event(runtime_root, "usage_released", now=job.usage_now(), **fields)
+    if _usage_json(args):
+        print(json.dumps({"token": args.release, "status": result.status, "entry": entry}, sort_keys=True))
+    elif entry is None:
+        print("released; nothing charged")
+    else:
+        print(f"released; {entry['delta']} delta, charged {entry['charged']:.1f}%")
+    return EXIT_OK
+
+
+def cmd_usage(args: argparse.Namespace) -> int:
+    """``usage`` (workflow-controller-usage-budget CP4, D8): the budget's
+    view, and the gate manual workers (lane scripts, a Codex session) use to
+    share the Controller's forecast-and-reservation accounting. Dispatched
+    before pinning like ``follow``: it writes only the shared usage record
+    and ``usage-events.jsonl`` in the runtime root, apart from the replay
+    sweep (``job._settle_usage``) its view and gate run first, which marks a
+    terminal job record a crash left unaccounted ``accounting: "done"``."""
+    runtime_root, row = _follow_runtime_root_row(args)
+    runtime.ensure_runtime_root(runtime_root, ladder_row=row)
+    values = _effective(args).values
+    if args.renew is not None:
+        return _usage_renew(args, runtime_root, values)
+    if args.release is not None:
+        return _usage_release(args, runtime_root, values)
+    if args.check or args.wait:
+        return _usage_check_or_wait(args, runtime_root, values)
+    return _usage_show(args, runtime_root, values)
+
+
 def _run_one_step(
     args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
     target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions = routing.NO_OVERRIDES,
-    *, wait: bool = False,
-) -> tuple[int, dict | Decision | None]:
+    *, wait: bool = False, usage_pause: _UsagePause | None = None,
+) -> tuple[int, dict | Decision | job.UsageHold | None]:
     """One orchestration boundary: a generation-handoff check, then (at
     most) one job execution. Shared by ``step`` (one call) and ``run``'s
     own loop body (repeated until a stop condition) -- both `step`'s "stop
@@ -1114,7 +1690,11 @@ def _run_one_step(
 
     ``wait`` (auto-merge-release-wait I6): ``run`` passes ``True``, so the
     step may wait up to ``merge.wait_seconds`` on a pending merge gate;
-    ``step`` never waits."""
+    ``step`` never waits.
+
+    The usage gate (usage-budget CP3, D7) admits the job from the settings;
+    a hold is ``(EXIT_USAGE_PAUSED, hold)`` with nothing recorded, and the
+    caller decides whether to wait (``usage_pause`` is ``run``'s state)."""
     run = _open_run
     origin_source_root = ident.origin_source_root or ident.source_root
     pending = handoff.detect(ident, origin_source_root)
@@ -1147,7 +1727,12 @@ def _run_one_step(
         wait_seconds=effective["merge.wait_seconds"] if wait else 0,
         poll_seconds=effective["merge.poll_seconds"],
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
+        usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
     )
+
+    if isinstance(result, job.UsageHold):
+        # Usage budget (D7): refused before any record existed.
+        return EXIT_USAGE_PAUSED, result
 
     if isinstance(result, Decision):
         # LEGACY_READY / MILESTONE_COMPLETE, or a close-out after a release
@@ -1185,7 +1770,11 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     _start_follower(args, runtime_root, run.run_id)
     run.event("step_started", n=1)
     try:
-        exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
+        if isinstance(result, job.UsageHold):
+            # `step` never waits (D7): the event and the exit-17 line.
+            _usage_paused(runtime_root, run, target, result)
+            print(usage_hold_message(result), file=sys.stderr)
     finally:
         # Every finished child the launch recorded is collected before the
         # command returns (the between-launch reaper keeps collecting the
@@ -1278,6 +1867,7 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     settings file, else 20) is reached."""
     max_steps = _effective(args)["run.max_steps"]
     steps_run = 0
+    usage_pause = _UsagePause()
     while steps_run < max_steps:
         # The orchestration boundary: checked once before every job this
         # loop starts, including the first -- never mid-job. Both halves
@@ -1288,8 +1878,18 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         _await_pause_file(args.pause_file)
 
         run.event("step_started", n=steps_run + 1)
-        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options, wait=True)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options, wait=True,
+                                          usage_pause=usage_pause)
+        if isinstance(result, job.UsageHold):
+            # Usage budget (D7): a held attempt consumes no step. After the
+            # wait the loop re-enters the whole boundary -- the pause file,
+            # handoff detection, the lock, fresh state, a fresh decision and
+            # a fresh admission; a cap or a longer wait stops with 17.
+            if _usage_wait(args, runtime_root, run, target, result, usage_pause):
+                continue
+            return exit_code
         steps_run += 1
+        usage_pause.waited = 0.0
         worker.reap_adopted_children()
 
         if isinstance(result, dict) and result["status"] == job.STATUS_FINISHED:
@@ -1470,15 +2070,17 @@ def _capture_pre_existing_state(runtime_root: Path) -> dict:
 
 def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.RoutingConfig | None]:
     """The settings the options given on this command line override (I1):
-    ``--timeout``, ``run --max-steps``, ``resume --drain-timeout`` and
-    ``--routing-config``, the latter parsed strictly as today. Read with
-    ``getattr`` defaults: each is only on its own subcommand."""
+    ``--timeout``, ``run --max-steps``, ``resume --drain-timeout``,
+    ``--usage-cap``, ``usage --usage-codex-cap`` and ``--routing-config``,
+    the latter parsed strictly as today. Read with ``getattr`` defaults: each is only on its own subcommand."""
     config_path = getattr(args, "routing_config", None)
     cli_routing = None if config_path is None else routing.load_routing_config(config_path)
     return {
         "worker.timeout_seconds": getattr(args, "timeout", None),
         "run.max_steps": getattr(args, "max_steps", None),
         "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
+        "usage.run_cap_percent": getattr(args, "usage_cap", None),
+        "usage.codex_run_cap_percent": getattr(args, "usage_codex_cap", None),
     }, cli_routing
 
 
@@ -1575,6 +2177,13 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
         # Read-only like `follow`: the settings file is only validated.
         _apply_settings(args, write=False)
         return cmd_telemetry(args)
+    if command == "usage":
+        # Read-only like `follow` apart from the shared usage record (and
+        # the replay sweep's `accounting` mark on a job record a crash left
+        # unaccounted): the settings file is only validated and the source is
+        # not re-execed.
+        _apply_settings(args, write=False)
+        return cmd_usage(args)
     ident = identity.pin()
 
     handoff = identity.read_exec_handoff()
@@ -1644,6 +2253,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--acknowledge-unverifiable-worker is accepted only with --abandon JOB_ID")
     if args.command == "milestone-binding" and args.work_item is None:
         parser.error("milestone-binding requires --work-item <id>")
+    if args.command == "usage":
+        _validate_usage_args(parser, args)
     global _open_run
     if _open_run is not None:
         _open_run.discard()  # only a run this invocation creates is closed below

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-usage-budget",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -7971,6 +7971,208 @@
         },
         "evaluated_at": "2026-10-10T00:07:14Z",
         "workflow_release": "2.9.0"
+      }
+    },
+    "workflow-controller-usage-budget": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-usage-budget",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-usage-budget-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-usage-budget-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "plan_revision": 11,
+      "implementation_revision": 10,
+      "functional_review_round": null,
+      "base_commit": "f516e762b40f0fa4db1bbc23ac719706428ab9b8",
+      "reviewed_implementation_head": "ea5672d725a79d747cb2ffd1d531305fdf766a9b",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP5",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "03ddec05fef3c06da6b89274952abf1e8fe4f7f8"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "163683bc13e0a0ecf3c34ea42e9361295514081a"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "4f1900195ab0a7a0ff568a97f7517a35ddb092c6"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "47815b972041bd3ba757df2b2db598c68e68cecd"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "a2b0a21bdfb8d09bec563772902466aa0e1c4170"
+        }
+      },
+      "current_bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+        "approved_review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c061c87310e585b0875ee081e65ce269b265ff46"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-usage-budget-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1eeacc58290d35715c4378e724fcf8cb05d112f6"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-usage-budget-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b1c0635b121d16ce0e93e35f776161da79a1238e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-10T04:59:37Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+            "ledger": {
+              "local": {
+                "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+                "verdict": "APPROVE",
+                "round": 11,
+                "verdict_sha256": "b76b006e4c708b4dd74d9551ba45596335d228ac6146d496a329e12f3356c918",
+                "ledger_entry_sha256": "76f31a0f88048287e47cebae94449e99ae6c33670970c8a0f8631bffdb80d8d3",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+                "verdict": "APPROVE",
+                "round": 11,
+                "verdict_sha256": "35b4a7e1db782696c73b60c1381d89b9e7cc020d7a54a844e93d90ea552626b1",
+                "ledger_entry_sha256": "0f2310eb4af835ad45f3ad4651bd31fa25fd348ff75aaa25124909031e505d3b",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-10T04:59:37Z",
+          "workflow_release": "2.9.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-10T04:49:53Z",
+          "verdict_sha256": "b76b006e4c708b4dd74d9551ba45596335d228ac6146d496a329e12f3356c918",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-10T04:56:09Z",
+          "verdict_sha256": "35b4a7e1db782696c73b60c1381d89b9e7cc020d7a54a844e93d90ea552626b1",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 72,
+      "last_transition": "2026-10-10T16:13:37Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-10T04:17:30Z",
+        "consumed": {
+          "review_content_id": "64cb43684c65503bf23134a3705aa9ef9ea96a11d9ff6cf7272fe6ffd6713ec6",
+          "plan_revision": 10,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+          "plan_revision": 11
+        },
+        "bound": {
+          "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+          "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+          "plan_revision": 11
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "1b00c6a4a6c7383c0deee2295318ec270adbe3b51e5a4059248773426dfbce77",
+        "64cb43684c65503bf23134a3705aa9ef9ea96a11d9ff6cf7272fe6ffd6713ec6",
+        "a1a49bed5f8fc5f67afb5e636e1f50f720d6c553776e4571308d6f8cdb8354c4",
+        "ba14ce42027dac397946134207823bce576d6a369fef82829e7ff34643bfef4b",
+        "ca184b617edfad3f39adf63d98b29cd43307f31ef12eb841ca6a7771eb750e16",
+        "e389280c5e5ccd034e422a0f08954877b6b1a64124dd42a5b01c53499caea1ea",
+        "e7115a96999bfe16e941873442b7a6aa1119dee0f300317fd99c3471f86156ff",
+        "ecbc1622696343b5aac3504af4003e3063d572380ffdedefff4d0a98378a2f77",
+        "efef948d32a127d9aec369068c8788fa3aa68757f741032aee8cb0c8a9e924eb",
+        "fb49aa8092a561a4dc3cb1dccba6b5ff046bae75656687f840f28f61263193a9"
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "2d5f80253eb1ccee65057f2836ec69a6ff9c1fecafd1095a273b97dd535efe6b",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "fd1bfd791c36177750421b0e0d1417c4f9191d63f83db343bb845f4747c66c65",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-10-10T13:04:14Z",
+          "verdict_sha256": "712b7f9958123472e0fe99c868e461f2a23f08321053d02fb1ea52e30a743a4a",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

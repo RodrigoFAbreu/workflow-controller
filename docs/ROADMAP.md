@@ -21,7 +21,7 @@ and merged as a `test:` pull request that released nothing (PR #32); a `chore:` 
 moved this repository to Workflow 2.9.0. C9d, the installed-release test made version-agnostic
 (follow-up 16, accepted 2026-10-10 by gate policy), is complete and merged as a `test:` pull
 request (#34). It is the first milestone whose approvals and acceptance were all given by the gate
-policy. Next (user decisions, 2026-10-09 and 2026-10-10): C8, C5, C6, C7, C10 (with the automated
+policy. Next (user decisions, 2026-10-09 and 2026-10-10): C5 (C8, the usage budget, is complete), C6, C7, C10 (with the automated
 functional review), C12 (self-recovery), C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -63,10 +63,12 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C9c | Move this repository to the latest compatible Workflow (2.9.0 today) with automatic gates: vendor that release's tree under `tests/workflow_releases/`, let the installed-release test admit a protocol release by capability, then run the Workflow Manager update (a `chore:` pull request, no release); once the milestone is merged the update is the next action (complete) | C9b | [follow-up 15](#known-follow-ups-carried-forward) |
 | C9d | The installed-release test made version-agnostic: drop the requirement that this repository's own installed Workflow has a vendored tree, and admit it through the Controller's capability rule or `inspect`, with no vendored copy and no version literal, so a later Workflow move needs no test change (complete) | C9c | [follow-up 16](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
-| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, lane or repository, and run | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
-| C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
+| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, repository and run (complete) | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
+| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
+| C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
+| C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
-| C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
+| C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
@@ -1375,7 +1377,9 @@ needs no special case.
     stuck release;
   - a pull request merged;
   - a release published;
-  - a usage pause and its resume (C8);
+  - a usage pause and its resume, a release and a lapsed reservation (C8 writes `usage_paused`,
+    `usage_resumed`, `usage_released` and `usage_reservation_expired` to `usage-events.jsonl` and the
+    run's log; C5 subscribes to them);
   - a run finished.
 - **How each event is shaped:** a category and a severity, with a blocker at the highest severity,
   so SignalHub's per-device filters apply. Each event links to the pull request, release or run
@@ -1411,6 +1415,16 @@ needs no special case.
 
 ## 11.6 Usage budget
 
+**Status:** Complete (`workflow-controller-usage-budget`, plan
+`docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md`, ADR `docs/adr/0011-usage-budget.md`). Ships as
+1.8.0. The Controller reads the Claude and Codex windows itself, forecasts a job, admits it
+atomically against the other lanes' reservations, pauses before a job that would not fit, and
+resumes through the full orchestration boundary; `workflow-controller usage` gives a manually started
+worker the same gate and replaces `usage-gate.sh`. A cap in one repository is one number in that
+repository's settings file. Three follow-ups have owners: C8b and C8c below, C7 (a Codex worker the
+Controller starts must call the gate) and C5 (notifications). The description below is the original
+problem statement.
+
 **Step C8.** The kanban loop and the two parallel lanes share one set of usage limits: the Claude
 plan's 5-hour window, and Codex's limits.
 
@@ -1437,6 +1451,39 @@ The lane watchdog scripts that do this outside the Controller today are the star
   half way; workers started outside the Controller (cross-model reviews, functional testers, gate
   workers) are not counted; Codex usage has no budget, only retries; the threshold is one fixed
   number.
+
+### 11.6.1 Step C8b: a limit reached mid-job
+
+The usage budget forecasts, so it cannot stop a job that exceeds its forecast. Today such a job
+ends `FAILED` with a `TransitionNotObservedError` and the run stops with exit 30. Two real
+streams are kept in `~/.local/state/workflow-controller/jobs/20260924T213209Z-148c63ed/worker.stdout`
+and `.../20260924T211904Z-73845184/worker.stdout`: each ends in a `rate_limit_event` with
+`status: "rejected"`, an `assistant` message with `error: "rate_limit"` and a `result` with
+`is_error: true` and `api_error_status: 429`.
+
+- Recognise that `result` in `controller/worker_stream.py`. The first checkpoint is a golden built
+  from the two samples, sanitised.
+- The second checkpoint classifies the job distinctly in `controller/job.py` (not a failed
+  expected outcome).
+- Wait for the stream's `resetsAt` plus the grace, and have `resume` and reconciliation accept a job
+  that ended this way, so the step is repeated and not left failed. The wait is a pause in the sense of
+  C8: it holds no lock and records `usage_paused`.
+- It needs C8.
+- Follow-up from C8 review: the first job after a window reset is never measured, because an expired
+  stored reading is not baselined as an unknown window (`usage._component`/`_window_delta`). The
+  effect is a conservative over-charge and one fewer forecast sample per window.
+
+### 11.6.2 Step C8c: per-repository caps and per-lane budgets
+
+C8 applies one repository cap, taken from the settings file of the repository being driven
+(`--settings`). C8c adds:
+
+- a per-repository cap map, with its own validator like `routing`'s, so one file sets a different
+  cap for each repository;
+- per-lane budget files, so a lane's share is declared and not implied by which settings file it
+  passes.
+
+It depends on C8 and on the settings file's per-lane story, and is not scheduled before C5.
 
 ## 11.7 The kanban runner
 

@@ -85,6 +85,7 @@ stay stable; the code and the guides must agree with them.
 | [0008](adr/0008-controller-settings-file.md) | the user-level settings file: location, precedence, fill and forward-only migration, and which values are settings |
 | [0009](adr/0009-auto-merge-and-release-wait.md) | when and how the Controller merges an accepted milestone pull request (one head-bound squash merge, never GitHub's auto-merge request), the release wait, the stop after close-out, and what stays human |
 | [0010](adr/0010-orchestration-protocol-admission-by-capability.md) | admission of a Workflow release by capability (protocol major 1), the protocol's decisions and outcomes, and what stays the Controller's; amends 0006 |
+| [0011](adr/0011-usage-budget.md) | the usage budget: readings, reservations and a ledger shared by all lanes, the gate before every job, exit 17, and what is deferred (C8b, C8c) |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

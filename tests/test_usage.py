@@ -228,6 +228,16 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(usage.merge_reading(a, b)["observed_at"], NOW + 5)
         self.assertEqual(usage.merge_reading(b, a)["observed_at"], NOW + 5)
 
+    def test_a_stored_reading_without_an_observation_time_yields_to_an_equal_percent_one(self) -> None:
+        incoming = reading(FIVE_HOUR, 10.0, FIVE_RESETS, NOW)
+        for stored_at in (None, "missing"):
+            stored = reading(FIVE_HOUR, 10.0, FIVE_RESETS, stored_at)
+            if stored_at == "missing":
+                del stored["observed_at"]
+            with self.subTest(stored_at=stored_at):
+                self.assertEqual(usage.merge_reading(stored, incoming), incoming)
+                self.assertEqual(usage.merge_reading(incoming, stored), incoming)
+
     def test_a_window_rollover_takes_the_later_window(self) -> None:
         stored = reading(FIVE_HOUR, 90.0, FIVE_RESETS, NOW)
         later = reading(FIVE_HOUR, 2.0, FIVE_RESETS + 5 * H, NOW - 50)

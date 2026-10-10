@@ -162,6 +162,13 @@ def same_window(a: float, b: float) -> bool:
     return abs(a - b) <= WINDOW_JITTER_SECONDS
 
 
+def _observed(reading: dict) -> float:
+    """The reading's ``observed_at``; a record may store it absent or null
+    (a job-record reading has none), which reads as older than any stamp."""
+    value = reading.get("observed_at")
+    return float(value) if _is_number(value) else float("-inf")
+
+
 def merge_reading(stored: dict | None, incoming: dict) -> dict:
     """The deterministic merge of D2 (pure). The same window keeps the
     greater percent (usage within a window never falls), or on a tie the
@@ -171,7 +178,8 @@ def merge_reading(stored: dict | None, incoming: dict) -> dict:
         return dict(incoming)
     if same_window(stored["resets_at"], incoming["resets_at"]):
         if incoming["percent"] > stored["percent"] or (
-            incoming["percent"] == stored["percent"] and incoming["observed_at"] > stored["observed_at"]
+            incoming["percent"] == stored["percent"]
+            and _observed(incoming) > _observed(stored)
         ):
             winner = dict(incoming)
         else:

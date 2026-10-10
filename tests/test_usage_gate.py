@@ -492,6 +492,24 @@ class ReplayTest(_UsageCase):
         [entry] = self.shared()["ledger"]
         self.assertEqual(entry["id"], settled["usage"]["token"])
 
+    def test_a_stored_reading_without_an_observation_time_still_returns_the_outcome_and_settles(self) -> None:
+        for label, drop in (("missing", True), ("null", False)):
+            with self.subTest(stored=label):
+                self.reading(10)
+                path = self.runtime_root / usage.USAGE_FILE
+                shared = json.loads(path.read_text())
+                stored = shared["readings"]["claude"]["five_hour"]
+                if drop:
+                    del stored["observed_at"]
+                else:
+                    stored["observed_at"] = None
+                path.write_text(json.dumps(shared))
+                result = self.ustep(self.stream_env(self.rate_limit(10)))
+                self.assertIn(result["status"], job.TERMINAL_STATUSES)
+                self.assertNotIn("usage_record_unreadable", [e["event"] for e in self.events()])
+                self.assertEqual(result["usage"]["accounting"], "done")
+                self.assertIsNotNone(self.shared()["readings"]["claude"]["five_hour"]["observed_at"])
+
     def test_a_bound_reservation_with_no_record_is_released_only_once_lapsed(self) -> None:
         admission = usage.admit(self.runtime_root, provider="claude", role="r", model="m",
                                 repository=str(self.root), run_id="run-1", limits=usage.Limits(), now=self.now)

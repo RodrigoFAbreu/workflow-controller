@@ -354,13 +354,14 @@ def load_record(runtime_root: str | os.PathLike) -> dict:
     try:
         raw = runtime.read_json(path)
     except (ValueError, OSError) as exc:
-        raise UsageRecordError(f"the usage record at {path} cannot be read: {exc}",
+        raise UsageRecordError(f"the usage record at {path} cannot be read: {exc}; repair or remove it, or set usage.enabled=false "
+                               f"to run without the budget",
                                evidence={"path": str(path)}) from exc
     if raw is None:
         return _empty_record()
     if not isinstance(raw, dict) or raw.get("version") != RECORD_VERSION:
         raise UsageRecordError(
-            f"the usage record at {path} is not a version {RECORD_VERSION} object; repair or remove it",
+            f"the usage record at {path} is not a version {RECORD_VERSION} object; repair or remove it, or set usage.enabled=false to run without the budget",
             evidence={"path": str(path), "version": raw.get("version") if isinstance(raw, dict) else None})
     record = _empty_record()
     for key in record:

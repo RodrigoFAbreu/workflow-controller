@@ -1452,8 +1452,9 @@ def _usage_view_text(view: dict, provider: str) -> list[str]:
 
 def _usage_show(args: argparse.Namespace, runtime_root: Path, values: dict) -> int:
     """``usage`` with no mode: each window's percent, reset, reading age, the
-    reservations and the forecasts. The only write is the Codex readings it
-    merges into the shared record."""
+    reservations and the forecasts. Its writes are the Codex readings it
+    merges into the shared record and the replay sweep's ``accounting:
+    "done"`` on a terminal job record a crash left unaccounted."""
     context = _usage_context(args)
     now = job.usage_now()
     job._settle_usage(runtime_root)
@@ -1600,6 +1601,10 @@ def _usage_release(args: argparse.Namespace, runtime_root: Path, values: dict) -
     before = usage.snapshot(runtime_root, now=now)
     held = before["reservations"].get(args.release) or before["lapsed"].get(args.release)
     provider = None if held is None else held["provider"]
+    if args.stream is not None and provider not in (None, usage.PROVIDER_CLAUDE):
+        print(f"error: --stream reads a Claude stream and the token {args.release} is a {provider} reservation; "
+              f"nothing was accounted", file=sys.stderr)
+        return EXIT_USAGE
     stream_start = None
     if args.outcome == usage.OUTCOME_NOT_STARTED:
         end = None

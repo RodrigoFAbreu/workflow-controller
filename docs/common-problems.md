@@ -43,6 +43,10 @@ The usage budget held the job back before it started, so there is no job to resu
 
 `workflow-controller usage` shows the readings and reservations. See [pausing for usage limits](run.md#pausing-for-usage-limits), [`usage`](guide/commands.md#usage) and [exit codes](exit-codes.md).
 
+## The usage record cannot be read
+
+`step` or `run` stops with "the usage record ... is not a version 2 object" or "cannot be read". `usage.json` in the runtime root is either damaged or was written by a newer Controller release than this one. It is never overwritten. To keep working, set `usage.enabled: false` (the budget is then off and the record is not touched), or install the release that wrote it. Deleting the file also works but forgets every lane's reservations and spend. `resume` and the `usage` view skip the accounting sweep with a warning, and a release that can read the record settles it later.
+
 ## A worker hit a usage limit while it ran
 
 The budget forecasts, it cannot stop a job that exceeds its forecast. A job that meets the limit mid-way fails (exit 30). Check `workflow-controller usage`, wait for the reset, then run `explain` and run again. Recognising this case and waiting for it automatically is a roadmap item (C8b).

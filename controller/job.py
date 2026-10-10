@@ -130,6 +130,7 @@ from controller.errors import (
     UnmanagedRepositoryError,
     UnreconcilableJobError,
     UnsupportedWorkflowVersionError,
+    UsageRecordError,
     UserOnlyCommandError,
     WorkerLaunchError,
     WorkflowProtocolFailedError,
@@ -5349,9 +5350,31 @@ def _settle_usage(runtime_root: Path) -> list:
     """The crash-safe replay sweep (D6): ``usage.settle_pending`` over every
     reservation bound to a job, with :func:`never_launched`, then
     ``accounting: "done"`` on each record it settled. A runtime root with no
-    shared usage record has nothing to settle and is left untouched."""
+    shared usage record has nothing to settle and is left untouched.
+
+    A record this release cannot read (corrupt, or a newer ``version``) never
+    aborts the caller: the sweep is skipped with a warning and an event, every
+    job record's ``accounting`` is left as it is, and the block stays
+    ``pending``/``open`` for a release that can read the record."""
     if not (runtime_root / usage.USAGE_FILE).exists():
         return []
+    try:
+        return _settle_usage_readable(runtime_root)
+    except UsageRecordError as exc:
+        _warn_usage_record_unreadable(runtime_root, exc)
+        return []
+
+
+def _warn_usage_record_unreadable(runtime_root: Path, exc: UsageRecordError) -> None:
+    """The one stderr line and the ``usage_record_unreadable`` event of a
+    skipped sweep or dispatch."""
+    print(f"workflow-controller: the usage record cannot be read, so usage accounting is skipped "
+          f"({exc})", file=sys.stderr)
+    usage.append_event(runtime_root, "usage_record_unreadable", now=usage_now(), error=str(exc))
+
+
+def _settle_usage_readable(runtime_root: Path) -> list:
+    """:func:`_settle_usage`'s sweep, for a record that may raise."""
 
     def load_job(job_id: str) -> Mapping | None:
         path = _job_record_path(runtime_root, job_id)
@@ -5378,6 +5401,15 @@ def _usage_dispatch(runtime_root: Path, results: list[JobRecord]) -> list[JobRec
     carry what was written, with ``resume``'s in-memory markers kept."""
     if not (runtime_root / usage.USAGE_FILE).exists():
         return results
+    try:
+        return _usage_dispatch_readable(runtime_root, results)
+    except UsageRecordError as exc:
+        _warn_usage_record_unreadable(runtime_root, exc)
+        return results
+
+
+def _usage_dispatch_readable(runtime_root: Path, results: list[JobRecord]) -> list[JobRecord]:
+    """:func:`_usage_dispatch`'s loop, for a record that may raise."""
     out: list[JobRecord] = []
     for result in results:
         block = result.get("usage")
@@ -5605,8 +5637,10 @@ def _execute_step_locked(
     snapshot = target_state.read(managed_repo)
 
     # Usage budget (CP3, D6 "Where it runs"): a charge a crash left owing is
-    # settled before the admission below relies on the totals.
-    _settle_usage(runtime)
+    # settled before the admission below relies on the totals. With the
+    # budget off (no gate) the shared record is neither read nor swept.
+    if usage_gate is not None:
+        _settle_usage(runtime)
 
     # Step 1b (trunk-branch-pr-release-orchestration CP8): the repository
     # preflight, under the lifecycle lock, after the state read and before

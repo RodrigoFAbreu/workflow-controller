@@ -34,6 +34,16 @@ resumes and releases (see [`usage`](commands.md#usage)). Unlike `runs/`,
 reservations and every run's and repository's spend, so a cap restarts
 from zero. Back it up with the rest of the root.
 
+A `usage.json` this release cannot read (corrupt, or written by a newer
+release with a higher `version`) is never replaced. With
+`usage.enabled: false`, `step` and `run` neither read nor sweep it. With the
+budget on, admission fails closed and its message names
+`usage.enabled: false` as the way to keep running. The replay sweep that
+`step`, `run`, `resume` and `usage` perform skips the record with a
+one-line warning and a `usage_record_unreadable` event, leaving every job's
+`accounting` as it is; a release that can read the record settles it later,
+exactly once.
+
 This tree is disposable by design. It is never part of any managed
 target repository's own state, and the Controller never writes into a
 target repository's `WORKFLOW_STATE.json` -- only a worker running a
@@ -217,8 +227,8 @@ job will cost, and does not start a job that would not fit. Everything
 is in percent of the account's window, and Claude and Codex are
 separately configurable:
 
-- `usage.enabled: false` turns the gate off for every `run` and `step`
-  (the `usage` subcommand still shows the readings);
+- `usage.enabled: false` turns the gate off for every `run` and `step`,
+  which then do not read or sweep the shared record (the `usage` subcommand still shows the readings);
 - `pause_at_percent` and `weekly_pause_at_percent` (and the `codex_`
   pair) are the account thresholds: a job is held when the window's
   reading, plus the forecasts other lanes have reserved, plus this job's

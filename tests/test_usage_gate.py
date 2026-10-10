@@ -404,6 +404,37 @@ class ReplayTest(_UsageCase):
                 self.assertEqual(json.loads(path.read_text())["usage"]["accounting"], "done")
                 path.unlink()
 
+    def test_a_step_with_the_budget_off_ignores_an_unreadable_or_newer_record(self) -> None:
+        for text in ("{not json", json.dumps({"version": 3, "readings": {}})):
+            with self.subTest(text=text):
+                (self.runtime_root / usage.USAGE_FILE).write_text(text)
+                result = self._step(timeout=60)
+                self.assertIn(result["status"], job.TERMINAL_STATUSES)
+                self.assertEqual((self.runtime_root / usage.USAGE_FILE).read_text(), text)
+                for path in (self.runtime_root / "jobs").glob("*.json"):
+                    path.unlink()
+
+    def test_resume_with_a_newer_record_reconciles_and_a_later_sweep_settles_once(self) -> None:
+        self.reading(10)
+        with unittest.mock.patch.object(job, "_observe_post_phase", side_effect=RuntimeError("crash")), \
+                self.assertRaises(RuntimeError):
+            self.ustep(self.stream_env(self.rate_limit(15)))
+        readable = (self.runtime_root / usage.USAGE_FILE).read_text()
+        (self.runtime_root / usage.USAGE_FILE).write_text(json.dumps({"version": 3}))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            [reported] = self.resume()
+        self.assertIn("usage record cannot be read", err.getvalue())
+        self.assertTrue(reported["reconciled_this_call"])
+        self.assertIn(reported["status"], job.TERMINAL_STATUSES)
+        self.assertEqual(self.record_on_disk()["usage"]["accounting"], "pending")
+        self.assertIn("usage_record_unreadable", [e["event"] for e in self.events()])
+        (self.runtime_root / usage.USAGE_FILE).write_text(readable)
+        [settled] = self.resume()
+        self.assertEqual(settled["usage"]["accounting"], "done")
+        self.resume()
+        [entry] = self.shared()["ledger"]
+        self.assertEqual((entry["delta"], entry["charged"]), ("measured", 5.0))
+
     def test_a_bound_reservation_with_no_record_is_released_only_once_lapsed(self) -> None:
         admission = usage.admit(self.runtime_root, provider="claude", role="r", model="m",
                                 repository=str(self.root), run_id="run-1", limits=usage.Limits(), now=self.now)

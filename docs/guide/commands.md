@@ -213,6 +213,8 @@ token=$(workflow-controller usage --wait --reserve --role review --model opus --
 workflow-controller usage --release "$token" --stream "$STREAM"
 ```
 
+`--stream` reads a Claude stream, so it is refused (exit `2`) for a Codex reservation.
+
 A reservation never released lapses after `usage.reservation_seconds`
 without a `--renew`; a lapsed one stops counting against the account
 windows but still counts against the run and repository caps until it is

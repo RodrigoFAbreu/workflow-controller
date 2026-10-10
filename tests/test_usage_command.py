@@ -555,6 +555,15 @@ class UsageContextTest(_UsageCommandCase):
 
 class UsageReleaseTest(_UsageCommandCase):
 
+    def test_a_stream_is_refused_for_a_codex_token(self) -> None:
+        self.codex_rollout(10, 1)
+        token = self.reserve_token("--provider", "codex", "--role", "plan", "--model", "m")
+        stream = self.stream_file("s.jsonl", *fake_claude.default_events())
+        code, _out, err = self.run_cmd("usage", "--release", token, "--stream", str(stream))
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertIn("is a codex reservation", err)
+        self.assertIn(token, self.shared()["reservations"])
+
     def test_release_records_the_ledger_entry_and_spend_and_is_idempotent(self) -> None:
         self.reading(10, weekly=1)
         token = self.reserve_token("--role", "plan", "--model", "m", "--repo", str(self.repo), "--run-id", "r1")

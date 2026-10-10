@@ -10,6 +10,7 @@ copy, which the Controller's own tests compare with the code, is
 | Code | Meaning | What to do |
 |---|---|---|
 | 0 | the requested work completed and nothing is pending | nothing |
+| 1 | `usage --renew` or `--release` named a token the usage record does not know (`--renew` also refuses one already accounted); nothing was changed | check the token the `usage --reserve` call printed |
 | 2 | the command line did not parse | put global options such as `--work-item` before the subcommand and the repository last: `workflow-controller --work-item <id> explain <repo>` |
 | 10 | stopped cleanly at a [gate stop](glossary.md#gate-stop), waiting for you | the normal end of a run. Run `workflow-controller explain <repo>`, do what it says, then run again |
 | 15 | the next action is valid but not automated, so it was reported and not launched | do it yourself; `explain` names the phase and the command |

@@ -745,11 +745,12 @@ def _component(reading: dict | None, amount: float, now: float) -> dict:
 
 def admit(runtime_root: str | os.PathLike, *, provider: str, role: str | None, model: str | None,
           repository: str | None, run_id: str | None, limits: Limits, now: float,
-          readings: Iterable[dict] = ()) -> Admission:
+          readings: Iterable[dict] = (), reserve: bool = True) -> Admission:
     """Evaluate D5 and, on go, write the reservation, all in one critical
     section, so two lanes cannot both pass on the same headroom. ``readings``
     are merged first. On a hold nothing is written (apart from the
-    maintenance the record owed anyway)."""
+    maintenance the record owed anyway). ``reserve=False`` is the check of
+    ``usage --check``: a go reserves nothing and carries no token."""
     with runtime.usage_lock(Path(runtime_root)):
         record = load_record(runtime_root)
         _merge_into(record, list(readings))
@@ -762,7 +763,9 @@ def admit(runtime_root: str | os.PathLike, *, provider: str, role: str | None, m
             run_spent(record, provider, run_id), run_outstanding(record, provider, run_id),
             repository_spent(record, provider, repository, now),
             repository_outstanding(record, provider, repository, now), now, notes=notes)
-        if result == GO:
+        if result == GO and not reserve:
+            admission = Admission(None, None, fc, tuple(notes))
+        elif result == GO:
             token = secrets.token_hex(16)
             five = _component(stored.get(FIVE_HOUR), fc[0], now)
             weekly = _component(stored.get(WEEKLY), fc[1], now)

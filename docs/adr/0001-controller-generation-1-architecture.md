@@ -131,6 +131,7 @@ here, unchanged, with one named exception: code 15's meaning, which
 | Code | Meaning |
 |---|---|
 | 0 | requested work completed; nothing is pending |
+| 1 | `usage --renew`/`--release` named a token the usage record does not know; nothing was changed |
 | 2 | CLI usage error (argparse default) |
 | 10 | stopped cleanly at a human gate — the normal, expected outcome for a supervised run |
 | 15 | no verifiable expected outcome is declared for the selected action — it is model-invocable and not user-only, but it is reported (declined) instead of launched |

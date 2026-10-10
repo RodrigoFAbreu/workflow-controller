@@ -14,7 +14,7 @@ commit `f516e76`; pull request title `feat: a usage budget that pauses a run bef
 | CP1 `controller/usage.py` (readers, shared record, merge, admission, forecast, decision) | complete, verified by `tests/test_usage.py` |
 | CP2 settings generation 4 and the `--usage-cap` flags | complete, verified by `tests/test_settings.py` (`UsageRowsTest`), the regenerated no-policy golden and the full suite |
 | CP3 the gate, the reservation and the run loop (exit 17) | complete, verified by `tests/test_usage_gate.py` (38 tests), the regenerated no-policy golden and the full suite |
-| CP4 the `usage` subcommand and the manual-worker gate | not started |
+| CP4 the `usage` subcommand and the manual-worker gate | complete, verified by `tests/test_usage_command.py` (57 tests) and the full suite |
 | CP5 documentation and roadmap | not started |
 
 CP1 added `controller/usage.py` (a leaf below `job`, `observe` and `cli`), `runtime.usage_lock`,
@@ -22,7 +22,7 @@ CP1 added `controller/usage.py` (a leaf below `job`, `observe` and `cli`), `runt
 sanitised from a real `rejected` stream) and `tests/test_usage.py`.
 
 CP2 added the sixteen `usage.*` rows (table generation 4, `TABLE_GENERATION = 4`; the generation invariant is
-now `>=`), `run --usage-cap` and `step --usage-cap` (`usage --usage-codex-cap` arrives with the `usage`
+now `>=`), `run --usage-cap` and `step --usage-cap` (`usage --usage-codex-cap` arrived with the `usage`
 subcommand in CP4), and regenerated `tests/golden/no_policy_lifecycle.json` (only the new `controller_settings`
 keys moved, pinned by `tests/test_trunk_preflight.py`). The full suite fails only the two Git 2.56 trailer tests
 that fail on the base too.
@@ -33,6 +33,13 @@ CP3 added `UsageHold`, the `usage_gate` argument and the `usage` job-record bloc
 exit 17 in `controller/cli.py`, the `observe` rendering, the `CODEX_HOME` test redirection and the exit-17 rows
 in `docs/exit-codes.md` and ADR 0001. The no-policy golden gained each job's `usage` block. The full suite
 fails only the two Git 2.56 trailer tests.
+
+CP4 added the `usage` subcommand to `controller/cli.py` (dispatched before pinning like `follow`: it writes only
+the shared usage record and `usage-events.jsonl`): the view, `--check`, `--wait` (re-evaluating after every
+wait, bounded by `usage.max_wait_seconds`), `--reserve`, `--renew`, `--release` with `--outcome` and
+`--stream`, the role/model/repository/run context and the `--usage-cap`/`--usage-codex-cap` flags. `usage.admit`
+gained `reserve=False` for a check. Exit status 1 (`usage --renew`/`--release` of an unknown token) is on the exit-code
+page and in ADR 0001.
 
 ## Next action
 

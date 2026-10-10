@@ -19,8 +19,10 @@ that releases nothing. C9b, the patch that accepts the protocol's `warn` check s
 prepares this repository's move to Workflow 2.9.0 (follow-up 15, accepted 2026-10-09), is complete
 and merged as a `test:` pull request that released nothing (PR #32); a `chore:` pull request then
 moved this repository to Workflow 2.9.0. C9d, the installed-release test made version-agnostic
-(follow-up 16, accepted 2026-10-10 by gate policy), is complete. Next (user decision, 2026-10-09):
-1. C8.
+(follow-up 16, accepted 2026-10-10 by gate policy), is complete and merged as a `test:` pull
+request (#34). It is the first milestone whose approvals and acceptance were all given by the gate
+policy. Next (user decisions, 2026-10-09 and 2026-10-10): C8, C5, C6, C7, C10 (with the automated
+functional review), C12 (self-recovery), C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -33,6 +35,12 @@ starts the next item, until the roadmap is empty. In the end no human gate is le
 - the release runs from `main`.
 
 Usage limits are tracked, so a run never starts work it cannot finish before a limit resets.
+
+**After the kanban loop: a person only for escalation.** Once C11 runs the loop, the orchestrator
+series (O1-O7, [11.11](#1111-the-orchestrator-a-person-only-for-escalation)) takes over the judgement
+calls an orchestrating session still makes by hand: why a run stopped, whether to retry, what to do
+with a finding, what comes next. It acts only within a closed list of allowed actions and asks the
+user for everything else (user decisions, 2026-10-09 and 2026-10-10).
 
 **Two lanes run in parallel**, one milestone at a time in each: this repository, and Workflow
 Manager together with the new `workflow` repository. The lanes meet at two points only: C9 needs
@@ -55,12 +63,13 @@ lane waits for W2 before C8, the user added D1, a documentation milestone, to ru
 | C9c | Move this repository to the latest compatible Workflow (2.9.0 today) with automatic gates: vendor that release's tree under `tests/workflow_releases/`, let the installed-release test admit a protocol release by capability, then run the Workflow Manager update (a `chore:` pull request, no release); once the milestone is merged the update is the next action (complete) | C9b | [follow-up 15](#known-follow-ups-carried-forward) |
 | C9d | The installed-release test made version-agnostic: drop the requirement that this repository's own installed Workflow has a vendored tree, and admit it through the Controller's capability rule or `inspect`, with no vendored copy and no version literal, so a later Workflow move needs no test change (complete) | C9c | [follow-up 16](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
-| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
+| C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, lane or repository, and run | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices | C3 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself | — | the smallest slice of [5](#5-harness--agent-portability) |
-| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, and the PR defect loop; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
-| C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10 | [11.7](#117-the-kanban-runner) |
+| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
+| C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
+| C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
 
 **Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
 because C9 and C10 depend on them.
@@ -73,9 +82,23 @@ because C9 and C10 depend on them.
 | W2 | Workflow 2.8: gate policy, and a red or changes-requested pull request reopening the same work item | `workflow` |
 | M3 | Workflow Manager and `workflow` driven by the Controller's loop | both |
 
+**After C11: the orchestrator series, in order** ([11.11](#1111-the-orchestrator-a-person-only-for-escalation);
+user decisions, 2026-10-09 and 2026-10-10).
+
+| # | Step | Needs |
+|---|---|---|
+| O1 | Escalation record: every stop the Controller cannot resolve writes a structured record (what happened, the evidence, the allowed options, the severity, the orchestrator session id) and a decision log; no model | C11 |
+| O2 | Answer channel: the question and its options reach the user on the phone (SignalHub), a web page and the terminal at once; the first valid answer wins, is recorded, and the Controller resumes from it | O1, a SignalHub reply path |
+| O3 | The decider: a short orchestrator worker, launched on demand, decides the escalations its policy allows and forwards the rest with a recommendation; cautious defaults, loosened through a policy file (section 9 made real) | O1, O2 |
+| O4 | Roadmap intake and progress reports: follow-ups and optional notes become roadmap items, the post-release docs and release-notes pull requests, and a periodic timeline with next steps | O3 |
+| O5 | Upgrades: install the Controller's own new releases safely ([7.7](#77-update-self-update-from-published-releases)), and move repositories to a new Workflow release (doctor, dry run, update pull request) | O3 |
+| O6 | Many repositories: one orchestrator across the Controller, Manager and RepFlow repositories, replacing the shared lane plan and the messages between lanes | O5, M3 |
+| O7 | The control room: every run in every lane and repository, open escalations with decide or continue-in-the-CLI, the decision history, and the routing settings ([7.5](#75-observation-api-structured-event-store-and-web-dashboard), [8](#8-routing-and-costefficiency-improvements)) | O2, O6 |
+
 **Deferred** because they do not unlock that operating model: concurrency and multi-worktree (6),
-the observation dashboard (7.5), other forges (7.6), hot-reloadable routing (8), the orchestrator
-(9), and assurance tiers. RepFlow (3, 4) migrates once, directly to a protocol-capable Workflow.
+other forges (7.6), hot-reloadable routing (8, except what O7 needs), and assurance tiers.
+A hosted platform in the user's homelab is a direction still being refined, not a step
+([11.12](#1112-direction-a-hosted-platform-not-a-step-yet)). RepFlow (3, 4) migrates once, directly to a protocol-capable Workflow.
 
 The numbered sections below keep their historical numbers; these tables are the current order.
 
@@ -149,11 +172,13 @@ These are not blockers for the baseline, but should remain visible in later mile
    were ended by hand. It happened again on 2026-10-09: a `settle-wrong-match` test's fake worker and
    stdin anchor, left behind by a worker's full test run, held a job in DRAINING for the full
    3-hour limit, and the run ended with exit 45. The orchestrator ended the two exact pids and
-   resumed.
+   resumed. On 2026-10-10 the same two leftovers outlived a C9d worker, but the job finished after 34
+   seconds. Planned in C12 (11.10).
 9. A message from another session can land in a Controller-launched worker mid-turn (C9,
    2026-10-03). The Controller then classes the worker `AMBIGUOUS`
    (`command_lifecycle_irregular`) and fails the job, although the work was done and the state was
    coherent; the next run continued. Tolerate, or name, a peer message in a worker session.
+   Planned in C12 (11.10), with follow-up 14.
 10. The milestone planner can write an artifact declaration from an old template that classifies
    none of the paths the plan changes (C9 plan revision 10: `controller/`, `tests/`, `tools/`,
    the guides). Both plan-review stages approved it, and the first checkpoint after `controller/`
@@ -200,7 +225,8 @@ These are not blockers for the baseline, but should remain visible in later mile
       check whether the repository reached the expected phase, and finish the job if it did.
    3. Record the classifier's reason and anomalies in the completed job event and the run log.
 
-   Priority: later, not urgent (user decision, 2026-10-09).
+   Priority: later, not urgent (user decision, 2026-10-09). Planned in C12 (11.10, user decision,
+   2026-10-09).
 15. Moving this repository to Workflow 2.9.0 is more than a Workflow Manager update. A first try
    (PR #30, closed) failed CI: `tests/test_workflow_releases.py`'s `InstalledReleaseTest` requires
    the installed release to be in `managed_repo.VALIDATED_WORKFLOW_RELEASES` (2.5.1 and 2.6.0) and
@@ -963,6 +989,8 @@ Provide direct commands for:
 
 ## 7.5 Observation API, structured event store, and web dashboard
 
+**Planned as part of O7, the control room** ([11.11](#1111-the-orchestrator-a-person-only-for-escalation)).
+
 The existing `follow` implementation is the first observation client, not the final architecture.
 
 Target data flow:
@@ -1073,6 +1101,8 @@ Current policy remains human-only merge. The adapter may observe merge state but
 
 ## 7.7 `update`: self-update from published releases
 
+**Planned as part of O5** ([11.11](#1111-the-orchestrator-a-person-only-for-escalation)).
+
 Replace the manual download / `sha256sum -c` / `pipx install --force` / `--version` sequence with one command:
 
 ```text
@@ -1146,7 +1176,9 @@ Potential future integration:
 
 # 9. Controller Orchestrator / Escalation Layer
 
-**Priority:** Later
+**Priority:** planned as the orchestrator series O1-O7, after C11
+([11.11](#1111-the-orchestrator-a-person-only-for-escalation); user decision, 2026-10-09). This section
+was only a reference until then and never became a step.
 
 Controller should remain the deterministic lifecycle driver.
 
@@ -1388,6 +1420,24 @@ plan's 5-hour window, and Codex's limits.
   automatically after the reset, so no work is left half finished.
 - Record every pause and resume in the run's events.
 
+**Configurable budgets** (user decision, 2026-10-10). Budgets live in the settings file at three
+levels: the account (the shared pool), each lane or repository (its share or cap), and each run (an
+optional cap). The stricter limit wins. Claude and Codex have separate budgets. Before each job the
+Controller estimates its cost from earlier jobs of the same kind and does not start one that would
+not fit. One usage record is shared by every lane, so each lane's share holds. Every pause and resume
+is recorded and sent as a notification.
+
+The lane watchdog scripts that do this outside the Controller today are the starting point:
+- **What works:** a usage check before every step and every manually started worker, pausing at 85%
+  until three minutes after the reset; spotting a usage-limit result in a worker's stream, then
+  waiting for the reset and restarting; Codex retries at capacity or at its limit; a notification
+  for each pause and resume.
+- **What does not:** all lanes share one account, so a lane's own threshold can still starve the
+  others; the check runs only between steps, with no forecast, so a long step can reach the limit
+  half way; workers started outside the Controller (cross-model reviews, functional testers, gate
+  workers) are not counted; Codex usage has no budget, only retries; the threshold is one fixed
+  number.
+
 ## 11.7 The kanban runner
 
 **Step C11.**
@@ -1397,6 +1447,8 @@ plan's 5-hour window, and Codex's limits.
 - Start the next item, until nothing is left.
 - It stops for a human only when policy says the evidence is insufficient for the next decision,
   or when the usage budget says to wait.
+- It needs C8 (budgets), C10 (automatic gates and the automated functional review) and C12
+  (self-recovery); without them it would stop at every functional review and every hang.
 
 ## 11.8 Documentation reorganisation
 
@@ -1479,6 +1531,138 @@ checks run in CI and pass; and the existing tests pass. Only the documentation c
 
 ---
 
+## 11.9 Automated functional review
+
+**Part of step C10** (user decision, 2026-10-09). Today the orchestrating session runs the functional
+review by hand: a worker writes the checklist (`/prepare-functional-review`), an independent tester
+runs it, the session records each flow as `functional_evidence` (`record-external-result`), and
+`/apply-functional-review` fixes any finding. Under automatic gates `/satisfy-gate acceptance` then
+accepts on that evidence (first done for C9d, 2026-10-10). The Controller takes this over:
+
+- it launches the prepare worker, then the tester, then records the evidence, then the apply worker
+  when there are findings;
+- the tester is isolated: scratch clones whose origin is a scratch bare repository, a fake `gh` and
+  a fake `claude`, scratch XDG directories, no write to the real repository or GitHub, and a check
+  afterwards that the real repository is unchanged (C9b showed what an unisolated tester can do);
+- checklist flows state exact expected output (C9c and C9d showed wording that did not match the
+  tools);
+- the tester runs on a cheaper model than the implementation (user rule, 2026-10-09: Sonnet).
+
+## 11.10 Self-recovery
+
+**Step C12** (user decision, 2026-10-09). The Controller recovers from the stops that today hand the
+run back to the orchestrating session, and records each recovery in the run's events:
+
+- **Leftover test processes** (follow-up 8): a fake worker and its stdin anchor left by a worker's
+  full test run (working directory `/tmp/controller-lifecycle-*`) keep a job draining for up to
+  three hours. Recognise test leftovers that are not the worker's own work, and end them by exact
+  pid, or stop counting them, well before the drain bound.
+- **A message from another session** (follow-ups 9 and 14, issue #27): refuse inbound cross-session
+  messages in workers, and finish a job that is ambiguous only because of one when the repository
+  reached the expected phase.
+- **Network failures**: a failed name lookup or an unreachable GitHub (`git ls-remote` exit 128,
+  2026-10-09) waits and retries with a backoff instead of ending the run.
+
+Anything else still stops, for the orchestrator (11.11) or the user.
+
+## 11.11 The orchestrator: a person only for escalation
+
+**Steps O1-O7, after C11** (user decisions, 2026-10-09 and 2026-10-10). Three layers, each with one
+job:
+
+- **The Controller** follows the Workflow's rules step by step and makes no judgement calls. When it
+  cannot continue it stops and says why.
+- **The orchestrator** makes the judgement calls: why a run stopped, whether a retry is safe, what to
+  do with a finding, what comes next. It chooses only from a closed list of allowed actions, within
+  limits, and logs every decision with its reason.
+- **The user** decides only escalations: what the orchestrator may not decide, or is unsure about.
+
+**How one escalation works.**
+1. *Stop.* The Controller writes an escalation record: what happened, the evidence (logs, verdicts,
+   state), the allowed options with their effect, and a severity.
+2. *Decide.* The Controller launches a short orchestrator worker (on demand; nothing runs between
+   escalations). It acts, if the action is allowed and within its limits, or forwards the escalation
+   to the user with a recommendation.
+3. *Ask.* A forwarded question reaches the phone (SignalHub), a web page and the terminal at once.
+   The first valid answer wins; the other channels show it as answered.
+4. *Resume.* The Controller continues from the recorded decision.
+
+**Authority, cautious to start.** The limits live in a policy file in the repository, so every change
+is reviewable; the user loosens them over time.
+
+| The orchestrator decides alone | It always asks the user |
+|---|---|
+| Retry a network or usage-limit failure, up to a limit | Scope: splitting a milestone, dropping or adding a requirement |
+| Clear a stuck run, ending only its own processes by exact pid | A cross-model review that blocks |
+| Re-run a flaky CI job once | A review still not converging after a set number of rounds |
+| File a follow-up into the roadmap | Going over the cost or usage budget |
+| Pick the next roadmap item in the order the user set | Anything touching security, credentials or permissions |
+| | Changes to its own rules, and the same failure twice |
+
+Defaults: with no answer it waits and reminds, and never decides on a timeout (other repositories keep
+running); three retries for network and limit failures; a review counts as not converging after four
+rounds.
+
+**Talking to the orchestrator.** Each escalation records the session id of the orchestrator worker
+that raised it. Its link copies `claude --resume <id>`, which continues that conversation in the CLI,
+in that repository, with its full context: the way to ask questions, challenge a recommendation or
+refine an idea in a short loop. A full chat inside the web page is not planned: it would rebuild much
+of Claude Code, and a page that can run tools on the machine is a security surface; Claude Code's own
+remote access covers the phone (user decision, 2026-10-10).
+
+**Dependencies outside this repository.** O2's phone answers need a reply path in SignalHub. The
+SignalHub lane has the request, together with user-based producers and subscriptions (2026-10-10).
+O6 needs the Manager lane's M3.
+
+## 11.12 Direction: a hosted platform (not a step yet)
+
+**An idea to refine, not a roadmap item** (user, 2026-10-10). Nothing here is planned until the idea
+is refined and the user turns it into steps.
+
+The idea: the Controller runs as a hosted service in the user's homelab. A person logs in to a
+Controller page, sets up their Claude and Codex subscriptions (API keys and other providers much
+later), and then sees every run and lane, starts new ones and manages each run's settings. Work
+continues while their own computer is off. Several people could use it, each with their own runs.
+
+The homelab today is a switch, a desktop and a Raspberry Pi 5. Later it gains compute nodes and a
+networking board acting as a firewall in front of the homelab network, with VLANs to keep things
+contained.
+
+What is known so far (2026-10-10):
+- **It fits a homelab.** The models run at the providers, so a worker node runs only the harness,
+  git and the repository's own tests and builds. A Pi suits the control side (the page, login, the
+  database, the event store, the job queue). Workers want x86 nodes with plenty of memory: Android
+  builds need 8 to 16 GB per run and run poorly on ARM.
+- **The Workflow changes less than it seems.** The Controller already works inside a checkout,
+  makes branches, commits, opens pull requests and merges. New: a job queue and scheduler across
+  nodes, a run's state surviving a worker restart, several worktrees at once (6), and the forge
+  adapter (7.6).
+- **The hard parts are isolation and credentials, not compute.** An agent running commands on a
+  cloned repository is running untrusted code, and a repository can carry instructions aimed at the
+  agent. Each run needs its own sandbox (a container, or better a lightweight virtual machine),
+  network access only to what it needs, and no sight of another user's credentials or files. Each
+  user's logins and repository access are stored encrypted and handed only to that user's runs; a
+  GitHub App installed per repository is the likely route to GitHub.
+- **Subscription terms come first.** Subscription plans are generally meant for individual use.
+  Running other people's subscription logins on a shared server needs checking against the
+  providers' terms before any multi-user work; API keys are the clearly supported route for a
+  hosted service, so the order (subscriptions first, API keys later) may need reversing once other
+  people use it.
+- **Access from outside** goes through a tunnel or a VPN with a proper login, not open ports.
+
+A possible path, to refine:
+
+| Stage | What it gives |
+|---|---|
+| 1. One user, always on | The Controller and the orchestrator run on an always-on homelab node, so work continues with the desktop off. Mostly setup. |
+| 2. The control room | O7 for the user's own runs: see everything, start runs, change settings, answer escalations. |
+| 3. Sandboxed workers | Each run in its own container or virtual machine, a job queue, several worker nodes. |
+| 4. Several users | Accounts, encrypted credentials per user, a GitHub App, per-user budgets (C8's levels), hardened isolation. |
+| 5. API keys and other providers | Builds on harness portability (5). |
+
+The roadmap already builds towards it: the orchestrator series (11.11), concurrency (6), the forge
+adapter (7.6) and harness portability (5).
+
 # Execution order
 
 The current order is the tables in [At a glance](#at-a-glance). Completed so far, in order:
@@ -1496,6 +1680,10 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 1.4    C3: settings, telemetry v0, release notes, 1.4 patches     COMPLETE (released as 1.5.0)
 11.3   C4: auto-merge after acceptance and the release wait  COMPLETE (released as 1.6.0)
 1.7    C9: the Controller on Orchestration Protocol v1       COMPLETE (released as 1.7.0)
+11.8   D1: documentation reorganisation                      COMPLETE (docs, no release)
+fu 11  C9b: the protocol's warn status, Workflow 2.9.0 schema COMPLETE (released as 1.7.1)
+fu 15  C9c: preparing the move to Workflow 2.9.0              COMPLETE (test, no release)
+fu 16  C9d: the installed-release test made version-agnostic COMPLETE (test, no release; first by gate policy)
 ```
 
 ---

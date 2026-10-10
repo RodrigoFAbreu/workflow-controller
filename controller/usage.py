@@ -162,11 +162,17 @@ def same_window(a: float, b: float) -> bool:
     return abs(a - b) <= WINDOW_JITTER_SECONDS
 
 
-def _observed(reading: dict) -> float:
-    """The reading's ``observed_at``; a record may store it absent or null
-    (a job-record reading has none), which reads as older than any stamp."""
+def observed_stamp(reading: dict) -> float | None:
+    """The reading's ``observed_at``, or ``None``: a record may store it
+    absent or null (a job-record reading has none)."""
     value = reading.get("observed_at")
-    return float(value) if _is_number(value) else float("-inf")
+    return float(value) if _is_number(value) else None
+
+
+def _observed(reading: dict) -> float:
+    """``observed_stamp``, where an unstamped reading reads as older than any stamp."""
+    stamp = observed_stamp(reading)
+    return float("-inf") if stamp is None else stamp
 
 
 def merge_reading(stored: dict | None, incoming: dict) -> dict:

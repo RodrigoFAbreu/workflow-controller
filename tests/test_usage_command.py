@@ -225,6 +225,30 @@ class UsageShowTest(_UsageCommandCase):
         self.assertEqual(claude["repository"], {"repository": str(self.repo), "cap": None, "spent": 0,
                                                 "outstanding": 8})
 
+    def test_a_stored_reading_without_an_observation_time_still_renders(self) -> None:
+        # ``load_record`` admits a reading whose ``observed_at`` is absent or
+        # null, so the view (the command run to inspect a suspect record) must
+        # show the age as unknown, never a traceback.
+        for shape in ("absent", "null"):
+            with self.subTest(shape=shape):
+                self.reading(30, weekly=10)
+                path = self.runtime_root / usage.USAGE_FILE
+                record = json.loads(path.read_text())
+                reading = record["readings"]["claude"][FIVE]
+                if shape == "absent":
+                    del reading["observed_at"]
+                else:
+                    reading["observed_at"] = None
+                path.write_text(json.dumps(record))
+                usage.load_record(self.runtime_root)
+                code, out, err = self.run_cmd("--json", "usage", "--provider", "claude")
+                self.assertEqual(code, cli.EXIT_OK, err)
+                window = json.loads(out)["providers"]["claude"]["windows"][FIVE]
+                self.assertEqual((window["observed_at"], window["age_seconds"]), (None, None))
+                code, text, err = self.run_cmd("usage", "--provider", "claude")
+                self.assertEqual(code, cli.EXIT_OK, err)
+                self.assertIn("read at an unknown time from test", text)
+
     def test_provider_selects_one_provider(self) -> None:
         code, out, _err = self.run_cmd("--json", "usage", "--provider", "codex")
         self.assertEqual(code, cli.EXIT_OK)

@@ -1377,10 +1377,11 @@ def _usage_view(record: dict, provider: str, limits: usage.Limits, args: argpars
     windows: dict = {}
     for window in usage.WINDOWS:
         reading = readings.get(window)
+        stamp = None if reading is None else usage.observed_stamp(reading)
         windows[window] = None if reading is None else {
             "percent": usage.window_percent(reading, now), "stored_percent": reading["percent"],
-            "resets_at": reading["resets_at"], "observed_at": reading["observed_at"],
-            "age_seconds": max(0.0, now - reading["observed_at"]), "source": reading.get("source"),
+            "resets_at": reading["resets_at"], "observed_at": stamp,
+            "age_seconds": None if stamp is None else max(0.0, now - stamp), "source": reading.get("source"),
         }
 
     def reservation(token: str, entry: dict, state: str) -> dict:
@@ -1424,8 +1425,9 @@ def _usage_view_text(view: dict, provider: str) -> list[str]:
         if w is None:
             lines.append(f"  {label}: no reading (threshold {threshold}%)")
             continue
+        age = "at an unknown time" if w["age_seconds"] is None else f"{int(w['age_seconds'])} s ago"
         lines.append(f"  {label}: {w['percent']:.0f}% (threshold {threshold}%), resets {_local_time(w['resets_at'])}, "
-                     f"read {int(w['age_seconds'])} s ago from {w['source']}")
+                     f"read {age} from {w['source']}")
     live = [r for r in view["reservations"] if r["state"] == "live"]
     lapsed = [r for r in view["reservations"] if r["state"] == "lapsed"]
     lines.append(f"  reservations: {len(live)} live, {len(lapsed)} lapsed")

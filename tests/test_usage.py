@@ -1000,6 +1000,77 @@ class MalformedRecordTest(TempRootCase):
                     admit(self.root, now=NOW + 600)
                 self.assertEqual(path.read_text(), text)
 
+    def _assert_damage_is_refused(self, raw: object, token: str) -> None:
+        text = json.dumps(raw)
+        path = self._write(text)
+        with self.assertRaises(UsageRecordError):
+            usage.load_record(self.root)
+        with self.assertRaises(UsageRecordError):
+            usage.complete(self.root, token, end(16, 21), usage.OUTCOME_OK, now=NOW + 600)
+        with self.assertRaises(UsageRecordError):
+            admit(self.root, now=NOW + 600)
+        self.assertEqual(path.read_text(), text)
+
+    def test_negative_accounting_figures_are_an_unreadable_record(self) -> None:
+        seed(self.root, five=10)
+        token = admit(self.root).token
+        usage.complete(self.root, token, end(8, 21), usage.OUTCOME_OK, now=NOW + 60)
+        token = admit(self.root, now=NOW + 120).token
+        good = self.record()
+
+        def negative(change):
+            raw = json.loads(json.dumps(good))
+            change(raw)
+            return raw
+
+        corrupt = [
+            negative(lambda r: r["reservations"][token][FIVE_HOUR].update({"amount": -8})),
+            negative(lambda r: r["reservations"][token].update({"rolled_over": -1})),
+            {**good, "ledger": [{**good["ledger"][0], "five_hour": -8}]},
+            {**good, "ledger": [{**good["ledger"][0], "charged": -8}]},
+        ]
+        spend_run = json.loads(json.dumps(good))
+        next(iter(next(iter(spend_run["spend"]["run"].values())).values()))["charged"] = -8
+        corrupt.append(spend_run)
+        spend_repo = json.loads(json.dumps(good))
+        for entry in next(iter(spend_repo["spend"]["repository"].values())).values():
+            entry["charged"] = -8
+        corrupt.append(spend_repo)
+        for raw in corrupt:
+            with self.subTest(raw=raw):
+                self._assert_damage_is_refused(raw, token)
+
+    def test_a_missing_section_or_a_json_null_is_not_an_empty_record(self) -> None:
+        seed(self.root, five=10)
+        token = admit(self.root).token
+        usage.complete(self.root, token, end(8, 21), usage.OUTCOME_OK, now=NOW + 60)
+        token = admit(self.root, now=NOW + 120).token
+        good = self.record()
+        corrupt = [None]
+        for key in ("readings", "reservations", "lapsed", "ledger", "settled", "spend"):
+            corrupt.append({k: v for k, v in good.items() if k != key})
+        for scope in ("run", "repository"):
+            raw = json.loads(json.dumps(good))
+            del raw["spend"][scope]
+            corrupt.append(raw)
+        for raw in corrupt:
+            with self.subTest(raw=raw):
+                self._assert_damage_is_refused(raw, token)
+
+    def test_a_token_in_two_states_is_an_unreadable_record(self) -> None:
+        seed(self.root, five=10)
+        token = admit(self.root).token
+        live = self.record()
+        usage.complete(self.root, token, end(8, 21), usage.OUTCOME_OK, now=NOW + 60)
+        settled = self.record()
+        reinserted = {**settled, "reservations": live["reservations"]}
+        lapsed_copy = json.loads(json.dumps(live))
+        lapsed_copy["lapsed"][token] = {**lapsed_copy["reservations"][token], "lapsed_at": NOW + 1}
+        for raw in (reinserted, lapsed_copy):
+            with self.subTest(raw=raw):
+                self._assert_damage_is_refused(raw, token)
+        self.assertEqual(len(settled["ledger"]), 1)
+
     def test_a_valid_record_still_loads(self) -> None:
         seed(self.root, five=10)
         admit(self.root)

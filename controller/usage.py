@@ -377,6 +377,16 @@ def _number_or_none(value: object) -> bool:
     return value is None or _is_number(value)
 
 
+def _amount(value: object) -> bool:
+    """A consumption or accounting figure: a number that is not negative, so a
+    damaged record can never subtract a charge or a headroom liability."""
+    return _is_number(value) and value >= 0
+
+
+def _amount_or_none(value: object) -> bool:
+    return value is None or _amount(value)
+
+
 def _string_or_none(value: object) -> bool:
     return value is None or isinstance(value, str)
 
@@ -385,7 +395,7 @@ def _validate_component(component: object, what: str, *, amount: bool) -> None:
     """A window component; every key the readers index must be present."""
     _shape(isinstance(component, dict), what)
     if amount:
-        _shape(_is_number(component.get("amount")), f"{what}.amount")
+        _shape(_amount(component.get("amount")), f"{what}.amount")
     for key in ("start", "window_resets_at"):
         _shape(key in component and _number_or_none(component[key]), f"{what}.{key}")
 
@@ -397,7 +407,7 @@ def _validate_reservation(token: object, entry: object, section: str) -> None:
         _shape(_is_number(entry.get(key)), f"{what}.{key}")
     for key in ("role", "model", "repository", "run_id", "job_id"):
         _shape(_string_or_none(entry.get(key)), f"{what}.{key}")
-    _shape(_is_number(entry.get("rolled_over", 0)), f"{what}.rolled_over")
+    _shape(_amount(entry.get("rolled_over", 0)), f"{what}.rolled_over")
     for window in WINDOWS:
         _validate_component(entry.get(window), f"{what}.{window}", amount=True)
     baseline = entry.get("baseline")
@@ -435,17 +445,27 @@ def _validate_record(record: dict) -> None:
                "ledger entry")
         for key in ("role", "model", "repository", "run_id"):
             _shape(_string_or_none(entry.get(key)), f"ledger entry.{key}")
-        for key in ("started_at", "start_window_resets_at", "end_window_resets_at", "five_hour", "weekly",
-                    "five_hour_after_reset", "weekly_after_reset", "reserved_five_hour", "reserved_weekly", "charged"):
+        for key in ("started_at", "start_window_resets_at", "end_window_resets_at"):
             _shape(_number_or_none(entry.get(key)), f"ledger entry.{key}")
+        for key in ("five_hour", "weekly", "five_hour_after_reset", "weekly_after_reset", "reserved_five_hour",
+                    "reserved_weekly", "charged"):
+            _shape(_amount_or_none(entry.get(key)), f"ledger entry.{key}")
     spend = record["spend"]
     for scope, fields in (("run", ("charged", "updated_at")), ("repository", ("charged", "window_resets_at"))):
-        _shape(isinstance(spend.setdefault(scope, {}), dict), f"spend.{scope}")
+        _shape(isinstance(spend.get(scope), dict), f"spend.{scope}")
         for provider, entries in spend[scope].items():
             _shape(isinstance(entries, dict), f"spend.{scope}[{provider!r}]")
             for name, entry in entries.items():
-                _shape(isinstance(entry, dict) and all(_is_number(entry.get(f)) for f in fields),
+                _shape(isinstance(entry, dict) and _amount(entry.get("charged"))
+                       and all(_is_number(entry.get(f)) for f in fields if f != "charged"),
                        f"spend.{scope}[{provider!r}][{name!r}]")
+    # One authoritative state per token: a live, a lapsed and a settled token
+    # would otherwise be charged or counted twice.
+    sections = ("reservations", "lapsed", "settled")
+    for i, first in enumerate(sections):
+        for second in sections[i + 1:]:
+            both = sorted(set(record[first]) & set(record[second]))
+            _shape(not both, f"token {both[0]!r} in both {first} and {second}" if both else "")
 
 
 def load_record(runtime_root: str | os.PathLike) -> dict:
@@ -459,24 +479,24 @@ def load_record(runtime_root: str | os.PathLike) -> dict:
         raise UsageRecordError(f"the usage record at {path} cannot be read: {exc}; repair or remove it, or set usage.enabled=false "
                                f"to run without the budget",
                                evidence={"path": str(path)}) from exc
-    if raw is None:
+    if raw is None and not path.exists():
         return _empty_record()
     if not isinstance(raw, dict) or raw.get("version") != RECORD_VERSION:
         raise UsageRecordError(
             f"the usage record at {path} is not a version {RECORD_VERSION} object; repair or remove it, or set usage.enabled=false to run without the budget",
             evidence={"path": str(path), "version": raw.get("version") if isinstance(raw, dict) else None})
     record = _empty_record()
-    for key in record:
-        if key in raw:
-            record[key] = raw[key]
     try:
+        # Every section a supported writer supplies must be present: a missing
+        # one is damage, never an empty section that lifts a cap.
+        missing = [key for key in record if key not in raw]
+        _shape(not missing, f"the section {missing[0]!r} is missing" if missing else "")
+        record.update({key: raw[key] for key in record})
         _validate_record(record)
     except ValueError as exc:
         raise UsageRecordError(f"the usage record at {path} cannot be read: {exc}; repair or remove it, or set "
                                f"usage.enabled=false to run without the budget",
                                evidence={"path": str(path)}) from exc
-    record["spend"].setdefault("run", {})
-    record["spend"].setdefault("repository", {})
     return record
 
 

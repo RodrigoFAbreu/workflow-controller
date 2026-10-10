@@ -27,8 +27,8 @@ Codex budget, and workers started outside the Controller were not counted.
 
 1. **One leaf module and one shared record.** `controller/usage.py` holds
    the readers, the record, the window arithmetic, the forecast, admission
-   and the pure decision. It imports `runtime` and the standard library,
-   never `job`, `observe` or `cli`, which import it. Every path is a
+   and the pure decision. It imports `runtime`, `errors` (for the unreadable-record error)
+   and the standard library, never `job`, `observe` or `cli`, which import it. Every path is a
    parameter, so no test reads the real home or runtime root. The record is
    `<runtime root>/usage.json`, written whole under `runtime.usage_lock`, so
    every change is all-or-nothing. All lanes and repositories share a runtime

@@ -87,8 +87,9 @@ Global options go before the subcommand and the repository goes last, as in `wor
 
 ## Pausing for usage limits
 
-Before each job the Controller reads the Claude and Codex windows,
-forecasts what the job will cost from earlier jobs of the same role and
+Before each job the Controller reads the Claude windows (a Codex job you
+start yourself is checked against the Codex windows, see
+[`usage`](guide/commands.md#usage)), forecasts what the job will cost from earlier jobs of the same role and
 model, and does not start one that would not fit. It checks before the
 job record exists, so a pause leaves nothing half finished. The limits
 are the `usage.*` settings ([The settings file](guide/runtime.md#what-it-holds));
@@ -102,8 +103,10 @@ are the `usage.*` settings ([The settings file](guide/runtime.md#what-it-holds))
   `usage_resumed` in the run's events.
 - `step`, a wait longer than `usage.max_wait_seconds`, and a run or
   repository cap stop with exit 17 and start nothing. The message says
-  which: a timed pause names the resume time; a cap says no reset will
-  lift it (raise the cap, or start a new run for the run cap).
+  which: a timed pause names the resume time; a cap names no resume time: a run cap
+  is never lifted by a reset (raise it, or start a new run), and a
+  repository cap counts only the current five-hour window, so it clears
+  when that window resets.
 - `--usage-cap PERCENT` caps this run's Claude usage; the default is
   `usage.run_cap_percent`.
 

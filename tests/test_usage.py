@@ -333,6 +333,13 @@ class EvaluateTest(unittest.TestCase):
         self.assertTrue(hold.outstanding)
         self.assertEqual(decide(0, 0, settings=Limits(run_cap_percent=21), run=(10.0, 3.0)), GO)
 
+    def test_a_cap_is_not_evaluated_for_a_scope_the_caller_did_not_name(self) -> None:
+        capped = Limits(run_cap_percent=5, repository_cap_percent=5)
+        args = ("claude", {}, [], capped, (8.0, 1.0), 0.0, 0.0, 0.0, 0.0, NOW)
+        self.assertEqual(usage.evaluate(*args, run_named=False, repository_named=False), GO)
+        self.assertEqual(usage.evaluate(*args, run_named=True, repository_named=False).window, "run_cap")
+        self.assertEqual(usage.evaluate(*args, run_named=False, repository_named=True).window, "repository_cap")
+
     def test_repository_cap_carries_the_reset_for_the_message_only(self) -> None:
         hold = decide(0, 0, settings=Limits(repository_cap_percent=20), repo=(10.0, 8.0))
         self.assertEqual((hold.window, hold.waitable, hold.resume_at, hold.resets_at),
@@ -491,6 +498,13 @@ class RolloverLapseRenewTest(TempRootCase):
         record = usage.snapshot(self.root, now=FIVE_RESETS + 10)
         comp = (record["reservations"].get(holder) or record["lapsed"][holder])[FIVE_HOUR]
         self.assertEqual((comp["start"], comp["window_resets_at"]), (0.0, FIVE_RESETS + 5 * H))
+
+    def test_admit_skips_the_caps_of_an_unnamed_run_and_repository(self) -> None:
+        seed(self.root, five=10)
+        limits = Limits(run_cap_percent=5, repository_cap_percent=5)
+        self.assertIsNone(admit(self.root, limits=limits, run_id=None, repository=None).hold)
+        self.assertEqual(admit(self.root, limits=limits, run_id="run-1", repository=None).hold.window, "run_cap")
+        self.assertEqual(admit(self.root, limits=limits, run_id=None).hold.window, "repository_cap")
 
     def test_an_expired_lease_lapses_but_keeps_the_cap_liability(self) -> None:
         seed(self.root, five=10)

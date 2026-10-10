@@ -201,9 +201,11 @@ The modes:
 - `--release TOKEN [--outcome ok|not_started] [--stream PATH]` accounts
   the worker and releases the reservation. `--stream` measures the
   worker's stream-json output; `not_started` releases without charging.
-  It is idempotent and works on a lapsed token. A token the record does
-  not know, or `--renew` of one already accounted, exits `1` and changes
-  nothing.
+  It works on a lapsed token, and repeating a measured or `ok` release is
+  harmless (`already accounted; nothing changed`, exit `0`). A
+  `not_started` release forgets the token, so repeating it exits `1`
+  like any token the record does not know. `--renew` of a token already
+  accounted also exits `1` and changes nothing.
 
 A lane script therefore reads:
 

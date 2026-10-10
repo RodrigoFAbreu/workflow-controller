@@ -423,7 +423,7 @@ class ReplayTest(_UsageCase):
         (self.runtime_root / usage.USAGE_FILE).write_text(json.dumps({"version": 3}))
         with contextlib.redirect_stderr(io.StringIO()) as err:
             [reported] = self.resume()
-        self.assertIn("usage record cannot be read", err.getvalue())
+        self.assertEqual(err.getvalue().count("usage record cannot be read"), 1)
         self.assertTrue(reported["reconciled_this_call"])
         self.assertIn(reported["status"], job.TERMINAL_STATUSES)
         self.assertEqual(self.record_on_disk()["usage"]["accounting"], "pending")

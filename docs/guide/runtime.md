@@ -35,12 +35,16 @@ reservations and every run's and repository's spend, so a cap restarts
 from zero. Back it up with the rest of the root.
 
 A `usage.json` this release cannot read (corrupt, or written by a newer
-release with a higher `version`) is never replaced. With
+release with a higher `version`) is never replaced. Deleting it is a last
+resort: a job whose accounting was still pending stays unaccounted, because
+its reservation went with the file, while repairing or restoring the record
+in place lets a later sweep settle it. With
 `usage.enabled: false`, `step` and `run` neither read nor sweep it. With the
 budget on, admission fails closed and its message names
 `usage.enabled: false` as the way to keep running. The replay sweep that
 `step`, `run`, `resume` and `usage` perform skips the record with a
-one-line warning and a `usage_record_unreadable` event, leaving every job's
+one-line warning (printed once per command, and left out of the `usage`
+commands, which report the error themselves and exit `20`) and a `usage_record_unreadable` event, leaving every job's
 `accounting` as it is; a release that can read the record settles it later,
 exactly once.
 

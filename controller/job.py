@@ -3125,8 +3125,9 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path,
     _settle_usage(runtime)
     results = _resume_phases(managed_repo, identity=identity, runtime=runtime,
                              drain_detach_seconds=drain_detach_seconds)
-    _settle_usage(runtime)
-    return _usage_dispatch(runtime, results)
+    # The first sweep has already warned; the event still records each skip.
+    _settle_usage(runtime, quiet=True)
+    return _usage_dispatch(runtime, results, quiet=True)
 
 
 def _resume_phases(managed_repo: Any, *, identity: Any, runtime: Path,
@@ -5370,14 +5371,16 @@ def _usage_account_readable(runtime_root: Path, record: JobRecord, *, end_readin
     return marked if marked is not None else record
 
 
-def _settle_usage(runtime_root: Path) -> list:
+def _settle_usage(runtime_root: Path, *, quiet: bool = False) -> list:
     """The crash-safe replay sweep (D6): ``usage.settle_pending`` over every
     reservation bound to a job, with :func:`never_launched`, then
     ``accounting: "done"`` on each record it settled. A runtime root with no
     shared usage record has nothing to settle and is left untouched.
 
     A record this release cannot read (corrupt, or a newer ``version``) never
-    aborts the caller: the sweep is skipped with a warning and an event, every
+    aborts the caller: the sweep is skipped with a warning and an event (the
+    warning left out under ``quiet``, for a caller that reports the error
+    itself or has already warned), every
     job record's ``accounting`` is left as it is, and the block stays
     ``pending``/``open`` for a release that can read the record."""
     if not (runtime_root / usage.USAGE_FILE).exists():
@@ -5385,15 +5388,16 @@ def _settle_usage(runtime_root: Path) -> list:
     try:
         return _settle_usage_readable(runtime_root)
     except UsageRecordError as exc:
-        _warn_usage_record_unreadable(runtime_root, exc)
+        _warn_usage_record_unreadable(runtime_root, exc, quiet=quiet)
         return []
 
 
-def _warn_usage_record_unreadable(runtime_root: Path, exc: UsageRecordError) -> None:
+def _warn_usage_record_unreadable(runtime_root: Path, exc: UsageRecordError, *, quiet: bool = False) -> None:
     """The one stderr line and the ``usage_record_unreadable`` event of a
-    skipped sweep or dispatch."""
-    print(f"workflow-controller: the usage record cannot be read, so usage accounting is skipped "
-          f"({exc})", file=sys.stderr)
+    skipped sweep or dispatch. ``quiet`` keeps the event and drops the line."""
+    if not quiet:
+        print(f"workflow-controller: the usage record cannot be read, so usage accounting is skipped "
+              f"({exc})", file=sys.stderr)
     usage.append_event(runtime_root, "usage_record_unreadable", now=usage_now(), error=str(exc))
 
 
@@ -5415,7 +5419,7 @@ def _settle_usage_readable(runtime_root: Path) -> list:
     return settled
 
 
-def _usage_dispatch(runtime_root: Path, results: list[JobRecord]) -> list[JobRecord]:
+def _usage_dispatch(runtime_root: Path, results: list[JobRecord], *, quiet: bool = False) -> list[JobRecord]:
     """``resume``'s dispatch over the terminal records it reports whose
     accounting is not ``done`` (D6): a settled token is marked ``done``
     with no charge, a present reservation is settled, and a token neither
@@ -5428,7 +5432,7 @@ def _usage_dispatch(runtime_root: Path, results: list[JobRecord]) -> list[JobRec
     try:
         return _usage_dispatch_readable(runtime_root, results)
     except UsageRecordError as exc:
-        _warn_usage_record_unreadable(runtime_root, exc)
+        _warn_usage_record_unreadable(runtime_root, exc, quiet=quiet)
         return results
 
 

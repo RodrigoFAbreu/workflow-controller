@@ -1459,7 +1459,7 @@ def _usage_show(args: argparse.Namespace, runtime_root: Path, values: dict) -> i
     "done"`` on a terminal job record a crash left unaccounted."""
     context = _usage_context(args)
     now = job.usage_now()
-    job._settle_usage(runtime_root)
+    job._settle_usage(runtime_root, quiet=True)  # the read below reports the error itself (exit 20)
     views: dict = {}
     for provider in _usage_providers(args, gate=False):
         fresh = _usage_fresh_readings(provider)
@@ -1533,7 +1533,7 @@ def _usage_check_or_wait(args: argparse.Namespace, runtime_root: Path, values: d
     started = job.usage_now()
     paused = False
     while True:
-        job._settle_usage(runtime_root)
+        job._settle_usage(runtime_root, quiet=True)  # admit reports an unreadable record itself (exit 20)
         now = job.usage_now()
         admission = usage.admit(
             runtime_root, provider=provider, role=args.role, model=args.usage_model,

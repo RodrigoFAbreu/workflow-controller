@@ -816,7 +816,8 @@ def _label(window: str) -> str:
 
 def evaluate(provider: str, readings: Mapping, reservations: Iterable[dict], settings: Limits,
              forecast: tuple[float, float], run_spent: float, run_outstanding: float, repository_spent: float,
-             repository_outstanding: float, now: float, *, notes: list | None = None) -> Hold | str:
+             repository_outstanding: float, now: float, *, notes: list | None = None,
+             run_named: bool = True, repository_named: bool = True) -> Hold | str:
     """The pure strictest-wins decision of D5: ``GO`` or a :class:`Hold`.
 
     A job is held when ``reading + reserved + forecast`` reaches a window's
@@ -824,7 +825,9 @@ def evaluate(provider: str, readings: Mapping, reservations: Iterable[dict], set
     never waitable and dominates every timed hold; among timed holds the one
     with the latest resume time is reported. A *missing* reading disables only
     that window's account check (a note ``no reading`` is appended to
-    ``notes``): a fresh machine must run."""
+    ``notes``): a fresh machine must run. A cap counts only what the caller
+    named (``run_named``, ``repository_named``): an unnamed scope's cap is not
+    evaluated, whatever its value."""
     five, weekly = forecast
     live = list(reservations)
     reserved = {FIVE_HOUR: sum(r[FIVE_HOUR]["amount"] for r in live),
@@ -833,14 +836,14 @@ def evaluate(provider: str, readings: Mapping, reservations: Iterable[dict], set
     forecasts = {FIVE_HOUR: five, WEEKLY: weekly}
 
     caps: list[Hold] = []
-    if settings.run_cap_percent is not None:
+    if run_named and settings.run_cap_percent is not None:
         total = run_spent + run_outstanding + five
         if total > settings.run_cap_percent:
             caps.append(Hold(provider, "run_cap", run_spent + run_outstanding, five, None,
                              f"the run's {provider} spend {run_spent:.0f}% + outstanding {run_outstanding:.0f}% + "
                              f"forecast {five:.0f}% exceeds the run cap {settings.run_cap_percent}%",
                              False, outstanding=run_outstanding > 0))
-    if settings.repository_cap_percent is not None:
+    if repository_named and settings.repository_cap_percent is not None:
         total = repository_spent + repository_outstanding + five
         if total > settings.repository_cap_percent:
             reading = readings.get(FIVE_HOUR)
@@ -915,7 +918,8 @@ def admit(runtime_root: str | os.PathLike, *, provider: str, role: str | None, m
             provider, stored, [r for r in record["reservations"].values() if r["provider"] == provider], limits, fc,
             run_spent(record, provider, run_id), run_outstanding(record, provider, run_id),
             repository_spent(record, provider, repository, now),
-            repository_outstanding(record, provider, repository, now), now, notes=notes)
+            repository_outstanding(record, provider, repository, now), now, notes=notes,
+            run_named=run_id is not None, repository_named=repository is not None)
         if result == GO and not reserve:
             admission = Admission(None, None, fc, tuple(notes))
         elif result == GO:

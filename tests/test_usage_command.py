@@ -528,6 +528,22 @@ class UsageContextTest(_UsageCommandCase):
         _c, out, _e = self.run_cmd("--json", "usage", "--check", "--role", "other", "--model", "m")
         self.assertEqual(json.loads(out)["forecast"][FIVE], 8)
 
+    def test_an_unnamed_cap_below_the_forecast_does_not_hold(self) -> None:
+        self.configure(run_cap_percent=5, repository_cap_percent=5)
+        self.reading(10)
+        code, _out, err = self.run_cmd("usage", "--check")
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("run cap not evaluated (no --run-id)", err)
+        self.assertEqual(self.run_cmd("usage", "--check", "--run-id", "r1")[0], cli.EXIT_USAGE_PAUSED)
+
+    def test_the_usage_commands_on_a_damaged_record_report_the_error_without_a_skip_warning(self) -> None:
+        self.reading(10)
+        (self.runtime_root / usage.USAGE_FILE).write_text(json.dumps({"version": 3}))
+        for argv in (("usage",), ("--json", "usage"), ("usage", "--check")):
+            code, _out, err = self.run_cmd(*argv)
+            self.assertEqual(code, 20, argv)
+            self.assertNotIn("accounting is skipped", err, argv)
+
     def test_a_repository_cap_needs_repo_and_counts_outstanding_work_of_the_same_repository(self) -> None:
         self.configure(repository_cap_percent=20)
         self.reading(10)

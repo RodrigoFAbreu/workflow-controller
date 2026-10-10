@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.8.0; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.8.0 | A usage budget: the Controller reads the Claude and Codex windows, forecasts each job, shares reservations between lanes and pauses a run before a limit (new `usage` command, settings generation 4, exit code 17) | [1.8.0](releases/1.8.0.md) |
 | 1.7.1 | A Workflow check with status `warn` is advisory instead of a refusal, and the Workflow 2.9.0 protocol schema is vendored | [1.7.1](releases/1.7.1.md) |
 | 1.7.0 | The Controller drives a Workflow that ships the Orchestration Protocol (2.7.0 first), admitted by capability, and its jobs are judged by the Workflow's own reconcile | [1.7.0](releases/1.7.0.md) |
 | 1.6.0 | A repository can let the Controller merge an accepted milestone and wait for the release | [1.6.0](releases/1.6.0.md) |

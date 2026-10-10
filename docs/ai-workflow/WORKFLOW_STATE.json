@@ -7972,6 +7972,798 @@
         "evaluated_at": "2026-10-10T00:07:14Z",
         "workflow_release": "2.9.0"
       }
+    },
+    "workflow-controller-usage-budget": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-usage-budget",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-usage-budget-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-usage-budget-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 11,
+      "implementation_revision": 15,
+      "functional_review_round": null,
+      "base_commit": "f516e762b40f0fa4db1bbc23ac719706428ab9b8",
+      "reviewed_implementation_head": "a9f6e93522b8f3d586dcee8d6555cc640030c954",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP5",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "03ddec05fef3c06da6b89274952abf1e8fe4f7f8"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "163683bc13e0a0ecf3c34ea42e9361295514081a"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "4f1900195ab0a7a0ff568a97f7517a35ddb092c6"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "47815b972041bd3ba757df2b2db598c68e68cecd"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "a2b0a21bdfb8d09bec563772902466aa0e1c4170"
+        }
+      },
+      "current_bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+        "approved_review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c061c87310e585b0875ee081e65ce269b265ff46"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-usage-budget-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1eeacc58290d35715c4378e724fcf8cb05d112f6"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-usage-budget-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b1c0635b121d16ce0e93e35f776161da79a1238e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-10T04:59:37Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+            "ledger": {
+              "local": {
+                "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+                "verdict": "APPROVE",
+                "round": 11,
+                "verdict_sha256": "b76b006e4c708b4dd74d9551ba45596335d228ac6146d496a329e12f3356c918",
+                "ledger_entry_sha256": "76f31a0f88048287e47cebae94449e99ae6c33670970c8a0f8631bffdb80d8d3",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+                "verdict": "APPROVE",
+                "round": 11,
+                "verdict_sha256": "35b4a7e1db782696c73b60c1381d89b9e7cc020d7a54a844e93d90ea552626b1",
+                "ledger_entry_sha256": "0f2310eb4af835ad45f3ad4651bd31fa25fd348ff75aaa25124909031e505d3b",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-10T04:59:37Z",
+          "workflow_release": "2.9.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "0d3e67012b77973dc2b207a7891de6c8ed9d8070e134169da610c97905e2c4e1",
+        "approved_review_content_id": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7e1f573179aa1a45246ea7872933f8406a8913eb"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6a29abcc7854fe602824ef1e1d0ebe3e0f021a8e"
+          },
+          {
+            "path": "controller/errors.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "380dceb3a20b9d22a466dd2178a2971af02f1287"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1072163e862404cfd6fa0b5425db65f9e7a86767"
+          },
+          {
+            "path": "controller/observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "14701bff55f5cd027fc62c2ab6a20d0d644a26a8"
+          },
+          {
+            "path": "controller/runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bc59db2e8ec7517787a3865500c1543ed409bb9d"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "77774417b4d68aed8b207885a9c931e8d726131e"
+          },
+          {
+            "path": "controller/usage.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ddf85aab5f2e5f2ad5c8cd2b59dd4a950eb3396a"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bb3354a4b0071ed6f89c9a3ab7f80f8948286232"
+          },
+          {
+            "path": "docs/adr/0001-controller-generation-1-architecture.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aa6718423f2a288ead07a9f7c1f2635c37665cf6"
+          },
+          {
+            "path": "docs/adr/0011-usage-budget.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8acf56d4aaec3980f76c73fb43382fd3c6790bb6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-usage-budget-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c54d6d4caf59093df69851dabc45795a1e376322"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fc1ffc3771ef052b1ab0434f7547b311714680aa"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1f906466877d211e1872729a45198c149f159c7b"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9012cab8959e0c8f578f288990b54ed1a537ebda"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9b9050d39e109ac2ccc9dc9aa67f8730526c28dd"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "241e841852d41220ac9c7cef0d1851bc2e194b4e"
+          },
+          {
+            "path": "tests/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3d308a469fba6c260e65162d681f5b87426dfc13"
+          },
+          {
+            "path": "tests/fake_claude.py",
+            "exists": true,
+            "mode": "100755",
+            "blob": "9c1800b2762c6d7e66a3fa7fa59992509db8bcd6"
+          },
+          {
+            "path": "tests/golden/claude_stream_usage_limit_rejected.jsonl",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f0ddc9f39c917bd333d2dfb70d8319ab13a449ff"
+          },
+          {
+            "path": "tests/golden/claude_stream_usage_limit_rejected.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b30d3c439451aabc02b60edc55f4a3f2e2cf9942"
+          },
+          {
+            "path": "tests/golden/generate_no_policy_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da2724397fb2e3c05f79e9ed8e273b2eb4a3febc"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f3c42051f3b518164d85f0908c33ac8b5359b37e"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "921655f7ec136a50e6b3eee46f94e503406d9ccd"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5769f42f44c5a72c86ce12254bd2515137183a46"
+          },
+          {
+            "path": "tests/test_observation_equivalence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "915c309663a7126af81b1d262c10b87dca610162"
+          },
+          {
+            "path": "tests/test_observe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b84f70435320bf2ed7c94c6a516d1e2939fe7c79"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "27741074e664c2921b80a7d68f844172738d9cc9"
+          },
+          {
+            "path": "tests/test_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9681e941d35ef25375cae12bd0f24deca95547ae"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "464fdf4e3345c92c33a036240a7e22e02b7d5143"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "708ea709ece1cadc2d77072da22a45793d9aaed8"
+          },
+          {
+            "path": "tests/test_usage.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cc81446dc2db283239aea0965e150799a1c3364b"
+          },
+          {
+            "path": "tests/test_usage_command.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88a7e614c10088a33aac052c03b9eddfec7825d5"
+          },
+          {
+            "path": "tests/test_usage_gate.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "09a793b42cce69373fe5280604ec2d3a08690894"
+          }
+        ],
+        "reviewed_content_commit": "a9f6e93522b8f3d586dcee8d6555cc640030c954",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-10T21:16:45Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "ledger": {
+              "local": {
+                "bundle_id": "0d3e67012b77973dc2b207a7891de6c8ed9d8070e134169da610c97905e2c4e1",
+                "verdict": "APPROVE",
+                "round": 15,
+                "verdict_sha256": "f74d11fb7f83a37d6c3e49826453038bb62ce66cdcaf3e511a6d78249b5266c5",
+                "ledger_entry_sha256": "fd887db6f375b1a41789801e6cd7f5709ab0b246c3e346563ca4979b268dbf84",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "0d3e67012b77973dc2b207a7891de6c8ed9d8070e134169da610c97905e2c4e1",
+                "verdict": "APPROVE",
+                "round": 15,
+                "verdict_sha256": "ed601d9d0175dcfed7ab05108d4e8ab8703710e96f95a8f202d10f7671687e44",
+                "ledger_entry_sha256": "335aa9e81334f1970aa9c4fcfd62e5dea5523fea6a3c948e204e15071f9f0831",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-10T21:16:45Z",
+          "workflow_release": "2.9.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-10T04:49:53Z",
+          "verdict_sha256": "b76b006e4c708b4dd74d9551ba45596335d228ac6146d496a329e12f3356c918",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-10T04:56:09Z",
+          "verdict_sha256": "35b4a7e1db782696c73b60c1381d89b9e7cc020d7a54a844e93d90ea552626b1",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 91,
+      "last_transition": "2026-10-10T21:43:46Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-10T04:17:30Z",
+        "consumed": {
+          "review_content_id": "64cb43684c65503bf23134a3705aa9ef9ea96a11d9ff6cf7272fe6ffd6713ec6",
+          "plan_revision": 10,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+          "plan_revision": 11
+        },
+        "bound": {
+          "review_content_id": "c84c14e79ce970db4dcb5c89e10fafdc792a0d071b57f757e85663648a7a1677",
+          "bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
+          "plan_revision": 11
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "1b00c6a4a6c7383c0deee2295318ec270adbe3b51e5a4059248773426dfbce77",
+        "64cb43684c65503bf23134a3705aa9ef9ea96a11d9ff6cf7272fe6ffd6713ec6",
+        "a1a49bed5f8fc5f67afb5e636e1f50f720d6c553776e4571308d6f8cdb8354c4",
+        "ba14ce42027dac397946134207823bce576d6a369fef82829e7ff34643bfef4b",
+        "ca184b617edfad3f39adf63d98b29cd43307f31ef12eb841ca6a7771eb750e16",
+        "e389280c5e5ccd034e422a0f08954877b6b1a64124dd42a5b01c53499caea1ea",
+        "e7115a96999bfe16e941873442b7a6aa1119dee0f300317fd99c3471f86156ff",
+        "ecbc1622696343b5aac3504af4003e3063d572380ffdedefff4d0a98378a2f77",
+        "efef948d32a127d9aec369068c8788fa3aa68757f741032aee8cb0c8a9e924eb",
+        "fb49aa8092a561a4dc3cb1dccba6b5ff046bae75656687f840f28f61263193a9"
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0d3e67012b77973dc2b207a7891de6c8ed9d8070e134169da610c97905e2c4e1",
+          "verdict": "APPROVE",
+          "round": 15,
+          "completed_at": "2026-10-10T21:11:36Z",
+          "verdict_sha256": "f74d11fb7f83a37d6c3e49826453038bb62ce66cdcaf3e511a6d78249b5266c5",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0d3e67012b77973dc2b207a7891de6c8ed9d8070e134169da610c97905e2c4e1",
+          "verdict": "APPROVE",
+          "round": 15,
+          "completed_at": "2026-10-10T21:15:39Z",
+          "verdict_sha256": "ed601d9d0175dcfed7ab05108d4e8ab8703710e96f95a8f202d10f7671687e44",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-budget/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-f0-isolated-setup": {
+            "flow_id": "flow-f0-isolated-setup",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:21:00Z",
+            "summary": {
+              "result": "scratch clone, scratch bare origin, fake gh, claude/codex stubs first on PATH",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "a3dbc6238f187fc6f7a9da9af3f46021e772407a10a809b15f2deb1248cbbcdc",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:31Z"
+          },
+          "flow-f1-usage-view": {
+            "flow_id": "flow-f1-usage-view",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:21:35Z",
+            "summary": {
+              "result": "usage text/JSON/--provider views; fresh root with no rollout shows no reading",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "5876e182b14e5522f998c6233322c55381101e03bd1a1f05a6a295e073dc02a1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:31Z"
+          },
+          "flow-f2-settings-generation-4": {
+            "flow_id": "flow-f2-settings-generation-4",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:21:40Z",
+            "summary": {
+              "result": "16 usage rows, --usage-cap flags, exit 2 bad flag, exit 20 bad file value, generation 4 fill",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "8f21d0294fbbfaef8ddf00bb67680a7001a9b9dc067726b2c6c1f8a71ad36c80",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:31Z"
+          },
+          "flow-f3-strictest-wins": {
+            "flow_id": "flow-f3-strictest-wins",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:21:48Z",
+            "summary": {
+              "result": "account/repository/run limits for Claude and Codex; unnamed caps not evaluated, named caps hold",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "8a3a08da2ff1e017cb7c1f837539f3e1d46254127279759e58b2024900c1f7de",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:31Z"
+          },
+          "flow-f4-check-and-wait": {
+            "flow_id": "flow-f4-check-and-wait",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:21:56Z",
+            "summary": {
+              "result": "--check exit 17, --wait to go, max_wait, cap never waited on",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "a28b0119d0691f77b5dddba47dd54e8af242e1c58e9307abe6c2170c410ec354",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:31Z"
+          },
+          "flow-f5-step-hold-run-wait": {
+            "flow_id": "flow-f5-step-hold-run-wait",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:22:09Z",
+            "summary": {
+              "result": "step held exits 17 with no job record; run waits then continues; run cap exits 17",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "d1e222e6e1c5e454da12f1decf5c6ffc6ef5fa2e343c361cd0c420d8baa4f767",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:32Z"
+          },
+          "flow-f6-reserve-release": {
+            "flow_id": "flow-f6-reserve-release",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:22:24Z",
+            "summary": {
+              "result": "reserve/renew/release incl. not_started, measured charge, idempotent repeat, codex --stream refused",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "0eaecae8c839c1f684d9f06db5d1f4569083621787f03a7125c97696391f4809",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:32Z"
+          },
+          "flow-f7-damaged-record": {
+            "flow_id": "flow-f7-damaged-record",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:23:11Z",
+            "summary": {
+              "result": "damaged record exit 20 bytes preserved; job outcome kept; warning once; restore settles",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "f90eb8c9ad5e28554109e6b2510650361c56830bb5d7cfa954163117f11f340f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:32Z"
+          },
+          "flow-f8-generation-3-settings": {
+            "flow_id": "flow-f8-generation-3-settings",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:23:23Z",
+            "summary": {
+              "result": "generation 3 settings work and fill to generation 4, user values kept",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "adbafb21a025eac11d3e1e95664263ad490d0e70868612992b36258fc2becf43",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:32Z"
+          },
+          "flow-f9-docs-match": {
+            "flow_id": "flow-f9-docs-match",
+            "status": "passed",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "ran_at": "2026-10-10T21:23:29Z",
+            "summary": {
+              "result": "check_docs exit 0; guides match behaviour (one minor wording finding deferred to the release docs PR)",
+              "tester": "independent Sonnet 5.5 worker, scratch clone (round 2)"
+            },
+            "log_digest": "251b21a3bbd6f6ced82a1e8d24dc84445f1e42f45f2c5c654d4dd600d3395bc8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:32:32Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 36,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/36"
+          },
+          "state": "open",
+          "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+          "observed_at": "2026-10-10T21:43:46Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "a9f6e93522b8f3d586dcee8d6555cc640030c954",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-10T21:43:46Z",
+            "raw_sha256": "a09b61d8da1b1f22f66624e19448494c01d0f7fe898f047a1c04a0c71f2409c8",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "42a7856d6b182b717d8e59612a5d1c6b0e3c1bb707fcd7a57aa64029da75aae1"
+          },
+          "fact_id": "afc7662c1cdd3348c4ee2ff6507ad71ca5b369c9aaa19cf1bf42afb0070b8ecc"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-f0-isolated-setup', 'flow-f1-usage-view', 'flow-f2-settings-generation-4', 'flow-f3-strictest-wins', 'flow-f4-check-and-wait', 'flow-f5-step-hold-run-wait', 'flow-f6-reserve-release', 'flow-f7-damaged-record', 'flow-f8-generation-3-settings', 'flow-f9-docs-match'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #36 at 123b1d3a071af83544e1246fdc2e4b9f3d11432c is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "a9f6e93522b8f3d586dcee8d6555cc640030c954",
+          "anchor_identity": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "94edf9b8acc3baae1b271052213a9f8d6cdc7d6320be42c4732daa761b0801ee",
+            "recorded_at": "2026-10-10T21:16:45Z"
+          },
+          "functional": {
+            "flow-f0-isolated-setup": {
+              "evidence_id": "e7c29eae6948bced05ad536f47b7080d7a08f8c239da0cbdc54217b61cfac59a",
+              "log_digest": "a3dbc6238f187fc6f7a9da9af3f46021e772407a10a809b15f2deb1248cbbcdc",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f1-usage-view": {
+              "evidence_id": "fcc424828f176eb5ca7f91648cb4d70cc0e61e5f605d31787c0b8414f7b22042",
+              "log_digest": "5876e182b14e5522f998c6233322c55381101e03bd1a1f05a6a295e073dc02a1",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f2-settings-generation-4": {
+              "evidence_id": "a91e1805b417b6162c4b1495995dad9e94203d1fe32750419435e680f541ca16",
+              "log_digest": "8f21d0294fbbfaef8ddf00bb67680a7001a9b9dc067726b2c6c1f8a71ad36c80",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f3-strictest-wins": {
+              "evidence_id": "685830352daf2ac460006be105f580a4882d8333c135b49eebe82c34e9aea32f",
+              "log_digest": "8a3a08da2ff1e017cb7c1f837539f3e1d46254127279759e58b2024900c1f7de",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f4-check-and-wait": {
+              "evidence_id": "7ed8aded4e1b5f98571be0a78b1c4f5ad34c7dc0c6283952187ccd4d099ae9b7",
+              "log_digest": "a28b0119d0691f77b5dddba47dd54e8af242e1c58e9307abe6c2170c410ec354",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f5-step-hold-run-wait": {
+              "evidence_id": "c92542d0557f5cb1a510cf8c1661a0dac41e0399deee0f829feffad64e986da1",
+              "log_digest": "d1e222e6e1c5e454da12f1decf5c6ffc6ef5fa2e343c361cd0c420d8baa4f767",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f6-reserve-release": {
+              "evidence_id": "c14eee4722999cd8b06ff9c354c5ac773372dda19169250aa9406b2fa77a0097",
+              "log_digest": "0eaecae8c839c1f684d9f06db5d1f4569083621787f03a7125c97696391f4809",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f7-damaged-record": {
+              "evidence_id": "f84b746b061506fab07f8024a352cc7e4e3723a4cb586123c5bfb9a514442b62",
+              "log_digest": "f90eb8c9ad5e28554109e6b2510650361c56830bb5d7cfa954163117f11f340f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f8-generation-3-settings": {
+              "evidence_id": "7f2728f5b1023b69afa78456560e2e16bf55ed017eddd1817e4f43eeeb653367",
+              "log_digest": "adbafb21a025eac11d3e1e95664263ad490d0e70868612992b36258fc2becf43",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            },
+            "flow-f9-docs-match": {
+              "evidence_id": "3ba0191cb82b9d855d4795eec1b29a28d6d823afcc2176ab47c6c46e36a913a2",
+              "log_digest": "251b21a3bbd6f6ced82a1e8d24dc84445f1e42f45f2c5c654d4dd600d3395bc8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md"
+            }
+          },
+          "pr": {
+            "fact_id": "afc7662c1cdd3348c4ee2ff6507ad71ca5b369c9aaa19cf1bf42afb0070b8ecc",
+            "head": "123b1d3a071af83544e1246fdc2e4b9f3d11432c",
+            "provenance": "workflow_gh",
+            "raw_sha256": "a09b61d8da1b1f22f66624e19448494c01d0f7fe898f047a1c04a0c71f2409c8"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-10T21:43:46Z",
+        "workflow_release": "2.9.0"
+      }
     }
   }
 }

@@ -304,6 +304,19 @@ def _clock(at: Any) -> str:
     return (moment.astimezone() if moment else datetime.datetime.now()).strftime("%H:%M:%S")
 
 
+def _epoch_text(epoch: Any) -> str:
+    """An epoch (the usage events' times) in local time with the epoch, the
+    bare epoch when no local date exists for it, or the value as given when
+    it is not a number."""
+    if not isinstance(epoch, (int, float)) or isinstance(epoch, bool):
+        return str(epoch)
+    try:
+        local = datetime.datetime.fromtimestamp(epoch).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (ValueError, OverflowError, OSError):
+        return f"epoch {int(epoch)}"  # beyond the calendar: the raw epoch, never a traceback
+    return f"{local} (epoch {int(epoch)})"
+
+
 def _transition(event: Mapping) -> str:
     verified = "verified" if event.get("transition_verified") else "not verified"
     return f"{event.get('observed_phase')} -> {event.get('observed_phase_after')} {verified}"
@@ -391,6 +404,15 @@ def _run_text(event: Mapping) -> str:
         return f"no action at {event.get('observed_phase')}: {event.get('reason')}"
     if name == "waiting":
         return f"waiting at {event.get('gate')} until {event.get('deadline')}"
+    # Usage budget (usage-budget CP3, D9): a pause before a job, and the
+    # admission that ended it.
+    if name == "usage_paused":
+        until = event.get("waiting_until")
+        tail = (f"; waiting until {_epoch_text(until)}" if until is not None
+                else "; not waiting (exit 17)")
+        return f"usage paused ({event.get('provider')} {event.get('window')}): {event.get('reason')}{tail}"
+    if name == "usage_resumed":
+        return f"usage resumed: {event.get('provider')} job admitted"
     if name == "run_ended":
         return f"run ended: exit {event.get('exit_code')}"
     if name == "run_interrupted":

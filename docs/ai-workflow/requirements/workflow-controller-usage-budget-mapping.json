@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-usage-budget",
+  "requirements": {
+    "R1": {
+      "description": "Claude and Codex usage is read without a model or the real home, a past `resets_at` counts as 0%, and a shared record under the runtime root keeps the freshest reading under a lock by a deterministic window-and-percent rule that survives reset-timestamp jitter and delayed writers",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Admission is atomic across lanes: a job reserves its forecast under the lock, other lanes count live reservations, and a reservation is renewed by a timer owned by `job.py` for the whole life of its job (not by the state-change flush), released on completion, failed launch or recovery, and a window reset rolls a live reservation's components over independently instead of releasing them, and a lapsed one still accounts and still counts against the run and repository caps as outstanding liability until settled or abandoned",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R3": {
+      "description": "Each job's share of the five-hour and weekly windows is recorded in a ledger, an unmeasured (reset-spanning or no newer end reading) delta is charged at least at the forecast and kept out of the forecast, the ledger entry and job `usage` block are fully pinned, authoritative run and repository spend totals and a settled-id set are separate from the bounded forecast ledger so eviction never reopens a cap, run spend survives resets, repository spend counts a boundary-spanning job correctly, and the forecast per `(provider, role, model)` is the mean of earlier jobs with documented defaults for both windows",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The decision is pure and strictest-wins across the five-hour, weekly, run and repository limits (the caps counting outstanding liabilities, not only completed spend), a cap never has a resume time and dominates timed holds, and a missing reading disables only its own check",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R5": {
+      "description": "Budgets are settings in generation 4, additive, validated, separately configurable for Claude and Codex at the account, run and repository levels, filled without moving existing values, ignored by an older release, with every generation-dependent fixture updated",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R6": {
+      "description": "A run pauses before a job that would not fit, before the job record exists, holding no lock during the wait, and after the reset plus grace goes through the full orchestration boundary (handoff detection, fresh state, fresh decision, fresh admission) without consuming a step, with `usage_paused`/`usage_resumed` run events; a long wait, a cap and `step` stop with exit 17 and start nothing, the message distinguishing a timed pause from a cap",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R7": {
+      "description": "A recovered (reattached) job is accounted like a live one, even when its reservation has lapsed, from the lapsed reservation with the job record's `usage` block supplying its end figures, and a single charging authority holds (a charge needs a reservation or lapsed entry; a `usage` block alone, an abandoned token or a pruned `settled` entry never charges, and a retained run total is never reopened by continuing work); completion is crash-safe: the `COMPLETED` write that reads the stream carries the end figures through every later terminal write, a replay sweep (also after `resume`'s reconciliation) settles any terminal record not yet accounted, a record that never launched (structurally: `INTERRUPTED` with no `expected_transition`, or a `FAILED` `WorkerNotStarted`/`decision_stale_at_launch` record) is released rather than charged, and a reconciled `LAUNCHED` record never is, `complete` is idempotent by settled token and nothing is ever charged from a record's block alone (no unknown-token fallback in `complete`, `_reattach` or dispatch), so a crash at any point charges exactly once",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R8": {
+      "description": "`usage` shows both providers, and `--check`/`--wait --reserve`/`--release` (with `--stream`)/`--renew` give a manual worker the same forecast-and-reservation gate with explicit role, model, repository and run context, re-evaluating before success, bounded in time, with durable pause, resume and release events",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R9": {
+      "description": "The guide, exit codes, ADR and roadmap agree, every deferral (C8b, C8c, Codex enforcement in C7, notifications in C5) has a named roadmap owner, and `check_docs` and the full suite are green",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

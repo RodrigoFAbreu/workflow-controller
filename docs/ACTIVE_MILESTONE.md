@@ -2,49 +2,49 @@
 
 ## Status
 
-**Complete.** `workflow-controller-installed-release-test-agnostic` (`docs/ROADMAP.md` step C9d,
-follow-up 16) reached `MILESTONE_COMPLETE` on 2026-10-10. `InstalledReleaseTest` in
-`tests/test_workflow_releases.py` now checks this repository's own installed Workflow through the
-non-Manager steps of `managed_repo.inspect` (the installation record, the `RELEASE_CONTRACTS` arm, the
-profile check) and against the `sha256` and `executable` flag of every file in
-`.workflow-manager/installation.json`, with no vendored tree and no version literal.
-`InstalledReleaseRefusalTest` shows a modified, missing, extra and mode-changed file, a release without
-the protocol script, a protocol-major-2 `describe` and an unsupported profile each refused.
-`docs/guide/development.md` says the installed Workflow needs no vendored tree. Nothing in `controller/`
-changed. A later Workflow release that speaks protocol major 1 needs no test change.
+**Complete.** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6) reached
+`MILESTONE_COMPLETE` on 2026-10-10. The Controller reads the Claude and Codex usage windows itself,
+forecasts a job from telemetry, admits it atomically against the readings and the other lanes'
+reservations in one shared usage record, and pauses a run before a limit (exit 17) instead of starting a
+job that would not fit. `workflow-controller usage` gives a manually started worker the same gate
+(`--check`, `--wait`, `--reserve`, `--renew`, `--release`). Settings table generation 4 adds the sixteen
+`usage.*` rows; `run --usage-cap` and `step --usage-cap` cap a run. The design is recorded in
+`docs/adr/0011-usage-budget.md`.
 
 The milestone was accepted **by gate policy, not by a person**: `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`), after functional review
-round 1 (implementation revision 1), checked against evidence commit `294d3a8`, came back clean (flows 1-6
-passed).
-- Plan revision 2 was approved by policy at `fe249ce`. The base commit is `5532cdd`.
-- Technical approval `bb4fa81` was recorded by policy and is `CURRENT`: bundle `05979f51`, review content
-  id `bb49d2bf`, reviewed implementation head `7a13f7d`.
-- The Workflow's own GitHub query found pull request #34 at head `294d3a8` with every check passing and no
+round 2 (implementation revision 15), checked against evidence commit `123b1d3`, passed every flow
+(F0-F9).
+- Plan revision 11 was approved by policy at `03ddec0`. The base commit is `f516e76`.
+- Technical approval `bcdebf8` was recorded by policy and is `CURRENT`: bundle `0d3e6701`, review content
+  id `94edf9b8`, reviewed implementation head `a9f6e93`.
+- The Workflow's own GitHub query found pull request #36 at head `123b1d3` with every check passing and no
   standing objection.
 
-All registry checkpoints (CP1, CP2) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
+All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
 ground-truth record of this transition, including its `acceptance_satisfaction` evidence, and
-`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C9d and follow-up 16 complete. The full
-milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-installed-release-test-agnostic.md`.
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C8 complete. The full milestone
+narrative is archived verbatim at `docs/milestones/completed/workflow-controller-usage-budget.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Merge.** Pull request #34, titled
-  `test: check the installed Workflow by capability and installation record, not by a vendored tree`, is
-  merged by the Controller once every check passes; a `test:` pull request releases nothing.
-- **Optional notes from the Codex implementation review:** the module docstring at
-  `tests/test_workflow_releases.py:7-8` still mentions the vendored tree; `docs/guide/development.md`
-  could also mention the installed protocol's `describe`.
-- **Optional notes from functional review round 1** (the checklist's wording, see
-  `.ai-review/archive/workflow-controller-installed-release-test-agnostic/functional-review-round1-CLEAN.md`):
-  flow 2 said the whole module "may fail" without the vendored 2.9.0 tree, but it passes (29 tests OK), so
-  a future checklist should expect it to pass; flow 3 case b (a missing file) fails with one failure and
-  one error, because the admission test also errors on the missing file.
+- **Merge and release.** Pull request #36, titled
+  `feat: a usage budget that pauses a run before a Claude or Codex limit`, is merged once every check
+  passes; a `feat:` pull request releases 1.8.0.
+- **Two Minor wording findings from functional review round 2** (user decision, 2026-10-10: they go into
+  the 1.8.0 release-notes `docs:` pull request, not into C8; see
+  `.ai-review/archive/workflow-controller-usage-budget/functional-review-round2-PASSED.md`):
+  `docs/common-problems.md` and `docs/guide/runtime.md` should say that a damaged record must be restored
+  before the next `step`, `run` or `resume`, because after one the pending job is marked `done` without a
+  charge; and the checklist's F4/F7 wording missed `usage-events.jsonl` and the exit 20 of a further
+  `run`.
+- **Accepted optional follow-ups** (see the archived checklist's "Known limitations"): a usage-limit result
+  inside a worker stream is C8b; per-repository caps and per-lane budgets are C8c; the accumulator totals at
+  the absolute numeric limit; the second unreadable-record warning when `resume` re-attaches to a running
+  job.
 
 ## Next action
 
-1. The Controller merges pull request #34 (a `test:` pull request, no release).
-2. A `docs:` roadmap pull request: the orchestrator series O1-O7 after C11, automated functional review,
-   self-recovery, and configurable C8 budgets.
-3. `/milestone-plan` for C8.
+1. Pull request #36 merges (a `feat:` pull request, releasing 1.8.0).
+2. The 1.8.0 release-notes `docs:` pull request, with the two Minor wording findings above.
+3. `/milestone-plan` for C5, the next step in `docs/ROADMAP.md`'s order (C5, C6, C7, C10, C12, C11, then
+   O1-O7).

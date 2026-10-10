@@ -482,7 +482,7 @@ class ExitCodeRuleTest(TreeTestCase):
     def test_the_live_repository_constants_are_what_the_check_reads(self) -> None:
         constants, sigint = check_docs.cli_exit_codes(cli)
         self.assertEqual(sigint, cli.SIGINT_EXIT_STATUS)
-        self.assertEqual(constants, {0, 2, 10, 15, 16, 20, 30, 35, 40, 45, 50})
+        self.assertEqual(constants, {0, 1, 2, 10, 15, 16, 17, 20, 30, 35, 40, 45, 50})
 
 
 class DigestRuleTest(TreeTestCase):

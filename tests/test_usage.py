@@ -919,6 +919,75 @@ class MalformedRecordTest(TempRootCase):
                     usage.complete(self.root, token, {}, usage.OUTCOME_OK, now=NOW)
                 self.assertEqual(path.read_text(), text)
 
+    def _stored_reading(self, change) -> dict:
+        """The record after ``change`` mutated its stored five-hour reading."""
+        raw = json.loads((self.root / usage.USAGE_FILE).read_text())
+        change(raw["readings"]["claude"][FIVE_HOUR])
+        return raw
+
+    def test_an_unstamped_shared_reading_is_not_shown_newer_so_the_forecast_is_charged(self) -> None:
+        for variant in ("missing", "null"):
+            with self.subTest(variant=variant):
+                with tempfile.TemporaryDirectory() as tmp:
+                    self.root = Path(tmp)
+                    seed(self.root, five=10)
+                    token = admit(self.root).token
+                    raw = self._stored_reading(lambda r: r.pop("observed_at") if variant == "missing"
+                                               else r.update({"observed_at": None}))
+                    (self.root / usage.USAGE_FILE).write_text(json.dumps(raw))
+                    readings = list(usage.current_readings(usage.snapshot(self.root, now=NOW + 60), "claude").values())
+                    entry = usage.complete(self.root, token, readings, usage.OUTCOME_OK, now=NOW + 60).entry
+                    self.assertEqual((entry["delta"], entry["charged"]), ("unknown", 8.0))
+                    self.assertEqual(usage.run_spent(self.record(), "claude", "run-1"), 8.0)
+                    again = usage.complete(self.root, token, readings, usage.OUTCOME_OK, now=NOW + 61)
+                    self.assertEqual((again.status, again.reason), (usage.COMPLETE_NOOP, "already_settled"))
+                    self.assertEqual(usage.run_spent(self.record(), "claude", "run-1"), 8.0)
+
+    def test_a_job_record_reading_without_a_time_is_still_measured(self) -> None:
+        seed(self.root, five=10)
+        token = admit(self.root).token
+        block = {"five_hour_end": 14.0, "end_window_resets_at": FIVE_RESETS}
+        entry = usage.complete(self.root, token, None, usage.OUTCOME_OK, now=NOW + 60, usage_block=block).entry
+        self.assertEqual((entry["delta"], entry["charged"]), ("measured", 4.0))
+
+    def test_a_stored_reading_identity_is_the_keys_it_is_stored_under(self) -> None:
+        for change in (lambda r: r.pop("window"), lambda r: r.update({"window": None}),
+                       lambda r: r.update({"window": ["x"]}), lambda r: r.update({"provider": ["x"]}),
+                       lambda r: r.pop("provider")):
+            seed(self.root, five=10)
+            token = admit(self.root).token
+            (self.root / usage.USAGE_FILE).write_text(json.dumps(self._stored_reading(change)))
+            readings = usage.load_record(self.root)["readings"]["claude"]
+            self.assertEqual((readings[FIVE_HOUR]["provider"], readings[FIVE_HOUR]["window"]), ("claude", FIVE_HOUR))
+            snap = usage.snapshot(self.root, now=NOW + 60)
+            result = usage.complete(self.root, token, list(usage.current_readings(snap, "claude").values()),
+                                    usage.OUTCOME_OK, now=NOW + 60)
+            self.assertEqual(result.status, usage.COMPLETE_CHARGED)
+            (self.root / usage.USAGE_FILE).unlink()
+
+    def test_oversized_or_non_finite_figures_are_an_unreadable_record(self) -> None:
+        seed(self.root, five=10)
+        token = admit(self.root).token
+        good = self.record()
+        corrupt = [
+            self._stored_reading(lambda r: r.update({"observed_at": 10 ** 400})),
+            self._stored_reading(lambda r: r.update({"resets_at": 1_790_000_000_000})),
+            self._stored_reading(lambda r: r.update({"percent": float("inf")})),
+            self._stored_reading(lambda r: r.update({"percent": float("nan")})),
+            {**good, "ledger": [{"provider": "claude", "finished_at": NOW, "five_hour": 10 ** 400}]},
+        ]
+        for raw in corrupt:
+            with self.subTest(raw=raw):
+                text = json.dumps(raw)
+                path = self._write(text)
+                with self.assertRaises(UsageRecordError):
+                    usage.load_record(self.root)
+                with self.assertRaises(UsageRecordError):
+                    usage.complete(self.root, token, end(16, 21), usage.OUTCOME_OK, now=NOW + 600)
+                with self.assertRaises(UsageRecordError):
+                    admit(self.root, now=NOW + 600)
+                self.assertEqual(path.read_text(), text)
+
     def test_a_valid_record_still_loads(self) -> None:
         seed(self.root, five=10)
         admit(self.root)

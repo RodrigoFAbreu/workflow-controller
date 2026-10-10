@@ -153,8 +153,15 @@ def make_reading(provider: str, window: str, percent: float, resets_at: float, o
             "observed_at": observed_at, "source": source}
 
 
+# The largest magnitude a figure may have: the last second of year 9999, so a
+# timestamp always converts to a date and no figure overflows a float.
+_NUMBER_LIMIT = 253402300799
+
+
 def _is_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A real number within ``_NUMBER_LIMIT`` (``nan`` and the infinities fail
+    the comparison), so a stored figure never overflows a consumer."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and abs(value) <= _NUMBER_LIMIT
 
 
 def same_window(a: float, b: float) -> bool:
@@ -408,9 +415,11 @@ def _validate_record(record: dict) -> None:
     for provider, windows in record["readings"].items():
         _shape(isinstance(windows, dict), f"readings[{provider!r}]")
         for window, reading in windows.items():
-            _shape(isinstance(reading, dict) and _is_number(reading.get("percent"))
+            _shape(window in WINDOWS and isinstance(reading, dict) and _is_number(reading.get("percent"))
                    and _is_number(reading.get("resets_at")) and _number_or_none(reading.get("observed_at")),
                    f"readings[{provider!r}][{window!r}]")
+            # A reading's identity is the keys it is stored under.
+            reading["provider"], reading["window"] = provider, window
     for section in ("reservations", "lapsed"):
         for token, entry in record[section].items():
             _validate_reservation(token, entry, section)
@@ -1055,7 +1064,10 @@ def _window_delta(start: float | None, start_resets: float | None, end: dict | N
         later = end_resets > start_resets and not same
     if same:
         observed = end.get("observed_at")
-        if observed is None or observed > created_at:
+        # Only a job-record reading (a pending block written before
+        # observation times were kept) may be measured without a time; an
+        # unstamped shared reading is not shown newer than the reservation.
+        if observed is None and end.get("source") == "job-record" or observed is not None and observed > created_at:
             return "measured", max(0.0, end["percent"] - start), None
         return "unknown", None, None
     if later:

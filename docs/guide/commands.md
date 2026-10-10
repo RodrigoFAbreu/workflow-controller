@@ -20,7 +20,7 @@
 | `workflow-controller --work-item <id> milestone-binding --abandon <repo>` | retire such a binding, under the preconditions stated there; exactly one of `--new-pr`/`--abandon` is required |
 | `workflow-controller settings show\|path\|clean` | the user settings file (see [`settings`](#settings)); `show` and `path` are read-only |
 | `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by role\|model\|role,model] [<repo>]` | the recorded jobs' turns, tokens, cost and time (see [`telemetry`](#telemetry)); read-only |
-| `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record |
+| `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted |
 | `workflow-controller --version` | the version, then the running runtime (see [Runtime identity](runtime.md#runtime-identity)) |
 
 Global options -- declared on the top-level parser, so they are accepted
@@ -219,7 +219,9 @@ windows but still counts against the run and repository caps until it is
 released or, after seven days, charged at its forecast. Every pause,
 resume and release is appended to `usage-events.jsonl` in the runtime
 root, so a wait leaves a record without a run. `usage` writes only the
-shared record and that file.
+shared record and that file, apart from the replay sweep it runs first: a
+finished job whose charge a crash left owing is charged then, and its job
+record is marked accounted.
 
 ## Worker routing
 

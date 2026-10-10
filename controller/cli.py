@@ -1647,7 +1647,9 @@ def cmd_usage(args: argparse.Namespace) -> int:
     view, and the gate manual workers (lane scripts, a Codex session) use to
     share the Controller's forecast-and-reservation accounting. Dispatched
     before pinning like ``follow``: it writes only the shared usage record
-    and ``usage-events.jsonl`` in the runtime root."""
+    and ``usage-events.jsonl`` in the runtime root, apart from the replay
+    sweep (``job._settle_usage``) its view and gate run first, which marks a
+    terminal job record a crash left unaccounted ``accounting: "done"``."""
     runtime_root, row = _follow_runtime_root_row(args)
     runtime.ensure_runtime_root(runtime_root, ladder_row=row)
     values = _effective(args).values
@@ -2169,8 +2171,10 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
         _apply_settings(args, write=False)
         return cmd_telemetry(args)
     if command == "usage":
-        # Read-only like `follow` apart from the shared usage record: the
-        # settings file is only validated and the source is not re-execed.
+        # Read-only like `follow` apart from the shared usage record (and
+        # the replay sweep's `accounting` mark on a job record a crash left
+        # unaccounted): the settings file is only validated and the source is
+        # not re-execed.
         _apply_settings(args, write=False)
         return cmd_usage(args)
     ident = identity.pin()

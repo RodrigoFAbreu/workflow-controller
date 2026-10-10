@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implementing (all five checkpoints complete).** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6): the
+**Self-reviewed; awaiting the local implementation review.** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6): the
 Controller reads the Claude and Codex usage windows itself, forecasts a job, admits it atomically against
 the readings and the other lanes' reservations, and pauses a run before a limit. Plan:
 `docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md` (revision 11, approved by policy at `03ddec0`; base
@@ -41,8 +41,20 @@ wait, bounded by `usage.max_wait_seconds`), `--reserve`, `--renew`, `--release` 
 gained `reserve=False` for a check. Exit status 1 (`usage --renew`/`--release` of an unknown token) is on the exit-code
 page and in ADR 0001.
 
+CP5 documented the budget: the sixteen `usage` rows and the usage files in `docs/guide/runtime.md`, the `usage` command in `docs/guide/commands.md`, `docs/run.md` and `docs/common-problems.md` (exit 17, timed pause versus cap), the exit-17 row in `docs/exit-codes.md`, `docs/adr/0011-usage-budget.md` and its README row, and `docs/ROADMAP.md` (C8 complete; C8b and C8c added with sections 11.6.1 and 11.6.2; C7 and C5 amended; "Next" names C5).
+
+Self-review (`SELF_REVIEWING_IMPLEMENTATION`, 2026-10-10): the full diff from `f516e76` was reviewed against D1-D13.
+No Blocking or Important findings. One Optional finding was fixed: `docs/guide/commands.md` and the `cmd_usage`
+docstring said `usage` writes only the shared record and `usage-events.jsonl`, but the replay sweep it runs first
+(plan D6, "on a `usage` read") also marks a terminal job record a crash left unaccounted `accounting: "done"`. The
+text now says so. Not changed, by design: a Ctrl-C in the pure record-building lines between the gate and
+`bind_job` leaves an unbound reservation. That window is no wider than the one inside `usage.admit` itself, and
+the lapse and seven-day abandonment backstop covers both.
+
+Full verification: `python3 tools/check_docs.py` exit 0; `python3 tools/run_tests.py` (under a reaping subreaper,
+without `FORCE_COLOR`): 3300 tests in 8 shards, coverage exact, 2 failures. Both are the Git 2.56 trailer-rule
+tests (follow-up 12), which also fail on the base.
+
 ## Next action
 
-`/milestone-implement workflow-controller-usage-budget` runs the next checkpoint, one per invocation.
-
-CP5 documented the budget: the sixteen `usage` rows and the usage files in `docs/guide/runtime.md`, the `usage` command in `docs/guide/commands.md`, `docs/run.md` and `docs/common-problems.md` (exit 17, timed pause versus cap), the exit-17 row in `docs/exit-codes.md`, `docs/adr/0011-usage-budget.md` and its README row, and `docs/ROADMAP.md` (C8 complete; C8b and C8c added with sections 11.6.1 and 11.6.2; C7 and C5 amended; "Next" names C5).
+The implementation review bundle (revision 1) is generated; the local implementation review comes next.

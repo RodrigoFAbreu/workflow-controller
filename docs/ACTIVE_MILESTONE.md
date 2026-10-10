@@ -55,6 +55,274 @@ Full verification: `python3 tools/check_docs.py` exit 0; `python3 tools/run_test
 without `FORCE_COLOR`): 3300 tests in 8 shards, coverage exact, 2 failures. Both are the Git 2.56 trailer-rule
 tests (follow-up 12), which also fail on the base.
 
+## Functional review checklist
+
+Milestone `workflow-controller-usage-budget` (C8), implementation revision 13. Every flow runs in scratch
+clones and scratch directories only; nothing touches `~/.config/workflow-controller`,
+`~/.local/state/workflow-controller`, `~/.codex`, the real repository's runtime root, or a real `claude`, `codex`
+or `gh`. Each flow below was run once by the preparer against this branch; the expected output is what it printed
+(times, epochs and paths differ). `F0` is the setup every other flow depends on.
+
+### Setup (F0)
+
+```bash
+SRC=/home/rodrigo/Workspace/workflow-controller        # read-only source; never run step/run in it
+W=$(mktemp -d)                                         # everything lives under $W
+git clone -q --branch milestone/workflow-controller-usage-budget "$SRC" "$W/clone"
+git -C "$W/clone" checkout -q "$(git -C "$SRC" rev-parse HEAD)"
+export W CLONE=$W/clone
+# a scratch bare origin for the clone, so nothing can push to the real remote
+git init -q --bare "$W/origin.git" && git -C "$CLONE" remote set-url origin "$W/origin.git"
+# a fake gh first on PATH (the flows never reach the forge; this is a guard)
+mkdir -p "$W/bin" && printf '#!/bin/sh\nexec python3 %s/tests/fake_gh.py "$@"\n' "$CLONE" > "$W/bin/gh" && chmod +x "$W/bin/gh"
+export PATH=$W/bin:$PATH
+```
+
+Three helper files (copy them verbatim). `env.sh` isolates the environment and defines `ctl`; `harness.py` builds a
+managed scratch target (a `PLANNING` work item and a stub `workflow-manager`, using the repository's own test
+fixtures) and prints its path; `seed.py` writes Claude readings into a runtime root and a Codex rollout into
+`$CODEX_HOME`, using the real clock.
+
+```bash
+cat > "$W/env.sh" <<'EOS'
+export XDG_CONFIG_HOME=$W/cfg XDG_STATE_HOME=$W/state XDG_CACHE_HOME=$W/cache CODEX_HOME=$W/codex
+export PYTHONPATH=$CLONE RT=${RT:-$W/rt} T=$W/t/target ST=$W/cfg/workflow-controller/settings.json
+mkdir -p "$(dirname "$ST")"
+ctl() { python3 -m controller --runtime-dir "$RT" --workflow-manager "$W/t/workflow-manager" \
+        --claude-binary "$CLONE/tests/fake_claude.py" "$@"; }
+EOS
+cat > "$W/harness.py" <<'EOS'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from tests import fixtures, test_job
+dest = Path(sys.argv[2]); dest.mkdir(parents=True, exist_ok=True)
+repo = test_job._build_target(dest, phase="PLANNING", governing_workflow_version="2.1")
+fixtures.write_stub_workflow_manager(dest / "workflow-manager")
+print(repo.root)
+EOS
+cat > "$W/seed.py" <<'EOS'
+"""claude RT FIVE_PCT FIVE_RESET_IN_S [WEEKLY_PCT WEEKLY_RESET_IN_S] | codex HOME PRIMARY SECONDARY [F_IN W_IN]"""
+import sys, time, json
+from pathlib import Path
+from controller import usage
+kind, a = sys.argv[1], sys.argv[2:]
+now = time.time()
+if kind == "claude":
+    rt, five, five_in, *rest = a
+    rs = [usage.make_reading("claude", usage.FIVE_HOUR, float(five), now + float(five_in), now, "scratch")]
+    if rest:
+        rs.append(usage.make_reading("claude", usage.WEEKLY, float(rest[0]), now + float(rest[1]), now, "scratch"))
+    usage.record_reading(rt, rs)
+else:
+    home, p, s, *rest = a
+    f_in, w_in = (float(rest[0]) if rest else 3600), (float(rest[1]) if len(rest) > 1 else 7 * 86400)
+    path = Path(home) / "sessions/2026/10/10/rollout-a.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "type": "event_msg",
+        "payload": {"type": "token_count", "rate_limits": {
+            "primary": {"used_percent": float(p), "window_minutes": 300, "resets_at": int(now + f_in)},
+            "secondary": {"used_percent": float(s), "window_minutes": 10080, "resets_at": int(now + w_in)}}}}) + "\n")
+EOS
+. "$W/env.sh"; (cd "$CLONE" && python3 "$W/harness.py" "$CLONE" "$W/t")   # prints $W/t/target
+```
+
+Every flow starts a shell with `export W CLONE; . "$W/env.sh"`; where a flow needs its own runtime root it sets
+`RT=$W/rtN` first (re-source `env.sh` or just `export RT=...`; `ctl` reads `$RT`). Remove `$ST` (the scratch
+settings file) at the start of a flow unless it says otherwise. Use bash; `S="python3 $W/seed.py"` below. A worker launched
+by `step`/`run` is the repository's `tests/fake_claude.py`, which changes no workflow state, so a step that
+**starts** the worker ends with exit **30** (worker failed its postcondition); that exit, with a job record and
+`usage.accounting: "done"`, is the "the gate let it through" result. Run `step`/`run` only against `$T`, always
+with `</dev/null`.
+
+### Flows
+
+**F1 -- the `usage` view, text and JSON, from seeded readings.**
+`RT=$W/rt1; $S claude $RT 40 3600 60 432000; $S codex $CODEX_HOME 30 20; ctl usage; echo $?`
+Expect exit 0 and two blocks. `claude:` five-hour 40% (threshold 85%), weekly 60% (threshold 95%), each with a
+local-time reset plus `epoch N`, `read N s ago from scratch`; `reservations: 0 live, 0 lapsed`; `forecast: the
+provider default (no jobs recorded)`; `run cap: not evaluated (no --run-id)`; `repository cap: not evaluated (no
+--repo)`. `codex:` five-hour 30%, weekly 20%, read from `$CODEX_HOME/sessions/2026/10/10/rollout-a.jsonl`.
+Then `ctl --json usage | python3 -m json.tool` (also `ctl usage --json`): one object with `at` and
+`providers.claude|codex`, each with `windows.five_hour|weekly` (`percent`, `resets_at`, `observed_at`,
+`age_seconds`, `source`), `thresholds` (85/95), `forecast` (8.0/1.0), `reservations: []`, `run: null`,
+`repository: null`. `ctl usage --provider codex` shows only the Codex block. With no Codex rollout
+(`CODEX_HOME=$W/nocodex ctl usage --provider codex`) both windows say `no reading` and the exit is still 0.
+
+**F2 -- settings generation 4: the sixteen rows and the flags.**
+`ctl settings show | grep '^usage'` prints sixteen `usage.*` rows, all `(default)`: `enabled=true`,
+`pause_at_percent=85`, `weekly_pause_at_percent=95`, `codex_pause_at_percent=85`,
+`codex_weekly_pause_at_percent=95`, `resume_grace_seconds=180`, `max_wait_seconds=21600`,
+`reservation_seconds=7200`, the four `*default_job*` rows (8, 1, 8, 1) and the four `*cap_percent` rows `null`.
+`ctl settings path` prints `$ST`. `ctl step --help` and `ctl run --help` list `--usage-cap PERCENT`; `ctl usage
+--help` lists `--usage-cap` and `--usage-codex-cap`. After a `step` has filled the file (F10),
+`python3 -c 'import json,os;d=json.load(open(os.environ["ST"]));print(d["_table_generation"],"usage" in d)'`
+prints `4 True`. A bad flag value is a usage error, exit 2 (`ctl usage --check --usage-cap 0` prints `argument --usage-cap: must be
+from 1 to 100, not 0`); a bad value in the settings file (`echo '{"usage":{"pause_at_percent":0}}' > $ST; ctl
+settings show`) is a settings-file error, exit 20 (remove $ST afterwards).
+
+**F3 -- strictest wins across account, repository and run, Claude and Codex separately.**
+`RT=$W/rt3`, seed as F1 (`claude 40 3600 60 432000`, `codex 30 20`). Each case below `echo ... > $ST` first;
+`rm -f $ST` for the first. Expect exit 0 and `go` for the unconstrained `ctl usage --check` (Claude 40% + forecast
+8%). Then, for each, the exact final stderr line is a `stopped for the usage budget, nothing was started: ...`
+sentence and the exit is **17**:
+1. `{"usage":{"pause_at_percent":45}}` then `ctl usage --check`: `claude five-hour usage 40% + reserved 0% +
+   forecast 8% reaches the 45% threshold -- a timed pause: run again after the resume time <local> (epoch N)`.
+2. `{"usage":{"weekly_pause_at_percent":60}}`: `claude weekly usage 60% + reserved 0% + forecast 1% reaches the
+   60% threshold ...` with the weekly reset time.
+3. `{"usage":{"codex_pause_at_percent":35}}`: `ctl usage --check --provider codex` holds (`codex five-hour usage
+   30% ... reaches the 35% threshold`, 17) while `ctl usage --check --provider claude` is `go` (0): the providers
+   are independent.
+4. `{"usage":{"run_cap_percent":5}}`: `ctl usage --check --run-id R1` holds (`the run's claude spend 0% +
+   outstanding 0% + forecast 8% exceeds the run cap 5% -- no reset will lift this; raise usage.run_cap_percent or
+   start a new run`, 17; stderr first says `run cap evaluated for run R1`).
+5. `{"usage":{"repository_cap_percent":6}}`: `ctl usage --check --repo $T` holds (`the repository's claude spend
+   ... exceeds the repository cap 6% -- a new run does not clear this repository's spending ... run again after
+   the window resets at <local> (epoch N) (the spending then falls), or raise usage.repository_cap_percent`).
+6. Flags beat the file for the run cap, in both directions: file `{"usage":{"run_cap_percent":50}}` and
+   `ctl usage --check --run-id R1 --usage-cap 5` holds (cap 5%); file `{"usage":{"run_cap_percent":5}}` and
+   `--usage-cap 50` is `go` (0). Same for Codex with `--usage-codex-cap` (`ctl usage --check --provider codex
+   --run-id R1 --usage-codex-cap 5` holds, `... 50` is go) and the file rows `codex_run_cap_percent`,
+   `codex_repository_cap_percent`, which do not affect the Claude check.
+7. With several limits set at once (pause 45, run cap 7, repository cap 6) and both `--repo $T --run-id R1`
+   named, a cap dominates a timed hold: the printed reason is a cap (never "a timed pause").
+8. A cap only counts what you name: with `{"usage":{"run_cap_percent":9}}` and no `--run-id`, `ctl usage --check`
+   prints `run cap not evaluated (no --run-id)` and `go` (0).
+Observed while preparing (flag for the tester): with a cap *below the 8% default forecast* (e.g. a run cap of 5 or
+7) and the cap **not** named, the hold still fires although stderr says `run cap not evaluated`, because the
+evaluation compares forecast alone to the cap. Caps of 9 or more behave as documented. Record what you see; it
+is not a flow failure unless the plan says otherwise (plan D5, `controller.usage.evaluate`).
+
+**F4 -- `usage --check` and `--wait`.**
+`RT=$W/rt4; rm -f $ST; $S claude $RT 90 6` (90% used, resets in 6 s).
+- `ctl usage --check; echo $?` prints the `claude five-hour usage 90% + reserved 0% + forecast 8% reaches the 85%
+  threshold -- a timed pause ...` line and exits **17**; `ls $RT` shows `usage.json`, `usage.lock` and no `jobs/`.
+  `ctl usage --check --reserve` held: no token on stdout.
+- `time ctl usage --wait; echo $?`: sleeps about 6 s plus `usage.resume_grace_seconds` (default 180 s -- so first
+  `echo '{"usage":{"resume_grace_seconds":1}}' > $ST`), then prints `go` and exits **0**. `tail -2
+  $RT/usage-events.jsonl` shows `usage_paused` then `usage_resumed`.
+- `RT=$W/rt4b; echo '{"usage":{"max_wait_seconds":3,"resume_grace_seconds":1}}' > $ST; $S claude $RT 90 300;
+  ctl usage --wait; echo $?`: returns at once, exit **17**, message ends `(waiting for it would exceed
+  usage.max_wait_seconds, 3 s)`.
+- `--wait` gives up on a cap, it never sleeps: `echo '{"usage":{"run_cap_percent":5}}' > $ST; ctl usage --wait
+  --run-id R1` exits 17 immediately.
+- With `{"usage":{"enabled":false}}` in `$ST`, `ctl step $T </dev/null` does not read or sweep the record (a held
+  state does not hold it); `ctl usage` still shows the readings.
+
+**F5 -- a step held by the budget exits 17 before any job record exists; a run waits, then continues.**
+`RT=$W/rt5; echo '{"usage":{"resume_grace_seconds":1}}' > $ST; $S claude $RT 90 5`.
+- `ctl step $T </dev/null; echo $?`: the same `stopped for the usage budget, nothing was started: ...` line,
+  exit **17**; `ls $RT/jobs` fails (no such directory) -- no job record, nothing half finished.
+- `RT=$W/rt5b; $S claude $RT 90 6; time ctl run --max-steps 1 $T </dev/null; echo $?`: no output while it
+  waits (about 7 s), then the fake worker runs and the exit is **30**. The run's `events.jsonl`
+  (`cat $RT/runs/*/events.jsonl`, key `event`) reads, in order: `run_started, step_started, usage_paused,
+  step_started, usage_resumed, job_started, job_ended, run_ended`. The pause does not count as a step
+  (`--max-steps 1` still allowed the one job), and `ls $RT/jobs` shows one record whose `usage.accounting` is
+  `done` and `usage.charged` is `8.0`.
+- A cap stops `run` as well, with no wait: `echo '{"usage":{"run_cap_percent":5}}' > $ST; RT=$W/rt5c; $S claude
+  $RT 10 3600; ctl run --max-steps 1 $T </dev/null; echo $?` prints the run-cap line, exits **17**, no `jobs/`.
+- `ctl step --usage-cap 5 $T </dev/null` behaves like the file setting (the run-cap line, exit 17, no `jobs/`).
+
+**F6 -- reservation and release, idempotent.**
+`RT=$W/rt6; rm -f $ST; $S claude $RT 40 3600 60 432000`.
+- `TOK=$(ctl usage --check --reserve --role review --model opus --repo $T --run-id R2 2>/dev/null); echo $TOK`
+  prints a 32-hex token as the only stdout line, exit 0. `ctl usage --provider claude` now shows `reservations: 1
+  live` and a line `<token8> live review/opus 8% five-hour, 1% weekly, repository <T>, run R2`.
+- `ctl usage --renew $TOK; echo $?` prints a renewed message, exit 0.
+- Two parallel reserves never both take the last headroom: with `{"usage":{"pause_at_percent":55}}` (40% + 8% fits
+  once, not twice) two `ctl usage --check --reserve` in a row give a token then exit 17.
+- Release without charge: `ctl usage --release $TOK --outcome not_started; echo $?` prints `released; nothing
+  charged`, exit 0; the reservation is gone from the view and nothing is spent. A second release of that token
+  exits **1** (`error: the token ... is unknown; nothing was accounted`), as does `--release deadbeef` and a
+  `--renew` of a released token. (Observed: a `not_started` release forgets the token, so the repeat is "unknown"
+  rather than "already accounted"; the guide says release is idempotent -- record this for the reviewer.)
+- Release with a measured stream: reserve a new token, then build a stream whose rate-limit event matches the
+  seeded window and release with it:
+  ```bash
+  R5=$(python3 -c "import json,os;print(json.load(open(os.environ['RT']+'/usage.json'))['readings']['claude']['five_hour']['resets_at'])")
+  RW=$(python3 -c "import json,os;print(json.load(open(os.environ['RT']+'/usage.json'))['readings']['claude']['weekly']['resets_at'])")
+  TOK=$(ctl usage --check --reserve --role review --model opus --repo $T --run-id R3 2>/dev/null); sleep 1
+  python3 -c "import sys;sys.path.insert(0,'$CLONE');from tests import fake_claude as f;open('$W/s.jsonl','w').write(f.stream_text([f.rate_limit(52.0,$R5,61.0,$RW),*f.default_events()]))"
+  ctl usage --release $TOK --stream $W/s.jsonl; echo $?
+  ```
+  Expect `released; measured delta, charged 12.0%`, exit 0. Repeating the same release prints `already accounted;
+  nothing changed`, exit **0**, and charges nothing again. `ctl usage --provider claude --repo $T --run-id R3`
+  now shows five-hour 52%, weekly 61%, `review/opus: 12.0% five-hour, 1.0% weekly from 1 measured jobs`, `run cap
+  none: spent 12%, outstanding 0%`, `repository cap none: spent 12%, outstanding 0%`. If the stream's window reset
+  differs from the reserved window, the result is `unknown delta, charged 8.0%` (the forecast), not an error.
+  `$RT/usage-events.jsonl` has a `usage_released` line (`reason` `measured` or `unknown`) and a
+  `usage_complete_already_settled` line for the repeat.
+- A Codex reservation refuses `--stream`: `T2=$(ctl usage --check --reserve --provider codex 2>/dev/null); ctl
+  usage --release $T2 --stream $W/s.jsonl; echo $?` exits **2**.
+
+**F7 -- a damaged or unreadable usage record.**
+`RT=$W/rt7; rm -f $ST; $S claude $RT 10 3600; printf '{"version": 2, "garbage"' > $RT/usage.json; sha256sum
+$RT/usage.json` (note the hash).
+- `ctl step $T </dev/null; echo $?`, `ctl run --max-steps 1 $T </dev/null`, `ctl usage`, `ctl --json usage` and
+  `ctl usage --check` each print `error: the usage record at <RT>/usage.json cannot be read: ...; repair or
+  remove it, or set usage.enabled=false to run without the budget` and exit **20** (the first two also print the
+  one-line `workflow-controller: the usage record cannot be read, so usage accounting is skipped (...)` warning
+  first). No job record is created by `step` here (`ls $RT/jobs` fails), and `sha256sum` shows the file
+  **unchanged** after all of them.
+- The job outcome survives damage that happens while a job runs: `RT=$W/rt7b; $S claude $RT 10 3600;
+  FAKE_CLAUDE_WRITE_PATH=$RT/usage.json FAKE_CLAUDE_WRITE_TEXT='{"version": 2, "garbage"' ctl step $T
+  </dev/null; echo $?`. The fake worker overwrites the record while the job runs. Expect the warning line on stderr,
+  exit **30** (the worker outcome, not a usage error), one job record with `status` `FAILED` and
+  `usage.accounting` `pending` (left unaccounted), the bytes of `usage.json` exactly what the worker wrote, and
+  `$RT/usage-events.jsonl` containing a `usage_record_unreadable` line. `ctl usage` then exits 20 as above.
+- `ctl resume $T </dev/null` on that root (`ctl resume`'s exit is 0, it prints the existing job as `FAILED`), and
+  a further `ctl run --max-steps 1 $T`, keep the job's outcome: the warning is printed, the record's status does
+  not change, `usage.json` is still byte-identical (`sha256sum`).
+- `usage.enabled:false` is the documented way through: `echo '{"usage":{"enabled":false}}' > $ST; ctl step $T
+  </dev/null; echo $?` runs the job (exit 30) without reading the record, which stays untouched.
+- A record written by a newer release is also never replaced: `printf '{"version": 3}' > $RT/usage.json`; `ctl
+  usage` exits 20 with `... is not a version 2 object; repair or remove it ...` and the file is unchanged.
+
+**F8 -- an older settings file (table generation 3) keeps working.**
+`RT=$W/rt8; rm -f $ST; $S claude $RT 10 3600; ctl step $T </dev/null` (exit 30) fills `$ST` at generation 4. Then
+rewrite it as a 1.7.x file:
+```bash
+python3 - <<'EOS'
+import json, os
+st = os.environ["ST"]; d = json.load(open(st))
+d["_table_generation"] = 3; d.pop("usage", None)
+dw = d["_defaults_written"]
+d["_defaults_written"] = {k: v for k, v in dw.items() if not k.startswith("usage")} if isinstance(dw, dict) \
+    else [k for k in dw if not k.startswith("usage")]
+json.dump(d, open(st, "w"), indent=2)
+EOS
+```
+`ctl settings show | grep -c '^usage.*(default)'` prints **16** (the rows resolve to defaults though the file has no
+`usage` section); `ctl usage --check` prints `go`, exit 0; `ctl step $T </dev/null` exits 30 and the file is
+afterwards at `_table_generation` 4 with a `usage` section holding the defaults (a value you set yourself, e.g.
+`routing.*` or `run.max_steps`, is not moved). A user-set `usage.pause_at_percent` survives the fill.
+
+**F9 -- documentation matches behaviour (read-only).**
+In the clone: `python3 tools/check_docs.py` exits 0. Read `docs/guide/commands.md#usage`, `docs/run.md#pausing-for-usage-limits`,
+`docs/guide/runtime.md` (usage rows, the shared record, "A `usage.json` this release cannot read"),
+`docs/exit-codes.md` (rows 1 and 17), `docs/common-problems.md` (exit 17 and "The usage record cannot be read")
+and `docs/adr/0011-usage-budget.md`; each statement you exercised in F1-F8 should be true. Note any that is not.
+
+### Known limitations and out of scope
+
+- Recognising a usage-limit result *inside a worker stream* (a `rejected`/429 result mid-job) and waiting for it
+  automatically is **C8b** and is not built: such a job fails (exit 30) as before; `common-problems.md` says so.
+- The accumulator totals at the absolute numeric limit are an accepted optional follow-up (not a defect here).
+- The budget forecasts; it cannot stop a job that exceeds its forecast.
+- Codex is gated only for workers you start yourself (`usage --provider codex ...`); the Controller does not launch
+  Codex workers in this milestone.
+- The `--stream` measurement reads Claude streams only (a Codex reservation refuses `--stream`).
+- A reservation or run record in a deleted or replaced `usage.json` cannot be settled afterwards (the spend is
+  forgotten by design, see `runtime.md`).
+- Two Git 2.56 trailer-rule tests fail in the full suite on this branch and on its base (follow-up 12, unrelated).
+- Automated evidence: `python3 tools/check_docs.py` exit 0; `python3 tools/run_tests.py`: 3300 tests, coverage
+  exact, only those two failures (last full run at this content, by the local implementation review).
+
+### Where to put findings
+
+Write findings to `.ai-review/workflow-controller-usage-budget/feedback/FUNCTIONAL_REVIEW.md` (the resolved
+feedback path), one entry per flow id above.
+
 ## Next action
 
-The implementation review bundle (revision 1) is generated; the local implementation review comes next.
+The local implementation review is complete; the functional-review checklist above is ready for the independent tester. Findings go to `.ai-review/workflow-controller-usage-budget/feedback/FUNCTIONAL_REVIEW.md`; `/accept-milestone` follows a clean test and `/apply-functional-review` routes findings.

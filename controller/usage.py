@@ -165,6 +165,12 @@ def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and abs(value) <= _NUMBER_LIMIT
 
 
+def _is_percent(value: object) -> bool:
+    """A reading's figure: a real number, never below zero, so no reading a
+    writer takes can make a ledger or spend figure the reader refuses."""
+    return _is_number(value) and value >= 0
+
+
 def same_window(a: float, b: float) -> bool:
     """Whether two ``resets_at`` name one window (within the jitter)."""
     return abs(a - b) <= WINDOW_JITTER_SECONDS
@@ -238,11 +244,11 @@ def _claude_event_readings(event: dict, observed_at: float, source: str) -> dict
     if isinstance(windows, dict):
         for key, window in _CLAUDE_WINDOW_KEYS.items():
             entry = windows.get(key)
-            if isinstance(entry, dict) and _is_number(entry.get("utilization")) and _is_number(entry.get("resetsAt")):
+            if isinstance(entry, dict) and _is_percent(entry.get("utilization")) and _is_number(entry.get("resetsAt")):
                 out[window] = make_reading(PROVIDER_CLAUDE, window, round(100 * entry["utilization"], 6),
                                            entry["resetsAt"], observed_at, source)
     named = _CLAUDE_WINDOW_KEYS.get(info.get("rateLimitType"))
-    if named and named not in out and _is_number(info.get("utilization")) and _is_number(info.get("resetsAt")):
+    if named and named not in out and _is_percent(info.get("utilization")) and _is_number(info.get("resetsAt")):
         out[named] = make_reading(PROVIDER_CLAUDE, named, round(100 * info["utilization"], 6),
                                   info["resetsAt"], observed_at, source)
     if info.get("status") == "rejected" and named:
@@ -348,7 +354,7 @@ def read_codex_home(codex_home: str | os.PathLike, *, max_files: int = CODEX_FIL
                 if not isinstance(entry, dict):
                     continue
                 window = _CODEX_WINDOW_MINUTES.get(entry.get("window_minutes"))
-                if window is None or not _is_number(entry.get("used_percent")) or not _is_number(entry.get("resets_at")):
+                if window is None or not _is_percent(entry.get("used_percent")) or not _is_number(entry.get("resets_at")):
                     continue
                 candidates.append(make_reading(PROVIDER_CODEX, window, entry["used_percent"], entry["resets_at"],
                                                stamp, str(path)))
@@ -426,7 +432,7 @@ def _validate_record(record: dict) -> None:
     for provider, windows in record["readings"].items():
         _shape(isinstance(windows, dict), f"readings[{provider!r}]")
         for window, reading in windows.items():
-            _shape(window in WINDOWS and isinstance(reading, dict) and _is_number(reading.get("percent"))
+            _shape(window in WINDOWS and isinstance(reading, dict) and _is_percent(reading.get("percent"))
                    and _is_number(reading.get("resets_at")) and _number_or_none(reading.get("observed_at")),
                    f"readings[{provider!r}][{window!r}]")
             # A reading's identity is the keys it is stored under.
@@ -527,6 +533,8 @@ def current_readings(record: dict, provider: str) -> dict:
 
 def _merge_into(record: dict, readings: Iterable[dict]) -> None:
     for reading in readings:
+        if not _is_percent(reading["percent"]):
+            continue  # never stored: the reader refuses a record holding one
         per_provider = record["readings"].setdefault(reading["provider"], {})
         per_provider[reading["window"]] = merge_reading(per_provider.get(reading["window"]), reading)
 
@@ -1037,7 +1045,7 @@ def _end_readings_from_block(block: Mapping | None) -> dict:
     observed = block.get("end_observed_at")
     for window, figure in ((FIVE_HOUR, "five_hour_end"), (WEEKLY, "weekly_end")):
         value = block.get(figure)
-        if not _is_number(value):
+        if not _is_percent(value):
             continue
         if window == WEEKLY and "weekly_end_resets_at" not in block:
             # A block written before the weekly identity was recorded cannot
@@ -1062,7 +1070,7 @@ def _first_readings_from_block(block: Mapping | None) -> dict:
     out: dict = {}
     for window, prefix in ((FIVE_HOUR, "five_hour"), (WEEKLY, "weekly")):
         value, resets = block.get(f"{prefix}_first"), block.get(f"{prefix}_first_resets_at")
-        if _is_number(value) and _is_number(resets):
+        if _is_percent(value) and _is_number(resets):
             out[window] = {"provider": None, "window": window, "percent": float(value), "resets_at": resets,
                            "observed_at": None, "source": "job-record"}
     return out
@@ -1096,7 +1104,7 @@ def _window_delta(start: float | None, start_resets: float | None, end: dict | N
             return "measured", max(0.0, end["percent"] - start), None
         return "unknown", None, None
     if later:
-        return "after_reset", None, end["percent"]
+        return "after_reset", None, max(0.0, end["percent"])
     return "unknown", None, None
 
 

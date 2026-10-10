@@ -86,6 +86,12 @@ class ClaudeReaderTest(unittest.TestCase):
             self.assertEqual(r["provider"], "claude")
             self.assertTrue(0 <= r["percent"] <= 100)
 
+    def test_a_negative_utilization_is_not_a_reading(self) -> None:
+        self.assertEqual(usage.read_claude_stream(stream(rate_event(five=-0.005, weekly=-1))), [])
+        named = rate_event(kind="five_hour")
+        named["rate_limit_info"].update({"utilization": -0.5, "resetsAt": 1000})
+        self.assertEqual(usage.read_claude_stream(stream(named)), [])
+
     def test_rejected_golden_reads_100_for_the_named_window(self) -> None:
         got = {r["window"]: r for r in usage.read_claude_stream(GOLDEN / "claude_stream_usage_limit_rejected.jsonl")}
         self.assertEqual(got[FIVE_HOUR]["percent"], 100.0)
@@ -159,6 +165,10 @@ class CodexReaderTest(unittest.TestCase):
         return {"timestamp": stamp, "type": "event_msg", "payload": {"type": "token_count", "rate_limits": {
             "primary": {"used_percent": primary, "window_minutes": 300, "resets_at": p_resets},
             "secondary": {"used_percent": secondary, "window_minutes": 10080, "resets_at": s_resets}}}}
+
+    def test_a_negative_used_percent_is_not_a_reading(self) -> None:
+        self.rollout("neg", [self.limits("2026-10-09T21:50:53.039Z", -1.0, -0.5)], 100)
+        self.assertEqual(usage.read_codex_home(self.home), [])
 
     def test_primary_and_secondary_by_window_minutes(self) -> None:
         self.rollout("a", [self.limits("2026-10-09T21:50:53.039Z", 36.0, 17.0)], 100)
@@ -644,6 +654,27 @@ class CompleteTest(TempRootCase):
         self.assertEqual(usage.repository_spent(self.record(), "claude", "/repo", after), 3.0)
         self.assertEqual(usage.run_spent(self.record(), "claude", "run-1"), 8.0)
 
+    def test_a_negative_end_figure_never_makes_a_record_the_reader_refuses(self) -> None:
+        after = FIVE_RESETS + 60
+        later = {"provider": "claude", "window": FIVE_HOUR, "percent": -0.5, "resets_at": FIVE_RESETS + 5 * H,
+                 "observed_at": after, "source": "test"}
+        blocks = {"stream": None, "block": {"five_hour_end": -0.5, "end_window_resets_at": FIVE_RESETS + 5 * H,
+                                            "end_observed_at": after, "weekly_end": -2.0,
+                                            "weekly_end_resets_at": WEEK_RESETS}}
+        for variant, block in blocks.items():
+            with self.subTest(variant=variant):
+                with tempfile.TemporaryDirectory() as tmp:
+                    self.root = Path(tmp)
+                    seed(self.root, five=10, weekly=20)
+                    token = admit(self.root).token
+                    readings = {FIVE_HOUR: later} if block is None else None
+                    entry = usage.complete(self.root, token, readings, usage.OUTCOME_OK, now=after,
+                                           usage_block=block).entry
+                    for key in ("five_hour_after_reset", "weekly_after_reset"):
+                        self.assertTrue(entry[key] is None or entry[key] >= 0)
+                    self.assertGreaterEqual(entry["charged"], 0)
+                    self.assertGreaterEqual(usage.repository_spent(self.record(), "claude", "/repo", after), 0)
+
     def test_a_manual_worker_spanning_a_reset_is_rolled_over_then_after_reset(self) -> None:
         seed(self.root, five=10)
         token = admit(self.root).token
@@ -918,6 +949,14 @@ class MalformedRecordTest(TempRootCase):
                 with self.assertRaises(UsageRecordError):
                     usage.complete(self.root, token, {}, usage.OUTCOME_OK, now=NOW)
                 self.assertEqual(path.read_text(), text)
+
+    def test_a_stored_reading_with_a_negative_percent_is_unreadable(self) -> None:
+        seed(self.root, five=10)
+        text = json.dumps(self._stored_reading(lambda r: r.update({"percent": -0.5})))
+        path = self._write(text)
+        with self.assertRaises(UsageRecordError):
+            usage.load_record(self.root)
+        self.assertEqual(path.read_text(), text)
 
     def _stored_reading(self, change) -> dict:
         """The record after ``change`` mutated its stored five-hour reading."""

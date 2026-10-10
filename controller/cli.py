@@ -205,6 +205,19 @@ def _positive_int(text: str) -> int:
     return value
 
 
+def _usage_percent(text: str) -> int:
+    """``--usage-cap``'s ``type=``: an integer from 1 to 100, the bounds of
+    the ``usage.*_cap_percent`` rows; anything else is a usage error
+    (exit 2)."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid percentage: {text!r}") from None
+    if not 1 <= value <= 100:
+        raise argparse.ArgumentTypeError(f"must be from 1 to 100, not {value}")
+    return value
+
+
 def _role_assignment(text: str) -> tuple[str, str]:
     """``--role-model``/``--role-effort``'s ``type=``: ``ROLE=VALUE`` with
     ``ROLE`` one of ``routing.ROLES``. A missing ``=``, an unknown role or
@@ -312,6 +325,9 @@ def build_parser() -> argparse.ArgumentParser:
     step_p.add_argument("repo")
     step_p.add_argument("--follow", action="store_true", default=False,
                         help="render the run's events and worker output on stderr while it runs")
+    step_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
+                        help="cap this run's Claude usage at PERCENT of the account window "
+                             "(default: the usage.run_cap_percent setting, none)")
 
     run_p = subparsers.add_parser("run")
     run_p.add_argument("repo")
@@ -319,6 +335,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="render the run's events and worker output on stderr while it runs")
     run_p.add_argument("--max-steps", type=_positive_int, default=None,
                        help="stop after this many steps (default: the run.max_steps setting, 20)")
+    run_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
+                       help="cap this run's Claude usage at PERCENT of the account window "
+                            "(default: the usage.run_cap_percent setting, none)")
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
@@ -1470,8 +1489,9 @@ def _capture_pre_existing_state(runtime_root: Path) -> dict:
 
 def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.RoutingConfig | None]:
     """The settings the options given on this command line override (I1):
-    ``--timeout``, ``run --max-steps``, ``resume --drain-timeout`` and
-    ``--routing-config``, the latter parsed strictly as today. Read with
+    ``--timeout``, ``run --max-steps``, ``resume --drain-timeout``,
+    ``--usage-cap`` (``usage --usage-codex-cap`` once the ``usage``
+    subcommand exists) and ``--routing-config``, the latter parsed strictly as today. Read with
     ``getattr`` defaults: each is only on its own subcommand."""
     config_path = getattr(args, "routing_config", None)
     cli_routing = None if config_path is None else routing.load_routing_config(config_path)
@@ -1479,6 +1499,8 @@ def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.Rou
         "worker.timeout_seconds": getattr(args, "timeout", None),
         "run.max_steps": getattr(args, "max_steps", None),
         "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
+        "usage.run_cap_percent": getattr(args, "usage_cap", None),
+        "usage.codex_run_cap_percent": getattr(args, "usage_codex_cap", None),
     }, cli_routing
 
 

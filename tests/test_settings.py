@@ -58,8 +58,29 @@ V2_ROWS = (
     ("merge.poll_seconds", "int", 30, 10, 600, 2),
 )
 
+#: The rows generation 4 added (workflow-controller-usage-budget D4), before
+#: ``routing``. Generation 3 added routing roles, not rows.
+V4_ROWS = (
+    ("usage.enabled", "bool", True, None, None, 4),
+    ("usage.pause_at_percent", "int", 85, 1, 100, 4),
+    ("usage.weekly_pause_at_percent", "int", 95, 1, 100, 4),
+    ("usage.codex_pause_at_percent", "int", 85, 1, 100, 4),
+    ("usage.codex_weekly_pause_at_percent", "int", 95, 1, 100, 4),
+    ("usage.resume_grace_seconds", "int", 180, 0, 3600, 4),
+    ("usage.max_wait_seconds", "int", 21600, 0, 604800, 4),
+    ("usage.reservation_seconds", "int", 7200, 60, 86400, 4),
+    ("usage.default_job_percent", "int", 8, 0, 100, 4),
+    ("usage.default_job_weekly_percent", "int", 1, 0, 100, 4),
+    ("usage.codex_default_job_percent", "int", 8, 0, 100, 4),
+    ("usage.codex_default_job_weekly_percent", "int", 1, 0, 100, 4),
+    ("usage.run_cap_percent", "optional-int", None, 1, 100, 4),
+    ("usage.repository_cap_percent", "optional-int", None, 1, 100, 4),
+    ("usage.codex_run_cap_percent", "optional-int", None, 1, 100, 4),
+    ("usage.codex_repository_cap_percent", "optional-int", None, 1, 100, 4),
+)
+
 #: This release's table, pinned.
-TABLE_ROWS = V1_TABLE[:-1] + V2_ROWS + V1_TABLE[-1:]
+TABLE_ROWS = V1_TABLE[:-1] + V2_ROWS + V4_ROWS + V1_TABLE[-1:]
 
 #: Every generation's type and bounds of each key, oldest first. A release
 #: that changes a default appends nothing here (the rule forbids changing
@@ -78,7 +99,7 @@ V1_ROLES = frozenset({
 })
 
 
-def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 3) -> dict:
+def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 4) -> dict:
     """The file this release's fill writes over a missing one (``rows``
     and ``table_generation``: another release's)."""
     data: dict = {"schema_version": 1, "_table_generation": table_generation, "_defaults_written": {}}
@@ -157,10 +178,11 @@ class TableTest(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
         rows = tuple((s.key, s.type, s.default, s.minimum, s.maximum, s.generation) for s in settings.TABLE)
         self.assertEqual(rows, TABLE_ROWS)
-        # 3 on purpose (orchestration-protocol-v1 C.3): two routing roles were
-        # added, which raises the generation without a row's own generation.
-        self.assertEqual(settings.TABLE_GENERATION, 3)
-        self.assertGreater(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
+        # 4: the usage rows (workflow-controller-usage-budget D4) were added at
+        # generation 4, so the table's generation equals its highest row's
+        # (generation 3 only added routing roles, which raise it alone).
+        self.assertEqual(settings.TABLE_GENERATION, 4)
+        self.assertGreaterEqual(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
         self.assertEqual(routing.ROLES, V1_ROLES)
         self.assertEqual(routing.FIELDS, ("model", "effort"))
         self.assertEqual(routing.SECTION_KEYS, ("default", "roles"))
@@ -368,11 +390,11 @@ class MergeRowsTest(_TempSettings):
         self.assertEqual(data["merge"], {"auto": True, "wait_seconds": 3600, "poll_seconds": 30})
         for key, value in (("merge.auto", True), ("merge.wait_seconds", 3600), ("merge.poll_seconds", 30)):
             self.assertEqual(data["_defaults_written"][key], {"value": value, "generation": 2})
-        self.assertEqual(data["_table_generation"], 3)
-        for key in [key for key in data if key not in ("merge", "_defaults_written", "_table_generation")]:
+        self.assertEqual(data["_table_generation"], 4)
+        for key in [key for key in data if key not in ("merge", "usage", "_defaults_written", "_table_generation")]:
             self.assertEqual(data[key], old[key], key)
         self.assertEqual({key: value for key, value in data["_defaults_written"].items()
-                          if not key.startswith("merge.")}, old["_defaults_written"])
+                          if not key.startswith(("merge.", "usage."))}, old["_defaults_written"])
 
     def test_clean_of_a_generation_1_file_fills_the_rows_and_removes_nothing_known(self) -> None:
         _write(self.path, _defaults_file(V1_TABLE, 1))
@@ -489,12 +511,112 @@ class UnknownKeyTest(_TempSettings):
 
     def test_a_newer_release_s_file_says_so(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 4
+        data["_table_generation"] = 5
         data["forge"]["new_thing"] = 1
         _write(self.path, data)
         _loaded, err = self.stderr_of(settings.load, self.path)
         self.assertIn("forge.new_thing", err)
-        self.assertIn("last filled by a newer Controller release (table generation 4", err)
+        self.assertIn("last filled by a newer Controller release (table generation 5", err)
+
+
+class UsageRowsTest(_TempSettings):
+    """workflow-controller-usage-budget D4: the sixteen ``usage.*`` rows of
+    table generation 4."""
+
+    def test_the_caps_are_the_only_rows_with_a_flag_and_default_to_none(self) -> None:
+        flags = {s.key: s.cli_flag for s in settings.TABLE if s.key.startswith("usage.")}
+        self.assertEqual({key: flag for key, flag in flags.items() if flag is not None},
+                         {"usage.run_cap_percent": "--usage-cap",
+                          "usage.codex_run_cap_percent": "usage --usage-codex-cap"})
+        effective = settings.resolve(settings.load(self.path))
+        for key, _kind, default, *_rest in V4_ROWS:
+            with self.subTest(key=key):
+                self.assertEqual(effective[key], default)
+                self.assertEqual(effective.sources[key], "default")
+
+    def test_each_row_refuses_a_value_outside_its_bounds_with_exit_20(self) -> None:
+        for key, kind, _default, minimum, maximum, _generation in V4_ROWS:
+            section, _, name = key.partition(".")
+            if kind == "bool":
+                bad = [0, "yes", None]
+            else:
+                bad = [minimum - 1, maximum + 1, "5", True, 1.5]
+            for value in bad:
+                with self.subTest(key=key, value=value):
+                    _write(self.path, {section: {name: value}})
+                    with self.assertRaises(SettingsError) as ctx:
+                        settings.load(self.path)
+                    self.assertEqual(ctx.exception.evidence["key"], key)
+                    code, _out, _err = _main(["--settings", str(self.path), "settings", "show"])
+                    self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
+            for value in ([minimum, maximum] if kind != "bool" else [True, False]):
+                with self.subTest(key=key, accepted=value):
+                    _write(self.path, {section: {name: value}})
+                    self.assertEqual(settings.load(self.path).values[key], value)
+        _write(self.path, {"usage": {"run_cap_percent": None}})
+        self.assertIsNone(settings.load(self.path).values["usage.run_cap_percent"])
+
+    def test_the_fill_of_a_generation_3_file_adds_the_rows_and_moves_nothing(self) -> None:
+        old = _defaults_file(V1_TABLE[:-1] + V2_ROWS + V1_TABLE[-1:], 3)
+        old["run"]["max_steps"] = 7
+        del old["_defaults_written"]["run.max_steps"]
+        old["merge"]["wait_seconds"] = 100
+        _write(self.path, old)
+        settings.fill(self.path)
+        data = _read(self.path)
+        self.assertEqual(data["_table_generation"], 4)
+        self.assertEqual(data["usage"], {name: default for (key, _k, default, *_r) in V4_ROWS
+                                         for name in [key.partition(".")[2]]})
+        for key, _kind, default, _minimum, _maximum, generation in V4_ROWS:
+            self.assertEqual(data["_defaults_written"][key], {"value": default, "generation": generation})
+        for key in [key for key in data if key not in ("usage", "_defaults_written", "_table_generation")]:
+            self.assertEqual(data[key], old[key], key)
+        self.assertEqual({key: value for key, value in data["_defaults_written"].items()
+                          if not key.startswith("usage.")}, old["_defaults_written"])
+
+    def test_a_fill_does_not_move_a_set_usage_value(self) -> None:
+        old = _defaults_file(V1_TABLE[:-1] + V2_ROWS + V1_TABLE[-1:], 3)
+        old["usage"] = {"pause_at_percent": 70, "run_cap_percent": 40}
+        _write(self.path, old)
+        settings.fill(self.path)
+        data = _read(self.path)
+        self.assertEqual((data["usage"]["pause_at_percent"], data["usage"]["run_cap_percent"]), (70, 40))
+        self.assertEqual(data["usage"]["weekly_pause_at_percent"], 95)
+        self.assertNotIn("usage.pause_at_percent", data["_defaults_written"])
+
+    def test_an_older_release_ignores_the_rows_with_one_warning(self) -> None:
+        settings.fill(self.path)
+        before = self.path.read_bytes()
+        old_table = tuple(row for row in settings.TABLE if not row.key.startswith("usage."))
+        with _release(old_table, 3):
+            loaded, err = self.stderr_of(settings.load, self.path)
+            self.assertEqual(err.count("warning:"), 1)
+            self.assertIn("unknown key(s) usage;", err)  # the whole section is new to it
+            self.assertIn("last filled by a newer Controller release (table generation 4", err)
+            self.assertEqual(settings.resolve(loaded)["run.max_steps"], 20)
+            with self.assertRaises(SettingsError):
+                settings.clean(self.path)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_show_lists_the_rows_and_the_flag_overrides_the_setting(self) -> None:
+        _write(self.path, {"usage": {"run_cap_percent": 30}})
+        code, out, _err = _main(["--settings", str(self.path), "settings", "show"])
+        self.assertEqual(code, 0)
+        self.assertIn("usage.run_cap_percent", out)
+        self.assertIn("usage.codex_repository_cap_percent", out)
+        code, out, _err = _main(["--settings", str(self.path), "--json", "settings", "show"])
+        shown = json.loads(out)
+        self.assertEqual(shown["values"]["usage.run_cap_percent"], 30)
+        self.assertEqual(shown["sources"]["usage.run_cap_percent"], "file")
+        args = cli.build_parser().parse_args(["run", "--usage-cap", "55", "x"])
+        overrides, _routing = cli._settings_cli_overrides(args)
+        self.assertEqual(overrides["usage.run_cap_percent"], 55)
+        self.assertIsNone(overrides["usage.codex_run_cap_percent"])
+        for bad in ("0", "101", "x"):
+            with self.subTest(cap=bad), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as ctx:
+                    cli.build_parser().parse_args(["step", "--usage-cap", bad, "x"])
+                self.assertEqual(ctx.exception.code, 2)
 
 
 class CleanTest(_TempSettings):
@@ -573,13 +695,13 @@ class CleanTest(_TempSettings):
 
     def test_clean_refuses_a_file_filled_by_a_newer_release(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 4
+        data["_table_generation"] = 5
         data["run"]["speed"] = "fast"
         _write(self.path, data)
         before = self.path.read_bytes()
         with self.assertRaises(SettingsError) as ctx:
             settings.clean(self.path)
-        self.assertIn("table generation 4", ctx.exception.message)
+        self.assertIn("table generation 5", ctx.exception.message)
         self.assertIn("newest installed release", ctx.exception.message)
         self.assertEqual(ctx.exception.evidence["key"], "_table_generation")
         self.assertEqual(self.path.read_bytes(), before)
@@ -692,14 +814,14 @@ class SharedRoutingTest(_TempSettings):
         old_roles = routing.ROLES - {"prepare-functional-review", "apply-functional-review"}
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data["_table_generation"], 3)
+        self.assertEqual(data["_table_generation"], 4)
         data["routing"]["roles"] = {"apply-functional-review": {"model": "m-fix"}, "review-plan": {"model": "m-rp"}}
         _write(self.path, data)
         before = self.path.read_bytes()
         with _release(settings.TABLE, 2, old_roles):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertIn("routing.roles.apply-functional-review", err)
-            self.assertIn("table generation 3", err)
+            self.assertIn("table generation 4", err)
             route = routing.resolve_route("review-plan", config=loaded.routing_config)
             self.assertEqual((route.model, route.model_source), ("m-rp", "config-role"))
             settings.fill(self.path)

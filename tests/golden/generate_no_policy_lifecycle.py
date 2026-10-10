@@ -52,6 +52,11 @@ And once by ``workflow-controller-auto-merge-release-wait`` CP1, whose three
 ``controller_settings`` ``values`` and ``sources``. Nothing else moved
 (``tests/test_trunk_preflight.py`` pins that against the 1.5.0 golden).
 
+And once by ``workflow-controller-usage-budget`` CP2, whose sixteen
+``usage.*`` settings rows (table generation 4) appear in each launched job's
+``controller_settings`` ``values`` and ``sources``. Nothing else moved
+(``tests/test_trunk_preflight.py`` pins that against the 1.5.0 golden).
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

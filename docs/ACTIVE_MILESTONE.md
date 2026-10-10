@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6): the
+**Implementing (all five checkpoints complete).** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6): the
 Controller reads the Claude and Codex usage windows itself, forecasts a job, admits it atomically against
 the readings and the other lanes' reservations, and pauses a run before a limit. Plan:
 `docs/ai-workflow/CONTROLLER_USAGE_BUDGET_PLAN.md` (revision 11, approved by policy at `03ddec0`; base
@@ -15,7 +15,7 @@ commit `f516e76`; pull request title `feat: a usage budget that pauses a run bef
 | CP2 settings generation 4 and the `--usage-cap` flags | complete, verified by `tests/test_settings.py` (`UsageRowsTest`), the regenerated no-policy golden and the full suite |
 | CP3 the gate, the reservation and the run loop (exit 17) | complete, verified by `tests/test_usage_gate.py` (38 tests), the regenerated no-policy golden and the full suite |
 | CP4 the `usage` subcommand and the manual-worker gate | complete, verified by `tests/test_usage_command.py` (57 tests) and the full suite |
-| CP5 documentation and roadmap | not started |
+| CP5 documentation and roadmap | complete, verified by `tools/check_docs.py` and the full suite (3291 tests; only the two Git 2.56 trailer failures) |
 
 CP1 added `controller/usage.py` (a leaf below `job`, `observe` and `cli`), `runtime.usage_lock`,
 `errors.UsageRecordError`, a golden stream (`tests/golden/claude_stream_usage_limit_rejected.jsonl`,
@@ -44,3 +44,5 @@ page and in ADR 0001.
 ## Next action
 
 `/milestone-implement workflow-controller-usage-budget` runs the next checkpoint, one per invocation.
+
+CP5 documented the budget: the sixteen `usage` rows and the usage files in `docs/guide/runtime.md`, the `usage` command in `docs/guide/commands.md`, `docs/run.md` and `docs/common-problems.md` (exit 17, timed pause versus cap), the exit-17 row in `docs/exit-codes.md`, `docs/adr/0011-usage-budget.md` and its README row, and `docs/ROADMAP.md` (C8 complete; C8b and C8c added with sections 11.6.1 and 11.6.2; C7 and C5 amended; "Next" names C5).

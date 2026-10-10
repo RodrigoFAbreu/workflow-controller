@@ -7982,14 +7982,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-usage-budget-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-usage-budget-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 11,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "f516e762b40f0fa4db1bbc23ac719706428ab9b8",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP4",
+      "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -8006,6 +8006,10 @@
         "CP4": {
           "status": "COMPLETE",
           "start_commit": "47815b972041bd3ba757df2b2db598c68e68cecd"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "a2b0a21bdfb8d09bec563772902466aa0e1c4170"
         }
       },
       "current_bundle_id": "11a48c801e6887300357d70987ebf8518bcd1610621bef8b00fd98ac8c76898a",
@@ -8124,8 +8128,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 47,
-      "last_transition": "2026-10-10T06:56:36Z",
+      "state_revision": 49,
+      "last_transition": "2026-10-10T07:28:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -87,7 +87,30 @@ Global options go before the subcommand and the repository goes last, as in `wor
 
 ## Pausing for usage limits
 
-The Controller has no usage-limit pause of its own yet. To stay inside a budget, bound the work: `run --max-steps 1` performs one step and exits, so a script or you can check your usage between steps, and `--max-steps N` bounds a longer run. The default comes from the `run.max_steps` setting ([The settings file](guide/runtime.md#the-settings-file)).
+Before each job the Controller reads the Claude and Codex windows,
+forecasts what the job will cost from earlier jobs of the same role and
+model, and does not start one that would not fit. It checks before the
+job record exists, so a pause leaves nothing half finished. The limits
+are the `usage.*` settings ([The settings file](guide/runtime.md#what-it-holds));
+`usage.enabled: false` turns the check off.
+
+- `run` waits for a timed pause: it sleeps, with no lock held, until the
+  window resets plus `usage.resume_grace_seconds`, then goes through the
+  whole boundary again (a newer Controller generation is noticed, the
+  state and the decision are read afresh) and does not count the wait as
+  a step. Ctrl-C works while it waits. It records `usage_paused` and
+  `usage_resumed` in the run's events.
+- `step`, a wait longer than `usage.max_wait_seconds`, and a run or
+  repository cap stop with exit 17 and start nothing. The message says
+  which: a timed pause names the resume time; a cap says no reset will
+  lift it (raise the cap, or start a new run for the run cap).
+- `--usage-cap PERCENT` caps this run's Claude usage; the default is
+  `usage.run_cap_percent`.
+
+`workflow-controller usage` shows the readings and gates workers you start
+yourself ([`usage`](guide/commands.md#usage)). To bound the work by steps
+instead, `run --max-steps N` still applies; the default comes from the
+`run.max_steps` setting.
 
 ```bash
 workflow-controller run --max-steps 1 .

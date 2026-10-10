@@ -5310,6 +5310,23 @@ def _mark_usage_done(runtime_root: Path, job_id: str, token: str, *, action: str
 
 def _usage_account(runtime_root: Path, record: JobRecord, *, end_readings: Any = None,
                    stream_start: Mapping | None = None, statuses: frozenset = TERMINAL_STATUSES) -> JobRecord:
+    """:func:`_usage_account_readable`, for a shared usage record this
+    release may not be able to read (corrupt, or a newer ``version``): the
+    job's outcome is never lost to it. The warning and the
+    ``usage_record_unreadable`` event are the only effect, the record is
+    returned as written (``accounting`` stays ``pending``/``open``), and a
+    later sweep under a release that can read the record settles it once."""
+    try:
+        return _usage_account_readable(runtime_root, record, end_readings=end_readings,
+                                       stream_start=stream_start, statuses=statuses)
+    except UsageRecordError as exc:
+        _warn_usage_record_unreadable(runtime_root, exc)
+        return record
+
+
+def _usage_account_readable(runtime_root: Path, record: JobRecord, *, end_readings: Any = None,
+                            stream_start: Mapping | None = None,
+                            statuses: frozenset = TERMINAL_STATUSES) -> JobRecord:
     """Account one job this process holds (D6): ``usage.complete`` for its
     token, then ``accounting: "done"``. ``pending`` (end figures present)
     is charged from ``end_readings`` (the stream, live) or the block's

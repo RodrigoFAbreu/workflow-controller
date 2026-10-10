@@ -435,6 +435,31 @@ class ReplayTest(_UsageCase):
         [entry] = self.shared()["ledger"]
         self.assertEqual((entry["delta"], entry["charged"]), ("measured", 5.0))
 
+    def test_a_step_whose_record_turns_unreadable_while_the_job_runs_returns_the_outcome_and_settles_later(self) -> None:
+        self.reading(10)
+        readable: list[str] = []
+        real_complete = usage.complete
+
+        def newer_then_complete(*args, **kwargs):
+            readable.append((self.runtime_root / usage.USAGE_FILE).read_text())
+            (self.runtime_root / usage.USAGE_FILE).write_text(json.dumps({"version": 3}))
+            return real_complete(*args, **kwargs)
+
+        with unittest.mock.patch.object(usage, "complete", newer_then_complete), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            result = self.ustep(self.stream_env(self.rate_limit(15)))
+        self.assertIn("usage record cannot be read", err.getvalue())
+        self.assertIn(result["status"], job.TERMINAL_STATUSES)
+        self.assertEqual(result["usage"]["accounting"], "pending")
+        self.assertEqual(self.record_on_disk()["usage"]["accounting"], "pending")
+        self.assertIn("usage_record_unreadable", [e["event"] for e in self.events()])
+        (self.runtime_root / usage.USAGE_FILE).write_text(readable[0])
+        [settled] = self.resume()
+        self.assertEqual(settled["usage"]["accounting"], "done")
+        self.resume()
+        [entry] = self.shared()["ledger"]
+        self.assertEqual(entry["id"], settled["usage"]["token"])
+
     def test_a_bound_reservation_with_no_record_is_released_only_once_lapsed(self) -> None:
         admission = usage.admit(self.runtime_root, provider="claude", role="r", model="m",
                                 repository=str(self.root), run_id="run-1", limits=usage.Limits(), now=self.now)
@@ -627,6 +652,25 @@ class ReattachAccountingTest(unittest.TestCase):
         self.assertEqual([e["id"] for e in shared["ledger"]], [token])
         self.assertEqual((shared["reservations"], shared["lapsed"]), ({}, {}))
         self.assertIn(token, shared["settled"])
+
+    def test_a_newer_version_record_never_aborts_the_reattach_and_a_later_sweep_settles_once(self) -> None:
+        token = self._admit()
+        record = self._record(token)
+        readable = (self.runtime_root / usage.USAGE_FILE).read_text()
+        (self.runtime_root / usage.USAGE_FILE).write_text(json.dumps({"version": 3}))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            written = self._reattach(record, alive=True)
+        self.assertIn("usage record cannot be read", err.getvalue())
+        self.assertEqual(written["status"], job.STATUS_COMPLETED)
+        self.assertEqual(written["usage"]["accounting"], "pending")
+        self.assertIn("usage_record_unreadable", [e["event"] for e in _lines(self.runtime_root / usage.EVENTS_FILE)])
+        (self.runtime_root / usage.USAGE_FILE).write_text(readable)
+        # Phase 2 of `resume` writes the terminal status; the sweep needs it.
+        runtime.write_json(self.runtime_root, "jobs/j-1.json", {**written, "status": job.STATUS_FINISHED})
+        [settled] = job._settle_usage(self.runtime_root)
+        self.assertEqual(settled.token, token)
+        self.assertEqual(job._settle_usage(self.runtime_root), [])
+        self.assertEqual([e["id"] for e in usage.load_record(self.runtime_root)["ledger"]], [token])
 
     def test_a_lapsed_reservation_is_charged_from_the_lapsed_entry_with_the_blocks_end_figures(self) -> None:
         token = self._admit()

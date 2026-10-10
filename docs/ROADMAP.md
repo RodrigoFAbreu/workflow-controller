@@ -19,7 +19,7 @@ that releases nothing. C9b, the patch that accepts the protocol's `warn` check s
 prepares this repository's move to Workflow 2.9.0 (follow-up 15, accepted 2026-10-09), is complete
 and merged as a `test:` pull request that released nothing (PR #32); a `chore:` pull request then
 moved this repository to Workflow 2.9.0. C9d, the installed-release test made version-agnostic
-(follow-up 16), is complete (implementation 2026-10-09). Next (user decision, 2026-10-09):
+(follow-up 16, accepted 2026-10-10 by gate policy), is complete. Next (user decision, 2026-10-09):
 1. C8.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 

@@ -335,6 +335,25 @@ def read_json(path: Path) -> dict | None:
     return json.loads(raw)
 
 
+#: The shared usage record's lock file (``workflow-controller-usage-budget``
+#: CP1): ``<runtime_root>/usage.lock`` guards ``usage.json``.
+USAGE_LOCK_NAME = "usage.lock"
+
+
+@contextlib.contextmanager
+def usage_lock(runtime_root: Path) -> Iterator[Path]:
+    """Hold the exclusive ``flock`` on ``<runtime_root>/usage.lock`` for the
+    whole read-modify-write of the shared usage record, creating the lock
+    file as needed. Blocks until the lock is free, and is released when the
+    block exits or the process dies. Yields the lock file's path."""
+    fd = open_lock_file(runtime_root, USAGE_LOCK_NAME)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield Path(runtime_root) / USAGE_LOCK_NAME
+    finally:
+        os.close(fd)
+
+
 # ---------------------------------------------------------------------------
 # The user settings file (workflow-controller-settings-and-telemetry CP1).
 # It lives outside the runtime root, so its primitives are contained against

@@ -36,9 +36,13 @@ from zero. Back it up with the rest of the root.
 
 A `usage.json` this release cannot read (corrupt, or written by a newer
 release with a higher `version`) is never replaced. Deleting it is a last
-resort: a job whose accounting was still pending stays unaccounted, because
-its reservation went with the file, while repairing or restoring the record
-in place lets a later sweep settle it. With
+resort: repairing or restoring the original record in place lets a later
+sweep settle a job whose accounting was still pending, but only if no `step`,
+`run` or `resume` ran on a fresh record in between. Such a sweep finds the
+job's reservation unknown and marks its accounting done with no charge (an
+orphan, by design, recorded as a `usage_accounting_orphan` event), and a
+record restored afterwards no longer settles it. Restore the record before
+the next `step`, `run` or `resume`. With
 `usage.enabled: false`, `step` and `run` neither read nor sweep it. With the
 budget on, admission fails closed and its message names
 `usage.enabled: false` as the way to keep running. The replay sweep that

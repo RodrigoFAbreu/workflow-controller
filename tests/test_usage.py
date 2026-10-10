@@ -9,11 +9,13 @@ reads ``~/.codex`` or the operator's runtime root.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 
+import tests
 from controller import runtime, usage
 from controller.errors import UsageRecordError
 from controller.usage import FIVE_HOUR, WEEKLY, GO, Hold, Limits
@@ -1001,6 +1003,25 @@ class SnapshotTest(TempRootCase):
 
     def test_load_of_an_absent_record_is_empty(self) -> None:
         self.assertEqual(self.record(), usage._empty_record())
+
+
+class CodexHomeIsolationTest(unittest.TestCase):
+    """The suite's ``CODEX_HOME`` guard (CP3, D1): ``tests/__init__.py``
+    points it at an empty temporary directory beside the ``XDG_CONFIG_HOME``
+    redirection, so a Codex reading resolved the way the ``usage``
+    subcommand resolves it (``$CODEX_HOME``, else ``~/.codex``) never
+    reaches the operator's sessions."""
+
+    def test_codex_home_is_the_isolated_directory(self) -> None:
+        resolved = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+        self.assertEqual(resolved, Path(tests.ISOLATED_CODEX_HOME))
+        self.assertNotEqual(resolved.resolve(), (Path.home() / ".codex").resolve())
+        self.assertTrue(resolved.is_dir())
+        self.assertEqual(list(resolved.iterdir()), [])
+        self.assertEqual(usage.read_codex_home(resolved), [])
+
+    def test_a_subprocess_inherits_it(self) -> None:
+        self.assertEqual(dict(os.environ)["CODEX_HOME"], tests.ISOLATED_CODEX_HOME)
 
 
 if __name__ == "__main__":

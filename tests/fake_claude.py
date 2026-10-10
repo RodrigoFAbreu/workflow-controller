@@ -377,6 +377,23 @@ def default_events() -> list[dict]:
     ]
 
 
+def rate_limit(five_hour: float, five_hour_resets_at: float, seven_day: float | None = None,
+               seven_day_resets_at: float | None = None, *, status: str = "allowed",
+               rate_limit_type: str = "five_hour") -> dict:
+    """A ``rate_limit_event`` shaped like the real CLI's
+    (``tests/harness_contract``), for a ``FAKE_CLAUDE_STDOUT`` stream: the
+    percentages are 0-100 here and written as the stream's 0-1
+    ``utilization`` (workflow-controller-usage-budget CP3). Used only where
+    a test puts it into a stream; no default event carries one."""
+    windows = {"five_hour": {"utilization": five_hour / 100, "resetsAt": five_hour_resets_at}}
+    if seven_day is not None:
+        windows["seven_day"] = {"utilization": seven_day / 100, "resetsAt": seven_day_resets_at}
+    named = windows.get(rate_limit_type) or windows["five_hour"]
+    return {"type": "rate_limit_event", "session_id": FAKE_SESSION_ID, "rate_limit_info": {
+        "status": status, "resetsAt": named["resetsAt"], "rateLimitType": rate_limit_type,
+        "unifiedWindows": windows}}
+
+
 def stream_text(events: list[dict]) -> str:
     """``events`` as ``stream-json`` text: one compact JSON object per line."""
     return "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in events)

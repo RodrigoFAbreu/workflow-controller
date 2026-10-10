@@ -10,6 +10,7 @@ pid-level liveness and the in-process renderer's descriptor sink.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import errno
 import io
 import json
@@ -247,6 +248,23 @@ class NormaliseRenderTest(unittest.TestCase):
         self.assertEqual(_texts("run", {"run_id": "r1", "event": "waiting", "gate": "checks_pending",
                                         "deadline": "2026-10-02T13:00:00Z"}),
                          ["waiting at checks_pending until 2026-10-02T13:00:00Z"])
+
+    def test_usage_pause_and_resume_run_events(self) -> None:
+        """Usage budget (CP3, D9): ``follow`` renders the run's pause before
+        a job -- waiting, or stopping with 17 -- and the admission that
+        ended it."""
+        until = 1790343600
+        local = datetime.datetime.fromtimestamp(until).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+        self.assertEqual(_texts("run", {"run_id": "r1", "event": "usage_paused", "provider": "claude",
+                                        "window": "five_hour", "reason": "claude five-hour usage 80% ...",
+                                        "waiting_until": until}),
+                         [f"usage paused (claude five_hour): claude five-hour usage 80% ...; waiting until "
+                          f"{local} (epoch {until})"])
+        self.assertEqual(_texts("run", {"run_id": "r1", "event": "usage_paused", "provider": "claude",
+                                        "window": "run_cap", "reason": "a cap", "waiting_until": None}),
+                         ["usage paused (claude run_cap): a cap; not waiting (exit 17)"])
+        self.assertEqual(_texts("run", {"run_id": "r1", "event": "usage_resumed", "provider": "claude"}),
+                         ["usage resumed: claude job admitted"])
 
     def test_an_unknown_event_type(self) -> None:
         [event] = observe.normalise("worker", json.dumps({"type": "rate_limit_event", "x": 1}))

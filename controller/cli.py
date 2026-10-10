@@ -28,7 +28,7 @@ from typing import Any
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, protocol_decision, routing,
-    runtime, settings, target_state, telemetry, worker,
+    runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -52,6 +52,10 @@ EXIT_USAGE = 2
 EXIT_GATE = 10
 EXIT_DECLINED = 15
 EXIT_MAX_STEPS = 16
+#: `workflow-controller-usage-budget` CP3 (D10): stopped before starting a
+#: job because of the usage budget -- a timed pause (run again after the
+#: resume time) or an exhausted run or repository cap. Nothing was started.
+EXIT_USAGE_PAUSED = 17
 EXIT_FAIL_CLOSED = 20
 EXIT_WORKER_FAILED = 30
 EXIT_INCOMPLETE = 35
@@ -73,6 +77,16 @@ SIGINT_EXIT_STATUS = 130
 TEST_HOOKS_ENV = "WORKFLOW_CONTROLLER_TEST_HOOKS"
 
 _PAUSE_POLL_SECONDS = 0.05
+
+#: The longest single sleep of a usage pause, so Ctrl-C and the clock are
+#: honoured promptly (usage-budget CP3, D7).
+USAGE_WAIT_SLICE_SECONDS = 1.0
+
+
+def _usage_sleep(seconds: float) -> None:
+    """One slice of a usage pause; tests replace it (with
+    ``job.usage_now``) to wait on an injected clock."""
+    time.sleep(seconds)
 
 #: The run record the current ``step``/``run`` created
 #: (``workflow-controller-release-runtime-observability`` CP5).
@@ -1112,11 +1126,145 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
     )
 
 
+class _UsagePause:
+    """One ``run``'s usage-pause state (usage-budget CP3, D7): whether an
+    earlier attempt was held (so the next admission that passes announces
+    ``usage_resumed``), and how long this step has already waited."""
+
+    def __init__(self) -> None:
+        self.held = False
+        self.waited = 0.0
+
+
+class UsageWaitInterrupted(milestone_branch.WaitInterrupted):
+    """Ctrl-C during a usage pause: a ``KeyboardInterrupt`` like the merge
+    wait's, printed as one line. No job record exists."""
+
+    def message(self) -> str:
+        return (f"interrupted while paused for the usage budget (the pause would have ended at {self.deadline}); "
+                "nothing was started")
+
+
+def _usage_event_fields(*, provider: str | None, repository: str, run_id: str | None,
+                        hold: Any = None, token: str | None = None) -> dict:
+    """The fields D8 gives every usage event."""
+    return {
+        "provider": provider, "window": getattr(hold, "window", None), "percent": getattr(hold, "percent", None),
+        "forecast": getattr(hold, "forecast", None), "resume_at": getattr(hold, "resume_at", None),
+        "reason": getattr(hold, "reason", None), "token": token, "repository": repository, "run_id": run_id,
+    }
+
+
+def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run: job.RunRecord | None,
+                effective: settings.EffectiveSettings, pause: _UsagePause | None):
+    """``execute_step``'s ``usage_gate`` from the settings (usage-budget
+    CP3, D7): ``usage.admit`` for a Claude job of the route's role and
+    model, in this repository and run, against the Claude limits. ``None``
+    when ``usage.enabled`` is false. After an earlier hold in this run, the
+    first admission that passes emits ``usage_resumed`` -- never a wake-up
+    alone."""
+    limits = usage.limits_from_values(effective.values, usage.PROVIDER_CLAUDE)
+    if not limits.enabled:
+        return None
+    repository = str(target.root)
+    run_id = None if run is None else run.run_id
+
+    def gate(route: routing.ResolvedRoute) -> Any:
+        admission = usage.admit(runtime_root, provider=usage.PROVIDER_CLAUDE, role=route.role, model=route.model,
+                                repository=repository, run_id=run_id, limits=limits, now=job.usage_now())
+        if admission.hold is not None:
+            return admission.hold
+        if pause is not None and pause.held:
+            pause.held = False
+            fields = _usage_event_fields(provider=usage.PROVIDER_CLAUDE, repository=repository, run_id=run_id,
+                                         token=admission.token)
+            if run is not None:
+                run.event("usage_resumed", **fields)
+            usage.append_event(runtime_root, "usage_resumed", now=job.usage_now(), **fields)
+        return admission.token
+
+    return gate
+
+
+def _local_time(epoch: float) -> str:
+    """``epoch`` in local time, with the epoch itself (D7, D10)."""
+    local = datetime.datetime.fromtimestamp(epoch).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    return f"{local} (epoch {int(epoch)})"
+
+
+def usage_hold_message(hold: job.UsageHold, *, max_wait_seconds: int | None = None) -> str:
+    """The one stderr line of exit 17 (D10): a timed pause names its resume
+    time; a run cap says no reset lifts it; a repository cap says a new run
+    does not clear it and names the window reset. Outstanding work is named
+    when it is part of what holds a cap."""
+    head = f"workflow-controller: stopped for the usage budget, nothing was started: {hold.reason}"
+    if hold.window == "run_cap":
+        text = f"{head} -- no reset will lift this; raise usage.run_cap_percent or start a new run"
+    elif hold.window == "repository_cap":
+        when = (f"run again after the window resets at {_local_time(hold.resets_at)} (the spending then falls)"
+                if hold.resets_at is not None else
+                "run again after the five-hour window resets (the spending then falls)")
+        text = (f"{head} -- a new run does not clear this repository's spending, which is counted per five-hour "
+                f"window; {when}, or raise usage.repository_cap_percent")
+    elif hold.resume_at is not None:
+        text = f"{head} -- a timed pause: run again after the resume time {_local_time(hold.resume_at)}"
+        if max_wait_seconds is not None:
+            text += f" (waiting for it would exceed usage.max_wait_seconds, {max_wait_seconds} s)"
+    else:
+        text = f"{head} -- the window has no reset left to wait for; run again once a newer reading is recorded"
+    if hold.outstanding:
+        text += "; outstanding work (reservations of jobs not yet accounted) is part of what holds the cap"
+    return text
+
+
+def _usage_paused(runtime_root: Path, run: job.RunRecord | None, target: managed_repo.ManagedRepository,
+                  hold: job.UsageHold, *, waiting_until: float | None = None) -> None:
+    """The ``usage_paused`` event (D8, D9), in the run's log -- with the
+    branch preflight's events of the attempt -- and in
+    ``usage-events.jsonl``."""
+    fields = _usage_event_fields(provider=hold.provider, repository=str(target.root),
+                                 run_id=None if run is None else run.run_id, hold=hold)
+    if run is not None:
+        run.event("usage_paused", **fields, waitable=hold.waitable, waiting_until=waiting_until,
+                  preflight_events=list(hold.preflight_events))
+    usage.append_event(runtime_root, "usage_paused", now=job.usage_now(), **fields)
+
+
+def _usage_wait(args: argparse.Namespace, runtime_root: Path, run: job.RunRecord,
+                target: managed_repo.ManagedRepository, hold: job.UsageHold, pause: _UsagePause) -> bool:
+    """``run``'s pause (D7): for a waitable hold whose resume time plus
+    ``usage.resume_grace_seconds`` keeps this step's cumulative wait within
+    ``usage.max_wait_seconds``, emit ``usage_paused`` and sleep to it in
+    short interruptible slices, with no lock held, and return ``True`` (the
+    loop re-enters the whole boundary). Otherwise -- a cap, a longer wait --
+    emit ``usage_paused``, print the exit-17 line and return ``False``."""
+    limits = usage.limits_from_values(_effective(args).values, usage.PROVIDER_CLAUDE)
+    now = job.usage_now()
+    if hold.waitable and hold.resume_at is not None:
+        until = hold.resume_at + limits.resume_grace_seconds
+        if pause.waited + max(0.0, until - now) <= limits.max_wait_seconds:
+            _usage_paused(runtime_root, run, target, hold, waiting_until=until)
+            pause.held = True
+            try:
+                while (remaining := until - job.usage_now()) > 0:
+                    _usage_sleep(min(remaining, USAGE_WAIT_SLICE_SECONDS))
+            except KeyboardInterrupt:
+                raise UsageWaitInterrupted("usage_paused", _local_time(until)) from None
+            pause.waited += job.usage_now() - now
+            return True
+        _usage_paused(runtime_root, run, target, hold)
+        print(usage_hold_message(hold, max_wait_seconds=limits.max_wait_seconds), file=sys.stderr)
+        return False
+    _usage_paused(runtime_root, run, target, hold)
+    print(usage_hold_message(hold), file=sys.stderr)
+    return False
+
+
 def _run_one_step(
     args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity,
     target: managed_repo.ManagedRepository, routing_options: routing.RoutingOptions = routing.NO_OVERRIDES,
-    *, wait: bool = False,
-) -> tuple[int, dict | Decision | None]:
+    *, wait: bool = False, usage_pause: _UsagePause | None = None,
+) -> tuple[int, dict | Decision | job.UsageHold | None]:
     """One orchestration boundary: a generation-handoff check, then (at
     most) one job execution. Shared by ``step`` (one call) and ``run``'s
     own loop body (repeated until a stop condition) -- both `step`'s "stop
@@ -1133,7 +1281,11 @@ def _run_one_step(
 
     ``wait`` (auto-merge-release-wait I6): ``run`` passes ``True``, so the
     step may wait up to ``merge.wait_seconds`` on a pending merge gate;
-    ``step`` never waits."""
+    ``step`` never waits.
+
+    The usage gate (usage-budget CP3, D7) admits the job from the settings;
+    a hold is ``(EXIT_USAGE_PAUSED, hold)`` with nothing recorded, and the
+    caller decides whether to wait (``usage_pause`` is ``run``'s state)."""
     run = _open_run
     origin_source_root = ident.origin_source_root or ident.source_root
     pending = handoff.detect(ident, origin_source_root)
@@ -1166,7 +1318,12 @@ def _run_one_step(
         wait_seconds=effective["merge.wait_seconds"] if wait else 0,
         poll_seconds=effective["merge.poll_seconds"],
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
+        usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
     )
+
+    if isinstance(result, job.UsageHold):
+        # Usage budget (D7): refused before any record existed.
+        return EXIT_USAGE_PAUSED, result
 
     if isinstance(result, Decision):
         # LEGACY_READY / MILESTONE_COMPLETE, or a close-out after a release
@@ -1204,7 +1361,11 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     _start_follower(args, runtime_root, run.run_id)
     run.event("step_started", n=1)
     try:
-        exit_code, _result = _run_one_step(args, runtime_root, ident, target, routing_options)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options)
+        if isinstance(result, job.UsageHold):
+            # `step` never waits (D7): the event and the exit-17 line.
+            _usage_paused(runtime_root, run, target, result)
+            print(usage_hold_message(result), file=sys.stderr)
     finally:
         # Every finished child the launch recorded is collected before the
         # command returns (the between-launch reaper keeps collecting the
@@ -1297,6 +1458,7 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     settings file, else 20) is reached."""
     max_steps = _effective(args)["run.max_steps"]
     steps_run = 0
+    usage_pause = _UsagePause()
     while steps_run < max_steps:
         # The orchestration boundary: checked once before every job this
         # loop starts, including the first -- never mid-job. Both halves
@@ -1307,8 +1469,18 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         _await_pause_file(args.pause_file)
 
         run.event("step_started", n=steps_run + 1)
-        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options, wait=True)
+        exit_code, result = _run_one_step(args, runtime_root, ident, target, routing_options, wait=True,
+                                          usage_pause=usage_pause)
+        if isinstance(result, job.UsageHold):
+            # Usage budget (D7): a held attempt consumes no step. After the
+            # wait the loop re-enters the whole boundary -- the pause file,
+            # handoff detection, the lock, fresh state, a fresh decision and
+            # a fresh admission; a cap or a longer wait stops with 17.
+            if _usage_wait(args, runtime_root, run, target, result, usage_pause):
+                continue
+            return exit_code
         steps_run += 1
+        usage_pause.waited = 0.0
         worker.reap_adopted_children()
 
         if isinstance(result, dict) and result["status"] == job.STATUS_FINISHED:

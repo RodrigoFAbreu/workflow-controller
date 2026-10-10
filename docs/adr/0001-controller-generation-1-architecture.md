@@ -135,6 +135,7 @@ here, unchanged, with one named exception: code 15's meaning, which
 | 10 | stopped cleanly at a human gate — the normal, expected outcome for a supervised run |
 | 15 | no verifiable expected outcome is declared for the selected action — it is model-invocable and not user-only, but it is reported (declined) instead of launched |
 | 16 | `run` hit `--max-steps` with work still outstanding |
+| 17 | stopped before starting because of the usage budget; nothing was started |
 | 20 | fail-closed refusal (`ControllerError`) — unmanaged/drifted repo, malformed state, unsupported phase |
 | 30 | a worker ran and failed |
 | 35 | a worker ran and stopped without completing its action — it refused for a stated reason, or was cut short — leaving no durable Workflow change to verify |

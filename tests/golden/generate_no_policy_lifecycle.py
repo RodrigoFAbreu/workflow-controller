@@ -57,6 +57,14 @@ And once by ``workflow-controller-usage-budget`` CP2, whose sixteen
 ``controller_settings`` ``values`` and ``sources``. Nothing else moved
 (``tests/test_trunk_preflight.py`` pins that against the 1.5.0 golden).
 
+And once by that work item's CP3, whose usage gate admits every launch
+(``usage.enabled`` defaults to true): each launched job's record gains the
+``usage`` block (the fake's stream carries no ``rate_limit_event``, so each
+job is an ``unknown`` delta charged at the default forecast) and its
+``usage_accounted`` write, one more ``event_seq``. Its ``token`` and its
+epoch ``started_at`` are volatile keys. Nothing else moved
+(``tests/test_trunk_preflight.py`` pins that too).
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:
@@ -119,6 +127,9 @@ VOLATILE_KEYS = frozenset({
     "offset", "ending_point",
     # Settings-and-telemetry CP3: the telemetry block's wall times.
     "job_seconds", "worker_seconds",
+    # Usage-budget CP3: the job's reservation token and its admission time
+    # (an epoch from the usage clock).
+    "token", "started_at",
 })
 
 

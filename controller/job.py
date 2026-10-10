@@ -104,7 +104,7 @@ from typing import Any, Callable
 
 from controller import (
     evidence, identity, lock, milestone_branch, protocol, protocol_decision, routing, runtime, target_state,
-    telemetry, worker, workflow_contract,
+    telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
     NO_PHASE,
@@ -3112,7 +3112,25 @@ def resume(managed_repo: Any, *, identity: Any, runtime: Path,
     whose ownership scan is unverifiable, is never reconciled.
 
     ``drain_detach_seconds`` (settings-and-telemetry CP2) bounds phase 1's
-    re-attached drain (``None``: :data:`worker.DRAIN_DETACH_SECONDS`)."""
+    re-attached drain (``None``: :data:`worker.DRAIN_DETACH_SECONDS`).
+
+    **Usage accounting** (``workflow-controller-usage-budget`` CP3, D6).
+    The replay sweep (:func:`_settle_usage`) runs at the start and again
+    after phase 2, so the records this very call made terminal are settled
+    before they are reported; then the dispatch (:func:`_usage_dispatch`)
+    marks a terminal record whose token is already settled, or neither
+    present nor settled (``usage_accounting_orphan``), ``done`` with no
+    charge."""
+    _settle_usage(runtime)
+    results = _resume_phases(managed_repo, identity=identity, runtime=runtime,
+                             drain_detach_seconds=drain_detach_seconds)
+    _settle_usage(runtime)
+    return _usage_dispatch(runtime, results)
+
+
+def _resume_phases(managed_repo: Any, *, identity: Any, runtime: Path,
+                   drain_detach_seconds: float | None = None) -> list[JobRecord]:
+    """:func:`resume`'s two phases (its docstring)."""
     if getattr(managed_repo, "drift", None) is not None:
         _refuse_drift_unless_decided(managed_repo, runtime)
     if not managed_repo.root.is_dir():
@@ -3971,7 +3989,7 @@ def _supervise_record(managed_repo: Any, *, identity: Any, runtime_root: Path, p
             return
         alive = assessment.verdict == worker.ACTIVE and leader
         _reattach(runtime_root, root, record, streams, classify=alive or record.get("ending_offset") is not None,
-                  drain_detach_seconds=drain_detach_seconds)
+                  drain_detach_seconds=drain_detach_seconds, alive=alive)
 
 
 def _refuse_unrecorded_worker(record: JobRecord, root: Path) -> None:
@@ -4007,13 +4025,31 @@ def anchor_orphan_seconds() -> float:
 
 
 def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mapping, *, classify: bool,
-              drain_detach_seconds: float | None = None) -> None:
+              drain_detach_seconds: float | None = None, alive: bool = False) -> None:
     """Run :func:`worker.reattach` for ``record``, persisting each
     ``on_state_change`` exactly as ``execute_step`` does (the record stays
     ``LAUNCHED``), then the drain detach, or ``COMPLETED`` (after
-    ``ENDED``) when the stream was classified."""
+    ``ENDED``) when the stream was classified.
+
+    Usage budget (CP3, D6, R7): for a job found ``alive`` carrying a usage
+    token, the reservation is renewed at once -- reviving it if it lapsed
+    while no Controller ran -- and then on the renewal timer until the
+    re-attachment ends. The ``COMPLETED`` write carries the end figures,
+    and the job is then accounted from its reservation (live or lapsed),
+    never from the block alone, and marked ``done`` on that record."""
     job_id = record["job_id"]
     current = {"record": record}
+    usage_block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
+    ticker = None
+    if alive and usage_block is not None and usage_block.get("token") and usage_block.get("accounting") == "open":
+        ticker = _usage_ticker(runtime_root, usage_block["token"], _usage_reservation_seconds(record))
+        try:
+            usage.renew(runtime_root, usage_block["token"], reservation_seconds=_usage_reservation_seconds(record),
+                        now=usage_now())
+        except Exception as exc:  # noqa: BLE001 -- a renewal never fails the job
+            usage.append_event(runtime_root, "usage_renew_failed", now=usage_now(), token=usage_block["token"],
+                               reason=f"{type(exc).__name__}: {exc}")
+        ticker.start()
 
     def on_state_change(state: str, details: Mapping) -> None:
         before = current["record"]
@@ -4026,19 +4062,23 @@ def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mappin
     worker_state = record.get("worker_state") if isinstance(record.get("worker_state"), Mapping) else {}
     owned = worker_state.get("owned_processes")
     settled = record.get("settled_wakeups")
-    result = worker.reattach(
-        stdout_path=streams["stdout_path"], stderr_path=streams["stderr_path"],
-        worker_process=record["worker_process"], anchor=record.get("worker_anchor"),
-        ownership_tag=record.get("ownership_tag"), state=worker_state.get("state"),
-        owned_processes=owned if isinstance(owned, list) else (),
-        owned_processes_seen_count=worker_state.get("owned_processes_seen_count"),
-        ending_offset=record.get("ending_offset"),
-        wakeup_overdue_declared_at=record.get("wakeup_overdue_declared_at"),
-        command_lifecycle_overdue_declared_at=record.get("command_lifecycle_overdue_declared_at"),
-        command_lifecycle_overdue_command_uuid=record.get("command_lifecycle_overdue_command_uuid"),
-        settled_wakeups=settled if isinstance(settled, list) else (),
-        on_state_change=on_state_change, classify=classify, drain_detach_seconds=drain_detach_seconds,
-    )
+    try:
+        result = worker.reattach(
+            stdout_path=streams["stdout_path"], stderr_path=streams["stderr_path"],
+            worker_process=record["worker_process"], anchor=record.get("worker_anchor"),
+            ownership_tag=record.get("ownership_tag"), state=worker_state.get("state"),
+            owned_processes=owned if isinstance(owned, list) else (),
+            owned_processes_seen_count=worker_state.get("owned_processes_seen_count"),
+            ending_offset=record.get("ending_offset"),
+            wakeup_overdue_declared_at=record.get("wakeup_overdue_declared_at"),
+            command_lifecycle_overdue_declared_at=record.get("command_lifecycle_overdue_declared_at"),
+            command_lifecycle_overdue_command_uuid=record.get("command_lifecycle_overdue_command_uuid"),
+            settled_wakeups=settled if isinstance(settled, list) else (),
+            on_state_change=on_state_change, classify=classify, drain_detach_seconds=drain_detach_seconds,
+        )
+    finally:
+        if ticker is not None:
+            ticker.stop()
     record = current["record"]
     if isinstance(result, worker.DrainDetached):
         _record_drain_detached(runtime_root, root, job_id, record, result,
@@ -4057,9 +4097,19 @@ def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mappin
         "telemetry": block,
         "updated_at": completed_at,
     }
-    _persist(runtime_root, job_id, record, event="completed",
-             details={"outcome": result.outcome, "exit_code": result.returncode, "reattached": True,
-                      "telemetry": telemetry.completed_summary(block)})
+    first: dict = {}
+    last: dict = {}
+    if usage_block is not None and usage_block.get("accounting") == "open":
+        record["usage"], first, last = _usage_end_block(usage_block, streams["stdout_path"])
+    record = _persist(runtime_root, job_id, record, event="completed",
+                      details={"outcome": result.outcome, "exit_code": result.returncode, "reattached": True,
+                               "telemetry": telemetry.completed_summary(block)})
+    if usage_block is not None:
+        # This `COMPLETED` record is held under the job's supervisor lock;
+        # `resume`'s phase 2 spreads it, the `done` flag included, into the
+        # terminal write.
+        _usage_account(runtime_root, record, end_readings=list(last.values()), stream_start=first,
+                       statuses=TERMINAL_STATUSES | {STATUS_COMPLETED})
 
 
 def _telemetry_block(record: Mapping, streams: Mapping, *, completed_at: str,
@@ -5081,6 +5131,282 @@ def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOp
 
 
 # ---------------------------------------------------------------------------
+# The usage budget (`workflow-controller-usage-budget` CP3, plan D6/D7): the
+# gate before the job record exists, the job record's `usage` block, the
+# reservation's renewal while the worker runs, and the accounting on every
+# completion path, replayable after a crash.
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class UsageHold:
+    """:func:`execute_step`'s third outcome (D7): the usage gate refused the
+    job before its record existed, so nothing was recorded or launched. The
+    fields are :class:`usage.Hold`'s; ``preflight_events`` are the branch
+    preflight's events of this attempt, so a hold after a preflight action
+    is not silent."""
+
+    provider: str
+    window: str
+    percent: float
+    forecast: float
+    resume_at: float | None
+    reason: str
+    waitable: bool
+    resets_at: float | None = None
+    outstanding: bool = False
+    preflight_events: tuple = ()
+
+
+def _as_usage_hold(hold: Any, preflight_events: list[str]) -> UsageHold:
+    return UsageHold(
+        provider=hold.provider, window=hold.window, percent=hold.percent, forecast=hold.forecast,
+        resume_at=hold.resume_at, reason=hold.reason, waitable=hold.waitable,
+        resets_at=getattr(hold, "resets_at", None), outstanding=getattr(hold, "outstanding", False),
+        preflight_events=tuple(preflight_events),
+    )
+
+
+def usage_now() -> float:
+    """The usage budget's clock, epoch seconds (the shared record's times).
+    Tests replace it; ``cli``'s gate and wait read the same one."""
+    return time.time()
+
+
+#: The renewal ticker's ``wait`` (``usage.RenewalTicker``); ``None`` waits
+#: on the ticker's own stop event. Tests replace it to step the ticker.
+usage_ticker_wait: Callable[[float], bool] | None = None
+
+#: The `usage` block's accounting figures, copied from the ledger entry
+#: when the job is accounted (D6, Deltas).
+_USAGE_FIGURES = ("five_hour", "weekly", "five_hour_after_reset", "weekly_after_reset", "charged", "delta")
+
+
+def never_launched(record: Mapping) -> bool:
+    """Whether a terminal record's worker structurally never started (D6,
+    What the sweep settles): (i) ``INTERRUPTED`` with no
+    ``expected_transition`` -- the record a ``PLANNED`` one becomes under
+    :func:`_reconcile_planned`, since every record that was ever ``LAUNCHED``
+    carries that key -- or (ii) ``FAILED`` with the
+    ``reconciliation_evidence.code`` of :func:`_launch_job`'s
+    ``not_started()`` (``WorkerNotStarted`` or ``decision_stale_at_launch``).
+    Anything else, a terminal status a future reconciler writes included,
+    is not released and falls to the conservative ``unknown`` charge."""
+    status = record.get("status")
+    if status == STATUS_INTERRUPTED and "expected_transition" not in record:
+        return True
+    if status == STATUS_FAILED:
+        evidence_block = record.get("reconciliation_evidence")
+        code = evidence_block.get("code") if isinstance(evidence_block, Mapping) else None
+        return code in (WORKER_NOT_STARTED_CODE, protocol_decision.DECISION_STALE_AT_LAUNCH)
+    return False
+
+
+def _usage_reservation_seconds(record: Mapping) -> float:
+    """``usage.reservation_seconds`` as the job recorded it in its
+    ``controller_settings`` block, else the D4 default."""
+    settings_block = record.get("controller_settings")
+    values = settings_block.get("values") if isinstance(settings_block, Mapping) else None
+    value = values.get("usage.reservation_seconds") if isinstance(values, Mapping) else None
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return value
+    return usage.Limits().reservation_seconds
+
+
+def _usage_start_block(runtime_root: Path, token: str) -> dict:
+    """The ``usage`` block written at record creation (D6): the original
+    baseline of the reservation ``token`` names, so a recovered job keeps it
+    even after the reservation has gone."""
+    shared = usage.load_record(runtime_root)
+    reservation = shared["reservations"].get(token) or shared["lapsed"].get(token) or {}
+    baseline = reservation.get("baseline") or {}
+    five = baseline.get(usage.FIVE_HOUR) or {}
+    weekly = baseline.get(usage.WEEKLY) or {}
+    return {
+        "token": token, "provider": reservation.get("provider"), "role": reservation.get("role"),
+        "model": reservation.get("model"), "repository": reservation.get("repository"),
+        "run_id": reservation.get("run_id"), "started_at": reservation.get("created_at"),
+        "window_resets_at": five.get("window_resets_at"), "five_hour_start": five.get("start"),
+        "weekly_start": weekly.get("start"),
+        "reserved_five_hour": (reservation.get(usage.FIVE_HOUR) or {}).get("amount"),
+        "reserved_weekly": (reservation.get(usage.WEEKLY) or {}).get("amount"),
+        "accounting": "open",
+    }
+
+
+def _usage_end_block(block: Mapping, stdout_path: str) -> tuple[dict, dict, dict]:
+    """``(block, first, last)``: the ``usage`` block with the end figures of
+    the worker's stream and ``accounting: "pending"``, for the ``COMPLETED``
+    write that reads the stream (D6, Crash-safe replay), and the stream's
+    first and last readings by window. Like the telemetry block it never
+    raises: a stream that cannot be read has no end reading (an ``unknown``
+    delta, charged at the forecast)."""
+    first: dict = {}
+    last: dict = {}
+    try:
+        # A path, never text: `read_claude_stream_span` reads a `str` as the stream itself.
+        first, last = usage.read_claude_stream_span(Path(stdout_path))
+    except Exception:  # noqa: BLE001 -- the completion write never fails on usage
+        first, last = {}, {}
+    five, weekly = last.get(usage.FIVE_HOUR), last.get(usage.WEEKLY)
+    ended = {
+        **block,
+        "five_hour_end": five["percent"] if five else None,
+        "weekly_end": weekly["percent"] if weekly else None,
+        "end_window_resets_at": five["resets_at"] if five else None,
+        "end_observed_at": (five or weekly or {}).get("observed_at"),
+        "accounting": "pending",
+    }
+    return ended, first, last
+
+
+def _usage_ticker(runtime_root: Path, token: str, reservation_seconds: float) -> usage.RenewalTicker:
+    """The reservation's renewal timer (D6), owned by this module: it renews
+    every ``usage.renewal_interval`` whatever the worker publishes, and a
+    renewal that raises is the ``usage_renew_failed`` event, never a failed
+    job."""
+
+    def renew() -> None:
+        usage.renew(runtime_root, token, reservation_seconds=reservation_seconds, now=usage_now())
+
+    def on_error(exc: BaseException) -> None:
+        usage.append_event(runtime_root, "usage_renew_failed", now=usage_now(), token=token,
+                           reason=f"{type(exc).__name__}: {exc}")
+
+    return usage.RenewalTicker(renew, usage.renewal_interval(reservation_seconds), usage_ticker_wait,
+                               on_error=on_error)
+
+
+def _job_record_path(runtime_root: Path, job_id: Any) -> Path | None:
+    if not isinstance(job_id, str) or not job_id or "/" in job_id or job_id in (".", ".."):
+        return None
+    return runtime_root / "jobs" / f"{job_id}.json"
+
+
+def _mark_usage_done(runtime_root: Path, job_id: str, token: str, *, action: str, entry: Mapping | None = None,
+                     statuses: frozenset = TERMINAL_STATUSES) -> JobRecord | None:
+    """Set ``accounting: "done"`` (and the ledger entry's figures, when the
+    job was charged) on the job record on disk, with the existing record
+    write. Idempotent, and made only to a record whose status is in
+    ``statuses`` (terminal; ``_reattach`` also passes its own ``COMPLETED``
+    record) and whose block carries ``token``. A sweep reaching a record of
+    another target writes the same content its owner would."""
+    path = _job_record_path(runtime_root, job_id)
+    record = _read_job_record(path) if path is not None else None
+    block = record.get("usage") if record is not None else None
+    if not isinstance(block, Mapping) or block.get("token") != token or record.get("status") not in statuses:
+        return None
+    if block.get("accounting") == "done":
+        return record
+    if entry is None and action in ("charged", "unknown"):
+        entry = next((e for e in reversed(usage.load_record(runtime_root)["ledger"]) if e.get("id") == token), None)
+    updated = {**block, "accounting": "done"}
+    if entry is not None:
+        updated.update({key: entry.get(key) for key in _USAGE_FIGURES})
+    return _persist(runtime_root, job_id, {**record, "usage": updated}, event="usage_accounted",
+                    details={"token": token, "action": action})
+
+
+def _usage_account(runtime_root: Path, record: JobRecord, *, end_readings: Any = None,
+                   stream_start: Mapping | None = None, statuses: frozenset = TERMINAL_STATUSES) -> JobRecord:
+    """Account one job this process holds (D6): ``usage.complete`` for its
+    token, then ``accounting: "done"``. ``pending`` (end figures present)
+    is charged from ``end_readings`` (the stream, live) or the block's
+    figures; ``open`` and :func:`never_launched` is released with no
+    charge; any other ``open`` record is an ``unknown`` delta charged at the
+    forecast. Nothing is charged without the reservation: a settled token is
+    marked ``done``, and one neither present nor settled is the recorded
+    ``usage_accounting_orphan`` no-op. Returns the record as last written."""
+    block = record.get("usage")
+    if not isinstance(block, Mapping) or not block.get("token") or block.get("accounting") == "done" \
+            or record.get("status") not in statuses:
+        return record
+    token = block["token"]
+    now = usage_now()
+    if block.get("accounting") == "pending":
+        result = usage.complete(runtime_root, token, end_readings, usage.OUTCOME_OK, now=now, usage_block=block,
+                                stream_start=stream_start)
+    elif never_launched(record):
+        result = usage.complete(runtime_root, token, None, usage.OUTCOME_NOT_STARTED, now=now)
+    else:
+        result = usage.complete(runtime_root, token, {}, usage.OUTCOME_OK, now=now)
+    if result.status == usage.COMPLETE_CHARGED:
+        action = "charged" if result.entry and result.entry.get("delta") != "unknown" else "unknown"
+    elif result.status == usage.COMPLETE_NOT_STARTED:
+        action = "not_started"
+    elif result.reason == "already_settled":
+        action = "already_settled"
+    else:
+        action = "orphan"
+        usage.append_event(runtime_root, "usage_accounting_orphan", now=now, token=token,
+                           repository=block.get("repository"), run_id=block.get("run_id"))
+    marked = _mark_usage_done(runtime_root, record["job_id"], token, action=action, entry=result.entry,
+                              statuses=statuses)
+    return marked if marked is not None else record
+
+
+def _settle_usage(runtime_root: Path) -> list:
+    """The crash-safe replay sweep (D6): ``usage.settle_pending`` over every
+    reservation bound to a job, with :func:`never_launched`, then
+    ``accounting: "done"`` on each record it settled. A runtime root with no
+    shared usage record has nothing to settle and is left untouched."""
+    if not (runtime_root / usage.USAGE_FILE).exists():
+        return []
+
+    def load_job(job_id: str) -> Mapping | None:
+        path = _job_record_path(runtime_root, job_id)
+        if path is None or not os.path.lexists(path):
+            return None
+        # A record that exists but cannot be read is never "no record":
+        # it is left alone, like a non-terminal one.
+        return _read_job_record(path) or {"status": None}
+
+    settled = usage.settle_pending(runtime_root, load_job, never_launched, now=usage_now(),
+                                   is_terminal=lambda record: record.get("status") in TERMINAL_STATUSES)
+    for item in settled:
+        _mark_usage_done(runtime_root, item.job_id, item.token, action=item.action)
+    return settled
+
+
+def _usage_dispatch(runtime_root: Path, results: list[JobRecord]) -> list[JobRecord]:
+    """``resume``'s dispatch over the terminal records it reports whose
+    accounting is not ``done`` (D6): a settled token is marked ``done``
+    with no charge, a present reservation is settled, and a token neither
+    present nor settled is the recorded ``usage_accounting_orphan`` no-op
+    (marked ``done``, never charged from the block). A record ``resume``
+    marked invalid is history and never rewritten. The returned records
+    carry what was written, with ``resume``'s in-memory markers kept."""
+    if not (runtime_root / usage.USAGE_FILE).exists():
+        return results
+    out: list[JobRecord] = []
+    for result in results:
+        block = result.get("usage")
+        if "resume_marked" in result or result.get("status") not in TERMINAL_STATUSES \
+                or not isinstance(block, Mapping) or not block.get("token") or block.get("accounting") == "done":
+            out.append(result)
+            continue
+        token, job_id = block["token"], result.get("job_id")
+        state = usage.token_state(runtime_root, token, now=usage_now())
+        written: JobRecord | None
+        if state == "present":
+            path = _job_record_path(runtime_root, job_id)
+            current = _read_job_record(path) if path is not None else None
+            written = _usage_account(runtime_root, current) if current is not None else None
+        elif state == "settled":
+            written = _mark_usage_done(runtime_root, job_id, token, action="already_settled")
+        else:
+            usage.append_event(runtime_root, "usage_accounting_orphan", now=usage_now(), token=token,
+                               repository=block.get("repository"), run_id=block.get("run_id"))
+            written = _mark_usage_done(runtime_root, job_id, token, action="orphan")
+        if written is None:
+            out.append(result)
+        else:
+            markers = {key: result[key] for key in ("reconciled_this_call",) if key in result}
+            out.append({**written, **markers})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # execute_step -- CP6 owns steps 1-6, CP6B extends it with steps 7-9.
 # ---------------------------------------------------------------------------
 
@@ -5102,7 +5428,8 @@ def execute_step(
     wait_seconds: int = 0,
     poll_seconds: int = 30,
     on_wait: Callable[[str, str], None] | None = None,
-) -> JobRecord | Decision:
+    usage_gate: Callable[[routing.ResolvedRoute], Any] | None = None,
+) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
     CP5), which covers the whole call.
@@ -5144,7 +5471,16 @@ def execute_step(
     ``wait_seconds`` above 0 (``run`` only, E.2) lets the preflight poll a
     waitable gate (:func:`~controller.milestone_branch.waiting_preflight`)
     under the lock this call holds; ``on_wait(code, deadline)`` is called
-    once per gate code it waits on. Only the final outcome is recorded."""
+    once per gate code it waits on. Only the final outcome is recorded.
+
+    ``usage_gate`` (``workflow-controller-usage-budget`` CP3, D7), a
+    callable ``(route) -> UsageHold | usage.Hold | token``, admits the job
+    against the usage budget once its route is resolved and before its
+    record exists. A hold returns a :class:`UsageHold` and records nothing
+    (the lock is released on the way out, and the caller waits, if at all,
+    with no lock held); a token is bound to the job and written into the
+    record's ``usage`` block, released ``not_started`` if no worker ever
+    starts and accounted when the job ends. ``None``: no gate."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
@@ -5153,6 +5489,7 @@ def execute_step(
             lifecycle_lock=lifecycle_lock, routing=routing, run_id=run_id,
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
+            usage_gate=usage_gate,
         )
 
 
@@ -5229,7 +5566,8 @@ def _execute_step_locked(
     wait_seconds: int = 0,
     poll_seconds: int = 30,
     on_wait: Callable[[str, str], None] | None = None,
-) -> JobRecord | Decision:
+    usage_gate: Callable[[routing.ResolvedRoute], Any] | None = None,
+) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
     ``identity`` is an already-resolved
@@ -5265,6 +5603,10 @@ def _execute_step_locked(
     # here, once, rather than re-derived at every later site that would
     # otherwise read them straight off `work_item`.
     snapshot = target_state.read(managed_repo)
+
+    # Usage budget (CP3, D6 "Where it runs"): a charge a crash left owing is
+    # settled before the admission below relies on the totals.
+    _settle_usage(runtime)
 
     # Step 1b (trunk-branch-pr-release-orchestration CP8): the repository
     # preflight, under the lifecycle lock, after the state read and before
@@ -5370,6 +5712,17 @@ def _execute_step_locked(
     # unroutable action leaves no record behind.
     route = _worker_route(decision, work_item, routing)
 
+    # Usage budget (CP3, D7): admitted against the budget now, with the
+    # route known and before any record exists, so a hold leaves nothing for
+    # `resume`. A hold never waits here: the decision and pre-state are this
+    # boundary's, and the caller re-enters the whole boundary after a wait.
+    token: str | None = None
+    if usage_gate is not None:
+        admitted = usage_gate(route)
+        if isinstance(admitted, (UsageHold, usage.Hold)):
+            return _as_usage_hold(admitted, preflight_events)
+        token = admitted
+
     # Step 4: write the job record in two flushes, PLANNED then LAUNCHED,
     # both before the worker is spawned.
     job_id = _new_job_id()
@@ -5409,23 +5762,57 @@ def _execute_step_locked(
         # binding and the pre-step tip the post-step verification checks
         # against, here and at `resume`. Absent without a binding (I1).
         record["branch_binding"] = _branch_binding_block(binding, pre_state["target_head"])
-    _run_job_started(run_id, job_id)
-    record = _persist(runtime, job_id, record, event="planned",
-                      details={"command": decision.action.command})
+    try:
+        if token is not None:
+            # Usage budget (D6, Binding order): the job id is bound into the
+            # reservation durably before the record is published, so the
+            # sweep can always reach a record that exists; the record's
+            # `usage` block carries the original baseline from creation.
+            usage.bind_job(runtime, token, job_id, now=usage_now())
+            record["usage"] = _usage_start_block(runtime, token)
+        _run_job_started(run_id, job_id)
+        record = _persist(runtime, job_id, record, event="planned",
+                          details={"command": decision.action.command})
+    except BaseException:
+        # Admitted, but no record was published: nothing will ever account
+        # for the reservation, so it is released with no charge.
+        if token is not None and not os.path.lexists(runtime / "jobs" / f"{job_id}.json"):
+            with contextlib.suppress(Exception):
+                usage.complete(runtime, token, None, usage.OUTCOME_NOT_STARTED, now=usage_now())
+        raise
 
     # Worker-lifecycle-ownership CP3: the job's supervisor lock, taken
     # before the pre-spawn LAUNCHED write and held until `_launch_job` has
     # made its last write to this record (the terminal flush, or the exit-45
     # path after a drain detach); an exception releases it as it unwinds.
-    with _supervisor_lock(runtime, job_id) as supervisor_lock_path:
-        return _launch_job(
-            managed_repo, runtime=runtime, run_id=run_id, job_id=job_id, record=record,
-            decision=decision, route=route, binding=binding, pre_state=pre_state,
-            resolved_work_item_id=resolved_work_item_id, governing_workflow_version=governing_workflow_version,
-            permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
-            lifecycle_lock=lifecycle_lock, supervisor_lock_path=supervisor_lock_path,
-            drain_detach_seconds=drain_detach_seconds,
-        )
+    usage_end: dict = {}
+    try:
+        with _supervisor_lock(runtime, job_id) as supervisor_lock_path:
+            record = _launch_job(
+                managed_repo, runtime=runtime, run_id=run_id, job_id=job_id, record=record,
+                decision=decision, route=route, binding=binding, pre_state=pre_state,
+                resolved_work_item_id=resolved_work_item_id, governing_workflow_version=governing_workflow_version,
+                permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
+                lifecycle_lock=lifecycle_lock, supervisor_lock_path=supervisor_lock_path,
+                drain_detach_seconds=drain_detach_seconds, usage_end=usage_end,
+            )
+    except BaseException:
+        # A worker that never started left a terminal record: released
+        # `not_started`. A record still LAUNCHED (Ctrl-C, a drain detach)
+        # keeps its reservation for supervision and `resume` to account.
+        if token is not None:
+            with contextlib.suppress(Exception):
+                current = _read_job_record(runtime / "jobs" / f"{job_id}.json")
+                if current is not None:
+                    _usage_account(runtime, current)
+        raise
+    if token is None:
+        return record
+    # The terminal record exists: account the job, from the stream's own
+    # readings, then mark it `done` (D6).
+    last = usage_end.get("last")
+    return _usage_account(runtime, record, end_readings=None if last is None else list(last.values()),
+                          stream_start=usage_end.get("first"))
 
 
 #: How long a Controller retries a job's supervisor lock before it reports
@@ -5529,9 +5916,12 @@ def _launch_job(
     lifecycle_lock: lock.LifecycleLock,
     supervisor_lock_path: Path,
     drain_detach_seconds: float | None = None,
+    usage_end: dict | None = None,
 ) -> JobRecord:
     """Steps 4 (from the LAUNCHED flush) to 9 of :func:`execute_step`,
-    under the job's supervisor lock."""
+    under the job's supervisor lock. ``usage_end``, when given, receives
+    the worker stream's ``first`` and ``last`` usage readings (usage-budget
+    CP3) for the caller's accounting."""
     if decision.protocol is not None:
         # No release contract names a protocol job's phases: the Workflow's
         # own `reconcile` judges the outcome (CP5).
@@ -5594,6 +5984,12 @@ def _launch_job(
     # leaves the group to wait on or end on disk.
     resolved_timeout = DEFAULT_WORKER_TIMEOUT if timeout is None else timeout
     spawned: dict[str, Any] = {}
+    # Usage budget (CP3, D6): the reservation is renewed on this module's
+    # own timer from the on_spawn flush to the end of the launch, however
+    # few state changes the worker publishes.
+    usage_block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
+    ticker = (_usage_ticker(runtime, usage_block["token"], _usage_reservation_seconds(record))
+              if usage_block is not None and usage_block.get("token") else None)
 
     def on_spawn(worker_process: worker.WorkerProcess, *, anchor: worker.WorkerProcess | None = None,
                  ownership_tag: str | None = None) -> None:
@@ -5615,6 +6011,8 @@ def _launch_job(
                           details={"pid": worker_process.pid, "pgid": worker_process.pgid})
         spawned["flushed"] = True
         spawned["spawned_at"] = record["updated_at"]
+        if ticker is not None:
+            ticker.start()
 
     def on_group_drain(pid: int, remaining_pids: list[int]) -> None:
         # CP4 (release-runtime-observability): the worker exited but its
@@ -5694,6 +6092,9 @@ def _launch_job(
             _announce_orphaned_worker(spawned["worker_process"], managed_repo.root, runtime,
                                       drained=spawned.get("drained", False), anchor=spawned.get("anchor"))
         raise
+    finally:
+        if ticker is not None:
+            ticker.stop()
 
     if isinstance(result, worker.DrainDetached):
         # CP4 (worker-lifecycle-ownership, plan D): owned processes outlived
@@ -5729,6 +6130,14 @@ def _launch_job(
         "telemetry": block,
         "updated_at": completed_at,
     }
+    if usage_block is not None:
+        # Usage budget (CP3, D6): the end figures and `accounting:
+        # "pending"` ride in the write that reads the stream; every later
+        # write spreads the record, so whichever terminal write follows
+        # (here or a `resume` reconciler) carries them.
+        record["usage"], first, last = _usage_end_block(usage_block, worker_streams["stdout_path"])
+        if usage_end is not None:
+            usage_end.update(first=first, last=last)
     record = _persist(runtime, job_id, record, event="completed",
                       details={"outcome": result.outcome, "exit_code": result.returncode,
                                "telemetry": telemetry.completed_summary(block)})

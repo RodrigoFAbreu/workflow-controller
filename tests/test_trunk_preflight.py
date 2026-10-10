@@ -92,7 +92,9 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
     ``merge.*`` keys added to each job record's ``controller_settings``
     ``values`` and ``sources``. ``workflow-controller-usage-budget`` CP2
     regenerated it again, adding only the sixteen ``usage.*`` keys the same
-    way, so those are removed (and checked) too."""
+    way, so those are removed (and checked) too. Its CP3 added only each
+    launched job's ``usage`` block and the one ``usage_accounted`` write
+    (``event_seq`` + 1), so those are removed (and checked) as well."""
 
     #: The SHA-256 of ``tests/golden/no_policy_lifecycle.json`` at
     #: ``854d25c`` (1.5.0).
@@ -122,6 +124,15 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
 
         collect(data)
         self.assertEqual(len(blocks), 8)
+        jobs = [record for scenario in data.values()
+                for record in scenario.get("run", scenario.get("step", {})).get("jobs", [])]
+        usage_blocks = [record for record in jobs if "usage" in record]
+        self.assertEqual(len(usage_blocks), 8)
+        for record in usage_blocks:
+            block = record.pop("usage")
+            self.assertEqual((block["accounting"], block["delta"], block["charged"], block["token"]),
+                             ("done", "unknown", 8.0, "<V>"))
+            record["event_seq"] -= 1
         expected = {"values": {"merge.auto": True, "merge.poll_seconds": 30, "merge.wait_seconds": 3600},
                     "sources": dict.fromkeys(self.MERGE_KEYS, "file")}
         for block in blocks:

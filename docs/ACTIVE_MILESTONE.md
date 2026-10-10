@@ -13,7 +13,7 @@ commit `f516e76`; pull request title `feat: a usage budget that pauses a run bef
 | --- | --- |
 | CP1 `controller/usage.py` (readers, shared record, merge, admission, forecast, decision) | complete, verified by `tests/test_usage.py` |
 | CP2 settings generation 4 and the `--usage-cap` flags | complete, verified by `tests/test_settings.py` (`UsageRowsTest`), the regenerated no-policy golden and the full suite |
-| CP3 the gate, the reservation and the run loop (exit 17) | not started |
+| CP3 the gate, the reservation and the run loop (exit 17) | complete, verified by `tests/test_usage_gate.py` (38 tests), the regenerated no-policy golden and the full suite |
 | CP4 the `usage` subcommand and the manual-worker gate | not started |
 | CP5 documentation and roadmap | not started |
 
@@ -26,6 +26,13 @@ now `>=`), `run --usage-cap` and `step --usage-cap` (`usage --usage-codex-cap` a
 subcommand in CP4), and regenerated `tests/golden/no_policy_lifecycle.json` (only the new `controller_settings`
 keys moved, pinned by `tests/test_trunk_preflight.py`). The full suite fails only the two Git 2.56 trailer tests
 that fail on the base too.
+
+CP3 added `UsageHold`, the `usage_gate` argument and the `usage` job-record block in `controller/job.py`
+(bind before publish, renewal ticker, end figures in the `COMPLETED` write, the replay sweep in
+`_execute_step_locked` and `resume`, the `_reattach` accounting), the gate builder, the waiting `run` loop and
+exit 17 in `controller/cli.py`, the `observe` rendering, the `CODEX_HOME` test redirection and the exit-17 rows
+in `docs/exit-codes.md` and ADR 0001. The no-policy golden gained each job's `usage` block. The full suite
+fails only the two Git 2.56 trailer tests.
 
 ## Next action
 

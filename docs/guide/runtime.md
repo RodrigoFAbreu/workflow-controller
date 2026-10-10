@@ -43,8 +43,9 @@ in place lets a later sweep settle it. With
 budget on, admission fails closed and its message names
 `usage.enabled: false` as the way to keep running. The replay sweep that
 `step`, `run`, `resume` and `usage` perform skips the record with a
-one-line warning (printed once per command, and left out of the `usage`
-commands, which report the error themselves and exit `20`) and a `usage_record_unreadable` event, leaving every job's
+one-line warning (printed once per sweep, and left out of the `usage`
+commands, which report the error themselves and exit `20`; a command that
+sweeps more than once, such as `run` or `resume`, can print it again) and a `usage_record_unreadable` event, leaving every job's
 `accounting` as it is; a release that can read the record settles it later,
 exactly once.
 

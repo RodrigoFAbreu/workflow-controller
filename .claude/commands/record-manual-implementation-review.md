@@ -199,9 +199,23 @@ and refuses before writing anything.
      actually saw) and its phase transition to the terminal
      `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` phase — the existing phase
      name, reused rather than a new one (`D-Implementation-Review-Version-Activation`'s
-     "terminal-phase naming" decision).
+     "terminal-phase naming" decision). **Leave this write uncommitted -- do
+     not commit it** (workflow-2.9.1, `REVIEW_PROTOCOL.md`'s commit rule for
+     review-stage writes): the approval commit (`/approve-review
+     implementation` or `/satisfy-gate implementation`) picks it up, and a
+     commit of its own would put HEAD past the bundle's `generation_head`
+     and raise `bundle_generation_mismatch` at that gate.
    - `REVISE`: only the phase transition directly to
-     `APPLYING_REVIEW_FEEDBACK` (no ledger write).
+     `APPLYING_REVIEW_FEEDBACK` (no ledger write). **Then commit the write
+     alone** (workflow-2.9.1): after the persist, call
+     `workflow_state.commit_pending_applying_review_feedback_entry(repo_root,
+     work_item_id, attribution=<the Co-Authored-By/Claude-Session lines this
+     session is told to add, or ()>)`; any uncommitted local `APPROVE`
+     ledger rides in with it. It stages only this work item's state and
+     commits it with a `Workflow-Work-Item` trailer as the final paragraph,
+     before any fix commit; it returns `None` when already committed. Report a
+     `ReviewStageWriteNotCommittableError` or a `DirtyIndexBeforeStagingError`
+     (unstage the unrelated content) and stop. Never a broader `git add`.
    - `BLOCK`: nothing (a true no-op; the work item stays at
      `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`).
    Never the plan, registry, mapping, command, product, or bundle-content

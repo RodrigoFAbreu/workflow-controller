@@ -202,6 +202,11 @@ normative definition.
    `LPR-R3-003`): an untracked declared path makes
    `resolve_plan_stage_metadata` refuse, and both the two-stage publish's
    own fresh-id computation and the regeneration below read through it.
+   Plan-stage writes are not committed here (workflow-2.9.1,
+   `REVIEW_PROTOCOL.md`'s commit rule for review-stage writes): there is no
+   generation-record commit at the plan stage, the plan-approval commit
+   takes the whole working-tree state, and a commit of its own would raise
+   `bundle_generation_mismatch` at the plan-approval gate.
    Then publish, in the same operation and before the bundle below is
    regenerated (`D-Plan-Revision-Publication`, `WFR-65`), by calling
    `workflow_state.state_transaction(repo_root, lambda state:

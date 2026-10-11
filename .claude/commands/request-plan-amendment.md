@@ -197,8 +197,7 @@ and wait.
 3. **Commit the state write, alone**: stage exactly
    `docs/ai-workflow/WORKFLOW_STATE.json` (never a broader `git add`) and
    create one commit carrying a single `Workflow-Work-Item: <work_item_id>`
-   trailer as the message's own final paragraph -- after any
-   `Co-Authored-By:`/`Claude-Session:` lines, never before them
+   trailer as the message's own final paragraph and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
    (`OPUS-R129-001`, the same rule `milestone-implement.md` step 1f and
    `approve-review.md` step 6.4 already state). No
    `Workflow-Bundle-Generation-Record`, `Workflow-Supersedes`,

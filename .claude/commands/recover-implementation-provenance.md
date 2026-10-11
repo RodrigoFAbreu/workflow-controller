@@ -129,8 +129,7 @@ provenance pointer.
    number), `Workflow-Work-Item: <work_item_id>`, and
    `Workflow-Supersedes: <t>` naming the commit step 3 returned. No other
    trailer, and no other path in the same commit. **These three trailer
-   lines must be the commit message's own final paragraph** — after any
-   `Co-Authored-By:`/`Claude-Session:` lines, never before them
+   lines must be the commit message's own final paragraph** and nothing else is in it (the record's trailer set is checked exactly, so a `Co-Authored-By:` line in that paragraph is refused): any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
    (`OPUS-R129-001`, the same rule `milestone-implement.md` step 1f,
    `bootstrap-workflow-v2.md` step 6, `approve-review.md` step 6.4, and
    `accept-milestone.md` step 6 already state): Git's `git

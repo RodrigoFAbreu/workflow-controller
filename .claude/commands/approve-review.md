@@ -679,8 +679,7 @@ actually load-bearing control for the Skill exposure path, not mechanism
      trailer; it never needs to search for one itself. The exact scoped
      trailer *lookup* later durability/freshness checks use is
      `workflow_state.discover_plan_approval_commit` (`WF4a-iii`). **These
-     two lines must be the commit message's own final paragraph** — after
-     any `Co-Authored-By:`/`Claude-Session:` lines, never before them
+     two lines must be the commit message's own final paragraph** and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
      (`OPUS-R129-001`): Git's `git interpret-trailers --parse`, the exact
      mechanism `discover_plan_approval_commit` uses, treats only the
      message's last paragraph as trailers, so a blank line after these
@@ -693,8 +692,7 @@ actually load-bearing control for the Skill exposure path, not mechanism
    direct `apply_technical_approval`/`state_transaction` write and plain
    `git commit` this stage has always used; none of 4b/4c/5/6.2-6.4/
    6a/6b/6c/6d below apply to it. **These two trailer lines must also be
-   the commit message's own final paragraph** — after any
-   `Co-Authored-By:`/`Claude-Session:` lines, never before them
+   the commit message's own final paragraph** and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
    (`OPUS-R129-001`, the same rule `milestone-implement.md` step 1f,
    `bootstrap-workflow-v2.md` step 6, step 6.4 above, and
    `accept-milestone.md` step 6 already state): Git's `git

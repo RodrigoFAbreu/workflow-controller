@@ -264,8 +264,7 @@ dirty-resume rule, `WF2`):
       only writes the trailer, it never needs to search for one itself;
       the exact scoped lookup later checks use is
       `workflow_state.discover_checkpoint_commits`, `WF4a-iii`). **These
-      two lines must be the commit message's final paragraph** -- after
-      any `Co-Authored-By:`/`Claude-Session:` lines, never before them
+      two lines must be the commit message's final paragraph** and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
       (`OPUS-R129-001`): Git's `git interpret-trailers --parse`, the exact
       mechanism `discover_checkpoint_commits` uses, treats only the
       message's last paragraph as trailers, so a blank line after these
@@ -383,8 +382,7 @@ dirty-resume rule, `WF2`):
      <work_item_id>/<implementation_revision>` +
      `Workflow-Work-Item: <work_item_id>` trailers, no other trailer.
      **These two trailer lines must be the commit message's own final
-     paragraph** -- after any `Co-Authored-By:`/`Claude-Session:` lines,
-     never before them (`OPUS-R129-001`, the same rule step 1f above,
+     paragraph** and nothing else is in it (the record's trailer set is checked exactly, so a `Co-Authored-By:` line in that paragraph is refused): any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line (`OPUS-R129-001`, the same rule step 1f above,
      `bootstrap-workflow-v2.md` step 6, `approve-review.md` step 6.4, and
      `accept-milestone.md` step 6 already state): Git's `git
      interpret-trailers --parse`, the exact mechanism

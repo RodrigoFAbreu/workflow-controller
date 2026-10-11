@@ -93,10 +93,45 @@ all in the same invocation.
      longer matches the working tree. If an edit already landed before
      this call ran, that is a process violation: make the stale write
      now, before continuing, rather than backfilling it after the fact.
+     **Then commit that write alone, before the first edit**, exactly as
+     `/apply-pr-review`'s "Durable ordering of every branch that stales"
+     step 2 does (`LPR-R4-001`): the generation-record validators do not
+     admit `technical_approval`, so a post-fix record commit that swept the
+     `STALE` write up would be refused. A plain **state-only commit**, with no
+     trailer, staging exactly that one path with
+     `workflow_state.stage_scoped_state(repo_root, <work_item_id>)` (it
+     returns `False`, and the ordinary single-path `git add` runs, unless
+     another work item holds uncommitted residue in the state file). When
+     nothing is staged afterwards (`git diff --cached --quiet`: an
+     orchestrator already committed the write), there is nothing to commit and
+     this does nothing. A repeated `mark_technical_approval_stale` call
+     advances `state_revision`, so it is a new state change and gives one more
+     state-only commit before the fix, which is valid; only re-staging a write
+     that is already committed leaves nothing staged. This still precedes the
+     first source or test edit.
   2. Make the fix (step 4's normal work: regression test included).
   3. Commit the fix (one coherent commit; do not bundle it with an
-     unrelated finding's fix).
-  4. Regenerate the bundle at the `post-fix` stage. **`REJECTED`-bundle
+     unrelated finding's fix). Each bounded finding of the round runs
+     sub-steps 1 to 3 in turn; a second stale write is legal and is
+     committed the same way.
+
+     **Then, before the regeneration, run top-level steps 5 and 6 for the
+     whole round**: route every broad finding of the round first (its child
+     is created, so step 6 can name its id). The new child's entry in
+     `WORKFLOW_STATE.json` stays uncommitted in this round: the child's own
+     plan-approval commit (`/approve-review plan <child-id>` or
+     `/satisfy-gate plan <child-id>`) first commits it, and `stage_scoped_state` keeps it
+     out of every commit of the parent's round, the generation record
+     included. Then commit the "no code change"
+     fixes (step 5) and the
+     functional-review checklist update in `docs/ACTIVE_MILESTONE.md`
+     (step 6: what changed, any deferral to a remediation child by id, what
+     needs re-testing). This is the last ordinary commit of the round: a
+     commit that lands after the generation record in sub-step 4 moves
+     `HEAD` past the bundle's `generation_head`, and the next implementation
+     review stops with `bundle_generation_mismatch`.
+  4. Regenerate the bundle at the `post-fix` stage, **once per round**, after
+     the last fix and the step 5 and 6 commits. **`REJECTED`-bundle
      refusal, this branch's sole assertion, immediately preceding
      `record_bundle_generation`** (`WFR-67`, one of the three named writer
      call sites; this branch is a consumer scoped by act, since it creates
@@ -146,8 +181,7 @@ all in the same invocation.
      `"same_content"`, that same `Workflow-Bundle-Generation-Record` value
      (unchanged) + `Workflow-Work-Item: <work_item_id>` +
      `Workflow-Supersedes: <t>`, no other trailer. **These trailer lines
-     must be the commit message's own final paragraph** — after any
-     `Co-Authored-By:`/`Claude-Session:` lines, never before them
+     must be the commit message's own final paragraph** and nothing else is in it (the record's trailer set is checked exactly, so a `Co-Authored-By:` line in that paragraph is refused): any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
      (`OPUS-R129-001`, the same rule `milestone-implement.md` step 1f,
      `bootstrap-workflow-v2.md` step 6, `approve-review.md` step 6.4, and
      `accept-milestone.md` step 6 already state): Git's `git
@@ -187,6 +221,11 @@ all in the same invocation.
      corrected, at the `assert_stage_completeness` withdrawal above. Then
      run `./scripts/prepare-ai-review.sh <base-sha> post-fix
      [work_item_id]`.
+
+     **No commit may follow this record in this invocation;
+     anything still to commit belongs before it.** What turns up after it
+     belongs to the next round, or to `/recover-implementation-provenance`
+     when it is excluded-only.
   5. **Mark this round's `FUNCTIONAL_REVIEW.md` consumed** (O3): call
      `workflow_fingerprint.mark_functional_review_consumed(repo_root,
      work_item_id)` — every finding this round classified now has a
@@ -194,9 +233,13 @@ all in the same invocation.
      change"/"broad" branch in this same invocation), so this exact
      content must never be re-read as fresh on a later pass. This finding
      now requires a fresh implementation-review round: report readiness
-     and **stop** — this re-enters
-     `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` exactly like an ordinary
-     post-fix round (`/apply-implementation-review` drives it from here).
+     and **stop** — this re-enters the version's post-fix target phase
+     (`bundle_generation_target_phase("post-fix", <version>)`):
+     `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for a `"2.2"` item (both
+     implementation-review stages run again) and
+     `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a `"1"`/`"2.1"` item,
+     exactly like an ordinary post-fix round for that version
+     (`/apply-implementation-review` drives it from here).
      A fresh `/approve-review implementation` must succeed before
      `AWAITING_FUNCTIONAL_REVIEW` is reachable again for this item. Do not
      proceed to step 6/7 in this same invocation once any finding takes
@@ -292,10 +335,14 @@ all in the same invocation.
 5. Commit coherent fixes for any "no code change"/narrative-only findings
    resolved in step 4 (the bounded branch already committed its own fix
    above; a round that is entirely bounded- or broad-branch findings may
-   have nothing left to commit here).
+   have nothing left to commit here). In a round where a finding took the
+   bounded branch, this step already ran inside it, before the
+   regeneration, and is not repeated.
 6. Update the functional-review checklist in `docs/ACTIVE_MILESTONE.md` to
    reflect what changed, what was deferred to a remediation child (name the
-   child work-item id), and what still needs re-testing.
+   child work-item id), and what still needs re-testing. In a round where a
+   finding took the bounded branch, this step already ran inside it, before
+   the regeneration, and is not repeated.
 7. **Mark this round's `FUNCTIONAL_REVIEW.md` consumed** (O3): call
    `workflow_fingerprint.mark_functional_review_consumed(repo_root,
    work_item_id)` — every finding this round classified now has a

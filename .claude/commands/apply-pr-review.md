@@ -99,7 +99,9 @@ and the bounded fix, in this order:
    that one path, again with `stage_scoped_state`, and create one commit
    carrying `Workflow-Bundle-Generation-Record: <work_item_id>/<implementation_revision>`
    and `Workflow-Work-Item: <work_item_id>` as the message's own final
-   paragraph (`OPUS-R129-001`, after any `Co-Authored-By:` lines). The
+   paragraph, with nothing else in it (the record's trailer set is checked exactly, so a `Co-Authored-By:` line in that paragraph is refused): any
+   `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before
+   it, separated by a blank line (`OPUS-R129-001`). The
    `post-fix` target phase is `bundle_generation_target_phase("post-fix",
    <governing_workflow_version>)`. Then run
    `workflow_state.validate_bundle_generation_record_commit`, refresh

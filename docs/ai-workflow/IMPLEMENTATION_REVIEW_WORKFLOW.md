@@ -95,6 +95,17 @@ Whichever command stops, it states, in its own report:
   the ordinary `REVISE` loop or from a `"2.2"` item's functional-review
   bounded-fix branch (`/apply-functional-review`).
 
+## Committing a review-stage write (`workflow-2.9.1`)
+
+A `REVISE` is committed on its own, before any fix commit, so the post-fix
+generation record still transitions `phase`; an `APPROVE` is left uncommitted
+for the approval commit to take, because a commit of its own puts `HEAD` past
+the bundle's `generation_head`. `/apply-implementation-review` step 1 commits
+a still-pending `REVISE` write (or step 0's own entry) as a safety net and
+does nothing when it is already committed. The full rule, with the helper
+and its refusals, is in `REVIEW_PROTOCOL.md` ("Which review-stage writes are
+committed"); it does not depend on the governing version.
+
 ## Staleness, in one line
 
 Both ledger stages are valid only while the ledger's stored

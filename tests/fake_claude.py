@@ -87,6 +87,25 @@ Recognised environment variables (all optional):
     Only with ``FAKE_CLAUDE_DESCENDANT``: the descendant writes
     ``{"pid"}`` here as JSON when it starts, and rewrites it as
     ``{"pid", "exited_at"}`` (``time.time()``) just before it exits.
+``FAKE_CLAUDE_ORPHAN_SECONDS``
+    How long an *orphaned* fake lives (default ``300``; ``0`` or a negative
+    value disables the watchdog). ``main()`` records its parent's pid and
+    polls it every 0.5 s with an interval timer (no thread: a thread would
+    make ``os.fork()`` in the ``FAKE_CLAUDE_DESCENDANT`` modes warn on
+    Python 3.12+). Once the parent differs (it died and the fake was
+    re-parented) the fake counts this many seconds down and then ends its
+    process group with ``SIGKILL`` when it leads one, otherwise only
+    itself. A killed test run therefore cannot leave a fake behind that
+    keeps a real Controller's job draining (the stdin anchor holds the
+    pipe the fake waits on, and the anchor waits for the fake).
+``FAKE_CLAUDE_ORPHAN_READY_FILE``
+    If set, the fake writes its pid here (temporary name, then renamed)
+    once the watchdog is armed. A test that orphans a fake on purpose
+    waits for it first. Test plumbing, absent from every production path.
+``FAKE_CLAUDE_READY_HOLD_FILE``
+    If set, the fake waits (at most the orphan lifetime) for this file to
+    exist before it writes the ready file -- so a test can order a helper's
+    wait against the fake's readiness by a handshake, not a delay.
 ``FAKE_CLAUDE_STDERR``
     The exact stderr to write. Defaults to empty.
 
@@ -1322,6 +1341,53 @@ def orphan_burst(count: int, spacing: float, lifetime: float, marks_file: str | 
             json.dump({"started_at": started_at, "ended_at": time.time()}, fh)
 
 
+ORPHAN_SECONDS_DEFAULT = 300.0
+_ORPHAN_POLL_SECONDS = 0.5
+
+
+def _orphan_seconds() -> float:
+    try:
+        return float(os.environ.get("FAKE_CLAUDE_ORPHAN_SECONDS", ORPHAN_SECONDS_DEFAULT))
+    except ValueError:
+        return ORPHAN_SECONDS_DEFAULT
+
+
+def _start_orphan_watchdog() -> None:
+    """End this fake, and its process group when it leads one, a bounded
+    time after its original parent has died (module docstring). The
+    readiness file is written whether or not the watchdog is armed."""
+    seconds = _orphan_seconds()
+    if seconds > 0:
+        original_parent = os.getppid()
+        orphaned_at: list[float] = []
+
+        def check(_signum, _frame) -> None:
+            if os.getppid() == original_parent:
+                return
+            now = time.monotonic()
+            if not orphaned_at:
+                orphaned_at.append(now)
+            if now - orphaned_at[0] < seconds:
+                return
+            if os.getpgrp() == os.getpid():
+                os.killpg(os.getpgrp(), signal.SIGKILL)
+            os.kill(os.getpid(), signal.SIGKILL)
+
+        signal.signal(signal.SIGALRM, check)
+        signal.setitimer(signal.ITIMER_REAL, _ORPHAN_POLL_SECONDS, _ORPHAN_POLL_SECONDS)
+    hold = os.environ.get("FAKE_CLAUDE_READY_HOLD_FILE")
+    if hold:
+        deadline = time.monotonic() + (seconds if seconds > 0 else ORPHAN_SECONDS_DEFAULT)
+        while not os.path.exists(hold) and time.monotonic() < deadline:
+            time.sleep(0.01)
+    ready = os.environ.get("FAKE_CLAUDE_ORPHAN_READY_FILE")
+    if ready:
+        tmp = f"{ready}.{os.getpid()}.tmp"
+        with open(tmp, "w") as fh:
+            fh.write(str(os.getpid()))
+        os.replace(tmp, ready)
+
+
 def main() -> None:
     if sys.argv[1:2] == ["--orphan-burst"]:
         count, spacing, lifetime, *rest = sys.argv[2:]
@@ -1330,6 +1396,7 @@ def main() -> None:
         orphan_burst(int(count), float(spacing), float(lifetime), options.get("--marks"), options.get("--gate"),
                      int(after_parent) if after_parent else None)
         return
+    _start_orphan_watchdog()
     _refuse_stream_json_without_verbose()
     _count_invocation()
     if _streaming():

@@ -1,5 +1,21 @@
 # Active Milestone
 
+## In progress
+
+**`workflow-controller-test-leftover-lifetime`** (`docs/ROADMAP.md` step C12a, follow-up 8; plan
+`docs/ai-workflow/CONTROLLER_TEST_LEFTOVER_LIFETIME_PLAN.md`, revision 11, base `e2064d3`). A fake worker (and the
+other processes tests start) whose test run was killed now ends by itself, so a review worker that is killed
+mid-suite no longer leaves a real job draining for hours.
+
+| checkpoint | state |
+| --- | --- |
+| CP1 orphan watchdog, readiness file, contract tests, readiness-gated loss helpers | complete (verified: `tests.test_fake_claude_contract`, `test_worker`, `test_resume`, `test_lifecycle_orchestration`, 420 tests OK) |
+| CP2 detached helpers, daemons and sleepers bounded; inventory | pending |
+| CP3 child Controllers end with their test; incident replays | pending |
+| CP4 documentation and roadmap | pending |
+
+The section below describes the previous, completed milestone.
+
 ## Status
 
 **Complete.** `workflow-controller-usage-budget` (`docs/ROADMAP.md` step C8, section 11.6) reached

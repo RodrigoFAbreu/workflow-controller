@@ -99,6 +99,27 @@ def spawn_sleeper(test_case: unittest.TestCase) -> subprocess.Popen:
     return proc
 
 
+def wait_fake_ready(ready_file: "str | os.PathLike", pid: int, on_waiting=None, *, timeout: float = 30.0) -> None:
+    """Wait until the fake's watchdog readiness file (``FAKE_CLAUDE_ORPHAN_READY_FILE``)
+    names ``pid``, so a test that orphans a fake on purpose never does it in
+    the fake's startup window. ``on_waiting`` is called once, after the
+    inputs are resolved and immediately before the first poll (a handshake
+    for tests that order something against the fake's readiness). Raises
+    ``AssertionError`` naming the file and pid when it never does."""
+    ready = Path(ready_file)
+    if on_waiting is not None:
+        on_waiting()
+
+    def named() -> bool:
+        try:
+            return ready.read_text().strip() == str(pid)
+        except (OSError, ValueError):
+            return False
+
+    if not wait_until(named, timeout=timeout):
+        raise AssertionError(f"the fake worker {pid} never announced readiness in {ready}")
+
+
 def worker_process_dict(pid: int, *, pgid: int | None = None, start_ticks: int | None | object = ...,
                         context: dict | None = None) -> dict:
     """A ``worker_process`` record for ``pid`` in ``context`` (the current

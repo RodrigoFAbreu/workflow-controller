@@ -1112,6 +1112,7 @@ class _OrphanWorkerCase(_ResumeTestCase):
         super().setUp()
         self.release = self.tmp_root / "release"
         self.invocations = self.tmp_root / "invocations"
+        self.fake_ready = self.tmp_root / "fake-ready"
         self._child: subprocess.Popen | None = None
         self.addCleanup(self._end_orphans)
 
@@ -1153,7 +1154,8 @@ class _OrphanWorkerCase(_ResumeTestCase):
             [sys.executable, "-c", script, str(fixtures.REPO_ROOT), str(root), str(self.runtime_root),
              str(FAKE_CLAUDE), *marker],
             env={**os.environ, "FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
-                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations), **(env or {})},
+                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(self.invocations),
+                 "FAKE_CLAUDE_ORPHAN_READY_FILE": str(self.fake_ready), **(env or {})},
         )
         appeared = process_fixtures.wait_until(
             lambda: self._record_with_worker_process() is not None or self._child.poll() is not None,
@@ -1162,6 +1164,8 @@ class _OrphanWorkerCase(_ResumeTestCase):
         record = self._record_with_worker_process()
         self.assertTrue(appeared and record is not None,
                         "the LAUNCHED record never carried worker_process with its worker_spawned line")
+        # Never orphan a fake that has not armed its watchdog (fake_claude D2).
+        process_fixtures.wait_fake_ready(self.fake_ready, record["worker_process"]["pid"])
         self._child.send_signal(signal.SIGKILL)
         self._child.wait(timeout=10)
         # The orphaned worker is running on its own now (its start may
@@ -2640,7 +2644,17 @@ if config.get("hang_on_spawn"):
     real_launch = worker.launch
 
     def launch(*args, **kwargs):
-        kwargs["on_spawn"] = lambda *a, **k: hang()
+        def on_spawn(worker_process, **_ignored):
+            # Test plumbing for `lose_controller`: the worker's pid, published
+            # in a marker file and never in the job record, which must stay
+            # STARTING with no `worker_process` and no `worker_anchor`.
+            spawn_file = Path(config["spawn_pid_file"])
+            tmp = spawn_file.with_name(spawn_file.name + ".tmp")
+            tmp.write_text(str(worker_process.pid))
+            os.replace(tmp, spawn_file)
+            hang()
+
+        kwargs["on_spawn"] = on_spawn
         return real_launch(*args, **kwargs)
 
     job.worker.launch = launch
@@ -2680,7 +2694,8 @@ class _LostControllerCase(lifecycle._WaitingWorkerCase):
               env: dict | None = None) -> subprocess.Popen:
         fixtures.write_worker_script(lc.script_path, lc.script)
         lc.runtime.mkdir(parents=True, exist_ok=True)
-        config = {"marker": str(lc.case_dir / "controller-stopped"), **(config or {})}
+        config = {"marker": str(lc.case_dir / "controller-stopped"),
+                  "spawn_pid_file": str(lc.case_dir / "spawn-pid"), **(config or {})}
         fields = json.dumps(dataclasses_asdict(self.ident), default=str)
         argv = ["--runtime-dir", str(lc.runtime), "--workflow-manager", str(self.stub_manager),
                 "--claude-binary", str(lifecycle.FAKE_CLAUDE), command, *args, str(lc.root)]
@@ -2717,12 +2732,13 @@ class _LostControllerCase(lifecycle._WaitingWorkerCase):
         return found
 
     def lose_controller(self, lc: lifecycle.Lifecycle, turns: list, *, until=None, config: dict | None = None,
-                        timeout: float = 60) -> dict:
+                        timeout: float = 60, on_waiting=None, env: dict | None = None) -> dict:
         """Run ``step`` in a child Controller whose worker plays ``turns``,
         and SIGKILL it once ``until(record)`` holds (or once it stopped at
         its configured point). Returns the record as the loss left it."""
         lc.add(MILESTONE_IMPLEMENT, {"turns": turns})
-        child = self.child(lc, "step", config=config)
+        ready_file = lc.case_dir / "fake-ready"
+        child = self.child(lc, "step", config=config, env={"FAKE_CLAUDE_ORPHAN_READY_FILE": str(ready_file), **(env or {})})
         marker = lc.case_dir / "controller-stopped"
 
         def ready() -> bool:
@@ -2734,9 +2750,34 @@ class _LostControllerCase(lifecycle._WaitingWorkerCase):
         self.assertTrue(process_fixtures.wait_until(lambda: ready() or child.poll() is not None, timeout=timeout),
                         "the Controller never reached the loss point")
         self.assertIsNone(child.poll(), f"the Controller ended first: {self.child_stderr(child)}")
+        # Never orphan a fake that has not armed its watchdog (fake_claude D2).
+        worker_pid = self._lost_worker_pid(lc, config)
+        process_fixtures.wait_fake_ready(ready_file, worker_pid, on_waiting=on_waiting)
         child.send_signal(signal.SIGKILL)
         child.wait(timeout=10)
         return self.job_record(lc)
+
+    def _lost_worker_pid(self, lc: lifecycle.Lifecycle, config: dict | None) -> int:
+        """The pid of the worker the lost Controller started: the record's
+        `worker_process`, or -- for `hang_on_spawn`, which loses the
+        Controller before the record carries one -- the pid its replaced
+        `on_spawn` wrote to `spawn_pid_file`."""
+        if (config or {}).get("hang_on_spawn"):
+            spawn_file = lc.case_dir / "spawn-pid"
+            self.assertTrue(process_fixtures.wait_until(spawn_file.exists, timeout=30),
+                            "the replaced on_spawn never published the worker's pid")
+            return int(spawn_file.read_text())
+        found: list[int] = []
+
+        def published() -> bool:
+            record = self.job_record(lc)
+            if record is not None and "worker_process" in record:
+                found.append(record["worker_process"]["pid"])
+            return bool(found)
+
+        self.assertTrue(process_fixtures.wait_until(published, timeout=30),
+                        "the record never carried worker_process")
+        return found[0]
 
     @staticmethod
     def at_state(state: str):
@@ -3471,6 +3512,33 @@ class StartingRecordTest(_LostControllerCase):
         result = self.cli(lc, "resume")
         self.assertEqual(result.code, cli.EXIT_INTERRUPTED, result.stderr)
         self.assertEqual(self.job_record(lc, lost["job_id"])["status"], job.STATUS_INTERRUPTED)
+
+    def test_the_pre_record_loss_waits_for_the_markers_pid_and_publishes_no_identity(self) -> None:
+        lc = self.seed("starting-ready", IMPLEMENTING)
+        ready, hold = lc.case_dir / "fake-ready", lc.case_dir / "ready-hold"
+        waited: list[bool] = []
+
+        def release_hold() -> None:
+            # The fake is held, so it is provably not ready when the helper starts waiting.
+            self.assertFalse(ready.exists())
+            waited.append(True)
+            hold.touch()
+
+        def end_worker() -> None:
+            if lc.processes_file.exists():
+                for line in lc.processes_file.read_text().split():
+                    process_fixtures.kill_group(int(line))
+
+        self.addCleanup(end_worker)
+        lost = self.lose_controller(lc, [[{"step": "text", "text": "hello"}]], on_waiting=release_hold,
+                                    env={"FAKE_CLAUDE_READY_HOLD_FILE": str(hold)}, config={
+            "hang_on_spawn": True, "anchor": {"ANCHOR_ORPHAN_SECONDS": 1, "ANCHOR_POLL_SECONDS": 0.2}})
+        self.assertEqual(waited, [True])
+        spawn_pid = int((lc.case_dir / "spawn-pid").read_text())
+        self.assertEqual(int(ready.read_text()), spawn_pid)
+        self.assertEqual(lost["worker_state"]["state"], worker.STARTING)
+        self.assertNotIn("worker_process", lost)
+        self.assertNotIn("worker_anchor", lost)
 
 
 class SupervisorProbeTest(_LostControllerCase):

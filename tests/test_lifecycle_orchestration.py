@@ -1321,7 +1321,8 @@ class ResumeReconciliationTest(_LifecycleTestCase):
              str(FAKE_CLAUDE)],
             env={**os.environ, "FAKE_CLAUDE_SCRIPT": str(lc.script_path),
                  "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file),
-                 "FAKE_CLAUDE_HANG_UNTIL_FILE": str(release)},
+                 "FAKE_CLAUDE_HANG_UNTIL_FILE": str(release),
+                 "FAKE_CLAUDE_ORPHAN_READY_FILE": str(lc.case_dir / "fake-ready")},
         )
         self.addCleanup(self._end_orphans, lc, child, release)
         self.assertTrue(process_fixtures.wait_until(
@@ -1332,6 +1333,8 @@ class ResumeReconciliationTest(_LifecycleTestCase):
         self.assertEqual(record["selected_action"]["command"], APPLY)
         self.assertEqual(record["selected_action"]["task_addendum"],
                          evidence.pending_review_stage_write_addendum(WI, AWAITING_LOCAL))
+        # Never orphan a fake that has not armed its watchdog (fake_claude D2).
+        process_fixtures.wait_fake_ready(lc.case_dir / "fake-ready", record["worker_process"]["pid"])
         child.send_signal(signal.SIGKILL)
         child.wait(timeout=10)
         self.assertTrue(process_fixtures.wait_until(lambda: self.processes(lc) == 1),
@@ -2217,7 +2220,8 @@ class LifecycleLockLifetimeTest(_WaitingWorkerCase):
             [sys.executable, "-c", _CHILD_WAITING_STEP, str(fixtures.REPO_ROOT), str(lc.root), str(lc.runtime),
              str(FAKE_CLAUDE)],
             env={**os.environ, "FAKE_CLAUDE_TURNS": json.dumps(turns),
-                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file)},
+                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file),
+                 "FAKE_CLAUDE_ORPHAN_READY_FILE": str(lc.case_dir / "fake-ready")},
         )
         self.addCleanup(release.touch)
         self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait()))
@@ -2236,6 +2240,8 @@ class LifecycleLockLifetimeTest(_WaitingWorkerCase):
         self.assertEqual(record["status"], job.STATUS_LAUNCHED)
         self.assertEqual(lock.probe_lifecycle_lock(lc.root), lock.HELD)
 
+        # Never orphan a fake that has not armed its watchdog (fake_claude D2).
+        process_fixtures.wait_fake_ready(lc.case_dir / "fake-ready", record["worker_process"]["pid"])
         child.send_signal(signal.SIGKILL)
         child.wait(timeout=10)
         self.assertEqual(lock.probe_lifecycle_lock(lc.root), lock.HELD)

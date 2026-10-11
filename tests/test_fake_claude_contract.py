@@ -1193,6 +1193,200 @@ class FakeStreamingModeTest(unittest.TestCase):
         self.assertEqual(len(report["sessions"]), 6)
         self.assertEqual({int(pid) for pid in report["sessions"]}, set(report["sessions"].values()))
 
+def _gone(pid: int) -> bool:
+    """Whether ``pid`` is gone; a zombie counts as gone (as
+    ``controller.anchor.worker_gone`` counts it)."""
+    from tests import process_fixtures
+
+    stat = process_fixtures.read_stat(pid)
+    return stat is None or stat[0] in ("Z", "X", "x")
+
+
+#: Starts one fake from this intermediate process and records its pid. The
+#: test kills the intermediate (by pid) to orphan the fake for real.
+_INTERMEDIATE = """
+import json, os, subprocess, sys, time
+spec = json.loads(sys.argv[1])
+env = {**os.environ, **spec["env"]}
+stdin, pass_fds, holder = subprocess.DEVNULL, (), None
+if spec.get("held_stdin"):
+    read_end, write_end = os.pipe()
+    os.write(write_end, spec["task_line"].encode())
+    holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"], pass_fds=(write_end,),
+                              start_new_session=True)
+    stdin = read_end
+proc = subprocess.Popen(spec["argv"], env=env, stdin=stdin, stdout=subprocess.DEVNULL,
+                        start_new_session=spec["new_session"])
+with open(spec["pids"], "w") as fh:
+    json.dump({"fake": proc.pid, "holder": holder.pid if holder else None}, fh)
+time.sleep(600)
+"""
+
+#: Starts a hang-mode fake and a sibling sleeper in this launcher's own
+#: group (the fake does not lead it), waits for the fake's readiness, and
+#: exits -- which orphans the fake.
+_LAUNCHER = """
+import json, os, subprocess, sys, time
+spec = json.loads(sys.argv[1])
+fake = subprocess.Popen(spec["argv"], env={**os.environ, **spec["env"]}, stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL)
+sibling = subprocess.Popen(["sleep", "600"])
+while not os.path.exists(spec["fake_ready"]):
+    time.sleep(0.02)
+with open(spec["pids"], "w") as fh:
+    json.dump({"fake": fake.pid, "sibling": sibling.pid, "pgrp": os.getpgrp()}, fh)
+"""
+
+
+class OrphanWatchdogTest(unittest.TestCase):
+    """An orphaned fake ends itself (and its group, when it leads one)
+    after ``FAKE_CLAUDE_ORPHAN_SECONDS`` (``tests/fake_claude.py``, D2)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="orphan-watchdog-"))
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.env = {"FAKE_CLAUDE_ORPHAN_SECONDS": "1", "FAKE_CLAUDE_ORPHAN_READY_FILE": str(self.tmp / "ready"),
+                    "FAKE_CLAUDE_HANG": "1", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": str(self.tmp / "child")}
+        self.plain_argv = [sys.executable, str(FAKE_CLAUDE), "-p", "task", "--output-format", "stream-json",
+                           "--verbose"]
+
+    def _track(self, pid: int) -> None:
+        def end() -> None:
+            for sig in (signal.SIGCONT, signal.SIGKILL):
+                _kill_with(pid, sig)
+
+        self.addCleanup(end)
+
+    def _start(self, *, env=None, argv=None, new_session=True, held_stdin=False) -> tuple[subprocess.Popen, dict]:
+        from tests import process_fixtures
+
+        pids = self.tmp / "pids"
+        spec = {"env": {**self.env, **(env or {})}, "argv": argv or self.plain_argv, "pids": str(pids),
+                "new_session": new_session, "held_stdin": held_stdin, "task_line": task_line()}
+        intermediate = subprocess.Popen([sys.executable, "-c", _INTERMEDIATE, json.dumps(spec)])
+        self.addCleanup(intermediate.wait)
+        self._track(intermediate.pid)
+        self.assertTrue(process_fixtures.wait_until(pids.exists, timeout=30), "the intermediate never started")
+        found = json.loads(pids.read_text())
+        for pid in found.values():
+            if pid:
+                self._track(pid)
+        self.assertTrue(process_fixtures.wait_until((self.tmp / "ready").exists, timeout=30),
+                        "the fake never announced readiness")
+        self.assertEqual(int((self.tmp / "ready").read_text()), found["fake"])
+        child_file = spec["env"]["FAKE_CLAUDE_HANG_CHILD_PID_FILE"]
+        if child_file and spec["env"]["FAKE_CLAUDE_HANG"]:
+            # The fake's own `sleep`, in the fake's group; ended by exact pid at cleanup.
+            self.assertTrue(process_fixtures.wait_until(Path(child_file).exists, timeout=10))
+            self._track(int(Path(child_file).read_text()))
+        return intermediate, found
+
+    def _orphan(self, intermediate: subprocess.Popen) -> None:
+        os.kill(intermediate.pid, signal.SIGKILL)
+        intermediate.wait(timeout=10)
+
+    def _assert_gone_within(self, pid: int, seconds: float = 10) -> None:
+        from tests import process_fixtures
+
+        self.assertTrue(process_fixtures.wait_until(lambda: _gone(pid), timeout=seconds),
+                        f"process {pid} outlived its orphaning by more than {seconds}s")
+
+    def test_an_orphaned_fake_in_hang_mode_ends_with_its_group(self):
+        from tests import process_fixtures
+
+        intermediate, found = self._start()
+        child = int((self.tmp / "child").read_text())
+        self.assertFalse(_gone(found["fake"]))
+        self.assertFalse(_gone(child))
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self._assert_gone_within(child)
+
+    def test_the_incident_shape_stdin_held_open_by_a_separate_process(self):
+        env = {"FAKE_CLAUDE_HANG": "", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": ""}
+        argv = [sys.executable, str(FAKE_CLAUDE), *STREAMING_ARGV]
+        intermediate, found = self._start(env=env, argv=argv, held_stdin=True)
+        self.assertFalse(_gone(found["fake"]))
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self.assertFalse(_gone(found["holder"]), "the stdin holder is not the watchdog's to end")
+
+    def test_a_fake_with_a_live_parent_is_left_alone(self):
+        intermediate, found = self._start()
+        time.sleep(3)
+        self.assertFalse(_gone(found["fake"]))
+        self.assertIsNone(intermediate.poll())
+
+    def test_zero_disables_the_watchdog(self):
+        intermediate, found = self._start(env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"})
+        self._orphan(intermediate)
+        time.sleep(3)
+        self.assertFalse(_gone(found["fake"]))
+
+    def test_a_fake_that_does_not_lead_its_group_ends_only_itself(self):
+        from tests import process_fixtures
+
+        pids = self.tmp / "launcher-pids"
+        spec = {"env": self.env, "argv": self.plain_argv, "fake_ready": str(self.tmp / "ready"),
+                "pids": str(pids)}
+        launcher = subprocess.Popen([sys.executable, "-c", _LAUNCHER, json.dumps(spec)], start_new_session=True)
+        self.addCleanup(launcher.wait)
+        self._track(launcher.pid)
+        self.assertTrue(process_fixtures.wait_until(pids.exists, timeout=30), "the launcher never finished")
+        launcher.wait(timeout=10)
+        found = json.loads(pids.read_text())
+        for pid in (found["fake"], found["sibling"]):
+            self._track(pid)
+        # The hang-mode fake's own `sleep` is in the launcher's group, not the fake's.
+        self.assertTrue(process_fixtures.wait_until((self.tmp / "child").exists, timeout=10))
+        self._track(int((self.tmp / "child").read_text()))
+        self.assertNotEqual(found["fake"], found["pgrp"])
+        self._assert_gone_within(found["fake"])
+        self.assertFalse(_gone(found["sibling"]), "the group kill must not reach a fake that is not its leader")
+
+    def test_the_watchdog_adds_nothing_to_the_workers_stderr(self):
+        def stderr(seconds: str) -> str:
+            env = {**os.environ, "FAKE_CLAUDE_DESCENDANT": "group-closed:1", "FAKE_CLAUDE_ORPHAN_SECONDS": seconds}
+            done = subprocess.run(self.plain_argv, env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                  text=True, timeout=60)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return done.stderr
+
+        self.assertEqual(stderr("30"), stderr("0"))
+
+    def test_a_held_fake_is_ready_only_after_its_release_and_the_helper_sees_it_arrive(self):
+        from tests import process_fixtures
+
+        ready, hold = self.tmp / "ready", self.tmp / "hold"
+        env = {**os.environ, "FAKE_CLAUDE_ORPHAN_READY_FILE": str(ready), "FAKE_CLAUDE_READY_HOLD_FILE": str(hold),
+               "FAKE_CLAUDE_HANG": "1", "FAKE_CLAUDE_ORPHAN_SECONDS": "30"}
+        fake = subprocess.Popen(self.plain_argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                start_new_session=True)
+        self.addCleanup(fake.wait)
+        self._track(fake.pid)
+        waited = []
+
+        def on_waiting() -> None:
+            self.assertFalse(ready.exists(), "a held fake must not be ready")
+            waited.append(True)
+            hold.touch()
+
+        process_fixtures.wait_fake_ready(ready, fake.pid, on_waiting=on_waiting)
+        self.assertEqual(waited, [True])
+        # Released before the helper starts waiting: accepted at once.
+        process_fixtures.wait_fake_ready(ready, fake.pid)
+        # A ready file naming another pid is a named failure, not a pass.
+        with self.assertRaisesRegex(AssertionError, "never announced readiness"):
+            process_fixtures.wait_fake_ready(ready, fake.pid + 1, timeout=0.3)
+
+
+def _kill_with(pid: int, sig: int) -> None:
+    try:
+        os.kill(pid, sig)
+    except OSError:
+        pass
+
+
 class ReapRecordedWorkersTest(unittest.TestCase):
     """The test-teardown guarantee (plan CP1, round 1's I7)."""
 

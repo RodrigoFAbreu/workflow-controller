@@ -8774,7 +8774,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-test-leftover-lifetime-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-test-leftover-lifetime-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 11,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -8916,8 +8916,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 51,
-      "last_transition": "2026-10-11T21:07:27Z",
+      "state_revision": 53,
+      "last_transition": "2026-10-11T22:22:07Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -8948,7 +8948,20 @@
         "d1bc063136ad002ab6c04d510bb26cc647113b236f4a0e84344390f56a00f817",
         "dc351a579efc67362ca83987853bbfc2a91adf84038492a67821612ecaf6df37",
         "fb0a3d6e9b2f5fe4f6e15ef491f5b981aeb95a1cc94f9d1e012633f42024e387"
-      ]
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "beb616e246d84c8474f47b92dd4ab73d4a04e45b0b8c4c7e72eb4366e4e426ee",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4ffc004599fb5aeb4397df568181ef599185b3420dc4d32a7608d7a9e2b27a78",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-11T21:48:27Z",
+          "verdict_sha256": "f41bf506d6344bbef1b301d18dc3d903ccd40768f48c39895af71cccc19a2284",
+          "run_ref": "session:local .ai-review/workflow-controller-test-leftover-lifetime/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

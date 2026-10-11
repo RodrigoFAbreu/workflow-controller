@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import cli, handoff, identity, job, runtime  # noqa: E402
 from controller.decision import Decision  # noqa: E402
 from controller.errors import GenerationHandoffPendingError, SourceSnapshotError  # noqa: E402
-from tests import fixtures  # noqa: E402
+from tests import fixtures, process_fixtures  # noqa: E402
 
 
 def _pinned_identity(
@@ -544,7 +544,10 @@ class EndToEndHandoffSubprocessTest(unittest.TestCase):
 
             import subprocess
 
-            proc = subprocess.Popen(
+            # Behind an independent deadline: the run pauses on the sentinel
+            # with no Controller --timeout, so a killed test would leave it
+            # waiting for ever (leftover-lifetime plan D14).
+            proc = process_fixtures.popen_bounded(
                 [
                     str(console_script), "--runtime-dir", str(runtime_root),
                     "--workflow-manager", str(stub_manager),

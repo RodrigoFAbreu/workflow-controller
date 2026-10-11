@@ -1755,12 +1755,15 @@ RUNNING, WAITING, ENDING, DRAINING, ENDED = (worker.RUNNING, worker.WAITING, wor
 _WORKER_STATE_EVENTS = ("worker_running", "worker_waiting", "worker_ending", "worker_draining", "worker_ended")
 
 
-def verification(done: Path, *, seconds: float = 1.5, release: Path | None = None) -> dict:
+def verification(done: Path, *, seconds: float = 1.5, release: Path | None = None,
+                 deadline: float = process_fixtures.LEFTOVER_LIFETIME_SECONDS) -> dict:
     """A background full verification (``bash_bg``) that writes its
     completion time (``time.time()``) to ``done`` -- after ``seconds``, or
-    once ``release`` exists."""
+    once ``release`` exists. The release wait has a total ``deadline`` (plan
+    D13): past it the shell exits without writing ``done``, so a test that
+    deliberately killed the fake cannot leave the loop behind."""
     import shlex
-    wait = (f"while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.05; done" if release is not None
+    wait = (process_fixtures.shell_release_wait(release, seconds=deadline) if release is not None
             else f"sleep {seconds}")
     return {"step": "bash_bg", "id": "verify", "description": "full verification",
             "command": f"{wait}; date +%s.%N > {shlex.quote(str(done))}"}

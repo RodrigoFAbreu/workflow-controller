@@ -2786,11 +2786,12 @@ if pid == 0:
     null = os.open(os.devnull, os.O_RDWR)
     for fd in (0, 1, 2):
         os.dup2(null, fd)
-    while not os.path.exists(sys.argv[1]):
+    end = time.monotonic() + __LIFETIME__
+    while not os.path.exists(sys.argv[1]) and time.monotonic() < end:
         time.sleep(0.01)
     os._exit(0)
 print(pid, flush=True)
-"""
+""".replace("__LIFETIME__", str(process_fixtures.LEFTOVER_LIFETIME_SECONDS))
 
 
 def _proc_stat(pid: int) -> "worker._ProcStat | None":

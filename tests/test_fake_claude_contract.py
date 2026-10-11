@@ -1168,7 +1168,8 @@ class FakeStreamingModeTest(unittest.TestCase):
             ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
             burst = subprocess.Popen([sys.executable, sys.argv[1], "--orphan-burst", "6", "0.02", "0.3"])
             sessions, reaped = {}, set()
-            while True:
+            end = time.monotonic() + 60
+            while time.monotonic() < end:
                 for tid in os.listdir("/proc/self/task"):
                     with open(f"/proc/self/task/{tid}/children") as fh:
                         for pid in map(int, fh.read().split()):
@@ -1231,7 +1232,8 @@ spec = json.loads(sys.argv[1])
 fake = subprocess.Popen(spec["argv"], env={**os.environ, **spec["env"]}, stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL)
 sibling = subprocess.Popen(["sleep", "600"])
-while not os.path.exists(spec["fake_ready"]):
+end = time.monotonic() + 600
+while not os.path.exists(spec["fake_ready"]) and time.monotonic() < end:
     time.sleep(0.02)
 with open(spec["pids"], "w") as fh:
     json.dump({"fake": fake.pid, "sibling": sibling.pid, "pgrp": os.getpgrp()}, fh)
@@ -1378,6 +1380,208 @@ class OrphanWatchdogTest(unittest.TestCase):
         # A ready file naming another pid is a named failure, not a pass.
         with self.assertRaisesRegex(AssertionError, "never announced readiness"):
             process_fixtures.wait_fake_ready(ready, fake.pid + 1, timeout=0.3)
+
+    # -- leftovers that a group kill cannot reach (plan CP2, D6, D10, D12, D13) -------------------
+
+    def _scripted(self, turns, *, env=None, new_session=True):
+        """A scripted streaming fake whose stdin another process holds open, started by the
+        intermediate (so the test can orphan it for real)."""
+        argv = [sys.executable, str(FAKE_CLAUDE), *STREAMING_ARGV]
+        env = {"FAKE_CLAUDE_HANG": "", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": "",
+               "FAKE_CLAUDE_TURNS": json.dumps(turns), **(env or {})}
+        return self._start(env=env, argv=argv, held_stdin=True, new_session=new_session)
+
+    def _processes(self, needle: str) -> list[int]:
+        """Pids whose command line contains ``needle`` (the test's own processes excluded)."""
+        found = []
+        for name in os.listdir("/proc"):
+            if name.isdigit() and int(name) != os.getpid():
+                try:
+                    cmdline = Path(f"/proc/{name}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+                except OSError:
+                    continue
+                if needle in cmdline and not _gone(int(name)):
+                    found.append(int(name))
+        return found
+
+    def test_a_detached_burst_helper_blocked_on_an_absent_gate_ends(self):
+        from tests import process_fixtures
+
+        marks, gate = self.tmp / "marks", self.tmp / "gate"
+        turns = [[{"step": "orphan_burst", "count": 2, "spacing": 0.01, "lifetime": 0.1, "detach": True,
+                   "marks_file": str(marks), "gate": str(gate)}, {"step": "text"}]]
+        intermediate, found = self._scripted(turns)
+        self.assertTrue(process_fixtures.wait_until(lambda: self._processes(str(marks)), timeout=30),
+                        "the detached helper never started")
+        [helper] = self._processes(f"--marks {marks}")
+        self._track(helper)
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self._assert_gone_within(helper)
+        self.assertFalse(marks.exists(), "a helper that gave up wrote a mark")
+
+    def test_a_released_burst_helper_still_runs_its_burst(self):
+        from tests import process_fixtures
+
+        marks, gate = self.tmp / "marks", self.tmp / "gate"
+        helper = subprocess.Popen([sys.executable, str(FAKE_CLAUDE), "--orphan-burst", "2", "0.01", "0.1",
+                                   "--marks", str(marks), "--gate", str(gate)],
+                                  env={**os.environ, "FAKE_CLAUDE_ORPHAN_SECONDS": "30"})
+        self.addCleanup(helper.wait)
+        self._track(helper.pid)
+        time.sleep(0.3)
+        self.assertIsNone(helper.poll())
+        gate.touch()
+        self.assertEqual(helper.wait(timeout=30), 0)
+        self.assertTrue(marks.exists())
+
+    def test_a_daemon_leftover_has_a_finite_life(self):
+        from tests import fake_claude, process_fixtures
+
+        self.assertEqual(fake_claude.DAEMON_LIFETIME_SECONDS, 600)
+        pid_file = self.tmp / "daemon.pid"
+        turns = [[{"step": "bash_bg", "seconds": 0.2, "orphan": "daemon", "orphan_pid_file": str(pid_file)},
+                  {"step": "text"}]]
+        self._scripted(turns)
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
+        pid = int(pid_file.read_text())
+        self._track(pid)
+
+        def cmdline() -> list[str]:
+            try:
+                return Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")[:-1]
+            except OSError:
+                return []
+
+        self.assertTrue(process_fixtures.wait_until(lambda: cmdline()[:1] == ["fake-claude-daemon"], timeout=10))
+        self.assertEqual(cmdline(), ["fake-claude-daemon", str(fake_claude.DAEMON_LIFETIME_SECONDS)])
+
+    def test_a_gated_setsid_descendant_blocked_on_its_fifo_ends(self):
+        from tests import process_fixtures
+
+        fifo, pid_file = self.tmp / "gate.fifo", self.tmp / "gated.pid"
+        os.mkfifo(fifo)
+        turns = [[{"step": "bash_bg", "seconds": 600, "orphan": "setsid", "orphan_seconds": 1,
+                   "orphan_gate": str(fifo), "orphan_pid_file": str(pid_file)}, {"step": "text"}]]
+        intermediate, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "3"})
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
+        pid = int(pid_file.read_text())
+        self._track(pid)
+        self.assertFalse(_gone(pid))
+        waiters = self._processes(f"timeout --foreground 3 bash -c read _ < {fifo}")
+        for waiter in waiters:
+            self._track(waiter)
+        self.assertTrue(waiters, "the gate wait is not wrapped in timeout --foreground")
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self._assert_gone_within(pid, 15)
+        for waiter in waiters:
+            self._assert_gone_within(waiter, 15)
+
+    def test_the_fakes_own_subprocess_sleepers_are_bounded(self):
+        from tests import fake_claude, process_fixtures
+
+        self.assertLessEqual(fake_claude.SUBPROCESS_SLEEP_SECONDS, 600)
+        self.assertLessEqual(process_fixtures.LEFTOVER_LIFETIME_SECONDS, 600)
+
+        def sleep_argument(pid: int) -> int:
+            argv = Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")[:-1]
+            self.assertEqual(argv[0], "sleep", argv)
+            return int(float(argv[1]))
+
+        # Hang mode, started directly in the runner's group (the fake does not lead it).
+        intermediate, _ = self._start(new_session=False)
+        self.assertLessEqual(sleep_argument(int((self.tmp / "child").read_text())), 600)
+        self._orphan(intermediate)
+        # A monitor with a timeout, the same shape.
+        turns = [[{"step": "monitor", "id": "m", "ticks": 1, "interval": 0.1, "timeout": 5}, {"step": "text"}]]
+        _, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"}, new_session=False)
+        self.assertTrue(process_fixtures.wait_until(lambda: _children(found["fake"]), timeout=10))
+        [sleeper] = [int(pid) for pid in _children(found["fake"])]
+        self._track(sleeper)
+        self.assertLessEqual(sleep_argument(sleeper), 600)
+
+    def test_the_bounds_cannot_regress_and_the_inventory_is_complete(self):
+        from tests import process_fixtures
+
+        sources = {path.name: path.read_text() for path in Path(__file__).parent.glob("*.py")}
+        self.assertEqual(process_fixtures.check_inventory(sources, process_fixtures.LEFTOVER_INVENTORY), [])
+        self.assertLessEqual(process_fixtures.LEFTOVER_LIFETIME_SECONDS, 600)
+
+    def test_the_scan_keys_on_the_start_not_the_argv(self):
+        from tests import process_fixtures
+
+        console = "import subprocess\nsubprocess.Popen([str(console_script), '--runtime-dir', 'x'])\n"
+        built = "import subprocess\nargv = build()\nsubprocess.Popen(argv)\n"
+        waited = "import subprocess\nsubprocess.run(['true'], timeout=5)\nsubprocess.run(['git', 'status'])\n"
+        for name, source in (("a.py", console), ("b.py", built)):
+            problems = process_fixtures.check_inventory({name: source}, ())
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("no inventory row", problems[0])
+        self.assertEqual(process_fixtures.check_inventory({"c.py": waited}, ()), [])
+        row = ("a.py", "start:Popen:controller", 1, "deadline", "popen_bounded")
+        self.assertEqual(process_fixtures.check_inventory({"a.py": console}, (row,)), [])
+        stale = ("a.py", "start:Popen", 1, "bounded", "x")
+        self.assertTrue(any("stale" in p for p in process_fixtures.check_inventory({"c.py": waited}, (stale,))))
+        # Built from pieces so the scan of this very file does not read them as constructs.
+        loop = "import os, time\n" + "wh" + "ile not os.path.exists('r'):\n    time.sleep(0.1)\n"
+        self.assertTrue(any("no inventory row" in p for p in process_fixtures.check_inventory({"d.py": loop}, ())))
+        long_sleep = "import time\ntime.sl" + "eep(3600)\n"
+        self.assertTrue(any("sleep" in p for p in process_fixtures.check_inventory({"e.py": long_sleep}, ())))
+        bad = ("a.py", "start:Popen:controller", 1, "exception", "named")
+        self.assertTrue(any("Controller child" in p for p in process_fixtures.check_inventory({"a.py": console}, (bad,))))
+
+    def test_the_handoff_console_script_goes_through_the_deadline_wrapper(self):
+        from tests import process_fixtures
+
+        text = (Path(__file__).parent / "test_handoff.py").read_text()
+        self.assertIn("process_fixtures.popen_bounded(", text)
+        self.assertNotIn("subprocess.Popen(", text)
+        rows = {(f, k): d for f, k, _, d, _ in process_fixtures.LEFTOVER_INVENTORY}
+        self.assertEqual(rows[("test_handoff.py", "start:helper:popen_bounded")], "deadline")
+
+    def test_a_bounded_controller_ends_at_its_deadline_when_its_starter_is_killed(self):
+        from tests import process_fixtures
+
+        sentinel, pid_file = self.tmp / "sentinel", self.tmp / "stub.pid"
+        sentinel.touch()
+        stub = ("import os, sys, time\nopen(sys.argv[2], 'w').write(str(os.getpid()))\n"
+                "while os.path.exists(sys.argv[1]): time.sleep(0.05)\n")
+        starter = ("import sys\nsys.path.insert(0, sys.argv[1])\nfrom tests import process_fixtures\n"
+                   "import time\nprocess_fixtures.popen_bounded([sys.executable, '-c', sys.argv[2], sys.argv[3], sys.argv[4]], "
+                   "seconds=2)\ntime.sleep(600)\n")
+        root = str(Path(__file__).resolve().parent.parent)
+        intermediate = subprocess.Popen([sys.executable, "-c", starter, root, stub, str(sentinel), str(pid_file)])
+        self.addCleanup(intermediate.wait)
+        self._track(intermediate.pid)
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
+        stub_pid = int(pid_file.read_text())
+        self._track(stub_pid)
+        self.assertFalse(_gone(stub_pid))
+        self._orphan(intermediate)
+        self._assert_gone_within(stub_pid, 10)
+
+    def test_a_release_loop_outlives_a_deliberate_fake_kill_only_for_its_deadline(self):
+        from tests import process_fixtures
+
+        release, pid_file = self.tmp / "never", self.tmp / "loop.pid"
+        command = (process_fixtures.shell_release_wait(release, seconds=2) + "; echo done > "
+                   + str(self.tmp / "done"))
+        turns = [[{"step": "bash_bg", "id": "verify", "command": command, "notify": False}, {"step": "text"}]]
+        intermediate, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"})
+        self.assertTrue(process_fixtures.wait_until(lambda: _children(found["fake"]), timeout=30))
+        [loop] = [int(pid) for pid in _children(found["fake"])]
+        self._track(loop)
+        self.assertFalse(_gone(loop))
+        os.kill(found["fake"], signal.SIGKILL)
+        self._assert_gone_within(loop, 10)
+        self.assertFalse((self.tmp / "done").exists(), "a timed-out wait looked like a release")
+        self._orphan(intermediate)
+        # The Python form ends at its deadline too, and carries on.
+        script = ("import os, time\n" + process_fixtures.python_release_wait(repr(str(release)), seconds=1)
+                  + "print('after')\n")
+        out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.stdout.strip(), "after")
 
 
 def _kill_with(pid: int, sig: int) -> None:

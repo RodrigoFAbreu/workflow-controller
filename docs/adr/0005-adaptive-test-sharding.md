@@ -45,6 +45,19 @@ them: [ADR 0002](0002-release-runtime-identity-and-observability.md) runs
 shard". The hand-curated shard list (`CONTROLLER_SHARDS` in
 `tools/ci_workflows.py`) is gone. CI's matrix is now planned.
 
+Amendment (2026-10-11, runner budget, a `ci:` pull request): the
+maximum number of CI shards is 4, down from 16. A pull request starts the
+shards, `package` and the managed `workflow-conformance` job together, and
+the account shares 20 Linux runner jobs; at 8 shards one pull request held
+10 runners (a push to `main` 9 to 10), so a merge during another pull
+request's run could use the whole account. With 4 shards the peak is 6.
+The managed conformance job now takes 15 to 21 minutes (the text above
+says about 5), and it, not `validate`, sets when a pull request's checks
+finish, so longer shards do not delay a pull request. `tools/test_timings.json`
+was refreshed from the timings artifacts of 12 recent green `CI` and `Main`
+runs (92 shard records, 657 atoms); the planner then estimates four shards of
+about 661 s each. No workflow file and no required check changed.
+
 ## Context
 
 Measured at the base commit (`405f050`, 2026-09-26) on the reference
@@ -193,7 +206,7 @@ path) and the SHA-256 `plan_digest` of all of it.
 | profile | target | min | max | justification |
 | --- | --- | --- | --- | --- |
 | `local` | 60 s | 2 | `min(8, CPUs)` | a 240 s target would plan 3 shards (about 200 s); the largest atom (81 s) is the floor anyway; one shard per CPU is the measured-safe default, since 12 shards on 4 CPUs exposed a race where 8 on 4 did not |
-| `ci` | 180 s | 2 | 16 | the conformance acceptance matrix is about 185 s on CI, so a smaller target adds billed jobs without shortening the path; 240 s would plan 5 shards of about 200 s, slower than the old matrix |
+| `ci` | 180 s | 2 | 4 (amended 2026-10-11, see the runner-budget amendment) | the conformance acceptance matrix is about 185 s on CI, so a smaller target adds billed jobs without shortening the path; 240 s would plan 5 shards of about 200 s, slower than the old matrix |
 
 The values are named constants, overridable per run (`--target-seconds`,
 `--min-shards`, `--max-shards`, `--shards`). There is no environment

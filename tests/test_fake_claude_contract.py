@@ -1259,11 +1259,16 @@ class OrphanWatchdogTest(unittest.TestCase):
 
         self.addCleanup(end)
 
-    def _start(self, *, env=None, argv=None, new_session=True, held_stdin=False) -> tuple[subprocess.Popen, dict]:
+    def _start(self, *, env=None, argv=None, new_session=True, held_stdin=False,
+               tag: str = "") -> tuple[subprocess.Popen, dict]:
+        """``tag`` gives a second start in one test its own pids, ready and hang-child files,
+        so it never reads the first start's stale values."""
         from tests import process_fixtures
 
-        pids = self.tmp / "pids"
-        spec = {"env": {**self.env, **(env or {})}, "argv": argv or self.plain_argv, "pids": str(pids),
+        pids, ready = self.tmp / f"pids{tag}", self.tmp / f"ready{tag}"
+        own = {"FAKE_CLAUDE_ORPHAN_READY_FILE": str(ready),
+               "FAKE_CLAUDE_HANG_CHILD_PID_FILE": str(self.tmp / f"child{tag}")} if tag else {}
+        spec = {"env": {**self.env, **own, **(env or {})}, "argv": argv or self.plain_argv, "pids": str(pids),
                 "new_session": new_session, "held_stdin": held_stdin, "task_line": task_line()}
         intermediate = subprocess.Popen([sys.executable, "-c", _INTERMEDIATE, json.dumps(spec)])
         self.addCleanup(intermediate.wait)
@@ -1273,9 +1278,9 @@ class OrphanWatchdogTest(unittest.TestCase):
         for pid in found.values():
             if pid:
                 self._track(pid)
-        self.assertTrue(process_fixtures.wait_until((self.tmp / "ready").exists, timeout=30),
+        self.assertTrue(process_fixtures.wait_until(ready.exists, timeout=30),
                         "the fake never announced readiness")
-        self.assertEqual(int((self.tmp / "ready").read_text()), found["fake"])
+        self.assertEqual(int(ready.read_text()), found["fake"])
         child_file = spec["env"]["FAKE_CLAUDE_HANG_CHILD_PID_FILE"]
         if child_file and spec["env"]["FAKE_CLAUDE_HANG"]:
             # The fake's own `sleep`, in the fake's group; ended by exact pid at cleanup.
@@ -1383,13 +1388,13 @@ class OrphanWatchdogTest(unittest.TestCase):
 
     # -- leftovers that a group kill cannot reach (plan CP2, D6, D10, D12, D13) -------------------
 
-    def _scripted(self, turns, *, env=None, new_session=True):
+    def _scripted(self, turns, *, env=None, new_session=True, tag: str = ""):
         """A scripted streaming fake whose stdin another process holds open, started by the
         intermediate (so the test can orphan it for real)."""
         argv = [sys.executable, str(FAKE_CLAUDE), *STREAMING_ARGV]
         env = {"FAKE_CLAUDE_HANG": "", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": "",
                "FAKE_CLAUDE_TURNS": json.dumps(turns), **(env or {})}
-        return self._start(env=env, argv=argv, held_stdin=True, new_session=new_session)
+        return self._start(env=env, argv=argv, held_stdin=True, new_session=new_session, tag=tag)
 
     def _processes(self, needle: str) -> list[int]:
         """Pids whose command line contains ``needle`` (the test's own processes excluded)."""
@@ -1490,12 +1495,14 @@ class OrphanWatchdogTest(unittest.TestCase):
             return int(float(argv[1]))
 
         # Hang mode, started directly in the runner's group (the fake does not lead it).
-        intermediate, _ = self._start(new_session=False)
+        intermediate, first = self._start(new_session=False)
         self.assertLessEqual(sleep_argument(int((self.tmp / "child").read_text())), 600)
         self._orphan(intermediate)
-        # A monitor with a timeout, the same shape.
+        # A monitor with a timeout, the same shape, with its own pids/ready files (every pid
+        # the start reports, holder and fake included, is tracked by `_start`).
         turns = [[{"step": "monitor", "id": "m", "ticks": 1, "interval": 0.1, "timeout": 5}, {"step": "text"}]]
-        _, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"}, new_session=False)
+        _, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"}, new_session=False, tag="-monitor")
+        self.assertNotEqual(found["fake"], first["fake"])
         self.assertTrue(process_fixtures.wait_until(lambda: _children(found["fake"]), timeout=10))
         [sleeper] = [int(pid) for pid in _children(found["fake"])]
         self._track(sleeper)
@@ -1519,6 +1526,12 @@ class OrphanWatchdogTest(unittest.TestCase):
             self.assertEqual(len(problems), 1, problems)
             self.assertIn("no inventory row", problems[0])
         self.assertEqual(process_fixtures.check_inventory({"c.py": waited}, ()), [])
+        # A `timeout=` is no bound on a Controller child: it still needs an inventory row.
+        timed = "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'controller', 'run', 'r'], timeout=600)\n"
+        problems = process_fixtures.check_inventory({"f.py": timed}, ())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("start:run:controller", problems[0])
+        self.assertIn("no inventory row", problems[0])
         row = ("a.py", "start:Popen:controller", 1, "deadline", "popen_bounded")
         self.assertEqual(process_fixtures.check_inventory({"a.py": console}, (row,)), [])
         stale = ("a.py", "start:Popen", 1, "bounded", "x")
@@ -1526,12 +1539,6 @@ class OrphanWatchdogTest(unittest.TestCase):
         # Built from pieces so the scan of this very file does not read them as constructs.
         loop = "import os, time\n" + "wh" + "ile not os.path.exists('r'):\n    time.sleep(0.1)\n"
         self.assertTrue(any("no inventory row" in p for p in process_fixtures.check_inventory({"d.py": loop}, ())))
-        # A `timeout=` is no bound on a Controller child: it still needs an inventory row.
-        timed = "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'controller', 'run', 'r'], timeout=600)\n"
-        problems = process_fixtures.check_inventory({"f.py": timed}, ())
-        self.assertEqual(len(problems), 1, problems)
-        self.assertIn("start:run:controller", problems[0])
-        self.assertIn("no inventory row", problems[0])
         long_sleep = "import time\ntime.sl" + "eep(3600)\n"
         self.assertTrue(any("sleep" in p for p in process_fixtures.check_inventory({"e.py": long_sleep}, ())))
         bad = ("a.py", "start:Popen:controller", 1, "exception", "named")
@@ -1781,8 +1788,9 @@ class ChildControllerLifetimeTest(unittest.TestCase):
         proc.wait(10)
         time.sleep(0.5)
         if _gone(pid):
-            # GNU timeout 9.12 here sets PR_SET_PDEATHSIG on its child (read back as 9), so the child
-            # follows the wrapper; older builds orphan it (review R7-1). The helper is correct for both.
+            # Whether the child follows the wrapper depends on the build: this one sets
+            # PR_SET_PDEATHSIG on it (read back as 9), while review R7-1 reproduced the orphaning
+            # on another GNU coreutils 9.12 build. The helper is correct for both.
             self.skipTest("this timeout ends its child with itself; the orphaning the helper guards against is absent")
         self.assertFalse(_gone(pid))
 

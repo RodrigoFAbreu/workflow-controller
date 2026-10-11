@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-test-leftover-lifetime",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -8764,6 +8764,174 @@
         "evaluated_at": "2026-10-10T21:43:46Z",
         "workflow_release": "2.9.0"
       }
+    },
+    "workflow-controller-test-leftover-lifetime": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-test-leftover-lifetime",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_TEST_LEFTOVER_LIFETIME_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-test-leftover-lifetime-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-test-leftover-lifetime-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 11,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "e2064d32d6a3c073b0626ada3205f82d18933617",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+        "approved_review_content_id": "b9e44eb85bf2ee8552e6c656f3b4bf16189f511746817278b7dcff17b885400a",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_TEST_LEFTOVER_LIFETIME_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7915cd62f4e4a53f4850367a3d5b94695d206efd"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-test-leftover-lifetime-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bec2047883cbae165c38b09cf13869322550a9a8"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-test-leftover-lifetime-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a1fd1d23932722745d055076bb896e64851b4505"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-11T19:08:20Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b9e44eb85bf2ee8552e6c656f3b4bf16189f511746817278b7dcff17b885400a",
+            "ledger": {
+              "local": {
+                "bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+                "verdict": "APPROVE",
+                "round": 11,
+                "verdict_sha256": "bd234e068089f45f927e9543a61ec539e8589719bdab80225228a55203477f6f",
+                "ledger_entry_sha256": "7c6cc665f1ec821b38c656f585e83542ec0bc00bcd31ac9a5ebb6bbffdd867f4",
+                "run_ref": "session:local .ai-review/workflow-controller-test-leftover-lifetime/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+                "verdict": "APPROVE",
+                "round": 11,
+                "verdict_sha256": "98dc19680a72abe16558cab1f2bddfdc716b2d061461e6b1b6acd4d670a7e3c2",
+                "ledger_entry_sha256": "6e065949553322506b4c9a8e9c782dcf13cb557305da637a7dca00f1f8b6a8e2",
+                "run_ref": "session:local .ai-review/workflow-controller-test-leftover-lifetime/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-11T19:08:20Z",
+          "workflow_release": "2.9.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "b9e44eb85bf2ee8552e6c656f3b4bf16189f511746817278b7dcff17b885400a",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-11T18:58:38Z",
+          "verdict_sha256": "bd234e068089f45f927e9543a61ec539e8589719bdab80225228a55203477f6f",
+          "run_ref": "session:local .ai-review/workflow-controller-test-leftover-lifetime/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+          "verdict": "APPROVE",
+          "round": 11,
+          "completed_at": "2026-10-11T19:06:18.389109+00:00",
+          "verdict_sha256": "98dc19680a72abe16558cab1f2bddfdc716b2d061461e6b1b6acd4d670a7e3c2",
+          "run_ref": "session:local .ai-review/workflow-controller-test-leftover-lifetime/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 40,
+      "last_transition": "2026-10-11T19:08:20Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-11T18:56:51Z",
+        "consumed": {
+          "review_content_id": "d1bc063136ad002ab6c04d510bb26cc647113b236f4a0e84344390f56a00f817",
+          "plan_revision": 10,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "b9e44eb85bf2ee8552e6c656f3b4bf16189f511746817278b7dcff17b885400a",
+          "plan_revision": 11
+        },
+        "bound": {
+          "review_content_id": "b9e44eb85bf2ee8552e6c656f3b4bf16189f511746817278b7dcff17b885400a",
+          "bundle_id": "9910cc090baeb9e515c0086e4de4ad89152508ede6bd010b74690429f19b6356",
+          "plan_revision": 11
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0778d453df02ebe2629ecdef0ba450114be2bdfba2f2bd5ecfcac12d8470dcb6",
+        "38e41a7a686867626f3f040a98b41ba9e83d71daa97cf246544f0b985fb5302a",
+        "6dd577d46d779bf3099522c22510032b92cacc2d93b47070e14b22b9ddccd195",
+        "72aabb8e204a4b6a6895f4f91fb441f21bec6c6e75ac820e8716f2e250569c1a",
+        "8351464a1223f2f43c718888051bb3a07215ab9714047d99a25a2ab6a869b1e6",
+        "8fbac0a1e66691fe6be7e7bfc864e54fbf617ec3dbc34244d89d5c7abd4b098c",
+        "abc66ec6ccb14d27432048f5ac75dfbddd0a6275fce4421f8277b3b0515d1e5e",
+        "d1bc063136ad002ab6c04d510bb26cc647113b236f4a0e84344390f56a00f817",
+        "dc351a579efc67362ca83987853bbfc2a91adf84038492a67821612ecaf6df37",
+        "fb0a3d6e9b2f5fe4f6e15ef491f5b981aeb95a1cc94f9d1e012633f42024e387"
+      ]
     }
   }
 }

@@ -1325,10 +1325,18 @@ class OrphanWatchdogTest(unittest.TestCase):
         self.assertIsNone(intermediate.poll())
 
     def test_zero_disables_the_watchdog(self):
-        intermediate, found = self._start(env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"})
+        intermediate, found = self._start(env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0",
+                                                           "FAKE_CLAUDE_HANG_SECONDS": "30"})
         self._orphan(intermediate)
         time.sleep(3)
         self.assertFalse(_gone(found["fake"]))
+
+    def test_a_watchdog_disabled_fake_still_ends_by_its_own_hang_lifetime(self):
+        intermediate, found = self._start(env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0",
+                                               "FAKE_CLAUDE_HANG_SECONDS": "4"})
+        self._orphan(intermediate)
+        self.assertFalse(_gone(found["fake"]))
+        self._assert_gone_within(found["fake"], 15)
 
     def test_a_fake_that_does_not_lead_its_group_ends_only_itself(self):
         from tests import process_fixtures
@@ -1416,9 +1424,15 @@ class OrphanWatchdogTest(unittest.TestCase):
         turns = [[{"step": "orphan_burst", "count": 2, "spacing": 0.01, "lifetime": 0.1, "detach": True,
                    "marks_file": str(marks), "gate": str(gate)}, {"step": "text"}]]
         intermediate, found = self._scripted(turns)
-        self.assertTrue(process_fixtures.wait_until(lambda: self._processes(str(marks)), timeout=30),
+        helpers: list[int] = []
+
+        def helper_started() -> bool:
+            helpers[:] = self._processes(f"--marks {marks}")
+            return bool(helpers)
+
+        self.assertTrue(process_fixtures.wait_until(helper_started, timeout=30),
                         "the detached helper never started")
-        [helper] = self._processes(f"--marks {marks}")
+        [helper] = helpers
         self._track(helper)
         self._orphan(intermediate)
         self._assert_gone_within(found["fake"])
@@ -1473,10 +1487,16 @@ class OrphanWatchdogTest(unittest.TestCase):
         pid = int(pid_file.read_text())
         self._track(pid)
         self.assertFalse(_gone(pid))
-        waiters = self._processes(f"timeout --foreground 3 bash -c read _ < {fifo}")
+        waiters: list[int] = []
+
+        def waiter_started() -> bool:
+            waiters[:] = self._processes(f"timeout --foreground 3 bash -c read _ < {fifo}")
+            return bool(waiters)
+
+        self.assertTrue(process_fixtures.wait_until(waiter_started, timeout=30),
+                        "the gate wait is not wrapped in timeout --foreground")
         for waiter in waiters:
             self._track(waiter)
-        self.assertTrue(waiters, "the gate wait is not wrapped in timeout --foreground")
         self._orphan(intermediate)
         self._assert_gone_within(found["fake"])
         self._assert_gone_within(pid, 15)

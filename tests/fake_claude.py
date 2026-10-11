@@ -87,6 +87,10 @@ Recognised environment variables (all optional):
     Only with ``FAKE_CLAUDE_DESCENDANT``: the descendant writes
     ``{"pid"}`` here as JSON when it starts, and rewrites it as
     ``{"pid", "exited_at"}`` (``time.time()``) just before it exits.
+``FAKE_CLAUDE_HANG_SECONDS``
+    With ``FAKE_CLAUDE_HANG``: how long the fake hangs before it exits
+    (default ``3600``). A test that disables the orphan watchdog sets it so
+    the fake still has a lifetime of its own when the test is killed.
 ``FAKE_CLAUDE_ORPHAN_SECONDS``
     How long an *orphaned* fake lives (default ``300``; ``0`` or a negative
     value disables the watchdog). ``main()`` records its parent's pid and
@@ -1363,6 +1367,14 @@ def orphan_burst(count: int, spacing: float, lifetime: float, marks_file: str | 
 
 
 ORPHAN_SECONDS_DEFAULT = 300.0
+HANG_SECONDS_DEFAULT = 3600.0
+
+
+def _hang_seconds() -> float:
+    try:
+        return float(os.environ.get("FAKE_CLAUDE_HANG_SECONDS", HANG_SECONDS_DEFAULT))
+    except ValueError:
+        return HANG_SECONDS_DEFAULT
 _ORPHAN_POLL_SECONDS = 0.5
 
 
@@ -1444,7 +1456,8 @@ def main() -> None:
             child = subprocess.Popen(["sleep", str(SUBPROCESS_SLEEP_SECONDS)])
             with open(child_pid_file, "w") as fh:
                 fh.write(str(child.pid))
-        time.sleep(3600)
+        time.sleep(_hang_seconds())
+        sys.exit(0)
 
     if _streaming() and (_SCRIPTED_TURNS is not None or os.environ.get("FAKE_CLAUDE_TURNS") is not None):
         turns = _SCRIPTED_TURNS if _SCRIPTED_TURNS is not None else json.loads(os.environ["FAKE_CLAUDE_TURNS"])

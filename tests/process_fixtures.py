@@ -265,8 +265,10 @@ def check_inventory(sources: "dict[str, str]", inventory) -> list[str]:
 #: wrapper, D14), ``watchdog`` (the fake's own D2), ``exception`` (named,
 #: with the reason).
 LEFTOVER_INVENTORY = (
-    ("fake_claude.py", "sleep", 2, "watchdog",
-     "the fake's in-process hour-long sleeps of FAKE_CLAUDE_SELF_TERM and FAKE_CLAUDE_HANG: the sleeper is the fake itself, which D2 ends"),
+    ("fake_claude.py", "sleep", 1, "watchdog",
+     "the fake's in-process hour-long sleep of FAKE_CLAUDE_SELF_TERM: the sleeper is the fake itself, which D2 ends; "
+     "the FAKE_CLAUDE_HANG sleep has no literal (FAKE_CLAUDE_HANG_SECONDS, default an hour): D2 ends it too, and a "
+     "test that disables the watchdog sets FAKE_CLAUDE_HANG_SECONDS"),
     ("fake_claude.py", "start:Popen", 4, "bounded",
      "the Bash task shell (the fake's group, D2); the monitor and hang-child sleeps (SUBPROCESS_SLEEP_SECONDS, D12); "
      "the detached orphan-burst helper (its gate wait gives up after FAKE_CLAUDE_ORPHAN_SECONDS, D6)"),

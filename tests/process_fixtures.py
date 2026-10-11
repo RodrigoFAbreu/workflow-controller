@@ -154,7 +154,9 @@ def _call_parts(node: ast.Call) -> tuple[str | None, str | None]:
 def _start_form(node: ast.Call) -> str | None:
     """The inventory form of a call that starts a process, whatever its
     argv, or ``None`` for a call that starts none or cannot outlive a test
-    (a ``subprocess.run`` with a ``timeout=`` or of ``git``)."""
+    (a ``subprocess.run`` of ``git``, or with a ``timeout=`` that is not a
+    Controller: a ``timeout=`` stops being enforced when the test is killed,
+    so it never bounds a Controller child, D12/D13)."""
     owner, name = _call_parts(node)
     if name is None:
         return None
@@ -162,7 +164,8 @@ def _start_form(node: ast.Call) -> str | None:
         form = "helper:" + name
     elif owner == "subprocess" and name in _WAITED_STARTS:
         first = node.args[0] if node.args else None
-        if any(kw.arg == "timeout" for kw in node.keywords):
+        if any(kw.arg == "timeout" for kw in node.keywords) \
+                and not any(marker in ast.unparse(node).lower() for marker in _CONTROLLER_MARKERS):
             return None
         if isinstance(first, (ast.List, ast.Tuple)) and first.elts and isinstance(first.elts[0], ast.Constant) \
                 and first.elts[0].value == "git":
@@ -235,7 +238,8 @@ def check_inventory(sources: "dict[str, str]", inventory) -> list[str]:
             problems.append(f"{file} {kind}: unknown disposition {disposition!r}")
         if not reason:
             problems.append(f"{file} {kind}: no reason")
-        if kind.endswith(":controller") and disposition not in ("parent-guard", "deadline", "bounded", "short"):
+        if kind.endswith(":controller") and disposition not in ("parent-guard", "deadline", "bounded", "short") \
+                and not (disposition == "exception" and "opt-in" in reason):
             problems.append(f"{file} {kind}: a Controller child cannot be {disposition!r}")
         if kind.endswith(":controller") and disposition in ("bounded", "short") \
                 and not re.search(r"--timeout|read-only|exits", reason):
@@ -283,6 +287,8 @@ LEFTOVER_INVENTORY = (
     ("test_buildinfo.py", "start:run:controller", 1, "short",
      "a python -P -c import check in a venv; read-only and exits at once"),
     ("test_cli.py", "start:Popen", 1, "short", "python -c pass: exits at once"),
+    ("test_cli.py", "start:run:controller", 2, "bounded",
+     "a read-only `follow` that exits (its timeout= is no bound, D12), and the guarded _CHILD_RUN step with --timeout 30"),
     ("test_cli.py", "start:Popen:controller", 2, "parent-guard",
      "_CHILD_RUN is a pinned -c script (no re-exec) and takes the parent guard (D11); the second start is RunParentGuardTest's intermediate"),
     ("test_cli.py", "start:helper:run_controller_module", 3, "short",
@@ -297,6 +303,8 @@ LEFTOVER_INVENTORY = (
     ("test_forge.py", "start:run", 2, "short", "a forge/gh stub run the test waits for; exits"),
     ("test_handoff.py", "start:helper:popen_bounded", 1, "deadline",
      "the installed console-script Controller paused on a sentinel runs behind timeout -s KILL (D14)"),
+    ("test_integration_disposable_repo.py", "start:run:controller", 2, "exception",
+     "opt-in real-Claude Controller steps, skipped unless the operator opts in; their timeout= is no bound (D12) and they run longer than 600 s"),
     ("test_integration_disposable_repo.py", "start:Popen", 2, "exception",
      "opt-in real-Claude tests, skipped unless the operator opts in; they legitimately run longer than 600 s"),
     ("test_job.py", "start:helper:spawn_sleeper", 3, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
@@ -316,12 +324,16 @@ LEFTOVER_INVENTORY = (
      "a 60 s sleep, a lock holder with a finite seconds argument, python -c pass, the child of a lost-Controller helper, and the parent-guard test's intermediate (a 600 s sleep, ended by exact pid)"),
     ("test_resume.py", "start:Popen:controller", 1, "parent-guard",
      "_LOST_CONTROLLER is a pinned -c script and takes the parent guard (D9, D11)"),
+    ("test_resume.py", "start:run:controller", 1, "short",
+     "_CHILD_ABANDON is a pinned -c script that abandons a job record and exits"),
     ("test_resume.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
     ("test_resume.py", "wait", 1, "parent-guard",
      "_LOST_CONTROLLER's hang() loop ends with the guarded child (D9, D11)"),
     ("test_run_tests.py", "start:Popen", 2, "bounded",
      "a 300 s sleeper and a shard runner whose hanging test sleeps 600 s (the runner kills its shards)"),
     ("test_settings.py", "start:Popen", 1, "short", "a python -c snippet that exits"),
+    ("test_settings.py", "start:run:controller", 1, "short",
+     "a unittest child (matched by its _child_env name, not a Controller) that runs one test and exits"),
     ("test_test_shards.py", "start:Popen", 2, "bounded", "300 s sleepers, ended by exact pid"),
     ("test_test_shards.py", "start:run", 1, "short", "a python -c probe the test waits for"),
     ("test_trunk_orchestration_e2e.py", "start:run", 1, "short", "a bash command the test waits for"),

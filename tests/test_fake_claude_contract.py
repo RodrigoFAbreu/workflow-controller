@@ -1526,6 +1526,12 @@ class OrphanWatchdogTest(unittest.TestCase):
         # Built from pieces so the scan of this very file does not read them as constructs.
         loop = "import os, time\n" + "wh" + "ile not os.path.exists('r'):\n    time.sleep(0.1)\n"
         self.assertTrue(any("no inventory row" in p for p in process_fixtures.check_inventory({"d.py": loop}, ())))
+        # A `timeout=` is no bound on a Controller child: it still needs an inventory row.
+        timed = "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'controller', 'run', 'r'], timeout=600)\n"
+        problems = process_fixtures.check_inventory({"f.py": timed}, ())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("start:run:controller", problems[0])
+        self.assertIn("no inventory row", problems[0])
         long_sleep = "import time\ntime.sl" + "eep(3600)\n"
         self.assertTrue(any("sleep" in p for p in process_fixtures.check_inventory({"e.py": long_sleep}, ())))
         bad = ("a.py", "start:Popen:controller", 1, "exception", "named")

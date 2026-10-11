@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-test-leftover-lifetime",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -8774,7 +8774,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-test-leftover-lifetime-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-test-leftover-lifetime-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 11,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -9077,8 +9077,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 57,
-      "last_transition": "2026-10-11T23:14:45Z",
+      "state_revision": 58,
+      "last_transition": "2026-10-11T23:48:52Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -9130,6 +9130,260 @@
           "run_ref": "session:local .ai-review/workflow-controller-test-leftover-lifetime/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-f1": {
+            "flow_id": "flow-f1",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "docs links and anchors resolve",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          },
+          "flow-f2": {
+            "flow_id": "flow-f2",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "fake_claude contract tests pass with no leftover",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          },
+          "flow-f3": {
+            "flow_id": "flow-f3",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "an orphaned fake ends itself after its bound",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          },
+          "flow-f4": {
+            "flow_id": "flow-f4",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "the killed-test-run replay leaves no long-lived fake",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          },
+          "flow-f5": {
+            "flow_id": "flow-f5",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "full serial suite: coverage exact, only the two known Git 2.56 failures",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          },
+          "flow-f6": {
+            "flow_id": "flow-f6",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "docs match the observed bounds",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          },
+          "flow-f7": {
+            "flow_id": "flow-f7",
+            "status": "passed",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "ran_at": "2026-10-11T23:47:37Z",
+            "summary": {
+              "result": "PASS",
+              "check": "no production code changed",
+              "report": ".ai-review/archive/workflow-controller-test-leftover-lifetime/functional-review-round1-PASSED.md"
+            },
+            "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+            "run_ref": null,
+            "reporter": "orchestrator:workflow-controller-92; tester anthropic/claude-sonnet-5-5",
+            "identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:47:38Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 40,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/40"
+          },
+          "state": "open",
+          "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+          "observed_at": "2026-10-11T23:48:52Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "b39354dd467e1a2da1adcef6a0cde2b2b90409ec",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-11T23:48:52Z",
+            "raw_sha256": "c556a87ffaa799334a3f5f8fa0323de7786c44639bcc29e5ee4ed2487737850b",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "42a7856d6b182b717d8e59612a5d1c6b0e3c1bb707fcd7a57aa64029da75aae1"
+          },
+          "fact_id": "0e9e74fcb17ada559cd21a8f2d02bc2395d06d7f22c5b6d41aa2d713ecd37894"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-f1', 'flow-f2', 'flow-f3', 'flow-f4', 'flow-f5', 'flow-f6', 'flow-f7'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #40 at 8dcbcb745b059eb46d3323c6a26f7f8630a46f1c is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "b39354dd467e1a2da1adcef6a0cde2b2b90409ec",
+          "anchor_identity": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "fed27aeb791a18378fc612793652f908150a77d131a062be086a72113fe348ab",
+            "recorded_at": "2026-10-11T23:14:45Z"
+          },
+          "functional": {
+            "flow-f1": {
+              "evidence_id": "5c0908ed1cee8279c5fb201cbf063e9122145dbce2051bce3af2356aab9ea295",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            },
+            "flow-f2": {
+              "evidence_id": "3bef00f92ea1ca74e88f7c410a1c2cdc18d0afd26caa051bd7e695ecea34d0f7",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            },
+            "flow-f3": {
+              "evidence_id": "8815942f85a6f22b7db4f6c1637bd11416beeff2dc5b5baa339ac388a60e07dc",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            },
+            "flow-f4": {
+              "evidence_id": "95e957f9b8016a4ba46cadbb2fa180077b362576f684dc8a62b9f40905bf8ea9",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            },
+            "flow-f5": {
+              "evidence_id": "5b54375a25fb79d1a451d10d0e14f07cd81d257780923ddc8d022aeed2d1b938",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            },
+            "flow-f6": {
+              "evidence_id": "42359ad24965eabdad734decbbff3d0cff30c8e04440934e59cedde0448b699b",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            },
+            "flow-f7": {
+              "evidence_id": "8684f904256f48c40180796657711991a2583104aa22d012e1c93e1a914bc3d9",
+              "log_digest": "6e4be61bbed7445d35e2908ae05e4e84ba90a58f7738dadeb5dbaddacd5f158b",
+              "run_ref": null
+            }
+          },
+          "pr": {
+            "fact_id": "0e9e74fcb17ada559cd21a8f2d02bc2395d06d7f22c5b6d41aa2d713ecd37894",
+            "head": "8dcbcb745b059eb46d3323c6a26f7f8630a46f1c",
+            "provenance": "workflow_gh",
+            "raw_sha256": "c556a87ffaa799334a3f5f8fa0323de7786c44639bcc29e5ee4ed2487737850b"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-11T23:48:52Z",
+        "workflow_release": "2.9.2"
       }
     }
   }

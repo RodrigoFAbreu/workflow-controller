@@ -111,7 +111,8 @@ refusals:**
      `Workflow-Work-Item: <id>`, **and** `Workflow-Gate-Satisfied-By:
      policy:<first 12 characters of the policy digest>`
      (`workflow_state.gate_satisfied_by_trailer(record)`), all three as the
-     message's final paragraph (`OPUS-R129-001`);
+     message's final paragraph with nothing else in it: any `Co-Authored-By:`/`Claude-Session:`
+     lines go in their own paragraph before it, separated by a blank line (`OPUS-R129-001`);
    - the plan-approval transaction stays unscoped (the whole-file pin of
      `/approve-review plan`); `verify_plan_approval_commit` admits the
      `POLICY_SATISFIED` record and the extra trailer.
@@ -206,8 +207,9 @@ and this stage states only what differs.
    the completion commit, the next action). The completion commit's final
    paragraph carries `Workflow-Work-Item: <id>` **and**
    `Workflow-Gate-Satisfied-By: policy:<first 12 characters of the policy digest>`
-   (`workflow_state.acceptance_satisfied_by_trailer(record)`), after any
-   `Co-Authored-By:` lines (`OPUS-R129-001`).
+   (`workflow_state.acceptance_satisfied_by_trailer(record)`) and nothing else;
+   any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph
+   before it, separated by a blank line (`OPUS-R129-001`).
 5. **Record the floor, after the satisfying commit**, exactly as step 5 of "The
    policy evaluation, then the stage's transaction" says (`LPR-R23-003`:
    evaluate against the virtual floor, perform the satisfying commit, and only

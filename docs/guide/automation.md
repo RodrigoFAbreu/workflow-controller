@@ -328,8 +328,12 @@ class and any invalid reasons on the job's line. In order:
 
 ## Implementation-review apply rounds
 
-`/apply-implementation-review` at a `"2.2"` `APPLYING_REVIEW_FEEDBACK`
-has three safeguards:
+In legacy mode (Workflow 2.5.1 and 2.6.0), where the Controller decides
+itself, `/apply-implementation-review` at a `"2.2"` `APPLYING_REVIEW_FEEDBACK`
+has three safeguards. In protocol mode the Workflow decides, the worker's
+task is the bare command and `reconcile` judges the outcome, so none of them
+applies; from Workflow 2.9.1 the review and apply commands also commit a
+`REVISE` state write themselves. The legacy safeguards:
 
 - **The pending-write addendum.** After an automated local `REVISE`, or
   an ingested manual `REVISE`, the review-stage write that moved the work

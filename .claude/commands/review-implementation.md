@@ -492,7 +492,12 @@ A6. **Write set, exact.** **`REJECTED`-bundle refusal, second of two, under
       same one name, exactly as `LOCAL_MODEL_PLAN_REVIEW` and
       `MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` already are for their own
       stages) and its phase transition to
-      `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
+      `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`. **Leave this write
+      uncommitted -- do not commit it** (workflow-2.9.1, `REVIEW_PROTOCOL.md`'s
+      commit rule for review-stage writes): the approval commit
+      (`/approve-review implementation` or `/satisfy-gate implementation`)
+      picks it up, and a commit of its own would put HEAD past the bundle's
+      `generation_head` and raise `bundle_generation_mismatch` at that gate.
     - `REVISE`: `REVIEW_FEEDBACK.md`, plus the phase transition directly to
       `APPLYING_REVIEW_FEEDBACK`
       (`record_local_implementation_review(..., verdict="REVISE", ...)` --
@@ -501,7 +506,17 @@ A6. **Write set, exact.** **`REJECTED`-bundle refusal, second of two, under
       `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, which is wrong for this
       branch; `record_local_implementation_review` sets
       `APPLYING_REVIEW_FEEDBACK` directly instead, mirroring
-      `record_local_plan_review`'s own `REVISING_PLAN` write).
+      `record_local_plan_review`'s own `REVISING_PLAN` write). **Then commit
+      the write alone** (workflow-2.9.1): after the persist, call
+      `workflow_state.commit_pending_applying_review_feedback_entry(repo_root,
+      work_item_id, attribution=<the Co-Authored-By/Claude-Session lines this
+      session is told to add, or ()>)`. It stages only this work item's state
+      and commits it with a `Workflow-Work-Item` trailer as the final
+      paragraph, before any fix commit, so the post-fix generation record
+      still transitions `phase`; it returns `None` when the write is already
+      committed. Report a `ReviewStageWriteNotCommittableError` or a
+      `DirtyIndexBeforeStagingError` (unstage the unrelated content) and stop.
+      Never a broader `git add`.
     - `BLOCK`: `REVIEW_FEEDBACK.md` only --
       `record_local_implementation_review(..., verdict="BLOCK", ...)` is a
       true no-op; the work item stays at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`.

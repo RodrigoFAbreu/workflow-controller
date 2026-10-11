@@ -133,6 +133,15 @@ the design; operationally:
   publication status, its row, and the remedy, as one JSON object, and
   writes nothing.
 
+## Plan-stage writes are not committed (`workflow-2.9.1`)
+
+No plan-stage review write is committed on its own: there is no generation
+record at the plan stage, the plan-approval commit takes the whole
+working-tree state, and a commit of its own raises `bundle_generation_mismatch`
+at the plan-approval gate. A plan-stage `REVISE` therefore lives in the working
+tree until approval. The rule for every review stage is in `REVIEW_PROTOCOL.md`
+("Which review-stage writes are committed").
+
 ## Staleness, in one line
 
 Both ledger stages are valid only while the ledger's stored

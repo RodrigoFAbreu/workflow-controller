@@ -7320,6 +7320,41 @@ class TestRecoveredRoleLegalParentPhaseCombinations(unittest.TestCase):
             child = self._child(repo, p, "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", parent)
             ws.validate_bundle_generation_record_commit(repo.root, child, self.WI)  # must not raise
 
+    def _child_with_attribution(self, repo: "ScratchRepo", p: str, supersedes: str, *, same_paragraph: bool) -> str:
+        """The recovered-role commit with a `Co-Authored-By:` line either in
+        its own earlier paragraph or in the trailer paragraph itself."""
+        child_state = {
+            "work_item_id": self.WI, "work_item_type": "process",
+            "reviewed_implementation_head": p, "implementation_revision": 1,
+            "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "state_revision": 6, "last_transition": "t6",
+        }
+        full = repo.root / STATE_REL_PATH
+        full.write_bytes(ws._serialize_state({"schema_version": 1, "work_items": {self.WI: child_state}}))
+        _run(["git", "add", STATE_REL_PATH], cwd=repo.root)
+        trailers = "\n".join(f"{k}: {v}" for k, v in _recovered_trailers(self.WI, 1, supersedes).items())
+        attribution = "Co-Authored-By: Claude <noreply@anthropic.com>"
+        sep = "\n" if same_paragraph else "\n\n"
+        _run(["git", "commit", "-q", "-m", f"recovered-role commit\n\n{attribution}{sep}{trailers}"], cwd=repo.root)
+        return repo.head()
+
+    def test_attribution_in_its_own_paragraph_before_the_trailers_validates(self):
+        with ScratchRepo() as repo:
+            p, parent = self._seed_and_parent(repo, "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW")
+            child = self._child_with_attribution(repo, p, parent, same_paragraph=False)
+            ws.validate_bundle_generation_record_commit(repo.root, child, self.WI)  # must not raise
+
+    def test_attribution_in_the_trailer_paragraph_is_refused_and_the_refusal_names_the_remedy(self):
+        with ScratchRepo() as repo:
+            p, parent = self._seed_and_parent(repo, "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW")
+            child = self._child_with_attribution(repo, p, parent, same_paragraph=True)
+            with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError) as ctx:
+                ws.validate_bundle_generation_record_commit(repo.root, child, self.WI)
+            message = str(ctx.exception)
+            self.assertIn("Co-Authored-By", message)
+            self.assertIn("earlier paragraph", message)
+            self.assertIn("unpublished HEAD", message)
+            self.assertIn("a later recovery cannot supersede it", message)
+
     def test_item_293_awaiting_technical_approval_parent_phase_refused(self):
         with ScratchRepo() as repo:
             p, parent = self._seed_and_parent(repo, "AWAITING_TECHNICAL_APPROVAL")
@@ -19051,6 +19086,267 @@ class TestResumeImplementationCommandFile(unittest.TestCase):
         self.assertEqual(spec["command"], "resume-implementation")
         self.assertIn("disable-model-invocation: true", self.PATH.read_text().split("---")[1])
 
+
+
+class TestCommitPendingApplyingReviewFeedbackEntry(unittest.TestCase):
+    """workflow-2.9.1 CP1 (`D-Helper`): the committing helper, its field
+    allow-list, its refusals and its resumable staging."""
+
+    WID = "wi"
+    LOCAL = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+    MANUAL = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+    TERMINAL = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+    APPLYING = "APPLYING_REVIEW_FEEDBACK"
+
+    def _item(self, phase, version="2.2", **extra):
+        item = _base_work_item(governing_workflow_version=version, phase=phase, state_revision=1)
+        item.update(extra)
+        return item
+
+    def _state(self, wi_item, other=None):
+        items = {self.WID: wi_item}
+        if other is not None:
+            items["other"] = other
+        return {"schema_version": 1, "active_work_item_id": None, "work_items": items}
+
+    def _write(self, repo, state):
+        full = repo.root / STATE_REL_PATH
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_bytes(ws._serialize_state(state))
+
+    def _commit(self, repo, state):
+        self._write(repo, state)
+        _run(["git", "add", STATE_REL_PATH], cwd=repo.root)
+        _run(["git", "commit", "-q", "-m", "state"], cwd=repo.root)
+
+    def _setup(self, repo, head_phase, working_phase, version="2.2", other_head=None, other_working=None,
+               working_extra=None, head_extra=None):
+        self._commit(repo, self._state(self._item(head_phase, version, **(head_extra or {})), other_head))
+        working = self._item(working_phase, version, **(working_extra or {}))
+        working["state_revision"] = 2
+        self._write(repo, self._state(working, other_working if other_working is not None else other_head))
+
+    def _message(self, repo):
+        return subprocess.run(["git", "log", "-1", "--format=%B"], cwd=repo.root, check=True,
+                              capture_output=True, text=True).stdout
+
+    def _count(self, repo):
+        return int(subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=repo.root, check=True,
+                                  capture_output=True, text=True).stdout)
+
+    def test_local_revise_commits_alone_with_only_the_work_item_trailer(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            sha = ws.commit_pending_applying_review_feedback_entry(
+                repo.root, self.WID, attribution=("Co-Authored-By: A <a@example.com>",))
+            self.assertEqual(sha, repo.head())
+            body = self._message(repo).strip().split("\n\n")
+            self.assertEqual(body[-1], f"Workflow-Work-Item: {self.WID}")
+            self.assertIn("Co-Authored-By: A", body[-2])
+            self.assertNotIn("Workflow-Bundle-Generation-Record", self._message(repo))
+            changed = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"], cwd=repo.root,
+                                     check=True, capture_output=True, text=True).stdout.split()
+            self.assertEqual(changed, [STATE_REL_PATH])
+
+    def test_manual_revise_with_an_uncommitted_local_approve_ledger_rides_in(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING,
+                        working_extra={"implementation_review_stages": {"local": {"verdict": "APPROVE"}}})
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            committed = json.loads(subprocess.run(
+                ["git", "show", f"HEAD:{STATE_REL_PATH}"], cwd=repo.root, check=True,
+                capture_output=True, text=True).stdout)
+            self.assertIn("implementation_review_stages", committed["work_items"][self.WID])
+
+    def test_already_committed_and_nothing_pending_return_none(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            count = self._count(repo)
+            self.assertIsNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            self.assertEqual(self._count(repo), count)
+        with ScratchRepo() as repo:
+            self._commit(repo, self._state(self._item(self.LOCAL)))
+            self.assertIsNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+
+    def test_head_already_applying_returns_none_even_with_another_difference(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.APPLYING, self.APPLYING, working_extra={"technical_review_block_pins": {}})
+            self.assertIsNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+
+    def test_step_zero_entry_is_version_independent_for_1_and_2_1(self):
+        for version in ("1", "2.1"):
+            with self.subTest(version=version), ScratchRepo() as repo:
+                self._setup(repo, self.TERMINAL, self.APPLYING, version=version)
+                self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+
+    def test_2_1_item_refuses_a_head_phase_outside_its_one_phase_set(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING, version="2.1")
+            count = self._count(repo)
+            with self.assertRaises(ws.ReviewStageWriteNotCommittableError):
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertEqual(self._count(repo), count)
+
+    def test_2_2_recovered_head_at_the_terminal_phase_commits(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.TERMINAL, self.APPLYING)
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+
+    def test_approve_shaped_write_refuses_and_commits_nothing(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.MANUAL)
+            count = self._count(repo)
+            with self.assertRaises(ws.ReviewStageWriteNotCommittableError) as ctx:
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertIn("leave it uncommitted", str(ctx.exception))
+            self.assertEqual(self._count(repo), count)
+            self.assertEqual(_git_out(repo, ["diff", "--cached", "--name-only"]), "")
+
+    def test_a_crash_left_block_pin_refuses_naming_the_remedy(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING,
+                        working_extra={"technical_review_block_pins": [{"x": 1}]})
+            with self.assertRaises(ws.ReviewStageWriteNotCommittableError) as ctx:
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertIn("technical_review_block_pins", str(ctx.exception))
+            self.assertIn("stage_scoped_state", str(ctx.exception))
+            self.assertNotIn("committed alone", str(ctx.exception))
+
+    def test_a_pin_with_another_stray_field_leads_with_the_investigation(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING,
+                        working_extra={"technical_review_block_pins": [{"x": 1}], "probe_field": None})
+            with self.assertRaises(ws.ReviewStageWriteNotCommittableError) as ctx:
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            msg = str(ctx.exception)
+            self.assertIn("probe_field", msg)
+            self.assertIn("not a pure review-stage entry", msg)
+            self.assertIn("only once ['probe_field'] are resolved", msg)
+            self.assertIn("stage_scoped_state", msg)
+            self.assertLess(msg.index("not a pure review-stage entry"), msg.index("stage_scoped_state"))
+
+    def test_a_stray_field_refuses_without_the_block_pin_remedy(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING, working_extra={"reviewed_implementation_head": "abc"})
+            with self.assertRaises(ws.ReviewStageWriteNotCommittableError) as ctx:
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertIn("reviewed_implementation_head", str(ctx.exception))
+            self.assertIn("not a pure review-stage entry", str(ctx.exception))
+            self.assertNotIn("technical_review_block_pins entry", str(ctx.exception))
+
+    def _assert_refuses_untouched(self, repo):
+        count = self._count(repo)
+        head = _git_out(repo, ["rev-parse", "HEAD"])
+        with self.assertRaises(ws.ReviewStageWriteNotCommittableError):
+            ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+        self.assertEqual(self._count(repo), count)
+        self.assertEqual(_git_out(repo, ["rev-parse", "HEAD"]), head)
+        self.assertEqual(_git_out(repo, ["diff", "--cached", "--name-only"]), "")
+
+    def test_a_null_valued_field_added_outside_the_allow_list_refuses(self):
+        # An absent key and a present JSON null are different (EIR-R1-001).
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING, working_extra={"feedback_layout": None})
+            self._assert_refuses_untouched(repo)
+
+    def test_a_null_valued_field_removed_outside_the_allow_list_refuses(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            working = self._item(self.APPLYING)
+            working["state_revision"] = 2
+            self.assertIsNone(working.pop("parent_work_item_id"))
+            self._write(repo, self._state(working))
+            self._assert_refuses_untouched(repo)
+
+    def test_a_dirty_index_refuses(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            (repo.root / "unrelated.txt").write_text("x\n")
+            _run(["git", "add", "unrelated.txt"], cwd=repo.root)
+            count = self._count(repo)
+            with self.assertRaises(ws.DirtyIndexBeforeStagingError):
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertEqual(self._count(repo), count)
+
+    def test_foreign_residue_stays_in_the_working_tree_and_out_of_the_commit(self):
+        with ScratchRepo() as repo:
+            other_head = _base_work_item(work_item_id="other", phase="IMPLEMENTING")
+            other_working = dict(other_head, phase="SELF_REVIEWING_IMPLEMENTATION")
+            self._setup(repo, self.LOCAL, self.APPLYING, other_head=other_head, other_working=other_working)
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            committed = json.loads(_git_out(repo, ["show", f"HEAD:{STATE_REL_PATH}"]))
+            self.assertEqual(committed["work_items"]["other"]["phase"], "IMPLEMENTING")
+            self.assertEqual(committed["work_items"][self.WID]["phase"], self.APPLYING)
+            working = json.loads((repo.root / STATE_REL_PATH).read_text())
+            self.assertEqual(working["work_items"]["other"]["phase"], "SELF_REVIEWING_IMPLEMENTATION")
+
+    def _interrupted_commit(self, repo):
+        real_run = ws._run
+
+        def failing(args, cwd, env=None):
+            if args[:2] == ["git", "commit"]:
+                raise RuntimeError("simulated crash before the commit")
+            return real_run(args, cwd, env)
+
+        ws._run = failing
+        try:
+            with self.assertRaises(RuntimeError):
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+        finally:
+            ws._run = real_run
+
+    def test_interrupted_scoped_staging_resumes_and_commits_exactly_once(self):
+        with ScratchRepo() as repo:
+            other_head = _base_work_item(work_item_id="other", phase="IMPLEMENTING")
+            other_working = dict(other_head, phase="SELF_REVIEWING_IMPLEMENTATION")
+            self._setup(repo, self.LOCAL, self.APPLYING, other_head=other_head, other_working=other_working)
+            count = self._count(repo)
+            self._interrupted_commit(repo)
+            self.assertEqual(self._count(repo), count)
+            self.assertEqual(_git_out(repo, ["diff", "--cached", "--name-only"]).strip(), STATE_REL_PATH)
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            self.assertEqual(self._count(repo), count + 1)
+            committed = json.loads(_git_out(repo, ["show", f"HEAD:{STATE_REL_PATH}"]))
+            self.assertEqual(committed["work_items"]["other"]["phase"], "IMPLEMENTING")
+            working = json.loads((repo.root / STATE_REL_PATH).read_text())
+            self.assertEqual(working["work_items"]["other"]["phase"], "SELF_REVIEWING_IMPLEMENTATION")
+            self.assertIsNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            self.assertEqual(self._count(repo), count + 1)
+
+    def test_interrupted_plain_staging_resumes_too(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            count = self._count(repo)
+            self._interrupted_commit(repo)
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            self.assertEqual(self._count(repo), count + 1)
+
+    def test_interrupted_staging_with_an_unrelated_or_foreign_staged_blob_still_refuses(self):
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            self._interrupted_commit(repo)
+            (repo.root / "unrelated.txt").write_text("x\n")
+            _run(["git", "add", "unrelated.txt"], cwd=repo.root)
+            count = self._count(repo)
+            with self.assertRaises(ws.DirtyIndexBeforeStagingError):
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertEqual(self._count(repo), count)
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING)
+            tampered = json.loads((repo.root / STATE_REL_PATH).read_text())
+            tampered["note"] = "staged but not what scoped staging would stage"
+            (repo.root / STATE_REL_PATH).write_bytes(ws._serialize_state(tampered))
+            _run(["git", "add", STATE_REL_PATH], cwd=repo.root)
+            self._write(repo, self._state(dict(self._item(self.APPLYING), state_revision=2)))
+            count = self._count(repo)
+            with self.assertRaises(ws.DirtyIndexBeforeStagingError):
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+            self.assertEqual(self._count(repo), count)
+
+
+def _git_out(repo, args):
+    return subprocess.run(["git", *args], cwd=repo.root, check=True, capture_output=True, text=True).stdout
 
 if __name__ == "__main__":
     unittest.main()

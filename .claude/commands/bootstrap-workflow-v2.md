@@ -177,8 +177,7 @@ until `docs/ai-workflow/WORKFLOW_STATE.json` exists to read it from
      workflow-v2-1-core/<implementation_revision>` +
      `Workflow-Work-Item: workflow-v2-1-core` trailers, no other trailer.
      **These two trailer lines must be the commit message's own final
-     paragraph** — after any `Co-Authored-By:`/`Claude-Session:` lines,
-     never before them (`OPUS-R129-001`, the same rule
+     paragraph** and nothing else is in it (the record's trailer set is checked exactly, so a `Co-Authored-By:` line in that paragraph is refused): any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line (`OPUS-R129-001`, the same rule
      `milestone-implement.md` step 1f, step 6 below, `approve-review.md`
      step 6.4, and `accept-milestone.md` step 6 already state): Git's
      `git interpret-trailers --parse`, the exact mechanism
@@ -215,8 +214,7 @@ until `docs/ai-workflow/WORKFLOW_STATE.json` exists to read it from
 6. Commit the checkpoint's changes, carrying an exact
    `Workflow-Checkpoint: <id>` + `Workflow-Work-Item: workflow-v2-1-core`
    trailer. **These two lines must be the commit message's final
-   paragraph** — after any `Co-Authored-By:`/`Claude-Session:` lines, never
-   before them (`OPUS-R129-001`): Git's `git interpret-trailers --parse`,
+   paragraph** and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line (`OPUS-R129-001`): Git's `git interpret-trailers --parse`,
    the exact mechanism `discover_checkpoint_commits` uses, treats only the
    message's last paragraph as trailers, so a blank line after these two
    lines (e.g. one followed by `Co-Authored-By:`) silently discards both

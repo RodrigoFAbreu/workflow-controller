@@ -50,8 +50,9 @@ ask for it and stop.
    uncommitted residue in the state file). The message body carries one line
    `Retirement-Confirmation: <the user's confirmation text, on one line>`,
    then the trailers `Workflow-Legacy-Retirement: <work_item_id>` and
-   `Workflow-Work-Item: <work_item_id>` as the message's **final paragraph**,
-   after any `Co-Authored-By:` lines (`OPUS-R129-001`: Git's
+   `Workflow-Work-Item: <work_item_id>` as the message's **final paragraph**
+   with nothing else in it: any `Co-Authored-By:`/`Claude-Session:` lines go in
+   their own paragraph before it, separated by a blank line (`OPUS-R129-001`: Git's
    `git interpret-trailers --parse` treats only the last paragraph as
    trailers, so a blank line after them discards both). **Gate-policy content
    check**: right after the commit, call

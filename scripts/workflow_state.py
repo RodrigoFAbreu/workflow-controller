@@ -516,6 +516,15 @@ POST_COMMIT_FAILURE_TREE_CONTENT = "TREE_CONTENT"
 POST_COMMIT_FAILURE_RECORD_OR_INPUT = "RECORD_OR_INPUT"
 
 
+class ReviewStageWriteNotCommittableError(Exception):
+    """`commit_pending_applying_review_feedback_entry` refuses a pending
+    review-stage write that is not an entry into `APPLYING_REVIEW_FEEDBACK`
+    from a phase the item's governing version admits, or whose field diff
+    leaves `REVIEW_STAGE_WRITE_COMMIT_FIELDS` (workflow-2.9.1,
+    `D-Helper`, `INV-2`). An APPROVE-shaped write is refused here by design:
+    it stays uncommitted until the approval commit."""
+
+
 class DirtyIndexBeforeStagingError(Exception):
     """`/approve-review`'s Git index-isolation precondition: the index
     already differs from `HEAD` *before* this invocation stages anything
@@ -14382,6 +14391,15 @@ RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     "reopenings",
 })
 
+# workflow-2.9.1 (`D-Helper`, step 3): the item fields a committed entry into
+# `APPLYING_REVIEW_FEEDBACK` may carry -- the set the recovered-role record
+# already admits, so an uncommitted local APPROVE ledger rides in with a
+# manual REVISE or a step-0 late-problem entry.
+REVIEW_STAGE_WRITE_COMMIT_FIELDS = frozenset({
+    "phase", "state_revision", "last_transition",
+    "implementation_review_stages", "gate_evidence", "reopenings",
+})
+
 RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES = (
     # workflow-2.5.0 CP3: additively widened with the two new "2.2" phases
     # (D-Implementation-Review-Stages' "Provenance-interval interaction",
@@ -14671,7 +14689,10 @@ def validate_bundle_generation_record_commit(repo_root: Path, commit: str, work_
             f"{commit} carries trailer set {sorted(trailers)}, not exactly the "
             f"ordinary {{'Workflow-Bundle-Generation-Record', 'Workflow-Work-Item'}} "
             f"set or the recovered {{'Workflow-Bundle-Generation-Record', "
-            f"'Workflow-Work-Item', 'Workflow-Supersedes'}} set"
+            f"'Workflow-Work-Item', 'Workflow-Supersedes'}} set; every line of the "
+            f"final paragraph counts, so put Co-Authored-By:/Claude-Session: lines in an "
+            f"earlier paragraph; while this commit is still the unpublished HEAD, rewrite "
+            f"its message, because a later recovery cannot supersede it"
         )
     field_diff = _work_item_field_diff(repo_root, commit, work_item_id)
     after = _read_json_at_commit_or_empty(repo_root, commit, state_rel)
@@ -19051,6 +19072,25 @@ def validate_gate_policy_floor_commit(repo_root: Path, commit: str) -> None:
             f"{after[GATE_POLICY_FLOOR_KEY]['digest']!r}")
 
 
+def _scoped_state_from(head: dict, working: dict, scope) -> dict:
+    """`HEAD`'s state with only `scope` (a work item id or a top-level key
+    set) taken from the working tree; what `stage_scoped_state` stages."""
+    scoped = copy.deepcopy(head)
+    if isinstance(scope, str):
+        items = scoped.setdefault("work_items", {})
+        if scope in working.get("work_items", {}):
+            items[scope] = copy.deepcopy(working["work_items"][scope])
+        else:
+            items.pop(scope, None)
+    else:
+        for key in scope:
+            if key in working:
+                scoped[key] = copy.deepcopy(working[key])
+            else:
+                scoped.pop(key, None)
+    return scoped
+
+
 def stage_scoped_state(repo_root: Path, scope) -> bool:
     """Item-scoped (or top-level-scoped) staging of `WORKFLOW_STATE.json` for a
     validated commit (`LPR-R4-002`, `LPR-R5-001`, `LPR-R5-002`). `scope` is a
@@ -19100,19 +19140,7 @@ def stage_scoped_state(repo_root: Path, scope) -> bool:
         raise DirtyIndexBeforeStagingError(
             f"{state_rel} is already staged and differs from HEAD before scoped staging ran "
             f"-- resolve or unstage it first")
-    scoped = copy.deepcopy(head)
-    if isinstance(scope, str):
-        items = scoped.setdefault("work_items", {})
-        if scope in working.get("work_items", {}):
-            items[scope] = copy.deepcopy(working["work_items"][scope])
-        else:
-            items.pop(scope, None)
-    else:
-        for key in scope:
-            if key in working:
-                scoped[key] = copy.deepcopy(working[key])
-            else:
-                scoped.pop(key, None)
+    scoped = _scoped_state_from(head, working, scope)
     mode_and_sha = _blob_mode_and_sha_at_commit(repo_root, "HEAD", state_rel)
     mode = mode_and_sha[0] if mode_and_sha is not None else _FALLBACK_STATE_BLOB_MODE
     blob_sha = subprocess.run(
@@ -19143,6 +19171,99 @@ def _stage_state_for_commit(repo_root: Path, scope) -> None:
 
 def _head_sha(repo_root: Path) -> str:
     return _run(["git", "rev-parse", "HEAD"], cwd=repo_root).strip()
+
+
+def commit_pending_applying_review_feedback_entry(
+    repo_root: Path, work_item_id: str, *, attribution=(),
+) -> str | None:
+    """Commits a pending entry into `APPLYING_REVIEW_FEEDBACK` alone and
+    returns the new commit's SHA, or `None` when there is nothing to commit
+    (workflow-2.9.1, `D-Helper`). It writes no state: it stages and commits
+    what `state_transaction` already wrote. A REVISE write (local or manual)
+    and `/apply-implementation-review` step 0's own entry are both this shape;
+    an APPROVE write is not, and is refused (`INV-2`)."""
+    state_rel = DEFAULT_STATE_PATH.as_posix()
+    head_state = _read_json_at_commit_or_empty(repo_root, "HEAD", state_rel)
+    working = _load_json(repo_root / DEFAULT_STATE_PATH)
+    head_item = head_state.get("work_items", {}).get(work_item_id)
+    work_item = (working or {}).get("work_items", {}).get(work_item_id) if isinstance(working, dict) else None
+    if work_item is None:
+        raise ReviewStageWriteNotCommittableError(
+            f"{work_item_id!r} has no work item entry in the working-tree {state_rel}")
+    if head_item == work_item:
+        return None
+    if head_item is None:
+        raise ReviewStageWriteNotCommittableError(
+            f"{work_item_id!r} has no entry in HEAD's {state_rel}; nothing to commit alone")
+    head_phase = head_item.get("phase")
+    working_phase = work_item.get("phase")
+    if head_phase == "APPLYING_REVIEW_FEEDBACK":
+        return None
+    legal = bundle_generation_recovered_role_legal_committed_phases(
+        work_item.get("governing_workflow_version"))
+    if working_phase != "APPLYING_REVIEW_FEEDBACK" or head_phase not in legal:
+        raise ReviewStageWriteNotCommittableError(
+            f"the pending write moves {work_item_id!r} from {head_phase!r} (HEAD) to "
+            f"{working_phase!r} (working tree), not into APPLYING_REVIEW_FEEDBACK from one of "
+            f"{sorted(legal)}; an APPROVE-shaped review-stage write is never committed on its own "
+            f"-- leave it uncommitted for the approval commit (REVIEW_PROTOCOL.md, commit rule)")
+    # A key present with a null value differs from an absent key.
+    field_diff = {
+        k for k in set(head_item) | set(work_item)
+        if (k in head_item) != (k in work_item) or head_item.get(k) != work_item.get(k)
+    }
+    if not field_diff <= REVIEW_STAGE_WRITE_COMMIT_FIELDS:
+        stray = sorted(field_diff - REVIEW_STAGE_WRITE_COMMIT_FIELDS)
+        pin_remedy = (
+            "a crash-left technical_review_block_pins entry is committed by staging the state "
+            f"file with workflow_state.stage_scoped_state(repo_root, {work_item_id!r}) (when it "
+            f"returns False, stage exactly {state_rel}), committing it with a "
+            "Workflow-Work-Item trailer as the final paragraph, then re-running this step; "
+            "never stage the whole file while another work item holds uncommitted state")
+        not_pure = (
+            "the write is not a pure review-stage entry; investigate those fields, and "
+            "commit or revert them deliberately, then re-run this step")
+        other = [f for f in stray if f != "technical_review_block_pins"]
+        if "technical_review_block_pins" not in stray:
+            remedy = not_pure
+        elif not other:
+            remedy = pin_remedy
+        else:
+            remedy = (
+                f"{not_pure}; only once {other} are resolved, {pin_remedy}")
+        raise ReviewStageWriteNotCommittableError(
+            f"the pending write also changes {stray} of {work_item_id!r}, outside "
+            f"{sorted(REVIEW_STAGE_WRITE_COMMIT_FIELDS)}; {remedy}")
+    outside_equal = _scoped_state_from(head_state, working, work_item_id) == working
+    if outside_equal:
+        expected = _hash_object(repo_root, (repo_root / DEFAULT_STATE_PATH).read_bytes())
+    else:
+        expected = _hash_object(
+            repo_root, _serialize_state(_scoped_state_from(head_state, working, work_item_id)))
+    staged = [line for line in _run(["git", "diff", "--name-only", "--cached"], cwd=repo_root).splitlines()
+              if line]
+    if staged:
+        # Resumable (EPR-001): only this helper's own interrupted staging is accepted.
+        if staged != [state_rel] or _run(["git", "rev-parse", f":{state_rel}"], cwd=repo_root).strip() != expected:
+            raise DirtyIndexBeforeStagingError(
+                f"the index holds staged content other than this helper's own staging of "
+                f"{state_rel}: {sorted(staged)} -- unstage it before this commit")
+    else:
+        _stage_state_for_commit(repo_root, work_item_id)
+    message = [
+        "-m", f"chore(workflow): record entry into APPLYING_REVIEW_FEEDBACK for {work_item_id}",
+    ]
+    if attribution:
+        message += ["-m", "\n".join(attribution)]
+    message += ["-m", f"Workflow-Work-Item: {work_item_id}"]
+    _run(["git", "commit", "-q", *message], cwd=repo_root)
+    return _head_sha(repo_root)
+
+
+def _hash_object(repo_root: Path, data: bytes) -> str:
+    return subprocess.run(
+        ["git", "hash-object", "--stdin"], cwd=repo_root, input=data, capture_output=True, check=True,
+    ).stdout.decode("ascii").strip()
 
 
 def commit_gate_policy_floor(repo_root: Path, *, now: str) -> str | None:

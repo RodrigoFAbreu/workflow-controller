@@ -767,6 +767,12 @@ class TestVersion21OnlyCommandsRefuseCleanlyForV1(unittest.TestCase):
 # below, for the two files where a real pre-v2.1 copy is actually
 # available to diff against.
 _GOLDEN_COMMAND_FILE_SHA256 = {
+    # workflow-2.9.1 (review-stage-write-durability, CP2): `review-implementation.md`,
+    # `record-manual-implementation-review.md` and `apply-implementation-review.md`
+    # gain the commit rule for review-stage writes (REVISE commits through
+    # `commit_pending_applying_review_feedback_entry`, APPROVE stays uncommitted);
+    # `review-plan.md`, `record-manual-plan-review.md` and `apply-plan-review.md`
+    # gain the plan-stage sentence.
     # workflow-2.8.0 (gate-policy-and-reopening, CP2): `approve-review.md`
     # gains the pointer to `/satisfy-gate`; `milestone-plan.md`,
     # `apply-plan-review.md`, `milestone-implement.md` and
@@ -902,7 +908,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # checkpoint (1f) and self-review (2) commits call
     # assert_gate_policy_fields_unchanged_or_tightened after landing --
     # intentional content change.
-    "milestone-implement.md": "09d20a57b37590fe632b60149f0ce13aa04d6b796a8671909db5dc3dd13bd128",
+    "milestone-implement.md": "b5d6e1a13f02b432c1a7bc885155410f3c19322af11ee41bdcf7ac072cffd79f",
     # approve-review.md (WF8c item (c), same-content bundle-generation
     # republication idempotency; further updated WF8c item (b): the
     # trailing caveat naming the dedicated /recover-implementation-provenance
@@ -1032,7 +1038,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # approval commit keeps its whole-file pin and
     # verify_plan_approval_commit applies the gate-policy content check --
     # intentional content change.
-    "approve-review.md": "e760ecb36c98e271ad483af4d3b3a0bcb6469749f333742bbb993c9e93a7fb21",
+    "approve-review.md": "6dedae58154bb4be4604154c6034ece138d57bc9f45eb96367eba3f73b7d63c1",
     # accept-milestone.md updated, baseline-freeze correctness fix
     # (OPUS-R129-001): step 6's completion-commit instruction now states
     # the same "trailers must be the commit message's own final paragraph"
@@ -1072,7 +1078,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # user-only /resume-implementation for a 2.1/2.2 item and drops the wrong
     # "legacy promotion" origin -- intentional content change, outside every
     # "1"-inert span.
-    "accept-milestone.md": "ace07f7d4ccbe3660ef477651b11562502513bd8e55aefab5deff3ec0994d1c8",
+    "accept-milestone.md": "4095408099b74c1ab226a2a1f2ad7e7e41fa66baca4efcf5310344e2a7594fbf",
     # prepare-functional-review.md further updated, baseline-portability
     # correctness fix (OPUS-R129-001): step 3a's checklist-evidence
     # provenance commit instruction now states the same "trailers must be
@@ -1091,7 +1097,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # (workflow-2.6.0, CP3): the preamble states feedback_layout-keyed
     # resolution, and step 4 calls ensure_feedback_dir and prints the exact
     # resolved FUNCTIONAL_REVIEW.md path -- intentional content change.
-    "prepare-functional-review.md": "cddd822a7fe1b1c6a47596ab510baefd418f2dea4ed755f1445a3aa33adab65f",
+    "prepare-functional-review.md": "34fb21d3c55384d63bfde61edf8d179289dc2eeeb8dcff36419426cdc8f92bc6",
     # apply-plan-review.md/bootstrap-workflow-v2.md (D-Plan-Revision-Publication,
     # WFR-65): intentional content change, publish_plan_revision wiring.
     # apply-plan-review.md further updated, convergence pass 12 (ledger row
@@ -1115,7 +1121,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # assert_apply_review_feedback_binding (D-Apply-Binding): a two-stage
     # REVISE stating a review_content_id is bound by content --
     # intentional content change.
-    "apply-plan-review.md": "17c7ea54b5d98cd5267dccbe42df5b4e37ed8a1fc8be3762d34aa9b2db5a4658",
+    "apply-plan-review.md": "878527ae17e3cc2cb207a90ee6de20b414e8a702eb6c3edb4da8374d96c66821",
     # apply-implementation-review.md (WF8c item (c)): step 7's
     # record_bundle_generation call site widened to first resolve the
     # outcome (resolve_bundle_generation_outcome) and write the matching
@@ -1150,7 +1156,10 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # workflow-2.8.0 (gate-policy-and-reopening, CP1): the generation-record
     # commit stages item-scoped (stage_scoped_state) -- intentional content
     # change.
-    "apply-implementation-review.md": "deaf93154185971241690ee4b5e0c8ec9b21a765a957e5cae78f1a66627a76ba",
+    # functional-fix-commit-order implementation review: step 8 is
+    # version-aware (a "2.2" post-fix round re-enters local review) --
+    # intentional content change.
+    "apply-implementation-review.md": "bad7a8fde2b5ded6658abb6faffcdfead9d45e136b8211d59aab9f98c378c0b8",
     # review-plan.md/record-manual-plan-review.md further updated,
     # workflow-v2-3-followups CP3 (REQ-8/-9): the `Reviewer role:` template
     # literal, the round-computation prose, the exact-match-expectation
@@ -1188,7 +1197,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # review-plan.md further updated, D-Consumed-History (workflow-2.7.0,
     # CP2, v2.6.0-001): REVISE also adds the id to the durable
     # consumed_plan_review_content_ids history -- intentional content change.
-    "review-plan.md": "61cb286719b6f310c61f9304324d6994f74dc9c443661178b81c051e05d27e0d",
+    "review-plan.md": "d7615154b539dbd74ac08fe06245f3137fffb7d1af83a600eed7207690cfa43a",
     # record-manual-plan-review.md further updated, D-Feedback-Layout
     # (workflow-2.6.0, CP3): preamble states feedback_layout-keyed
     # resolution; step 4 prints the exact resolved paste path and adds the
@@ -1207,7 +1216,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # ingest_manual_review_verdict (two_stage_only=True), which holds
     # state_lock through the publication; the required header fields,
     # Round: and the absent-bundle-id advisory -- intentional content change.
-    "record-manual-plan-review.md": "f5647bdb1af514a4c89d0fdf9e6bfe098009d48ee6f124c0bf26684f2870b58f",
+    "record-manual-plan-review.md": "3a3a5fd42430430c67a8d13a4ede47a8bb8a8332dbd4769e66d99a658550fe70",
     # bootstrap-workflow-v2.md (WF8c scope clauses (l)/(p)/(q), GPT-R108-002/
     # OPUS-R109-004): the driver-range text made checkpoint-agnostic
     # (OPUS-R102-009), a NO_CHECKPOINT terminal-wrap-up branch added to step
@@ -1235,7 +1244,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # requirement step 6 already states, closing the gap a fresh Opus
     # review found at this second trailer-write site in an already-
     # corrected file -- intentional content change.
-    "bootstrap-workflow-v2.md": "01d5873ba807e78f0d0618eb944246783cb3827fe3e31ad253e0158f879e5cae",
+    "bootstrap-workflow-v2.md": "ec00adbbb2057cbf8c9a590b16ffa32be0448c3394c8785cf3784b0603195324",
     # review-implementation.md: new, workflow-v2-3 CP1 -- the first
     # recorded hash, not a change.
     #
@@ -1301,7 +1310,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # review-implementation.md further updated, workflow-2.7.0
     # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 4's bundle check is
     # verify_implementation_review_bundle -- intentional content change.
-    "review-implementation.md": "656538d4033c9a086adf1c0b387f15d18ee5a5b95af782a6267a712018d04060",
+    "review-implementation.md": "7af3603cf6834223968258e8256cde95a0ef5e9a9e71a89e41ad1414d671be62",
     # review-functional.md: new, workflow-v2-3 CP2 -- the first recorded
     # hash, not a change.
     #
@@ -1388,7 +1397,15 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # exists" bullet names the user-only /resume-implementation for an outstanding
     # checkpoint at this phase -- intentional content change, outside every
     # "1"-inert span.
-    "apply-functional-review.md": "2e1518c67823d41b3ae2a1776c5f0e95931a45d2728cf68dcd0983d94d45ead2",
+    # workflow-2.9.2 (functional-fix-commit-order, CP1): the bounded branch commits
+    # the stale technical-approval write before the first edit, runs steps 5 and 6
+    # before the regeneration, and says no commit follows the record (#19) --
+    # intentional content change.
+    # Implementation review / functional review round 1 (functional-fix-commit-order):
+    # the bounded branch names the version's post-fix target phase, says a mixed
+    # round's new child entry stays uncommitted, and words the stale-write rerun
+    # by state_revision -- intentional content change.
+    "apply-functional-review.md": "15fbf8e3d9f788345a269b5f820f5a82d800312289dbd679e48302f5571413da",
 }
 
 
@@ -2678,6 +2695,83 @@ class TestGoldenCommandFileHashes(unittest.TestCase):
                 )
 
 
+class TestFunctionalFixCommitOrderConformance(unittest.TestCase):
+    """workflow-2.9.2 (functional-fix-commit-order, CP1): in
+    `/apply-functional-review`'s bounded branch the stale write and the
+    checklist are committed before the regeneration, and the generation
+    record is the round's last commit."""
+
+    def _bounded(self) -> str:
+        text = _command_text("apply-functional-review.md")
+        start = text.index("- **Bounded code change**")
+        return text[start:text.index("- **Broad/multi-finding remediation**", start)]
+
+    def test_sub_step_1_commits_the_stale_write_state_only(self):
+        branch = self._bounded()
+        sub1 = branch[branch.index("  1. **Stale-before-edit"):branch.index("  2. Make the fix")]
+        self.assertIn("state-only commit", sub1)
+        self.assertIn("stage_scoped_state", sub1)
+        self.assertIn("git diff --cached --quiet", sub1)
+        self.assertIn("nothing to commit", sub1)
+
+    def test_steps_5_and_6_precede_the_regeneration(self):
+        branch = self._bounded()
+        marker = "run top-level steps 5 and 6 for the\n     whole round"
+        self.assertIn(marker, branch)
+        self.assertLess(branch.index(marker), branch.index("record_bundle_generation("))
+        self.assertLess(branch.index(marker), branch.index("  4. Regenerate the bundle"))
+
+    def test_no_commit_may_follow_the_record(self):
+        branch = self._bounded()
+        sentence = "**No commit may follow this record in this invocation;"
+        self.assertEqual(branch.count(sentence), 1)
+        self.assertLess(branch.index("prepare-ai-review.sh <base-sha> post-fix"), branch.index(sentence))
+        self.assertLess(branch.index(sentence), branch.index("  5. **Mark this round's"))
+
+    def test_top_level_steps_5_and_6_carry_the_bounded_round_sentence(self):
+        text = _command_text("apply-functional-review.md")
+        tail = text[text.index("\n5. Commit coherent fixes"):text.index("\n7. **Mark this round's")]
+        self.assertEqual(tail.count("already ran inside it, before"), 2)
+
+
+class TestReviewStageWriteCommitRuleConformance(unittest.TestCase):
+    """workflow-2.9.1 (review-stage-write-durability, CP2): the command texts
+    carry the commit rule for review-stage writes -- a REVISE branch commits
+    through the helper, an APPROVE branch says to leave the write
+    uncommitted, the apply safety net precedes the `BLOCK` pin, and the plan
+    texts carry the plan-stage sentence."""
+
+    HELPER = "commit_pending_applying_review_feedback_entry"
+
+    def test_revise_branches_name_the_helper_and_approve_branches_say_uncommitted(self):
+        for filename, revise_marker, block_marker, approve_marker in (
+            ("review-implementation.md", "    - `REVISE`", "    - `BLOCK`", "    - `APPROVE`"),
+            ("record-manual-implementation-review.md", "   - `REVISE`", "   - `BLOCK`", "   - `APPROVE`"),
+        ):
+            with self.subTest(filename=filename):
+                text = _command_text(filename)
+                approve = text[text.index(approve_marker, text.index("Write set, exact")):]
+                approve = approve[:approve.index(revise_marker)]
+                revise = text[text.index(revise_marker, text.index("Write set, exact")):]
+                revise = revise[:revise.index(block_marker)]
+                self.assertIn("uncommitted", approve)
+                self.assertNotIn(self.HELPER, approve)
+                self.assertIn(self.HELPER, revise)
+
+    def test_apply_safety_net_precedes_the_block_pin(self):
+        text = _command_text("apply-implementation-review.md")
+        self.assertEqual(text.count(self.HELPER), 1)
+        self.assertLess(text.index(self.HELPER), text.index("**Durable `BLOCK`-verdict pin**"))
+        self.assertLess(text.index("assert_apply_review_feedback_binding"), text.index(self.HELPER))
+
+    def test_plan_texts_carry_the_plan_stage_sentence(self):
+        for filename in ("review-plan.md", "record-manual-plan-review.md", "apply-plan-review.md"):
+            with self.subTest(filename=filename):
+                text = _command_text(filename)
+                self.assertIn("Plan-stage writes are not committed here", text)
+                self.assertNotIn(self.HELPER, text)
+
+
 class TestReconciliationOutcomeReportingConformance(unittest.TestCase):
     """workflow-2.4.0's round-6 implementation-review fix (`IMPL6-B1`):
     `D-Plan-Amendment-4`'s own closing requirement --
@@ -2712,30 +2806,39 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
     before this checkpoint; this is new coverage for all three, not just
     `approve-review.md`."""
 
+    def _assert_trailer_paragraph_wording(self, text: str, *, record: bool):
+        """CP2 (`functional-fix-commit-order`, D-Trailers): the one wording
+        every statement of `OPUS-R129-001` carries -- the `Workflow-*`
+        trailers are the final paragraph and nothing else is in it, with any
+        `Co-Authored-By:`/`Claude-Session:` lines in their own paragraph
+        before it -- and, for a generation-record writer, the clause saying
+        why (the record's trailer set is checked exactly)."""
+        collapsed = " ".join(text.split())
+        self.assertIn("and nothing else is in it", collapsed)
+        self.assertIn(
+            "`Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, "
+            "separated by a blank line",
+            collapsed,
+        )
+        if record:
+            self.assertIn(
+                "the record's trailer set is checked exactly, so a `Co-Authored-By:` line "
+                "in that paragraph is refused",
+                collapsed,
+            )
+
     def test_approve_review_states_the_final_paragraph_requirement(self):
         text = _command_text("approve-review.md")
-        self.assertIn(
-            "**These\n     two lines must be the commit message's own final paragraph** — after\n"
-            "     any `Co-Authored-By:`/`Claude-Session:` lines, never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=False)
         self.assertIn("discover_plan_approval_commit", text)
 
     def test_milestone_implement_states_the_final_paragraph_requirement(self):
         text = _command_text("milestone-implement.md")
-        self.assertIn(
-            "**These\n      two lines must be the commit message's final paragraph** -- after\n"
-            "      any `Co-Authored-By:`/`Claude-Session:` lines, never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=False)
 
     def test_bootstrap_workflow_v2_states_the_final_paragraph_requirement(self):
         text = _command_text("bootstrap-workflow-v2.md")
-        self.assertIn(
-            "**These two lines must be the commit message's final\n   paragraph** — after any `Co-Authored-By:`/`Claude-Session:` lines, never\n"
-            "   before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=False)
 
     def test_accept_milestone_states_the_final_paragraph_requirement(self):
         """Baseline-freeze correctness fix: `accept-milestone.md` step 6
@@ -2746,12 +2849,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         the same defect class as a result. This closes the gap those three
         grandfathered entries' own comments name explicitly as still open."""
         text = _command_text("accept-milestone.md")
-        self.assertIn(
-            "**This line must be part of the commit\n   message's own final paragraph** -- after any `Co-Authored-By:`/\n"
-            "   `Claude-Session:` lines, never in an earlier paragraph separated from\n"
-            "   them by a blank line",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=False)
         self.assertIn("OPUS-R129-001", text)
 
     def test_prepare_functional_review_states_the_final_paragraph_requirement(self):
@@ -2761,12 +2859,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         evidence provenance commit -- the identity step 4 reports to the
         operator and `/review-functional` reads back."""
         text = _command_text("prepare-functional-review.md")
-        self.assertIn(
-            "**These two lines must be the commit message's own final\n"
-            "         paragraph** — after any `Co-Authored-By:`/`Claude-Session:` lines,\n"
-            "         never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=False)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_current_functional_checklist_evidence", text)
 
@@ -2775,12 +2868,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         bounded-branch post-fix bundle-generation-record commit never stated
         this rule at all."""
         text = _command_text("apply-functional-review.md")
-        self.assertIn(
-            "**These trailer lines\n"
-            "     must be the commit message's own final paragraph** — after any\n"
-            "     `Co-Authored-By:`/`Claude-Session:` lines, never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=True)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_current_bundle_generation_record_commit", text)
 
@@ -2789,12 +2877,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         step 7's post-fix bundle-generation-record commit never stated this
         rule at all."""
         text = _command_text("apply-implementation-review.md")
-        self.assertIn(
-            "**These trailer lines must be the commit\n"
-            "   message's own final paragraph** — after any `Co-Authored-By:`/\n"
-            "   `Claude-Session:` lines, never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=True)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_current_bundle_generation_record_commit", text)
 
@@ -2805,12 +2888,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         `Workflow-Work-Item`/`Workflow-Supersedes` set) never stated this
         rule at all."""
         text = _command_text("recover-implementation-provenance.md")
-        self.assertIn(
-            "**These three trailer\n"
-            "   lines must be the commit message's own final paragraph** — after any\n"
-            "   `Co-Authored-By:`/`Claude-Session:` lines, never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=True)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_current_bundle_generation_record_commit", text)
 
@@ -2823,12 +2901,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         `apply-implementation-review.md`/`apply-functional-review.md`
         already state it for."""
         text = _command_text("milestone-implement.md")
-        self.assertIn(
-            "**These two trailer lines must be the commit message's own final\n"
-            "     paragraph** -- after any `Co-Authored-By:`/`Claude-Session:` lines,\n"
-            "     never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=True)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_current_bundle_generation_record_commit", text)
 
@@ -2840,12 +2913,7 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         checkpoint-completion commit in the same file, which
         OPUS-R129-001 already covered."""
         text = _command_text("bootstrap-workflow-v2.md")
-        self.assertIn(
-            "**These two trailer lines must be the commit message's own final\n"
-            "     paragraph** — after any `Co-Authored-By:`/`Claude-Session:` lines,\n"
-            "     never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=True)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_current_bundle_generation_record_commit", text)
 
@@ -2875,14 +2943,54 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         6.4's own plan-stage approval commit in the same file, which the
         earlier `workflow-v2-3-followups` round already covered."""
         text = _command_text("approve-review.md")
-        self.assertIn(
-            "**These two trailer lines must also be\n"
-            "   the commit message's own final paragraph** — after any\n"
-            "   `Co-Authored-By:`/`Claude-Session:` lines, never before them",
-            text,
-        )
+        self._assert_trailer_paragraph_wording(text, record=False)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_technical_approval_commit", text)
+
+
+class TestTrailerParagraphWordingConformance(unittest.TestCase):
+    """CP2 (`functional-fix-commit-order`, D-Trailers): every payload command
+    that states `OPUS-R129-001` states it in the one new wording, none keeps
+    the old phrase, and the six generation-record writers say why the
+    paragraph must hold nothing else."""
+
+    _STATING = frozenset({
+        "accept-milestone.md", "adopt-gate-policy.md", "apply-functional-review.md",
+        "apply-implementation-review.md", "apply-pr-review.md", "approve-review.md",
+        "bootstrap-workflow-v2.md", "milestone-implement.md", "prepare-functional-review.md",
+        "recover-implementation-provenance.md", "request-plan-amendment.md",
+        "resume-implementation.md", "retire-legacy-work-item.md", "satisfy-gate.md",
+    })
+    _RECORD_WRITERS = frozenset({
+        "apply-functional-review.md", "apply-implementation-review.md", "apply-pr-review.md",
+        "bootstrap-workflow-v2.md", "milestone-implement.md", "recover-implementation-provenance.md",
+    })
+    _OWN_PARAGRAPH = "go in their own paragraph before it, separated by a blank line"
+    _RECORD_CLAUSE = "trailer set is checked exactly, so a `Co-Authored-By:` line in that paragraph is refused"
+
+    def _stating(self):
+        commands = _repo_root() / ".claude" / "commands"
+        return {
+            path.name: " ".join(path.read_text().split())
+            for path in sorted(commands.glob("*.md"))
+            if "OPUS-R129-001" in path.read_text()
+        }
+
+    def test_exactly_the_expected_commands_state_the_rule(self):
+        self.assertEqual(set(self._stating()), set(self._STATING))
+
+    def test_every_statement_carries_the_new_wording_and_none_the_old_phrase(self):
+        for name, text in self._stating().items():
+            with self.subTest(name):
+                self.assertGreaterEqual(text.count(self._OWN_PARAGRAPH), text.count("OPUS-R129-001"))
+                self.assertNotIn("never before them", text)
+                self.assertNotIn("never in an earlier paragraph", text)
+
+    def test_generation_record_writers_say_why_the_paragraph_holds_nothing_else(self):
+        stating = self._stating()
+        for name in sorted(self._RECORD_WRITERS):
+            with self.subTest(name):
+                self.assertIn(self._RECORD_CLAUSE, stating[name])
 
 
 class TestAcceptMilestoneCompletionCommitTrailerShape(unittest.TestCase):
@@ -2933,12 +3041,12 @@ class TestAcceptMilestoneCompletionCommitTrailerShape(unittest.TestCase):
 
     def test_final_paragraph_layout_is_recognized_as_a_trailer(self):
         """The layout accept-milestone.md step 6 now requires: the
-        Workflow-Work-Item line inside the same final trailer paragraph as
-        Co-Authored-By/Claude-Session, positioned after them."""
+        Workflow-Work-Item line is the final paragraph, after the
+        Co-Authored-By/Claude-Session paragraph."""
         with h.ScratchRepo() as repo:
             body = (
                 f"{self._SUBJECT}\n\n{self._NARRATIVE}\n\n"
-                f"{self._COAUTHOR_LINES}\n"
+                f"{self._COAUTHOR_LINES}\n\n"
                 "Workflow-Work-Item: demo-item\n"
             )
             commit = self._commit_with_body(repo, body)
@@ -2957,8 +3065,8 @@ class TestBaselinePortabilityCommandsCommitTrailerShape(unittest.TestCase):
     it, taking its `Workflow-Scoped-Remediation-Acceptance` family with it):
     constructs both the pre-fix layout (the trailer paragraph separated from
     `Co-Authored-By:`/`Claude-Session:` by a blank line) and the corrected
-    layout (the trailer paragraph positioned after them, as the message's
-    own final paragraph) against a real `ScratchRepo` commit for each
+    layout (the trailer paragraph positioned after them in a paragraph of its
+    own, as the message's final paragraph) against a real `ScratchRepo` commit for each
     family, and confirms via the real `git interpret-trailers --parse`
     mechanism (`workflow_state._commit_trailers`, the exact primitive
     `discover_current_functional_checklist_evidence`/
@@ -3009,7 +3117,7 @@ class TestBaselinePortabilityCommandsCommitTrailerShape(unittest.TestCase):
         with h.ScratchRepo() as repo:
             body = (
                 f"{self._SUBJECT}\n\n{self._NARRATIVE}\n\n"
-                f"{self._COAUTHOR_LINES}\n"
+                f"{self._COAUTHOR_LINES}\n\n"
                 f"{trailer_lines}\n"
             )
             commit = self._commit_with_body(repo, body)
@@ -3071,6 +3179,53 @@ class TestBaselinePortabilityCommandsCommitTrailerShape(unittest.TestCase):
                 "Workflow-Supersedes": "0123456789abcdef0123456789abcdef01234567",
             },
         )
+
+    def _role_of(self, trailer_lines: str, *, same_paragraph: bool) -> str | None:
+        separator = "\n" if same_paragraph else "\n\n"
+        with h.ScratchRepo() as repo:
+            body = (
+                f"{self._SUBJECT}\n\n{self._NARRATIVE}\n\n"
+                f"{self._COAUTHOR_LINES}{separator}{trailer_lines}\n"
+            )
+            commit = self._commit_with_body(repo, body)
+            return ws._bundle_generation_record_role(ws._commit_trailers(repo.root, commit))
+
+    def test_generation_record_new_layout_has_the_ordinary_role(self):
+        """The check that let #20 through: the layout the commands now
+        require classifies as a generation record, not merely parses."""
+        self.assertEqual(
+            self._role_of(
+                "Workflow-Bundle-Generation-Record: demo-item/4\nWorkflow-Work-Item: demo-item",
+                same_paragraph=False,
+            ),
+            "ordinary",
+        )
+
+    def test_generation_record_new_layout_has_the_recovered_role(self):
+        self.assertEqual(
+            self._role_of(
+                "Workflow-Bundle-Generation-Record: demo-item/4\n"
+                "Workflow-Work-Item: demo-item\n"
+                "Workflow-Supersedes: 0123456789abcdef0123456789abcdef01234567",
+                same_paragraph=False,
+            ),
+            "recovered",
+        )
+
+    def test_generation_record_same_paragraph_layout_has_no_role(self):
+        """`Co-Authored-By:`/`Claude-Session:` in the trailer paragraph make
+        the trailer set inexact, so the read side classifies the commit as
+        neither role (it stays strict)."""
+        self.assertIsNone(self._role_of(
+            "Workflow-Bundle-Generation-Record: demo-item/4\nWorkflow-Work-Item: demo-item",
+            same_paragraph=True,
+        ))
+        self.assertIsNone(self._role_of(
+            "Workflow-Bundle-Generation-Record: demo-item/4\n"
+            "Workflow-Work-Item: demo-item\n"
+            "Workflow-Supersedes: 0123456789abcdef0123456789abcdef01234567",
+            same_paragraph=True,
+        ))
 
     def test_technical_approval_pre_fix_layout_silently_drops_the_trailer(self):
         """`approve-review.md`'s implementation-stage technical-approval

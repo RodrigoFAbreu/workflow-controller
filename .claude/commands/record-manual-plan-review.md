@@ -201,6 +201,11 @@ writing anything.
    - `BLOCK`: nothing (`record_manual_plan_review(..., verdict="BLOCK",
      ...)` is a true no-op; the work item stays at
      `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW`).
+   Plan-stage writes are not committed here (workflow-2.9.1,
+   `REVIEW_PROTOCOL.md`'s commit rule for review-stage writes): there is no
+   generation-record commit at the plan stage, the plan-approval commit
+   takes the whole working-tree state, and a commit of its own would raise
+   `bundle_generation_mismatch` at the plan-approval gate.
    Never the plan, registry, mapping, command, product, or bundle-content
    files.
 8. **Report and stop.** Report the ingest's returned `round`, `bundle_id`

@@ -8,9 +8,9 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-10).** Controller 1.8.0 is the latest release (PR #36, squash `91c6233`). It admits Workflow
+**Where things stand (2026-10-11).** Controller 1.8.0 is the latest release (PR #36, squash `91c6233`). It admits Workflow
 2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
-repository runs Workflow 2.9.0 with automatic gates (since 2026-10-09). Every milestone through C9, the Controller
+repository runs Workflow 2.9.2 with automatic gates (since 2026-10-11; 2.9.0 from 2026-10-09). Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
@@ -21,10 +21,10 @@ and merged as a `test:` pull request that released nothing (PR #32); a `chore:` 
 moved this repository to Workflow 2.9.0. C9d, the installed-release test made version-agnostic
 (follow-up 16, accepted 2026-10-10 by gate policy), is complete and merged as a `test:` pull
 request (#34). C8, the usage budget (accepted 2026-10-10 by gate policy), is complete and was
-released as 1.8.0. Next (user decisions, 2026-10-09 and 2026-10-10): this repository first moves to
-Workflow 2.9.2 (a Workflow fix release for workflow#19 and workflow#20, in progress in the Workflow
-lane); then a small milestone that fixes the recurring drain hang from leftover test processes
-(follow-up 8); then C5, C6, C7, C10 (with the automated functional review), C12 (self-recovery),
+released as 1.8.0. A `chore:` pull request then moved this repository to Workflow 2.9.2 (the
+Workflow fix release for workflow#19 and workflow#20; 2026-10-11). Next (user decisions,
+2026-10-09 and 2026-10-10): a small milestone that fixes the recurring drain hang from leftover
+test processes (follow-up 8); then C5, C6, C7, C10 (with the automated functional review), C12 (self-recovery),
 C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -55,7 +55,7 @@ then C5, then C6, C7, C10 and C11. The step numbers stay as they were. On 2026-1
 lane waits for W2 before C8, the user added D1, a documentation milestone, to run first.
 On 2026-10-10 the user placed a small milestone for the leftover-test-process drain hang
 ([follow-up 8](#known-follow-ups-carried-forward)) right after this repository's move to Workflow 2.9.2,
-ahead of C5.
+ahead of C5. That move is done (2026-10-11), so the drain-hang milestone is next.
 
 | # | Step | Needs | Section |
 |---|---|---|---|
@@ -182,7 +182,7 @@ These are not blockers for the baseline, but should remain visible in later mile
    3-hour limit, and the run ended with exit 45. The orchestrator ended the two exact pids and
    resumed. On 2026-10-10 the same two leftovers outlived a C9d worker, but the job finished after 34
    seconds. User decision 2026-10-10: fix this as its own small milestone right after the Workflow 2.9.2
-   move, ahead of C5; the wider self-recovery stays in C12 (11.10).
+   move (done 2026-10-11), ahead of C5; the wider self-recovery stays in C12 (11.10).
 9. A message from another session can land in a Controller-launched worker mid-turn (C9,
    2026-10-03). The Controller then classes the worker `AMBIGUOUS`
    (`command_lifecycle_irregular`) and fails the job, although the work was done and the state was

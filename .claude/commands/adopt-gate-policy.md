@@ -80,8 +80,7 @@ prior turn; if it is missing, show step 1 and stop and wait.
    another work item's uncommitted residue is neither committed nor refused
    (without such residue the ordinary single-path `git add` runs and the bytes
    are the unscoped result). It creates **one** commit carrying
-   `Workflow-Gate-Policy-Adoption: <digest>` as the message's own final paragraph
-   -- after any `Co-Authored-By:`/`Claude-Session:` lines, never before them
+   `Workflow-Gate-Policy-Adoption: <digest>` as the message's own final paragraph and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
    (`OPUS-R129-001`) -- and no other `Workflow-*` trailer, then runs
    `workflow_state.validate_gate_policy_adoption_commit`, whose contract is
    exactly the two top-level keys and no work-item change.

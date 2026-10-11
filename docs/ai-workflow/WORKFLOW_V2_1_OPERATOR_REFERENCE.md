@@ -176,7 +176,7 @@ exactly like `AWAITING_TECHNICAL_APPROVAL` is for both versions.
 | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, feedback says `APPROVE` | **You**: `/approve-review implementation [work-item-id]` — do **not** route a clean `APPROVE` through `/apply-implementation-review` |
 | `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, feedback says `REVISE`/`BLOCK` | Paste external feedback (unless `/review-implementation` already wrote it), then `/apply-implementation-review` |
 | Same, but `/approve-review implementation` fails on provenance after an unrelated doc/scripts commit | `/recover-implementation-provenance` |
-| `APPLYING_REVIEW_FEEDBACK` | `/apply-implementation-review` is mid-run; finishing its step 7 republishes the bundle and returns the item to `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` |
+| `APPLYING_REVIEW_FEEDBACK` | `/apply-implementation-review` is mid-run; finishing its step 7 republishes the bundle and returns the item to the version's post-fix target phase (`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for a `"2.2"` item, `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a `"1"`/`"2.1"` item) |
 | Post-fix bundle published, blocking findings remain | Another external review round → `/apply-implementation-review` |
 | `AWAITING_FUNCTIONAL_REVIEW`, no checklist yet | `/prepare-functional-review` |
 | `AWAITING_FUNCTIONAL_REVIEW`, want a second opinion on checklist completeness first | `/review-functional` (optional) — report-only, writes nothing |
@@ -700,6 +700,18 @@ test fails and is authoritative about which one moved.
   `FeedbackBundleMismatchError`, and forcing past it records
   `USER_OVERRIDE` rather than `EXTERNAL_APPROVE` (ledger `I11`).
 
+**Review-stage write commit rule (`workflow-2.9.1`).** The review commands
+commit a `REVISE` write alone (a `Workflow-Work-Item` trailer) before any
+fix commit, and `/apply-implementation-review` step 1 commits a
+still-pending one (or step 0's own entry) as a safety net, so the post-fix
+generation record transitions `phase`. An `APPROVE` write, and every
+plan-stage write, is left uncommitted for the approval commit to take: a
+commit of its own puts `HEAD` past the bundle's generation head, and
+`/approve-review` and `/satisfy-gate` refuse. The rule and the helper's
+refusals are in `REVIEW_PROTOCOL.md` ("Which review-stage writes are
+committed"); if a round was refused with "must always transition phase", see
+`docs/common-problems.md` in the Workflow repository.
+
 ### `/recover-implementation-provenance [work-item-id]`
 - **When**: `/approve-review implementation` fails its provenance check only
   because a legitimate excluded-only commit (docs, `scripts/`) landed on top
@@ -808,8 +820,10 @@ test fails and is authoritative about which one moved.
   persisted stop (see [Phases](#phases)). The one branch that really moves
   the item is the bounded fix: `mark_technical_approval_stale` →
   `STALE` **before the first edit**, then step 4's
-  `record_bundle_generation(stage="post-fix")`, which is what writes
-  `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`. That call is legal from
+  `record_bundle_generation(stage="post-fix")`, which is what writes the
+  version's post-fix target phase (`AWAITING_LOCAL_IMPLEMENTATION_REVIEW`
+  for a `"2.2"` item, `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a
+  `"1"`/`"2.1"` item). That call is legal from
   `AWAITING_FUNCTIONAL_REVIEW` *only* because of the `STALE` marker; with
   a `CURRENT` `technical_approval` it refuses with
   `BundleGenerationRequiresStaleTechnicalApprovalError`.
@@ -819,8 +833,12 @@ test fails and is authoritative about which one moved.
   - *no code change* → back to `AWAITING_FUNCTIONAL_REVIEW`,
     `technical_approval` untouched;
   - *bounded fix* → marks `technical_approval` `STALE` **before** the first
-    edit, fixes, commits, regenerates the `post-fix` bundle, and stops at a
-    fresh `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`;
+    edit and commits that write alone, fixes and commits, commits the
+    checklist update, then regenerates the `post-fix` bundle once and commits
+    the generation record **last** (nothing is committed after it), and stops
+    at the version's post-fix target phase: `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`
+    for a `"2.2"` item (both implementation-review stages run again),
+    `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a `"1"`/`"2.1"` item;
   - *broad* → creates a child work item `<parent-id>-remediation-<n>` and
     hands you its whole own command sequence, starting `/milestone-plan
     <child-id>`; nothing is implemented inline. See [Remediation
@@ -1062,7 +1080,7 @@ one:
 |---|---|
 | `SELF_REVIEWING_PLAN` | `/milestone-plan` step 4's in-session self-review. Real work, no persisted stop |
 | `AWAITING_TECHNICAL_APPROVAL` | The name of the implementation-stage approval **gate**, whose entry condition is computed by `technical_approval_gate_reachable` while the item sits at `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`. `apply_technical_approval` writes `AWAITING_FUNCTIONAL_REVIEW` directly |
-| `FIXING_FUNCTIONAL_FINDINGS` | `/apply-functional-review`'s opening line. The item stays at `AWAITING_FUNCTIONAL_REVIEW` unless a bounded fix's `record_bundle_generation` moves it to `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` |
+| `FIXING_FUNCTIONAL_FINDINGS` | `/apply-functional-review`'s opening line. The item stays at `AWAITING_FUNCTIONAL_REVIEW` unless a bounded fix's `record_bundle_generation` moves it to the version's post-fix target phase (`AWAITING_LOCAL_IMPLEMENTATION_REVIEW` for a `"2.2"` item, `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a `"1"`/`"2.1"` item) |
 | `AWAITING_USER_ACCEPTANCE` | Accepted for forward compatibility by `milestone_complete_gate_reachable`; in practice acceptance happens from `AWAITING_FUNCTIONAL_REVIEW` |
 
 Note the asymmetry, because it is not obvious: `AWAITING_PLAN_APPROVAL`

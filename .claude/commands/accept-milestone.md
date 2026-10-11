@@ -182,15 +182,15 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
 6. Create the final completion commit if verification/doc updates are not
    already committed, carrying a `Workflow-Work-Item: <work_item_id>`
    trailer (the established convention every real completion commit to
-   date already follows). **This line must be part of the commit
-   message's own final paragraph** -- after any `Co-Authored-By:`/
-   `Claude-Session:` lines, never in an earlier paragraph separated from
-   them by a blank line (`OPUS-R129-001`, the same rule
+   date already follows). **This line must be the commit
+   message's own final paragraph** and nothing else is in it: any
+   `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph
+   before it, separated by a blank line (`OPUS-R129-001`, the same rule
    `milestone-implement.md` step 1f, `bootstrap-workflow-v2.md` step 6,
    and `approve-review.md` step 6.4 already state): Git's `git
    interpret-trailers --parse` treats only the message's actual last
-   paragraph as trailers, so a blank line before this line (e.g. one
-   separating it from a preceding `Co-Authored-By:`/`Claude-Session:`
+   paragraph as trailers, so a blank line after this line (e.g. one
+   separating it from a following `Co-Authored-By:`/`Claude-Session:`
    block) silently discards it. No command currently re-discovers this
    trailer by search -- `/accept-milestone` is a terminal, one-way
    transition -- but the same layout rule still applies so the trailer is

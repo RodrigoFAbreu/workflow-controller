@@ -66,7 +66,8 @@ it, naming the exact `work_item_id`, and stop.
    uncommitted residue in the state file). The message body carries one line
    `Resume-Confirmation: <the user's confirmation text, on one line>`, then the
    single trailer `Workflow-Work-Item: <work_item_id>` as the message's **final
-   paragraph**, after any `Co-Authored-By:` lines (`OPUS-R129-001`: Git's
+   paragraph** with nothing else in it: any `Co-Authored-By:`/`Claude-Session:`
+   lines go in their own paragraph before it, separated by a blank line (`OPUS-R129-001`: Git's
    `git interpret-trailers --parse` treats only the last paragraph as trailers,
    so a blank line after it discards it). **Gate-policy content check**: right
    after the commit, call

@@ -908,8 +908,13 @@ class Item:
 
     def generate_impl_bundle(self, stage="implementation", check=True, expect_outcome=None,
                              summary=None, review_request=None, skip_durability=False,
-                             wrap_up=True, refresh_inputs=True):
-        """`refresh_inputs=False` leaves whatever the previous round wrote
+                             wrap_up=True, refresh_inputs=True, scoped_staging=False):
+        """`scoped_staging=True` stages the state file through
+        `stage_scoped_state`, as `/milestone-implement` step 4 and
+        `/apply-implementation-review` do, so another work item's
+        uncommitted residue stays out of the generation-record commit.
+
+        `refresh_inputs=False` leaves whatever the previous round wrote
         under `<bundle_dir>` exactly as it is -- the shape a command that
         never names its author-written preconditions actually produces
         (convergence pass 11, ledger `I19`, row `C9`)."""
@@ -934,10 +939,15 @@ class Item:
             }
             if outcome == "same_content":
                 trailers["Workflow-Supersedes"] = superseded
-            durability = self.sim.commit(
-                f"chore({self.wid}): record bundle generation, revision {revision} ({outcome})",
-                trailers, paths=["docs/ai-workflow/WORKFLOW_STATE.json"],
-            )
+            subject = f"chore({self.wid}): record bundle generation, revision {revision} ({outcome})"
+            if scoped_staging:
+                if not ws.stage_scoped_state(self.root, self.wid):
+                    self.sim.git("add", "--", "docs/ai-workflow/WORKFLOW_STATE.json")
+                body = subject + "\n\n" + "\n".join(f"{k}: {v}" for k, v in trailers.items())
+                self.sim.git("commit", "-q", "-m", body)
+                durability = self.sim.head()
+            else:
+                durability = self.sim.commit(subject, trailers, paths=["docs/ai-workflow/WORKFLOW_STATE.json"])
         if refresh_inputs:
             self.write_bundle_inputs(stage, durability, revision,
                                      summary=summary, review_request=review_request)
@@ -7948,6 +7958,855 @@ class RepoGlobalLifecycleAcrossWorktrees(MatrixCase):
         self.assertEqual((witness["status"], witness["resolution_projection_sha256"]),
                          (ws.AMENDMENT_WITNESS_RESOLVED, reserved))
         self.assertEqual(len(approval_trailer_commits(self.scratch, self.item.wid)), 2)
+
+
+# ===========================================================================
+# workflow-2.9.1: the commit rule for review-stage writes
+# ===========================================================================
+
+
+class ReviewStageWriteDurabilityProcess(unittest.TestCase):
+    """CP3 of `review-stage-write-durability`: every review-stage write is
+    driven through the functions and commits the command texts name, in the
+    texts' order. A REVISE write (and `/apply-implementation-review` step
+    0's entry) is committed alone by
+    `commit_pending_applying_review_feedback_entry` before any fix commit;
+    an APPROVE write is left uncommitted for the approval commit, because
+    committing it alone moves HEAD past the generation record
+    (`bundle_generation_mismatch`, INV-1). Scenario numbers follow the
+    plan's CP3 section; the rows that exercise the new commit fail against
+    2.9.0's texts, the ones named `regression_pin` already passed there."""
+
+    work_item_type = "process"
+    STATE = "docs/ai-workflow/WORKFLOW_STATE.json"
+    LOCAL = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+    TERMINAL = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+    def setUp(self):
+        self.scratch = Scratch()
+        self.addCleanup(self.scratch.cleanup)
+
+    # --- fixtures ---------------------------------------------------------
+
+    def start(self, governing="2.2"):
+        """Plan approved, one checkpoint implemented and its first
+        implementation bundle generated; returns the generation-record
+        commit `T`."""
+        self.item = item = Item(self.scratch, self.work_item_type, governing=governing)
+        item.seed()
+        if governing == "2.2":
+            config = json.loads(self.scratch.read("docs/ai-workflow/WORKFLOW_CONFIG.json"))
+            config["supported_versions"] = ["1", "2.1", "2.2"]
+            self.scratch.write("docs/ai-workflow/WORKFLOW_CONFIG.json", json.dumps(config, indent=2) + "\n")
+            item.base_commit = self.scratch.commit("base: enable 2.2")
+        item.milestone_plan()
+        item.generate_plan_bundle()
+        item.write_feedback("APPROVE")
+        if governing != "1":
+            item.record_plan_reviews()
+        item.approve_plan()
+        item.implement_checkpoint("CP1", {item.deliverable: "// round 1\n"})
+        _, durability, _ = item.generate_impl_bundle("implementation", expect_outcome="ordinary")
+        self.review_phase = self.LOCAL if governing == "2.2" else self.TERMINAL
+        self.assertEqual(item.entry()["phase"], self.review_phase)
+        return durability
+
+    def local_review(self, verdict, round=1):
+        item = self.item
+        content_id, _ = item.impl_review_content_id(self.scratch.head())
+        bundle_id = item.bundle_id()
+        item.tx(lambda state: ws.record_local_implementation_review(
+            state, item.wid, verdict=verdict, bundle_id=bundle_id,
+            review_content_id=content_id, round=round, now=item.now(),
+        ))
+
+    def manual_review(self, verdict, round=1):
+        item = self.item
+        content_id, _ = item.impl_review_content_id(self.scratch.head())
+        bundle_id = item.bundle_id()
+        item.tx(lambda state: ws.record_manual_implementation_review(
+            state, item.wid, verdict=verdict, bundle_id=bundle_id, round=round,
+            now=item.now(), current_review_content_id=content_id,
+            feedback_role=ws.MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW,
+            feedback_review_content_id=content_id,
+        ))
+
+    def enter_applying(self):
+        """`/apply-implementation-review` step 0's own entry, uncommitted."""
+        item = self.item
+        item.tx(lambda state: ws.enter_applying_review_feedback(state, item.wid, item.now()))
+
+    def commit_entry(self):
+        return ws.commit_pending_applying_review_feedback_entry(self.item.root, self.item.wid)
+
+    def standin_commit(self, subject, final_paragraph):
+        """A commit of the pending state write made by something other than
+        the helper (the Controller): the whole state file, one subject,
+        an arbitrary final paragraph."""
+        self.scratch.git("add", "--", self.STATE)
+        self.scratch.git("commit", "-q", "-m", subject, "-m", final_paragraph)
+        return self.scratch.head()
+
+    def commit_count(self):
+        return int(self.scratch.git("rev-list", "--count", "HEAD").stdout)
+
+    def fix_commit(self, excluded=False):
+        item = self.item
+        if excluded:
+            self.scratch.write(item.excluded_note, "# ledger\n\nfindings recorded.\n")
+            path = item.excluded_note
+        else:
+            self.scratch.write(item.deliverable, f"// fix {self.commit_count()}\n")
+            path = item.deliverable
+        return self.scratch.commit(f"fix({item.wid}): review finding", {"Workflow-Work-Item": item.wid},
+                                   paths=[path])
+
+    def assert_generation_refused_for_missing_phase_transition(self):
+        """The generator itself refuses the post-fix record: its commit would
+        carry no phase transition (OPUS-R101-001)."""
+        _, durability, proc = self.item.generate_impl_bundle(
+            "post-fix", expect_outcome="ordinary", check=False)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("OPUS-R101-001", proc.stderr)
+        with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError):
+            ws.validate_bundle_generation_record_commit(self.item.root, durability, self.item.wid)
+
+    def regenerate(self, expect_outcome="ordinary", scoped_staging=False):
+        """`record_bundle_generation` and its record commit, then the
+        validations the approval step later relies on."""
+        item = self.item
+        outcome, durability, proc = item.generate_impl_bundle(
+            "post-fix", expect_outcome=expect_outcome, scoped_staging=scoped_staging)
+        self.assertEqual(proc.returncode, 0)
+        ws.validate_bundle_generation_record_commit(item.root, durability, item.wid)
+        self.assertTrue(ws.implementation_provenance_interval_reachable(
+            item.root, item.entry(), item.base_commit))
+        self.assertEqual(item.entry()["phase"], self.review_phase)
+        return durability
+
+    def gate(self):
+        item = self.item
+        return ws.technical_approval_gate_status(item.root, item.state(), item.wid)
+
+    def approve_both(self):
+        self.local_review("APPROVE")
+        self.manual_review("APPROVE")
+        self.assertEqual(self.item.entry()["phase"], self.TERMINAL)
+
+    def add_foreign_residue(self):
+        """Another work item's uncommitted change in the shared state file."""
+        path = self.item.root / self.STATE
+        state = json.loads(path.read_text())
+        state["work_items"]["other-item"] = {
+            "work_item_id": "other-item", "work_item_type": "process", "phase": "PLANNING",
+            "state_revision": 1, "last_transition": "2026-01-01T00:00:00Z",
+        }
+        path.write_bytes(ws._serialize_state(state))
+
+    def committed_state(self, commit="HEAD"):
+        return json.loads(self.scratch.git("show", f"{commit}:{self.STATE}").stdout)
+
+    # --- implementation stage, REVISE ---------------------------------------
+
+    def test_s01_local_revise_is_committed_then_the_round_regenerates(self):
+        self.start()
+        before = self.commit_count()
+        self.local_review("REVISE")
+        self.assertEqual(self.item.entry()["phase"], "APPLYING_REVIEW_FEEDBACK")
+        sha = self.commit_entry()
+        self.assertEqual(sha, self.scratch.head())
+        self.assertEqual(self.commit_count(), before + 1)
+        message = self.scratch.git("log", "-1", "--format=%B").stdout.strip().split("\n\n")
+        self.assertEqual(message[-1], f"Workflow-Work-Item: {self.item.wid}")
+        self.fix_commit()
+        self.regenerate()
+        self.assertEqual(self.item.entry()["implementation_revision"], 2)
+
+    def test_s02_manual_revise_after_an_uncommitted_local_approve(self):
+        self.start()
+        self.local_review("APPROVE")
+        self.manual_review("REVISE")
+        self.assertEqual(self.item.entry()["phase"], "APPLYING_REVIEW_FEEDBACK")
+        self.assertIsNotNone(self.item.entry()["implementation_review_stages"])
+        self.assertIsNotNone(self.commit_entry())
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s06_a_write_never_committed_is_repaired_by_the_apply_safety_net(self):
+        """The REVISE command crashed after persisting: `/apply-implementation-
+        review` step 1 calls the helper before its first fix commit."""
+        self.start()
+        self.local_review("REVISE")
+        before = self.commit_count()
+        self.assertIsNotNone(self.commit_entry())  # the safety net
+        self.assertEqual(self.commit_count(), before + 1)
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s06b_without_the_helper_the_record_is_refused(self):
+        """What 2.9.0's texts produced: the REVISE write left uncommitted, so
+        the post-fix record commit has no phase transition."""
+        self.start()
+        self.local_review("REVISE")
+        self.fix_commit()
+        self.assert_generation_refused_for_missing_phase_transition()
+
+    def test_s08_late_problem_entry_commits_the_ledgers_and_the_move_together(self):
+        self.start()
+        self.approve_both()
+        self.enter_applying()
+        sha = self.commit_entry()
+        self.assertIsNotNone(sha)
+        committed = self.committed_state()["work_items"][self.item.wid]
+        self.assertEqual(committed["phase"], "APPLYING_REVIEW_FEEDBACK")
+        self.assertIsNotNone(committed["implementation_review_stages"])
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s09_entry_from_a_head_left_at_the_terminal_phase_by_recovery(self):
+        self.start()
+        self.fix_commit(excluded=True)
+        self.approve_both()
+        superseded, record, _ = self.item.recover_provenance()
+        self.assertEqual(self.committed_state()["work_items"][self.item.wid]["phase"], self.TERMINAL)
+        self.enter_applying()
+        self.assertIsNotNone(self.commit_entry())
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s10_a_2_1_item_through_the_ordinary_step_0_route(self):
+        self.start("2.1")
+        self.enter_applying()
+        self.assertIsNotNone(self.commit_entry())
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s10b_a_2_1_item_without_the_helper_is_refused(self):
+        self.start("2.1")
+        self.enter_applying()
+        self.fix_commit()
+        self.assert_generation_refused_for_missing_phase_transition()
+
+    def test_s10_a_1_item_through_the_ordinary_step_0_route(self):
+        self.start("1")
+        self.enter_applying()
+        self.assertIsNotNone(self.commit_entry())
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s10b_a_1_item_without_the_helper_is_refused(self):
+        self.start("1")
+        self.enter_applying()
+        self.fix_commit()
+        self.assert_generation_refused_for_missing_phase_transition()
+
+    def test_s12_a_same_content_round_classifies_the_entry_commit_as_excluded_only(self):
+        self.start()
+        self.local_review("REVISE")
+        entry_commit = self.commit_entry()
+        self.fix_commit(excluded=True)
+        durability = self.regenerate(expect_outcome="same_content")
+        self.assertEqual(self.item.entry()["implementation_revision"], 1)
+        self.assertEqual(
+            ws.verify_implementation_provenance_interval(
+                self.item.root, self.item.entry(), self.item.base_commit), durability)
+        self.assertEqual(
+            self.scratch.git("rev-list", "--count", f"{entry_commit}..{durability}").stdout.strip(), "2")
+
+    # --- interrupted staging (EPR-001) ---------------------------------------
+
+    def interrupt_after_staging(self):
+        """Run the helper with the commit step failing: staging is done and
+        no entry commit exists."""
+        real = ws._run
+
+        def run(args, *a, **kw):
+            if list(args[:2]) == ["git", "commit"]:
+                raise RuntimeError("interrupted before the commit")
+            return real(args, *a, **kw)
+
+        with mock.patch.object(ws, "_run", side_effect=run):
+            with self.assertRaises(RuntimeError):
+                self.commit_entry()
+
+    def check_interrupted_staging(self):
+        before = self.commit_count()
+        self.interrupt_after_staging()
+        self.assertEqual(self.commit_count(), before)
+        staged = self.scratch.git("diff", "--name-only", "--cached").stdout.split()
+        self.assertEqual(staged, [self.STATE])
+        staged_state = json.loads(self.scratch.git("show", f":{self.STATE}").stdout)
+        self.assertNotIn("other-item", staged_state["work_items"])
+        sha = self.commit_entry()  # the retry
+        self.assertEqual(sha, self.scratch.head())
+        self.assertEqual(self.commit_count(), before + 1)
+        self.assertNotIn("other-item", self.committed_state()["work_items"])
+        self.assertIn("other-item", json.loads((self.item.root / self.STATE).read_text())["work_items"])
+        self.assertIsNone(self.commit_entry())
+        self.assertEqual(self.commit_count(), before + 1)
+
+    def test_s11_interrupted_staging_resumes_and_commits_exactly_once(self):
+        self.start()
+        self.local_review("REVISE")
+        self.add_foreign_residue()
+        self.check_interrupted_staging()
+        self.fix_commit()
+        self.regenerate(scoped_staging=True)
+        self.assertIn("other-item", json.loads((self.item.root / self.STATE).read_text())["work_items"])
+        self.assertNotIn("other-item", self.committed_state()["work_items"])
+
+    def test_s15_manual_revise_with_a_local_approve_ledger_through_interrupted_staging(self):
+        self.start()
+        self.local_review("APPROVE")
+        self.manual_review("REVISE")
+        self.add_foreign_residue()
+        self.check_interrupted_staging()
+        self.fix_commit()
+        self.regenerate(scoped_staging=True)
+
+    # --- implementation stage, APPROVE and the strict read side ---------------
+
+    def test_s03_regression_pin_both_approves_left_uncommitted_reach_the_gate(self):
+        self.start()
+        self.item.write_feedback("APPROVE")
+        self.approve_both()
+        gate = self.gate()
+        self.assertTrue(gate["reachable"], gate)
+        self.assertIsNone(gate["cause"])
+        commit = self.item.approve_implementation()
+        self.assertEqual(self.item.entry()["phase"], "AWAITING_FUNCTIONAL_REVIEW")
+        ws.validate_technical_approval_commit(self.item.root, commit, self.item.wid)
+
+    def test_s04_regression_pin_an_approve_committed_alone_breaks_the_gate(self):
+        """The trap the rule exists for: the strict read side (INV-1) refuses
+        a HEAD past the generation record, and the helper refuses to create
+        that commit."""
+        self.start()
+        self.item.write_feedback("APPROVE")
+        self.local_review("APPROVE")
+        head = self.scratch.head()
+        with self.assertRaises(ws.ReviewStageWriteNotCommittableError):
+            self.commit_entry()
+        self.assertEqual(self.scratch.head(), head)
+        self.standin_commit("chore: record local approve", f"Workflow-Work-Item: {self.item.wid}")
+        gate = self.gate()
+        self.assertFalse(gate["reachable"])
+        self.assertEqual(gate["cause"], "bundle_generation_mismatch")
+
+    # --- already committed REVISE ---------------------------------------------
+
+    def test_s05_regression_pin_an_already_committed_revise_is_left_alone(self):
+        self.start()
+        self.local_review("REVISE")
+        self.standin_commit("chore: record revise", f"Workflow-Work-Item: {self.item.wid}")
+        before = self.commit_count()
+        self.assertIsNone(self.commit_entry())
+        self.assertEqual(self.commit_count(), before)
+        self.fix_commit()
+        self.regenerate()
+
+    def test_s13_an_already_committed_revise_with_the_controllers_message_shape(self):
+        self.start()
+        self.local_review("REVISE")
+        self.standin_commit(
+            "Record local implementation review: REVISE",
+            f"Workflow-Work-Item: {self.item.wid}\nCo-Authored-By: Controller <controller@example.com>")
+        before = self.commit_count()
+        self.assertIsNone(self.commit_entry())
+        self.assertEqual(self.commit_count(), before)
+        self.fix_commit()
+        self.regenerate()
+
+    # --- plan stage ------------------------------------------------------------
+
+    def plan_item(self):
+        self.item = item = Item(self.scratch, self.work_item_type)
+        item.seed()
+        item.milestone_plan()
+        item.generate_plan_bundle()
+        return item
+
+    def test_s07_regression_pin_plan_stage_writes_stay_uncommitted_until_approval(self):
+        item = self.plan_item()
+        item.record_plan_reviews(local="REVISE")
+        item.apply_plan_review(2)
+        item.generate_plan_bundle()
+        item.write_feedback("APPROVE")
+        item.record_plan_reviews(round=2)
+        self.assertEqual(item.entry()["phase"], "AWAITING_PLAN_APPROVAL")
+        status = ws.plan_approval_gate_status(item.root, item.state(), item.wid)
+        self.assertTrue(status["reachable"], status)
+        item.approve_plan()
+        self.assertEqual(item.entry()["phase"], "IMPLEMENTING")
+
+    def test_s07b_regression_pin_a_plan_write_committed_alone_breaks_the_plan_gate(self):
+        item = self.plan_item()
+        item.write_feedback("APPROVE")
+        item.record_plan_reviews()
+        self.standin_commit("chore: record plan reviews", f"Workflow-Work-Item: {item.wid}")
+        status = ws.plan_approval_gate_status(item.root, item.state(), item.wid)
+        self.assertFalse(status["reachable"])
+        self.assertEqual(status["cause"], "bundle_generation_mismatch")
+
+    def test_s14_regression_pin_a_manual_plan_revise_then_approval(self):
+        item = self.plan_item()
+        item.record_plan_reviews(local="APPROVE", manual="REVISE")
+        self.assertEqual(item.entry()["phase"], "REVISING_PLAN")
+        item.apply_plan_review(2)
+        item.generate_plan_bundle()
+        item.write_feedback("APPROVE")
+        item.record_plan_reviews(round=2)
+        item.approve_plan()
+        self.assertEqual(item.entry()["phase"], "IMPLEMENTING")
+        self.assertEqual(item.entry()["plan_revision"], 2)
+
+
+class ReviewStageWriteDurabilityProduct(ReviewStageWriteDurabilityProcess):
+    """The same scenarios for a `product` work item."""
+
+    work_item_type = "product"
+
+
+# ===========================================================================
+# workflow-2.9.2: the commit order of a bounded functional fix
+# ===========================================================================
+
+
+class FunctionalFixCommitOrderProcess(unittest.TestCase):
+    """CP3 of `functional-fix-commit-order`: `/apply-functional-review`'s
+    bounded branch, driven through the functions and commits its text names
+    in the text's order -- the stale write persisted and committed alone
+    before the first edit, the fix, the narrative and checklist, and the
+    generation record last -- and then through the next review to the
+    technical approval. The stale write is persisted with
+    `state_transaction` and committed here, the way sub-step 1 now says;
+    `Item.mark_technical_approval_stale`'s built-in commit is not used.
+    Generation-record and recovery commits are written in the trailer
+    layout the commands now state: `Co-Authored-By:` in a paragraph of its
+    own before the one holding exactly the `Workflow-*` trailers.
+
+    Scenario numbers follow the plan's CP3 section. The rows named
+    `regression_pin` or `trap_pin` pass against 2.9.1's texts too."""
+
+    work_item_type = "process"
+    STATE = "docs/ai-workflow/WORKFLOW_STATE.json"
+    CHECKLIST = ws.FUNCTIONAL_CHECKLIST_PATH
+    LOCAL = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+    TERMINAL = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+    CO_AUTHOR = "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
+
+    def setUp(self):
+        self.scratch = Scratch()
+        self.addCleanup(self.scratch.cleanup)
+        self.round = 0
+
+    # --- fixtures ---------------------------------------------------------
+
+    def start(self, governing="2.2"):
+        """Technically approved, checklist committed, one finding written:
+        the state `/apply-functional-review` starts from."""
+        self.item = item = Item(self.scratch, self.work_item_type, governing=governing)
+        item.seed()
+        if governing == "2.2":
+            config = json.loads(self.scratch.read("docs/ai-workflow/WORKFLOW_CONFIG.json"))
+            config["supported_versions"] = ["1", "2.1", "2.2"]
+            self.scratch.write("docs/ai-workflow/WORKFLOW_CONFIG.json", json.dumps(config, indent=2) + "\n")
+            item.base_commit = self.scratch.commit("base: enable 2.2")
+        item.milestone_plan()
+        item.generate_plan_bundle()
+        item.write_feedback("APPROVE")
+        item.record_plan_reviews()
+        item.approve_plan()
+        item.implement_checkpoint("CP1", {item.deliverable: "// round 1\n"})
+        item.generate_impl_bundle("implementation", expect_outcome="ordinary")
+        item.write_feedback("APPROVE")
+        self.finish_review()
+        item.prepare_functional_review()
+        item.write_functional_findings("Finding 1: the label is wrong.\n")
+        return item
+
+    def reviews_in_two_stages(self):
+        return self.item.governing == "2.2"
+
+    def finish_review(self):
+        """The reviews of one round and `/approve-review implementation`."""
+        item = self.item
+        self.round += 1
+        if self.reviews_in_two_stages():
+            self.assertEqual(item.entry()["phase"], self.LOCAL)
+            content_id, _ = item.impl_review_content_id(self.scratch.head())
+            bundle_id = item.bundle_id()
+            item.tx(lambda state: ws.record_local_implementation_review(
+                state, item.wid, verdict="APPROVE", bundle_id=bundle_id,
+                review_content_id=content_id, round=self.round, now=item.now(),
+            ))
+            item.tx(lambda state: ws.record_manual_implementation_review(
+                state, item.wid, verdict="APPROVE", bundle_id=bundle_id, round=self.round,
+                now=item.now(), current_review_content_id=content_id,
+                feedback_role=ws.MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW,
+                feedback_review_content_id=content_id,
+            ))
+        self.assertEqual(item.entry()["phase"], self.TERMINAL)
+        item.write_feedback("APPROVE")
+        commit = item.approve_implementation()
+        self.assertEqual(item.entry()["phase"], "AWAITING_FUNCTIONAL_REVIEW")
+        self.assertEqual(item.entry()["technical_approval"]["status"], "CURRENT")
+        return commit
+
+    def commit_count(self):
+        return int(self.scratch.git("rev-list", "--count", "HEAD").stdout)
+
+    # --- the bounded branch, sub-step by sub-step -------------------------
+
+    def persist_stale(self):
+        """Sub-step 1, first half: the write, on disk before any edit."""
+        item = self.item
+        item.tx(lambda state: ws.mark_technical_approval_stale(state, item.wid, item.now()))
+        self.assertEqual(item.entry()["technical_approval"]["status"], "STALE")
+
+    def commit_stale(self):
+        """Sub-step 1, second half: a plain state-only commit, no trailer,
+        staged with `stage_scoped_state`; nothing staged, nothing committed."""
+        item = self.item
+        if not ws.stage_scoped_state(item.root, item.wid):
+            self.scratch.git("add", "--", self.STATE)
+        if self.scratch.git("diff", "--cached", "--quiet", check=False).returncode == 0:
+            return None
+        self.scratch.git("commit", "-q", "-m",
+                         f"chore({item.wid}): stale technical approval before a bounded functional fix")
+        return self.scratch.head()
+
+    def stale_write(self):
+        self.persist_stale()
+        return self.commit_stale()
+
+    def fix_commit(self, content="// functional fix\n", paths=None):
+        item = self.item
+        self.scratch.write(item.deliverable, content)
+        return self.scratch.commit(
+            f"fix({item.wid}): functional finding", {"Workflow-Work-Item": item.wid},
+            paths=paths or [item.deliverable])
+
+    def checklist_commit(self, note="round 2: finding 1 fixed, re-test the label\n"):
+        item = self.item
+        self.scratch.write(self.CHECKLIST, self.scratch.read(self.CHECKLIST) + f"\n{note}")
+        return self.scratch.commit(
+            f"docs({item.wid}): functional-review checklist update", paths=[self.CHECKLIST])
+
+    def message(self, subject, trailers, layout):
+        lines = "\n".join(f"{k}: {v}" for k, v in trailers.items())
+        if layout == "corrected":
+            return [subject, self.CO_AUTHOR, lines]
+        if layout == "co_author_in_trailers":
+            return [subject, lines + "\n" + self.CO_AUTHOR]
+        return [subject, lines]
+
+    def commit_record(self, subject, trailers, layout):
+        item = self.item
+        if not ws.stage_scoped_state(item.root, item.wid):
+            self.scratch.git("add", "--", self.STATE)
+        args = ["commit", "-q"]
+        for paragraph in self.message(subject, trailers, layout):
+            args += ["-m", paragraph]
+        self.scratch.git(*args)
+        return self.scratch.head()
+
+    def regenerate(self, expect_outcome="ordinary", layout="corrected", prepare=True):
+        """Sub-step 4: `record_bundle_generation`, its record commit (the last
+        commit of the invocation), the author-written inputs, the generator."""
+        item = self.item
+        head = self.scratch.head()
+        outcome, superseded = ws.resolve_bundle_generation_outcome(
+            item.root, item.entry(), base_commit=item.base_commit, head=head)
+        self.assertEqual(outcome, expect_outcome)
+        item.tx(lambda state: ws.record_bundle_generation(
+            state, item.wid, stage="post-fix", head=head, now=item.now(), outcome=outcome))
+        revision = item.entry()["implementation_revision"]
+        trailers = {
+            "Workflow-Bundle-Generation-Record": f"{item.wid}/{revision}",
+            "Workflow-Work-Item": item.wid,
+        }
+        if outcome == "same_content":
+            trailers["Workflow-Supersedes"] = superseded
+        record = self.commit_record(
+            f"chore({item.wid}): record bundle generation, revision {revision} ({outcome})",
+            trailers, layout)
+        if prepare:
+            self.publish(record, revision)
+        return record
+
+    def publish(self, record, revision):
+        item = self.item
+        item.write_bundle_inputs("post-fix", record, revision)
+        proc = self.scratch.prepare(item.base_commit, "post-fix", item.wid)
+        self.assertEqual(proc.returncode, 0)
+        fingerprint.mark_functional_review_consumed(item.root, item.wid)
+
+    def bounded_round(self, findings=1):
+        """The whole branch in the command's order; returns the record."""
+        for number in range(findings):
+            self.stale_write()
+            self.fix_commit(f"// functional fix {number}\n")
+        self.checklist_commit()
+        return self.regenerate()
+
+    # --- the next review ----------------------------------------------------
+
+    def next_action(self):
+        import workflow_protocol as protocol
+        body, code = protocol.run(
+            ["--repo-root", str(self.item.root), "next-action", "--work-item", self.item.wid])
+        self.assertEqual(code, 0, body)
+        return body["result"]
+
+    def assert_next_review_passes(self):
+        item = self.item
+        fingerprint.assert_local_generation_matches(item.root, item.bundle_dir() / "MANIFEST.md")
+        result = self.next_action()
+        self.assertNotEqual(result["row"], "25a", result)
+        self.assertNotEqual(result["reason"]["code"], "bundle_generation_mismatch", result)
+        expected = self.LOCAL if self.reviews_in_two_stages() else self.TERMINAL
+        self.assertEqual(item.entry()["phase"], expected)
+        self.assertTrue(ws.implementation_provenance_interval_reachable(
+            item.root, item.entry(), item.base_commit))
+
+    def assert_reaches_technical_approval(self):
+        self.assert_next_review_passes()
+        self.finish_review()
+        self.assertEqual(self.item.entry()["phase"], "AWAITING_FUNCTIONAL_REVIEW")
+
+    def committed_state(self, commit="HEAD"):
+        return json.loads(self.scratch.git("show", f"{commit}:{self.STATE}").stdout)
+
+    # --- scenarios ----------------------------------------------------------
+
+    def test_s01_the_issues_case_a_2_2_item(self):
+        """The commands' own order, the stale write committed alone, a fix
+        commit that stages only the fix, the checklist, the record last."""
+        item = self.start("2.2")
+        before = self.commit_count()
+        stale = self.stale_write()
+        self.assertIsNotNone(stale)
+        self.assertEqual(self.committed_state(stale)["work_items"][item.wid]["technical_approval"]["status"], "STALE")
+        fix = self.fix_commit()
+        self.assertEqual(
+            self.scratch.git("show", "--name-only", "--format=", fix).stdout.split(), [item.deliverable])
+        self.checklist_commit()
+        record = self.regenerate()
+        self.assertEqual(self.commit_count(), before + 4)
+        self.assertEqual(self.scratch.head(), record)
+        ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertEqual(item.entry()["phase"], self.LOCAL)
+        self.assertEqual(item.entry()["implementation_revision"], 2)
+        self.assert_next_review_passes()
+        self.assertEqual(self.next_action()["row"], "26")
+        self.finish_review()
+        self.assertEqual(item.entry()["technical_approval"]["status"], "CURRENT")
+
+    def test_s02_a_2_1_item_reaches_the_technical_approval(self):
+        item = self.start("2.1")
+        self.bounded_round()
+        ws.validate_bundle_generation_record_commit(item.root, self.scratch.head(), item.wid)
+        self.assertEqual(item.entry()["phase"], self.TERMINAL)
+        self.assert_reaches_technical_approval()
+
+    def test_s03_same_content_a_fix_reverted_before_the_regeneration(self):
+        item = self.start("2.2")
+        pinned = item.entry()["reviewed_implementation_head"]
+        self.stale_write()
+        # The fix is tried and reverted before it is ever committed, so only
+        # the stale write and the checklist commit are new.
+        self.scratch.write(item.deliverable, "// functional fix\n")
+        self.scratch.write(item.deliverable, "// round 1\n")
+        self.checklist_commit()
+        record = self.regenerate(expect_outcome="same_content")
+        ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertEqual(item.entry()["implementation_revision"], 1)
+        self.assertEqual(item.entry()["reviewed_implementation_head"], pinned)
+        self.assert_next_review_passes()
+        self.finish_review()
+
+    def test_s04_two_bounded_findings_in_one_round(self):
+        item = self.start("2.2")
+        before = self.commit_count()
+        self.stale_write()
+        self.fix_commit("// functional fix 1\n")
+        second = self.stale_write()
+        self.assertIsNotNone(second, "a second stale write is a new state revision, committed the same way")
+        self.fix_commit("// functional fix 2\n")
+        self.checklist_commit()
+        self.regenerate()
+        self.assertEqual(self.commit_count(), before + 6)
+        self.assertEqual(item.entry()["implementation_revision"], 2)
+        self.assert_reaches_technical_approval()
+
+    def test_s05_a_mixed_round_leaves_the_childs_entry_out_of_the_record(self):
+        """A broad finding (a child created, its entry left uncommitted) and
+        a bounded one: every state commit of the parent is staged with
+        `stage_scoped_state`."""
+        item = self.start("2.2")
+        config = json.loads(self.scratch.read("docs/ai-workflow/WORKFLOW_CONFIG.json"))
+        holder = {}
+
+        def create(state):
+            new_state, holder["id"] = ws.create_remediation_child_work_item(
+                state, config, parent_work_item_id=item.wid,
+                plan_path=f"docs/ai-workflow/{item.wid}-remediation-1-plan.md",
+                registry_path=f"docs/ai-workflow/registry/{item.wid}-remediation-1-registry.json",
+                base_commit=self.scratch.head(), now=item.now())
+            return new_state
+
+        item.tx(create)
+        child = holder["id"]
+        self.stale_write()
+        self.fix_commit()
+        self.checklist_commit(f"round 2: finding 2 deferred to {child}\n")
+        record = self.regenerate()
+        ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertNotIn(child, self.committed_state()["work_items"])
+        self.assertIn(child, item.state()["work_items"])
+        self.assert_next_review_passes()
+        self.assertNotIn(child, self.committed_state()["work_items"])
+
+    def test_s06_regression_pin_the_manager_lanes_order_and_a_committed_stale_write(self):
+        """The orders that already worked keep working: the stale write
+        carried in the fix commit, and sub-step 1's commit doing nothing when
+        an orchestrator already committed the write."""
+        item = self.start("2.2")
+        self.persist_stale()
+        self.fix_commit(paths=[item.deliverable, self.STATE])
+        self.checklist_commit()
+        self.regenerate()
+        self.assert_reaches_technical_approval()
+
+        self.scratch.cleanup()
+        self.scratch = Scratch()
+        self.addCleanup(self.scratch.cleanup)
+        self.round = 0
+        item = self.start("2.2")
+        self.persist_stale()
+        self.scratch.git("add", "--", self.STATE)
+        self.scratch.git("commit", "-q", "-m", "Record the stale approval", "-m",
+                         f"Workflow-Work-Item: {item.wid}")
+        before = self.commit_count()
+        self.assertIsNone(self.commit_stale())
+        self.assertEqual(self.commit_count(), before)
+        self.fix_commit()
+        self.checklist_commit()
+        self.regenerate()
+        self.assert_reaches_technical_approval()
+
+    def test_s07_trap_pin_a_checklist_commit_after_the_record_blocks_the_next_review(self):
+        """2.9.1's text order: the checklist is committed after the record, so
+        `HEAD` is past the bundle's `generation_head`."""
+        item = self.start("2.2")
+        self.stale_write()
+        self.fix_commit()
+        record = self.regenerate()
+        self.checklist_commit()
+        self.assertNotEqual(self.scratch.head(), record)
+        with self.assertRaises(fingerprint.WorktreeOrHeadMismatchError):
+            fingerprint.assert_local_generation_matches(item.root, item.bundle_dir() / "MANIFEST.md")
+        result = self.next_action()
+        self.assertEqual(result["row"], "25a", result)
+        self.assertEqual(result["reason"]["code"], "bundle_generation_mismatch")
+
+    def test_s07b_trap_pin_an_uncommitted_stale_write_makes_the_record_refused(self):
+        item = self.start("2.2")
+        self.persist_stale()
+        self.fix_commit()
+        self.checklist_commit()
+        record = self.regenerate(prepare=False)
+        with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError) as raised:
+            ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertIn("technical_approval", str(raised.exception))
+
+    # --- recovery and the trailer paragraph (#20) ---------------------------
+
+    def recover(self, layout):
+        """`/recover-implementation-provenance` steps 1 to 5 up to the commit."""
+        item = self.item
+        superseded = ws.verify_implementation_provenance_recovery(
+            item.root, item.entry(), base_commit=item.base_commit, head=self.scratch.head())
+        ws.validate_implementation_provenance_recovery_confirmation(
+            f"recover {item.wid} superseding {superseded}",
+            work_item_id=item.wid, superseded_commit=superseded)
+        item.tx(lambda state: ws.apply_implementation_provenance_recovery(state, item.wid, item.now()))
+        revision = item.entry()["implementation_revision"]
+        record = self.commit_record(
+            f"chore({item.wid}): recover implementation provenance",
+            {
+                "Workflow-Bundle-Generation-Record": f"{item.wid}/{revision}",
+                "Workflow-Work-Item": item.wid,
+                "Workflow-Supersedes": superseded,
+            }, layout)
+        return record, revision
+
+    def rewrite_message(self, record, layout):
+        """The remedy the refusal names: the same tree, the corrected layout,
+        while the commit is still the unpublished `HEAD`."""
+        self.assertEqual(self.scratch.head(), record)
+        old = self.scratch.git("log", "-1", "--format=%B", record).stdout
+        paragraphs = [p for p in old.strip().split("\n\n") if p]
+        trailer_lines = [line for line in paragraphs[-1].splitlines() if not line.startswith("Co-Authored-By")]
+        subject = paragraphs[0]
+        args = ["commit", "-q", "--amend", "--allow-empty"]
+        for paragraph in [subject, self.CO_AUTHOR, "\n".join(trailer_lines)]:
+            args += ["-m", paragraph]
+        tree = self.scratch.git("rev-parse", f"{record}^{{tree}}").stdout
+        self.scratch.git(*args)
+        self.assertEqual(self.scratch.git("rev-parse", "HEAD^{tree}").stdout, tree)
+        return self.scratch.head()
+
+    def test_s08_recovery_from_the_trap_state_in_the_corrected_layout(self):
+        item = self.start("2.2")
+        self.stale_write()
+        self.fix_commit()
+        self.regenerate()
+        self.checklist_commit()
+        record, revision = self.recover("corrected")
+        ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertTrue(ws.implementation_provenance_interval_reachable(
+            item.root, item.entry(), item.base_commit))
+        self.publish(record, revision)
+        self.assert_reaches_technical_approval()
+
+    def test_s08b_a_recovery_record_with_the_co_author_in_the_trailers_is_refused_then_rewritten(self):
+        item = self.start("2.2")
+        self.stale_write()
+        self.fix_commit()
+        self.regenerate()
+        self.checklist_commit()
+        record, revision = self.recover("co_author_in_trailers")
+        with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError) as raised:
+            ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertIn("Co-Authored-By", str(raised.exception))
+        self.assertIn("earlier paragraph", str(raised.exception))
+        self.assertIn("rewrite its message", str(raised.exception))
+        record = self.rewrite_message(record, "corrected")
+        ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.publish(record, revision)
+        self.assert_reaches_technical_approval()
+
+    def test_s08c_an_ordinary_record_with_the_co_author_in_the_trailers_is_refused_then_rewritten(self):
+        item = self.start("2.2")
+        self.stale_write()
+        self.fix_commit()
+        self.checklist_commit()
+        record = self.regenerate(layout="co_author_in_trailers", prepare=False)
+        with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError) as raised:
+            ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.assertIn("earlier paragraph", str(raised.exception))
+        record = self.rewrite_message(record, "corrected")
+        ws.validate_bundle_generation_record_commit(item.root, record, item.wid)
+        self.publish(record, item.entry()["implementation_revision"])
+        self.assert_reaches_technical_approval()
+
+
+class FunctionalFixCommitOrderProduct(FunctionalFixCommitOrderProcess):
+    """The same scenarios for a `product` work item."""
+
+    work_item_type = "product"
 
 
 if __name__ == "__main__":

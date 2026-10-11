@@ -339,6 +339,8 @@ Required CI structure:
 - old same-branch CI runs should be cancelled when a newer run makes them obsolete;
 - tagged release runs should not be casually cancelled by unrelated newer tags;
 - standard Ubuntu runners;
+- a pull request holds at most 6 Linux runners at once (the account shares 20 jobs); the CI shard
+  plan is capped at 4 shards;
 - hermetic jobs with no shared mutable state;
 - no live Claude/API-spend dependency for normal CI unless explicitly justified.
 

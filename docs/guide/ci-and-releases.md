@@ -1,6 +1,6 @@
 # Continuous integration and releases
 
-> For: maintainers of a repository that releases through the Controller, and of this one. Last checked with: Controller 1.7.0; Workflow 2.6.0 and 2.7.0.
+> For: maintainers of a repository that releases through the Controller, and of this one. Last checked with: Controller 1.8.0; Workflow 2.9.0.
 
 [Back to the documentation map](../README.md)
 
@@ -12,7 +12,7 @@ each on `ubuntu-latest` with Python 3.12 and read-only permissions:
 
 - `plan`: plans the whole CI selection with
   `tools/run_tests.py plan --profile ci --ci-placement`: every test
-  `python3 -m unittest discover -s tests -t .` loads, plus the seven frozen
+  `python3 -m unittest discover -s tests -t .` loads, plus the nine frozen
   Workflow conformance suites, in duration-balanced shards, from the
   committed `tools/test_timings.json`. Its outputs are the shard indexes,
   their count and the plan's digest, and it uploads `plan.json`;
@@ -57,17 +57,23 @@ Two workflows call it:
   pinned to a commit SHA.
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
-untouched. It still runs the seven conformance suites serially, in one
-job, on every pull request (about 5 minutes), so it, not `validate`, is
-the floor on when all of a pull request's checks finish. `validate` runs
-the same suites through the planner as well; the acceptance-matrix suite
-(about 3 minutes on CI) is its own largest shard. `release.yml` is gone:
-pushing a `v*` tag by hand triggers nothing.
+untouched. It still runs the nine conformance suites serially, in one
+job, on every pull request (15 to 21 minutes in recent runs), so it, not
+`validate`, is the floor on when all of a pull request's checks finish.
+`validate` runs the same suites through the planner as well; the
+acceptance-matrix suite (5 to 8 minutes on CI) is its own largest atom.
+`release.yml` is gone: pushing a `v*` tag by hand triggers nothing.
 
-The CI plan uses the `ci` profile: about 180 s of work per shard, at
-least 2 and at most 16 shards, from the committed `tools/test_timings.json`
-only. A stale or missing entry costs wall time (the shard count and the
-balance), never coverage. The plan is
+The CI plan uses the `ci` profile: a target of 180 s of work per shard,
+at least 2 and at most 4 shards, from the committed `tools/test_timings.json`
+only. The maximum wins today, so CI runs four shards of about 11 minutes
+each. The maximum is a runner budget: 4 shards, `package` and the managed
+`workflow-conformance` job hold at most 6 Linux runners for one pull
+request, on an account that shares 20 jobs. The longer shards do not delay
+a pull request, because the conformance job finishes later. Refresh
+`tools/test_timings.json` (see the development guide) when the longest
+shard passes about 15 minutes. A stale or missing entry costs wall time
+(the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
 digest mismatch, so the matrix carries only shard indexes. Every
 `tests-result` summary states the coverage check's verdict. A failing

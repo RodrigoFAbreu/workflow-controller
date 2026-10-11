@@ -22,9 +22,9 @@ moved this repository to Workflow 2.9.0. C9d, the installed-release test made ve
 (follow-up 16, accepted 2026-10-10 by gate policy), is complete and merged as a `test:` pull
 request (#34). C8, the usage budget (accepted 2026-10-10 by gate policy), is complete and was
 released as 1.8.0. A `chore:` pull request then moved this repository to Workflow 2.9.2 (the
-Workflow fix release for workflow#19 and workflow#20; 2026-10-11). Next (user decisions,
-2026-10-09 and 2026-10-10): a small milestone that fixes the recurring drain hang from leftover
-test processes (follow-up 8); then C5, C6, C7, C10 (with the automated functional review), C12 (self-recovery),
+Workflow fix release for workflow#19 and workflow#20; 2026-10-11). A small milestone
+(C12a, complete) then fixed the test side of the recurring drain hang from leftover test processes
+(follow-up 8). Next (user decisions, 2026-10-09 and 2026-10-10): C5, C6, C7, C10 (with the automated functional review), C12 (self-recovery),
 C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -76,6 +76,7 @@ ahead of C5. That move is done (2026-10-11), so the drain-hang milestone is next
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
+| C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
 
@@ -182,7 +183,10 @@ These are not blockers for the baseline, but should remain visible in later mile
    3-hour limit, and the run ended with exit 45. The orchestrator ended the two exact pids and
    resumed. On 2026-10-10 the same two leftovers outlived a C9d worker, but the job finished after 34
    seconds. User decision 2026-10-10: fix this as its own small milestone right after the Workflow 2.9.2
-   move (done 2026-10-11), ahead of C5; the wider self-recovery stays in C12 (11.10).
+   move (done 2026-10-11), ahead of C5. **Test side fixed by C12a**: a fake worker ends itself and its
+   group 300 s after its parent dies, every other leftover a killed test run can leave is bounded to
+   600 s or ends with its test, and the incident is replayed by hand. What stays in C12 (11.10) is the
+   Controller recognising leftovers it cannot tell apart from the worker's own work.
 9. A message from another session can land in a Controller-launched worker mid-turn (C9,
    2026-10-03). The Controller then classes the worker `AMBIGUOUS`
    (`command_lifecycle_irregular`) and fails the job, although the work was done and the state was
@@ -1615,9 +1619,10 @@ accepts on that evidence (first done for C9d, 2026-10-10). The Controller takes 
 **Step C12** (user decision, 2026-10-09). The Controller recovers from the stops that today hand the
 run back to the orchestrating session, and records each recovery in the run's events:
 
-- **Leftover test processes** (follow-up 8): a fake worker and its stdin anchor left by a worker's
-  full test run (working directory `/tmp/controller-lifecycle-*`) keep a job draining for up to
-  three hours. Recognise test leftovers that are not the worker's own work, and end them by exact
+- **Leftover test processes** (follow-up 8): the source is fixed (C12a: the test processes now end by
+  themselves), but a fake worker and its stdin anchor left by a worker's
+  full test run (working directory `/tmp/controller-lifecycle-*`) could still keep a job draining for up to
+  three hours, for example from a test written later. Recognise test leftovers that are not the worker's own work, and end them by exact
   pid, or stop counting them, well before the drain bound.
 - **A message from another session** (follow-ups 9 and 14, issue #27): refuse inbound cross-session
   messages in workers, and finish a job that is ambiguous only because of one when the repository

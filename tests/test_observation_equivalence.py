@@ -43,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, job, observe  # noqa: E402
-from tests import fake_claude, fixtures  # noqa: E402
+from tests import fake_claude, fixtures, process_fixtures  # noqa: E402
 from tests.test_lifecycle_orchestration import (  # noqa: E402
     CHECKPOINT_IDS, IMPLEMENTING, MILESTONE_IMPLEMENT, SAYS_IT_WILL_CONTINUE, STATE_REL, WI, WORK_ITEM, Lifecycle,
 )
@@ -286,27 +286,28 @@ class _ObservationCase(unittest.TestCase):
         return env
 
     def controller(self, fx: Fixture, command: str, *args: str, stderr=subprocess.PIPE,
-                   **env_extra: str) -> subprocess.Popen:
+                   **env_extra: str) -> process_fixtures.BoundedController:
         argv = [sys.executable, "-m", "controller", "--runtime-dir", str(fx.runtime),
                 "--workflow-manager", str(self.stub_manager), "--claude-binary", str(FAKE_CLAUDE),
                 "--timeout", str(WAIT_SECONDS), command, *args, str(fx.root)]
-        proc = subprocess.Popen(argv, cwd=fx.case_dir, env=self.env(fx, **env_extra), stdin=subprocess.DEVNULL,
-                                stdout=subprocess.PIPE, stderr=stderr, text=True)
+        proc = process_fixtures.popen_bounded(argv, cwd=fx.case_dir, env=self.env(fx, **env_extra),
+                                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=stderr,
+                                              text=True)
         self.addCleanup(self._reap, proc)
         return proc
 
-    def follower(self, fx: Fixture, *args: str, stdout=subprocess.PIPE) -> subprocess.Popen:
+    def follower(self, fx: Fixture, *args: str, stdout=subprocess.PIPE) -> process_fixtures.BoundedController:
         argv = [sys.executable, "-m", "controller", "--runtime-dir", str(fx.runtime), "follow", *args,
                 str(fx.root)]
-        proc = subprocess.Popen(argv, cwd=fx.case_dir, env=self.env(fx), stdin=subprocess.DEVNULL,
-                                stdout=stdout, stderr=subprocess.PIPE, text=True)
+        proc = process_fixtures.popen_bounded(argv, cwd=fx.case_dir, env=self.env(fx), stdin=subprocess.DEVNULL,
+                                              stdout=stdout, stderr=subprocess.PIPE, text=True)
         self.addCleanup(self._reap, proc)
         return proc
 
     @staticmethod
     def _reap(proc: subprocess.Popen) -> None:
         if proc.poll() is None:
-            proc.kill()
+            process_fixtures.kill_bounded(proc)
         proc.wait()
         for stream in (proc.stdout, proc.stderr):
             if stream is not None:
@@ -436,7 +437,7 @@ class EquivalenceTest(_ObservationCase):
         reader.wait_for("worker session")  # attached after the first event, mid-job
         self.assertIsNone(proc.poll(), "the job ended before the follower was killed")
         self.assertIsNone(follower.poll())
-        follower.kill()
+        process_fixtures.kill_bounded(follower)
         self.assertEqual(follower.wait(WAIT_SECONDS), -signal.SIGKILL)
         attached.release.touch()
         self.finish(attached, proc, before)
@@ -534,7 +535,7 @@ class AttachDetachTest(_ObservationCase):
         self.assertEqual(broken.wait(WAIT_SECONDS), cli.EXIT_OK)
         self.assertNotIn("Traceback", broken.stderr.read())
 
-        killed.kill()
+        process_fixtures.kill_bounded(killed)
         self.assertEqual(killed.wait(WAIT_SECONDS), -signal.SIGKILL)
         self.assertIsNone(proc.poll(), "the worker ended before its followers detached")
 
@@ -625,7 +626,7 @@ class RendererFailureTest(_ObservationCase):
             try:
                 stdout, _ = proc.communicate(timeout=STALLED_STDERR_BOUND_SECONDS)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                process_fixtures.kill_bounded(proc)
                 proc.communicate()
                 self.fail(f"a Controller with a stalled stderr ran past {STALLED_STDERR_BOUND_SECONDS}s")
             fx.exit_codes.append(proc.returncode)

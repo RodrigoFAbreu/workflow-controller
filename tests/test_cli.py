@@ -61,6 +61,8 @@ from controller.errors import (  # noqa: E402
 )
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
+_PARENT_GUARD = process_fixtures.PARENT_GUARD
+
 from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
@@ -2049,7 +2051,7 @@ class RunRecordJobTrackingTest(_RunRecordFixture, unittest.TestCase):
                         self.assertNotIn(" ".join(argv), json.dumps(run))
 
 
-_CHILD_RUN = (
+_CHILD_RUN = _PARENT_GUARD + (
     "import sys; sys.path.insert(0, sys.argv[1]); "
     "from pathlib import Path; from controller import cli, identity; "
     "ident = identity.ControllerIdentity(generation=1, source_root=Path(sys.argv[2]), "
@@ -2109,6 +2111,55 @@ class RunRecordCtrlCTest(_RunRecordFixture, unittest.TestCase):
         self.assertEqual(record["status"], job.STATUS_LAUNCHED)
         self.assertTrue(process_fixtures.group_has_running_member(record["worker_process"]["pgid"]),
                         "the Controller must not end the worker")
+
+
+class RunParentGuardTest(_RunRecordFixture, unittest.TestCase):
+    """A guarded ``_CHILD_RUN`` ends within 10 s of its parent's death while its fake hangs, and the fake
+    (``FAKE_CLAUDE_ORPHAN_SECONDS=1``) within a further 10 s (leftover-lifetime plan, CP3 test 14a). The
+    parent-alive form is :class:`RunRecordCtrlCTest`."""
+
+    _STARTER = (
+        "import os, subprocess, sys, time\n"
+        "child = subprocess.Popen(sys.argv[2:])\n"
+        "open(sys.argv[1] + '.tmp', 'w').write(str(child.pid)); os.replace(sys.argv[1] + '.tmp', sys.argv[1])\n"
+        f"time.sleep({process_fixtures.LEFTOVER_LIFETIME_SECONDS})\n"
+    )
+
+    @staticmethod
+    def _gone(pid: int) -> bool:
+        stat = process_fixtures.read_stat(pid)
+        return stat is None or stat[0] in ("Z", "X", "x")
+
+    def test_a_run_controller_with_a_hanging_fake_ends_with_its_parent(self) -> None:
+        import signal
+        import subprocess
+        pid_file, ready = self.tmp_root / "child-pid", self.tmp_root / "fake-ready"
+        intermediate = subprocess.Popen(
+            [sys.executable, "-c", self._STARTER, str(pid_file),
+             sys.executable, "-c", _CHILD_RUN, str(fixtures.REPO_ROOT), str(self.origin),
+             self.ident.source_commit, "--runtime-dir", str(self.runtime_root),
+             "--workflow-manager", str(self.stub_manager), "--claude-binary", str(FAKE_CLAUDE),
+             "run", str(self.repo)],
+            env={**os.environ, "FAKE_CLAUDE_HANG_UNTIL_FILE": str(self.release),
+                 "FAKE_CLAUDE_ORPHAN_SECONDS": "1", "FAKE_CLAUDE_ORPHAN_READY_FILE": str(ready)},
+        )
+        self.addCleanup(intermediate.wait)
+        self.addCleanup(lambda: intermediate.poll() is None and intermediate.kill())
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30), "the intermediate never started")
+        controller = int(pid_file.read_text())
+        self.addCleanup(lambda: os.kill(controller, signal.SIGKILL) if not self._gone(controller) else None)
+        self.assertTrue(process_fixtures.wait_until(ready.exists, timeout=60), "the fake never announced readiness")
+        fake = int(ready.read_text())
+        self.addCleanup(process_fixtures.kill_group, fake)
+        # Both exist before the parent dies, so the absences below mean the guard and the watchdog ran.
+        self.assertFalse(self._gone(controller))
+        self.assertFalse(self._gone(fake))
+        os.kill(intermediate.pid, signal.SIGKILL)
+        intermediate.wait(timeout=10)
+        self.assertTrue(process_fixtures.wait_until(lambda: self._gone(controller), timeout=10),
+                        "the guarded run Controller outlived its parent")
+        self.assertTrue(process_fixtures.wait_until(lambda: self._gone(fake), timeout=10),
+                        "the orphaned fake outlived the Controller by more than 10 s")
 
 
 class RunRecordBestEffortTest(_RunRecordFixture, unittest.TestCase):

@@ -54,6 +54,8 @@ from controller import cli, decision, evidence, identity, job, lock, runtime, wo
 from controller.errors import LifecycleWorkerActiveError  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
+_PARENT_GUARD = process_fixtures.PARENT_GUARD
+
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
@@ -1195,7 +1197,7 @@ class UncommittedImplementationStateTest(_LifecycleTestCase):
 #: A child Controller: ``execute_step`` against the target, from a process
 #: the test can ``SIGKILL`` once the worker is recorded (the CP5 orphan
 #: shape), with the same generation as the test's own pinned identity.
-_CHILD_STEP = (
+_CHILD_STEP = _PARENT_GUARD + (
     "import sys; sys.path.insert(0, sys.argv[1]); "
     "from pathlib import Path; from controller import job; "
     "from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT; "
@@ -1737,7 +1739,7 @@ class NoCheckpointPartialRunTest(_LifecycleTestCase):
 
 #: A second ``step`` from another process: ``cli.main`` with the same
 #: pinned identity, exiting with its real code.
-_CHILD_CLI = (
+_CHILD_CLI = _PARENT_GUARD + (
     "import sys, json, unittest.mock; sys.path.insert(0, sys.argv[1]); "
     "from pathlib import Path; from controller import cli, identity; "
     "from controller.identity import ControllerIdentity; "

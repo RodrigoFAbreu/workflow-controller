@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import buildinfo, gitrepo, identity, milestone_branch as mb, repo_policy, runtime  # noqa: E402
 from controller.cli import EXIT_FAIL_CLOSED, EXIT_HANDOFF_PENDING, EXIT_OK  # noqa: E402
-from tests import fake_gh, fixtures  # noqa: E402
+from tests import fake_gh, fixtures, process_fixtures  # noqa: E402
 from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
 from tests.test_milestone_branch import policy  # noqa: E402
 
@@ -559,7 +559,7 @@ class UpgradeHandoffTest(_PackagedRuntimeCase):
         env = _base_env()
         env.update({"XDG_STATE_HOME": str(self.xdg), "WORKFLOW_CONTROLLER_TEST_HOOKS": "1",
                     "FAKE_CLAUDE_INVOCATIONS_FILE": str(invocations)})
-        proc = subprocess.Popen(
+        proc = process_fixtures.popen_bounded(
             [str(script), "--runtime-dir", str(runtime_root), "--workflow-manager", str(self.stub_manager),
              "--claude-binary", str(FAKE_CLAUDE), "run", str(target), "--pause-file", str(sentinel)],
             cwd=self.cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -582,7 +582,7 @@ class UpgradeHandoffTest(_PackagedRuntimeCase):
             sentinel.unlink()
             stdout, stderr = proc.communicate(timeout=60)
         except BaseException:
-            proc.kill()
+            process_fixtures.kill_bounded(proc)
             proc.communicate()
             raise
 

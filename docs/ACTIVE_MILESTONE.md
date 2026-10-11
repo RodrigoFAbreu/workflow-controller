@@ -10,8 +10,8 @@ mid-suite no longer leaves a real job draining for hours.
 | checkpoint | state |
 | --- | --- |
 | CP1 orphan watchdog, readiness file, contract tests, readiness-gated loss helpers | complete (verified: `tests.test_fake_claude_contract`, `test_worker`, `test_resume`, `test_lifecycle_orchestration`, 420 tests OK) |
-| CP2 detached helpers, daemons and sleepers bounded; inventory | complete (verified: `tests.test_fake_claude_contract`, `test_worker`, `test_job`, `test_lock`, `test_handoff`, `test_run_tests`, `test_resume`, `test_lifecycle_orchestration`, `test_cli`, `test_observe`, `test_test_shards` OK; the audit table is `process_fixtures.LEFTOVER_INVENTORY`, checked by `OrphanWatchdogTest`; rows prefixed `CP3:` name the sites CP3 migrates) |
-| CP3 child Controllers end with their test; incident replays | pending |
+| CP2 detached helpers, daemons and sleepers bounded; inventory | complete (verified: `tests.test_fake_claude_contract`, `test_worker`, `test_job`, `test_lock`, `test_handoff`, `test_run_tests`, `test_resume`, `test_lifecycle_orchestration`, `test_cli`, `test_observe`, `test_test_shards` OK; the audit table is `process_fixtures.LEFTOVER_INVENTORY`, checked by `OrphanWatchdogTest`) |
+| CP3 child Controllers end with their test; incident replays | complete (verified: `tests.test_fake_claude_contract`, `test_worker`, `test_resume`, `test_lifecycle_orchestration`, `test_observation_equivalence`, `test_packaged_runtime`, `test_trunk_preflight`, `test_cli`, `test_handoff`, 654 tests OK, 1 skipped; the three D7 replays by hand: fake gone in 2.9-3.4 s of its orphaning, child Controller in 0.9 s, anchor in 65-68 s) |
 | CP4 documentation and roadmap | pending |
 
 The section below describes the previous, completed milestone.

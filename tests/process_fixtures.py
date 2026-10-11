@@ -70,6 +70,24 @@ def python_release_wait(release_expr: str, *, seconds: float = LEFTOVER_LIFETIME
             f"while not os.path.exists({release_expr}) and time.monotonic() < _end: time.sleep({poll!r})\n")
 
 
+#: A prefix for the ``-c`` script of a child Controller that cannot re-exec
+#: (it pins its identity before ``cli.main``, or never imports ``cli``): once
+#: its parent differs from the one it started under, the test that started it
+#: is dead and it exits (leftover-lifetime plan D11). ``SIGALRM`` is used by
+#: no Controller code, a handler that returns lets blocking calls retry
+#: (PEP 475), and while the parent lives it does nothing. The constant ends
+#: with a newline and is joined by plain concatenation, never by ``;``.
+PARENT_GUARD = (
+    "import os as _guard_os, signal as _guard_signal\n"
+    "_GUARD_PARENT = _guard_os.getppid()\n"
+    "def _guard_check(*_ignored):\n"
+    "    if _guard_os.getppid() != _GUARD_PARENT:\n"
+    "        _guard_os._exit(0)\n"
+    "_guard_signal.signal(_guard_signal.SIGALRM, _guard_check)\n"
+    "_guard_signal.setitimer(_guard_signal.ITIMER_REAL, 1, 1)\n"
+)
+
+
 def bounded_controller_argv(argv, seconds: float = LEFTOVER_LIFETIME_SECONDS) -> list[str]:
     """``argv`` behind GNU ``timeout -s KILL <seconds>``: a separate process
     that keeps counting down after the test that started the child has been
@@ -241,8 +259,7 @@ def check_inventory(sources: "dict[str, str]", inventory) -> list[str]:
 #: by the test), ``parent-guard`` (a ``-c`` Controller child that exits when
 #: its test process dies, D11), ``deadline`` (an independent ``timeout``
 #: wrapper, D14), ``watchdog`` (the fake's own D2), ``exception`` (named,
-#: with the reason). A reason that begins ``CP3:`` names a site the third
-#: checkpoint migrates; CP3 removes the prefix when it does.
+#: with the reason).
 LEFTOVER_INVENTORY = (
     ("fake_claude.py", "sleep", 2, "watchdog",
      "the fake's in-process hour-long sleeps of FAKE_CLAUDE_SELF_TERM and FAKE_CLAUDE_HANG: the sleeper is the fake itself, which D2 ends"),
@@ -266,13 +283,17 @@ LEFTOVER_INVENTORY = (
     ("test_buildinfo.py", "start:run:controller", 1, "short",
      "a python -P -c import check in a venv; read-only and exits at once"),
     ("test_cli.py", "start:Popen", 1, "short", "python -c pass: exits at once"),
-    ("test_cli.py", "start:Popen:controller", 1, "parent-guard",
-     "CP3: _CHILD_RUN is a pinned -c script (no re-exec) and takes the parent guard (D11)"),
+    ("test_cli.py", "start:Popen:controller", 2, "parent-guard",
+     "_CHILD_RUN is a pinned -c script (no re-exec) and takes the parent guard (D11); the second start is RunParentGuardTest's intermediate"),
     ("test_cli.py", "start:helper:run_controller_module", 3, "short",
      "read-only follow/--workflow-manager commands that exit, waited by the test"),
     ("test_cli.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
-    ("test_fake_claude_contract.py", "start:Popen", 8, "bounded",
-     "fakes (the watchdog, D2), the intermediate and launcher (a 600 s sleep), sleepers of 60 s; each test ends them by exact pid"),
+    ("test_fake_claude_contract.py", "start:Popen", 9, "bounded",
+     "fakes (the watchdog, D2), the intermediate and launcher (a 600 s sleep), sleepers of 60 s, the bounded-starter intermediate; each test ends them by exact pid"),
+    ("test_fake_claude_contract.py", "start:Popen:controller", 1, "deadline",
+     "the negative control: a bare Popen of a bounded_controller_argv wrapper, ended by exact pid (D14)"),
+    ("test_fake_claude_contract.py", "start:helper:popen_bounded", 4, "deadline",
+     "stand-in Controllers behind timeout -s KILL (D14); each test ends them by exact pid"),
     ("test_forge.py", "start:run", 2, "short", "a forge/gh stub run the test waits for; exits"),
     ("test_handoff.py", "start:helper:popen_bounded", 1, "deadline",
      "the installed console-script Controller paused on a sentinel runs behind timeout -s KILL (D14)"),
@@ -280,24 +301,24 @@ LEFTOVER_INVENTORY = (
      "opt-in real-Claude tests, skipped unless the operator opts in; they legitimately run longer than 600 s"),
     ("test_job.py", "start:helper:spawn_sleeper", 3, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
     ("test_lifecycle_orchestration.py", "start:Popen:controller", 3, "parent-guard",
-     "CP3: _CHILD_STEP, _CHILD_CLI and _CHILD_WAITING_STEP are pinned -c scripts and take the parent guard (D11)"),
+     "_CHILD_STEP, _CHILD_CLI and _CHILD_WAITING_STEP are pinned -c scripts and take the parent guard (D11)"),
     ("test_lock.py", "start:Popen", 1, "bounded",
      "the _spawn wrapper: its callers start sleepers of LEFTOVER_LIFETIME_SECONDS or short helpers"),
-    ("test_observation_equivalence.py", "start:Popen", 2, "deadline",
-     "CP3: python -m controller children supervising a worker with no --timeout; popen_bounded (D14)"),
+    ("test_observation_equivalence.py", "start:helper:popen_bounded", 2, "deadline",
+     "python -m controller children supervising a worker (controller and follower); popen_bounded (D14)"),
     ("test_observe.py", "sleep", 1, "exception",
      "a cmdline fixture string with an hour-long sleep, not a process"),
     ("test_observe.py", "start:Popen", 4, "short", "python -c pass: exits at once"),
     ("test_observe.py", "start:helper:spawn_sleeper", 13, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
-    ("test_packaged_runtime.py", "start:Popen:controller", 1, "deadline",
-     "CP3: the packaged console-script Controller paused with no --timeout; popen_bounded (D14)"),
-    ("test_resume.py", "start:Popen", 4, "bounded",
-     "a 60 s sleep, a lock holder with a finite seconds argument, python -c pass, and the child of a lost-Controller helper"),
+    ("test_packaged_runtime.py", "start:helper:popen_bounded", 1, "deadline",
+     "the packaged console-script Controller paused with no --timeout; popen_bounded (D14)"),
+    ("test_resume.py", "start:Popen", 5, "bounded",
+     "a 60 s sleep, a lock holder with a finite seconds argument, python -c pass, the child of a lost-Controller helper, and the parent-guard test's intermediate (a 600 s sleep, ended by exact pid)"),
     ("test_resume.py", "start:Popen:controller", 1, "parent-guard",
-     "CP3: _LOST_CONTROLLER is a pinned -c script and takes the parent guard (D9, D11)"),
+     "_LOST_CONTROLLER is a pinned -c script and takes the parent guard (D9, D11)"),
     ("test_resume.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
     ("test_resume.py", "wait", 1, "parent-guard",
-     "CP3: _LOST_CONTROLLER's hang() loop ends with the guarded child (D9, D11)"),
+     "_LOST_CONTROLLER's hang() loop ends with the guarded child (D9, D11)"),
     ("test_run_tests.py", "start:Popen", 2, "bounded",
      "a 300 s sleeper and a shard runner whose hanging test sleeps 600 s (the runner kills its shards)"),
     ("test_settings.py", "start:Popen", 1, "short", "a python -c snippet that exits"),
@@ -305,7 +326,7 @@ LEFTOVER_INVENTORY = (
     ("test_test_shards.py", "start:run", 1, "short", "a python -c probe the test waits for"),
     ("test_trunk_orchestration_e2e.py", "start:run", 1, "short", "a bash command the test waits for"),
     ("test_trunk_preflight.py", "start:Popen:controller", 1, "parent-guard",
-     "CP3: _CHILD_CLI is a pinned -c script (D11); its cleanup already kills the Controller itself"),
+     "_CHILD_CLI is a pinned -c script (D11); its cleanup already kills the Controller itself"),
     ("test_worker.py", "start:Popen", 15, "bounded",
      "sleepers of LEFTOVER_LIFETIME_SECONDS or 60 s or less, helpers that exit, and the leader/member scripts (LEFTOVER_LIFETIME_SECONDS)"),
     ("test_worker.py", "start:helper:spawn_sleeper", 13, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),

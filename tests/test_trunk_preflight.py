@@ -36,6 +36,8 @@ from tests import fake_gh, fixtures  # noqa: E402
 from tests import test_lifecycle_orchestration as lifecycle  # noqa: E402
 from tests.golden import generate_no_policy_lifecycle as golden  # noqa: E402
 from tests import process_fixtures  # noqa: E402
+_PARENT_GUARD = process_fixtures.PARENT_GUARD
+
 from tests.test_milestone_branch import policy  # noqa: E402
 from tests.test_pull_request_lifecycle import TITLE, plan_text, release_wait_policy  # noqa: E402
 
@@ -748,7 +750,7 @@ class MilestoneBindingTest(_PolicyCase):
 #: ``cli.main`` in a child process with the pinned identity (``sys.argv``:
 #: the Controller checkout, the identity's source root, source commit,
 #: pinned time and version, then the command line).
-_CHILD_CLI = (
+_CHILD_CLI = _PARENT_GUARD + (
     "import sys; sys.path.insert(0, sys.argv[1]); "
     "from pathlib import Path; from controller import cli, identity; "
     "ident = identity.ControllerIdentity(generation=1, source_root=Path(sys.argv[2]), "

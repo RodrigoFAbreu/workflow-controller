@@ -50,6 +50,8 @@ jobs:
           python-version: "3.12"
       - name: "install (editable)"
         run: "pip install -e ."
+      - name: "allow unprivileged user namespaces"
+        run: "if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi"
       - name: shard
         run: "python3 tools/run_tests.py exec-shard --profile ci --ci-placement --shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} --results-dir results --run-attempt ${{ github.run_attempt }}"
       - if: "always()"

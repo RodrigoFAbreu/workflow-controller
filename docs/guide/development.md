@@ -303,6 +303,12 @@ no PID namespace, on purpose: the Controller's liveness and lock answers
 must match a host run. Without user namespaces (some distributions
 restrict them) the runner exits 2 and the suite skips the scenarios; under
 `CI` they fail instead, so a green CI run means the sandbox was exercised.
+GitHub's `ubuntu-latest` image restricts them through AppArmor
+(`kernel.apparmor_restrict_unprivileged_userns=1`), so the generated
+`validate.yml` lifts the restriction in the `tests` job before the shard runs;
+on such an image locally, run
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` or use the
+diagnostic.
 `--degraded-diagnostic` runs without enforcement for local debugging and
 writes reports that are not evidence.
 

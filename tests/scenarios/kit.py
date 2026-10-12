@@ -28,6 +28,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest.mock
 from pathlib import Path
@@ -47,6 +48,8 @@ ALLOWED_TOOLS = ("git", "sh", "python3", "sleep", "timeout", "setsid", "env", "c
 REQUIRED_TOOLS = ("git", "sh", "python3")
 STEPS = ("user-namespace", "setup", "drop")
 KILL_DEADLINE_SECONDS = 10
+#: The longest failure message a worker reports (the rest is in the scenario log).
+MESSAGE_LIMIT = 4000
 
 
 #: The durable writes scenario 4 kills around, as the inventory measured them (`selftest-trace-lifecycle`):
@@ -195,20 +198,26 @@ _NEVER_PROTECT = {Path("/"), Path("/tmp"), Path("/home"), Path("/var"), Path("/r
 def protection_plan(checkout: Path, env: "dict | None" = None, extra: "list[Path]" = ()) -> list[dict]:
     """``[{"path", "mode"}]``: each existing real location read-only; a
     missing one is covered through its nearest existing ancestor that is not
-    a system directory, else (a missing top-level path) skipped."""
+    a system directory, else (a missing top-level path) skipped.
+
+    An existing real location stays in the plan even when it contains the
+    scratch tree (a sharded run's ``TMPDIR`` lies under
+    ``/tmp/workflow-controller-tests``): the setup phase mounts the scratch
+    tmpfs after the read-only binds, so the scratch tree stays writable."""
     plan: dict[str, str] = {}
-    # The scratch tree is created in the temporary directory, so neither it nor an ancestor of it may be made read-only
-    # to cover a missing real location (a per-shard TMPDIR that lacks `workflow-controller-tests`).
+    # The scratch tree is created in the temporary directory, so neither it nor an ancestor of it is made read-only
+    # merely to cover a missing real location (a per-shard TMPDIR that lacks `workflow-controller-tests`).
     temp = Path(os.path.realpath(tempfile.gettempdir()))
     candidates = [*real_locations(checkout, env), *resolve_git_metadata(checkout), *map(Path, extra)]
     for candidate in candidates:
         path = Path(os.path.abspath(candidate))
+        covering = False
         while not path.exists() and path != path.parent:
-            path = path.parent
+            path, covering = path.parent, True
         if path in _NEVER_PROTECT or not path.is_dir():
             continue
         resolved = path.resolve()
-        if resolved == temp or resolved in temp.parents:
+        if covering and (resolved == temp or resolved in temp.parents):
             continue
         plan[str(resolved)] = "ro"
     # An enclosing protected directory already covers a nested one.
@@ -490,12 +499,17 @@ def leak_scan(directories: "list[Path]", token: str, scratch: str, since: float)
     """Entries under ``directories`` created or modified since ``since``
     whose name (or content, up to 1 MiB) carries the scenario's token or
     scratch path. Cannot see a token-free overwrite or deletion: a diagnostic
-    aid, never the proof."""
+    aid, never the proof. The scratch tree itself is not a leak, even where a
+    real location contains it (a sharded run's ``TMPDIR``)."""
     leaks: list[str] = []
     needles = (token.encode(), scratch.encode())
+    own = Path(os.path.realpath(scratch))
     for root in directories:
         for path in ([root] if root.is_file() else sorted(root.rglob("*")) if root.is_dir() else []):
             try:
+                resolved = Path(os.path.realpath(path))
+                if resolved == own or own in resolved.parents:
+                    continue
                 if path.stat().st_mtime < since:
                     continue
                 if any(n.decode() in str(path) for n in needles):
@@ -564,6 +578,11 @@ def run_scenario(flow_id: str, *, mode: str = "namespace", checkout: Path = REPO
     config = {"flow_id": flow_id, "scratch": str(scratch), "tools": tools, "checkout": str(checkout.resolve()),
               "head": before["head"], "module": module, "isolation": mode, "params": params or {}}
     result_r, result_w = os.pipe()
+    # Drained while the worker runs: a result larger than the pipe buffer would otherwise block the worker's write
+    # until the timeout, since the host only returns from the launch once the worker has exited.
+    chunks: list[bytes] = []
+    reader = threading.Thread(target=lambda: chunks.append(_read_to_end(result_r)), daemon=True)
+    reader.start()
     worker = [sys.executable, "-B", "-c", WORKER_CODE, str(checkout.resolve()), json.dumps(config)]
     problems: list[str] = []
     try:
@@ -586,8 +605,8 @@ def run_scenario(flow_id: str, *, mode: str = "namespace", checkout: Path = REPO
                 out.seek(0), err.seek(0)
                 outcome = {"returncode": proc.returncode, "stages": [], "stdout": out.read().decode(errors="replace"),
                            "stderr": err.read().decode(errors="replace")}
-        with os.fdopen(result_r, "rb") as fh:
-            raw = fh.read().decode().strip()
+        reader.join(timeout=30)
+        raw = b"".join(chunks).decode(errors="replace").strip()
     except BaseException:
         shutil.rmtree(scratch, ignore_errors=True)
         raise
@@ -616,6 +635,11 @@ def run_scenario(flow_id: str, *, mode: str = "namespace", checkout: Path = REPO
     log = (outcome["stdout"] + outcome["stderr"])
     return Outcome(flow_id, mode if mode == "degraded" else "namespace", result, log, before["head"], unchanged, problems,
                    time.monotonic() - start)
+
+
+def _read_to_end(fd: int) -> bytes:
+    with os.fdopen(fd, "rb") as fh:
+        return fh.read()
 
 
 def _degraded_preexec(result_w: int, status_w: int):
@@ -939,7 +963,10 @@ def worker_main(argv: list[str]) -> None:
             raise ScenarioFailure(f"leftover processes after the scenario: {survivors}")
         result.status = "passed"
     except BaseException as exc:  # noqa: BLE001 -- a failure is evidence, reported not raised
-        result.message = f"{type(exc).__name__}: {exc}"
+        text = f"{type(exc).__name__}: {exc}"
+        # Bounded: the message goes into the evidence summary, and an assertion may print whole records.
+        result.message = text if len(text) <= MESSAGE_LIMIT else text[:MESSAGE_LIMIT] + " [truncated]"
+        print(text, file=sys.stderr, flush=True)
     finally:
         if kit is not None:
             kit.close()

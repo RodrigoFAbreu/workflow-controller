@@ -163,6 +163,17 @@ class SandboxEnforcementTest(SandboxCase):
         self.assertEqual(self.observed(outcome), {"before": 1})
         self.assertFalse(outcome.passed)
 
+    def test_a_result_larger_than_the_pipe_buffer_comes_back_at_once_with_a_bounded_message(self) -> None:
+        started = time.monotonic()
+        outcome = kit.run_scenario("selftest-fails-loudly", module=SELFTEST, timeout=120)
+        self.assertLess(time.monotonic() - started, 60, "the worker blocked writing its result")
+        self.assertEqual(outcome.result["status"], "failed", outcome.result.get("message", "")[:200])
+        message = outcome.result["message"]
+        self.assertTrue(message.startswith("ScenarioFailure: loud ") and message.endswith(" [truncated]"), message[-40:])
+        self.assertLessEqual(len(message), kit.MESSAGE_LIMIT + len(" [truncated]"))
+        self.assertEqual(self.observed(outcome), {"bulk": "o" * (1 << 17)})
+        self.assertIn("end-of-message", outcome.log, "the full message is in the scenario log")
+
     def test_a_process_left_behind_fails_the_scenario_and_is_ended(self) -> None:
         outcome = kit.run_scenario("selftest-leftover", module=SELFTEST)
         self.assertEqual(outcome.result["status"], "failed")
@@ -417,15 +428,64 @@ print(json.dumps(out))
 
 class ProtectionPlanTemporaryDirectoryTest(unittest.TestCase):
     """The shard runner sets ``TMPDIR`` to a directory that exists and lacks ``workflow-controller-tests``: the plan
-    must not cover that missing location through the temporary directory, which holds the scratch tree."""
+    must not cover that missing location through the temporary directory, which holds the scratch tree. An existing
+    real location that contains the temporary directory stays protected (the scratch tmpfs is mounted after it)."""
+
+    @staticmethod
+    def plan_and_real(shard_tmp: str, extra: "list[Path]" = ()) -> tuple[set[str], set[str]]:
+        with unittest.mock.patch.dict(os.environ, {"TMPDIR": shard_tmp}), \
+                unittest.mock.patch.object(tempfile, "tempdir", None):
+            plan = {entry["path"] for entry in kit.protection_plan(kit.REPO_ROOT, extra=extra)}
+            real = {os.path.realpath(p) for p in [*kit.real_locations(kit.REPO_ROOT), *extra] if p.exists()}
+        return plan, real
+
+    @staticmethod
+    def containing(plan: set[str], path: str) -> set[str]:
+        return {p for p in plan if path == p or path.startswith(p.rstrip("/") + "/")}
 
     def test_a_per_shard_temporary_directory_is_never_made_read_only(self) -> None:
         with tempfile.TemporaryDirectory(prefix="scenario-shard-tmp-") as shard_tmp:
-            with unittest.mock.patch.dict(os.environ, {"TMPDIR": shard_tmp}), \
-                    unittest.mock.patch.object(tempfile, "tempdir", None):
-                plan = {entry["path"] for entry in kit.protection_plan(kit.REPO_ROOT)}
-            self.assertNotIn(os.path.realpath(shard_tmp), plan)
-            self.assertFalse(any(os.path.realpath(shard_tmp).startswith(path.rstrip("/") + "/") for path in plan), plan)
+            plan, real = self.plan_and_real(shard_tmp)
+            shard = os.path.realpath(shard_tmp)
+            self.assertNotIn(shard, plan)
+            # Only an existing real location (here, when the outer TMPDIR is a sharded one, /tmp/workflow-controller-tests)
+            # may contain it, never an ancestor chosen to cover a missing location.
+            self.assertLessEqual(self.containing(plan, shard), real, plan)
+
+    def test_an_existing_real_location_that_contains_the_temporary_directory_stays_protected(self) -> None:
+        # A sharded run: TMPDIR lies under /tmp/workflow-controller-tests, which is itself a real location (D3).
+        with tempfile.TemporaryDirectory(prefix="scenario-results-") as results:
+            shard_tmp = Path(results) / "run" / "shard-0" / "tmp"
+            shard_tmp.mkdir(parents=True)
+            plan, _ = self.plan_and_real(str(shard_tmp), extra=[Path(results)])
+            self.assertTrue(self.containing(plan, os.path.realpath(results)), plan)
+
+
+class ScratchInsideProtectedLocationTest(SandboxCase):
+    """The scratch tmpfs is mounted after the read-only binds: a scratch tree inside a protected location is writable,
+    the rest of that location is not."""
+
+    def test_the_scratch_tree_stays_writable_inside_a_protected_location(self) -> None:
+        real = self.standin()
+        scratch = real / "shard" / "tmp" / "scn-nested-AbCdEf12"
+        scratch.mkdir(parents=True)
+        attack = r"""
+import errno, json, os, sys
+def write(path):
+    try:
+        with open(path, "w") as fh: fh.write("x")
+        return "ok"
+    except OSError as exc:
+        return errno.errorcode[exc.errno]
+print(json.dumps({"scratch": write(os.path.join(sys.argv[1], "x")), "sibling": write(os.path.join(sys.argv[2], "x"))}))
+"""
+        outcome = kit._launch(kit.Chain.resolve(), scratch=scratch, protect=[{"path": str(real), "mode": "ro"}],
+                              worker=[sys.executable, "-I", "-c", "import os; os.write(4, b'drop-ok\\n')\n" + attack,
+                                      str(scratch), str(real / "shard")],
+                              env={"PATH": os.devnull, "LC_ALL": "C"}, cwd=None, timeout=60)
+        result = json.loads(outcome["stdout"].strip().splitlines()[-1])
+        self.assertEqual(result, {"scratch": "ok", "sibling": "EROFS"}, outcome)
+        self.assertEqual(list(scratch.iterdir()), [], "a scratch write reached the host")
 
 
 class LeakScanTest(unittest.TestCase):
@@ -452,6 +512,15 @@ class LeakScanTest(unittest.TestCase):
         (self.real / f"{self.token}.json").write_text("{}")
         (self.real / "content.txt").write_text(f"path {self.scratch}/x")
         self.assertEqual(sorted(Path(p).name for p in self.scan()), sorted([f"{self.token}.json", "content.txt"]))
+
+    def test_the_scratch_tree_inside_a_scanned_location_is_not_a_leak(self) -> None:
+        # A sharded run's scratch tree lies under /tmp/workflow-controller-tests, which the scan walks.
+        scratch = self.real / "shard" / self.token
+        scratch.mkdir(parents=True)
+        (scratch / f"{self.token}.json").write_text(f"path {scratch}/x")
+        (self.real / "shard" / "leaked.txt").write_text(f"path {scratch}/x")
+        self.assertEqual([Path(p).name for p in kit.leak_scan([self.real], self.token, str(scratch), self.since)],
+                         ["leaked.txt"])
 
     def test_a_token_free_overwrite_is_not_seen_which_is_why_it_is_never_the_proof(self) -> None:
         (self.real / "existing.txt").write_text("overwritten with no token\n")

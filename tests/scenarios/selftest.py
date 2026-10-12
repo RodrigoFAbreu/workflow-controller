@@ -180,6 +180,13 @@ def fails(kit) -> None:
     raise ScenarioFailure("deliberate")
 
 
+@scenario("selftest-fails-loudly", selftest=True)
+def fails_loudly(kit) -> None:
+    """A failure whose message (an assertion that prints whole records) and observations exceed a pipe buffer."""
+    kit.observe("bulk", "o" * (1 << 17))
+    raise ScenarioFailure("loud " + "x" * (1 << 18) + " end-of-message")
+
+
 def _step_child(kit, kill_at=None, trace=False, **orphan):
     from tests import test_lifecycle_orchestration as lo
     lc = kit.seed_lifecycle()

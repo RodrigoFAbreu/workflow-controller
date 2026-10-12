@@ -82,9 +82,11 @@ def main():
     status = spec["status_fd"]
     os.write(status, b"userns\n")
     _mount(None, "/", None, MS_REC | MS_PRIVATE)
-    _mount("none", spec["scratch"], "tmpfs", MS_NOSUID | MS_NODEV, "mode=0700,size=" + spec.get("scratch_size", "1g"))
     for entry in spec["protect"]:
         protect(entry["path"], entry["mode"])
+    # The scratch tmpfs goes on last, so it stays writable when a protected location contains it (a sharded run's
+    # scratch tree lies under the read-only /tmp/workflow-controller-tests).
+    _mount("none", spec["scratch"], "tmpfs", MS_NOSUID | MS_NODEV, "mode=0700,size=" + spec.get("scratch_size", "1g"))
     loopback_up()
     os.write(status, b"setup-ok\n")
     for fd in spec["inherit_fds"]:

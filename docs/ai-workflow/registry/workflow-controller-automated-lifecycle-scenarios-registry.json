@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-automated-lifecycle-scenarios",
+  "plan_revision": 6,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The scenario kit (tests/scenarios): per-scenario sandbox (user, network and mount namespaces inherited by every descendant, no PID namespace, fail-closed when isolation is unavailable, resolved Git-metadata protection), scratch origin, clone, built environment and sanitised Git environment, PATH of fakes only, content-sensitive real-checkout snapshot, durable-write inventory and kill-point injection, audit-hook detector, observation normalisation and leftover check (C12a inventory extended), pinned by kit contract tests using safe stand-ins through every descendant path",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The runner tools/run_scenarios.py (list, run, check) writing FLOW_ID_RE-compliant protocol-shaped functional_evidence records plus index.json bound to HEAD, accepted by the real ingest_functional_evidence, refusing a changed code tree and unavailable isolation (nothing written) while accepting dirty Workflow bookkeeping, and the test-suite wrapper (one planner atom per variant, measured timings) with determinism and schema tests",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Lifecycle-core scenarios 1-5 (full lifecycle to merge, human gates stop and resume, worker failure fails closed, kill and resume, trunk drift) with a mutation check per scenario",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Feature scenarios 6-10 (squash merge and release classification, notifications never steer, usage admission pause and resume, read-only commands change nothing, settings file observation and writing commands) with a mutation check per scenario",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documentation and roadmap: development guide section, automation guide paragraph, step C6 complete, active milestone narrative, check_docs, full suite, two compared full scenario runs and shard estimates on the final HEAD",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

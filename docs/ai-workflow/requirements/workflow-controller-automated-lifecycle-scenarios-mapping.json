@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-automated-lifecycle-scenarios",
+  "requirements": {
+    "R1": {
+      "description": "A scenario runs in a sandbox (user, network and mount namespaces every descendant inherits, set up in a privileged phase and then run with no capability as the invoker's uid, and no PID namespace so the Controller's liveness and lock answers match a host run) with scratch origin, clone, a `PATH` of only the fakes and allowed tools, scratch home/XDG/runtime directories, a built environment and a sanitised Git environment; a connection beyond loopback, a write to a real location, a real `claude`/`gh`/`workflow-manager` by name and an inherited Git override all fail or have no effect, through shells, git hooks, `-E` interpreters and the re-exec; the audit hook is a detector for the interpreters that load it, as D7 states, and an unavailable sandbox fails closed: no scenario runs in the suite wrapper (skip locally, failure under `CI`), the runner exits 2 writing nothing, and the diagnostic override writes no evidence; an external Git directory and common directory of the checkout are protected or the layout is refused before execution",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "After every scenario the real checkout's HEAD, refs, index and code-path file contents are provably identical (content-sensitive, token-free changes included), every real location of D3 is unwritable from the scenario (a record exists only for a namespace-mode run; the diagnostic mode's token scan, which cannot see token-free changes, makes no record), and no process tagged with the scenario's scratch directory remains ; scenario 4's job-after kill and resume oracle is proven inside the sandbox in namespace mode, with pre-spawn and post-spawn variants distinguished",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The runner writes one evidence record per scenario in the protocol's `functional_evidence` shape with a `FLOW_ID_RE`-compliant id, validated against `controller/protocol_schema.json` and accepted by the real `ingest_functional_evidence` at the runner's `HEAD` (stored `head` equals the source commit, stored identity equals the recomputed `identity_at`, asserted separately), plus an `index.json`; it refuses changed code paths (`controller/`, `tests/`, `tools/`, packaging) but not dirty Workflow bookkeeping, and refuses unavailable isolation with exit 2 writing nothing; a failed scenario writes a `failed` record and exits 1",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The ordinary test suite runs every registered scenario variant once, as its own planner atom with a measured timing, and two complete catalogue runs against the same `HEAD` produce the same normalised `summary` for every scenario",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The lifecycle core is covered by scenarios 1-5 (full lifecycle to merge, human gates, worker failure, kill and resume, trunk drift), each asserting observable outcomes only",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "The squash/release, notifications, usage pause/resume, read-only-command and settings paths are covered by scenarios 6-10",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "Every scenario fails when its claim is broken (a mutation check per scenario, per variant for kill-and-resume), so none passes vacuously",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R8": {
+      "description": "`controller/` is byte-unchanged, no release is cut, and the development guide, the roadmap and the active-milestone narrative agree; `check_docs`, the full suite and the full scenario run are green",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-automated-lifecycle-scenarios",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -10147,6 +10147,169 @@
         "evaluated_at": "2026-10-12T08:33:42Z",
         "workflow_release": "2.9.2"
       }
+    },
+    "workflow-controller-automated-lifecycle-scenarios": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-automated-lifecycle-scenarios",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_AUTOMATED_LIFECYCLE_SCENARIOS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-lifecycle-scenarios-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-lifecycle-scenarios-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "651f7da4085a09c0d3906e4a77c37b5c2daa1f90",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+        "approved_review_content_id": "e48d525949049535450f6c2e796dd04fac5e1febedddf30f812a992db72df59d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_AUTOMATED_LIFECYCLE_SCENARIOS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7f1be7610f17f46bb6814c801ceba357c1d0b8c0"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-automated-lifecycle-scenarios-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "db5331574de5dc71287c1ee7318910d39c3f85e5"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-automated-lifecycle-scenarios-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ccc15398eba93be5d8d0ac586572b2a85a8041f7"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-12T10:50:45Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e48d525949049535450f6c2e796dd04fac5e1febedddf30f812a992db72df59d",
+            "ledger": {
+              "local": {
+                "bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "7f6b31a0b59c5ded99323081e249ccb5fb6e55218e6655c13bf4dae51cd8314c",
+                "ledger_entry_sha256": "ac927e8e02eaefaddb543397bd3660db2fc5c1a7602c2a1e6e16278b4578d6ab",
+                "run_ref": "session:local .ai-review/workflow-controller-automated-lifecycle-scenarios/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "1ecffec5eddeb73f462729188b0d81450f1df589b2b2a0fc67515439a7a4f788",
+                "ledger_entry_sha256": "5251e58a892abfe12eb3f1db0730cddf2f8a0af4827ff99799454549aa17a944",
+                "run_ref": "session:local .ai-review/workflow-controller-automated-lifecycle-scenarios/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-12T10:50:45Z",
+          "workflow_release": "2.9.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "e48d525949049535450f6c2e796dd04fac5e1febedddf30f812a992db72df59d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-10-12T10:43:42Z",
+          "verdict_sha256": "7f6b31a0b59c5ded99323081e249ccb5fb6e55218e6655c13bf4dae51cd8314c",
+          "run_ref": "session:local .ai-review/workflow-controller-automated-lifecycle-scenarios/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-10-12T10:49:32.103599+00:00",
+          "verdict_sha256": "1ecffec5eddeb73f462729188b0d81450f1df589b2b2a0fc67515439a7a4f788",
+          "run_ref": "session:local .ai-review/workflow-controller-automated-lifecycle-scenarios/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 23,
+      "last_transition": "2026-10-12T10:50:45Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-12T10:40:30Z",
+        "consumed": {
+          "review_content_id": "b33e1a717624aa22d1afdb73a369ab9332ee3289dc93e6821cdd1572be379797",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "e48d525949049535450f6c2e796dd04fac5e1febedddf30f812a992db72df59d",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "e48d525949049535450f6c2e796dd04fac5e1febedddf30f812a992db72df59d",
+          "bundle_id": "706edb9956625e8359e7b7dbb40dd9ca494b24205595322467ef379fc02a58be",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "250a9d00e5204c9db6934502b2c26ab364eebfb79d4f17f9a789624e39e2d2c1",
+        "2c57198b102456d755aa137225a9916556052d781e2ca5cb2533eb8917bf4e14",
+        "428804bc9f1697b26300a6fda5d671630a58ebaad08117e856e2cab649464cb1",
+        "9387ca398e2a0a978987db2d6c5dd003c577e67cffe3fe2093f738f78f62e391",
+        "b33e1a717624aa22d1afdb73a369ab9332ee3289dc93e6821cdd1572be379797"
+      ]
     }
   }
 }

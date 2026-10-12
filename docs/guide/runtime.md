@@ -206,6 +206,13 @@ file is never an error: every setting then takes its built-in default.
 | `usage.repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
 | `usage.codex_run_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | `usage --usage-codex-cap` |
 | `usage.codex_repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
+| `notifications.enabled` | boolean | `true` | -- | none |
+| `notifications.url` | string or `null` | `null` | an `http` or `https` URL, 1 to 2048 characters | none |
+| `notifications.api_key_file` | string or `null` | `null` | a path, 1 to 1024 characters; never the key | none |
+| `notifications.timeout_seconds` | integer | `5` | 1 to 60 | none |
+| `notifications.attempts` | integer | `3` | 1 to 10 | none |
+| `notifications.retry_seconds` | integer | `2` | 1 to 60 | none |
+| `notifications.events` | object | `{"kinds": {}, "events": {}}` | see [The notifications section](#the-notifications-section) | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
 
 Each default is the value the Controller used before the file existed,
@@ -264,16 +271,40 @@ the shared record holds is in
 `17` ([exit codes](../exit-codes.md)), and the operator's view is
 [`usage`](commands.md#usage).
 
+The seven `notifications` rows (1.9.0) make the Controller a SignalHub
+producer (see [ADR 0012](../adr/0012-signalhub-notifications.md) and
+[unattended runs](automation.md#notifications-from-an-unattended-run)):
+
+- `notifications.enabled: false` is the master switch: nothing is sent and
+  the notifier records one `disabled` line;
+- `notifications.url` is the server address when `$SIGNALHUB_URL` is not
+  set, and `notifications.api_key_file` is the path of a file whose first
+  line is the API key when neither `$SIGNALHUB_API_KEY` nor
+  `$SIGNALHUB_API_KEY_FILE` is set. The settings file never holds the key.
+  Without them the Controller looks in `~/.config/signalhub/` (or
+  `$SIGNALHUB_CONFIG_DIR`) for `url` and `api-key`. A file named `disabled`
+  there silences every producer;
+- `timeout_seconds`, `attempts` and `retry_seconds` bound one delivery: the
+  wait per attempt, the number of attempts, and the first pause between them
+  (it doubles). Delivery never delays a step, whatever they are.
+
+The two log files a notifier writes are presentation history like the rest
+of `runs/`: `runs/<run_id>/notifications.jsonl` (one line per event outcome,
+each with the event's key and never the API key) and, outside a run,
+`notifications.jsonl` at the runtime root. A run's `events.jsonl` ends with
+a `notifications_summary` event holding the counts.
+
 A file filled by this release looks like this (the `_defaults_written`
 entries are shortened):
 
 ```json
 {
   "_defaults_written": {"merge.auto": {"generation": 2, "value": true}, "...": "..."},
-  "_table_generation": 4,
+  "_table_generation": 5,
   "follow": {"heartbeat_seconds": 30, "replay_events": 20},
   "forge": {"pr_list_limit": 200},
   "merge": {"auto": true, "poll_seconds": 30, "wait_seconds": 3600},
+  "notifications": {"enabled": true, "url": null, "events": {"kinds": {}, "events": {}}, "...": "..."},
   "routing": {"default": {}, "roles": {}},
   "run": {"max_steps": 20},
   "schema_version": 1,
@@ -338,6 +369,11 @@ filled by 1.7.x, and moves nothing else. A 1.7.x Controller sharing the
 file afterwards warns about the unknown `usage` section, ignores it, and
 its `settings clean` refuses.
 
+1.9.0 is table generation 5: it adds the seven `notifications` rows to a
+file filled by 1.8.x, and moves nothing else. A 1.8.x Controller sharing
+the file afterwards warns about the unknown `notifications` section,
+ignores it, and its `settings clean` refuses.
+
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer
 release's value alone. `_table_generation` records the newest release
@@ -390,3 +426,31 @@ The fill only ever adds an empty `{"default": {}, "roles": {}}`. The
 contents are yours, and no release migrates them. A `--routing-config`
 file keeps its own strict rules, byte for byte: there an unknown role or
 field is still `RoutingConfigError` (exit `20`).
+
+### The notifications section
+
+`notifications.events` has two layers, each a map from a name to
+`{"enabled": ..., "category": ..., "severity": ...}`, every field optional:
+
+```json
+"events": {
+  "kinds": {"state": {"enabled": false}},
+  "events": {"milestone_accepted": {"severity": "HIGH"}, "run_finished": {"enabled": true}}
+}
+```
+
+The kinds are `state`, `info`, `gate` and `blocker`; the event types are
+listed in [`notifications`](commands.md#notifications). A field resolves
+from the built-in default of the kind (`state` INFO/LOW, `info`
+INFO/NORMAL, `gate` ACTION_REQUIRED/HIGH, `blocker` BLOCKED/CRITICAL),
+then the `kinds` entry, then the `events` entry, so an event type's setting
+overrides its kind's. Categories are `ACTION_REQUIRED`, `BLOCKED`,
+`COMPLETED` and `INFO`; severities are `LOW`, `NORMAL`, `HIGH` and
+`CRITICAL`. `usage_released` and `usage_reservation_expired` are off unless
+you turn them on.
+
+- a known field with a value that is not allowed is refused (exit `20`);
+- an unknown kind, event type or field is ignored, with the unknown-key
+  warning above, and so is any field whose name starts with `_`, so the
+  object in the lanes' `~/.config/signalhub/events.json` can be pasted in
+  whole. The Controller does not read that file itself.

@@ -9395,14 +9395,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-signalhub-notifications-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-signalhub-notifications-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 16,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "e0f400ef0135173e5fef111644f6759321bed333",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP4",
+      "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -9419,6 +9419,10 @@
         "CP4": {
           "status": "COMPLETE",
           "start_commit": "c0365bb858a761c854d6e6f1f21ac12a6ca70166"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "5bd3669f03ad98255602b9663b450cb85cc08fb7"
         }
       },
       "current_bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
@@ -9537,8 +9541,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 62,
-      "last_transition": "2026-10-12T04:23:25.611704+00:00",
+      "state_revision": 64,
+      "last_transition": "2026-10-12T04:32:51.799322+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

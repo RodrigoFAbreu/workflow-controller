@@ -43,6 +43,37 @@ The usage budget held the job back before it started, so there is no job to resu
 
 `workflow-controller usage` shows the readings and reservations. See [pausing for usage limits](run.md#pausing-for-usage-limits), [`usage`](guide/commands.md#usage) and [exit codes](exit-codes.md).
 
+## No notifications arrive
+
+Nothing in the lifecycle depends on a notification, so a step that succeeded
+is not undone by one that did not send. To find out why none arrived:
+
+1. Run `workflow-controller notifications`. It names where it looked for the
+   server address and the key and which it used (never the key). "Not
+   configured" means neither was found: set `notifications.url` and
+   `notifications.api_key_file`, or the `SIGNALHUB_URL` and
+   `SIGNALHUB_API_KEY_FILE` variables, in the environment the run starts in.
+   A run started by a script that does not export them finds only the
+   settings file.
+2. Check that the type is on. `notifications.enabled: false`, a file named
+   `disabled` in `~/.config/signalhub/`, or `enabled: false` for the event
+   type (`usage_released` and `usage_reservation_expired` are off by
+   default) sends nothing.
+3. Run `workflow-controller notifications --test`. It exits `0` when the
+   server accepted the test, `1` when it rejected it, `3` when it could not
+   be reached and `2` when nothing was sent.
+4. Read `runs/<run_id>/notifications.jsonl` in the runtime root (outside a
+   run, `notifications.jsonl` there). Each line is one event's outcome and
+   its key: `sent` and `duplicate` arrived; `rejected` (a refused request),
+   `conflict` (the server holds that key for different content) and `failed`
+   (attempts spent) did not; `skipped` is the pause after repeated failures;
+   `dropped` means the queue was full. The run's `events.jsonl` ends with a
+   `notifications_summary`.
+
+A notice for a step that was cut off when the process died is derived again
+by `resume`, for a job that ended in the last 30 minutes. See
+[unattended runs](guide/automation.md#notifications-from-an-unattended-run).
+
 ## The usage record cannot be read
 
 `step` or `run` stops with "the usage record ... is not a version 2 object" or "cannot be read". `usage.json` in the runtime root is either damaged or was written by a newer Controller release than this one. It is never overwritten. To keep working, set `usage.enabled: false` (the budget is then off and the record is not touched), or install the release that wrote it. Deleting the file also works but forgets every lane's reservations and spend. A job whose accounting was pending is settled by repairing or restoring the original record in place, but only before the next `step`, `run` or `resume`: one of those that runs on a fresh record finds the job's reservation unknown and marks its accounting done with no charge (an `usage_accounting_orphan` event), and restoring the record afterwards no longer settles it. Restore the record first. (`usage` alone does not do this.) `step`, `run` and `resume` never lose a job's outcome to it: the accounting is skipped with a warning, the job stays unaccounted, and a release that can read the record settles it later. The `usage` view itself reports the error.

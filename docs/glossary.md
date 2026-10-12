@@ -181,3 +181,14 @@ checkout) or `unidentified`. `workflow-controller --version` prints it. See
 The compatibility axis for job records and for handing over between a running
 Controller and a newer one. Every release so far is generation 1. A version, in
 contrast, names a release.
+
+### Notification
+
+A message the Controller pushes to SignalHub about an event it recorded: a
+finished step, a human gate, a blocker, a merge, a release or a usage pause.
+Each event type has a kind that sets its default category and severity, and
+each can be turned off or re-ranked in the settings file. A notification never
+blocks, fails or delays a step, and carries an `Idempotency-Key` so a repeat
+of the same occurrence is not sent twice. See
+[unattended runs](guide/automation.md#notifications-from-an-unattended-run)
+and [ADR 0012](adr/0012-signalhub-notifications.md).

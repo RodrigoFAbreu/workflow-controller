@@ -121,6 +121,25 @@ workflow-controller run --max-steps 1 .
 
 A run that stops because it used all its steps with work outstanding exits 16; run again to continue.
 
+## Notifications
+
+A run you leave alone can push its events to SignalHub: a finished step, a
+human gate, a blocker, a merge, a release, a usage pause and the end of the
+run. Point the Controller at the server and a key file once, with
+`notifications.url` and `notifications.api_key_file` in the
+[settings file](guide/runtime.md#what-it-holds) (or the `SIGNALHUB_URL` and
+`SIGNALHUB_API_KEY_FILE` variables), and check it:
+
+```bash
+workflow-controller notifications
+workflow-controller notifications --test
+```
+
+Each event type can be turned off or re-ranked
+([the notifications section](guide/runtime.md#the-notifications-section));
+`notifications.enabled: false` stops all of them. Sending never slows or
+fails a step. See [unattended runs](guide/automation.md#notifications-from-an-unattended-run).
+
 ## What you should see
 
 `explain` prints a decision and, at a gate, the instruction for a human. `run` prints one line per step and ends with the reason it stopped and an exit status; [exit codes](exit-codes.md) says what each means. A normal end is exit 10 at a gate, or exit 0 when nothing is pending. On a directory Workflow Manager does not manage, every command that needs one refuses with exit 20 and says there is no `.workflow-manager/installation.json`.

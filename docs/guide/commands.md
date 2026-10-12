@@ -176,6 +176,20 @@ kill switch or `notifications.enabled: false`), or the test event's type
 disabled by `notifications.events`. It takes no repository, opens no run
 record and writes nothing under the runtime directory.
 
+The event types, with the kind each belongs to (which sets its default
+category and severity, see
+[the notifications section](runtime.md#the-notifications-section)):
+
+| kind | event types |
+|---|---|
+| `state` | `step_done`, `run_finished`, `usage_paused`, `usage_resumed`, and, off by default, `usage_released` and `usage_reservation_expired` |
+| `info` | `milestone_started`, `milestone_planned`, `approval_recorded`, `milestone_accepted`, `pr_merged`, `release_published` |
+| `gate` | `user_gate` |
+| `blocker` | `lane_blocked` |
+
+[ADR 0012](../adr/0012-signalhub-notifications.md) says what each one is
+derived from.
+
 ## `usage`
 
 `workflow-controller usage` shows the usage budget and gates workers the

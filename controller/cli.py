@@ -1675,8 +1675,8 @@ def cmd_usage(args: argparse.Namespace) -> int:
     runtime.ensure_runtime_root(runtime_root, ladder_row=row)
     effective = _effective(args)
     values = effective.values
-    if args.check or args.wait:
-        _install_notifier(effective, runtime_root)  # a pause here sends usage_paused
+    if args.check or args.wait or args.release is not None:
+        _install_notifier(effective, runtime_root)  # a pause sends usage_paused; a release, usage_released
     if args.renew is not None:
         return _usage_renew(args, runtime_root, values)
     if args.release is not None:

@@ -9395,7 +9395,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-signalhub-notifications-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-signalhub-notifications-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 16,
       "implementation_revision": 7,
       "functional_review_round": null,
@@ -9517,10 +9517,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "cc430899db3cae2cd6a57dfb9722bc17345baa86a504d4e7764886b1cc40e839",
-        "approved_review_content_id": "f521d137f3f9070b13601d0471467e6fe4d86e8213dceb7fc9128500e1ed92eb",
+        "reviewed_bundle_id": "24c0afe495ba9616ce5543a36d1a7d121fcc9a3de1b7ef25567bd2bb9250ac13",
+        "approved_review_content_id": "a706b67c14f19ae32b729d999d3b7f84ac557e23f98530523da8ab9de86561b8",
         "review_content_manifest": [
           {
             "path": "controller/__init__.py",
@@ -9532,7 +9532,7 @@
             "path": "controller/cli.py",
             "exists": true,
             "mode": "100644",
-            "blob": "7eaf48053fc1994a45634139ea879ce1c315cae6"
+            "blob": "050d19d73becb8c5051e05d899f5de66102833c6"
           },
           {
             "path": "controller/job.py",
@@ -9550,7 +9550,7 @@
             "path": "controller/notify.py",
             "exists": true,
             "mode": "100644",
-            "blob": "b71ff40774dbbe36ff1bf3b608fbb19f3cfc5b4f"
+            "blob": "36bdf076ee690b01813df22f6e674808878c2768"
           },
           {
             "path": "controller/settings.py",
@@ -9658,7 +9658,7 @@
             "path": "tests/test_cli.py",
             "exists": true,
             "mode": "100644",
-            "blob": "810158b499d7aeac68bd71b372b473c2928c597e"
+            "blob": "a4caf2b72c5fbb5553d20b55a9db7e0a54155e0f"
           },
           {
             "path": "tests/test_notifications_wiring.py",
@@ -9703,11 +9703,11 @@
             "blob": "0c91b05befb680beca1260ca6a9be94d7e2a5f57"
           }
         ],
-        "reviewed_content_commit": "de9e47694fca42245b0dbaa39ec94e6817fd82bb",
+        "reviewed_content_commit": "117449a39923bff9e3e9e210de78557ba94255a2",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-12T07:26:10Z",
+        "recorded_at": "2026-10-12T08:06:33Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -9737,24 +9737,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "f521d137f3f9070b13601d0471467e6fe4d86e8213dceb7fc9128500e1ed92eb",
+            "review_content_id": "a706b67c14f19ae32b729d999d3b7f84ac557e23f98530523da8ab9de86561b8",
             "ledger": {
               "local": {
-                "bundle_id": "cc430899db3cae2cd6a57dfb9722bc17345baa86a504d4e7764886b1cc40e839",
+                "bundle_id": "24c0afe495ba9616ce5543a36d1a7d121fcc9a3de1b7ef25567bd2bb9250ac13",
                 "verdict": "APPROVE",
-                "round": 6,
-                "verdict_sha256": "7e9d460e4cbbd853a2d32c25558fce6f787b5810465ecabbc71a2227f3f09563",
-                "ledger_entry_sha256": "a7f22d72c21aad93b8f3277daee5e874afec75c6e7d62fce487fd8ba978e4a32",
+                "round": 7,
+                "verdict_sha256": "1e994e6f493f19f0035db33a1f0504232a046f21b140e9290be1ec6db4fb64f2",
+                "ledger_entry_sha256": "9a75f130e73125762d805bb5e74134f11e57d6489c3d314846f146e730f8c280",
                 "run_ref": "session:local .ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "cc430899db3cae2cd6a57dfb9722bc17345baa86a504d4e7764886b1cc40e839",
+                "bundle_id": "24c0afe495ba9616ce5543a36d1a7d121fcc9a3de1b7ef25567bd2bb9250ac13",
                 "verdict": "APPROVE",
-                "round": 6,
-                "verdict_sha256": "2a51508aed8eeab6c6342dc8a0b53bf3dd2c54f8649b9139ab15e156644f0330",
-                "ledger_entry_sha256": "c4733642524f252e02740469295193faa94483833ee80f65abc2e3e0d010754e",
-                "run_ref": "session:local.ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
+                "round": 7,
+                "verdict_sha256": "1bc6772174bb4d42154fca10a2b27793eb0bd1d20ab36b17963726d774369b55",
+                "ledger_entry_sha256": "31ae0bfd427200b59cad1a92992a230520f6acd80843a2798f2c6103927d86d9",
+                "run_ref": "session:local .ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -9764,7 +9764,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-10-12T07:26:10Z",
+          "evaluated_at": "2026-10-12T08:06:33Z",
           "workflow_release": "2.9.2"
         }
       },
@@ -9792,8 +9792,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 82,
-      "last_transition": "2026-10-12T07:52:35Z",
+      "state_revision": 85,
+      "last_transition": "2026-10-12T08:06:33Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -9831,23 +9831,23 @@
         "d5f658d762e0a420dc0306dfec347e69b406abd13e1d292bbc19474724c64bef"
       ],
       "implementation_review_stages": {
-        "review_content_id": "f521d137f3f9070b13601d0471467e6fe4d86e8213dceb7fc9128500e1ed92eb",
+        "review_content_id": "a706b67c14f19ae32b729d999d3b7f84ac557e23f98530523da8ab9de86561b8",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "cc430899db3cae2cd6a57dfb9722bc17345baa86a504d4e7764886b1cc40e839",
+          "bundle_id": "24c0afe495ba9616ce5543a36d1a7d121fcc9a3de1b7ef25567bd2bb9250ac13",
           "verdict": "APPROVE",
-          "round": 6,
-          "completed_at": "2026-10-12T07:16:18Z",
-          "verdict_sha256": "7e9d460e4cbbd853a2d32c25558fce6f787b5810465ecabbc71a2227f3f09563",
+          "round": 7,
+          "completed_at": "2026-10-12T07:59:38Z",
+          "verdict_sha256": "1e994e6f493f19f0035db33a1f0504232a046f21b140e9290be1ec6db4fb64f2",
           "run_ref": "session:local .ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "cc430899db3cae2cd6a57dfb9722bc17345baa86a504d4e7764886b1cc40e839",
+          "bundle_id": "24c0afe495ba9616ce5543a36d1a7d121fcc9a3de1b7ef25567bd2bb9250ac13",
           "verdict": "APPROVE",
-          "round": 6,
-          "completed_at": "2026-10-12T07:24:54.714904+00:00",
-          "verdict_sha256": "2a51508aed8eeab6c6342dc8a0b53bf3dd2c54f8649b9139ab15e156644f0330",
-          "run_ref": "session:local.ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
+          "round": 7,
+          "completed_at": "2026-10-12T08:05:17Z",
+          "verdict_sha256": "1bc6772174bb4d42154fca10a2b27793eb0bd1d20ab36b17963726d774369b55",
+          "run_ref": "session:local .ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       }

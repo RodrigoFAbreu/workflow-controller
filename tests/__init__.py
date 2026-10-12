@@ -32,3 +32,13 @@ atexit.register(shutil.rmtree, ISOLATED_XDG_CONFIG_HOME, ignore_errors=True)
 ISOLATED_CODEX_HOME = tempfile.mkdtemp(prefix="workflow-controller-tests-codex-")
 os.environ["CODEX_HOME"] = ISOLATED_CODEX_HOME
 atexit.register(shutil.rmtree, ISOLATED_CODEX_HOME, ignore_errors=True)
+
+#: The redirected ``SIGNALHUB_CONFIG_DIR``, empty
+#: (``workflow-controller-signalhub-notifications`` CP1, D7): no test process
+#: can resolve the operator's ``~/.config/signalhub/url``, key files or kill
+#: switch, even inside a worker the lane watchdog started.
+for _name in ("SIGNALHUB_URL", "SIGNALHUB_API_KEY", "SIGNALHUB_API_KEY_FILE"):
+    os.environ.pop(_name, None)
+ISOLATED_SIGNALHUB_CONFIG_DIR = tempfile.mkdtemp(prefix="workflow-controller-tests-signalhub-")
+os.environ["SIGNALHUB_CONFIG_DIR"] = ISOLATED_SIGNALHUB_CONFIG_DIR
+atexit.register(shutil.rmtree, ISOLATED_SIGNALHUB_CONFIG_DIR, ignore_errors=True)

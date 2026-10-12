@@ -1675,8 +1675,11 @@ def cmd_usage(args: argparse.Namespace) -> int:
     runtime.ensure_runtime_root(runtime_root, ladder_row=row)
     effective = _effective(args)
     values = effective.values
-    if args.check or args.wait or args.release is not None:
-        _install_notifier(effective, runtime_root)  # a pause sends usage_paused; a release, usage_released
+    if args.check or args.wait or args.release is not None or args.renew is not None:
+        # a pause sends usage_paused; a release, usage_released; every one of the three lapses expired
+        # reservations (_maintain), which is when usage_reservation_expired is written -- once, by whoever
+        # runs first, and D13 does not recover usage events
+        _install_notifier(effective, runtime_root)
     if args.renew is not None:
         return _usage_renew(args, runtime_root, values)
     if args.release is not None:

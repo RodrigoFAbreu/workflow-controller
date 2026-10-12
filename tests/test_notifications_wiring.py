@@ -904,6 +904,28 @@ class UsageReleaseWiringTest(test_usage_command._UsageCommandCase):
         self.assertEqual(self.shared()["spend"]["run"]["claude"]["r1"]["charged"], 5)
 
 
+class UsageRenewWiringTest(test_usage_command._UsageCommandCase):
+    """``usage --renew`` installs the notifier: it lapses expired reservations, and each enabled
+    ``usage_reservation_expired`` reaches the fake SignalHub once."""
+
+    def test_renew_lapsing_expired_reservations_sends_one_notice_each(self) -> None:
+        hub = FakeSignalHub().start()
+        self.addCleanup(hub.stop)
+        self.reading(10, weekly=1)
+        first = self.reserve_token("--role", "plan", "--model", "m", "--repo", str(self.repo), "--run-id", "r1")
+        second = self.reserve_token("--role", "plan", "--model", "m", "--repo", str(self.repo), "--run-id", "r2")
+        self.settings_path.write_text(json.dumps({
+            "notifications": {"events": {"events": {"usage_reservation_expired": {"enabled": True}}}}}))
+        self.now += 10 * 3600  # past both leases
+        env = {"SIGNALHUB_URL": hub.url, "SIGNALHUB_API_KEY": KEY}
+        with unittest.mock.patch.dict(os.environ, env):
+            code, _out, _err = self.run_cmd("usage", "--renew", first)
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(sorted(r["body"]["metadata"]["event_type"] for r in hub.requests),
+                         ["usage_reservation_expired"] * 2)
+        self.assertIn(second, self.shared()["lapsed"])
+
+
 class BranchWiringTest(test_trunk_preflight.RunWaitTest):
     """The branch-gate, merge, release and refusal events over the fake forge and fake SignalHub (the
     ``RunWaitTest`` fixture: an auto-merge binding with releases)."""

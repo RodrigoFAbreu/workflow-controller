@@ -107,17 +107,72 @@ def validate_record(record: object, flow_id: "str | None" = None) -> list[str]:
     return problems
 
 
+def _index_problems(data: object) -> list[str]:
+    """Problems with ``data`` as the ``index.json`` :func:`cmd_run` writes (the keys, the reporter and the digests)."""
+    if not isinstance(data, dict) or set(data) != {"head", "isolation", "reporter", "order", "exit_status", "records"}:
+        return ["not the index this runner writes"]
+    problems = []
+    if not (isinstance(data["reporter"], str) and data["reporter"].startswith("workflow-controller-scenarios/")):
+        problems.append("reporter")
+    records = data["records"]
+    if not isinstance(records, dict) or not all(
+            isinstance(k, str) and FLOW_ID_RE.match(k) and isinstance(v, str) and re.fullmatch(r"[0-9a-f]{64}", v)
+            for k, v in records.items()):
+        problems.append("records")
+    return problems
+
+
+def _load_json(path: Path) -> object:
+    """The parsed JSON of a regular file that is not a symlink, else ``None``."""
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _generated_content_ok(path: Path, relative: tuple) -> bool:
+    """The file's *content* is what the runner writes there: an index, a record that validates against the protocol's
+    schema under its own name, or a degraded report. A name alone proves nothing (a Python scenario can be called
+    ``review-alias.json``)."""
+    data = _load_json(path)
+    if not isinstance(data, dict):
+        return False
+    if relative[0] == "degraded":
+        keys = ({"evidence", "isolation", "failed_step", "detail", "reports"} if relative[-1] == INDEX_NAME
+                else {"scenario", "passed", "observations", "message", "problems"})
+        return set(data) == keys
+    if relative[0] == INDEX_NAME:
+        return not _index_problems(data)
+    return not validate_record(data, relative[0][:-5])
+
+
 def _is_generated_evidence(checkout: Path, path: str, output: Path) -> bool:
     """An untracked file the runner itself writes under ``output``: ``index.json``, ``<flow_id>.json`` and the
-    ``degraded/`` reports. Nothing else beneath the output directory is exempt: a scenario module, a tracked file or a
-    stray script stays code however the output directory is placed."""
-    full = (checkout / path).resolve()
-    if output not in full.parents:
+    ``degraded/`` reports. The changed path keeps its identity: it is never resolved (a symlink to somewhere else is not
+    the file it points at), no component of it may be a symlink, its directory must be ``output`` itself, and its content
+    must be the runner's own output. Nothing else beneath the output directory is exempt: a scenario module, a tracked
+    file or a stray script stays code however the output directory is placed."""
+    pure = Path(path)
+    if pure.is_absolute() or ".." in pure.parts:
         return False
-    parts = full.relative_to(output).parts
-    if len(parts) == 1:
-        return parts[0] == INDEX_NAME or (parts[0].endswith(".json") and FLOW_ID_RE.match(parts[0][:-5]) is not None)
-    return parts[0] == "degraded" and len(parts) == 2 and (parts[1] == INDEX_NAME or parts[1].endswith(".report.json"))
+    walked = checkout
+    for part in pure.parts:
+        walked = walked / part
+        if walked.is_symlink():
+            return False
+    full = checkout / pure
+    try:
+        relative = full.parent.resolve().relative_to(output).parts + (full.name,)
+    except ValueError:
+        return False
+    if len(relative) == 1:
+        named = relative[0] == INDEX_NAME or (relative[0].endswith(".json") and FLOW_ID_RE.match(relative[0][:-5]) is not None)
+    else:
+        named = (relative[0] == "degraded" and len(relative) == 2
+                 and (relative[1] == INDEX_NAME or relative[1].endswith(".report.json")))
+    return named and _generated_content_ok(full, relative)
 
 
 def dirty_code_paths(checkout: Path, ignore: "Path | None" = None) -> list[str]:
@@ -146,36 +201,35 @@ def dirty_code_paths(checkout: Path, ignore: "Path | None" = None) -> list[str]:
     return paths
 
 
-def _previous_records(output: Path) -> list[Path]:
-    """The files under ``output`` that an earlier run of this runner wrote: ``index.json`` in the shape
-    :func:`cmd_run` writes it, and ``<flow_id>.json`` whose ``flow_id`` is its own name and which carries the record's
-    ``log_digest``. A tracked file, a file that is not valid JSON of that shape and a foreign name are never touched."""
-    if not output.is_dir():
-        return []
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _previous_outputs(output: Path) -> "tuple[Path | None, list[Path]]":
+    """What an earlier run of this runner wrote under ``output``, as that run's own ``index.json`` attests: the index
+    (when it is valid, a regular file and untracked) and each record the index lists whose content still digests to
+    the listed value. Nothing else is owned: a file merely shaped like a record or an index, a record from another run
+    or output directory, a file edited since, a symlink and a tracked file are all foreign."""
+    index = output / INDEX_NAME
+    data = _load_json(index)
+    if _index_problems(data):
+        return None, []
     listed = subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", str(REPO_ROOT), "ls-files", "-z"],
                             capture_output=True, env=kit.sanitised_git_env())
     tracked = {(REPO_ROOT / name).resolve() for name in listed.stdout.decode(errors="replace").split("\0") if name}
+    if index.resolve() in tracked:
+        return None, []
     owned = []
-    for path in sorted(output.glob("*.json")):
-        if not path.is_file() or path.is_symlink() or path.resolve() in tracked:
+    for flow_id, digest in sorted(data["records"].items()):
+        path = output / f"{flow_id}.json"
+        if path.is_symlink() or not path.is_file() or path.resolve() in tracked:
             continue
         try:
-            data = json.loads(path.read_text())
-        except (OSError, ValueError):
+            if _digest(path.read_text()) == digest:
+                owned.append(path)
+        except OSError:
             continue
-        if not isinstance(data, dict):
-            continue
-        if path.name == INDEX_NAME:
-            written = {"head", "isolation", "reporter", "order", "exit_status", "records"} <= set(data)
-        else:
-            written = data.get("flow_id") == path.stem and "log_digest" in data
-        if written:
-            owned.append(path)
-    return owned
-
-
-def _digest(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+    return index, owned
 
 
 def _canonical(record: dict) -> str:
@@ -261,7 +315,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             raise Refused(f"{flow_id}: the record is malformed: {problems}")
     status = 1 if (failed or over) else 0
     output.mkdir(parents=True, exist_ok=True)
-    for stale in _previous_records(output):  # a smaller run must not leave the earlier run's records beside its index
+    previous_index, previous = _previous_outputs(output)
+    ours = set(previous) | ({previous_index} if previous_index else set())
+    foreign = [t for t in [output / INDEX_NAME, *(output / f"{f}.json" for f in records)]
+               if (t.exists() or t.is_symlink()) and t not in ours]
+    if foreign:
+        raise Refused("the output directory holds files this runner did not write, which a run would overwrite: "
+                      + ", ".join(t.name for t in foreign))
+    for stale in previous:  # a smaller run must not leave the earlier run's records beside its index
         stale.unlink()
     texts = {flow_id: _canonical(record) for flow_id, record in records.items()}
     for flow_id, text in texts.items():

@@ -254,8 +254,16 @@ class OutputPlacementTest(CloneCase):
         runner = load_runner(self.clone)
         out = self.clone / "tools" / "evidence-out"
         (out / "degraded").mkdir(parents=True)
-        for name in ("index.json", "selftest-basic.json", "degraded/index.json", "degraded/a.report.json"):
-            (out / name).write_text("{}")
+        outcome = kit.Outcome("selftest-basic", "namespace", {"status": "passed"}, "", "0" * 40, True, [], 0.0)
+        record = runner._canonical(runner.build_record(outcome, "workflow-controller-scenarios/1", "2026-10-12T12:00:00Z"))
+        (out / "selftest-basic.json").write_text(record)
+        (out / "index.json").write_text(runner._canonical(
+            {"head": "0" * 40, "isolation": "namespace", "reporter": "workflow-controller-scenarios/1", "order": [],
+             "exit_status": 0, "records": {"selftest-basic": runner._digest(record)}}))
+        (out / "degraded" / "index.json").write_text(runner._canonical(
+            {"evidence": False, "isolation": "degraded", "failed_step": None, "detail": "", "reports": []}))
+        (out / "degraded" / "a.report.json").write_text(runner._canonical(
+            {"scenario": "a", "passed": True, "observations": [], "message": "", "problems": []}))
         self.assertEqual(runner.dirty_code_paths(self.clone, ignore=out.resolve()), [])
         for name in ("helper.py", "Not A Flow.json", "degraded/helper.py", "nested/x.json"):
             (out / name).parent.mkdir(exist_ok=True)
@@ -265,15 +273,16 @@ class OutputPlacementTest(CloneCase):
                                 ("helper.py", "Not A Flow.json", "degraded/helper.py", "nested/x.json")))
 
     def test_a_smaller_run_leaves_no_stale_record_beside_its_index(self) -> None:
+        self.assertEqual(self.runner("run", "selftest-basic", "selftest-env").returncode, 0)
+        self.assertTrue((self.out / "selftest-env.json").exists())
         self.assertEqual(self.runner("run", "selftest-basic").returncode, 0)
-        (self.out / "stale-flow.json").write_text('{"flow_id": "stale-flow", "log_digest": "0"}')
-        self.assertEqual(self.runner("run", "selftest-basic").returncode, 0)
-        self.assertFalse((self.out / "stale-flow.json").exists())
+        self.assertFalse((self.out / "selftest-env.json").exists())
         self.assertEqual(self.runner("check", "--output", str(self.out)).returncode, 0)
 
     def test_a_run_leaves_foreign_json_in_the_output_directory(self) -> None:
         foreign = {"my-settings.json": '{"a": 1}', "package.json": "{}", "list.json": "[1]", "broken.json": "{",
-                   "other-flow.json": '{"flow_id": "different"}'}
+                   "other-flow.json": '{"flow_id": "different"}',
+                   "my-config.json": json.dumps({"flow_id": "my-config", "log_digest": "0" * 64})}
         for name, text in foreign.items():
             (self.out / name).write_text(text)
         done = self.runner("run", "selftest-basic")
@@ -427,6 +436,141 @@ class CatalogueDeterminismTest(CloneCase):
         self.assertGreaterEqual(len(first), 15)
         self.assertFalse([name for name in first if name.startswith("selftest")])
         self.assertEqual(first, second)
+
+
+
+
+class _GitCase(unittest.TestCase):
+    """A scratch git repository with the code directories, for guard and ownership tests that need no namespace."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="run-scenarios-guard-")).resolve()
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        for name in ("tests/scenarios", "tools", "controller"):
+            (self.root / name).mkdir(parents=True)
+            (self.root / name / ".keep").write_text("")
+        _git(self.root, "init", "-q")
+        _git(self.root, "add", "-A")
+        _git(self.root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "base")
+        self.runner = load_runner(REPO_ROOT)
+
+    def record(self, flow_id: str = "selftest-basic") -> str:
+        outcome = kit.Outcome(flow_id, "namespace", {"status": "passed"}, "", "0" * 40, True, [], 0.0)
+        return self.runner._canonical(self.runner.build_record(outcome, "workflow-controller-scenarios/1",
+                                                               "2026-10-12T12:00:00Z"))
+
+    def dirty(self, output: Path) -> list:
+        return self.runner.dirty_code_paths(self.root, ignore=output.resolve())
+
+
+class SymlinkedEvidenceTest(_GitCase):
+    """A symlink named like an evidence file stays code, however the output directory is placed (round 5, I2)."""
+
+    def alias(self) -> None:
+        (self.root / "tests" / "review-alias.json").write_text("x = 1\n")
+        os.symlink("../review-alias.json", self.root / "tests" / "scenarios" / "review_alias.py")
+
+    def test_the_alias_and_its_target_are_dirty_whatever_the_output_placement(self) -> None:
+        self.alias()
+        links = self.root / "linked"
+        os.symlink(self.root / "tests", links)
+        for output in (self.root / "tests", self.root, self.root / "tests" / "scenarios" / ".." , links):
+            with self.subTest(output=str(output)):
+                found = self.dirty(output)
+                self.assertIn("tests/scenarios/review_alias.py", found)
+                self.assertIn("tests/review-alias.json", found)
+
+    def test_a_symlinked_evidence_name_is_not_exempt(self) -> None:
+        out = self.root / "tools" / "out"
+        out.mkdir()
+        (self.root / "elsewhere.json").write_text(self.record())
+        os.symlink(self.root / "elsewhere.json", out / "selftest-basic.json")
+        self.assertEqual(self.dirty(out), ["tools/out/selftest-basic.json"])
+
+    def test_a_file_under_a_symlinked_directory_is_not_exempt(self) -> None:
+        real = self.root / "tools" / "real"
+        real.mkdir()
+        (real / "selftest-basic.json").write_text(self.record())
+        os.symlink(real, self.root / "tools" / "out")
+        self.assertIn("tools/out", " ".join(self.dirty(self.root / "tools" / "out")))
+
+    def test_code_in_an_evidence_named_file_is_not_exempt_but_a_real_record_is(self) -> None:
+        out = self.root / "tools" / "out"
+        out.mkdir()
+        (out / "selftest-basic.json").write_text("import os\n")
+        self.assertEqual(self.dirty(out), ["tools/out/selftest-basic.json"])
+        (out / "selftest-basic.json").write_text(self.record())
+        self.assertEqual(self.dirty(out), [])
+        (out / "selftest-basic.json").write_text(self.record("other-flow"))  # a record under another name
+        self.assertEqual(self.dirty(out), ["tools/out/selftest-basic.json"])
+
+
+class OutputOwnershipTest(_GitCase):
+    """A run deletes or overwrites only what an earlier run's own index attests (round 5, I3)."""
+
+    def run_with(self, output: Path, ids: list, status: str = "passed") -> int:
+        outcomes = [kit.Outcome(i, "namespace", {"status": status}, "", "0" * 40, True, [], 0.0) for i in ids]
+        err = io.StringIO()
+        with mock.patch.object(self.runner, "dirty_code_paths", return_value=[]), \
+                mock.patch.object(self.runner.kit, "probe_isolation", return_value=kit.Probe(True, None, "")), \
+                mock.patch.object(self.runner, "selected", return_value=ids), \
+                mock.patch.object(self.runner.kit, "run_scenario", side_effect=outcomes), \
+                contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            code = self.runner.main(["run", "--output", str(output)])
+        self.err = err.getvalue()
+        return code
+
+    def test_a_smaller_run_removes_only_what_the_previous_index_lists(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a", "flow-b"]), 0)
+        self.assertEqual(self.run_with(out, ["flow-a"]), 0)
+        self.assertEqual(sorted(p.name for p in out.iterdir()), ["flow-a.json", "index.json"])
+
+    def test_a_file_with_matching_fields_that_the_index_does_not_list_is_preserved(self) -> None:
+        out = self.root / "out"
+        out.mkdir()
+        mine = json.dumps({"flow_id": "my-settings", "log_digest": "0" * 64})
+        (out / "my-settings.json").write_text(mine)
+        self.assertEqual(self.run_with(out, ["flow-a"]), 0)
+        self.assertEqual((out / "my-settings.json").read_text(), mine)
+
+    def test_a_record_from_another_run_is_preserved(self) -> None:
+        other, out = self.root / "other", self.root / "out"
+        self.assertEqual(self.run_with(other, ["flow-x"]), 0)
+        self.assertEqual(self.run_with(out, ["flow-a", "flow-b"]), 0)
+        text = (other / "flow-x.json").read_text()
+        (out / "flow-x.json").write_text(text)  # a valid record the out index does not list
+        self.assertEqual(self.run_with(out, ["flow-a"]), 0)
+        self.assertEqual((out / "flow-x.json").read_text(), text)
+        self.assertFalse((out / "flow-b.json").exists())
+
+    def test_a_listed_record_edited_since_is_preserved(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a", "flow-b"]), 0)
+        (out / "flow-b.json").write_text("{}")
+        self.assertEqual(self.run_with(out, ["flow-a"]), 0)
+        self.assertEqual((out / "flow-b.json").read_text(), "{}")
+
+    def test_a_foreign_file_that_a_run_would_overwrite_is_refused_untouched(self) -> None:
+        out = self.root / "out"
+        out.mkdir()
+        (out / "index.json").write_text('{"mine": true}')
+        (out / "flow-a.json").write_text("{}")
+        self.assertEqual(self.run_with(out, ["flow-a"]), 2)
+        self.assertIn("did not write", self.err)
+        self.assertEqual((out / "index.json").read_text(), '{"mine": true}')
+        self.assertEqual((out / "flow-a.json").read_text(), "{}")
+
+    def test_a_symlink_is_never_followed_or_removed(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a", "flow-b"]), 0)
+        target = self.root / "precious.json"
+        target.write_text("precious")
+        (out / "flow-b.json").unlink()
+        os.symlink(target, out / "flow-b.json")
+        self.assertEqual(self.run_with(out, ["flow-a"]), 0)
+        self.assertTrue((out / "flow-b.json").is_symlink())
+        self.assertEqual(target.read_text(), "precious")
 
 
 if __name__ == "__main__":

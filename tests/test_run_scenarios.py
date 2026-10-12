@@ -261,7 +261,7 @@ class OutputPlacementTest(CloneCase):
             {"head": "0" * 40, "isolation": "namespace", "reporter": "workflow-controller-scenarios/1", "order": [],
              "exit_status": 0, "records": {"selftest-basic": runner._digest(record)}}))
         (out / "degraded" / "index.json").write_text(runner._canonical(
-            {"evidence": False, "isolation": "degraded", "failed_step": None, "detail": "", "reports": []}))
+            {"evidence": False, "isolation": "degraded", "failed_step": None, "detail": "", "reports": {}}))
         (out / "degraded" / "a.report.json").write_text(runner._canonical(
             {"scenario": "a", "passed": True, "observations": [], "message": "", "problems": []}))
         self.assertEqual(runner.dirty_code_paths(self.clone, ignore=out.resolve()), [])
@@ -581,6 +581,59 @@ class OutputOwnershipTest(_GitCase):
         self.assertIn("did not write", self.err)
         self.assertEqual((out / "degraded" / "flow-a.report.json").read_text(), "mine")
         self.assertEqual((out / "degraded" / "index.json").read_text(), '{"mine": true}')
+
+    def _foreign_degraded(self, out: Path, report: "str | None" = None, index: "dict | None" = None) -> None:
+        """Files with exactly the runner's keys that no previous index attests."""
+        (out / "degraded").mkdir(parents=True)
+        shaped = {"scenario": "flow-a", "passed": True, "observations": [], "message": "mine", "problems": []}
+        (out / "degraded" / "flow-a.report.json").write_text(report or self.runner._canonical(shaped))
+        if index is not None:
+            (out / "degraded" / "index.json").write_text(self.runner._canonical(index))
+
+    def test_a_degraded_report_shaped_like_ours_but_in_no_index_is_preserved(self) -> None:
+        out = self.root / "out"
+        self._foreign_degraded(out)
+        before = (out / "degraded" / "flow-a.report.json").read_text()
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 2)
+        self.assertIn("did not write", self.err)
+        self.assertEqual((out / "degraded" / "flow-a.report.json").read_text(), before)
+        self.assertFalse((out / "degraded" / "index.json").exists())
+
+    def test_a_foreign_degraded_index_with_our_keys_but_invalid_values_is_preserved(self) -> None:
+        out = self.root / "out"
+        bad = {"evidence": True, "isolation": "x", "failed_step": 3, "detail": None, "reports": ["flow-a"]}
+        self._foreign_degraded(out, index=bad)
+        before = (out / "degraded" / "index.json").read_text()
+        self.assertEqual(self.run_with(out, ["flow-b"], degraded=True), 2)
+        self.assertEqual((out / "degraded" / "index.json").read_text(), before)
+        self.assertFalse((out / "degraded" / "flow-b.report.json").exists())
+
+    def test_a_degraded_report_edited_since_the_previous_run_is_preserved(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 0)
+        report = out / "degraded" / "flow-a.report.json"
+        edited = json.loads(report.read_text())
+        edited["message"] = "annotated by hand"
+        report.write_text(self.runner._canonical(edited))
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 2)
+        self.assertEqual(json.loads(report.read_text())["message"], "annotated by hand")
+
+    def test_a_degraded_report_copied_from_another_run_is_preserved(self) -> None:
+        first, second = self.root / "first", self.root / "second"
+        self.assertEqual(self.run_with(first, ["flow-a"], status="failed", degraded=True), 1)
+        self.assertEqual(self.run_with(second, ["flow-a", "flow-b"], degraded=True), 0)
+        copied = (first / "degraded" / "flow-a.report.json").read_text()
+        (second / "degraded" / "flow-a.report.json").write_text(copied)
+        self.assertEqual(self.run_with(second, ["flow-a", "flow-b"], degraded=True), 2)
+        self.assertEqual((second / "degraded" / "flow-a.report.json").read_text(), copied)
+
+    def test_a_smaller_degraded_run_removes_only_what_the_previous_index_lists(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a", "flow-b"], degraded=True), 0)
+        (out / "degraded" / "mine.txt").write_text("mine")
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 0)
+        self.assertEqual(sorted(p.name for p in (out / "degraded").iterdir()),
+                         ["flow-a.report.json", "index.json", "mine.txt"])
 
     def test_a_degraded_run_never_follows_a_linked_destination(self) -> None:
         out = self.root / "out"

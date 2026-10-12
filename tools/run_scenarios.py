@@ -123,6 +123,28 @@ def _index_problems(data: object) -> list[str]:
     return problems
 
 
+DEGRADED_REPORT_KEYS = {"scenario", "passed", "observations", "message", "problems"}
+DEGRADED_INDEX_KEYS = {"evidence", "isolation", "failed_step", "detail", "reports"}
+
+
+def _degraded_index_problems(data: object) -> list[str]:
+    """Problems with ``data`` as the ``degraded/index.json`` :func:`_write_degraded` writes (the keys, the constants and
+    a sha256 digest for each report it lists)."""
+    if not isinstance(data, dict) or set(data) != DEGRADED_INDEX_KEYS:
+        return ["not the degraded index this runner writes"]
+    problems = []
+    if data["evidence"] is not False or data["isolation"] != "degraded":
+        problems.append("evidence/isolation")
+    if not (data["failed_step"] is None or isinstance(data["failed_step"], str)) or not isinstance(data["detail"], str):
+        problems.append("failed_step/detail")
+    reports = data["reports"]
+    if not isinstance(reports, dict) or not all(
+            isinstance(k, str) and FLOW_ID_RE.match(k) and isinstance(v, str) and re.fullmatch(r"[0-9a-f]{64}", v)
+            for k, v in reports.items()):
+        problems.append("reports")
+    return problems
+
+
 def _load_json(path: Path) -> object:
     """The parsed JSON of a regular file that is not a symlink, else ``None``."""
     try:
@@ -141,9 +163,9 @@ def _generated_content_ok(path: Path, relative: tuple) -> bool:
     if not isinstance(data, dict):
         return False
     if relative[0] == "degraded":
-        keys = ({"evidence", "isolation", "failed_step", "detail", "reports"} if relative[-1] == INDEX_NAME
-                else {"scenario", "passed", "observations", "message", "problems"})
-        return set(data) == keys
+        if relative[-1] == INDEX_NAME:
+            return not _degraded_index_problems(data)
+        return set(data) == DEGRADED_REPORT_KEYS
     if relative[0] == INDEX_NAME:
         return not _index_problems(data)
     return not validate_record(data, relative[0][:-5])
@@ -253,23 +275,43 @@ def _tracked_paths() -> "set[Path]":
     return {(REPO_ROOT / name).resolve() for name in listed.stdout.decode(errors="replace").split("\0") if name}
 
 
+def _previous_degraded(target: Path) -> "tuple[Path | None, list[Path]]":
+    """What an earlier diagnostic run wrote under ``target`` (``output/degraded``), as that run's own index attests: the
+    index (when it is valid, a regular file, unlinked and untracked) and each report it lists whose content still
+    digests to the listed value. A file merely shaped like a report or an index, a report the index does not list, a
+    report edited since, a symlink, a hard-linked file and a tracked file are all foreign."""
+    index = target / INDEX_NAME
+    data = _load_json(index)
+    if _degraded_index_problems(data):
+        return None, []
+    tracked = _tracked_paths()
+    if index.resolve() in tracked or index.stat().st_nlink > 1:
+        return None, []
+    owned = []
+    for flow_id, digest in sorted(data["reports"].items()):
+        path = target / f"{flow_id}.report.json"
+        if path.is_symlink() or not path.is_file() or path.stat().st_nlink > 1 or path.resolve() in tracked:
+            continue
+        try:
+            if _digest(path.read_text()) == digest:
+                owned.append(path)
+        except OSError:
+            continue
+    return index, owned
+
+
 def _unowned_degraded(output: Path, flow_ids: list) -> list[str]:
-    """What a diagnostic run would overwrite that it did not write: a ``degraded/`` that is not a plain directory,
-    and a destination that is a symlink, a hard-linked or tracked file, not a regular file, or not shaped like the
-    runner's own degraded report or index. Absent destinations are free."""
+    """What a diagnostic run would overwrite that it did not write: a ``degraded/`` that is not a plain directory, and
+    a destination the previous diagnostic index does not attest (:func:`_previous_degraded`). Absent destinations are
+    free."""
     target = output / "degraded"
     if target.is_symlink() or (target.exists() and not target.is_dir()):
         return ["degraded/"]
-    tracked = _tracked_paths()
-    found = []
-    for name in [*(f"{f}.report.json" for f in flow_ids), INDEX_NAME]:
-        path = target / name
-        if not (path.exists() or path.is_symlink()):
-            continue
-        if (path.is_symlink() or not path.is_file() or path.stat().st_nlink > 1 or path.resolve() in tracked
-                or not _generated_content_ok(path, ("degraded", name))):
-            found.append(f"degraded/{name}")
-    return found
+    previous_index, previous = _previous_degraded(target)
+    ours = set(previous) | ({previous_index} if previous_index else set())
+    return [f"degraded/{path.name}" for path in
+            [*(target / f"{f}.report.json" for f in flow_ids), target / INDEX_NAME]
+            if (path.exists() or path.is_symlink()) and path not in ours]
 
 
 def _canonical(record: dict) -> str:
@@ -388,14 +430,19 @@ def _write_degraded(output: Path, outcomes: list, probe: "kit.Probe") -> None:
         raise Refused("the output directory holds files this runner did not write, which a diagnostic run would "
                       "overwrite: " + ", ".join(foreign))
     target.mkdir(exist_ok=True)
+    _, previous = _previous_degraded(target)
+    for stale in previous:  # a smaller run must not leave the earlier run's reports beside its index
+        stale.unlink()
+    texts = {}
     for outcome in outcomes:
         report = {"scenario": outcome.flow_id, "passed": outcome.passed, "observations":
                   outcome.result.get("observations", []), "message": outcome.result.get("message", ""),
                   "problems": outcome.problems}
-        _publish(target / f"{outcome.flow_id}.report.json", _canonical(report))
+        texts[outcome.flow_id] = _canonical(report)
+        _publish(target / f"{outcome.flow_id}.report.json", texts[outcome.flow_id])
     _publish(target / INDEX_NAME, _canonical({
         "evidence": False, "isolation": "degraded", "failed_step": probe.step, "detail": probe.detail,
-        "reports": [o.flow_id for o in outcomes]}))
+        "reports": {flow_id: _digest(text) for flow_id, text in texts.items()}}))
 
 
 def cmd_check(args: argparse.Namespace) -> int:

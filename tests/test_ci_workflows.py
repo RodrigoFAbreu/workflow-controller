@@ -92,6 +92,15 @@ def _normalise(path: str) -> str:
     return path.rstrip("/")
 
 
+def _managed_suites(text: str) -> list[str]:
+    """Suites of the managed workflow: ``run: python3 <file>`` lines (up to
+    Workflow 2.9.x) or one ``suites="a.py b.py"`` assignment (2.10.0)."""
+    runs = re.findall(r"(?m)^\s*run: python3 (\S+)\s*$", text)
+    if runs:
+        return runs
+    return [s for m in re.findall(r'(?m)^\s*suites="([^"\n]*)"\s*$', text) for s in m.split()]
+
+
 class CommittedFilesTest(unittest.TestCase):
     def test_check_passes_on_the_committed_files(self) -> None:
         self.assertEqual(ci.check(), [])
@@ -320,8 +329,7 @@ class CoverageTest(unittest.TestCase):
                             for test_id in package_ids))
 
     def test_conformance_family_equals_the_managed_workflow(self) -> None:
-        managed = re.findall(r"(?m)^\s*run: python3 (\S+)\s*$",
-                             CONFORMANCE_YML.read_text(encoding="utf-8"))
+        managed = _managed_suites(CONFORMANCE_YML.read_text(encoding="utf-8"))
         self.assertTrue(managed)
         conformance = [test_id for test_id in self.partition[shards.SHARDS]
                        if test_id.startswith(shards.CONFORMANCE_PREFIX)]

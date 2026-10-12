@@ -269,8 +269,11 @@ def environment(kit) -> None:
     kit.observe("bin", sorted(os.listdir(kit.bin_dir)))
     kit.observe("hooks-path", kit.git("config", "--get", "core.hooksPath", cwd=clone).strip())
     kit.observe("head-lookup", bool(kit.git("rev-parse", "HEAD", cwd=clone).strip()))
-    kit.observe("which-claude", subprocess.run(["sh", "-c", "command -v claude gh workflow-manager curl"],
-                                               capture_output=True, text=True).stdout.split())
+    # One name per `command -v`: POSIX defines a single operand, and dash (CI's /bin/sh)
+    # describes only the first of several.
+    kit.observe("which-claude", subprocess.run(
+        ["sh", "-c", 'for n in claude gh workflow-manager curl; do command -v "$n"; done'],
+        capture_output=True, text=True).stdout.split())
 
 
 @scenario("selftest-unnormalised", selftest=True)

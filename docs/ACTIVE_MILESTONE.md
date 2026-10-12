@@ -77,6 +77,13 @@ atoms) passed, but shards 1 and 3 failed. Shard 1's cause is reproduced in a sha
 depth-1 checkout lacks. The runner tests' clone now measures from the checkout's own `HEAD` when that base is missing.
 Shard 3 passes in the same reproduction; its CI log is needed.
 
+CI run 38286662623 for `fd3c3fe`: the shallow-checkout failure is gone and the scenario atoms run, but one test
+failed: `SandboxEnforcementTest`'s `selftest-env` observed only `claude` resolving. The scenario asked
+`sh -c "command -v claude gh workflow-manager curl"`; on the runner `/bin/sh` is dash, whose `command -v`
+describes only its first operand (POSIX defines one), while here `/bin/sh` is bash, which describes every name.
+The scenario now runs one `command -v` per name. No other multi-operand `command -v` or bash-only `sh` usage is in
+the scenario kit or its tests.
+
 The sections below describe the previous milestone and stay until the milestone is accepted.
 
 ## Status

@@ -341,9 +341,9 @@ ALLOWED_RUNTIME_ADDITIONS = {"identity.json"}
 
 @scenario("scenario-read-only-commands-change-nothing", covers=("C1", "C9"))
 def read_only_commands_change_nothing(kit) -> None:
-    """``status``, ``explain``, ``inspect`` and ``follow`` at every phase of scenario 1 leave the target's working
-    tree and refs, the origin's refs, the fake forge and every job and run record unchanged, and add to the runtime
-    root at most ``identity.json``."""
+    """``status``, ``explain``, ``inspect`` and ``follow`` at every phase of scenario 1 up to the merge gate (not the
+    human merge, close-out or next trunk start) leave the target's working tree and refs, the origin's refs, the fake
+    forge and every job and run record unchanged, and add to the runtime root at most ``identity.json``."""
     from controller import cli
 
     commands = [("status", False), ("explain", False), ("inspect", False), ("follow", False), ("status", True)]

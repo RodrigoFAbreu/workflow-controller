@@ -21,7 +21,7 @@ importlib.import_module("tests.scenarios.catalogue")
 
 #: flow id -> the mutations that must make it fail.
 MUTATIONS: dict[str, tuple[str, ...]] = {
-    "scenario-full-lifecycle-to-merge": ("skip-trailer",),
+    "scenario-full-lifecycle-to-merge": ("skip-trailer", "remote-outside"),
     "scenario-human-gates-stop-and-resume": ("gate-launches-worker",),
     "scenario-worker-failure-fails-closed": ("advancing-worker",),
     "scenario-trunk-drift": ("no-drift",),
@@ -46,6 +46,10 @@ def all_mutations() -> dict[str, tuple[str, ...]]:
     return {**MUTATIONS, **MUTATIONS_CP4}
 
 
+#: mutation -> text its failure message must carry, where the claim is one the mutation is aimed at by name.
+EXPECTED = {"remote-outside": "resolves outside the scratch tree"}
+
+
 def class_name(flow_id: str, mutation: str) -> str:
     return "Mutation_" + re.sub(r"[^0-9A-Za-z]+", "_", f"{flow_id}_{mutation}")
 
@@ -62,6 +66,8 @@ def mutation_class(flow_id: str, mutation: str) -> type:
         message = outcome.result.get("message", "")
         self.assertRegex(message, r"^(ScenarioFailure|AssertionError)", f"{mutation} crashed instead of failing: {message}")
         self.assertNotIn("no scenario is registered", message)
+        if mutation in EXPECTED:
+            self.assertIn(EXPECTED[mutation], message)
     return type(class_name(flow_id, mutation), (unittest.TestCase,),
                 {"test_mutation_fails_the_scenario": test_mutation_fails_the_scenario, "__module__": __name__,
                  "__doc__": f"{flow_id} fails under the {mutation} mutation."})

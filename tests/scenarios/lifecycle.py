@@ -100,6 +100,17 @@ def seeded_class():
     return ScenarioSeeded
 
 
+def assert_case_in_scratch(kit, case) -> None:
+    """D3: every repository the case built, and every remote of it, resolves inside the scratch tree."""
+    for holder in (case, getattr(case, "lc", None)):
+        root, origin = getattr(holder, "root", None), getattr(holder, "origin", None)
+        if isinstance(root, Path):
+            kit.assert_inside_scratch(root)
+            kit.assert_remote_in_scratch(root)
+        if isinstance(origin, Path):
+            kit.assert_inside_scratch(origin)
+
+
 @contextlib.contextmanager
 def opened(kit, cls):
     """An instance of the test-case class ``cls`` set up inside the scenario, torn down afterwards."""
@@ -110,7 +121,11 @@ def opened(kit, cls):
         case.mutation = mutation(kit)
         try:
             case.setUp()
+            if mutation(kit) == "remote-outside":  # the repository now pushes to the real checkout: the guard must fail
+                kit.git("remote", "set-url", "origin", str(kit.checkout), cwd=case.root)
+            assert_case_in_scratch(kit, case)
             yield case
+            assert_case_in_scratch(kit, case)
         finally:
             case.doCleanups()
             cls.tearDownClass()

@@ -87,6 +87,29 @@ Recognised environment variables (all optional):
     Only with ``FAKE_CLAUDE_DESCENDANT``: the descendant writes
     ``{"pid"}`` here as JSON when it starts, and rewrites it as
     ``{"pid", "exited_at"}`` (``time.time()``) just before it exits.
+``FAKE_CLAUDE_HANG_SECONDS``
+    With ``FAKE_CLAUDE_HANG``: how long the fake hangs before it exits
+    (default ``3600``). A test that disables the orphan watchdog sets it so
+    the fake still has a lifetime of its own when the test is killed.
+``FAKE_CLAUDE_ORPHAN_SECONDS``
+    How long an *orphaned* fake lives (default ``300``; ``0`` or a negative
+    value disables the watchdog). ``main()`` records its parent's pid and
+    polls it every 0.5 s with an interval timer (no thread: a thread would
+    make ``os.fork()`` in the ``FAKE_CLAUDE_DESCENDANT`` modes warn on
+    Python 3.12+). Once the parent differs (it died and the fake was
+    re-parented) the fake counts this many seconds down and then ends its
+    process group with ``SIGKILL`` when it leads one, otherwise only
+    itself. A killed test run therefore cannot leave a fake behind that
+    keeps a real Controller's job draining (the stdin anchor holds the
+    pipe the fake waits on, and the anchor waits for the fake).
+``FAKE_CLAUDE_ORPHAN_READY_FILE``
+    If set, the fake writes its pid here (temporary name, then renamed)
+    once the watchdog is armed. A test that orphans a fake on purpose
+    waits for it first. Test plumbing, absent from every production path.
+``FAKE_CLAUDE_READY_HOLD_FILE``
+    If set, the fake waits (at most the orphan lifetime) for this file to
+    exist before it writes the ready file -- so a test can order a helper's
+    wait against the fake's readiness by a handshake, not a delay.
 ``FAKE_CLAUDE_STDERR``
     The exact stderr to write. Defaults to empty.
 
@@ -215,7 +238,10 @@ mode (the lifecycle lock's included).
       ``orphan_gate`` (``setsid`` only), a FIFO path, holds the descendant
       in the worker's group, blocked opening the FIFO, until a writer opens
       it, and only then execs ``setsid`` in place, so a test can see it
-      owned by group first (adaptive-test-sharding CP5B);
+      owned by group first (adaptive-test-sharding CP5B); the wait ends
+      after ``FAKE_CLAUDE_ORPHAN_SECONDS`` (``timeout --foreground``) and the
+      descendant then continues into its own finite life; a ``daemon``
+      without ``orphan_seconds`` lives ``DAEMON_LIFETIME_SECONDS`` (600);
     - ``{"step": "orphan_burst", "count", "spacing", "lifetime", "detach",
       "marks_file", "gate"}``: one Bash call whose command double-forks ``count``
       times, ``spacing`` seconds apart; each intermediate exits at once and
@@ -225,7 +251,8 @@ mode (the lifecycle lock's included).
       once the last grandchild has exited. With ``detach`` the burst runs
       instead in a ``setsid`` descendant that waits for this fake to exit
       first, so it happens while the supervisor drains. With ``gate`` (a
-      path) the burst starts only once that file exists. ``marks_file``
+      path) the burst starts only once that file exists, and a gate that
+      never appears makes it exit after ``FAKE_CLAUDE_ORPHAN_SECONDS``. ``marks_file``
       receives ``{"started_at", "ended_at"}`` (``time.time()``) of the
       burst. The same burst is ``fake_claude.py --orphan-burst <count>
       <spacing> <lifetime> [--marks <file>] [--gate <file>]``, for a
@@ -334,6 +361,10 @@ def _append_diagnostics_log() -> None:
 
 #: The session id every default event carries.
 FAKE_SESSION_ID = "fake-session-id"
+# A leftover this fake starts in a new session, or as a separate process the
+# fake's group kill may not reach, lives at most this long (D10, D12).
+DAEMON_LIFETIME_SECONDS = 600
+SUBPROCESS_SLEEP_SECONDS = 600
 
 #: The real CLI's refusal of ``stream-json`` in print mode without
 #: ``--verbose`` (``claude`` 2.1.281).
@@ -981,7 +1012,7 @@ class StreamingSession:
         if orphan == "none":
             return command
         argv0 = step.get("argv0") or ("fake-claude-daemon" if orphan == "daemon" else "fake-claude-orphan")
-        lifetime = step.get("orphan_seconds", 3600 if orphan == "daemon" else 60)
+        lifetime = step.get("orphan_seconds", DAEMON_LIFETIME_SECONDS if orphan == "daemon" else 60)
         if step.get("orphan_write_file"):
             # The orphan writes its end time (``time.time()``) when it exits.
             inner = shlex.quote(f"sleep {lifetime}; date +%s.%N > {shlex.quote(step['orphan_write_file'])}")
@@ -995,9 +1026,17 @@ class StreamingSession:
         if gate and orphan != "setsid":
             raise ValueError("orphan_gate needs the setsid orphan mode")
         if gate:
-            # ``read`` is a builtin, and ``exec`` keeps the pid: the
-            # descendant is the same process before and after its setsid.
-            spawn = (f"({{ read _ < {shlex.quote(gate)}; exec setsid bash -c {inner}; }}"
+            # ``exec`` keeps the pid: the descendant is the same process
+            # before and after its setsid. The wait for the gate is bounded
+            # by the orphan lifetime; ``--foreground`` keeps the waiter in
+            # this group (without it ``timeout`` moves it to a new one that
+            # the fake's group kill cannot reach). A gate that never opens
+            # lets the descendant continue into its own finite life.
+            wait = f"read _ < {shlex.quote(gate)}"
+            bound = _orphan_seconds()
+            if bound > 0:
+                wait = f"timeout --foreground {bound:g} bash -c {shlex.quote(wait)}"
+            spawn = (f"({{ {wait}; exec setsid bash -c {inner}; }}"
                      f" </dev/null >/dev/null 2>&1 &{record})")
         elif orphan == "setsid":
             spawn = f"(setsid bash -c {inner} </dev/null >/dev/null 2>&1 &{record})"
@@ -1063,7 +1102,7 @@ class StreamingSession:
         tool_use_id = self.tool_use("Monitor", {"command": "fake monitor", "description": step.get("id", "monitor")})
         ticks, interval = int(step.get("ticks", 1)), float(step.get("interval", 0.1))
         timeout = step.get("timeout")
-        lifetime = 3600 if timeout is not None else ticks * interval + 1
+        lifetime = max(SUBPROCESS_SLEEP_SECONDS, float(timeout) + 1) if timeout is not None else ticks * interval + 1
         proc = subprocess.Popen(["sleep", str(lifetime)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL, close_fds=True)
         task = _Task(step.get("id") or self._id("bmon"), tool_use_id, "monitor", step.get("id", "monitor"),
@@ -1294,11 +1333,16 @@ def orphan_burst(count: int, spacing: float, lifetime: float, marks_file: str | 
     seconds; returns once every grandchild has exited (each holds a pipe's
     write end, so the read sees end of file only then). With
     ``after_parent`` it first waits until that parent has exited, and with
-    ``gate`` until that file exists."""
+    ``gate`` until that file exists, giving up (and producing nothing) after
+    ``FAKE_CLAUDE_ORPHAN_SECONDS`` so an absent gate cannot hold it for ever."""
     if after_parent is not None:
         while os.getppid() == after_parent:
             time.sleep(0.01)
+    bound = _orphan_seconds()
+    gate_deadline = time.monotonic() + bound
     while gate and not os.path.exists(gate):
+        if bound > 0 and time.monotonic() >= gate_deadline:
+            return
         time.sleep(0.01)
     read_end, write_end = os.pipe()
     started_at = time.time()
@@ -1322,6 +1366,61 @@ def orphan_burst(count: int, spacing: float, lifetime: float, marks_file: str | 
             json.dump({"started_at": started_at, "ended_at": time.time()}, fh)
 
 
+ORPHAN_SECONDS_DEFAULT = 300.0
+HANG_SECONDS_DEFAULT = 3600.0
+
+
+def _hang_seconds() -> float:
+    try:
+        return float(os.environ.get("FAKE_CLAUDE_HANG_SECONDS", HANG_SECONDS_DEFAULT))
+    except ValueError:
+        return HANG_SECONDS_DEFAULT
+_ORPHAN_POLL_SECONDS = 0.5
+
+
+def _orphan_seconds() -> float:
+    try:
+        return float(os.environ.get("FAKE_CLAUDE_ORPHAN_SECONDS", ORPHAN_SECONDS_DEFAULT))
+    except ValueError:
+        return ORPHAN_SECONDS_DEFAULT
+
+
+def _start_orphan_watchdog() -> None:
+    """End this fake, and its process group when it leads one, a bounded
+    time after its original parent has died (module docstring). The
+    readiness file is written whether or not the watchdog is armed."""
+    seconds = _orphan_seconds()
+    if seconds > 0:
+        original_parent = os.getppid()
+        orphaned_at: list[float] = []
+
+        def check(_signum, _frame) -> None:
+            if os.getppid() == original_parent:
+                return
+            now = time.monotonic()
+            if not orphaned_at:
+                orphaned_at.append(now)
+            if now - orphaned_at[0] < seconds:
+                return
+            if os.getpgrp() == os.getpid():
+                os.killpg(os.getpgrp(), signal.SIGKILL)
+            os.kill(os.getpid(), signal.SIGKILL)
+
+        signal.signal(signal.SIGALRM, check)
+        signal.setitimer(signal.ITIMER_REAL, _ORPHAN_POLL_SECONDS, _ORPHAN_POLL_SECONDS)
+    hold = os.environ.get("FAKE_CLAUDE_READY_HOLD_FILE")
+    if hold:
+        deadline = time.monotonic() + (seconds if seconds > 0 else ORPHAN_SECONDS_DEFAULT)
+        while not os.path.exists(hold) and time.monotonic() < deadline:
+            time.sleep(0.01)
+    ready = os.environ.get("FAKE_CLAUDE_ORPHAN_READY_FILE")
+    if ready:
+        tmp = f"{ready}.{os.getpid()}.tmp"
+        with open(tmp, "w") as fh:
+            fh.write(str(os.getpid()))
+        os.replace(tmp, ready)
+
+
 def main() -> None:
     if sys.argv[1:2] == ["--orphan-burst"]:
         count, spacing, lifetime, *rest = sys.argv[2:]
@@ -1330,6 +1429,7 @@ def main() -> None:
         orphan_burst(int(count), float(spacing), float(lifetime), options.get("--marks"), options.get("--gate"),
                      int(after_parent) if after_parent else None)
         return
+    _start_orphan_watchdog()
     _refuse_stream_json_without_verbose()
     _count_invocation()
     if _streaming():
@@ -1353,10 +1453,11 @@ def main() -> None:
     if os.environ.get("FAKE_CLAUDE_HANG"):
         child_pid_file = os.environ.get("FAKE_CLAUDE_HANG_CHILD_PID_FILE")
         if child_pid_file:
-            child = subprocess.Popen(["sleep", "3600"])
+            child = subprocess.Popen(["sleep", str(SUBPROCESS_SLEEP_SECONDS)])
             with open(child_pid_file, "w") as fh:
                 fh.write(str(child.pid))
-        time.sleep(3600)
+        time.sleep(_hang_seconds())
+        sys.exit(0)
 
     if _streaming() and (_SCRIPTED_TURNS is not None or os.environ.get("FAKE_CLAUDE_TURNS") is not None):
         turns = _SCRIPTED_TURNS if _SCRIPTED_TURNS is not None else json.loads(os.environ["FAKE_CLAUDE_TURNS"])

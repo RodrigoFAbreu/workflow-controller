@@ -24,8 +24,12 @@ orchestration` CP5's lifecycle-lock and worker-liveness tests.
 
 from __future__ import annotations
 
+import ast
+import collections
 import json
+import math
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -37,6 +41,310 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = REPO_ROOT / "build"
+
+#: The most a process a test starts may live when a killed test could leave
+#: it behind in a new session or group (leftover-lifetime plan D12). A new
+#: long-lived helper takes this instead of re-introducing a 3,600 s sleep.
+LEFTOVER_LIFETIME_SECONDS = 600
+
+
+def shell_release_wait(release: "str | os.PathLike", *, seconds: float = LEFTOVER_LIFETIME_SECONDS,
+                       poll: float = 0.05) -> str:
+    """A bash fragment that waits for ``release`` to exist for at most
+    ``seconds`` (``$SECONDS``, monotonic, counted from the loop's start) and
+    otherwise exits non-zero, so the commands after it never run and a
+    timeout cannot look like a release. The loop ends with no help from the
+    test that was meant to open it (plan D13)."""
+    import shlex
+    end = math.ceil(seconds)
+    return (f"end=$((SECONDS+{end})); while [ ! -e {shlex.quote(str(release))} ]; do "
+            f"[ $SECONDS -lt $end ] || exit 1; sleep {poll:g}; done")
+
+
+def python_release_wait(release_expr: str, *, seconds: float = LEFTOVER_LIFETIME_SECONDS,
+                        poll: float = 0.01) -> str:
+    """Python source (for a ``-c`` script) that waits for the path
+    ``release_expr`` names, for at most ``seconds`` from the loop's start
+    (``time.monotonic()``), then carries on (plan D13)."""
+    return (f"_end = time.monotonic() + {seconds!r}\n"
+            f"while not os.path.exists({release_expr}) and time.monotonic() < _end: time.sleep({poll!r})\n")
+
+
+#: A prefix for the ``-c`` script of a child Controller that cannot re-exec
+#: (it pins its identity before ``cli.main``, or never imports ``cli``): once
+#: its parent differs from the one it started under, the test that started it
+#: is dead and it exits (leftover-lifetime plan D11). ``SIGALRM`` is used by
+#: no Controller code, a handler that returns lets blocking calls retry
+#: (PEP 475), and while the parent lives it does nothing. The constant ends
+#: with a newline and is joined by plain concatenation, never by ``;``.
+PARENT_GUARD = (
+    "import os as _guard_os, signal as _guard_signal\n"
+    "_GUARD_PARENT = _guard_os.getppid()\n"
+    "def _guard_check(*_ignored):\n"
+    "    if _guard_os.getppid() != _GUARD_PARENT:\n"
+    "        _guard_os._exit(0)\n"
+    "_guard_signal.signal(_guard_signal.SIGALRM, _guard_check)\n"
+    "_guard_signal.setitimer(_guard_signal.ITIMER_REAL, 1, 1)\n"
+)
+
+
+def bounded_controller_argv(argv, seconds: float = LEFTOVER_LIFETIME_SECONDS) -> list[str]:
+    """``argv`` behind GNU ``timeout -s KILL <seconds>``: a separate process
+    that keeps counting down after the test that started the child has been
+    killed, and that survives the child's own ``execve`` (the snapshot
+    re-exec keeps the pid). It signals only its child and the group it makes
+    for it, never the test's (plan D14)."""
+    return ["timeout", "-s", "KILL", f"{seconds:g}", *[str(part) for part in argv]]
+
+
+def kill_bounded(proc: subprocess.Popen, sig: int = signal.SIGKILL) -> None:
+    """Signal a ``popen_bounded`` child's group (the ``timeout`` wrapper and
+    the child), tolerating one that is already gone. ``SIGKILL`` cannot be
+    forwarded by the wrapper, so ``proc.kill()`` alone would orphan the child
+    and remove its one deadline."""
+    try:
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+class BoundedController(subprocess.Popen):
+    """A ``Popen`` whose handle is the ``timeout`` wrapper of
+    :func:`bounded_controller_argv`: ``kill()`` and ``terminate()`` go through
+    the group so the child ends with the wrapper; ``send_signal(SIGINT)``
+    stays a plain signal to the wrapper, which forwards it."""
+
+    def kill(self) -> None:
+        if self.returncode is None:
+            kill_bounded(self, signal.SIGKILL)
+
+    def terminate(self) -> None:
+        if self.returncode is None:
+            kill_bounded(self, signal.SIGTERM)
+
+
+def popen_bounded(argv, seconds: float = LEFTOVER_LIFETIME_SECONDS, **popen_kwargs) -> BoundedController:
+    """Start ``argv`` under an independent deadline (plan D14)."""
+    return BoundedController(bounded_controller_argv(argv, seconds), **popen_kwargs)
+
+
+# ---------------------------------------------------------------------------
+# The enumerated inventory of survivor shapes (leftover-lifetime plan D13).
+# ---------------------------------------------------------------------------
+
+_WAITED_STARTS = frozenset({"run", "call", "check_call", "check_output"})
+_HELPER_STARTS = frozenset({"spawn_sleeper", "popen_bounded", "run_controller_module"})
+_CONTROLLER_MARKERS = ("controller", "_child_", "console_script", "str(script)")
+_LOOP_TEXT = re.compile(r"\[ ! -e|while not os\.path\.exists|while True")
+_BOUND_TEXT = re.compile(r"SECONDS|monotonic|deadline")
+_SLEEP_TEXT = re.compile(r"sleep\W{1,3}(\d+)")
+
+
+def _call_parts(node: ast.Call) -> tuple[str | None, str | None]:
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        owner = func.value
+        return (owner.id if isinstance(owner, ast.Name) else owner.attr if isinstance(owner, ast.Attribute)
+                else None), func.attr
+    if isinstance(func, ast.Name):
+        return None, func.id
+    return None, None
+
+
+def _start_form(node: ast.Call) -> str | None:
+    """The inventory form of a call that starts a process, whatever its
+    argv, or ``None`` for a call that starts none or cannot outlive a test
+    (a ``subprocess.run`` of ``git``, or with a ``timeout=`` that is not a
+    Controller: a ``timeout=`` stops being enforced when the test is killed,
+    so it never bounds a Controller child, D12/D13)."""
+    owner, name = _call_parts(node)
+    if name is None:
+        return None
+    if name in _HELPER_STARTS:
+        form = "helper:" + name
+    elif owner == "subprocess" and name in _WAITED_STARTS:
+        first = node.args[0] if node.args else None
+        if any(kw.arg == "timeout" for kw in node.keywords) \
+                and not any(marker in ast.unparse(node).lower() for marker in _CONTROLLER_MARKERS):
+            return None
+        if isinstance(first, (ast.List, ast.Tuple)) and first.elts and isinstance(first.elts[0], ast.Constant) \
+                and first.elts[0].value == "git":
+            return None
+        form = "run"
+    elif name == "Popen" and owner in (None, "subprocess"):
+        form = "Popen"
+    elif owner == "os" and (name in ("fork", "forkpty", "system", "popen") or name.startswith(("exec", "spawn", "posix_spawn"))):
+        form = "other"
+    elif owner == "multiprocessing" and name == "Process":
+        form = "other"
+    else:
+        return None
+    if form in ("Popen", "run") and any(marker in ast.unparse(node).lower() for marker in _CONTROLLER_MARKERS):
+        form += ":controller"
+    return form
+
+
+def scan_leftover_constructs(sources: "dict[str, str]") -> "dict[tuple[str, str], int]":
+    """Count, per ``(file, kind)``, every construct that starts or holds a
+    process beyond a test: ``start:<form>`` for each process start (the argv
+    is never a filter), ``wait`` for a wait loop with no deadline, and
+    ``sleep`` for a ``sleep`` literal above ``LEFTOVER_LIFETIME_SECONDS``."""
+    counts: collections.Counter = collections.Counter()
+    for name, source in sources.items():
+        tree = ast.parse(source)
+        inside_f = {id(part) for node in ast.walk(tree) if isinstance(node, ast.JoinedStr)
+                    for part in ast.walk(node) if part is not node}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                form = _start_form(node)
+                if form is not None:
+                    counts[(name, "start:" + form)] += 1
+                if _call_parts(node)[1] == "sleep" and node.args and isinstance(node.args[0], ast.Constant) \
+                        and isinstance(node.args[0].value, (int, float)) \
+                        and node.args[0].value > LEFTOVER_LIFETIME_SECONDS:
+                    counts[(name, "sleep")] += 1
+            elif isinstance(node, ast.While):
+                text = ast.unparse(node.test)
+                if ("exists" in text or "is_file" in text) and not _BOUND_TEXT.search(text):
+                    counts[(name, "wait")] += 1
+            elif (isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in inside_f) \
+                    or isinstance(node, ast.JoinedStr):
+                text = node.value if isinstance(node, ast.Constant) else ast.unparse(node)
+                if _LOOP_TEXT.search(text) and not _BOUND_TEXT.search(text):
+                    counts[(name, "wait")] += 1
+                for match in _SLEEP_TEXT.finditer(text):
+                    if int(match.group(1)) > LEFTOVER_LIFETIME_SECONDS:
+                        counts[(name, "sleep")] += 1
+    return dict(counts)
+
+
+DISPOSITIONS = frozenset({"bounded", "short", "parent-guard", "deadline", "watchdog", "exception"})
+
+
+def check_inventory(sources: "dict[str, str]", inventory) -> list[str]:
+    """Problems between the scan of ``sources`` and ``inventory`` (rows of
+    ``(file, kind, count, disposition, reason)``): a match with no row, a row
+    whose count differs, a stale row, an unknown disposition, a Controller
+    child with a disposition that does not survive its test, and a long
+    ``sleep`` or deadline-less wait loop that is not a named exception."""
+    problems: list[str] = []
+    found = scan_leftover_constructs(sources)
+    rows: dict[tuple[str, str], tuple] = {}
+    for file, kind, count, disposition, reason in inventory:
+        if (file, kind) in rows:
+            problems.append(f"{file} {kind}: two rows")
+        rows[(file, kind)] = (count, disposition, reason)
+        if disposition not in DISPOSITIONS:
+            problems.append(f"{file} {kind}: unknown disposition {disposition!r}")
+        if not reason:
+            problems.append(f"{file} {kind}: no reason")
+        if kind.endswith(":controller") and disposition not in ("parent-guard", "deadline", "bounded", "short") \
+                and not (disposition == "exception" and "opt-in" in reason):
+            problems.append(f"{file} {kind}: a Controller child cannot be {disposition!r}")
+        if kind.endswith(":controller") and disposition in ("bounded", "short") \
+                and not re.search(r"--timeout|read-only|exits", reason):
+            problems.append(f"{file} {kind}: a bounded Controller child names its --timeout or its read-only command")
+        if kind in ("sleep", "wait") and disposition not in ("exception", "watchdog", "deadline", "parent-guard"):
+            problems.append(f"{file} {kind}: only an exception, a watchdog, a deadline or a guard may hold one")
+    for key, count in sorted(found.items()):
+        if key not in rows:
+            problems.append(f"{key[0]} {key[1]}: {count} match(es) and no inventory row")
+        elif rows[key][0] != count:
+            problems.append(f"{key[0]} {key[1]}: inventory says {rows[key][0]}, the scan finds {count}")
+    for key in sorted(set(rows) - set(found)):
+        problems.append(f"{key[0]} {key[1]}: stale inventory row (no match)")
+    return problems
+
+
+#: One row per survivor shape: ``(file, kind, count, disposition, reason)``
+#: with the kinds of :func:`scan_leftover_constructs`. Dispositions: ``bounded``
+#: (a numeric life, at most ``LEFTOVER_LIFETIME_SECONDS``, or a deadline the
+#: process enforces itself), ``short`` (exits by itself at once, or is waited
+#: by the test), ``parent-guard`` (a ``-c`` Controller child that exits when
+#: its test process dies, D11), ``deadline`` (an independent ``timeout``
+#: wrapper, D14), ``watchdog`` (the fake's own D2), ``exception`` (named,
+#: with the reason).
+LEFTOVER_INVENTORY = (
+    ("fake_claude.py", "sleep", 1, "watchdog",
+     "the fake's in-process hour-long sleep of FAKE_CLAUDE_SELF_TERM: the sleeper is the fake itself, which D2 ends; "
+     "the FAKE_CLAUDE_HANG sleep has no literal (FAKE_CLAUDE_HANG_SECONDS, default an hour): D2 ends it too, and a "
+     "test that disables the watchdog sets FAKE_CLAUDE_HANG_SECONDS"),
+    ("fake_claude.py", "start:Popen", 4, "bounded",
+     "the Bash task shell (the fake's group, D2); the monitor and hang-child sleeps (SUBPROCESS_SLEEP_SECONDS, D12); "
+     "the detached orphan-burst helper (its gate wait gives up after FAKE_CLAUDE_ORPHAN_SECONDS, D6)"),
+    ("fake_claude.py", "start:other", 3, "bounded",
+     "the descendant fork of FAKE_CLAUDE_DESCENDANT and the burst's two forks: each lives its finite seconds/lifetime parameter"),
+    ("fake_claude.py", "start:run", 1, "bounded",
+     "the non-detached orphan burst, waited by the fake; its gate wait is bounded as D6"),
+    ("fake_claude.py", "wait", 4, "watchdog",
+     "the fake's own pause, hang-until-file and record-path loops end with the fake (D2); the burst gate loop has its own deadline (D6)"),
+    ("fixtures.py", "start:run", 5, "short",
+     "venv, pip and install runs the test waits for; each exits by itself"),
+    ("fixtures.py", "start:run:controller", 1, "short",
+     "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
+    ("process_fixtures.py", "start:Popen", 2, "bounded",
+     "spawn_sleeper (LEFTOVER_LIFETIME_SECONDS) and the ZombieGroup helper (its release wait has a total deadline)"),
+    ("process_fixtures.py", "wait", 1, "exception",
+     "the scan's own pattern text, not a loop"),
+    ("test_buildinfo.py", "start:run:controller", 1, "short",
+     "a python -P -c import check in a venv; read-only and exits at once"),
+    ("test_cli.py", "start:Popen", 1, "short", "python -c pass: exits at once"),
+    ("test_cli.py", "start:run:controller", 2, "bounded",
+     "a read-only `follow` that exits (its timeout= is no bound, D12), and the guarded _CHILD_RUN step with --timeout 30"),
+    ("test_cli.py", "start:Popen:controller", 2, "parent-guard",
+     "_CHILD_RUN is a pinned -c script (no re-exec) and takes the parent guard (D11); the second start is RunParentGuardTest's intermediate"),
+    ("test_cli.py", "start:helper:run_controller_module", 3, "short",
+     "read-only follow/--workflow-manager commands that exit, waited by the test"),
+    ("test_cli.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+    ("test_fake_claude_contract.py", "start:Popen", 9, "bounded",
+     "fakes (the watchdog, D2), the intermediate and launcher (a 600 s sleep), sleepers of 60 s, the bounded-starter intermediate; each test ends them by exact pid"),
+    ("test_fake_claude_contract.py", "start:Popen:controller", 1, "deadline",
+     "the negative control: a bare Popen of a bounded_controller_argv wrapper, ended by exact pid (D14)"),
+    ("test_fake_claude_contract.py", "start:helper:popen_bounded", 4, "deadline",
+     "stand-in Controllers behind timeout -s KILL (D14); each test ends them by exact pid"),
+    ("test_forge.py", "start:run", 2, "short", "a forge/gh stub run the test waits for; exits"),
+    ("test_handoff.py", "start:helper:popen_bounded", 1, "deadline",
+     "the installed console-script Controller paused on a sentinel runs behind timeout -s KILL (D14)"),
+    ("test_integration_disposable_repo.py", "start:run:controller", 2, "exception",
+     "opt-in real-Claude Controller steps, skipped unless the operator opts in; their timeout= is no bound (D12) and they run longer than 600 s"),
+    ("test_integration_disposable_repo.py", "start:Popen", 2, "exception",
+     "opt-in real-Claude tests, skipped unless the operator opts in; they legitimately run longer than 600 s"),
+    ("test_job.py", "start:helper:spawn_sleeper", 3, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+    ("test_lifecycle_orchestration.py", "start:Popen:controller", 3, "parent-guard",
+     "_CHILD_STEP, _CHILD_CLI and _CHILD_WAITING_STEP are pinned -c scripts and take the parent guard (D11)"),
+    ("test_lock.py", "start:Popen", 1, "bounded",
+     "the _spawn wrapper: its callers start sleepers of LEFTOVER_LIFETIME_SECONDS or short helpers"),
+    ("test_observation_equivalence.py", "start:helper:popen_bounded", 2, "deadline",
+     "python -m controller children supervising a worker (controller and follower); popen_bounded (D14)"),
+    ("test_observe.py", "sleep", 1, "exception",
+     "a cmdline fixture string with an hour-long sleep, not a process"),
+    ("test_observe.py", "start:Popen", 4, "short", "python -c pass: exits at once"),
+    ("test_observe.py", "start:helper:spawn_sleeper", 13, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+    ("test_packaged_runtime.py", "start:helper:popen_bounded", 1, "deadline",
+     "the packaged console-script Controller paused with no --timeout; popen_bounded (D14)"),
+    ("test_resume.py", "start:Popen", 5, "bounded",
+     "a 60 s sleep, a lock holder with a finite seconds argument, python -c pass, the child of a lost-Controller helper, and the parent-guard test's intermediate (a 600 s sleep, ended by exact pid)"),
+    ("test_resume.py", "start:Popen:controller", 1, "parent-guard",
+     "_LOST_CONTROLLER is a pinned -c script and takes the parent guard (D9, D11)"),
+    ("test_resume.py", "start:run:controller", 1, "short",
+     "_CHILD_ABANDON is a pinned -c script that abandons a job record and exits"),
+    ("test_resume.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+    ("test_resume.py", "wait", 1, "parent-guard",
+     "_LOST_CONTROLLER's hang() loop ends with the guarded child (D9, D11)"),
+    ("test_run_tests.py", "start:Popen", 2, "bounded",
+     "a 300 s sleeper and a shard runner whose hanging test sleeps 600 s (the runner kills its shards)"),
+    ("test_settings.py", "start:Popen", 1, "short", "a python -c snippet that exits"),
+    ("test_settings.py", "start:run:controller", 1, "short",
+     "a unittest child (matched by its _child_env name, not a Controller) that runs one test and exits"),
+    ("test_test_shards.py", "start:Popen", 2, "bounded", "300 s sleepers, ended by exact pid"),
+    ("test_test_shards.py", "start:run", 1, "short", "a python -c probe the test waits for"),
+    ("test_trunk_orchestration_e2e.py", "start:run", 1, "short", "a bash command the test waits for"),
+    ("test_trunk_preflight.py", "start:Popen:controller", 1, "parent-guard",
+     "_CHILD_CLI is a pinned -c script (D11); its cleanup already kills the Controller itself"),
+    ("test_worker.py", "start:Popen", 15, "bounded",
+     "sleepers of LEFTOVER_LIFETIME_SECONDS or 60 s or less, helpers that exit, and the leader/member scripts (LEFTOVER_LIFETIME_SECONDS)"),
+    ("test_worker.py", "start:helper:spawn_sleeper", 13, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+)
 
 
 def wait_until(predicate, *, timeout: float = 15.0, interval: float = 0.02) -> bool:
@@ -85,7 +393,8 @@ def group_has_running_member(pgid: int) -> bool:
 def spawn_sleeper(test_case: unittest.TestCase) -> subprocess.Popen:
     """A test-owned sleeper in its own session (its pid is its pgid),
     killed and reaped by ``test_case``'s cleanup."""
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"], start_new_session=True)
+    proc = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep({LEFTOVER_LIFETIME_SECONDS})"],
+                            start_new_session=True)
 
     def _cleanup() -> None:
         kill_group(proc.pid)
@@ -97,6 +406,27 @@ def spawn_sleeper(test_case: unittest.TestCase) -> subprocess.Popen:
     test_case.addCleanup(_cleanup)
     assert wait_until(lambda: read_stat(proc.pid) is not None)
     return proc
+
+
+def wait_fake_ready(ready_file: "str | os.PathLike", pid: int, on_waiting=None, *, timeout: float = 30.0) -> None:
+    """Wait until the fake's watchdog readiness file (``FAKE_CLAUDE_ORPHAN_READY_FILE``)
+    names ``pid``, so a test that orphans a fake on purpose never does it in
+    the fake's startup window. ``on_waiting`` is called once, after the
+    inputs are resolved and immediately before the first poll (a handshake
+    for tests that order something against the fake's readiness). Raises
+    ``AssertionError`` naming the file and pid when it never does."""
+    ready = Path(ready_file)
+    if on_waiting is not None:
+        on_waiting()
+
+    def named() -> bool:
+        try:
+            return ready.read_text().strip() == str(pid)
+        except (OSError, ValueError):
+            return False
+
+    if not wait_until(named, timeout=timeout):
+        raise AssertionError(f"the fake worker {pid} never announced readiness in {ready}")
 
 
 def worker_process_dict(pid: int, *, pgid: int | None = None, start_ticks: int | None | object = ...,
@@ -285,7 +615,7 @@ elif mode == "member":
         member = os.fork()
         if member == 0:
             os.close(w)
-            time.sleep(3600)
+            time.sleep(__LIFETIME__)
             os._exit(0)
         os.write(w, f"{member}\n".encode())
         os._exit(0)
@@ -307,9 +637,10 @@ else:
 with open(out_path + ".tmp", "w") as fh:
     json.dump(info, fh)
 os.replace(out_path + ".tmp", out_path)
-while not os.path.exists(release_path):
+deadline = time.monotonic() + __LIFETIME__
+while not os.path.exists(release_path) and time.monotonic() < deadline:
     time.sleep(0.02)
-'''
+'''.replace("__LIFETIME__", str(LEFTOVER_LIFETIME_SECONDS))
 
 
 class ZombieGroup:

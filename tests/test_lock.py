@@ -91,11 +91,11 @@ if member == 0:
     devnull = os.open(os.devnull, os.O_RDWR)
     os.dup2(devnull, 0)
     os.dup2(devnull, 1)
-    time.sleep(3600)
+    time.sleep(__LIFETIME__)
     os._exit(0)
 print(member, flush=True)
 sys.stdin.readline()
-'''
+'''.replace("__LIFETIME__", str(process_fixtures.LEFTOVER_LIFETIME_SECONDS))
 
 
 def _spawn(test_case: unittest.TestCase, args: list[str], **kwargs) -> subprocess.Popen:
@@ -253,7 +253,7 @@ class InheritedDescriptorTest(unittest.TestCase):
         root = process_fixtures.scratch_git_repo(self)
         held = lock.acquire_lifecycle_lock(root)
         self.addCleanup(held.release)
-        sleeper = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"],
+        sleeper = _spawn(self, [sys.executable, "-c", f"import time; time.sleep({process_fixtures.LEFTOVER_LIFETIME_SECONDS})"],
                          pass_fds=(held.fd,))
         self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(sleeper.pid) is not None))
 
@@ -389,7 +389,7 @@ class InheritedDescriptorTest(unittest.TestCase):
         runtime = Path(tempfile.mkdtemp(prefix="f3-lock-runtime-"))
         self.addCleanup(shutil.rmtree, runtime, True)
         (runtime / "jobs").mkdir()
-        bystander = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"])
+        bystander = _spawn(self, [sys.executable, "-c", f"import time; time.sleep({process_fixtures.LEFTOVER_LIFETIME_SECONDS})"])
         self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(bystander.pid) is not None))
         self._waiting_run_record(runtime, root, bystander.pid)
         managed_repo = fixtures.build_target_managed_repository(root)
@@ -431,7 +431,7 @@ class InheritedDescriptorTest(unittest.TestCase):
         (runtime / "jobs" / "job-orphan.json").write_text(json.dumps({
             "schema_version": 1, "job_id": "job-orphan", "target_repo": str(root), "status": "LAUNCHED",
             "worker_process": process_fixtures.worker_process_dict(leader.pid, start_ticks=leader_ticks)}))
-        bystander = _spawn(self, [sys.executable, "-c", "import time; time.sleep(3600)"])
+        bystander = _spawn(self, [sys.executable, "-c", f"import time; time.sleep({process_fixtures.LEFTOVER_LIFETIME_SECONDS})"])
         self.assertTrue(process_fixtures.wait_until(lambda: process_fixtures.read_stat(bystander.pid) is not None))
         self._waiting_run_record(runtime, root, bystander.pid)
         managed_repo = fixtures.build_target_managed_repository(root)

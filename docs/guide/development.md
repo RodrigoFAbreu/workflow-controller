@@ -165,6 +165,21 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   something worse happened to it. The summary's "Leaked processes
   (failure, killed)" section names each one with its shard, pid, age and
   command line.
+- **Leftovers of a killed test run.** A test run killed mid-suite used to
+  leave a fake worker and its stdin anchor behind, and inside a
+  Controller-launched worker those held the real job draining for hours.
+  Now `tests/fake_claude.py` ends itself and its process group
+  `FAKE_CLAUDE_ORPHAN_SECONDS` (default 300) after its parent dies, and
+  writes `FAKE_CLAUDE_ORPHAN_READY_FILE` once that watchdog runs, so a test
+  that orphans a fake on purpose waits for the file first. Every other
+  process a test starts that can outlive it (detached helpers, daemons,
+  sleepers, release loops) lives at most
+  `LEFTOVER_LIFETIME_SECONDS` (600) in `tests/process_fixtures.py`, and a
+  child Controller ends with its test, by a parent guard (`-c` scripts) or
+  an independent `timeout` deadline (`-m` and console-script children).
+  `LEFTOVER_INVENTORY` lists each shape, and a check over every process
+  start keeps a new one from going unclassified. A new test that orphans a
+  fake on purpose must finish within that time or set the variable.
 - **Timings.** Durations only decide where a test runs, never whether it
   runs. Local runs plan from the untracked
   `$XDG_CACHE_HOME/workflow-controller-tests/timings-local.json`

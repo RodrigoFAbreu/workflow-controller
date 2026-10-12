@@ -1168,7 +1168,8 @@ class FakeStreamingModeTest(unittest.TestCase):
             ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
             burst = subprocess.Popen([sys.executable, sys.argv[1], "--orphan-burst", "6", "0.02", "0.3"])
             sessions, reaped = {}, set()
-            while True:
+            end = time.monotonic() + 60
+            while time.monotonic() < end:
                 for tid in os.listdir("/proc/self/task"):
                     with open(f"/proc/self/task/{tid}/children") as fh:
                         for pid in map(int, fh.read().split()):
@@ -1192,6 +1193,690 @@ class FakeStreamingModeTest(unittest.TestCase):
         self.assertEqual(report["returncode"], 0)
         self.assertEqual(len(report["sessions"]), 6)
         self.assertEqual({int(pid) for pid in report["sessions"]}, set(report["sessions"].values()))
+
+def _gone(pid: int) -> bool:
+    """Whether ``pid`` is gone; a zombie counts as gone (as
+    ``controller.anchor.worker_gone`` counts it)."""
+    from tests import process_fixtures
+
+    stat = process_fixtures.read_stat(pid)
+    return stat is None or stat[0] in ("Z", "X", "x")
+
+
+#: Starts one fake from this intermediate process and records its pid. The
+#: test kills the intermediate (by pid) to orphan the fake for real.
+_INTERMEDIATE = """
+import json, os, subprocess, sys, time
+spec = json.loads(sys.argv[1])
+env = {**os.environ, **spec["env"]}
+stdin, pass_fds, holder = subprocess.DEVNULL, (), None
+if spec.get("held_stdin"):
+    read_end, write_end = os.pipe()
+    os.write(write_end, spec["task_line"].encode())
+    holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"], pass_fds=(write_end,),
+                              start_new_session=True)
+    stdin = read_end
+proc = subprocess.Popen(spec["argv"], env=env, stdin=stdin, stdout=subprocess.DEVNULL,
+                        start_new_session=spec["new_session"])
+with open(spec["pids"], "w") as fh:
+    json.dump({"fake": proc.pid, "holder": holder.pid if holder else None}, fh)
+time.sleep(600)
+"""
+
+#: Starts a hang-mode fake and a sibling sleeper in this launcher's own
+#: group (the fake does not lead it), waits for the fake's readiness, and
+#: exits -- which orphans the fake.
+_LAUNCHER = """
+import json, os, subprocess, sys, time
+spec = json.loads(sys.argv[1])
+fake = subprocess.Popen(spec["argv"], env={**os.environ, **spec["env"]}, stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL)
+sibling = subprocess.Popen(["sleep", "600"])
+end = time.monotonic() + 600
+while not os.path.exists(spec["fake_ready"]) and time.monotonic() < end:
+    time.sleep(0.02)
+with open(spec["pids"], "w") as fh:
+    json.dump({"fake": fake.pid, "sibling": sibling.pid, "pgrp": os.getpgrp()}, fh)
+"""
+
+
+class OrphanWatchdogTest(unittest.TestCase):
+    """An orphaned fake ends itself (and its group, when it leads one)
+    after ``FAKE_CLAUDE_ORPHAN_SECONDS`` (``tests/fake_claude.py``, D2)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="orphan-watchdog-"))
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.env = {"FAKE_CLAUDE_ORPHAN_SECONDS": "1", "FAKE_CLAUDE_ORPHAN_READY_FILE": str(self.tmp / "ready"),
+                    "FAKE_CLAUDE_HANG": "1", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": str(self.tmp / "child")}
+        self.plain_argv = [sys.executable, str(FAKE_CLAUDE), "-p", "task", "--output-format", "stream-json",
+                           "--verbose"]
+
+    def _track(self, pid: int) -> None:
+        def end() -> None:
+            for sig in (signal.SIGCONT, signal.SIGKILL):
+                _kill_with(pid, sig)
+
+        self.addCleanup(end)
+
+    def _start(self, *, env=None, argv=None, new_session=True, held_stdin=False,
+               tag: str = "") -> tuple[subprocess.Popen, dict]:
+        """``tag`` gives a second start in one test its own pids, ready and hang-child files,
+        so it never reads the first start's stale values."""
+        from tests import process_fixtures
+
+        pids, ready = self.tmp / f"pids{tag}", self.tmp / f"ready{tag}"
+        own = {"FAKE_CLAUDE_ORPHAN_READY_FILE": str(ready),
+               "FAKE_CLAUDE_HANG_CHILD_PID_FILE": str(self.tmp / f"child{tag}")} if tag else {}
+        spec = {"env": {**self.env, **own, **(env or {})}, "argv": argv or self.plain_argv, "pids": str(pids),
+                "new_session": new_session, "held_stdin": held_stdin, "task_line": task_line()}
+        intermediate = subprocess.Popen([sys.executable, "-c", _INTERMEDIATE, json.dumps(spec)])
+        self.addCleanup(intermediate.wait)
+        self._track(intermediate.pid)
+        self.assertTrue(process_fixtures.wait_until(pids.exists, timeout=30), "the intermediate never started")
+        found = json.loads(pids.read_text())
+        for pid in found.values():
+            if pid:
+                self._track(pid)
+        self.assertTrue(process_fixtures.wait_until(ready.exists, timeout=30),
+                        "the fake never announced readiness")
+        self.assertEqual(int(ready.read_text()), found["fake"])
+        child_file = spec["env"]["FAKE_CLAUDE_HANG_CHILD_PID_FILE"]
+        if child_file and spec["env"]["FAKE_CLAUDE_HANG"]:
+            # The fake's own `sleep`, in the fake's group; ended by exact pid at cleanup.
+            self.assertTrue(process_fixtures.wait_until(Path(child_file).exists, timeout=10))
+            self._track(int(Path(child_file).read_text()))
+        return intermediate, found
+
+    def _orphan(self, intermediate: subprocess.Popen) -> None:
+        os.kill(intermediate.pid, signal.SIGKILL)
+        intermediate.wait(timeout=10)
+
+    def _assert_gone_within(self, pid: int, seconds: float = 10) -> None:
+        from tests import process_fixtures
+
+        self.assertTrue(process_fixtures.wait_until(lambda: _gone(pid), timeout=seconds),
+                        f"process {pid} outlived its orphaning by more than {seconds}s")
+
+    def test_an_orphaned_fake_in_hang_mode_ends_with_its_group(self):
+        from tests import process_fixtures
+
+        intermediate, found = self._start()
+        child = int((self.tmp / "child").read_text())
+        self.assertFalse(_gone(found["fake"]))
+        self.assertFalse(_gone(child))
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self._assert_gone_within(child)
+
+    def test_the_incident_shape_stdin_held_open_by_a_separate_process(self):
+        env = {"FAKE_CLAUDE_HANG": "", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": ""}
+        argv = [sys.executable, str(FAKE_CLAUDE), *STREAMING_ARGV]
+        intermediate, found = self._start(env=env, argv=argv, held_stdin=True)
+        self.assertFalse(_gone(found["fake"]))
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self.assertFalse(_gone(found["holder"]), "the stdin holder is not the watchdog's to end")
+
+    def test_a_fake_with_a_live_parent_is_left_alone(self):
+        intermediate, found = self._start()
+        time.sleep(3)
+        self.assertFalse(_gone(found["fake"]))
+        self.assertIsNone(intermediate.poll())
+
+    def test_zero_disables_the_watchdog(self):
+        intermediate, found = self._start(env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0",
+                                                           "FAKE_CLAUDE_HANG_SECONDS": "30"})
+        self._orphan(intermediate)
+        time.sleep(3)
+        self.assertFalse(_gone(found["fake"]))
+
+    def test_a_watchdog_disabled_fake_still_ends_by_its_own_hang_lifetime(self):
+        intermediate, found = self._start(env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0",
+                                               "FAKE_CLAUDE_HANG_SECONDS": "4"})
+        self._orphan(intermediate)
+        self.assertFalse(_gone(found["fake"]))
+        self._assert_gone_within(found["fake"], 15)
+
+    def test_a_fake_that_does_not_lead_its_group_ends_only_itself(self):
+        from tests import process_fixtures
+
+        pids = self.tmp / "launcher-pids"
+        spec = {"env": self.env, "argv": self.plain_argv, "fake_ready": str(self.tmp / "ready"),
+                "pids": str(pids)}
+        launcher = subprocess.Popen([sys.executable, "-c", _LAUNCHER, json.dumps(spec)], start_new_session=True)
+        self.addCleanup(launcher.wait)
+        self._track(launcher.pid)
+        self.assertTrue(process_fixtures.wait_until(pids.exists, timeout=30), "the launcher never finished")
+        launcher.wait(timeout=10)
+        found = json.loads(pids.read_text())
+        for pid in (found["fake"], found["sibling"]):
+            self._track(pid)
+        # The hang-mode fake's own `sleep` is in the launcher's group, not the fake's.
+        self.assertTrue(process_fixtures.wait_until((self.tmp / "child").exists, timeout=10))
+        self._track(int((self.tmp / "child").read_text()))
+        self.assertNotEqual(found["fake"], found["pgrp"])
+        self._assert_gone_within(found["fake"])
+        self.assertFalse(_gone(found["sibling"]), "the group kill must not reach a fake that is not its leader")
+
+    def test_the_watchdog_adds_nothing_to_the_workers_stderr(self):
+        def stderr(seconds: str) -> str:
+            env = {**os.environ, "FAKE_CLAUDE_DESCENDANT": "group-closed:1", "FAKE_CLAUDE_ORPHAN_SECONDS": seconds}
+            done = subprocess.run(self.plain_argv, env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                  text=True, timeout=60)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return done.stderr
+
+        self.assertEqual(stderr("30"), stderr("0"))
+
+    def test_a_held_fake_is_ready_only_after_its_release_and_the_helper_sees_it_arrive(self):
+        from tests import process_fixtures
+
+        ready, hold = self.tmp / "ready", self.tmp / "hold"
+        env = {**os.environ, "FAKE_CLAUDE_ORPHAN_READY_FILE": str(ready), "FAKE_CLAUDE_READY_HOLD_FILE": str(hold),
+               "FAKE_CLAUDE_HANG": "1", "FAKE_CLAUDE_ORPHAN_SECONDS": "30"}
+        fake = subprocess.Popen(self.plain_argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                start_new_session=True)
+        self.addCleanup(fake.wait)
+        self._track(fake.pid)
+        waited = []
+
+        def on_waiting() -> None:
+            self.assertFalse(ready.exists(), "a held fake must not be ready")
+            waited.append(True)
+            hold.touch()
+
+        process_fixtures.wait_fake_ready(ready, fake.pid, on_waiting=on_waiting)
+        self.assertEqual(waited, [True])
+        # Released before the helper starts waiting: accepted at once.
+        process_fixtures.wait_fake_ready(ready, fake.pid)
+        # A ready file naming another pid is a named failure, not a pass.
+        with self.assertRaisesRegex(AssertionError, "never announced readiness"):
+            process_fixtures.wait_fake_ready(ready, fake.pid + 1, timeout=0.3)
+
+    # -- leftovers that a group kill cannot reach (plan CP2, D6, D10, D12, D13) -------------------
+
+    def _scripted(self, turns, *, env=None, new_session=True, tag: str = ""):
+        """A scripted streaming fake whose stdin another process holds open, started by the
+        intermediate (so the test can orphan it for real)."""
+        argv = [sys.executable, str(FAKE_CLAUDE), *STREAMING_ARGV]
+        env = {"FAKE_CLAUDE_HANG": "", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": "",
+               "FAKE_CLAUDE_TURNS": json.dumps(turns), **(env or {})}
+        return self._start(env=env, argv=argv, held_stdin=True, new_session=new_session, tag=tag)
+
+    def _processes(self, needle: str) -> list[int]:
+        """Pids whose command line contains ``needle`` (the test's own processes excluded)."""
+        found = []
+        for name in os.listdir("/proc"):
+            if name.isdigit() and int(name) != os.getpid():
+                try:
+                    cmdline = Path(f"/proc/{name}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+                except OSError:
+                    continue
+                if needle in cmdline and not _gone(int(name)):
+                    found.append(int(name))
+        return found
+
+    def test_a_detached_burst_helper_blocked_on_an_absent_gate_ends(self):
+        from tests import process_fixtures
+
+        marks, gate = self.tmp / "marks", self.tmp / "gate"
+        turns = [[{"step": "orphan_burst", "count": 2, "spacing": 0.01, "lifetime": 0.1, "detach": True,
+                   "marks_file": str(marks), "gate": str(gate)}, {"step": "text"}]]
+        intermediate, found = self._scripted(turns)
+        helpers: list[int] = []
+
+        def helper_started() -> bool:
+            helpers[:] = self._processes(f"--marks {marks}")
+            return bool(helpers)
+
+        self.assertTrue(process_fixtures.wait_until(helper_started, timeout=30),
+                        "the detached helper never started")
+        [helper] = helpers
+        self._track(helper)
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self._assert_gone_within(helper)
+        self.assertFalse(marks.exists(), "a helper that gave up wrote a mark")
+
+    def test_a_released_burst_helper_still_runs_its_burst(self):
+        from tests import process_fixtures
+
+        marks, gate = self.tmp / "marks", self.tmp / "gate"
+        helper = subprocess.Popen([sys.executable, str(FAKE_CLAUDE), "--orphan-burst", "2", "0.01", "0.1",
+                                   "--marks", str(marks), "--gate", str(gate)],
+                                  env={**os.environ, "FAKE_CLAUDE_ORPHAN_SECONDS": "30"})
+        self.addCleanup(helper.wait)
+        self._track(helper.pid)
+        time.sleep(0.3)
+        self.assertIsNone(helper.poll())
+        gate.touch()
+        self.assertEqual(helper.wait(timeout=30), 0)
+        self.assertTrue(marks.exists())
+
+    def test_a_daemon_leftover_has_a_finite_life(self):
+        from tests import fake_claude, process_fixtures
+
+        self.assertEqual(fake_claude.DAEMON_LIFETIME_SECONDS, 600)
+        pid_file = self.tmp / "daemon.pid"
+        turns = [[{"step": "bash_bg", "seconds": 0.2, "orphan": "daemon", "orphan_pid_file": str(pid_file)},
+                  {"step": "text"}]]
+        self._scripted(turns)
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
+        pid = int(pid_file.read_text())
+        self._track(pid)
+
+        def cmdline() -> list[str]:
+            try:
+                return Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")[:-1]
+            except OSError:
+                return []
+
+        self.assertTrue(process_fixtures.wait_until(lambda: cmdline()[:1] == ["fake-claude-daemon"], timeout=10))
+        self.assertEqual(cmdline(), ["fake-claude-daemon", str(fake_claude.DAEMON_LIFETIME_SECONDS)])
+
+    def test_a_gated_setsid_descendant_blocked_on_its_fifo_ends(self):
+        from tests import process_fixtures
+
+        fifo, pid_file = self.tmp / "gate.fifo", self.tmp / "gated.pid"
+        os.mkfifo(fifo)
+        turns = [[{"step": "bash_bg", "seconds": 600, "orphan": "setsid", "orphan_seconds": 1,
+                   "orphan_gate": str(fifo), "orphan_pid_file": str(pid_file)}, {"step": "text"}]]
+        intermediate, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "3"})
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
+        pid = int(pid_file.read_text())
+        self._track(pid)
+        self.assertFalse(_gone(pid))
+        waiters: list[int] = []
+
+        def waiter_started() -> bool:
+            waiters[:] = self._processes(f"timeout --foreground 3 bash -c read _ < {fifo}")
+            return bool(waiters)
+
+        self.assertTrue(process_fixtures.wait_until(waiter_started, timeout=30),
+                        "the gate wait is not wrapped in timeout --foreground")
+        for waiter in waiters:
+            self._track(waiter)
+        self._orphan(intermediate)
+        self._assert_gone_within(found["fake"])
+        self._assert_gone_within(pid, 15)
+        for waiter in waiters:
+            self._assert_gone_within(waiter, 15)
+
+    def test_the_fakes_own_subprocess_sleepers_are_bounded(self):
+        from tests import fake_claude, process_fixtures
+
+        self.assertLessEqual(fake_claude.SUBPROCESS_SLEEP_SECONDS, 600)
+        self.assertLessEqual(process_fixtures.LEFTOVER_LIFETIME_SECONDS, 600)
+
+        def sleep_argument(pid: int) -> int:
+            argv = Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")[:-1]
+            self.assertEqual(argv[0], "sleep", argv)
+            return int(float(argv[1]))
+
+        # Hang mode, started directly in the runner's group (the fake does not lead it).
+        intermediate, first = self._start(new_session=False)
+        self.assertLessEqual(sleep_argument(int((self.tmp / "child").read_text())), 600)
+        self._orphan(intermediate)
+        # A monitor with a timeout, the same shape, with its own pids/ready files (every pid
+        # the start reports, holder and fake included, is tracked by `_start`).
+        turns = [[{"step": "monitor", "id": "m", "ticks": 1, "interval": 0.1, "timeout": 5}, {"step": "text"}]]
+        _, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"}, new_session=False, tag="-monitor")
+        self.assertNotEqual(found["fake"], first["fake"])
+        self.assertTrue(process_fixtures.wait_until(lambda: _children(found["fake"]), timeout=10))
+        [sleeper] = [int(pid) for pid in _children(found["fake"])]
+        self._track(sleeper)
+        self.assertLessEqual(sleep_argument(sleeper), 600)
+
+    def test_the_bounds_cannot_regress_and_the_inventory_is_complete(self):
+        from tests import process_fixtures
+
+        sources = {path.name: path.read_text() for path in Path(__file__).parent.glob("*.py")}
+        self.assertEqual(process_fixtures.check_inventory(sources, process_fixtures.LEFTOVER_INVENTORY), [])
+        self.assertLessEqual(process_fixtures.LEFTOVER_LIFETIME_SECONDS, 600)
+
+    def test_the_scan_keys_on_the_start_not_the_argv(self):
+        from tests import process_fixtures
+
+        console = "import subprocess\nsubprocess.Popen([str(console_script), '--runtime-dir', 'x'])\n"
+        built = "import subprocess\nargv = build()\nsubprocess.Popen(argv)\n"
+        waited = "import subprocess\nsubprocess.run(['true'], timeout=5)\nsubprocess.run(['git', 'status'])\n"
+        for name, source in (("a.py", console), ("b.py", built)):
+            problems = process_fixtures.check_inventory({name: source}, ())
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("no inventory row", problems[0])
+        self.assertEqual(process_fixtures.check_inventory({"c.py": waited}, ()), [])
+        # A `timeout=` is no bound on a Controller child: it still needs an inventory row.
+        timed = "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'controller', 'run', 'r'], timeout=600)\n"
+        problems = process_fixtures.check_inventory({"f.py": timed}, ())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("start:run:controller", problems[0])
+        self.assertIn("no inventory row", problems[0])
+        row = ("a.py", "start:Popen:controller", 1, "deadline", "popen_bounded")
+        self.assertEqual(process_fixtures.check_inventory({"a.py": console}, (row,)), [])
+        stale = ("a.py", "start:Popen", 1, "bounded", "x")
+        self.assertTrue(any("stale" in p for p in process_fixtures.check_inventory({"c.py": waited}, (stale,))))
+        # Built from pieces so the scan of this very file does not read them as constructs.
+        loop = "import os, time\n" + "wh" + "ile not os.path.exists('r'):\n    time.sleep(0.1)\n"
+        self.assertTrue(any("no inventory row" in p for p in process_fixtures.check_inventory({"d.py": loop}, ())))
+        long_sleep = "import time\ntime.sl" + "eep(3600)\n"
+        self.assertTrue(any("sleep" in p for p in process_fixtures.check_inventory({"e.py": long_sleep}, ())))
+        bad = ("a.py", "start:Popen:controller", 1, "exception", "named")
+        self.assertTrue(any("Controller child" in p for p in process_fixtures.check_inventory({"a.py": console}, (bad,))))
+
+    def test_the_handoff_console_script_goes_through_the_deadline_wrapper(self):
+        from tests import process_fixtures
+
+        text = (Path(__file__).parent / "test_handoff.py").read_text()
+        self.assertIn("process_fixtures.popen_bounded(", text)
+        self.assertNotIn("subprocess.Popen(", text)
+        rows = {(f, k): d for f, k, _, d, _ in process_fixtures.LEFTOVER_INVENTORY}
+        self.assertEqual(rows[("test_handoff.py", "start:helper:popen_bounded")], "deadline")
+
+    def test_a_bounded_controller_ends_at_its_deadline_when_its_starter_is_killed(self):
+        from tests import process_fixtures
+
+        sentinel, pid_file = self.tmp / "sentinel", self.tmp / "stub.pid"
+        sentinel.touch()
+        stub = ("import os, sys, time\nopen(sys.argv[2], 'w').write(str(os.getpid()))\n"
+                "while os.path.exists(sys.argv[1]): time.sleep(0.05)\n")
+        starter = ("import sys\nsys.path.insert(0, sys.argv[1])\nfrom tests import process_fixtures\n"
+                   "import time\nprocess_fixtures.popen_bounded([sys.executable, '-c', sys.argv[2], sys.argv[3], sys.argv[4]], "
+                   "seconds=2)\ntime.sleep(600)\n")
+        root = str(Path(__file__).resolve().parent.parent)
+        intermediate = subprocess.Popen([sys.executable, "-c", starter, root, stub, str(sentinel), str(pid_file)])
+        self.addCleanup(intermediate.wait)
+        self._track(intermediate.pid)
+        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
+        stub_pid = int(pid_file.read_text())
+        self._track(stub_pid)
+        self.assertFalse(_gone(stub_pid))
+        self._orphan(intermediate)
+        self._assert_gone_within(stub_pid, 10)
+
+    def test_a_release_loop_outlives_a_deliberate_fake_kill_only_for_its_deadline(self):
+        from tests import process_fixtures
+
+        release, pid_file = self.tmp / "never", self.tmp / "loop.pid"
+        command = (process_fixtures.shell_release_wait(release, seconds=2) + "; echo done > "
+                   + str(self.tmp / "done"))
+        turns = [[{"step": "bash_bg", "id": "verify", "command": command, "notify": False}, {"step": "text"}]]
+        intermediate, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "0"})
+        self.assertTrue(process_fixtures.wait_until(lambda: _children(found["fake"]), timeout=30))
+        [loop] = [int(pid) for pid in _children(found["fake"])]
+        self._track(loop)
+        self.assertFalse(_gone(loop))
+        os.kill(found["fake"], signal.SIGKILL)
+        self._assert_gone_within(loop, 10)
+        self.assertFalse((self.tmp / "done").exists(), "a timed-out wait looked like a release")
+        self._orphan(intermediate)
+        # The Python form ends at its deadline too, and carries on.
+        script = ("import os, time\n" + process_fixtures.python_release_wait(repr(str(release)), seconds=1)
+                  + "print('after')\n")
+        out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.stdout.strip(), "after")
+
+
+def _kill_with(pid: int, sig: int) -> None:
+    try:
+        os.kill(pid, sig)
+    except OSError:
+        pass
+
+
+class ChildControllerLifetimeTest(unittest.TestCase):
+    """Child Controllers started by tests end with their test (leftover-lifetime plan D11, D14, CP3 tests
+    15-18): ``-c`` scripts that cannot re-exec by a parent guard, ``-m`` and console-script children by an
+    independent ``timeout`` deadline that survives test death and the snapshot re-exec."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="child-lifetime-"))
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+
+    def _track(self, pid: int) -> None:
+        self.addCleanup(_kill_with, pid, signal.SIGKILL)
+
+    def _read_pid(self, path: Path, timeout: float = 30) -> int:
+        from tests import process_fixtures
+
+        self.assertTrue(process_fixtures.wait_until(path.exists, timeout=timeout), f"{path.name} never appeared")
+        pid = int(path.read_text())
+        self._track(pid)
+        return pid
+
+    def _assert_gone_within(self, pid: int, seconds: float = 10) -> None:
+        from tests import process_fixtures
+
+        self.assertTrue(process_fixtures.wait_until(lambda: _gone(pid), timeout=seconds),
+                        f"process {pid} outlived its deadline by more than {seconds}s")
+
+    # -- 15: no guard script can re-exec ---------------------------------------------------------
+
+    @staticmethod
+    def _unpinned_reexec_risk(script: str) -> str | None:
+        """Why ``script`` could re-exec under a ``SIGALRM`` handler, or ``None``: it imports
+        ``controller.cli`` and does not replace both ``identity.pin`` and ``identity.current`` before
+        it calls ``main``."""
+        import ast
+
+        tree = ast.parse(script)
+        imports_cli = any(
+            (isinstance(node, ast.ImportFrom) and node.module == "controller"
+             and any(alias.name == "cli" for alias in node.names))
+            or (isinstance(node, ast.Import) and any(alias.name == "controller.cli" for alias in node.names))
+            for node in ast.walk(tree))
+        if not imports_cli:
+            return None
+        pinned: dict[str, tuple[int, int]] = {}
+        main_at = None
+        for node in ast.walk(tree):
+            where = (getattr(node, "lineno", 0), getattr(node, "col_offset", 0))
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) \
+                            and target.value.id == "identity" and target.attr in ("pin", "current"):
+                        pinned[target.attr] = where
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "object" and len(node.args) >= 2 and isinstance(node.args[0], ast.Name) \
+                        and node.args[0].id == "identity" and isinstance(node.args[1], ast.Constant) \
+                        and node.args[1].value in ("pin", "current"):
+                    pinned[node.args[1].value] = where
+                elif node.func.attr == "main" and isinstance(node.func.value, ast.Name) \
+                        and node.func.value.id == "cli":
+                    main_at = where
+        if main_at is None:
+            return None
+        for name in ("pin", "current"):
+            if name not in pinned or pinned[name] > main_at:
+                return f"identity.{name} is not replaced before cli.main"
+        return None
+
+    def test_no_guard_script_can_re_exec(self):
+        import importlib
+        from tests import process_fixtures
+
+        guard = process_fixtures.PARENT_GUARD
+        self.assertTrue(guard.endswith("\n"))
+        expected = {"tests.test_resume": {"_CHILD_STEP", "_CHILD_STEP_SLOW_SPAWN_LINE", "_LOST_CONTROLLER"},
+                    "tests.test_lifecycle_orchestration": {"_CHILD_STEP", "_CHILD_WAITING_STEP", "_CHILD_CLI"},
+                    "tests.test_trunk_preflight": {"_CHILD_CLI"}, "tests.test_cli": {"_CHILD_RUN"}}
+        for module_name, names in expected.items():
+            module = importlib.import_module(module_name)
+            guarded = {name for name, value in vars(module).items() if isinstance(value, str) and value.startswith(guard) and value != guard}
+            self.assertEqual(guarded, names, module_name)
+            for name in names:
+                with self.subTest(script=f"{module_name}.{name}"):
+                    self.assertIsNone(self._unpinned_reexec_risk(getattr(module, name)))
+        unpinned = "import sys\nfrom controller import cli\nsys.exit(cli.main(sys.argv[1:]))\n"
+        self.assertIsNotNone(self._unpinned_reexec_risk(unpinned))
+        half = "import sys\nfrom controller import cli, identity\nidentity.pin = lambda: 1\ncli.main([])\n"
+        self.assertIsNotNone(self._unpinned_reexec_risk(half))
+        late = ("from controller import cli, identity\nimport unittest.mock\ncli.main([])\n"
+                "unittest.mock.patch.object(identity, 'pin')\nunittest.mock.patch.object(identity, \"current\")\n")
+        self.assertIsNotNone(self._unpinned_reexec_risk(late))
+        for source in ("from controller import job\njob.execute_step()\n",
+                       "from controller import cli, identity\nimport unittest.mock\n"
+                       "unittest.mock.patch.object(identity, 'pin')\nunittest.mock.patch.object(identity, \"current\")\n"
+                       "cli.main([])\n"):
+            self.assertIsNone(self._unpinned_reexec_risk(source))
+
+    def test_the_m_children_that_supervise_a_worker_go_through_the_deadline(self):
+        tests_dir = Path(__file__).parent
+        for name in ("test_observation_equivalence.py", "test_packaged_runtime.py", "test_handoff.py"):
+            text = (tests_dir / name).read_text()
+            self.assertIn("process_fixtures.popen_bounded(", text, name)
+            self.assertNotIn("subprocess.Popen(", text, name)
+
+    # -- 16: an independent deadline that survives test death and re-exec ----------------------------
+
+    #: A stub Controller: records its pid, ``execve``s itself once (the shape of ``controller/cli.py:178``),
+    #: records the pid again and waits.
+    _EXEC_STUB = (
+        "import os, sys, time\n"
+        "pid_file, phase, src = sys.argv[1:4]\n"
+        "if phase == 'first':\n"
+        "    open(pid_file + '.first', 'w').write(str(os.getpid()))\n"
+        "    os.execv(sys.executable, [sys.executable, '-c', src, pid_file, 'second', src])\n"
+        "open(pid_file, 'w').write(str(os.getpid()))\n"
+        "time.sleep(600)\n"
+    )
+
+    #: Starts the stub through ``popen_bounded`` and waits; the test kills this process by pid.
+    _BOUNDED_STARTER = (
+        "import sys, time\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "from tests import process_fixtures\n"
+        "process_fixtures.popen_bounded([sys.executable, '-c', sys.argv[2], sys.argv[3], 'first', sys.argv[2]], "
+        "seconds=float(sys.argv[4]))\n"
+        "time.sleep(600)\n"
+    )
+
+    def _start_stub(self, seconds: float) -> tuple[subprocess.Popen, Path]:
+        pid_file = self.tmp / "stub.pid"
+        root = str(Path(__file__).resolve().parent.parent)
+        intermediate = subprocess.Popen(
+            [sys.executable, "-c", self._BOUNDED_STARTER, root, self._EXEC_STUB, str(pid_file), str(seconds)])
+        self.addCleanup(intermediate.wait)
+        self._track(intermediate.pid)
+        return intermediate, pid_file
+
+    def test_a_dash_m_child_has_a_deadline_that_survives_test_death_and_re_exec(self):
+        intermediate, pid_file = self._start_stub(2)
+        pid = self._read_pid(pid_file)
+        self.assertEqual(pid, int(Path(str(pid_file) + ".first").read_text()), "execve changed the pid")
+        self.assertFalse(_gone(pid))
+        os.kill(intermediate.pid, signal.SIGKILL)
+        intermediate.wait(timeout=10)
+        self._assert_gone_within(pid, 10)
+
+    def test_with_the_real_deadline_a_live_test_is_never_signalled(self):
+        from tests import process_fixtures
+
+        intermediate, pid_file = self._start_stub(process_fixtures.LEFTOVER_LIFETIME_SECONDS)
+        pid = self._read_pid(pid_file)
+        time.sleep(3)
+        self.assertIsNone(intermediate.poll())
+        self.assertFalse(_gone(pid), "the deadline ended a child of a live test")
+
+    # -- 17, 18: the tests' normal kill path ends the child itself ----------------------------------
+
+    _WAITER = ("import os, sys, time\nopen(sys.argv[1], 'w').write(str(os.getpid()))\ntime.sleep(600)\n")
+
+    def test_a_wrapped_child_killed_through_the_normal_kill_path_is_gone(self):
+        from tests import process_fixtures
+
+        pid_file = self.tmp / "wrapped.pid"
+        proc = process_fixtures.popen_bounded([sys.executable, "-c", self._WAITER, str(pid_file)])
+        self.addCleanup(proc.wait)
+        self._track(proc.pid)
+        pid = self._read_pid(pid_file)
+        self.assertFalse(_gone(pid))
+        proc.kill()
+        self.assertEqual(proc.wait(10), -signal.SIGKILL)
+        self._assert_gone_within(pid, 10)
+
+    def test_a_bare_kill_of_the_wrapper_orphans_the_child_which_is_why_the_helper_exists(self):
+        from tests import process_fixtures
+
+        pid_file = self.tmp / "bare.pid"
+        proc = subprocess.Popen(process_fixtures.bounded_controller_argv(
+            [sys.executable, "-c", self._WAITER, str(pid_file)]))
+        self.addCleanup(proc.wait)
+        self._track(proc.pid)
+        pid = self._read_pid(pid_file)
+        subprocess.Popen.kill(proc)
+        proc.wait(10)
+        time.sleep(0.5)
+        if _gone(pid):
+            # Whether the child follows the wrapper depends on the build: this one sets
+            # PR_SET_PDEATHSIG on it (read back as 9), while review R7-1 reproduced the orphaning
+            # on another GNU coreutils 9.12 build. The helper is correct for both.
+            self.skipTest("this timeout ends its child with itself; the orphaning the helper guards against is absent")
+        self.assertFalse(_gone(pid))
+
+    _SIGINT_STUB = (
+        "import os, signal, sys, time\n"
+        "pid_file, count_file = sys.argv[1:3]\n"
+        "def handler(*_):\n"
+        "    open(count_file, 'a').write('x')\n"
+        "    os._exit(0)\n"
+        "signal.signal(signal.SIGINT, handler)\n"
+        "open(pid_file, 'w').write(str(os.getpid()))\n"
+        "time.sleep(600)\n"
+    )
+
+    def test_sigint_to_a_wrapped_child_runs_its_handler_once(self):
+        from tests import process_fixtures
+
+        pid_file, count_file = self.tmp / "sigint.pid", self.tmp / "sigint.count"
+        proc = process_fixtures.popen_bounded([sys.executable, "-c", self._SIGINT_STUB, str(pid_file), str(count_file)])
+        self.addCleanup(proc.wait)
+        self._track(proc.pid)
+        pid = self._read_pid(pid_file)
+        proc.send_signal(signal.SIGINT)
+        proc.wait(10)
+        self._assert_gone_within(pid, 10)
+        self.assertEqual(count_file.read_text(), "x")
+
+    _GRANDCHILD_STUB = (
+        "import os, subprocess, sys, time\n"
+        "grand = subprocess.Popen(['sleep', '600'], start_new_session=True)\n"
+        "open(sys.argv[1] + '.grand', 'w').write(str(grand.pid))\n"
+        "open(sys.argv[1], 'w').write(str(os.getpid()))\n"
+        "time.sleep(600)\n"
+    )
+
+    def test_the_group_kill_leaves_a_new_session_grandchild_alone(self):
+        from tests import process_fixtures
+
+        pid_file = self.tmp / "grand-parent.pid"
+        proc = process_fixtures.popen_bounded([sys.executable, "-c", self._GRANDCHILD_STUB, str(pid_file)])
+        self.addCleanup(proc.wait)
+        self._track(proc.pid)
+        pid = self._read_pid(pid_file)
+        grand = self._read_pid(Path(str(pid_file) + ".grand"))
+        proc.kill()
+        proc.wait(10)
+        self._assert_gone_within(pid, 10)
+        self.assertFalse(_gone(grand), "the group kill reached a worker in its own session")
+
+    def test_the_deliberate_follower_kills_end_the_follower_itself(self):
+        from tests import process_fixtures
+
+        text = (Path(__file__).parent / "test_observation_equivalence.py").read_text()
+        self.assertIn("process_fixtures.kill_bounded(follower)", text)
+        self.assertIn("process_fixtures.kill_bounded(killed)", text)
+        self.assertNotIn("follower.kill()", text)
+        self.assertNotIn("killed.kill()", text)
+        pid_file = self.tmp / "follower.pid"
+        follower = process_fixtures.popen_bounded([sys.executable, "-c", self._WAITER, str(pid_file)])
+        self.addCleanup(follower.wait)
+        self._track(follower.pid)
+        pid = self._read_pid(pid_file)
+        process_fixtures.kill_bounded(follower)
+        self.assertEqual(follower.wait(10), -signal.SIGKILL)
+        self.assertTrue(_gone(pid), "the follower process outlived the kill that the test waits on")
+
 
 class ReapRecordedWorkersTest(unittest.TestCase):
     """The test-teardown guarantee (plan CP1, round 1's I7)."""

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-test-leftover-lifetime",
+  "requirements": {
+    "R1": {
+      "description": "a fake worker whose parent has died ends itself, and its process group, after FAKE_CLAUDE_ORPHAN_SECONDS (default 300), including when its stdin is held open by another process; the orphaning tests wait for the watchdog's readiness first",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "a fake worker with a live parent is never ended by the watchdog, FAKE_CLAUDE_ORPHAN_SECONDS=0 disables it, a fake that does not lead its group ends only itself, and the watchdog changes no worker's stderr",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "the fake's separate-session leftovers have a numeric life of at most 600 s on top of the fake's own 300 s (the Goal's eleven minutes): a detached --orphan-burst helper blocked on an absent gate, a daemon-mode sleep, a gated setsid descendant whose wrapper stays in the fake's group (timeout --foreground), and the fake's two subprocess sleeps (monitor timeout, hang child)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "a child Controller that a test starts ends when its test process dies (_LOST_CONTROLLER, _CHILD_STEP, the pinned _CHILD_CLI of the lifecycle and trunk-preflight suites, test_cli's _CHILD_RUN, the -m subprocess Controllers of test_packaged_runtime and test_observation_equivalence, the installed console-script Controller of test_handoff, and what the audit finds) or is bounded to 600 s, and is unchanged while the test lives",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "the incident replays (killed by pid after the loss, before the loss at a real hang point, and with a _CHILD_STEP child) show every process alive first, then no fake within 10 s of its orphaning and no anchor within 90 s with the variable set to 2",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "the development guide, the roadmap and follow-up 8 agree, check_docs and the full suite are green, and controller/ is unchanged",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "every process a test starts that a killed test can leave behind with the job's tag lives at most 600 s (LEFTOVER_LIFETIME_SECONDS in tests/process_fixtures.py), including release loops after a deliberate fake kill (total deadline), or carries a parent guard (-c) or an independent timeout deadline that survives re-exec (-m), across tests/; an enumerated inventory and a construct-level check over every process start, whatever its argv, keep a new shape from passing unclassified; the real-Claude opt-in tests are a named exception; new tests and replays clean up by exact pid on every path",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R8": {
+      "description": "the existing intentional-loss helpers wait for the fake's readiness, matched to the recorded worker pid (the spawn marker's pid for the deliberate pre-record loss, which keeps its identities unpublished), before they kill a Controller",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    }
+  }
+}

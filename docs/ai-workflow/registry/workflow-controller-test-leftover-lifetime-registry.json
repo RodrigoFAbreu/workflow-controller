@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-test-leftover-lifetime",
+  "plan_revision": 11,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "An orphaned fake worker ends itself and its process group after a bounded lifetime (FAKE_CLAUDE_ORPHAN_SECONDS, default 300) and announces readiness through FAKE_CLAUDE_ORPHAN_READY_FILE, also when its stdin is held open by another process, pinned by synchronized contract tests; existing intentional-loss helpers wait for the fake's pid-matched readiness before they kill a Controller (the deliberate pre-record loss waits for the pid its replaced on_spawn writes to a marker, keeping the job record's worker identities unpublished)",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The fake's separate-session leftovers and every other test-started process that can outlive its test have a numeric bound or an independent deadline: a detached orphan-burst helper blocked on an absent gate, a daemon-mode sleep, a gated setsid descendant (timeout --foreground), the fake's own subprocess sleepers, release loops with a total deadline (including after a deliberate fake kill), the 3,600 s sleepers lowered to a shared 600 s constant, and an enumerated inventory with a construct-level regression check that matches every process start whatever its argv (console scripts included)",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Child Controllers started by tests end when their test process dies: -c scripts that cannot re-exec by a parent guard, -m controller children and the installed console-script Controller of test_handoff by an independent timeout deadline that survives test death and snapshot re-exec; three synchronized replays of the killed-test-run incident show no fake within 10 s and no anchor within 90 s, with exact-pid cleanup on every path",
+      "depends_on": [
+        "CP1",
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Documentation and roadmap: development guide note, step C12a and follow-up 8 marked fixed with the Controller-side half left in C12, check_docs and the full suite green",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

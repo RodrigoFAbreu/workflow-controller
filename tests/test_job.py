@@ -2771,7 +2771,8 @@ class DrainDetachJobTest(_StreamingCase):
         # escapee's, and the recorded command line one of its own stages.
         self.assertIn(f"{pid} ({remaining['cmdline']})", ctx.exception.message)
         self.assertRegex(remaining["cmdline"],
-                         r"^(fake-escapee 3600|(setsid )?bash -c .*exec -a fake-escapee sleep 3600.*)$")
+                         (f"^(fake-escapee {fake_claude.DAEMON_LIFETIME_SECONDS}|(setsid )?bash -c .*exec -a fake-escapee sleep "
+                          f"{fake_claude.DAEMON_LIFETIME_SECONDS}.*)$"))
         self.assertEqual(Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[0], b"fake-escapee")
         self.assertIn("resume", ctx.exception.message)
         # The record: LAUNCHED at DRAINING, with drain_detached_at, never COMPLETED.

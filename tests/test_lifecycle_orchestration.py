@@ -54,6 +54,8 @@ from controller import cli, decision, evidence, identity, job, lock, runtime, wo
 from controller.errors import LifecycleWorkerActiveError  # noqa: E402
 from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
+_PARENT_GUARD = process_fixtures.PARENT_GUARD
+
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 
@@ -1195,7 +1197,7 @@ class UncommittedImplementationStateTest(_LifecycleTestCase):
 #: A child Controller: ``execute_step`` against the target, from a process
 #: the test can ``SIGKILL`` once the worker is recorded (the CP5 orphan
 #: shape), with the same generation as the test's own pinned identity.
-_CHILD_STEP = (
+_CHILD_STEP = _PARENT_GUARD + (
     "import sys; sys.path.insert(0, sys.argv[1]); "
     "from pathlib import Path; from controller import job; "
     "from controller.identity import ControllerIdentity, SOURCE_KIND_COMMIT; "
@@ -1321,7 +1323,8 @@ class ResumeReconciliationTest(_LifecycleTestCase):
              str(FAKE_CLAUDE)],
             env={**os.environ, "FAKE_CLAUDE_SCRIPT": str(lc.script_path),
                  "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file),
-                 "FAKE_CLAUDE_HANG_UNTIL_FILE": str(release)},
+                 "FAKE_CLAUDE_HANG_UNTIL_FILE": str(release),
+                 "FAKE_CLAUDE_ORPHAN_READY_FILE": str(lc.case_dir / "fake-ready")},
         )
         self.addCleanup(self._end_orphans, lc, child, release)
         self.assertTrue(process_fixtures.wait_until(
@@ -1332,6 +1335,8 @@ class ResumeReconciliationTest(_LifecycleTestCase):
         self.assertEqual(record["selected_action"]["command"], APPLY)
         self.assertEqual(record["selected_action"]["task_addendum"],
                          evidence.pending_review_stage_write_addendum(WI, AWAITING_LOCAL))
+        # Never orphan a fake that has not armed its watchdog (fake_claude D2).
+        process_fixtures.wait_fake_ready(lc.case_dir / "fake-ready", record["worker_process"]["pid"])
         child.send_signal(signal.SIGKILL)
         child.wait(timeout=10)
         self.assertTrue(process_fixtures.wait_until(lambda: self.processes(lc) == 1),
@@ -1734,7 +1739,7 @@ class NoCheckpointPartialRunTest(_LifecycleTestCase):
 
 #: A second ``step`` from another process: ``cli.main`` with the same
 #: pinned identity, exiting with its real code.
-_CHILD_CLI = (
+_CHILD_CLI = _PARENT_GUARD + (
     "import sys, json, unittest.mock; sys.path.insert(0, sys.argv[1]); "
     "from pathlib import Path; from controller import cli, identity; "
     "from controller.identity import ControllerIdentity; "
@@ -1752,12 +1757,15 @@ RUNNING, WAITING, ENDING, DRAINING, ENDED = (worker.RUNNING, worker.WAITING, wor
 _WORKER_STATE_EVENTS = ("worker_running", "worker_waiting", "worker_ending", "worker_draining", "worker_ended")
 
 
-def verification(done: Path, *, seconds: float = 1.5, release: Path | None = None) -> dict:
+def verification(done: Path, *, seconds: float = 1.5, release: Path | None = None,
+                 deadline: float = process_fixtures.LEFTOVER_LIFETIME_SECONDS) -> dict:
     """A background full verification (``bash_bg``) that writes its
     completion time (``time.time()``) to ``done`` -- after ``seconds``, or
-    once ``release`` exists."""
+    once ``release`` exists. The release wait has a total ``deadline`` (plan
+    D13): past it the shell exits without writing ``done``, so a test that
+    deliberately killed the fake cannot leave the loop behind."""
     import shlex
-    wait = (f"while [ ! -e {shlex.quote(str(release))} ]; do sleep 0.05; done" if release is not None
+    wait = (process_fixtures.shell_release_wait(release, seconds=deadline) if release is not None
             else f"sleep {seconds}")
     return {"step": "bash_bg", "id": "verify", "description": "full verification",
             "command": f"{wait}; date +%s.%N > {shlex.quote(str(done))}"}
@@ -2217,7 +2225,8 @@ class LifecycleLockLifetimeTest(_WaitingWorkerCase):
             [sys.executable, "-c", _CHILD_WAITING_STEP, str(fixtures.REPO_ROOT), str(lc.root), str(lc.runtime),
              str(FAKE_CLAUDE)],
             env={**os.environ, "FAKE_CLAUDE_TURNS": json.dumps(turns),
-                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file)},
+                 "FAKE_CLAUDE_INVOCATIONS_FILE": str(lc.processes_file),
+                 "FAKE_CLAUDE_ORPHAN_READY_FILE": str(lc.case_dir / "fake-ready")},
         )
         self.addCleanup(release.touch)
         self.addCleanup(lambda: child.poll() is None and (child.kill(), child.wait()))
@@ -2236,6 +2245,8 @@ class LifecycleLockLifetimeTest(_WaitingWorkerCase):
         self.assertEqual(record["status"], job.STATUS_LAUNCHED)
         self.assertEqual(lock.probe_lifecycle_lock(lc.root), lock.HELD)
 
+        # Never orphan a fake that has not armed its watchdog (fake_claude D2).
+        process_fixtures.wait_fake_ready(lc.case_dir / "fake-ready", record["worker_process"]["pid"])
         child.send_signal(signal.SIGKILL)
         child.wait(timeout=10)
         self.assertEqual(lock.probe_lifecycle_lock(lc.root), lock.HELD)

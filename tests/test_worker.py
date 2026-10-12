@@ -1135,11 +1135,11 @@ if member == 0:
     devnull = os.open(os.devnull, os.O_RDWR)
     os.dup2(devnull, 0)
     os.dup2(devnull, 1)
-    time.sleep(3600)
+    time.sleep(__LIFETIME__)
     os._exit(0)
 print(member, flush=True)
 sys.stdin.readline()
-'''
+'''.replace("__LIFETIME__", str(process_fixtures.LEFTOVER_LIFETIME_SECONDS))
 
 
 # ---------------------------------------------------------------------------
@@ -2723,7 +2723,7 @@ class OwnershipTest(_SupervisedCase):
         # Functional review F3: the entry carries its command line, in the
         # one shape the presenter and its fixtures use.
         self.assertEqual(tuple(excluded), worker.DAEMON_ENTRY_FIELDS)
-        self.assertEqual(excluded["cmdline"], "gpg-agent 3600")
+        self.assertEqual(excluded["cmdline"], f"gpg-agent {fake_claude.DAEMON_LIFETIME_SECONDS}")
         self.assertTrue(_running(excluded["pid"]), "the recognised daemon was ended")
 
     def test_an_unrecognised_daemon_detaches_after_the_drain_bound_and_ends_nothing(self) -> None:
@@ -2743,7 +2743,7 @@ class OwnershipTest(_SupervisedCase):
         self.extra_pids.append(remaining["pid"])
         self.assertEqual(remaining["pid"], int(pid_file.read_text()))
         self.assertIn(remaining["pid"], emptied, "the widening never ran")
-        self.assertRegex(remaining["cmdline"], _orphan_cmdline_re("fake-claude-daemon", 3600))
+        self.assertRegex(remaining["cmdline"], _orphan_cmdline_re("fake-claude-daemon", fake_claude.DAEMON_LIFETIME_SECONDS))
         self.assertEqual(result.remaining_pids, [remaining["pid"]])
         self.assertTrue(_running(remaining["pid"]), "the drain bound ended the escapee")
         anchor_pid = self.spawn["anchor"].pid
@@ -3330,7 +3330,7 @@ class ReapingResetTest(unittest.TestCase):
         self.enterContext(unittest.mock.patch.object(worker.os, "kill", kill))
 
     def _sleeper(self, *, new_session: bool) -> subprocess.Popen:
-        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"],
+        proc = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep({process_fixtures.LEFTOVER_LIFETIME_SECONDS})"],
                                 start_new_session=new_session)
 
         def cleanup() -> None:
@@ -3465,7 +3465,7 @@ class ReapingLaunchTest(_SupervisedCase):
         self.assertNotIn(waited["pid"], admitted)
 
     def test_the_same_new_session_child_without_the_exclusion_is_recorded(self) -> None:
-        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"], start_new_session=True)
+        child = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep({process_fixtures.LEFTOVER_LIFETIME_SECONDS})"], start_new_session=True)
         self.extra_pids.append(child.pid)
         self.addCleanup(setattr, child, "returncode", -9)
         worker._collect_children({}, set(), force_full=True)
@@ -3565,7 +3565,7 @@ class ReapingLaunchTest(_SupervisedCase):
     def test_an_adopted_same_session_grandchild_is_reaped_and_its_parent_keeps_its_status(self) -> None:
         launch_release, parent_release, grandchild_release = (self.dir / name for name in (
             "launch-release", "parent-release", "grandchild-release"))
-        command = f"while [ ! -e {shlex.quote(str(launch_release))} ]; do sleep 0.05; done"
+        command = process_fixtures.shell_release_wait(launch_release)
         self.addCleanup(launch_release.touch)
         results: dict = {}
         waiting = threading.Event()
@@ -3579,12 +3579,12 @@ class ReapingLaunchTest(_SupervisedCase):
         launcher = threading.Thread(target=run_launch, daemon=True)
         launcher.start()
         self.assertTrue(waiting.wait(20))
-        poll = "import os, sys, time\nwhile not os.path.exists(sys.argv[1]): time.sleep(0.01)\n"
+        poll = "import os, sys, time\n" + process_fixtures.python_release_wait("sys.argv[1]")
         script = (
             "import subprocess, sys, os, time\n"
             f"g = subprocess.Popen([sys.executable, '-c', {poll!r}, {str(grandchild_release)!r}])\n"
             "print(g.pid, flush=True)\n"
-            f"while not os.path.exists({str(parent_release)!r}): time.sleep(0.01)\n"
+            + process_fixtures.python_release_wait(repr(str(parent_release))) +
             "sys.exit(45)\n"
         )
         parent = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True)

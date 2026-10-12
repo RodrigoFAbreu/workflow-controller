@@ -1,5 +1,18 @@
 # Active Milestone
 
+## In progress: automated lifecycle scenarios (`workflow-controller-automated-lifecycle-scenarios`, step C6)
+
+Checkpoint **CP1** (the scenario kit) is complete. `tests/scenarios/` holds the registry, the kit and the sandbox
+setup phase; `tests/test_scenario_kit.py` pins them with stand-ins. Verified: the two-phase sandbox (user, network
+and mount namespaces, no PID namespace, a capability drop to the invoker's uid) cuts off the network and every real
+location through a shell, a git hook, a `python -E` child and a re-exec; an unavailable sandbox fails closed; the
+checkout snapshot is content-sensitive; the kill-points sit at the primitives the write inventory measured.
+Measured against the plan: the milestone binding is published by `runtime.create_json`, and a kill *before* the
+job record that names a spawned worker (`job-before`) leaves a stdin anchor that `resume` cannot reconcile (exit
+45), so scenario 4 needs a plan amendment for that variant. CP2 (the runner) is next.
+
+The sections below describe the previous milestone and stay until CP5 rewrites them.
+
 ## Status
 
 **Complete.** `workflow-controller-signalhub-notifications` (`docs/ROADMAP.md` step C5, section 11.4)

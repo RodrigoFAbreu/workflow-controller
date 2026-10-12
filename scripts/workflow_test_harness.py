@@ -324,6 +324,84 @@ def base_state(**work_items: dict) -> dict:
     return {"schema_version": SCHEMA_VERSION, "active_work_item_id": None, "work_items": work_items}
 
 
+def seed_existing_work_item(
+    state: dict, *, work_item_id: str, governing_workflow_version: str,
+    work_item_type: str, work_item_kind: str, plan_path: str,
+    registry_path: str, plan_revision: int, now: str,
+    mapping_path: str | None = None, base_commit: str | None = None,
+) -> dict:
+    """Returns a new state holding the entry `workflow_state.route_work_item`'s
+    fresh-id branch writes, on the given governing version, with the active
+    pointer claimed when free (workflow-2.10.0, `D-Fixtures`).
+
+    Since 2.10.0 `route_work_item` refuses to create a "2.1" item, but a
+    repository's existing "2.1" items were created by an earlier release; a
+    test that needs one seeds it here. It deliberately skips
+    `identity_reference_admits`: the id was admitted when the earlier
+    release created it. `workflow_test_harness_test.py` pins this against
+    the real creator under a "2.2" default."""
+    import copy
+
+    import workflow_fingerprint as fingerprint
+    import workflow_state as ws
+
+    ws.validate_work_item_id(work_item_id)
+    new_state = copy.deepcopy(state)
+    work_items = new_state.setdefault("work_items", {})
+    work_items[work_item_id] = ws.default_work_item(
+        work_item_id=work_item_id, work_item_type=work_item_type,
+        work_item_kind=work_item_kind, plan_path=plan_path,
+        registry_path=registry_path,
+        governing_workflow_version=governing_workflow_version,
+        plan_revision=plan_revision, last_transition=now,
+        mapping_path=mapping_path, base_commit=base_commit,
+    )
+    work_items[work_item_id]["feedback_layout"] = fingerprint.FEEDBACK_LAYOUT_SCOPED
+    if new_state.get("active_work_item_id") is None:
+        new_state["active_work_item_id"] = work_item_id
+    return new_state
+
+
+def seed_existing_remediation_child(
+    state: dict, parent_work_item_id: str, *, governing_workflow_version: str,
+    plan_path: str, registry_path: str, base_commit: str, now: str,
+) -> tuple[dict, str]:
+    """Returns `(new_state, child_id)`: the entry
+    `workflow_state.create_remediation_child_work_item` writes, on the given
+    governing version (workflow-2.10.0, `D-Fixtures`): the deterministic
+    `<parent>-remediation-<n>` id, `parent_work_item_id`, `base_commit`,
+    `plan_revision` 1, and no `active_work_item_id` claim. Pinned against
+    the real creator by `workflow_test_harness_test.py`."""
+    import copy
+
+    import workflow_fingerprint as fingerprint
+    import workflow_state as ws
+
+    parent = state["work_items"][parent_work_item_id]
+    existing_children = [
+        wid for wid, item in state.get("work_items", {}).items()
+        if item.get("parent_work_item_id") == parent_work_item_id
+    ]
+    child_id = f"{parent_work_item_id}-remediation-{len(existing_children) + 1}"
+    ws.validate_work_item_id(child_id)
+    new_state = copy.deepcopy(state)
+    work_items = new_state.setdefault("work_items", {})
+    if child_id in work_items:
+        raise ws.RemediationChildAlreadyExistsError(f"{child_id!r} already exists")
+    child = ws.default_work_item(
+        work_item_id=child_id, work_item_type=parent["work_item_type"],
+        work_item_kind=parent["work_item_kind"], plan_path=plan_path,
+        registry_path=registry_path,
+        governing_workflow_version=governing_workflow_version,
+        plan_revision=1, last_transition=now,
+    )
+    child["parent_work_item_id"] = parent_work_item_id
+    child["base_commit"] = base_commit
+    child["feedback_layout"] = fingerprint.FEEDBACK_LAYOUT_SCOPED
+    work_items[child_id] = child
+    return new_state, child_id
+
+
 def base_registry(
     work_item_id: str = "wi", plan_revision: int = 1, checkpoints: list[dict] | None = None,
 ) -> dict:

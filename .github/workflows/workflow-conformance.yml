@@ -5,12 +5,23 @@
 # deliberately absent: they classify content from a fixed historical base
 # commit, so an unrelated later change would fail them for reasons that are
 # not a Workflow regression. Run those explicitly when you want them.
+#
+# The suites run in parallel inside this one job (min(4, nproc) at a time,
+# longest first), each in its own copy of the checkout with its own TMPDIR and
+# HOME, and every suite always runs to its end. A pull request's earlier run is
+# cancelled when a newer push supersedes it; any other run is keyed by its own
+# run identity, so none is ever replaced.
+
 name: Workflow conformance
 
 on:
   pull_request:
   push:
     branches: [main]
+
+concurrency:
+  group: workflow-conformance-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.run_id, github.run_attempt) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   workflow-conformance:
@@ -20,30 +31,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: workflow_fingerprint_test.py
-        working-directory: scripts
-        run: python3 workflow_fingerprint_test.py
-      - name: workflow_state_test.py
-        working-directory: scripts
-        run: python3 workflow_state_test.py
-      - name: workflow_test_harness_test.py
-        working-directory: scripts
-        run: python3 workflow_test_harness_test.py
-      - name: workflow_integration_test.py
-        working-directory: scripts
-        run: python3 workflow_integration_test.py
-      - name: workflow_acceptance_matrix_test.py
-        working-directory: scripts
-        run: python3 workflow_acceptance_matrix_test.py
-      - name: workflow_state_completion_obligations_test.py
-        working-directory: scripts
-        run: python3 workflow_state_completion_obligations_test.py
-      - name: workflow_fingerprint_generalization_test.py
-        working-directory: scripts
-        run: python3 workflow_fingerprint_generalization_test.py
-      - name: workflow_protocol_test.py
-        working-directory: scripts
-        run: python3 workflow_protocol_test.py
-      - name: workflow_gate_policy_test.py
-        working-directory: scripts
-        run: python3 workflow_gate_policy_test.py
+      - name: Run the conformance suites
+        shell: bash
+        run: |
+          suites="workflow_acceptance_matrix_test.py workflow_protocol_test.py workflow_state_test.py workflow_gate_policy_test.py workflow_fingerprint_generalization_test.py workflow_state_completion_obligations_test.py workflow_integration_test.py workflow_fingerprint_test.py workflow_test_harness_test.py"
+          width=$(nproc); [ "$width" -gt 4 ] && width=4
+          base="$RUNNER_TEMP/workflow-conformance"
+          rm -rf "$base"; mkdir -p "$base"
+          run_suite() {
+            d="$base/$1"; mkdir -p "$d/tmp" "$d/home"
+            cp -a "$GITHUB_WORKSPACE/." "$d/repo"
+            start=$SECONDS; echo "start $1"
+            status=0
+            (cd "$d/repo/scripts" && TMPDIR="$d/tmp" HOME="$d/home" python3 "$1" >"$d/log" 2>&1) || status=$?
+            echo "$status $((SECONDS - start))" >"$d/result"
+            echo "done  $1 exit $status in $((SECONDS - start))s"
+          }
+          for s in $suites; do
+            while [ "$(jobs -rp | wc -l)" -ge "$width" ]; do wait -n || true; done
+            ( run_suite "$s" ) &
+          done
+          wait
+          failed=0
+          { echo "| suite | result | seconds |"; echo "| --- | --- | --- |"; } >>"$GITHUB_STEP_SUMMARY"
+          for s in $suites; do
+            d="$base/$s"; read -r status secs <"$d/result" 2>/dev/null || { status=missing; secs=0; }
+            if [ "$status" = 0 ]; then
+              echo "::group::$s passed in ${secs}s"; cat "$d/log"; echo "::endgroup::"
+              echo "| $s | passed | $secs |" >>"$GITHUB_STEP_SUMMARY"
+            else
+              failed=$((failed + 1))
+              echo "::error title=$s failed::exit $status after ${secs}s"; cat "$d/log" 2>/dev/null || true
+              echo "| $s | FAILED (exit $status) | $secs |" >>"$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then echo "$failed suite(s) failed"; exit 1; fi

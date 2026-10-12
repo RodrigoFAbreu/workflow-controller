@@ -1152,6 +1152,13 @@ parent's `work_item_type`/`work_item_kind`, its own
 `plan_path`/`registry_path`/`base_commit`, `parent_work_item_id` set, and
 `governing_workflow_version` fixed from the config default at creation.
 
+A child is a new work item, so its creation takes the configuration's default
+and, from 2.10.0, refuses with `DefaultWorkflowVersionRetiredError` before any
+write while that default is `"2.1"`; the same holds for a fresh
+`/milestone-plan`. Set the default to `"2.2"` in a `Workflow-Activation: 2.2`
+commit (see `docs/common-problems.md` in the repository, or
+`IMPLEMENTATION_REVIEW_WORKFLOW.md`). Existing `"2.1"` items are unaffected.
+
 Two consequences drive everything else:
 
 1. **The child is never `active_work_item_id`.** Creation deliberately

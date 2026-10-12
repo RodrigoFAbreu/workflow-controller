@@ -177,6 +177,13 @@ implementation-review flow unchanged. An operator updating
 automatically upgraded. Only a *new* work item created after activation
 gets the two-stage implementation-review flow.
 
+**From 2.10.0, a default that is `"2.1"` no longer starts new work.**
+Creating a new work item (a fresh `/milestone-plan`, or a broad remediation
+child from `/apply-functional-review` or `/apply-pr-review`) refuses before any
+write with `DefaultWorkflowVersionRetiredError` while `default_workflow_version`
+is `"2.1"`. Activate `"2.2"` as above to continue. Existing work items keep
+their governing version and finish on it.
+
 ## Rolling back
 
 A `Workflow-Rollback: 2.2` commit reverts `default_workflow_version` to
@@ -188,7 +195,8 @@ validation only ever checks the active `default_workflow_version` value
 itself, never an independently requested one.
 
 After a `Workflow-Rollback: 2.2` commit, the repository is still
-`"2.1"`-configured, and `ConfigMissingAfterActivationError`'s hard stop
+`"2.1"`-configured (and, from 2.10.0, cannot create a new work item until
+`"2.2"` is activated again), and `ConfigMissingAfterActivationError`'s hard stop
 correctly stays armed — this is why rollback is version-aware rather than
 a binary "activated"/"not activated" flag. An unresolvable
 `Workflow-Rollback` trailer value (blank, a typo, or a version this

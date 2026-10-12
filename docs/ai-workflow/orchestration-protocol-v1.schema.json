@@ -313,7 +313,8 @@
                       "checkpoint_completions_provable",
                       "installation_release_matches",
                       "protocol_ready",
-                      "gate_policy"
+                      "gate_policy",
+                      "default_workflow_version"
                     ]
                   },
                   "status": {"type": "string", "enum": ["pass", "warn", "fail", "skip"]},

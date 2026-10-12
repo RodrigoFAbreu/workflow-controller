@@ -8,9 +8,9 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-12).** Controller 1.9.0 is the latest release (PR #41, squash `04923f8`). It admits Workflow
+**Where things stand (2026-10-13).** Controller 1.9.0 is the latest release (PR #41, squash `04923f8`). It admits Workflow
 2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
-repository runs Workflow 2.9.2 with automatic gates (since 2026-10-11; 2.9.0 from 2026-10-09). Every milestone through C9, the Controller
+repository runs Workflow 2.10.0 with automatic gates (since 2026-10-13; 2.9.2 from 2026-10-11, 2.9.0 from 2026-10-09). Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
 `fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
 reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
@@ -24,7 +24,7 @@ request (#34). C8, the usage budget (accepted 2026-10-10 by gate policy), is com
 released as 1.8.0. A `chore:` pull request then moved this repository to Workflow 2.9.2 (the
 Workflow fix release for workflow#19 and workflow#20; 2026-10-11). A small milestone
 (C12a, accepted 2026-10-12 by gate policy) then fixed the test side of the recurring drain hang from leftover test processes
-(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and was released as 1.9.0. C6, the automated lifecycle scenarios (accepted 2026-10-12 by gate policy), is complete and merges as a `test:` pull request (#43) that releases nothing. Next (user decisions, 2026-10-09 and 2026-10-10): C7, C10 (with the automated functional review), C12 (self-recovery),
+(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and was released as 1.9.0. C6, the automated lifecycle scenarios (accepted 2026-10-12 by gate policy), is complete and merged as a `test:` pull request (#43, squash `febdf7e`) that released nothing. A `chore:` pull request then moved this repository to Workflow 2.10.0. Next (user decisions, 2026-10-09 and 2026-10-10): C7, C10 (with the automated functional review), C12 (self-recovery),
 C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -289,6 +289,33 @@ These are not blockers for the baseline, but should remain visible in later mile
 23. Note from the C5 functional review: a plain `usage` lapses only job-bound expired reservations; an
    unbound one lapses on the next reserve, check, renew or release. This is documented behaviour;
    consider stating it on the [`usage` commands page](guide/commands.md#usage).
+
+24. Worker shell `rm -i` hang: the operator's zsh aliases `rm` to `rm -i`, and a Controller worker's
+   background `rm` waited about 20 minutes for a y/n answer (C6 review job, 2026-10-12). Add one line
+   to `WORKER_LIFECYCLE_NOTE` (`controller/worker.py`) telling workers to use `command rm -f`.
+   Scheduled into C7, the next Controller code change.
+25. Stuck-worker detection: a worker idle on a background task with no progress for too long is
+   treated as stuck (ended by its exact pid, or flagged). Part of C12 (self-recovery, 11.10).
+26. `user_gate` notifications: 1.9.0 sends `user_gate` (ACTION_REQUIRED, HIGH) for every
+   `GATE_BLOCKED` stop, including stops an orchestrator handles itself. Send it only for gates that
+   need a person, and send nothing at all for a stop whose gate is in automatic mode (satisfied by
+   gate policy). A small patch, or C10. Until then the lanes run the Controller without a SignalHub key.
+27. Flaky test: `tests.test_cli.ResumeWorkerHoldExitTest.test_an_unverifiable_worker_exits_45_naming_no_group_and_abandon_clears_it`
+   asserts `str(pid) not in out`; on CI the pid matched inside another number. Match on word
+   boundaries.
+28. `tools/run_tests.py` keeps every run's results under `/tmp/workflow-controller-tests` (about
+   300 MB after a day). Prune old runs.
+29. Optional findings deferred from C6 (automated lifecycle scenarios), none applied: extra pipe
+   copies in `pass_fds`; unlisted real locations whose parent is a system directory; two small
+   error-path leaks; stale records left in a reused `--output`; the Git-metadata test's loose
+   `update-ref` check. From the external implementation review (rev 8): `$WORKFLOW_CONTROLLER_SETTINGS`
+   and some missing locations lack mount protection (O2); the namespace watchdog permits
+   `timeout + 15` and a degraded worker has no independent deadline after the parent dies (O4); most
+   negative checks accept a generic assertion failure (O6); registry tests import selftest scenario
+   code on the host (O7); ignored inputs, special Git index flags and external committed-symlink
+   targets can evade provenance checks (O8); flow id `index` collides with `index.json` (O9);
+   configured Git clean filters can execute during dirty checks (O10). Mid-job usage-limit handling
+   has no scenario (admission only).
 
 ---
 

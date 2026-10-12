@@ -209,7 +209,7 @@ class TestEnvelope(unittest.TestCase):
         self.assertEqual(out.stdout.count("\n"), 1)
         body = json.loads(out.stdout)
         assert_valid(body)
-        self.assertEqual(body["protocol"], {"name": "workflow-orchestration", "version": "1.2"})
+        self.assertEqual(body["protocol"], {"name": "workflow-orchestration", "version": "1.3"})
         self.assertEqual(body["workflow_release"], wp.WORKFLOW_RELEASE)
         self.assertEqual(body["operation"], "verify")
 
@@ -443,14 +443,14 @@ class TestDescribe(unittest.TestCase):
             sorted({"1"} | ws.TWO_STAGE_PLAN_REVIEW_VERSIONS))
 
     def test_the_v1_vocabulary(self):
-        self.assertEqual(wp.PROTOCOL_VERSION, "1.2")
+        self.assertEqual(wp.PROTOCOL_VERSION, "1.3")
         self.assertEqual(wp.PROTOCOL_MAJOR, 1)
         self.assertEqual(
             set(wp.OPERATIONS),
             {"describe", "verify", "resolve-artifact", "next-action", "reconcile", "record-external-result"})
         self.assertEqual(set(wp.EXTERNAL_RESULT_KINDS), {"plan_review_verdict", "implementation_review_verdict",
                                                          "functional_evidence", "pr_review_result"})
-        self.assertEqual(set(wp.RESERVED_RESULT_KINDS), set(), "nothing is reserved in protocol 1.2")
+        self.assertEqual(set(wp.RESERVED_RESULT_KINDS), set(), "nothing is reserved in protocol 1.3")
         self.assertEqual(set(wp.VERDICT_RESULT_KINDS), {"plan_review_verdict", "implementation_review_verdict"})
         self.assertEqual(
             set(wp.DISPOSITIONS),
@@ -762,7 +762,7 @@ COMMANDS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "commands"
 
 #: The catalogue's printed order (D-OP-Next's table, top to bottom).
 PRINTED_ROW_ORDER = (
-    "1", "1a", "2", "3", "4", "5", "6", "6a", "7", "7a", "8", "8a", "9", "10", "11", "11a", "12", "13",
+    "1", "1b", "1a", "2", "3", "4", "5", "6", "6a", "7", "7a", "8", "8a", "9", "10", "11", "11a", "12", "13",
     "14", "14a", "14b", "15", "16", "16a", "17", "18", "19", "20", "20a", "21", "22", "23", "24", "25", "25a",
     "25b", "26", "27", "28", "28a", "28b", "29", "30", "30a", "31", "31a", "32", "33", "34", "35", "35a", "36", "37", "38",
     "38a", "38b", "38c", "38d", "38e", "38f", "38g", "38h", "38i", "39", "40",
@@ -1111,6 +1111,65 @@ class TestNoItemRows(unittest.TestCase):
                              ("1a", "blocked", "plan_start_not_tracked"))
             self.assertIsNone(result["action"])
             self.assertEqual(result["snapshot"], {"work_item_ids": ["other"]})
+
+    def test_a_retired_default_gives_row_1b_never_plan_start(self):
+        """Protocol 1.3 (workflow-2.10.0, D-Protocol): a "2.1" default is
+        blocked, with the retired-default reason and `RETIRED_DEFAULT_NEXT_STEP`
+        as the remedy, and no action."""
+        with h.ScratchRepo() as repo:
+            write_config(repo, "2.1")
+            write_state(repo, h.base_state(other=minimal_item("MILESTONE_COMPLETE", "2.1", work_item_id="other")))
+            result = next_action(repo)
+            self.assertEqual((result["row"], result["disposition"], result["reason"]["code"]),
+                             ("1b", "blocked", "plan_start_default_retired"))
+            self.assertIsNone(result["action"])
+            self.assertEqual(result["reason"]["remedy"], ws.RETIRED_DEFAULT_NEXT_STEP)
+            self.assertEqual(result["snapshot"], {"work_item_ids": ["other"]})
+
+    def test_row_1b_leaves_rows_1_and_1a_unchanged(self):
+        for default, row in (("2.2", "1"), ("1", "1a")):
+            with self.subTest(default=default), h.ScratchRepo() as repo:
+                write_config(repo, default)
+                write_state(repo, h.base_state())
+                self.assertEqual(next_action(repo)["row"], row)
+
+    def test_row_1b_is_evaluated_between_rows_1_and_1a(self):
+        self.assertEqual(wp.ROW_IDS[:3], ("1", "1b", "1a"))
+        self.assertEqual(ws.NEW_WORK_RETIRED_VERSIONS, frozenset({"2.1"}))
+
+    def test_an_existing_item_is_still_driven_under_a_retired_default(self):
+        with h.ScratchRepo() as repo:
+            write_config(repo, "2.1")
+            write_state(repo, h.base_state(wi=minimal_item("PLANNING", "2.1", base_commit=repo.base)))
+            self.assertEqual(next_action(repo, "--work-item", WI)["row"], "7")
+
+    def test_verify_warns_on_a_retired_default_without_changing_health(self):
+        for default, status in (("2.1", "warn"), ("2.2", "pass"), ("1", "pass")):
+            with self.subTest(default=default), h.ScratchRepo() as repo:
+                write_config(repo, default)
+                write_state(repo, h.base_state())
+                body, code = call("--repo-root", str(repo.root), "verify")
+                self.assertEqual(code, wp.EXIT_OK)
+                assert_valid(body)
+                checks = {c["id"]: c for c in body["result"]["checks"]}
+                self.assertEqual(checks["default_workflow_version"]["status"], status)
+                self.assertEqual(body["result"]["checks"][-1]["id"], "default_workflow_version")
+                if status == "warn":
+                    self.assertTrue(checks["default_workflow_version"]["detail"].endswith(ws.RETIRED_DEFAULT_NEXT_STEP))
+                    self.assertEqual(checks["protocol_ready"]["status"], "pass")
+                healthy_without = all(c["status"] != "fail" for c in body["result"]["checks"])
+                self.assertEqual(body["result"]["healthy"], healthy_without)
+                self.assertIn("default_workflow_version", wp.ADVISORY_VERIFY_CHECKS)
+
+    def test_verify_skips_the_default_check_when_the_config_is_invalid(self):
+        with h.ScratchRepo() as repo:
+            write_state(repo, h.base_state())
+            (repo.root / ws.DEFAULT_CONFIG_PATH).parent.mkdir(parents=True, exist_ok=True)
+            (repo.root / ws.DEFAULT_CONFIG_PATH).write_text("{not json")
+            body, _ = call("--repo-root", str(repo.root), "verify")
+            checks = {c["id"]: c for c in body["result"]["checks"]}
+            self.assertNotEqual(checks["config_valid"]["status"], "pass")
+            self.assertEqual(checks["default_workflow_version"]["status"], "skip")
 
     def test_expect_state_identity_with_no_item_is_invalid_request(self):
         with h.ScratchRepo() as repo:
@@ -4287,6 +4346,9 @@ NEW_ACTION_IDS = ("plan.satisfy", "implementation.satisfy", "acceptance.satisfy"
 #: The 1.1 to 1.2 delta against v2.8.0 (workflow-2.9.0, `I1`). CP3 adds
 #: `legacy.retire`; CP5 adds `implementation.resume`.
 NEW_1_2_ACTION_IDS = ("legacy.retire", "implementation.resume")
+#: The `verify` checks 2.7.0 does not report: `gate_policy` (1.1) and
+#: `default_workflow_version` (1.3).
+ADVISORY_NEW = ("gate_policy", "default_workflow_version")
 
 
 class V270:
@@ -4341,8 +4403,13 @@ PINNED_NOW = "2026-10-03T12:00:00Z"
 
 
 def without_release(body: dict) -> dict:
-    """An envelope minus the two fields D-GP-Compat delta 1 changes."""
+    """An envelope minus the two fields D-GP-Compat delta 1 changes, and minus
+    the advisory `default_workflow_version` check protocol 1.3 adds to `verify`
+    (workflow-2.10.0), which no earlier release reports."""
     body = copy.deepcopy(body)
+    checks = body.get("result", {}).get("checks")
+    if isinstance(checks, list):
+        body["result"]["checks"] = [c for c in checks if c.get("id") != "default_workflow_version"]
     body["protocol"]["version"] = None
     body["workflow_release"] = None
     return body
@@ -4405,7 +4472,7 @@ class TestAllHumanEquivalence(unittest.TestCase):
                 old, _ = V270.run(repo.root, "verify")
                 new, _ = run_new(repo.root, "verify")
                 assert_valid(new)
-                new_checks = [c for c in new["result"]["checks"] if c["id"] != "gate_policy"]
+                new_checks = [c for c in new["result"]["checks"] if c["id"] not in ADVISORY_NEW]
                 self.assertEqual(new["result"]["healthy"], old["result"]["healthy"])
                 # `installation_release_matches` names the release the scripts are, by design
                 strip = lambda checks: [{k: v for k, v in c.items() if k != "detail"} if c["id"] ==
@@ -4429,9 +4496,9 @@ class TestAllHumanEquivalence(unittest.TestCase):
                 checks = {c["id"]: c for c in new["result"]["checks"]}
                 self.assertEqual(checks["gate_policy"]["status"], status)
                 self.assertEqual(new["result"]["healthy"], old["result"]["healthy"])
-                self.assertEqual([c["id"] for c in new["result"]["checks"] if c["id"] != "gate_policy"],
+                self.assertEqual([c["id"] for c in new["result"]["checks"] if c["id"] not in ADVISORY_NEW],
                                  [c["id"] for c in old["result"]["checks"]])
-                self.assertEqual([c["status"] for c in new["result"]["checks"] if c["id"] != "gate_policy"],
+                self.assertEqual([c["status"] for c in new["result"]["checks"] if c["id"] not in ADVISORY_NEW],
                                  [c["status"] for c in old["result"]["checks"]])
 
     def test_describe_differs_only_by_the_listed_additions(self):
@@ -4441,7 +4508,7 @@ class TestAllHumanEquivalence(unittest.TestCase):
             new, _ = run_new(repo.root, "describe")
         assert_valid(new)
         old_result, new_result = old["result"], new["result"]
-        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.0", "1.2"))
+        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.0", "1.3"))
         for key in ("supported_protocol_majors", "supported_governing_versions"):
             self.assertEqual(new_result[key], old_result[key])
         old_caps, new_caps = old_result["capabilities"], new_result["capabilities"]
@@ -5400,7 +5467,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         body, code = call("describe")
         self.assertEqual(code, wp.EXIT_OK)
         result = body["result"]
-        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.2", "2.9.2"))
+        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.3", "2.10.0"))
         caps = result["capabilities"]
         self.assertEqual(sorted(set(NEW_ACTION_IDS + NEW_1_2_ACTION_IDS) - set(caps["action_ids"])), [])
         self.assertEqual(caps["reserved_result_kinds"], [])
@@ -5410,7 +5477,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         self.assertIn("validation", caps["dispositions"])
 
     def test_the_release_constant_and_the_protocol_version(self):
-        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.9.2", "1.2", 1))
+        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.10.0", "1.3", 1))
         self.assertIn("validator", wp.WORKER_ROLES)
         self.assertEqual(wp.ACTIONS["acceptance.satisfy"]["role"], "validator")
         self.assertEqual(wp.ACTIONS["pr.apply_review"]["role"], "applier")
@@ -5521,7 +5588,7 @@ class TestEquivalenceAgainstV280(unittest.TestCase):
         new, new_code = run_new(repo_root, *argv)
         self.assertEqual(old_code, new_code, (old, new))
         assert_valid(new)
-        self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.1", "1.2"))
+        self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.1", "1.3"))
         return old, new
 
     def added_scenarios(self) -> list:
@@ -5623,7 +5690,7 @@ class TestEquivalenceAgainstV280(unittest.TestCase):
             write_state(repo, empty_state())
             old, new = self.compare(repo.root, "describe")
         old_result, new_result = old["result"], new["result"]
-        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.1", "1.2"))
+        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.1", "1.3"))
         self.assertEqual((old_result["workflow_release"], new_result["workflow_release"]), ("2.8.0", "2.9.0"))
         old_caps, new_caps = old_result["capabilities"], new_result["capabilities"]
         added = sorted(set(new_caps["action_ids"]) - set(old_caps["action_ids"]))
@@ -5847,7 +5914,7 @@ class TestUpdateSimulation27To28(unittest.TestCase):
                 self.assertEqual(json.dumps(without_release(old), sort_keys=True),
                                  json.dumps(without_release(new), sort_keys=True))
                 self.assertNotIn("policy", new["result"])
-                self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.0", "1.2"))
+                self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.0", "1.3"))
                 self.assertEqual(new["workflow_release"], "2.9.0")
 
     # -- the downgrade posture ------------------------------------------------

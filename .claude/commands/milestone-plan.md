@@ -70,7 +70,12 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
    has a `work_items[id]` entry, its own `governing_workflow_version`
    (fixed at that entry's creation) governs this run, never the current
    config default. Otherwise this is a fresh milestone and the config's
-   *current* `default_workflow_version` governs it.
+   *current* `default_workflow_version` governs it -- unless that default is
+   `"2.1"`: new work items no longer start on it, so the run stops here, before
+   step 1 writes anything, with `workflow_state.DefaultWorkflowVersionRetiredError`
+   (the same refusal `route_work_item` makes) and its next step
+   (`workflow_state.RETIRED_DEFAULT_NEXT_STEP`: set the default to `"2.2"`,
+   commit it with `Workflow-Activation: 2.2`, run the command again).
    - **`governing_workflow_version: "1"`** (today, always, until
      `WF-Activate` runs): steps 1-7 below execute exactly as written, with
      no `WORKFLOW_STATE.json`/`WORKFLOW_CONFIG.json` reads or writes

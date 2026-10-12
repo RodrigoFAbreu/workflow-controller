@@ -1,10 +1,11 @@
 # Workflow Orchestration Protocol v1
 
-The normative specification of Orchestration Protocol v1, version `1.2`
+The normative specification of Orchestration Protocol v1, version `1.3`
 (`1.0` first shipped in Workflow 2.7.0; `1.1` adds the gate-policy rows and
 actions in Workflow 2.8.0; `1.2` adds the user-only `legacy.retire`
 alternative of row 3 and `implementation.resume` alternative of row 38c in
-Workflow 2.9.0). An orchestrator (for example the Workflow
+Workflow 2.9.0; `1.3` adds row `1b` and the advisory `default_workflow_version`
+check in Workflow 2.10.0). An orchestrator (for example the Workflow
 Controller) drives a repository's Workflow through this protocol only. It
 copies no Workflow phases, artifact paths, helper names or transition
 rules: the Workflow owns what the lifecycle means, and the orchestrator owns
@@ -38,7 +39,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** (protocol `1.3`).
 
 ## 2. Invocation and the envelope
 
@@ -57,7 +58,7 @@ stdout is exactly one JSON document, the **envelope**
 
 ```json
 {
-  "protocol": {"name": "workflow-orchestration", "version": "1.2"},
+  "protocol": {"name": "workflow-orchestration", "version": "1.3"},
   "workflow_release": "2.8.0",
   "operation": "next-action",
   "ok": true,
@@ -222,6 +223,14 @@ directory exists. Its result (`$defs.results.describe`) is
    setting the file no longer carries, and a gate-lowering adoption; `fail`
    for an invalid file and for a failed provenance of the adopted policy or
    the floor. It never changes `healthy` and is not part of check 7.
+9. `default_workflow_version` (workflow-2.10.0, protocol `1.3`, advisory):
+   `warn` when the config's `default_workflow_version` is one new work items
+   no longer start on (`NEW_WORK_RETIRED_VERSIONS`, today `2.1`); its detail
+   names the default, that new work items are refused, and the next step
+   (`RETIRED_DEFAULT_NEXT_STEP`); `pass` otherwise; `skip` when the
+   configuration is unreadable (check 3 did not pass). It never changes
+   `healthy` and is not part of check 7: an existing `2.1` item is still
+   driven normally.
 
 A check fails on a Workflow or Git refusal. After an unreadable state,
 checks 2 to 5 are `skip`, check 6 still runs, and check 7 fails. A failing
@@ -308,7 +317,7 @@ a **decision**:
 
 With no work item named and none active, the result has no `basis`; its
 `snapshot` is `{"work_item_ids": [...]}`, the sorted keys of `work_items`,
-and the catalogue's no-item rows (1 and 1a) decide.
+and the catalogue's no-item rows (1, 1b and 1a) decide.
 `--expect-state-identity` then refuses with `invalid_request`.
 
 Refusals: `stale_decision` (section 4); `unknown_work_item`;
@@ -551,6 +560,7 @@ every row whose condition depends on it.
 | row | call | kind | classes |
 | --- | --- | --- | --- |
 | 1 | `load_config` | value | — |
+| 1b | `load_config` | value | — |
 | 1a | `load_config` | value | — |
 | 2 | — | — | — |
 | 3 | — | — | — |
@@ -692,13 +702,14 @@ the rows are tried from top to bottom, across phases, and the first row
 whose phase, `gv` and condition all match wins. No other precedence rule
 exists. A row covers every listed phase at every listed `gv`, except where
 the `gv` column says "as listed", when each phase names its own versions.
-The no-item rows (1, 1a) apply only when no work item is named or active,
+The no-item rows (1, 1b, 1a) apply only when no work item is named or active,
 and only they do. Mirrored by `CATALOGUE`; the condition and notes columns
 are a summary, and the code and its tests are the detail.
 
 | row | phases | gv | condition | disposition | action | reason, invocation and notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | — | — | no work item is named or active, and `load_config`'s `default_workflow_version` is `2.1` or `2.2` | automatic | `plan.start` | `plan_start` |
+| 1 | — | — | no work item is named or active, and `load_config`'s `default_workflow_version` is `2.2` (a two-stage default not in `NEW_WORK_RETIRED_VERSIONS`) | automatic | `plan.start` | `plan_start` |
+| 1b | — | — | no work item is named or active, and `load_config`'s `default_workflow_version` is `2.1` (in `NEW_WORK_RETIRED_VERSIONS`) | blocked | — | `plan_start_default_retired`: a `/milestone-plan` would refuse with `DefaultWorkflowVersionRetiredError`; remedy `RETIRED_DEFAULT_NEXT_STEP` (set the default to `2.2` and commit it with `Workflow-Activation: 2.2`) |
 | 1a | — | — | no work item is named or active (the default is `1`) | blocked | — | `plan_start_not_tracked`: a `1` `/milestone-plan` creates no work item |
 | 2 | `AWAITING_TECHNICAL_APPROVAL`, `AWAITING_USER_ACCEPTANCE`, `FIXING_FUNCTIONAL_FINDINGS`, `SELF_REVIEWING_PLAN` | `1`, `2.1`, `2.2` | — (a vocabulary-only phase is persisted) | blocked | — | `invalid_state` |
 | 3 | `LEGACY_READY` | `1`, `2.1`, `2.2` | — | blocked | — | `legacy_item_not_activated`; remedy: promote it, or (protocol `1.2`) retire it as already finished; alternative `legacy.retire` (`user_only`, never automatic) |
@@ -765,6 +776,21 @@ are a summary, and the code and its tests are the detail.
 | 40 | `MILESTONE_COMPLETE` | `1`, `2.1`, `2.2` | — | complete | — | — |
 
 Notes on the catalogue:
+
+- **Row `1b` is evaluated before row `1a`.** Its letter sorts after `1a`, but
+  `1a` is the unconditional fall-through for the `1` default and row ids are
+  stable, so row `1b` sits between rows `1` and `1a`. The order is deliberate
+  and `PRINTED_ROW_ORDER` pins it; without row `1b` a `2.1` default would keep
+  getting `plan.start` for a run that refuses.
+- **Rows 38 and 38d after a refused broad branch.** When the broad branch of
+  `functional.apply_findings` (row 38) or `pr.apply_review` (row 38d) is refused
+  with `DefaultWorkflowVersionRetiredError`, the phase is unchanged and
+  `reconcile` classifies the run `no_progress`; the next `next-action` matches
+  the same row. A repeated `no_progress` from row 38 or 38d while `verify`
+  reports the `default_workflow_version` `warn` is that refusal, not a stall to
+  retry: the remedy is the operator's configuration edit
+  (`RETIRED_DEFAULT_NEXT_STEP`). No row pre-empts it, because the broad/bounded
+  classification is the worker's, made by reading the findings.
 
 - **`1` items.** The protocol drives a `1` item only once it already has a
   `work_items` entry (a remediation child created under a `1` default, a
@@ -1046,6 +1072,14 @@ A consumer of protocol `1.x`:
 
 ## 10. Compatibility notes
 
+- **Protocol `1.3`** (Workflow 2.10.0). New work items are no longer created
+  while the config's default is `2.1`. Row `1` now matches only a default that
+  is not retired (`2.2`); the new row `1b` reports `blocked` for a `2.1`
+  default instead; `verify` gains the advisory `default_workflow_version`
+  check. A `1.2` consumer meets a `blocked` decision with an unknown reason
+  code and a `verify` check id it does not know: it stops, it does not misact.
+  `2.1` stays in `supported_governing_versions`: existing `2.1` items run to
+  completion unchanged.
 - **The pinned `review_content_id` label** (`v2.6.0-002`). Review feedback
   states its content id as `Reviewed review_content_id: <64 hex>`, required
   in every two-stage stage verdict and optional elsewhere. The legacy

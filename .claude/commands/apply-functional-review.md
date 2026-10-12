@@ -75,6 +75,19 @@ exclusive within one round — a single round can resolve some findings as
 "no code change," fix others as "bounded," and defer the rest as "broad,"
 all in the same invocation.
 
+**Retired-default check, before the first bounded sub-step** (`D-Paths`):
+this is the point where the round's branch for every finding is decided,
+before touching any source/test file or the state file. If any finding of the
+round is broad, first call
+`workflow_state.assert_default_admits_new_work_item(config)` on the loaded
+`docs/ai-workflow/WORKFLOW_CONFIG.json`. A `DefaultWorkflowVersionRetiredError`
+(the default is `"2.1"`; a remediation child is new work whatever its parent's
+version) stops the whole round with nothing written -- no stale write, no
+bounded commit, no child -- and is reported with its next step
+(`workflow_state.RETIRED_DEFAULT_NEXT_STEP`). The refusal holds the bounded and
+no-code-change findings too, so a re-run after the configuration edit starts
+from the same point.
+
 - **No code change**: the finding needs no source/test edit at all (e.g.
   resolved by a narrative-only checklist correction, or turns out on
   reproduction to already be correct). `technical_approval` is left

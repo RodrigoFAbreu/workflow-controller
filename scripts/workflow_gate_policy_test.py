@@ -1985,7 +1985,7 @@ class TestVerifyCheck(unittest.TestCase):
         return {c["id"]: c for c in body["result"]["checks"]} | {"_healthy": body["result"]["healthy"]}
 
     def test_the_check_is_the_eighth_and_advisory(self):
-        self.assertEqual(wp.VERIFY_CHECK_IDS[-1], "gate_policy")
+        self.assertEqual(wp.VERIFY_CHECK_IDS[-2:], ("gate_policy", "default_workflow_version"))
         self.assertIn("gate_policy", wp.ADVISORY_VERIFY_CHECKS)
         with PolicyRepo() as repo:
             checks = self.verify(repo)

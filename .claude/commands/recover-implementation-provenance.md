@@ -7,8 +7,12 @@ state_writer: true
 **State-writer discipline (D1, item 354):** every `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs -- everywhere a step below says "persist the returned state" -- is performed by calling `workflow_state.state_transaction(repo_root, mutator)`, never by a separate read-then-write: `state_transaction` holds `.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`, `fcntl.flock(LOCK_EX)`) across the complete re-read -> apply-the-named-function -> canonical-serialize -> atomic-publish sequence in one process invocation, so `mutator` is the exact transition function each step below names, applied to freshly re-read state rather than to a snapshot taken before the lock was acquired.
 
 `WFR-62`'s stale-`generation_head` recovery (`WF8c` (b)): after a work
-item's implementation-stage bundle has already been generated and is
-`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`, a later, entirely legitimate
+item's implementation-stage bundle has already been generated and the item
+is in its implementation-review phase (`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`
+for a `"1"` or `"2.1"` item; any of `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`,
+`AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` and
+`AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a `"2.2"` item, as step 2
+lists), a later, entirely legitimate
 excluded-only commit (e.g. a doc fix, a scripts/-prefixed change, anything
 `docs/ai-workflow/registry/<work_item_id>-artifacts.json` classifies
 `excluded` at the implementation stage) can land on top of the current
@@ -22,7 +26,7 @@ under review now spans the wider, still-content-identical interval. This
 command creates that recording commit (`S2`) without starting a new
 implementation round: `reviewed_implementation_head`/
 `implementation_revision` are never touched, and the work item's phase
-stays exactly `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` throughout. It is
+never changes. It is
 the standalone counterpart of `WF8c` (c)'s
 `resolve_bundle_generation_outcome`-driven `record_bundle_generation`
 same-content path — that path only runs from `record_bundle_generation`'s
@@ -32,7 +36,7 @@ stage-specific: `SELF_REVIEWING_IMPLEMENTATION` for
 `AWAITING_FUNCTIONAL_REVIEW` with a `STALE` `technical_approval`, for
 `stage="post-fix"` — a caller already regenerating a bundle for other
 reasons); this command is the only way to reach the identical
-recovered-role commit shape from `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`
+recovered-role commit shape from an implementation-review phase
 itself, without re-entering any of those remediation cycles just to fix a
 provenance pointer.
 

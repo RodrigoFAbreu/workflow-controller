@@ -9,7 +9,7 @@ location through a shell, a git hook, a `python -E` child and a re-exec; an unav
 checkout snapshot is content-sensitive; the kill-points sit at the primitives the write inventory measured.
 Measured against the plan: the milestone binding is published by `runtime.create_json`, and a kill *before* the
 job record that names a spawned worker (`job-before`) leaves a stdin anchor that `resume` cannot reconcile (exit
-45), so scenario 4 needs a plan amendment for that variant.
+45). The plan's oracle for that variant does not hold; no plan amendment was made (see CP3).
 
 Checkpoint **CP2** (the runner) is complete. `tools/run_scenarios.py` has `list`, `run` and `check`: `run` writes
 `<flow_id>.json` records in the protocol's `functional_evidence` shape plus `index.json` bound to `HEAD`, refuses
@@ -29,8 +29,8 @@ timeout, unverified effect: exit 30, a `FAILED` record, no phase advance, one wo
 the six `kill-and-resume-<point>` variants. `tests/test_scenarios_negative.py` breaks each claim and requires an
 assertion failure. Measured oracles for scenario 4: `binding-*` and `run-*` are pre-spawn (no worker, no job record,
 lock free, `resume` exits 0 and changes nothing); `job-after` leaves a `LAUNCHED` record and the killed Controller's
-stdin anchor holding the lock until `resume` reconciles it to `FINISHED`; `job-before` is the plan's amended case:
-`resume` exits 45 until the scenario ends the anchor, then reconciles. Every variant's continuation `run` reaches
+stdin anchor holding the lock until `resume` reconciles it to `FINISHED`; `job-before` deviates from the approved plan's
+oracle (no amendment was made): `resume` exits 45 until the scenario ends the anchor, then reconciles. Every variant's continuation `run` reaches
 the bound step's end state (exit 10, `BRANCH_BOUND`, each worker command run exactly once). Two kit fixes came out
 of this: `tempfile.tempdir` was cached before `TMPDIR` pointed at the scratch tree (case directories landed in the
 real `/tmp`), and a per-shard `TMPDIR` that lacks `workflow-controller-tests` made the plan cover the temporary
@@ -57,6 +57,19 @@ detected split, what a `passed` record proves and the uncovered mid-job usage pa
 determinism test (`CatalogueDeterminismTest`) runs the complete catalogue twice and compares every normalised summary.
 `controller/` is byte-unchanged and no release is cut. Verification results are in the checkpoint's final report and
 in the implementation bundle.
+
+Checkpoint **CP6** (run the scenarios fully protected on CI) is complete (amendment, plan revision 10). Measured on CI:
+`ubuntu-latest` sets `kernel.apparmor_restrict_unprivileged_userns=1`, so the sandbox probe failed and every scenario
+atom failed red. The `tests` job in `tools/ci_workflows.py` gains a step, before the shard, that runs
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` behind an existence guard; `validate.yml` is regenerated,
+`tests/test_ci_workflows.py` pins the step, and `docs/guide/development.md` says why. The kit fixes found while
+diagnosing it are committed with their tests (`955cb6d`): the worker's result pipe is read while the worker runs (a
+failure message over 64 KiB used to hang for 600 s), the degraded leak scan no longer flags its own scratch, and the
+scratch tmpfs is mounted after the read-only binds. Two complete `python3 tools/run_scenarios.py run` catalogue runs on
+that `HEAD` (namespace mode, 15 scenarios, about 37 s each against the 120 s budget) differ only in `ran_at`. The full
+suite passes except the two known Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`), which
+fail locally since Git 2.56 and are unrelated. That the pull request's CI shards run the atoms (not skipped) is the remaining evidence, seen
+when the branch is pushed.
 
 The sections below describe the previous milestone and stay until the milestone is accepted.
 

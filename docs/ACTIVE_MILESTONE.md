@@ -39,8 +39,14 @@ two known Git 2.56 trailer-rule tests (follow-up 12). `python3 tools/check_docs.
 
 ## Functional review checklist
 
-Implementation revision 6 (technical approval `d0a4479`, base `e0f400e`). Findings go in the feedback file
+Implementation revision 7 (technical approval re-requested after functional round 1; base `e0f400e`). Findings go in the feedback file
 named below the checklist.
+
+**Functional round 1 (2026-10-12).** F1 (the `notifications` table showed every type "on" with the master
+switch off) fixed in a bounded code change with a regression test; re-test flow 4 (`notifications.enabled:
+false` -> every row off, source `master switch`). F2 and F3 were checklist wording and are corrected in flows 4
+and 7 below. Flow 5's `step_done`, `pr_merged` and `release_published` stay covered by the wiring tests.
+No remediation child.
 
 **Setup.** From the repository root: `export PYTHONPATH=$PWD`, then use `python3 -m controller` as
 `workflow-controller`. For a safe server, start the project's fake SignalHub (`tests/fake_signalhub.py`,
@@ -60,7 +66,7 @@ the lanes' `events.json`.
 3. *Failure codes.* Script the fake server to answer 400/422 (exit 1), then 500 or a reset (exit 3 after a
    bounded retry), and stop it entirely (exit 3). Expected: no hang beyond the bounded retry.
 4. *Per-event configuration.* Set `notifications.events.kinds.state.enabled=false` and
-   `events.milestone_accepted.severity="HIGH"`; run `notifications`. Expected: the listing shows the
+   `notifications.events.events.milestone_accepted.severity="HIGH"`; run `notifications`. Expected: the listing shows the
    override winning over the kind, `usage_released` and `usage_reservation_expired` off by default, and
    `notifications.enabled: false` turns every event type off. An invalid value (`severity: "LOUD"`) is
    refused with exit 20; an unknown event type, kind or `_`-prefixed field is ignored (a warning for the
@@ -73,8 +79,8 @@ the lanes' `events.json`.
 6. *No double send.* Re-run the same step or `resume` a run; the repeated event reuses its
    `Idempotency-Key` (the fake answers 200, stores one event).
 7. *Delivery never steers.* Run a step with the server down, slow (delayed answer) and returning 500.
-   Expected: the step's outcome, exit status and run log are identical to the no-notification case;
-   only a bounded wait at exit.
+   Expected: the step's outcome and exit status are identical to the no-notification case, and so
+   is the run log apart from the documented `notifications_summary` line; only a bounded wait at exit.
 8. *Usage events.* `usage --release`, `usage --renew` and a plain `usage` that sweeps an expired
    reservation: with the two off-by-default types enabled, `usage_released` and
    `usage_reservation_expired` are sent; disabled, nothing is sent.

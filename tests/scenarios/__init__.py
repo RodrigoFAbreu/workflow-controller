@@ -72,6 +72,8 @@ def scenario(flow_id: str, *, covers: tuple[str, ...] = (), selftest: bool = Fal
     return register
 
 
-def catalogue() -> list[Scenario]:
-    """The registered non-selftest scenarios, in registration order."""
+def catalogued() -> list[Scenario]:
+    """The registered non-selftest scenarios, in registration order. (Not named
+    ``catalogue``: that is the submodule that registers them, and importing it
+    would shadow the function.)"""
     return [s for s in REGISTRY.values() if not s.selftest]

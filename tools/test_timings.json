@@ -2355,6 +2355,36 @@
       "seconds": 0.0,
       "tests": 3
     },
+    "tests.test_run_scenarios.CheckTest": {
+      "samples": 1,
+      "seconds": 4.0,
+      "tests": 2
+    },
+    "tests.test_run_scenarios.DeterminismTest": {
+      "samples": 1,
+      "seconds": 4.4,
+      "tests": 2
+    },
+    "tests.test_run_scenarios.IngestionTest": {
+      "samples": 1,
+      "seconds": 2.6,
+      "tests": 1
+    },
+    "tests.test_run_scenarios.IsolationRefusalTest": {
+      "samples": 1,
+      "seconds": 1.2,
+      "tests": 4
+    },
+    "tests.test_run_scenarios.RecordShapeTest": {
+      "samples": 1,
+      "seconds": 3.5,
+      "tests": 4
+    },
+    "tests.test_run_scenarios.ScopedRefusalTest": {
+      "samples": 1,
+      "seconds": 3.8,
+      "tests": 5
+    },
     "tests.test_run_tests.BuildingBlocksTest": {
       "samples": 12,
       "seconds": 5.504,
@@ -2404,6 +2434,61 @@
       "samples": 18,
       "seconds": 0.003,
       "tests": 4
+    },
+    "tests.test_scenario_kit.CheckoutSnapshotTest": {
+      "samples": 1,
+      "seconds": 0.1,
+      "tests": 6
+    },
+    "tests.test_scenario_kit.DeterminismTest": {
+      "samples": 1,
+      "seconds": 1.6,
+      "tests": 4
+    },
+    "tests.test_scenario_kit.FailClosedTest": {
+      "samples": 1,
+      "seconds": 0.8,
+      "tests": 5
+    },
+    "tests.test_scenario_kit.FixtureHygieneTest": {
+      "samples": 1,
+      "seconds": 0.02,
+      "tests": 1
+    },
+    "tests.test_scenario_kit.GitMetadataTest": {
+      "samples": 1,
+      "seconds": 0.05,
+      "tests": 1
+    },
+    "tests.test_scenario_kit.KillPointTest": {
+      "samples": 1,
+      "seconds": 7.5,
+      "tests": 7
+    },
+    "tests.test_scenario_kit.LeakScanTest": {
+      "samples": 1,
+      "seconds": 0.1,
+      "tests": 3
+    },
+    "tests.test_scenario_kit.RegistryTest": {
+      "samples": 1,
+      "seconds": 0.01,
+      "tests": 2
+    },
+    "tests.test_scenario_kit.SandboxEnforcementTest": {
+      "samples": 1,
+      "seconds": 22.2,
+      "tests": 8
+    },
+    "tests.test_scenarios.GeneratedClassTest": {
+      "samples": 1,
+      "seconds": 0.01,
+      "tests": 4
+    },
+    "tests.test_scenarios.ScenarioInventoryTest": {
+      "samples": 1,
+      "seconds": 0.3,
+      "tests": 3
     },
     "tests.test_settings.CleanTest": {
       "samples": 12,

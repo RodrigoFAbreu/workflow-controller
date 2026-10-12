@@ -9,7 +9,17 @@ location through a shell, a git hook, a `python -E` child and a re-exec; an unav
 checkout snapshot is content-sensitive; the kill-points sit at the primitives the write inventory measured.
 Measured against the plan: the milestone binding is published by `runtime.create_json`, and a kill *before* the
 job record that names a spawned worker (`job-before`) leaves a stdin anchor that `resume` cannot reconcile (exit
-45), so scenario 4 needs a plan amendment for that variant. CP2 (the runner) is next.
+45), so scenario 4 needs a plan amendment for that variant.
+
+Checkpoint **CP2** (the runner) is complete. `tools/run_scenarios.py` has `list`, `run` and `check`: `run` writes
+`<flow_id>.json` records in the protocol's `functional_evidence` shape plus `index.json` bound to `HEAD`, refuses
+(exit 2, nothing written) a tree whose code differs from `HEAD` and an unavailable sandbox, and exits 1 after
+writing a `failed` record for a failing scenario. `--degraded-diagnostic` writes reports that are not evidence.
+`tests/test_run_scenarios.py` runs a clone's copy of the runner against the selftest scenarios and feeds each
+record through the real `ingest_functional_evidence` (stored `head` and recomputed identity asserted separately);
+`tests/test_scenarios.py` generates one `TestCase` class per catalogue scenario (none until CP3) and checks the
+planner inventory. The registry function is now `catalogued()`, because `catalogue` is the submodule that
+registers the scenarios. CP3 (scenarios 1-5) is next.
 
 The sections below describe the previous milestone and stay until CP5 rewrites them.
 

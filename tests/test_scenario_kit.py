@@ -537,7 +537,7 @@ class RegistryTest(unittest.TestCase):
         importlib.import_module(SELFTEST)
         from tests import scenarios
         self.assertTrue(REGISTRY and all(s.selftest for s in REGISTRY.values()))
-        self.assertEqual(scenarios.catalogue(), [])
+        self.assertEqual(scenarios.catalogued(), [])
 
 
 class FixtureHygieneTest(unittest.TestCase):

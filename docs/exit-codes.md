@@ -11,7 +11,7 @@ copy, which the Controller's own tests compare with the code, is
 |---|---|---|
 | 0 | the requested work completed and nothing is pending | nothing |
 | 1 | `usage --renew` or `--release` named a token the usage record does not know (`--renew` also refuses one already accounted); nothing was changed. For `notifications --test`: the server rejected the test event, or answered `422` (a conflict) | check the token the `usage --reserve` call printed; for the test event, see [no notifications arrive](common-problems.md#no-notifications-arrive) |
-| 2 | the command line did not parse; `notifications --test` also returns it when nothing was sent because the notifier is not configured or is disabled | put global options such as `--work-item` before the subcommand and the repository last: `workflow-controller --work-item <id> explain <repo>` |
+| 2 | the command line did not parse; `notifications --test` also returns it when nothing was sent because the notifier is not configured or is disabled | put global options such as `--work-item` before the subcommand and the repository last: `workflow-controller --work-item <id> explain <repo>`; for the test event, configure or enable the notifier ([no notifications arrive](common-problems.md#no-notifications-arrive)) |
 | 10 | stopped cleanly at a [gate stop](glossary.md#gate-stop), waiting for you | the normal end of a run. Run `workflow-controller explain <repo>`, do what it says, then run again |
 | 15 | the next action is valid but not automated, so it was reported and not launched | do it yourself; `explain` names the phase and the command |
 | 16 | `run` reached `--max-steps` with work still outstanding | run again, or raise `--max-steps` |

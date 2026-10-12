@@ -80,8 +80,10 @@ preflight writes and the lines of `usage-events.jsonl`.
    the key is `wc-<event type>-<repository>-<identity>`, where the identity
    names the thing notified and changes when it recurs: a job id for a failed
    job, the run id for `run_finished`, the work item and pull request for
-   `pr_merged`, the release tag for `release_published`, a hash of the line's
-   own fields for a usage event, and for a branch gate the work item,
+   `pr_merged`, the release tag for `release_published`, for `usage_paused`
+   the provider, window, repository and the hold's occurrence (plus the run
+   for a `run_cap`), never the line's `at` or `reason`, a hash of the line's
+   own fields for the other usage events, and for a branch gate the work item,
    binding generation, the pull request head or the binding's latest event
    time, and a streak counter for gates (red checks) that nothing else tells
    apart. The title, message, metadata and link carry no job id, run id,

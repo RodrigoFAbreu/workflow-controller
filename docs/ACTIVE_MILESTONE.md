@@ -19,7 +19,22 @@ writing a `failed` record for a failing scenario. `--degraded-diagnostic` writes
 record through the real `ingest_functional_evidence` (stored `head` and recomputed identity asserted separately);
 `tests/test_scenarios.py` generates one `TestCase` class per catalogue scenario (none until CP3) and checks the
 planner inventory. The registry function is now `catalogued()`, because `catalogue` is the submodule that
-registers the scenarios. CP3 (scenarios 1-5) is next.
+registers the scenarios.
+
+Checkpoint **CP3** (scenarios 1-5) is complete. `tests/scenarios/lifecycle.py` registers ten flows over the existing
+`Lifecycle` and `_E2ECase` models, run inside the sandbox with the scratch `bin/` fakes: `full-lifecycle-to-merge`,
+`human-gates-stop-and-resume` (plan approval, technical approval and the acceptance track, each stopping with exit
+10 and zero workers, then resuming after the simulated user act), `worker-failure-fails-closed` (non-zero exit,
+timeout, unverified effect: exit 30, a `FAILED` record, no phase advance, one worker per `run`), `trunk-drift` and
+the six `kill-and-resume-<point>` variants. `tests/test_scenarios_negative.py` breaks each claim and requires an
+assertion failure. Measured oracles for scenario 4: `binding-*` and `run-*` are pre-spawn (no worker, no job record,
+lock free, `resume` exits 0 and changes nothing); `job-after` leaves a `LAUNCHED` record and the killed Controller's
+stdin anchor holding the lock until `resume` reconciles it to `FINISHED`; `job-before` is the plan's amended case:
+`resume` exits 45 until the scenario ends the anchor, then reconciles. Every variant's continuation `run` reaches
+the bound step's end state (exit 10, `BRANCH_BOUND`, each worker command run exactly once). Two kit fixes came out
+of this: `tempfile.tempdir` was cached before `TMPDIR` pointed at the scratch tree (case directories landed in the
+real `/tmp`), and a per-shard `TMPDIR` that lacks `workflow-controller-tests` made the plan cover the temporary
+directory read-only. CP4 (scenarios 6-10) is next.
 
 The sections below describe the previous milestone and stay until CP5 rewrites them.
 

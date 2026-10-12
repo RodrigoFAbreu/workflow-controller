@@ -299,6 +299,8 @@ LEFTOVER_INVENTORY = (
     ("scenarios/selftest.py", "start:Popen", 1, "bounded",
      "the leftover selftest: a 30 s sleep in a new session that the kit's leftover check must find and kill"),
     ("scenarios/selftest.py", "start:run", 5, "short", "attack paths and git calls the scenario waits for; each exits"),
+    ("test_run_scenarios.py", "start:run", 1, "deadline",
+     "the runner CLI in a clone of the checkout: the scenarios it runs sit behind the kit's per-scenario timeout (D14) and the call waits for it"),
     ("test_scenario_kit.py", "start:helper:popen_bounded", 1, "deadline",
      "the kill-point wrapper unit test: a child blocked at a durable write behind timeout -s KILL (D14), killed by group by the test"),
     ("test_buildinfo.py", "start:run:controller", 1, "short",

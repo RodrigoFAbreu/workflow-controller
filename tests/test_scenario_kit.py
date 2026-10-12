@@ -415,6 +415,19 @@ print(json.dumps(out))
             kit.run_scenario("selftest-basic", module=SELFTEST, checkout=dangling)
 
 
+class ProtectionPlanTemporaryDirectoryTest(unittest.TestCase):
+    """The shard runner sets ``TMPDIR`` to a directory that exists and lacks ``workflow-controller-tests``: the plan
+    must not cover that missing location through the temporary directory, which holds the scratch tree."""
+
+    def test_a_per_shard_temporary_directory_is_never_made_read_only(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="scenario-shard-tmp-") as shard_tmp:
+            with unittest.mock.patch.dict(os.environ, {"TMPDIR": shard_tmp}), \
+                    unittest.mock.patch.object(tempfile, "tempdir", None):
+                plan = {entry["path"] for entry in kit.protection_plan(kit.REPO_ROOT)}
+            self.assertNotIn(os.path.realpath(shard_tmp), plan)
+            self.assertFalse(any(os.path.realpath(shard_tmp).startswith(path.rstrip("/") + "/") for path in plan), plan)
+
+
 class LeakScanTest(unittest.TestCase):
     """D3b(b): the diagnostic mode's token scan, and what it cannot see."""
 
@@ -536,8 +549,8 @@ class RegistryTest(unittest.TestCase):
         import importlib
         importlib.import_module(SELFTEST)
         from tests import scenarios
-        self.assertTrue(REGISTRY and all(s.selftest for s in REGISTRY.values()))
-        self.assertEqual(scenarios.catalogued(), [])
+        self.assertTrue(REGISTRY and all(s.selftest == s.flow_id.startswith("selftest-") for s in REGISTRY.values()))
+        self.assertFalse([s for s in scenarios.catalogued() if s.flow_id.startswith("selftest-")])
 
 
 class FixtureHygieneTest(unittest.TestCase):

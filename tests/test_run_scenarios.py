@@ -128,7 +128,8 @@ class RecordShapeTest(CloneCase):
         self.assertEqual(list(self.out.glob("*")), [])
 
     def test_list_hides_the_selftest_scenarios_unless_asked(self) -> None:
-        self.assertEqual(self.runner("list", module=False).stdout.split(), [])
+        catalogue = self.runner("list", module=False).stdout.split()
+        self.assertTrue(catalogue and all(name.startswith("scenario-") for name in catalogue), catalogue)
         listed = self.runner("list", "--all").stdout.split()
         self.assertIn("selftest-basic", listed)
 

@@ -2356,33 +2356,33 @@
       "tests": 3
     },
     "tests.test_run_scenarios.CheckTest": {
-      "samples": 1,
-      "seconds": 4.0,
+      "samples": 2,
+      "seconds": 3.595,
       "tests": 2
     },
     "tests.test_run_scenarios.DeterminismTest": {
-      "samples": 1,
-      "seconds": 4.4,
+      "samples": 2,
+      "seconds": 3.952,
       "tests": 2
     },
     "tests.test_run_scenarios.IngestionTest": {
-      "samples": 1,
-      "seconds": 2.6,
+      "samples": 2,
+      "seconds": 2.162,
       "tests": 1
     },
     "tests.test_run_scenarios.IsolationRefusalTest": {
-      "samples": 1,
-      "seconds": 1.2,
+      "samples": 2,
+      "seconds": 1.021,
       "tests": 4
     },
     "tests.test_run_scenarios.RecordShapeTest": {
-      "samples": 1,
-      "seconds": 3.5,
+      "samples": 2,
+      "seconds": 3.08,
       "tests": 4
     },
     "tests.test_run_scenarios.ScopedRefusalTest": {
-      "samples": 1,
-      "seconds": 3.8,
+      "samples": 2,
+      "seconds": 3.396,
       "tests": 5
     },
     "tests.test_run_tests.BuildingBlocksTest": {
@@ -2436,59 +2436,169 @@
       "tests": 4
     },
     "tests.test_scenario_kit.CheckoutSnapshotTest": {
-      "samples": 1,
-      "seconds": 0.1,
+      "samples": 2,
+      "seconds": 0.082,
       "tests": 6
     },
     "tests.test_scenario_kit.DeterminismTest": {
-      "samples": 1,
-      "seconds": 1.6,
+      "samples": 2,
+      "seconds": 1.497,
       "tests": 4
     },
     "tests.test_scenario_kit.FailClosedTest": {
-      "samples": 1,
-      "seconds": 0.8,
+      "samples": 2,
+      "seconds": 0.711,
       "tests": 5
     },
     "tests.test_scenario_kit.FixtureHygieneTest": {
-      "samples": 1,
-      "seconds": 0.02,
+      "samples": 2,
+      "seconds": 0.017,
       "tests": 1
     },
     "tests.test_scenario_kit.GitMetadataTest": {
-      "samples": 1,
-      "seconds": 0.05,
+      "samples": 2,
+      "seconds": 0.064,
       "tests": 1
     },
     "tests.test_scenario_kit.KillPointTest": {
-      "samples": 1,
-      "seconds": 7.5,
+      "samples": 2,
+      "seconds": 7.754,
       "tests": 7
     },
     "tests.test_scenario_kit.LeakScanTest": {
-      "samples": 1,
-      "seconds": 0.1,
+      "samples": 2,
+      "seconds": 0.08,
       "tests": 3
     },
-    "tests.test_scenario_kit.RegistryTest": {
+    "tests.test_scenario_kit.ProtectionPlanTemporaryDirectoryTest": {
       "samples": 1,
-      "seconds": 0.01,
+      "seconds": 0.002,
+      "tests": 1
+    },
+    "tests.test_scenario_kit.RegistryTest": {
+      "samples": 2,
+      "seconds": 0.005,
       "tests": 2
     },
     "tests.test_scenario_kit.SandboxEnforcementTest": {
-      "samples": 1,
-      "seconds": 22.2,
+      "samples": 2,
+      "seconds": 22.183,
       "tests": 8
     },
     "tests.test_scenarios.GeneratedClassTest": {
-      "samples": 1,
-      "seconds": 0.01,
+      "samples": 2,
+      "seconds": 0.007,
       "tests": 4
     },
     "tests.test_scenarios.ScenarioInventoryTest": {
-      "samples": 1,
-      "seconds": 0.3,
+      "samples": 2,
+      "seconds": 0.195,
       "tests": 3
+    },
+    "tests.test_scenarios.Scenario_scenario_full_lifecycle_to_merge": {
+      "samples": 1,
+      "seconds": 2.701,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_human_gates_stop_and_resume": {
+      "samples": 1,
+      "seconds": 1.4,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_kill_and_resume_binding_after": {
+      "samples": 1,
+      "seconds": 0.849,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_kill_and_resume_binding_before": {
+      "samples": 1,
+      "seconds": 0.848,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_kill_and_resume_job_after": {
+      "samples": 1,
+      "seconds": 3.302,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_kill_and_resume_job_before": {
+      "samples": 1,
+      "seconds": 3.702,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_kill_and_resume_run_after": {
+      "samples": 1,
+      "seconds": 0.849,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_kill_and_resume_run_before": {
+      "samples": 1,
+      "seconds": 0.849,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_trunk_drift": {
+      "samples": 1,
+      "seconds": 2.25,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_worker_failure_fails_closed": {
+      "samples": 1,
+      "seconds": 3.802,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.EveryScenarioHasAMutationTest": {
+      "samples": 1,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_full_lifecycle_to_merge_skip_trailer": {
+      "samples": 1,
+      "seconds": 1.049,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_human_gates_stop_and_resume_gate_launches_worker": {
+      "samples": 1,
+      "seconds": 0.248,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_kill_and_resume_binding_after_run_true": {
+      "samples": 1,
+      "seconds": 0.648,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_kill_and_resume_binding_before_run_true": {
+      "samples": 1,
+      "seconds": 0.648,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_kill_and_resume_job_after_resume_true": {
+      "samples": 1,
+      "seconds": 13.716,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_kill_and_resume_job_before_resume_true": {
+      "samples": 1,
+      "seconds": 13.662,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_kill_and_resume_run_after_run_true": {
+      "samples": 1,
+      "seconds": 0.598,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_kill_and_resume_run_before_run_true": {
+      "samples": 1,
+      "seconds": 0.598,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_trunk_drift_no_drift": {
+      "samples": 1,
+      "seconds": 1.8,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_worker_failure_fails_closed_advancing_worker": {
+      "samples": 1,
+      "seconds": 0.398,
+      "tests": 1
     },
     "tests.test_settings.CleanTest": {
       "samples": 12,
@@ -3381,6 +3491,7 @@
     "7efb55ec733fc3ca4a38af5a1c847c850fa1c247a20992f9a4c96f0c74ff2f6e",
     "62a879bb73d088d1de1fc51dc005e80bf55bc4f715e82af7e21fba35c6b5d3a8",
     "45e2420ea13d2008ca0e6aafd7b85cdccf2b3c36f7bb99c359b2aee432ca8999",
-    "a91c4f3a88649aca817817ed26930a1353756597e8f63ff72cd4952d285af131"
+    "a91c4f3a88649aca817817ed26930a1353756597e8f63ff72cd4952d285af131",
+    "b5aa78f0c99fffe7aba4a04a97803f5371dde0c3f1ee747b79c0f80d7c6579f3"
   ]
 }

@@ -197,6 +197,9 @@ def protection_plan(checkout: Path, env: "dict | None" = None, extra: "list[Path
     missing one is covered through its nearest existing ancestor that is not
     a system directory, else (a missing top-level path) skipped."""
     plan: dict[str, str] = {}
+    # The scratch tree is created in the temporary directory, so neither it nor an ancestor of it may be made read-only
+    # to cover a missing real location (a per-shard TMPDIR that lacks `workflow-controller-tests`).
+    temp = Path(os.path.realpath(tempfile.gettempdir()))
     candidates = [*real_locations(checkout, env), *resolve_git_metadata(checkout), *map(Path, extra)]
     for candidate in candidates:
         path = Path(os.path.abspath(candidate))
@@ -204,7 +207,10 @@ def protection_plan(checkout: Path, env: "dict | None" = None, extra: "list[Path
             path = path.parent
         if path in _NEVER_PROTECT or not path.is_dir():
             continue
-        plan[str(path.resolve())] = "ro"
+        resolved = path.resolve()
+        if resolved == temp or resolved in temp.parents:
+            continue
+        plan[str(resolved)] = "ro"
     # An enclosing protected directory already covers a nested one.
     paths = sorted(plan, key=len)
     kept: list[str] = []
@@ -705,6 +711,7 @@ class Kit:
         env = build_env(self.scratch)
         os.environ.clear()
         os.environ.update(env)
+        tempfile.tempdir = None  # `gettempdir()` caches: forget a /tmp resolved before TMPDIR pointed at the scratch tree
         return env
 
     def boot_config(self, **extra) -> str:

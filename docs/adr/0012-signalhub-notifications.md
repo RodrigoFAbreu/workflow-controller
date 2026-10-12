@@ -55,7 +55,8 @@ preflight writes and the lines of `usage-events.jsonl`.
    declined action (15) are a run's normal ends and are not notifications.
    `merge_accepted` only means the Controller's own merge call was accepted,
    so it sends nothing: the later `merged_squashed` does. A branch gate that
-   is only a wait (`checks_pending`, `merge_pending`, `release_pending`) sends
+   is only a wait (`checks_pending`, `merge_pending`, `release_pending`,
+   `pr_head_not_accepted`) sends
    nothing, unless a run that waited ends on one when its wait is spent. No
    read-only command emits.
 
@@ -87,6 +88,19 @@ preflight writes and the lines of `usage-events.jsonl`.
    clock or wait deadline, so an event derived again by another process
    repeats the stored body byte for byte and gets `200`. A `422` is recorded
    as `conflict`, not as a duplicate, and is never retried.
+
+   Five bounded residuals of the usage and recovery keys are accepted and
+   named here: (a) more than 50 foreign `usage-events.jsonl` lines between
+   two pauses of one hold start a new occurrence chain, so one extra
+   `usage_paused` is sent; (b) a repository cap with no reading whose
+   accounting window is re-placed by a later charge sends one extra notice per
+   move; (c) a reservations-only cap pause less than five hours after a
+   matching pause, with no `usage_resumed` between, sends no notice, so the
+   promise of one `usage_paused` and one `usage_resumed` per hold is
+   qualified accordingly; (d) two processes appending at once may each record
+   their own occurrence, which sends one extra notice; (e) an event type that
+   was disabled when its record was written and is enabled within 30 minutes
+   sends one late notice on `resume`.
 
    The repository in the key is the directory name, which is also what the
    body's `context` carries. Two checkouts whose directory names are the same,

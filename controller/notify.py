@@ -224,10 +224,15 @@ def resolve(event_type: str, events_config: Mapping | None = None) -> Resolved:
     return Resolved(event_type, kind, enabled, category, severity, sources)
 
 
-def effective_table(events_config: Mapping | None = None) -> list[Resolved]:
+def effective_table(events_config: Mapping | None = None, *, master_enabled: bool = True) -> list[Resolved]:
     """Every event type resolved, in table order (the ``notifications``
-    command's rows)."""
-    return [resolve(name, events_config) for name in EVENT_TABLE]
+    command's rows). With the master switch off every row is off, its
+    ``enabled`` source ``master switch``."""
+    rows = [resolve(name, events_config) for name in EVENT_TABLE]
+    if master_enabled:
+        return rows
+    return [Resolved(r.event_type, r.kind, False, r.category, r.severity, {**r.sources, "enabled": "master switch"})
+            for r in rows]
 
 
 # ---------------------------------------------------------------------------

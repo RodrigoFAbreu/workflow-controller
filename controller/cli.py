@@ -2239,7 +2239,7 @@ def cmd_notifications(args: argparse.Namespace) -> int:
     config, credentials = _notifications_state(_effective(args).values)
     if args.test:
         return _notifications_test(args, config, credentials)
-    table = notify.effective_table(config.events)
+    table = notify.effective_table(config.events, master_enabled=config.enabled)
     inert = ("disabled" if (not config.enabled or credentials.disabled)
              else None if credentials.configured else "not_configured")
     if args.json:

@@ -3241,6 +3241,22 @@ class NotificationsCommandTest(unittest.TestCase):
         self.assertIsNone(data["inert"])
         self.assertEqual(len(data["events"]), len(notify.EVENT_TABLE))
 
+    def test_master_switch_off_shows_every_event_type_off(self) -> None:
+        self.write_settings(**{"notifications.url": self.hub.url, "notifications.api_key_file": str(self.key_file),
+                               "notifications.enabled": False})
+        code, out, err = self.run_cmd("--json", "notifications")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        data = json.loads(out)
+        self.assertEqual(data["inert"], "disabled")
+        self.assertEqual(len(data["events"]), len(notify.EVENT_TABLE))
+        for row in data["events"]:
+            self.assertFalse(row["enabled"], row["event_type"])
+            self.assertEqual(row["sources"]["enabled"], "master switch")
+        code, out, err = self.run_cmd("notifications")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn("notifications.enabled: false", out)
+        self.assertNotIn(" on  ", out)
+
     def test_unconfigured_names_where_it_looked(self) -> None:
         self.write_settings()
         code, out, _ = self.run_cmd("notifications")

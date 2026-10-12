@@ -48,7 +48,14 @@
     "R8": {
       "description": "`controller/` is byte-unchanged, no release is cut, and the development guide, the roadmap and the active-milestone narrative agree; `check_docs`, the full suite and the full scenario run are green",
       "checkpoint_ids": [
-        "CP5"
+        "CP5",
+        "CP6"
+      ]
+    },
+    "R9": {
+      "description": "The CI test jobs run the scenario atoms fully protected: the generated `validate.yml` lifts `kernel.apparmor_restrict_unprivileged_userns` (guarded) in the `tests` job before the shard runs, `tools/ci_workflows.py --check` agrees with the committed file, and the scenario atoms pass (not skip, not fail) on the pull request's CI",
+      "checkpoint_ids": [
+        "CP6"
       ]
     }
   }

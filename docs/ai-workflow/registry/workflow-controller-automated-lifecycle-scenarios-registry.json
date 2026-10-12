@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-automated-lifecycle-scenarios",
-  "plan_revision": 6,
+  "plan_revision": 10,
   "checkpoints": [
     {
       "id": "CP1",
@@ -42,6 +42,15 @@
       "name": "Documentation and roadmap: development guide section, automation guide paragraph, step C6 complete, active milestone narrative, check_docs, full suite, two compared full scenario runs and shard estimates on the final HEAD",
       "depends_on": [
         "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Run the scenarios fully protected on CI: a guarded sysctl step in the CI tests job, generated through tools/ci_workflows.py, lifting the AppArmor unprivileged-user-namespace restriction; the pending kit fixes committed; guide updated; the scenario atoms pass on the pull request's CI",
+      "depends_on": [
+        "CP5"
       ],
       "complexity": 1,
       "session_target": 1

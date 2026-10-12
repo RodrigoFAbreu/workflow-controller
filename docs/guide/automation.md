@@ -134,6 +134,46 @@ worker could build on the completion or commit it. A human commits the
 completion as the Workflow step would have, with its trailers, or
 discards it and reruns the step.
 
+## Notifications from an unattended run
+
+From 1.9.0 the Controller is a producer for SignalHub, so a run you are not
+watching tells you what it is doing and, above all, when it is blocked. It
+sends from records it already keeps (a finished job, a run that closed, a
+branch gate, a line of `usage-events.jsonl`), never from a separate source,
+and the events are the closed table in
+[`notifications`](commands.md#notifications). The ones that need you are
+the `user_gate` (a human gate, or a merge left to a person) and
+`lane_blocked` (a failed job, a refusal, a gate that needs a fix); by default
+they are the highest severities. A finished step, a usage pause and a run
+that closed are `INFO`/`LOW`.
+
+To set it up:
+
+1. Give the Controller the server address and a key. Either export
+   `SIGNALHUB_URL` and `SIGNALHUB_API_KEY_FILE` (or `SIGNALHUB_API_KEY`) in
+   the environment the run starts in, or set `notifications.url` and
+   `notifications.api_key_file` in the settings file once, which every launch
+   path then finds. The key itself is never stored in the settings file or
+   the repository.
+2. Run `workflow-controller notifications` to see what was found, and
+   `workflow-controller notifications --test` to send one test event.
+3. Turn off or re-rank what you do not want in `notifications.events`
+   ([the notifications section](runtime.md#the-notifications-section)).
+
+Sending never steers the lifecycle. It happens on a background thread, is
+bounded in time and attempts, and a notice that cannot be delivered is
+recorded in `runs/<run_id>/notifications.jsonl` and nothing else: the step
+is not blocked, failed or delayed, and a repeat of the same occurrence (a
+retry, a `resume`) carries the same `Idempotency-Key` and does not notify
+twice. There is no outbox that retries later. `resume` derives again the
+notice of a job whose record outlived the process that was to send it, if
+that job ended within the last 30 minutes and its run log shows the notice
+never left; a notice lost between a close-out and the queue (the
+`pr_merged` of a merge seen by a process that then died) is not recovered.
+A watchdog that restarts after a killed process should run `resume` before
+`run`. Why it is built this way is in
+[ADR 0012](../adr/0012-signalhub-notifications.md).
+
 ## Workflow's queries (2.6.0 and later)
 
 For a 2.6.0 target the Controller keeps no rule of its own for two facts. It

@@ -22,14 +22,15 @@ import datetime
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, protocol_decision, routing,
-    runtime, settings, target_state, telemetry, usage, worker,
+    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
+    routing, runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -39,15 +40,16 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: rather than by a denylist a future command could be added without
 #: updating. ``settings`` is dispatched before pinning, like ``follow``, and
 #: touches only the user settings file, never a target or the runtime root.
-READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry", "usage"})
+READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry", "usage", "notifications"})
 ALL_COMMANDS = frozenset({
     "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
-    "telemetry", "usage",
+    "telemetry", "usage", "notifications",
 })
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
-#: "Exit codes"). ``2`` is argparse's own default usage-error code and is
-#: never returned explicitly by this module.
+#: "Exit codes"). ``2`` is argparse's own default usage-error code; this
+#: module also returns it for a bad ``--stream`` and, as ``_NOTIFY_EXIT_INERT``,
+#: for ``notifications --test`` when nothing was sent.
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_GATE = 10
@@ -419,6 +421,16 @@ def build_parser() -> argparse.ArgumentParser:
                              help="group the jobs: role, model, or role,model for both (default: one group)")
     telemetry_p.add_argument("repo", nargs="?", default=None,
                              help="only this target repository's jobs (default: every target)")
+
+    # workflow-controller-signalhub-notifications CP4 (D10): the effective
+    # notification configuration, and the transport check. Takes no
+    # repository; `--json` is the global option.
+    notifications_p = subparsers.add_parser(
+        "notifications", help="show the effective notification table, or send one test event (--test)")
+    notifications_p.add_argument(
+        "--test", action="store_true", default=False,
+        help="send one info test event through the real transport; exit 0 sent or duplicate, "
+             "1 rejected or conflict, 3 failed, 2 not configured or disabled")
 
     # workflow-controller-usage-budget CP4 (D8): the usage budget's view and
     # the manual workers' gate. `--model` and `--json` are also global
@@ -1216,6 +1228,8 @@ def _usage_event_fields(*, provider: str | None, repository: str, run_id: str | 
         "provider": provider, "window": getattr(hold, "window", None), "percent": getattr(hold, "percent", None),
         "forecast": getattr(hold, "forecast", None), "resume_at": getattr(hold, "resume_at", None),
         "reason": getattr(hold, "reason", None), "token": token, "repository": repository, "run_id": run_id,
+        # Additive (signalhub-notifications D4): only a cap hold carries the window's reset.
+        **({"window_resets_at": hold.resets_at} if getattr(hold, "resets_at", None) is not None else {}),
     }
 
 
@@ -1659,7 +1673,14 @@ def cmd_usage(args: argparse.Namespace) -> int:
     terminal job record a crash left unaccounted ``accounting: "done"``."""
     runtime_root, row = _follow_runtime_root_row(args)
     runtime.ensure_runtime_root(runtime_root, ladder_row=row)
-    values = _effective(args).values
+    effective = _effective(args)
+    values = effective.values
+    # a pause sends usage_paused; a release, usage_released; every mode lapses expired reservations (the
+    # replay sweep or _maintain), which is when usage_reservation_expired is written -- once, by whoever
+    # runs first, and D13 does not recover usage events. The plain display installs it too, but without
+    # the credential warning: it is silent unless the sweep wrote an enabled event.
+    _install_notifier(effective, runtime_root,
+                      warn=bool(args.check or args.wait or args.release is not None or args.renew is not None))
     if args.renew is not None:
         return _usage_renew(args, runtime_root, values)
     if args.release is not None:
@@ -2099,7 +2120,27 @@ def _resolve_settings(args: argparse.Namespace, *, write: bool | None) -> settin
     return settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
 
 
-def _apply_settings(args: argparse.Namespace, *, write: bool) -> settings.EffectiveSettings:
+def _install_notifier(effective: settings.EffectiveSettings, runtime_root: Path, *, warn: bool = True) -> None:
+    """Install the process-wide notifier from the effective settings
+    (signalhub-notifications D1): the sender's own credential lookup,
+    outcome log and queue. Replaces any earlier one; :func:`main` removes it
+    again after the final flush. Never raises into the command."""
+    try:
+        values = effective.values
+        notifier = notify.install(notify.NotifierConfig(
+            enabled=values["notifications.enabled"], url=values["notifications.url"],
+            api_key_file=values["notifications.api_key_file"],
+            timeout_seconds=values["notifications.timeout_seconds"], attempts=values["notifications.attempts"],
+            retry_seconds=values["notifications.retry_seconds"], events=values["notifications.events"]),
+            runtime_root=runtime_root)
+        if warn:
+            notify.warn_once(notifier)
+    except Exception:  # noqa: BLE001 -- notification can never stop a command
+        notify.uninstall()
+
+
+def _apply_settings(args: argparse.Namespace, *, write: bool,
+                    runtime_root: Path | None = None) -> settings.EffectiveSettings:
     """:func:`main`'s one settings resolution, after the re-exec and before
     dispatch: the resolved settings are put on ``args`` for the commands
     (``args.effective_settings``), and the process-wide leaf values are set
@@ -2109,6 +2150,8 @@ def _apply_settings(args: argparse.Namespace, *, write: bool) -> settings.Effect
     effective = _resolve_settings(args, write=write)
     settings.apply_process_defaults(effective)
     args.effective_settings = effective
+    if runtime_root is not None:
+        _install_notifier(effective, runtime_root)
     return effective
 
 
@@ -2164,8 +2207,126 @@ def cmd_settings(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+#: The ``notifications --test`` event: an ``info`` event type, so the test
+#: follows the operator's own enabled/category/severity for it.
+NOTIFICATIONS_TEST_EVENT = "milestone_started"
+_NOTIFY_EXIT_REJECTED = 1
+_NOTIFY_EXIT_FAILED = 3
+_NOTIFY_EXIT_INERT = 2
+
+
+def _notifications_state(values: dict[str, Any]) -> tuple[notify.NotifierConfig, notify.Credentials]:
+    config = notify.NotifierConfig(
+        enabled=values["notifications.enabled"], url=values["notifications.url"],
+        api_key_file=values["notifications.api_key_file"],
+        timeout_seconds=values["notifications.timeout_seconds"], attempts=values["notifications.attempts"],
+        retry_seconds=values["notifications.retry_seconds"], events=values["notifications.events"])
+    credentials = notify.find_credentials(url_setting=config.url, api_key_file_setting=config.api_key_file)
+    return config, credentials
+
+
+def cmd_notifications(args: argparse.Namespace) -> int:
+    """``notifications [--test]`` (signalhub-notifications CP4, D10).
+
+    Dispatched before pinning like ``settings``: it takes no repository,
+    opens no run record and writes nothing (the ``--test`` outcome log goes
+    to a throwaway directory). Without ``--test`` it prints the effective
+    table and where the URL and key were found -- the key itself never. With
+    ``--test`` it sends one ``info`` event through the real transport and
+    exits 0 on ``sent``/``duplicate``, 1 on ``rejected``/``conflict``, 3 on
+    ``failed``, 2 when nothing was sent (not configured, disabled, or the
+    test event's type disabled)."""
+    config, credentials = _notifications_state(_effective(args).values)
+    if args.test:
+        return _notifications_test(args, config, credentials)
+    table = notify.effective_table(config.events, master_enabled=config.enabled)
+    inert = ("disabled" if (not config.enabled or credentials.disabled)
+             else None if credentials.configured else "not_configured")
+    if args.json:
+        print(json.dumps({
+            "enabled": config.enabled, "inert": inert,
+            "url": notify.redact_url(credentials.url), "url_source": credentials.url_source,
+            "key_found": credentials.key is not None, "key_source": credentials.key_source,
+            "kill_switch": credentials.disabled_path, "looked_in": credentials.tried,
+            "warnings": credentials.warnings,
+            "events": [{"event_type": r.event_type, "kind": r.kind, "enabled": r.enabled,
+                        "category": r.category, "severity": r.severity, "sources": dict(r.sources)}
+                       for r in table],
+        }, indent=2, sort_keys=True))
+        return EXIT_OK
+    print(f"notifications.enabled: {str(config.enabled).lower()}")
+    if credentials.disabled:
+        print(f"kill switch: {credentials.disabled_path} exists -- notifications are off")
+    print(f"url: {notify.redact_url(credentials.url) or 'not found'}"
+          + (f" ({credentials.url_source})" if credentials.url else ""))
+    print(f"api key: {'found (' + str(credentials.key_source) + ')' if credentials.key else 'not found'}")
+    if inert == "not_configured":
+        print("looked in: " + ", ".join(credentials.tried))
+    for text in credentials.warnings:
+        print(f"warning: {text}")
+    for r in table:
+        print(f"{r.event_type:<27} {r.kind:<8} {'on ' if r.enabled else 'off'} {r.category:<16} {r.severity:<8} "
+              f"(enabled: {r.sources['enabled']}, category: {r.sources['category']}, "
+              f"severity: {r.sources['severity']})")
+    return EXIT_OK
+
+
+def _notifications_test(args: argparse.Namespace, config: notify.NotifierConfig,
+                        credentials: notify.Credentials) -> int:
+    with tempfile.TemporaryDirectory(prefix="wc-notify-test-") as scratch:
+        notifier = notify.Notifier(config, runtime_root=scratch, credentials=credentials)
+        outcome: str
+        detail = ""
+        if notifier.inert_reason is not None:
+            outcome = notifier.inert_reason
+            detail = (f"disabled: {credentials.disabled_path}" if credentials.disabled
+                      else "notifications.enabled is false" if not config.enabled
+                      else "no SignalHub URL or API key; looked in: " + ", ".join(credentials.tried))
+        elif not notify.resolve(NOTIFICATIONS_TEST_EVENT, config.events).enabled:
+            outcome = notify.DISABLED
+            detail = f"the {NOTIFICATIONS_TEST_EVENT} event type is disabled by notifications.events"
+        else:
+            event = notify.build_event(
+                NOTIFICATIONS_TEST_EVENT, repository="notifications-test",
+                ident=notify.identity("notifications-test", time.time_ns(), os.getpid()),
+                events_config=config.events, title="workflow-controller notifications --test",
+                message="A test event from `workflow-controller notifications --test`.",
+                metadata={"test": True})
+            notifier.emit(event)
+            drained = notifier.flush()
+            seen = {k: v for k, v in notifier.counts().items() if v}
+            outcome = next((o for o in (notify.SENT, notify.DUPLICATE, notify.CONFLICT, notify.REJECTED, notify.FAILED)
+                            if seen.get(o)), notify.FAILED)
+            if not drained:
+                outcome, detail = notify.FAILED, "the server did not answer within the flush bound"
+            detail = detail or _last_test_detail(scratch)
+        code = (EXIT_OK if outcome in (notify.SENT, notify.DUPLICATE)
+                else _NOTIFY_EXIT_INERT if outcome in (notify.DISABLED, notify.NOT_CONFIGURED)
+                else _NOTIFY_EXIT_FAILED if outcome == notify.FAILED else _NOTIFY_EXIT_REJECTED)
+    if args.json:
+        print(json.dumps({"outcome": outcome, "detail": detail, "exit_code": code,
+                          "url": notify.redact_url(credentials.url), "url_source": credentials.url_source,
+                          "key_source": credentials.key_source}, sort_keys=True))
+    else:
+        print(f"notifications --test: {outcome}" + (f" ({detail})" if detail else ""))
+    return code
+
+
+def _last_test_detail(scratch: str) -> str:
+    try:
+        lines = (Path(scratch) / notify.NOTIFICATIONS_LOG).read_text(encoding="utf-8").splitlines()
+        return str(json.loads(lines[-1]).get("detail", "")) if lines else ""
+    except (OSError, ValueError):
+        return ""
+
+
 def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     command = args.command
+    if command == "notifications":
+        # Before pinning and the runtime root, like `settings`: the settings
+        # file is only validated, and nothing is installed or written.
+        _apply_settings(args, write=False)
+        return cmd_notifications(args)
     if command == "follow":
         # Before pinning, runtime-root creation, materialisation and the
         # identity write: `follow` only reads, the settings file included.
@@ -2234,7 +2395,7 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     # dispatched -- a refusal (exit 20) leaves the ordinary dispatch
     # footprint, `identity.json` and no job record. A writing command fills
     # the file first (A.4).
-    _apply_settings(args, write=not read_only)
+    _apply_settings(args, write=not read_only, runtime_root=None if read_only else runtime_root)
 
     if command == "status":
         return cmd_status(args, runtime_root, ident, pre_existing=pre_existing)
@@ -2259,6 +2420,7 @@ def main(argv: list[str] | None = None) -> int:
     if _open_run is not None:
         _open_run.discard()  # only a run this invocation creates is closed below
     _open_run = None
+    notify.uninstall()  # an earlier invocation's notifier never serves this one
     _stop_follower(join=False)
     exit_code: int | None = None
     interrupted = False
@@ -2274,6 +2436,8 @@ def main(argv: list[str] | None = None) -> int:
         except ControllerError as exc:
             print(f"error: {exc.message}", file=sys.stderr)
             exit_code = EXIT_FAIL_CLOSED
+            if args.command in ("step", "run", "resume"):
+                job.notify_refusal(args.repo, exc)  # lane_blocked; no exit code depends on it
         return exit_code
     except milestone_branch.WaitInterrupted as exc:
         # Ctrl-C in a `run`'s wait for checks, the merge or the release: the
@@ -2287,7 +2451,21 @@ def main(argv: list[str] | None = None) -> int:
         raise
     finally:
         _close_open_run(exit_code, interrupted=interrupted)
+        _flush_notifier(interrupted=interrupted)
         _stop_follower(join=not interrupted)
+
+
+def _flush_notifier(*, interrupted: bool) -> None:
+    """The last act of :func:`main`: drain the notifier (the first flush of a
+    process fixed the shared deadline; a normally closed run was already
+    flushed in ``RunRecord.close``), then remove it. After an interrupt the
+    wait is at most 2 s. Never raises into the exit path."""
+    try:
+        notify.flush(interrupted=interrupted)
+    except BaseException:  # noqa: BLE001 -- a second Ctrl-C abandons the flush
+        pass
+    finally:
+        notify.uninstall()
 
 
 def _close_open_run(exit_code: int | None, *, interrupted: bool) -> None:

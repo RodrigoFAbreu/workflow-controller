@@ -828,7 +828,10 @@ class UsageEventsTest(_UsageCommandCase):
         self.run_cmd("usage", "--release", token)
         paused, resumed, released = self.events()
         for event in (paused, resumed, released):
-            self.assertEqual(sorted(event), self.FIELDS)
+            # ``occurrence`` is the additive notification identity of a pause (signalhub-notifications D4).
+            self.assertEqual(sorted(k for k in event if k != "occurrence"), self.FIELDS)
+        self.assertIn("occurrence", paused)
+        self.assertNotIn("occurrence", resumed)
         self.assertEqual((paused["event"], paused["provider"], paused["window"], paused["percent"],
                           paused["forecast"], paused["resume_at"], paused["repository"], paused["run_id"],
                           paused["token"]),

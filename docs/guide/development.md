@@ -277,6 +277,10 @@ python3 tools/run_scenarios.py run scenario-trunk-drift
 python3 tools/run_scenarios.py check                 # re-validate what run wrote
 ```
 
+`list` and `run` both load the scenarios inside the sandbox, so on a machine
+without user namespaces they exit 2 unless `--degraded-diagnostic` is passed
+(its reports are not evidence).
+
 `run` writes one `<flow_id>.json` per scenario and an `index.json` under
 `.ai-review/scenario-evidence/` (or `--output DIR`). Each record has the keys
 of the protocol's `functional_evidence` (`flow_id`, `status`, `head`,

@@ -146,6 +146,34 @@ def dirty_code_paths(checkout: Path, ignore: "Path | None" = None) -> list[str]:
     return paths
 
 
+def _previous_records(output: Path) -> list[Path]:
+    """The files under ``output`` that an earlier run of this runner wrote: ``index.json`` in the shape
+    :func:`cmd_run` writes it, and ``<flow_id>.json`` whose ``flow_id`` is its own name and which carries the record's
+    ``log_digest``. A tracked file, a file that is not valid JSON of that shape and a foreign name are never touched."""
+    if not output.is_dir():
+        return []
+    listed = subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", str(REPO_ROOT), "ls-files", "-z"],
+                            capture_output=True, env=kit.sanitised_git_env())
+    tracked = {(REPO_ROOT / name).resolve() for name in listed.stdout.decode(errors="replace").split("\0") if name}
+    owned = []
+    for path in sorted(output.glob("*.json")):
+        if not path.is_file() or path.is_symlink() or path.resolve() in tracked:
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if path.name == INDEX_NAME:
+            written = {"head", "isolation", "reporter", "order", "exit_status", "records"} <= set(data)
+        else:
+            written = data.get("flow_id") == path.stem and "log_digest" in data
+        if written:
+            owned.append(path)
+    return owned
+
+
 def _digest(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
@@ -233,7 +261,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             raise Refused(f"{flow_id}: the record is malformed: {problems}")
     status = 1 if (failed or over) else 0
     output.mkdir(parents=True, exist_ok=True)
-    for stale in output.glob("*.json"):  # a smaller run must not leave the earlier run's records beside its index
+    for stale in _previous_records(output):  # a smaller run must not leave the earlier run's records beside its index
         stale.unlink()
     texts = {flow_id: _canonical(record) for flow_id, record in records.items()}
     for flow_id, text in texts.items():

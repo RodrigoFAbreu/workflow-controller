@@ -266,10 +266,29 @@ class OutputPlacementTest(CloneCase):
 
     def test_a_smaller_run_leaves_no_stale_record_beside_its_index(self) -> None:
         self.assertEqual(self.runner("run", "selftest-basic").returncode, 0)
-        (self.out / "stale-flow.json").write_text("{}")
+        (self.out / "stale-flow.json").write_text('{"flow_id": "stale-flow", "log_digest": "0"}')
         self.assertEqual(self.runner("run", "selftest-basic").returncode, 0)
         self.assertFalse((self.out / "stale-flow.json").exists())
         self.assertEqual(self.runner("check", "--output", str(self.out)).returncode, 0)
+
+    def test_a_run_leaves_foreign_json_in_the_output_directory(self) -> None:
+        foreign = {"my-settings.json": '{"a": 1}', "package.json": "{}", "list.json": "[1]", "broken.json": "{",
+                   "other-flow.json": '{"flow_id": "different"}'}
+        for name, text in foreign.items():
+            (self.out / name).write_text(text)
+        done = self.runner("run", "selftest-basic")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for name, text in foreign.items():
+            self.assertEqual((self.out / name).read_text(), text, name)
+
+    def test_a_run_leaves_a_tracked_json_under_a_code_directory(self) -> None:
+        tracked = self.clone / "tools" / "test_timings.json"
+        self.assertTrue(tracked.exists())
+        before = tracked.read_text()
+        done = self.runner("run", "selftest-basic", output=self.clone / "tools")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(tracked.read_text(), before)
+        self.assertNotIn(" D tools/test_timings.json", _git(self.clone, "status", "--porcelain"))
 
 
 class DiscoveryIsolationTest(CloneCase):

@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import tests
@@ -317,6 +318,25 @@ class SenderTest(Case):
         n2.emit(make_event("hung3"))
         started = time.monotonic()
         self.assertFalse(n2.flush(interrupted=True))
+        self.assertLess(time.monotonic() - started, notify.INTERRUPTED_FLUSH_SECONDS + 0.5)
+
+    def test_an_interrupt_in_one_flush_bounds_the_later_flushes(self) -> None:
+        self.hub.queue(Step(200, delay=3.0))
+        n = self.notifier(attempts=1, timeout_seconds=30)
+        n.emit(make_event("hung4"))
+        real = n._queue.all_tasks_done.wait
+        calls = {"n": 0}
+
+        def interrupting(timeout=None):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise KeyboardInterrupt
+            return real(timeout)
+
+        with unittest.mock.patch.object(n._queue.all_tasks_done, "wait", interrupting):
+            self.assertFalse(n.flush())  # the interrupt is swallowed here
+        started = time.monotonic()
+        self.assertFalse(n.flush())  # the CLI's final flush, itself not told it was interrupted
         self.assertLess(time.monotonic() - started, notify.INTERRUPTED_FLUSH_SECONDS + 0.5)
 
     def test_an_exception_in_the_sender_is_recorded_and_the_process_is_unaffected(self) -> None:

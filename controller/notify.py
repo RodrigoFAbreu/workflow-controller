@@ -494,6 +494,7 @@ class Notifier:
         self._consecutive_exhausted = 0
         self._breaker_until = 0.0
         self._flush_deadline: float | None = None
+        self._interrupted = False
         self._warned = False
 
     # -- state ------------------------------------------------------------
@@ -692,7 +693,7 @@ class Notifier:
                 limit = (self.config.timeout_seconds + FLUSH_MARGIN_SECONDS) if timeout is None else timeout
                 self._flush_deadline = now + limit
             remaining = max(0.0, self._flush_deadline - now)
-            if interrupted:
+            if interrupted or self._interrupted:
                 remaining = min(remaining, INTERRUPTED_FLUSH_SECONDS)
             end = now + remaining
             with self._queue.all_tasks_done:
@@ -703,6 +704,7 @@ class Notifier:
                     self._queue.all_tasks_done.wait(min(left, 0.05))
             return True
         except KeyboardInterrupt:
+            self._interrupted = True  # D5: later flushes keep the interrupted bound
             return False
         except Exception:  # noqa: BLE001
             return False

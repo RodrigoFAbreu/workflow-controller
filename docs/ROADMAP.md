@@ -8,7 +8,7 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-11).** Controller 1.8.0 is the latest release (PR #36, squash `91c6233`). It admits Workflow
+**Where things stand (2026-10-12).** Controller 1.9.0 is the latest release (PR #41, squash `04923f8`). It admits Workflow
 2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
 repository runs Workflow 2.9.2 with automatic gates (since 2026-10-11; 2.9.0 from 2026-10-09). Every milestone through C9, the Controller
 on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
@@ -24,7 +24,7 @@ request (#34). C8, the usage budget (accepted 2026-10-10 by gate policy), is com
 released as 1.8.0. A `chore:` pull request then moved this repository to Workflow 2.9.2 (the
 Workflow fix release for workflow#19 and workflow#20; 2026-10-11). A small milestone
 (C12a, accepted 2026-10-12 by gate policy) then fixed the test side of the recurring drain hang from leftover test processes
-(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and ships as 1.9.0 when its `feat:` pull request (#41) merges. Next (user decisions, 2026-10-09 and 2026-10-10): C6, C7, C10 (with the automated functional review), C12 (self-recovery),
+(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and was released as 1.9.0. Next (user decisions, 2026-10-09 and 2026-10-10): C6, C7, C10 (with the automated functional review), C12 (self-recovery),
 C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -72,7 +72,7 @@ ahead of C5. That move is done (2026-10-11), so the drain-hang milestone is next
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, repository and run (complete) | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
 | C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
 | C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
-| C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
+| C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
@@ -277,6 +277,18 @@ These are not blockers for the baseline, but should remain visible in later mile
 19. Optional note from the C8 Codex review: when `resume` re-attaches to a still-running job and the
    usage record cannot be read, the "usage record cannot be read" warning can be printed a second
    time (the re-attach path and the sweep each warn). Print it once per `resume`.
+20. Optional finding from the C5 review: the notifier's sender thread waits forever on its queue, so a
+   test that installs a notifier leaves a live `signalhub-sender` thread behind (uninstall only drops
+   the reference). Stop the thread on uninstall, or make it end when its queue is idle.
+21. Optional finding from the C5 review: usage notifications do not pass the usage line's `run_id`, so
+   their outcomes go to the runtime-wide `notifications.jsonl` rather than the run's own
+   `notifications.jsonl` (plan D6). Pass the line's `run_id` when it has one.
+22. Optional finding from the C5 review: the `milestone_planned` ("plan ready") title omits the plan
+   revision that plan D2 names, although the event fires on every plan revision. Add the revision to
+   the title.
+23. Note from the C5 functional review: a plain `usage` lapses only job-bound expired reservations; an
+   unbound one lapses on the next reserve, check, renew or release. This is documented behaviour;
+   consider stating it on the [`usage` commands page](guide/commands.md#usage).
 
 ---
 
@@ -1386,7 +1398,7 @@ below is the original problem statement.
 
 **Status:** Complete, accepted 2026-10-12 by gate policy (`workflow-controller-signalhub-notifications`, plan
 `docs/ai-workflow/CONTROLLER_SIGNALHUB_NOTIFICATIONS_PLAN.md`, ADR `docs/adr/0012-signalhub-notifications.md`).
-Ships as 1.9.0 when pull request #41 merges. The Controller sends 14 event types to SignalHub
+Released as 1.9.0 (PR #41, squash `04923f8`). The Controller sends 14 event types to SignalHub
 from the records it keeps, each configurable in `notifications.events`, idempotent and off the
 lifecycle's thread, and `workflow-controller notifications [--test]` checks the wiring. A named
 follow-up has an owner, the lane orchestrators: after the release they stop hand-sending what the

@@ -75,10 +75,17 @@ def _audit(event: str, args: tuple) -> None:
         raise RuntimeError(f"scenario: {resolved} is outside the scratch bin/")
 
 
-def _block(marker: str, ready: str | None) -> None:
-    deadline = time.monotonic() + 10
+def _block(kill: dict) -> None:
+    """Hold the Controller at its kill point, announcing it with ``kill["marker"]``. A post-spawn point is honoured
+    only once the worker's readiness file ``kill["ready"]`` exists (both conditions, 10 s deadline, D5); a worker
+    that never becomes ready is announced with ``kill["unready"]`` instead, so the scenario fails naming it rather
+    than killing the Controller in a state the oracle does not describe."""
+    marker, ready = kill["marker"], kill.get("ready")
+    deadline = time.monotonic() + kill.get("ready_seconds", 10)
     while ready and not os.path.exists(ready) and time.monotonic() < deadline:
         time.sleep(0.02)
+    if ready and not os.path.exists(ready):
+        marker = kill.get("unready") or marker + ".not-ready"
     os.makedirs(os.path.dirname(marker), exist_ok=True)
     with open(marker, "w", encoding="utf-8") as fh:
         fh.write("reached\n")
@@ -109,10 +116,10 @@ def _wrap(module, name: str) -> None:
             _COUNTS[name] = _COUNTS.get(name, 0) + 1
             hit = _COUNTS[name] == kill["occurrence"]
         if hit and kill["when"] == "before":
-            _block(kill["marker"], kill.get("ready"))
+            _block(kill)
         result = real(runtime_root, rel_path, *args, **kwargs)
         if hit and kill["when"] == "after":
-            _block(kill["marker"], kill.get("ready"))
+            _block(kill)
         return result
     wrapper.__wrapped__ = real
     setattr(module, name, wrapper)

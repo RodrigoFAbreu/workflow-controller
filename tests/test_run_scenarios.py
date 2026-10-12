@@ -98,6 +98,30 @@ class CloneCase(unittest.TestCase):
         folder = output or self.out
         return {p.stem: json.loads(p.read_text()) for p in sorted(folder.glob("*.json")) if p.name != "index.json"}
 
+    def assert_ingested(self, records: dict) -> None:
+        """Every record passes the Workflow's real ``ingest_functional_evidence`` in the clone, with the stored head and
+        the stored identity asserted separately (D4)."""
+        scripts = str(self.clone / "scripts")
+        sys.path.insert(0, scripts)
+        self.addCleanup(sys.path.remove, scripts)
+        import workflow_gate_policy as gate
+        import workflow_state as ws
+        import workflow_fingerprint as fingerprint
+        state = json.loads((self.clone / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())
+        item = state["work_items"][WORK_ITEM]
+        for flow_id, record in records.items():
+            with self.subTest(flow_id=flow_id):
+                _, result = gate.ingest_functional_evidence(
+                    self.clone, state, WORK_ITEM, record, now="2026-10-12T12:00:00Z")
+                stored = result["stored"]
+                self.assertEqual(stored["head"], _git(self.clone, "rev-parse", "HEAD").strip(), flow_id)
+                expected = ws.approval_review_content_id(
+                    self.clone, stage="implementation", base_commit=item["base_commit"],
+                    work_item_type=item["work_item_type"], work_item_id=WORK_ITEM, head=record["head"],
+                    artifacts_path=fingerprint.artifacts_path_for_work_item(WORK_ITEM))
+                self.assertEqual(stored["identity"], expected, flow_id)
+                self.assertNotEqual(len(stored["head"]), len(stored["identity"]))  # a commit, not a content id
+
 
 class RecordShapeTest(CloneCase):
     def test_passing_and_failing_scenarios_write_protocol_records(self) -> None:
@@ -149,27 +173,9 @@ class IngestionTest(CloneCase):
 
     def test_records_are_accepted_with_head_and_identity_asserted_separately(self) -> None:
         self.runner("run", "selftest-basic", "selftest-fails", "selftest-env")
-        scripts = str(self.clone / "scripts")
-        sys.path.insert(0, scripts)
-        self.addCleanup(sys.path.remove, scripts)
-        import workflow_gate_policy as gate
-        import workflow_state as ws
-        import workflow_fingerprint as fingerprint
-        state = json.loads((self.clone / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())
-        item = state["work_items"][WORK_ITEM]
         records = self.records()
         self.assertEqual(len(records), 3)
-        for flow_id, record in records.items():
-            _, result = gate.ingest_functional_evidence(
-                self.clone, state, WORK_ITEM, record, now="2026-10-12T12:00:00Z")
-            stored = result["stored"]
-            self.assertEqual(stored["head"], _git(self.clone, "rev-parse", "HEAD").strip(), flow_id)
-            expected = ws.approval_review_content_id(
-                self.clone, stage="implementation", base_commit=item["base_commit"],
-                work_item_type=item["work_item_type"], work_item_id=WORK_ITEM, head=record["head"],
-                artifacts_path=fingerprint.artifacts_path_for_work_item(WORK_ITEM))
-            self.assertEqual(stored["identity"], expected, flow_id)
-            self.assertNotEqual(len(stored["head"]), len(stored["identity"]))  # a commit, not a content id
+        self.assert_ingested(records)
 
 
 class ScopedRefusalTest(CloneCase):
@@ -311,11 +317,15 @@ class CatalogueDeterminismTest(CloneCase):
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         done = self.runner("run", output=folder, module=False)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        return {k: v["summary"] for k, v in self.records(folder).items()}
+        return self.records(folder)
 
     def test_two_complete_runs_agree_on_every_normalised_summary(self) -> None:
-        first = self.complete_run()
-        second = self.complete_run()
+        records = self.complete_run()
+        # D4: every record of every registered flow and variant passes the Workflow's real ingestion, not only the
+        # selftest records IngestionTest feeds it.
+        self.assert_ingested(records)
+        first = {k: v["summary"] for k, v in records.items()}
+        second = {k: v["summary"] for k, v in self.complete_run().items()}
         self.assertGreaterEqual(len(first), 15)
         self.assertFalse([name for name in first if name.startswith("selftest")])
         self.assertEqual(first, second)

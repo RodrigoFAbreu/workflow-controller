@@ -874,7 +874,8 @@ class Kit:
         if kill_at:
             if isinstance(kill_at, str):
                 kill_at = dict(KILL_POINTS[kill_at], point=kill_at)
-            kill = dict(kill_at, marker=str(self.kill_dir / f"{kill_at['point']}.reached"))
+            kill = dict(kill_at, marker=str(self.kill_dir / f"{kill_at['point']}.reached"),
+                        unready=str(self.kill_dir / f"{kill_at['point']}.not-ready"))
             if kill.get("spawn") == "post":
                 if ready_file is None:
                     raise ScenarioFailure("a post-spawn kill point needs the worker's readiness file")
@@ -894,10 +895,17 @@ class Kit:
         return proc
 
     def wait_for_marker(self, point: str, *, deadline: float = KILL_DEADLINE_SECONDS) -> None:
-        """Block until ``<scratch>/kill/<point>.reached`` exists (the persistence-boundary handshake)."""
-        marker = self.kill_dir / f"{point}.reached"
+        """Block until ``<scratch>/kill/<point>.reached`` exists (the persistence-boundary handshake). At a
+        post-spawn point whose worker never became ready the bootstrap writes ``<point>.not-ready`` instead: a named
+        failure, never a kill."""
+        marker, unready = self.kill_dir / f"{point}.reached", self.kill_dir / f"{point}.not-ready"
+        if KILL_POINTS.get(point, {}).get("spawn") == "post":
+            deadline += KILL_DEADLINE_SECONDS  # the bootstrap's own readiness wait runs inside this one
         end = time.monotonic() + deadline
         while not marker.exists():
+            if unready.exists():
+                raise ScenarioFailure(f"kill point {point!r} was reached, but the worker's readiness file did not "
+                                      f"appear within {KILL_DEADLINE_SECONDS:g} s; the Controller was not killed there")
             if time.monotonic() >= end:
                 raise ScenarioFailure(f"kill point {point!r} was not reached within {deadline:g} s")
             time.sleep(0.02)
@@ -939,9 +947,10 @@ _CHILD_MAIN = (
 def worker_main(argv: list[str]) -> None:
     """Entry of the sandboxed worker: progress to fd 4, result to fd 3."""
     config = json.loads(argv[0])
-    with contextlib.suppress(OSError):
+    with contextlib.suppress(OSError):  # the host may already have closed the read end (degraded mode)
         os.write(4, b"drop-ok\n")
-        for fd in (3, 4):  # no descendant may hold the result or status pipe open
+    for fd in (3, 4):  # no descendant may hold the result or status pipe open
+        with contextlib.suppress(OSError):
             os.set_inheritable(fd, False)
     result = Result(config["flow_id"], "failed", [], "")
     kit = None

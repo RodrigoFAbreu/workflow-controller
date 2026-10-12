@@ -84,6 +84,20 @@ describes only its first operand (POSIX defines one), while here `/bin/sh` is ba
 The scenario now runs one `command -v` per name. No other multi-operand `command -v` or bash-only `sh` usage is in
 the scenario kit or its tests.
 
+Self-review of the milestone diff against plan revision 10 found three important defects, now fixed:
+- D5's post-spawn handshake: the bootstrap's kill point wrote `<point>.reached` even when the worker's readiness
+  file never appeared, so the Controller was killed in a state the oracle does not describe. It now writes
+  `<point>.not-ready` instead and the scenario fails naming the readiness file (new kit test).
+- D5.4/R7: the `run-true` mutation of the four pre-spawn kill-and-resume variants ended in an assertion that
+  could never pass, so those mutation checks passed whatever the end-state comparison did. The stand-in result
+  (`true`: exit 0, nothing changed) now goes through the same end-state comparison, which is what fails.
+- D4: only the three selftest records went through the Workflow's real `ingest_functional_evidence`; the
+  catalogue determinism test now ingests every catalogue record of its first complete run as well.
+Also: the worker's fd 3/4 clean-up no longer shares one `suppress` with the status write, and a dead line in a
+kit test is gone. Not applied (optional): extra pipe copies in `pass_fds`, unlisted real locations whose
+parent is a system directory, two small error-path leaks, stale records left in a reused `--output`, and the
+Git-metadata test's loose `update-ref` check.
+
 The sections below describe the previous milestone and stay until the milestone is accepted.
 
 ## Status

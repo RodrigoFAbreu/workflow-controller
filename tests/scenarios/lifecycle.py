@@ -415,19 +415,18 @@ def kill_and_resume(kit, point: str) -> None:
                 final = {"exit": again.code, "jobs": jobs(), "lock": str(lock.probe_lifecycle_lock(case.root))}
                 kit.observe("after-anchor-ended", final)
                 kit.equal(final, {"exit": 0, "jobs": ["FINISHED"], "lock": "free"}, f"{point}: resume once the anchor ended")
-        if mutation(kit) != "run-true":
-            continued = case.cli("run")
-            tasks = case.worker_tasks()
-            end_state = {"exit": continued.code, "binding": (case.record() or {}).get("state"),
-                         "jobs": jobs(), "tasks": tasks, "workers-started": case.processes(case.lc)}
-            kit.observe("after-run", end_state)
-            # Every variant converges to the state the uninterrupted bound step reaches (scenario 1's `drive_to_pr`):
-            # each automatic command ran exactly once, the binding is bound, the run stops at the manual plan gate.
-            kit.equal(end_state, {"exit": cli.EXIT_GATE, "binding": "BRANCH_BOUND",
-                                  "jobs": ["FINISHED", "GATE_BLOCKED"], "tasks": [case.bootstrap(case.trunk_tip), e2e.REVIEW_PLAN],
-                                  "workers-started": 2}, f"{point}: the continuation run's end state")
-        else:
-            kit.equal(case.record() and case.record()["state"], "BRANCH_BOUND", f"{point}: the binding after the kill")
+        # The `run-true` mutation replaces the continuation `run` by `true` (exit 0, nothing changed), and the result
+        # goes through the same end-state comparison, which must then fail (D5.4: no variant passes vacuously).
+        continued_code = 0 if mutation(kit) == "run-true" else case.cli("run").code
+        tasks = case.worker_tasks()
+        end_state = {"exit": continued_code, "binding": (case.record() or {}).get("state"),
+                     "jobs": jobs(), "tasks": tasks, "workers-started": case.processes(case.lc)}
+        kit.observe("after-run", end_state)
+        # Every variant converges to the state the uninterrupted bound step reaches (scenario 1's `drive_to_pr`):
+        # each automatic command ran exactly once, the binding is bound, the run stops at the manual plan gate.
+        kit.equal(end_state, {"exit": cli.EXIT_GATE, "binding": "BRANCH_BOUND",
+                              "jobs": ["FINISHED", "GATE_BLOCKED"], "tasks": [case.bootstrap(case.trunk_tip), e2e.REVIEW_PLAN],
+                              "workers-started": 2}, f"{point}: the continuation run's end state")
 
 
 def _register_kill_variants() -> None:

@@ -267,6 +267,32 @@ class KillPointTest(SandboxCase):
                 proc.wait(timeout=10)
                 self.assertEqual(made, exist)
 
+    def test_a_worker_that_never_becomes_ready_is_a_named_failure_not_a_kill(self) -> None:
+        """D5: a post-spawn point is honoured only once the worker's readiness file exists; otherwise the bootstrap
+        announces ``<point>.not-ready`` and never ``<point>.reached``, and the scenario's wait names the cause."""
+        code = ("import json, sys\nsys.path.insert(0, sys.argv[1])\n"
+                "from tests.scenarios import bootstrap_hooks as h\nh.install(json.loads(sys.argv[2]))\n"
+                "from pathlib import Path\nfrom controller import runtime\n"
+                "runtime.create_json(Path(sys.argv[3]), 'repositories/k/milestones/one.json', {'n': 1})\n")
+        work = self.tmp / "hook-unready"
+        (work / "rt").mkdir(parents=True)
+        kill_dir = work / "kill"
+        reached, unready = kill_dir / "job-after.reached", kill_dir / "job-after.not-ready"
+        config = {"kill": dict(kit.KILL_POINTS["binding-before"], marker=str(reached), unready=str(unready),
+                               ready=str(work / "never-ready"), ready_seconds=0.2)}
+        proc = process_fixtures.popen_bounded(
+            [sys.executable, "-B", "-c", code, str(ROOT), json.dumps(config), str(work / "rt")], seconds=30,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(process_fixtures.kill_bounded, proc)
+        self.assertTrue(process_fixtures.wait_until(unready.exists, timeout=15), "the not-ready marker was not written")
+        instance = kit.Kit.__new__(kit.Kit)
+        instance.kill_dir = kill_dir
+        with self.assertRaisesRegex(ScenarioFailure, "readiness file did not appear"):
+            instance.wait_for_marker("job-after")
+        self.assertFalse(reached.exists(), "a worker that never became ready must not be announced as reached")
+        process_fixtures.kill_bounded(proc)
+        proc.wait(timeout=10)
+
     def _oracle(self, point: str) -> dict:
         return self.observed(self.run_selftest("selftest-kill-point", params={"point": point}))
 
@@ -397,7 +423,6 @@ def lock():
         open(os.path.join(git_dir, "index.lock"), "w").close(); return "ok"
     except OSError as exc:
         return errno.errorcode[exc.errno]
-open(os.path.join(linked, "g"), "w") if False else None
 out = {"update_ref": git_run("update-ref", "refs/heads/x", "HEAD"), "lock": lock(), "worktree_write": None}
 try:
     open(os.path.join(linked, "g"), "w").close(); out["worktree_write"] = "ok"

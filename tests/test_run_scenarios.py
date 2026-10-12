@@ -67,6 +67,16 @@ class CloneCase(unittest.TestCase):
         # the working tree's Workflow bookkeeping, so the clone resolves the same work item
         for name in ("docs/ai-workflow/WORKFLOW_STATE.json",):
             shutil.copy2(REPO_ROOT / name, cls.clone / name)
+        # CI's checkout is shallow, so the work item's base commit, which the Workflow's identity
+        # is computed from, may be missing; the clone then measures from the checkout's own HEAD.
+        state_path = cls.clone / "docs/ai-workflow/WORKFLOW_STATE.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        item = state["work_items"][WORK_ITEM]
+        probe = subprocess.run(["git", "cat-file", "-e", f"{item['base_commit']}^{{commit}}"], cwd=cls.clone,
+                               env=kit.sanitised_git_env(), capture_output=True)
+        if probe.returncode != 0:
+            item["base_commit"] = _git(cls.clone, "rev-parse", "HEAD").strip()
+            state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         _git(cls.clone, "add", "-A")
         _git(cls.clone, "commit", "-q", "--allow-empty", "-m", "test: working tree code")
         cls.head = _git(cls.clone, "rev-parse", "HEAD").strip()

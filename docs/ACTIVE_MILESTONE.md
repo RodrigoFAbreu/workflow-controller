@@ -71,6 +71,12 @@ suite passes except the two known Git 2.56 trailer tests (`test_release_notes`, 
 fail locally since Git 2.56 and are unrelated. That the pull request's CI shards run the atoms (not skipped) is the remaining evidence, seen
 when the branch is pushed.
 
+Self-review: on the pull request's CI run for `e43a4e2`, the sysctl step succeeded and shards 0 and 2 (which run scenario
+atoms) passed, but shards 1 and 3 failed. Shard 1's cause is reproduced in a shallow, detached checkout of the merge commit
+(as `actions/checkout` makes): `IngestionTest` computed the Workflow identity from the work item's base commit, which a
+depth-1 checkout lacks. The runner tests' clone now measures from the checkout's own `HEAD` when that base is missing.
+Shard 3 passes in the same reproduction; its CI log is needed.
+
 The sections below describe the previous milestone and stay until the milestone is accepted.
 
 ## Status

@@ -301,6 +301,8 @@ LEFTOVER_INVENTORY = (
     ("scenarios/selftest.py", "start:run", 5, "short", "attack paths and git calls the scenario waits for; each exits"),
     ("test_run_scenarios.py", "start:run", 1, "deadline",
      "the runner CLI in a clone of the checkout: the scenarios it runs sit behind the kit's per-scenario timeout (D14) and the call waits for it"),
+    ("test_scenarios.py", "start:run", 1, "short",
+     "a python -c that imports the two suite wrappers and prints which scenario modules they loaded: no scenario runs, it exits at once"),
     ("test_scenario_kit.py", "start:helper:popen_bounded", 2, "deadline",
      "the kill-point wrapper unit tests (reached and not-ready): a child blocked at a durable write behind timeout -s KILL (D14), "
      "killed by group by the test"),

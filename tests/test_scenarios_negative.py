@@ -10,14 +10,11 @@ is its own planner atom, like ``tests/test_scenarios.py``.
 
 from __future__ import annotations
 
-import importlib
 import os
 import re
 import unittest
 
-from tests.scenarios import kit
-
-importlib.import_module("tests.scenarios.catalogue")
+from tests.scenarios import inventory, kit
 
 #: flow id -> the mutations that must make it fail.
 MUTATIONS: dict[str, tuple[str, ...]] = {
@@ -80,7 +77,6 @@ for _flow, _mutations in all_mutations().items():
 
 class EveryScenarioHasAMutationTest(unittest.TestCase):
     def test_every_registered_scenario_names_a_mutation(self) -> None:
-        from tests import scenarios
-        registered = {s.flow_id for s in scenarios.catalogued()}
+        registered = set(inventory.catalogue_flow_ids())
         self.assertEqual(registered - set(all_mutations()), set(), "a scenario without a mutation check")
         self.assertEqual(set(all_mutations()) - registered, set(), "a mutation for a scenario that is not registered")

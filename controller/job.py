@@ -5013,7 +5013,9 @@ def notify_refusal(repo: "str | os.PathLike", exc: ControllerError) -> None:
                                 exc.message)
         work_item = evidence_block.get("work_item_id")
         event = DerivedEvent("lane_blocked", ident, f"Blocked: {type(exc).__name__}", work_item, exc.message[:1000])
-        _send_derived([event], notify.repository_name(repo))
+        # The raw argument (`step .`) has no name; resolved, it names the
+        # directory every other event of this repository names.
+        _send_derived([event], notify.repository_name(Path(repo).resolve()))
     except Exception:  # noqa: BLE001
         pass
 

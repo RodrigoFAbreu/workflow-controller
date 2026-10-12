@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, job, milestone_branch as mb, notify, runtime, usage  # noqa: E402
 from controller.notify import Credentials, NotifierConfig  # noqa: E402
-from tests import test_job, test_trunk_preflight  # noqa: E402
+from tests import process_fixtures, test_job, test_milestone_branch, test_trunk_preflight  # noqa: E402
 from tests.fake_signalhub import FakeSignalHub  # noqa: E402
 
 KEY = "shpk1_wiring-test-key"
@@ -124,6 +124,33 @@ def binding(*, generation: int = GENERATION, head: str | None = "a" * 40, streak
         last["gate"] = {"code": streak[0], "streak": streak[1]}
     return {"work_item_id": "wi-1", "binding_generation": generation, "state": state,
             "pr": {"number": 7, "url": "https://github.com/o/r/pull/7", "head_oid": head}, "last_observation": last}
+
+
+class RefusalRepositoryTest(unittest.TestCase):
+    def test_a_refusal_on_a_relative_repository_names_the_directory(self) -> None:
+        # `step .`, the lanes' form: the context and key name the directory, as every other event does.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name) / "manager-repo"
+        repo.mkdir()
+        hub = FakeSignalHub().start()
+        self.addCleanup(hub.stop)
+        install_notifier(self, hub, Path(tmp.name))
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        os.chdir(repo)
+        job.notify_refusal(".", cli.ControllerError("refused", evidence={"work_item_id": "wi-1"}))
+        self.assertTrue(notify.flush(10))
+        [request] = hub.requests
+        self.assertEqual(request["body"]["context"], "manager-repo/wi-1")
+        self.assertTrue(request["idempotency_key"].startswith("wc-lane_blocked-manager-repo-"))
+        # The same refusal again is the same key; a different one (message or stable evidence) is a new key.
+        job.notify_refusal(".", cli.ControllerError("refused", evidence={"work_item_id": "wi-1"}))
+        job.notify_refusal(".", cli.ControllerError("refused", evidence={"work_item_id": "wi-1", "state": "READY"}))
+        job.notify_refusal(".", cli.ControllerError("refused otherwise", evidence={"work_item_id": "wi-1"}))
+        self.assertTrue(notify.flush(10))
+        self.assertEqual(len(hub.requests), 3, "the repeated refusal is an in-process duplicate")
+        self.assertEqual(len(set(hub.keys())), 3)
 
 
 class GateClassificationTest(unittest.TestCase):
@@ -284,6 +311,32 @@ class GateStreakTest(unittest.TestCase):
     def test_a_gate_with_no_record_is_ignored(self) -> None:
         self.record(gate("switch_to_trunk", work_item="wi-9"))
         self.record(mb.Proceed())
+
+
+class ObservationTest(test_milestone_branch._Case):
+    """The stored ``gate`` over the real preflight: the trunk-side bind (F1 of round 8) and an adoption
+    (F1 of round 9). ``repository_preflight`` is the entry that runs ``_record_gate``."""
+
+    def test_the_trunk_side_bind_leaves_no_observation(self) -> None:
+        self.plan()
+        outcome = mb.repository_preflight(self.ctx)
+        self.assertEqual(outcome.action, "bound")
+        record = self.record()
+        self.assertIsNone(record["last_observation"])
+        self.assertIsNone(mb._binding_view(record)["last_observation"], "status prints `not observed yet`")
+
+    def test_an_adoption_stores_the_observation_and_the_proceed(self) -> None:
+        self.plan()
+        self.git("switch", "-q", "-c", test_milestone_branch.BRANCH)
+        self.approve()
+        outcome = mb.repository_preflight(self.ctx)
+        self.assertEqual(outcome.action, "adopted")
+        observation = self.record()["last_observation"]
+        self.assertEqual(observation["gate"], {"code": None, "streak": 1})
+        self.assertTrue(observation["tip"])
+        view = mb._binding_view(self.record())["last_observation"]
+        self.assertEqual(view["tip"], observation["tip"])
+        self.assertNotIn("gate", view, "status prints the observation, not the gate field")
 
 
 class RunsTextTest(unittest.TestCase):
@@ -771,6 +824,21 @@ class RecoveryTest(_StepCase):
         self.resume()
         self.assertEqual(self.request_types(), ["step_done"])
 
+    def test_a_record_reconciled_in_this_call_is_recovered_whatever_its_age(self) -> None:
+        # D13 (i): the record `resume` reconciled to terminal in this call needs no window; (ii)-(iv) still hold.
+        record = self.finish_job_unnotified()
+        self.active_log({"status": "notifier_active"})
+        install_notifier(self, self.hub, self.runtime_root)
+        old = {**record, "updated_at": "2020-01-01T00:00:00Z"}
+        job._recover_job_notices([old], self.runtime_root, self.managed_repo)
+        self.assertEqual(self.request_types(), [], "an old record not reconciled now is outside the window")
+        job._recover_job_notices([{**old, "reconciled_this_call": True}], self.runtime_root, self.managed_repo)
+        self.assertEqual(self.request_types(), ["step_done", "milestone_planned"])
+        self.hub.requests.clear()
+        failed = {**old, "job_id": "20261012T000001Z-bbbb", "status": job.STATUS_FAILED, "reconciled_this_call": True}
+        job._recover_job_notices([failed], self.runtime_root, self.managed_repo)
+        self.assertEqual(self.request_types(), ["lane_blocked"])
+
     def test_the_recovery_bound_examines_at_most_fifty_records(self) -> None:
         self.assertEqual(job.RECOVERY_RECORD_LIMIT, 50)
         self.assertEqual(job.RECOVERY_WINDOW_SECONDS, 1800)
@@ -912,6 +980,99 @@ class BranchWiringTest(test_trunk_preflight.RunWaitTest):
         job._notify_merge_events(managed, self.lc.runtime, "2026-10-12T00:00:01Z", ["observed"], None)
         self.assertEqual(self.hub.keys(), [key])
         self.assertTrue(number)
+
+    def typed_requests(self, event_type: str, *, at_least: int = 1) -> list[dict]:
+        """The hub's requests of ``event_type``, waiting a little for an interrupted run's short flush."""
+        def found() -> list[dict]:
+            return [r for r in self.hub.requests if r["body"]["metadata"]["event_type"] == event_type]
+        process_fixtures.wait_until(lambda: len(found()) >= at_least, timeout=10)
+        return found()
+
+    def merge_ready(self) -> int:
+        """Accepted, the head pushed and its checks passing: the next preflight merges (the PR number)."""
+        number = self.accepted()
+        self.assertEqual(self.cli("step").code, cli.EXIT_GATE)  # the head pushed; its checks pending
+        self.set_checks(number, "pass")
+        return number
+
+    def test_a_merge_seen_by_a_step_that_ends_at_a_branch_gate_sends_pr_merged_once(self) -> None:
+        number = self.merge_ready()
+        result = self.cli_hub("step")  # merged; the release is pending (a wait gate under wait 0: no gate notice)
+        self.assertEqual(result.code, cli.EXIT_GATE, result.stderr)
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.assertEqual(self.sent_types(), ["pr_merged"])
+        [merged] = self.typed_requests("pr_merged")
+        self.assertIn(f"#{number}", merged["body"]["title"])
+        # The next step's entry recovery derives the same key and body: the server answers 200, nothing new.
+        self.hub.requests.clear()
+        self.cli_hub("step")
+        self.assertEqual([r["idempotency_key"] for r in self.typed_requests("pr_merged")],
+                         [merged["idempotency_key"]])
+        self.assertNotIn("conflict", {line["status"] for line in self.outcome_lines()})
+
+    def test_a_ctrl_c_in_the_release_wait_after_the_merge_still_sends_pr_merged(self) -> None:
+        # F1: one wait poll wrote merged_squashed, then Ctrl-C during the release_pending sleep raises.
+        self.merge_ready()
+
+        def interrupt() -> None:
+            raise KeyboardInterrupt
+
+        self.changes = [interrupt]
+        with self.waiting():
+            result = self.cli_hub("run")
+        self.assertEqual(result.code, cli.SIGINT_EXIT_STATUS, result.stderr)
+        self.assertIn(f"interrupted while waiting at {mb.GATE_RELEASE_PENDING}", result.stderr)
+        self.assertEqual(self.record()["state"], mb.MERGED_SQUASHED)
+        self.assertEqual(len(self.typed_requests("pr_merged")), 1)
+        self.assertEqual(self.sent_types(), ["pr_merged"])
+
+    def test_a_refusal_raised_by_the_preflight_after_the_merge_still_sends_pr_merged(self) -> None:
+        # F1: the `_close_trunk_step3` shape -- the merge event is written, then the preflight raises (exit 20).
+        self.merge_ready()
+        real = mb.waiting_preflight
+
+        def merged_then_refused(ctx, **kwargs):
+            real(ctx, **kwargs)
+            raise mb._refuse("the squash commit is not on origin/main", work_item_id=test_trunk_preflight.WI)
+
+        with unittest.mock.patch.object(mb, "waiting_preflight", merged_then_refused):
+            result = self.cli_hub("step")
+        self.assertEqual(result.code, cli.EXIT_FAIL_CLOSED, result.stderr)
+        self.assertIn("the squash commit is not on origin/main", result.stderr, "the original refusal propagates")
+        self.assertEqual(sorted(self.sent_types()), ["lane_blocked", "pr_merged"])
+
+    def test_a_changed_release_refusal_after_the_merge_still_sends_pr_merged(self) -> None:
+        # The exits after the preflight that write no job record (the changed-release refusal; a usage hold
+        # leaves the same way) run after the `finally` that enqueued the merge.
+        self.merge_ready()
+        refusal = cli.ControllerError("the installed Workflow release changed during the step")
+        with unittest.mock.patch.object(job, "_refuse_changed_release", side_effect=refusal):
+            result = self.cli_hub("step")
+        self.assertEqual(result.code, cli.EXIT_FAIL_CLOSED, result.stderr)
+        self.assertEqual(sorted(self.sent_types()), ["lane_blocked", "pr_merged"])
+
+    def test_a_draft_toggled_back_without_a_push_is_a_new_user_gate(self) -> None:
+        # F5 of round 10: merge_held, checks_failing, merge_held on one head with no binding event between.
+        number = self.accepted()
+        self.cli_hub("step")  # the head pushed; its checks pending
+        self.set_checks(number, "pass")
+        self.gh_edit(number, mergeStateStatus="UNKNOWN")
+        self.cli_hub("step")  # marked ready, READY; merge_pending, a wait gate under wait 0: no notice
+        self.assertEqual(self.record()["state"], mb.READY)
+        self.gh_edit(number, isDraft=True)
+        self.assertEqual(self.cli_hub("step").code, cli.EXIT_GATE)
+        events_after_first = len(self.binding_events())
+        self.gh_edit(number, isDraft=False)
+        self.set_checks(number, "fail")
+        self.assertEqual(self.cli_hub("step").code, cli.EXIT_GATE)
+        self.gh_edit(number, isDraft=True)
+        self.assertEqual(self.cli_hub("step").code, cli.EXIT_GATE)
+        self.assertEqual(len(self.binding_events()), events_after_first, "no binding event between the two")
+        held = self.typed_requests("user_gate", at_least=2)
+        self.assertEqual([r["body"]["title"].split(":")[1].split()[0] for r in held], [mb.GATE_MERGE_HELD] * 2)
+        self.assertEqual(len({r["idempotency_key"] for r in held}), 2, "the second merge_held is a new occurrence")
+        self.assertEqual(len(self.typed_requests("lane_blocked")), 1)
+        self.assertEqual(self.record()["last_observation"]["gate"]["code"], mb.GATE_MERGE_HELD)
 
     def test_a_refusal_sends_one_lane_blocked_and_a_different_refusal_a_new_one(self) -> None:
         self.bind_step()

@@ -43,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, observe, routing, runtime, settings,
+    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, notify, observe, routing, runtime, settings,
     worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
@@ -3176,6 +3176,163 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 self.assertEqual(caught.exception.code, 2)
         args = parser.parse_args(["resume", "--drain-timeout", "90", "/r"])
         self.assertEqual(args.drain_timeout, 90)
+
+
+# ---------------------------------------------------------------------------
+# signalhub-notifications CP4 (D10): the `notifications` command.
+# ---------------------------------------------------------------------------
+
+CANARY_KEY = "canary-key-9f3a7c1d"
+
+
+class NotificationsCommandTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from tests.fake_signalhub import FakeSignalHub
+        self.hub = FakeSignalHub().start()
+        self.addCleanup(self.hub.stop)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.config_dir = self.tmp / "signalhub"
+        self.config_dir.mkdir()
+        self.key_file = self.tmp / "lane.key"
+        self.key_file.write_text(CANARY_KEY + "\n", encoding="utf-8")
+        self.key_file.chmod(0o600)
+        self.settings_path = self.tmp / "settings.json"
+        env = {k: v for k, v in os.environ.items() if not k.startswith("SIGNALHUB_")}
+        env["SIGNALHUB_CONFIG_DIR"] = str(self.config_dir)
+        patcher = unittest.mock.patch.dict(os.environ, env, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def write_settings(self, **values: object) -> None:
+        """``notifications.<name>`` keyword values, written as the file's nested section."""
+        section = {key.partition(".")[2]: value for key, value in values.items()}
+        self.settings_path.write_text(json.dumps({"schema_version": 1, "notifications": section}), encoding="utf-8")
+
+    def configure(self) -> None:
+        self.write_settings(**{"notifications.url": self.hub.url,
+                               "notifications.api_key_file": str(self.key_file),
+                               "notifications.retry_seconds": 1})
+
+    def run_cmd(self, *argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(["--settings", str(self.settings_path), *argv])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_table_names_the_sources_and_never_the_key(self) -> None:
+        self.configure()
+        code, out, err = self.run_cmd("notifications")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn(f"api key: found (notifications.api_key_file ({self.key_file}))", out)
+        self.assertIn(f"url: {self.hub.url} (notifications.url)", out)
+        self.assertIn("pr_merged", out)
+        self.assertNotIn(CANARY_KEY, out + err)
+        self.assertEqual(self.hub.requests, [])
+
+    def test_json_table_carries_no_key(self) -> None:
+        self.configure()
+        code, out, err = self.run_cmd("--json", "notifications")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertNotIn(CANARY_KEY, out)
+        data = json.loads(out)
+        self.assertTrue(data["key_found"])
+        self.assertIsNone(data["inert"])
+        self.assertEqual(len(data["events"]), len(notify.EVENT_TABLE))
+
+    def test_unconfigured_names_where_it_looked(self) -> None:
+        self.write_settings()
+        code, out, _ = self.run_cmd("notifications")
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("url: not found", out)
+        self.assertIn("looked in:", out)
+        self.assertIn(str(self.config_dir / "url"), out)
+
+    def test_key_discovered_in_the_config_dir(self) -> None:
+        (self.config_dir / "url").write_text(self.hub.url + "\n", encoding="utf-8")
+        (self.config_dir / "api-key").write_text(CANARY_KEY + "\n", encoding="utf-8")
+        self.write_settings()
+        _, out, _ = self.run_cmd("notifications")
+        self.assertIn(f"api key: found ({self.config_dir / 'api-key'})", out)
+        self.assertNotIn(CANARY_KEY, out)
+
+    def test_event_overrides_show_their_source(self) -> None:
+        self.write_settings(**{"notifications.events": {"events": {"pr_merged": {"severity": "high"}}}})
+        _, out, _ = self.run_cmd("notifications")
+        row = next(line for line in out.splitlines() if line.startswith("pr_merged"))
+        self.assertIn("HIGH", row)
+        self.assertIn("severity: event", row)
+
+    def test_test_sent_exits_zero_and_sends_the_bearer(self) -> None:
+        self.configure()
+        code, out, err = self.run_cmd("notifications", "--test")
+        self.assertEqual(code, 0, err)
+        self.assertIn("sent", out)
+        self.assertEqual(len(self.hub.requests), 1)
+        request = self.hub.requests[0]
+        self.assertEqual(request["authorization"], f"Bearer {CANARY_KEY}")
+        self.assertEqual(request["body"]["metadata"]["test"], True)
+        self.assertNotIn(CANARY_KEY, out + err)
+
+    def test_test_a_second_run_is_a_new_event(self) -> None:
+        self.configure()
+        self.assertEqual(self.run_cmd("notifications", "--test")[0], 0)
+        self.assertEqual(self.run_cmd("notifications", "--test")[0], 0)
+        self.assertEqual(len(set(self.hub.keys())), 2)
+
+    def test_test_rejected_exits_one(self) -> None:
+        self.configure()
+        self.hub.queue(400)
+        code, out, _ = self.run_cmd("notifications", "--test")
+        self.assertEqual(code, 1)
+        self.assertIn("rejected", out)
+
+    def test_test_conflict_exits_one(self) -> None:
+        self.configure()
+        self.hub.queue(422)
+        code, out, _ = self.run_cmd("notifications", "--test")
+        self.assertEqual(code, 1)
+        self.assertIn("conflict", out)
+
+    def test_test_failed_exits_three(self) -> None:
+        self.configure()
+        self.hub.queue(500, 500, 500)
+        code, out, _ = self.run_cmd("notifications", "--test")
+        self.assertEqual(code, 3)
+        self.assertIn("failed", out)
+
+    def test_test_not_configured_exits_two(self) -> None:
+        self.write_settings()
+        code, out, _ = self.run_cmd("notifications", "--test")
+        self.assertEqual(code, 2)
+        self.assertIn("not_configured", out)
+
+    def test_test_disabled_by_the_master_switch_the_kill_switch_or_the_type(self) -> None:
+        self.configure()
+        self.write_settings(**{"notifications.url": self.hub.url, "notifications.api_key_file": str(self.key_file),
+                               "notifications.enabled": False})
+        self.assertEqual(self.run_cmd("notifications", "--test")[0], 2)
+        self.configure()
+        (self.config_dir / "disabled").write_text("", encoding="utf-8")
+        self.assertEqual(self.run_cmd("notifications", "--test")[0], 2)
+        (self.config_dir / "disabled").unlink()
+        self.write_settings(**{"notifications.url": self.hub.url, "notifications.api_key_file": str(self.key_file),
+                               "notifications.events": {"events": {"milestone_started": {"enabled": False}}}})
+        code, out, _ = self.run_cmd("notifications", "--test")
+        self.assertEqual(code, 2)
+        self.assertIn("disabled", out)
+        self.assertEqual(self.hub.requests, [])
+
+    def test_test_writes_nothing_under_the_runtime_dir(self) -> None:
+        self.configure()
+        runtime_dir = self.tmp / "runtime"
+        self.assertEqual(self.run_cmd("--runtime-dir", str(runtime_dir), "notifications", "--test")[0], 0)
+        self.assertFalse(runtime_dir.exists())
+
+    def test_help_text_is_in_the_commands_guide(self) -> None:
+        guide = (Path(__file__).resolve().parent.parent / "docs" / "guide" / "commands.md").read_text()
+        self.assertIn("workflow-controller notifications", guide)
 
 
 if __name__ == "__main__":

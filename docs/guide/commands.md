@@ -20,6 +20,7 @@
 | `workflow-controller --work-item <id> milestone-binding --abandon <repo>` | retire such a binding, under the preconditions stated there; exactly one of `--new-pr`/`--abandon` is required |
 | `workflow-controller settings show\|path\|clean` | the user settings file (see [`settings`](#settings)); `show` and `path` are read-only |
 | `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by role\|model\|role,model] [<repo>]` | the recorded jobs' turns, tokens, cost and time (see [`telemetry`](#telemetry)); read-only |
+| `workflow-controller notifications [--test]` | the effective SignalHub notification table and where the URL and key were found (never the key); `--test` sends one `info` test event through the real transport (see [`notifications`](#notifications)); takes no repository and writes nothing |
 | `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted |
 | `workflow-controller --version` | the version, then the running runtime (see [Runtime identity](runtime.md#runtime-identity)) |
 
@@ -154,6 +155,26 @@ What each figure means is in [Telemetry](workers.md#telemetry).
 A job recorded before telemetry existed has no block. Its figures are
 derived from its `worker.stdout` each time, marked `"derived": true`,
 and nothing is written back. A job whose stream is gone has no figures.
+
+## `notifications`
+
+`workflow-controller notifications` prints the effective notification
+configuration: `notifications.enabled`, the SignalHub URL and API key
+discovered (naming the source of each -- the environment variable, the
+`notifications.api_key_file` path or the file under the SignalHub config
+directory -- and never the key), whether the lanes' kill switch file
+`<signalhub config dir>/disabled` exists, then one row per event type with its
+kind, whether it is on, its category and severity, and which layer set each
+(`default`, `kind` or `event`). Without a URL or key it lists the places it
+looked. `--json` prints the same as one object.
+
+`notifications --test` sends one `info` test event (`milestone_started`, so it
+follows your own setting for that type) through the real transport and exits
+`0` on `sent` or `duplicate`, `1` on `rejected` or `conflict` (a `422`), `3`
+on `failed`, and `2` when nothing was sent: not configured, disabled (the
+kill switch or `notifications.enabled: false`), or the test event's type
+disabled by `notifications.events`. It takes no repository, opens no run
+record and writes nothing under the runtime directory.
 
 ## `usage`
 

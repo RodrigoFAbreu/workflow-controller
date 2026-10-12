@@ -22,6 +22,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -31,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from tests.scenarios import kit  # noqa: E402
-from tests.scenarios import FLOW_ID_RE, REGISTRY  # noqa: E402
+from tests.scenarios import FLOW_ID_RE  # noqa: E402
 from controller import version as controller_version  # noqa: E402
 
 DEFAULT_MODULE = "tests.scenarios.catalogue"
@@ -106,14 +107,30 @@ def validate_record(record: object, flow_id: "str | None" = None) -> list[str]:
     return problems
 
 
+def _is_generated_evidence(checkout: Path, path: str, output: Path) -> bool:
+    """An untracked file the runner itself writes under ``output``: ``index.json``, ``<flow_id>.json`` and the
+    ``degraded/`` reports. Nothing else beneath the output directory is exempt: a scenario module, a tracked file or a
+    stray script stays code however the output directory is placed."""
+    full = (checkout / path).resolve()
+    if output not in full.parents:
+        return False
+    parts = full.relative_to(output).parts
+    if len(parts) == 1:
+        return parts[0] == INDEX_NAME or (parts[0].endswith(".json") and FLOW_ID_RE.match(parts[0][:-5]) is not None)
+    return parts[0] == "degraded" and len(parts) == 2 and (parts[1] == INDEX_NAME or parts[1].endswith(".report.json"))
+
+
 def dirty_code_paths(checkout: Path, ignore: "Path | None" = None) -> list[str]:
     """Tracked files modified or staged, and untracked files, under the code
     paths (``controller/``, ``tests/``, ``tools/``, packaging). Workflow
-    bookkeeping and the output directory are not code: every input a scenario
-    executes comes from the verified commit or from fixtures under ``tests/``."""
+    bookkeeping is not code: every input a scenario executes comes from the
+    verified commit or from fixtures under ``tests/``. ``ignore`` is the output
+    directory: only the untracked evidence files the runner writes there are
+    exempt (:func:`_is_generated_evidence`)."""
     env = kit.sanitised_git_env()
     out = subprocess.run(
-        ["git", "-C", str(checkout), "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", *CODE_PATHS],
+        ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-C", str(checkout), "status",
+         "--porcelain=v1", "-z", "--untracked-files=all", "--", *CODE_PATHS],
         capture_output=True, env=env, check=True).stdout.decode(errors="replace")
     paths: list[str] = []
     entries = iter(out.split("\0"))
@@ -123,8 +140,7 @@ def dirty_code_paths(checkout: Path, ignore: "Path | None" = None) -> list[str]:
         path = entry[3:]
         if entry[0] in "RC":
             next(entries, None)  # the rename source follows as its own entry
-        full = (checkout / path).resolve()
-        if ignore is not None and (full == ignore or ignore in full.parents):
+        if entry[:2] == "??" and ignore is not None and _is_generated_evidence(checkout, path, ignore):
             continue
         paths.append(path)
     return paths
@@ -152,16 +168,16 @@ def build_record(outcome: "kit.Outcome", reporter: str, ran_at: str) -> dict:
             "reporter": reporter}
 
 
-def selected(module: str, names: list[str], include_selftest: bool) -> list[str]:
-    import importlib
+def selected(module: str, names: list[str], include_selftest: bool, mode: str = "namespace") -> list[str]:
+    """The flow ids to run. The scenario modules are imported by the sandboxed discovery worker, never here."""
     if module.split(".")[0] != "tests":
         raise Refused(f"module {module!r} is outside the tests package: scenario code must come from the dirty-checked "
                       "code paths, or a record for it binds to no commit")
-    importlib.import_module(module)
-    if include_selftest:
-        importlib.import_module("tests.scenarios.selftest")
-    registered = [s for s in REGISTRY.values() if include_selftest or not s.selftest]
-    ids = [s.flow_id for s in registered]
+    try:
+        ids = [s.flow_id for s in kit.list_scenarios(
+            module if module != DEFAULT_MODULE else "", mode=mode, include_selftest=include_selftest)]
+    except (kit.IsolationUnavailable, kit.MetadataRefused) as exc:
+        raise Refused(str(exc))
     if names:
         unknown = [n for n in names if n not in ids]
         if unknown:
@@ -171,21 +187,24 @@ def selected(module: str, names: list[str], include_selftest: bool) -> list[str]
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    for flow_id in selected(args.module, [], args.all or args.module != DEFAULT_MODULE):
+    mode = "degraded" if args.degraded_diagnostic else "namespace"
+    for flow_id in selected(args.module, [], args.all or args.module != DEFAULT_MODULE, mode):
         print(flow_id)
     return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     output = Path(args.output).resolve()
-    ids = selected(args.module, args.names, args.module != DEFAULT_MODULE)
     mode = "degraded" if args.degraded_diagnostic else "namespace"
+    if args.module.split(".")[0] != "tests":
+        selected(args.module, [], False)  # refuses a module outside the tests package, importing nothing
     dirty = dirty_code_paths(REPO_ROOT, ignore=output)
     if dirty:
         raise Refused("code differs from HEAD (a record for uncommitted code binds to no commit): " + ", ".join(dirty))
     probe = kit.probe_isolation()
     if mode == "namespace" and not probe.ok:
         raise Refused(f"isolation unavailable at step {probe.step!r}: {probe.detail}")
+    ids = selected(args.module, args.names, args.module != DEFAULT_MODULE, mode)
     reporter, outcomes = _reporter(), []
     total = 0.0
     for flow_id in ids:
@@ -214,6 +233,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             raise Refused(f"{flow_id}: the record is malformed: {problems}")
     status = 1 if (failed or over) else 0
     output.mkdir(parents=True, exist_ok=True)
+    for stale in output.glob("*.json"):  # a smaller run must not leave the earlier run's records beside its index
+        stale.unlink()
     texts = {flow_id: _canonical(record) for flow_id, record in records.items()}
     for flow_id, text in texts.items():
         (output / f"{flow_id}.json").write_text(text)
@@ -283,6 +304,8 @@ def build_parser() -> argparse.ArgumentParser:
     lst = sub.add_parser("list", help="print the registered scenario flow ids")
     lst.add_argument("--module", default=DEFAULT_MODULE)
     lst.add_argument("--all", action="store_true", help="include the kit's selftest scenarios")
+    lst.add_argument("--degraded-diagnostic", action="store_true",
+                     help="discover without the sandbox for local debugging")
     run = sub.add_parser("run", help="run scenarios and write evidence records")
     run.add_argument("names", nargs="*")
     run.add_argument("--output", default=str(DEFAULT_OUTPUT))

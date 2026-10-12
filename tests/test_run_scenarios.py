@@ -228,6 +228,74 @@ class ScopedRefusalTest(CloneCase):
         self.assertEqual(again.returncode, 0, again.stderr)
 
 
+class OutputPlacementTest(CloneCase):
+    """The output directory exempts only the evidence files the runner writes (round 4, I2)."""
+
+    def _refused_with(self, output: Path) -> None:
+        (self.clone / "tests" / "scenarios" / "stray.py").write_text("x = 1\n")
+        done = self.runner("run", "selftest-basic", output=output)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("stray.py", done.stderr)
+
+    def test_an_output_directory_over_tests_does_not_hide_a_new_scenario_module(self) -> None:
+        self._refused_with(self.clone / "tests")
+
+    def test_an_output_directory_over_the_root_does_not_hide_a_new_scenario_module(self) -> None:
+        self._refused_with(self.clone)
+
+    def test_an_output_directory_over_controller_does_not_hide_a_tracked_edit(self) -> None:
+        with (self.clone / "controller" / "__init__.py").open("a") as fh:
+            fh.write("\n# edit\n")
+        done = self.runner("run", "selftest-basic", output=self.clone / "controller")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("code differs from HEAD", done.stderr)
+
+    def test_only_generated_evidence_files_are_exempt(self) -> None:
+        runner = load_runner(self.clone)
+        out = self.clone / "tools" / "evidence-out"
+        (out / "degraded").mkdir(parents=True)
+        for name in ("index.json", "selftest-basic.json", "degraded/index.json", "degraded/a.report.json"):
+            (out / name).write_text("{}")
+        self.assertEqual(runner.dirty_code_paths(self.clone, ignore=out.resolve()), [])
+        for name in ("helper.py", "Not A Flow.json", "degraded/helper.py", "nested/x.json"):
+            (out / name).parent.mkdir(exist_ok=True)
+            (out / name).write_text("x = 1\n")
+        self.assertEqual(sorted(runner.dirty_code_paths(self.clone, ignore=out.resolve())),
+                         sorted(f"tools/evidence-out/{n}" for n in
+                                ("helper.py", "Not A Flow.json", "degraded/helper.py", "nested/x.json")))
+
+    def test_a_smaller_run_leaves_no_stale_record_beside_its_index(self) -> None:
+        self.assertEqual(self.runner("run", "selftest-basic").returncode, 0)
+        (self.out / "stale-flow.json").write_text("{}")
+        self.assertEqual(self.runner("run", "selftest-basic").returncode, 0)
+        self.assertFalse((self.out / "stale-flow.json").exists())
+        self.assertEqual(self.runner("check", "--output", str(self.out)).returncode, 0)
+
+
+class DiscoveryIsolationTest(CloneCase):
+    """Scenario modules are imported only inside the sandbox (round 4, I1)."""
+
+    def _module(self, marker: Path) -> None:
+        (self.clone / "tests" / "scenarios" / "hostile.py").write_text(
+            f"from pathlib import Path\nPath({str(marker)!r}).write_text('ran')\n")
+
+    def test_a_refused_dirty_run_does_not_import_the_module(self) -> None:
+        marker = self.base / "marker-dirty"
+        self._module(marker)
+        done = self.runner("run", "--module", "tests.scenarios.hostile", module=False)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertFalse(marker.exists(), "the host imported a scenario module before refusing")
+
+    def test_a_committed_module_is_imported_inside_the_sandbox(self) -> None:
+        marker = self.clone / "marker-committed"  # the real checkout is write-protected inside the sandbox
+        self._module(marker)
+        _git(self.clone, "add", "-A")
+        _git(self.clone, "commit", "-q", "-m", "hostile module")
+        done = self.runner("run", "--module", "tests.scenarios.hostile", module=False)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertFalse(marker.exists(), "the module wrote to the real checkout during discovery")
+
+
 class IsolationRefusalTest(unittest.TestCase):
     """Fail closed: unavailable isolation exits 2 and writes nothing; the degraded
     diagnostic writes reports that are not evidence."""

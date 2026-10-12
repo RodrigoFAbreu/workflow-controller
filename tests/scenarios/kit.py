@@ -33,7 +33,7 @@ import time
 import unittest.mock
 from pathlib import Path
 
-from tests.scenarios import REGISTRY, REPO_ROOT, Result, ScenarioFailure
+from tests.scenarios import REGISTRY, REPO_ROOT, Result, Scenario, ScenarioFailure
 
 SCENARIO_DIR = Path(__file__).resolve().parent
 SETUP_SCRIPT = SCENARIO_DIR / "sandbox_setup.py"
@@ -637,6 +637,18 @@ def run_scenario(flow_id: str, *, mode: str = "namespace", checkout: Path = REPO
                    time.monotonic() - start)
 
 
+def list_scenarios(module: str, *, mode: str = "namespace", include_selftest: bool = False,
+                   checkout: Path = REPO_ROOT, chain: "Chain | None" = None) -> list[Scenario]:
+    """The scenarios ``module`` registers, discovered inside the same sandbox that runs them: the host never imports a
+    scenario module, whose import-time code would otherwise run unconfined."""
+    outcome = run_scenario("list", mode=mode, checkout=checkout, chain=chain, module=module,
+                           params={"list": True, "selftest": include_selftest}, timeout=120.0)
+    if outcome.result.get("status") != "passed" or outcome.problems:
+        raise MetadataRefused(f"scenario discovery failed: {outcome.result.get('message', '')} {outcome.problems}")
+    return [Scenario(o["flow_id"], None, (), o["selftest"]) for o in outcome.result["observations"]
+            if include_selftest or not o["selftest"]]
+
+
 def _read_to_end(fd: int) -> bytes:
     with os.fdopen(fd, "rb") as fh:
         return fh.read()
@@ -782,9 +794,9 @@ class Kit:
 
     def assert_remote_in_scratch(self, repo: Path) -> None:
         for line in self.git("remote", "-v", cwd=repo).splitlines():
-            parts = line.split()
-            if len(parts) > 1:
-                self.assert_inside_scratch(self.remote_path(parts[1]))
+            fields = line.split("\t")  # "<name>\t<url> (fetch)": the url may hold spaces
+            if len(fields) > 1:
+                self.assert_inside_scratch(self.remote_path(fields[1].rsplit(" ", 1)[0]))
 
     @staticmethod
     def remote_path(url: str) -> str:
@@ -970,16 +982,22 @@ def worker_main(argv: list[str]) -> None:
             importlib.import_module(config["module"])
         else:
             importlib.import_module("tests.scenarios.catalogue")
-        scenario = REGISTRY.get(config["flow_id"])
-        if scenario is None:
-            raise ScenarioFailure(f"no scenario is registered as {config['flow_id']!r}")
-        kit.install_audit_hook()
-        scenario.run(kit)
-        if kit.violations():
-            raise ScenarioFailure(f"the audit hook recorded a launch outside the scratch bin/: {kit.violations()}")
-        survivors = wait_no_tagged(str(kit.scratch), exclude=_ancestors())
-        if survivors:
-            raise ScenarioFailure(f"leftover processes after the scenario: {survivors}")
+        if config.get("params", {}).get("list"):
+            # Discovery: importing the modules registers the scenarios, so it happens here, inside the sandbox.
+            if config["params"].get("selftest"):
+                importlib.import_module("tests.scenarios.selftest")
+            kit.observations.extend({"flow_id": s.flow_id, "selftest": s.selftest} for s in REGISTRY.values())
+        else:
+            scenario = REGISTRY.get(config["flow_id"])
+            if scenario is None:
+                raise ScenarioFailure(f"no scenario is registered as {config['flow_id']!r}")
+            kit.install_audit_hook()
+            scenario.run(kit)
+            if kit.violations():
+                raise ScenarioFailure(f"the audit hook recorded a launch outside the scratch bin/: {kit.violations()}")
+            survivors = wait_no_tagged(str(kit.scratch), exclude=_ancestors())
+            if survivors:
+                raise ScenarioFailure(f"leftover processes after the scenario: {survivors}")
         result.status = "passed"
     except BaseException as exc:  # noqa: BLE001 -- a failure is evidence, reported not raised
         text = f"{type(exc).__name__}: {exc}"

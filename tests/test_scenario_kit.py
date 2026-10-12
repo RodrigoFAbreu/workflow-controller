@@ -369,6 +369,11 @@ class RemoteGuardTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "remote", "remove", "origin"], check=True)
         self.guard(f"file://{self.scratch}/origin.git")
 
+    def test_a_scratch_path_with_a_space_is_accepted(self) -> None:
+        spaced = self.scratch / "a dir"
+        spaced.mkdir()
+        self.guard(str(spaced / "origin.git"))
+
 
 class CheckoutSnapshotTest(unittest.TestCase):
     """D3b: content-sensitive, token-free changes included."""

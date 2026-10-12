@@ -65,6 +65,11 @@ job is an ``unknown`` delta charged at the default forecast) and its
 epoch ``started_at`` are volatile keys. Nothing else moved
 (``tests/test_trunk_preflight.py`` pins that too).
 
+And once by ``workflow-controller-signalhub-notifications`` CP2 (rewritten in
+CP3), whose seven ``notifications.*`` settings rows (table generation 5)
+appear in each launched job's ``controller_settings`` ``values`` and
+``sources``. Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

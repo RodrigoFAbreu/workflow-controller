@@ -103,10 +103,11 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, identity, lock, milestone_branch, protocol, protocol_decision, routing, runtime, target_state,
-    telemetry, usage, worker, workflow_contract,
+    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, routing, runtime,
+    target_state, telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
+    BRANCH_GATE_PHASE,
     NO_PHASE,
     NO_PHASE_WIRE,
     Decision,
@@ -3268,6 +3269,10 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
                 evidence={"job_id": record.get("job_id"), "status": status,
                           "clearing_command": _abandon_command(path.stem, root)},
             )
+    # Notifications (D13): re-derive the events a dead Controller may have
+    # failed to enqueue. Enqueue-only; never raises.
+    _recover_merge_notices(managed_repo, runtime)
+    _recover_job_notices(results, runtime, managed_repo)
     return results
 
 
@@ -4699,6 +4704,403 @@ def _reconciled_details(record: JobRecord) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Notifications (`workflow-controller-signalhub-notifications` CP3): the
+# events a Controller step derives from what it already records. Every
+# derivation is a function of the record it reads (D4 b: a re-derived event
+# repeats the stored body byte for byte), and every send only enqueues:
+# `notify.send` never raises and nothing here changes an exit code, a job
+# record or a step count.
+# ---------------------------------------------------------------------------
+
+#: How long after a job record was written a `resume` re-derives its event
+#: (D13), and how many of the most recent terminal records it examines.
+RECOVERY_WINDOW_SECONDS = 1800
+RECOVERY_RECORD_LIMIT = 50
+
+#: The meaning `run_finished` gives each exit code (`docs/exit-codes.md`).
+RUN_EXIT_MEANING = {
+    0: "completed, nothing pending", 10: "stopped at a gate", 15: "next action not automated",
+    17: "stopped for the usage budget", 20: "refused (fail closed)", 30: "a worker failed its expected outcome",
+    35: "a worker stopped without completing", 45: "the worktree is held", 50: "a generation handoff is pending",
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class DerivedEvent:
+    """One event derived from a record: what `notify.send` is called with.
+    ``ident`` is the occurrence identity of D4 (never an invocation's)."""
+
+    event_type: str
+    ident: str
+    title: str
+    work_item: str | None = None
+    message: str | None = None
+    link: str | None = None
+
+    def key(self, repository: str) -> str:
+        return notify.idempotency_key(self.event_type, repository, self.ident)
+
+
+def _send_derived(events: "list[DerivedEvent]", repository: str, *, run_id: str | None = None,
+                  recovered: bool = False) -> None:
+    for event in events:
+        notify.send(event.event_type, repository=repository, ident=event.ident, title=event.title,
+                    work_item=event.work_item, message=event.message, link=event.link, run_id=run_id,
+                    recovered=recovered)
+
+
+def _record_command(record: Mapping) -> str:
+    action = record.get("selected_action")
+    command = action.get("command") if isinstance(action, Mapping) else None
+    return command.split()[0] if isinstance(command, str) and command.split() else ""
+
+
+def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) -> "list[DerivedEvent]":
+    """The events a finished job record maps to (D2): the **single** source
+    of the job-outcome events. ``FINISHED`` gives ``step_done`` and, by the
+    action and the validated post-state phase, ``milestone_started``,
+    ``milestone_planned``, ``approval_recorded`` or ``milestone_accepted``;
+    ``FAILED`` and ``INCOMPLETE`` give ``lane_blocked``; a ``GATE_BLOCKED``
+    lifecycle gate gives ``user_gate``. A branch-gate record gives nothing
+    (it cannot be re-derived to its key; the live path sends branch gates
+    through :func:`derive_branch_gate_event`), and neither do ``DECLINED``,
+    ``HANDOFF_PENDING`` or a non-terminal record. Reads the record only,
+    never the live state: ``new_work_item_id`` is the work item a bootstrap
+    job created, which its record cannot name."""
+    status = record.get("status")
+    job_id = record.get("job_id")
+    work_item = record.get("work_item_id") or new_work_item_id
+    command = _record_command(record)
+    pre_state = record.get("pre_state") if isinstance(record.get("pre_state"), Mapping) else {}
+    after = record.get("observed_phase_after")
+    out: list[DerivedEvent] = []
+    if status == STATUS_FINISHED and job_id:
+        suffix = f" ({work_item})" if work_item else ""
+        out.append(DerivedEvent("step_done", str(job_id), f"Step done: {command or 'job'}{suffix}", work_item,
+                                f"{command} finished; the work item is now at {after}."))
+        if command == "/milestone-plan" and record.get("observed_phase_before") == NO_PHASE_WIRE and work_item:
+            out.append(DerivedEvent("milestone_started", str(work_item), f"Milestone started: {work_item}",
+                                    work_item, "The first plan was requested for a new work item."))
+        if after == "AWAITING_LOCAL_PLAN_REVIEW" and work_item:
+            out.append(DerivedEvent("milestone_planned", str(job_id), f"Plan ready for review: {work_item}",
+                                    work_item, f"{command} produced a plan awaiting review."))
+        if command == "/satisfy-gate" and work_item:
+            out.append(DerivedEvent("approval_recorded", str(job_id), f"Approval recorded: {work_item}",
+                                    work_item, f"{command} recorded the approval; the work item is now at {after}."))
+        if after == "MILESTONE_COMPLETE" and work_item:
+            out.append(DerivedEvent("milestone_accepted", str(work_item), f"Milestone accepted: {work_item}",
+                                    work_item, "The milestone is complete."))
+    elif status in (STATUS_FAILED, STATUS_INCOMPLETE) and job_id:
+        evidence_block = record.get("reconciliation_evidence")
+        reason = evidence_block.get("code") if isinstance(evidence_block, Mapping) else None
+        word = "failed" if status == STATUS_FAILED else "stopped without completing"
+        out.append(DerivedEvent("lane_blocked", str(job_id), f"Blocked: {command or 'job'} {word}"
+                                + (f" ({work_item})" if work_item else ""), work_item,
+                                f"{command} {word}" + (f" ({reason})" if reason else "") + "."))
+    elif status == STATUS_GATE_BLOCKED:
+        gate = record.get("human_gate_pending")
+        if isinstance(gate, Mapping) and gate.get("phase") != BRANCH_GATE_PHASE and work_item:
+            code = notify.identity(gate.get("what_is_required"), gate.get("safe_resume_command"))[:16]
+            ident = notify.lifecycle_gate_identity(str(work_item), str(gate.get("phase")),
+                                                   pre_state.get("state_revision"), code)
+            out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item,
+                                    f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"))
+    return out
+
+
+def _bootstrap_work_item(record: Mapping) -> str | None:
+    """The work item a FINISHED bootstrap job created: the one key the
+    state now has beyond the record's pre-state keys, else ``None``."""
+    pre_state = record.get("pre_state") if isinstance(record.get("pre_state"), Mapping) else {}
+    try:
+        snapshot = target_state.read(SimpleNamespace(root=Path(str(record.get("target_repo")))))
+    except Exception:  # noqa: BLE001 -- notification is best effort
+        return None
+    new = set(snapshot.work_items) - set(pre_state.get("pre_work_item_keys") or ())
+    return next(iter(new)) if len(new) == 1 else None
+
+
+def _notify_job_record(record: Mapping, run_id: str | None, *, recovered: bool = False) -> None:
+    """Derive and enqueue the events of a terminal job record. Never raises."""
+    try:
+        if notify.installed() is None:
+            return
+        new_id = None
+        if (record.get("status") == STATUS_FINISHED and not record.get("work_item_id")
+                and _record_command(record) == "/milestone-plan"):
+            new_id = _bootstrap_work_item(record)
+        events = derive_job_event(record, new_work_item_id=new_id)
+        _send_derived(events, notify.repository_name(str(record.get("target_repo"))),
+                      run_id=record.get("run_id") or run_id, recovered=recovered)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _binding_events(runtime_root: Path, key: str, record: Mapping) -> "list[dict]":
+    """The binding events of ``record``'s current generation, oldest first.
+    The log is presentation: a torn or unreadable line is skipped."""
+    path = Path(runtime_root) / milestone_branch.events_rel(key, record["work_item_id"])
+    out: list[dict] = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("binding_generation") == record.get("binding_generation"):
+            out.append(event)
+    return out
+
+
+def derive_branch_gate_event(gate: Any, binding_record: Mapping | None, *, waited: bool, spent: bool,
+                             events: "list[dict] | None" = None,
+                             state_revision: object = None) -> "DerivedEvent | None":
+    """The event of a branch gate the preflight returned (D2, D4): a user
+    gate for ``merge_pull_request`` and ``merge_held``, a blocker for the
+    blocker class, and for a wait code only when the run waited and the wait
+    is spent (a non-waitable outcome of a wait code is a blocker). The
+    identity is the work item, ``binding_generation``, the gate code and the
+    gate's own occurrence component (:data:`milestone_branch.GATE_OCCURRENCE`)."""
+    kind = milestone_branch.classify(gate)
+    if kind == milestone_branch.GATE_WAIT:
+        if not (waited and spent):
+            return None
+        kind = milestone_branch.GATE_BLOCKER
+    if kind is None:
+        return None
+    record = binding_record or {}
+    stored = (record.get("last_observation") or {}).get("gate") or {}
+    streak = stored.get("streak", 0) if stored.get("code") == gate.code else 0
+    occurrence_kind = milestone_branch.GATE_OCCURRENCE.get(gate.code, milestone_branch.OCCURRENCE_HEAD)
+    log = events or []
+    if occurrence_kind == milestone_branch.OCCURRENCE_RELEASE_EVENT:
+        occurrence: object = next((e.get("at") for e in reversed(log) if e.get("event") == "release_failed"), None)
+    elif occurrence_kind == milestone_branch.OCCURRENCE_STREAK:
+        occurrence = streak
+    else:
+        head = (record.get("pr") or {}).get("head_oid")
+        at = log[-1].get("at") if log else None
+        occurrence = f"{head}|{at}|{streak}" if head or at else f"rev{state_revision}|{streak}"
+    work_item = gate.work_item_id or record.get("work_item_id")
+    ident = notify.branch_gate_identity(str(work_item), record.get("binding_generation"), gate.code, occurrence)
+    event_type = "user_gate" if kind == milestone_branch.GATE_USER else "lane_blocked"
+    link = (record.get("pr") or {}).get("url")
+    exits = f" Next: {gate.exits[0]}" if gate.exits else ""
+    title = (f"Your decision is needed: {gate.code}" if event_type == "user_gate" else f"Blocked: {gate.code}")
+    return DerivedEvent(event_type, ident, f"{title} ({work_item})" if work_item else title,
+                        work_item, f"{gate.message}{exits}", link)
+
+
+def _notify_branch_gate(managed_repo: Any, runtime_root: Path, gate: Any, *, wait_seconds: int,
+                        run_id: str | None) -> None:
+    """Send the event of the gate the step's preflight ended on. Never raises."""
+    try:
+        if notify.installed() is None:
+            return
+        key = milestone_branch.repo_key(gitrepo.common_dir(managed_repo.root))
+        record = (milestone_branch.read_record(runtime_root, key, gate.work_item_id)
+                  if gate.work_item_id else None)
+        log = _binding_events(runtime_root, key, record) if record else []
+        state_revision = None
+        if record is None or not ((record.get("pr") or {}).get("head_oid") or log):
+            view = target_state.read(managed_repo).work_items.get(gate.work_item_id)
+            state_revision = None if view is None else view.state_revision
+        event = derive_branch_gate_event(gate, record, waited=wait_seconds > 0, spent=wait_seconds > 0,
+                                         events=log, state_revision=state_revision)
+        if event is not None:
+            _send_derived([event], notify.repository_name(managed_repo.root), run_id=run_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def derive_pr_merged(record: Mapping) -> "DerivedEvent | None":
+    """The ``pr_merged`` event of a binding record that observed a merge
+    (D2): keyed on the work item and pull request number, or, for the
+    PR-less close-out, the work item and ``binding_generation`` (O4)."""
+    work_item = record.get("work_item_id")
+    if not work_item:
+        return None
+    pr = record.get("pr") if isinstance(record.get("pr"), Mapping) else None
+    if pr and pr.get("number") is not None:
+        return DerivedEvent("pr_merged", notify.identity("pr", work_item, pr["number"]),
+                            f"Pull request #{pr['number']} merged: {work_item}", work_item,
+                            f"Pull request #{pr['number']} of {work_item} was merged.", pr.get("url"))
+    return DerivedEvent("pr_merged", notify.identity("pr-less", work_item, record.get("binding_generation")),
+                        f"Milestone branch merged: {work_item}", work_item,
+                        f"The milestone branch of {work_item} was merged.")
+
+
+def _notify_merge_events(managed_repo: Any, runtime_root: Path, step_started: str,
+                         preflight_events: "list[str]", run_id: str | None) -> None:
+    """The step's preflight observed a merge (`merged` / `merged_squashed`):
+    send ``pr_merged`` for each binding whose merge event was written in this
+    step. Runs in a ``finally`` on every exit of the preflight, including a
+    raise; it only enqueues and never raises, so the original exception is
+    never hidden."""
+    try:
+        if notify.installed() is None or not ({"merged", "merged_squashed"} & set(preflight_events)):
+            return
+        key = milestone_branch.repo_key(gitrepo.common_dir(managed_repo.root))
+        events: list[DerivedEvent] = []
+        for record in milestone_branch.live_records(runtime_root, key).values():
+            merged = [e for e in _binding_events(runtime_root, key, record)
+                      if e.get("event") in ("merged", "merged_squashed") and str(e.get("at", "")) >= step_started]
+            derived = derive_pr_merged(record) if merged else None
+            if derived is not None:
+                events.append(derived)
+        _send_derived(events, notify.repository_name(managed_repo.root), run_id=run_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _recover_merge_notices(managed_repo: Any, runtime_root: Path, run_id: str | None = None) -> None:
+    """Command-entry recovery of ``pr_merged`` (D13): a binding still at
+    ``MERGED``/``MERGED_SQUASHED`` was observed by a Controller that may
+    have died before enqueueing the notice. Runs before the preflight moves
+    the binding; the key is stable, so a notice the server holds answers
+    ``200``. Never raises."""
+    try:
+        notifier = notify.installed()
+        if notifier is None or not notifier.active:
+            return
+        key = milestone_branch.repo_key(gitrepo.common_dir(managed_repo.root))
+        events = []
+        for record in milestone_branch.live_records(runtime_root, key).values():
+            if record.get("state") in milestone_branch.CLOSE_OUT_STATES:
+                derived = derive_pr_merged(record)
+                if derived is not None:
+                    events.append(derived)
+        _send_derived(events, notify.repository_name(managed_repo.root), run_id=run_id, recovered=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _notify_release_published(managed_repo: Any, binding: Mapping, run_id: str | None) -> None:
+    """``release_published`` for the auto-merge release-wait close-out
+    (D2): keyed on the release tag, else the work item and
+    ``binding_generation``. Never raises."""
+    try:
+        if notify.installed() is None:
+            return
+        release = binding.get("release") or {}
+        work_item = binding.get("work_item_id")
+        tag = release.get("tag")
+        ident = notify.identity("release", tag) if tag else notify.identity(
+            "release", work_item, binding.get("binding_generation"))
+        title = f"Release published: {tag}" if tag else f"Release settled: {work_item}"
+        event = DerivedEvent("release_published", ident, title, work_item,
+                             milestone_branch.release_text(release), release.get("url"))
+        _send_derived([event], notify.repository_name(managed_repo.root), run_id=run_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def notify_refusal(repo: "str | os.PathLike", exc: ControllerError) -> None:
+    """``lane_blocked`` for a fail-closed refusal (exit 20) caught in
+    ``cli.main`` for ``step``, ``run`` and ``resume`` (D2). The refusal
+    writes no job record, so the identity is the SHA-256 of the error class,
+    its stable evidence and its message, never the invocation. Never raises."""
+    try:
+        if notify.installed() is None:
+            return
+        evidence_block = exc.evidence if isinstance(exc.evidence, Mapping) else {}
+        stable = {name: evidence_block.get(name) for name in
+                  ("work_item_id", "branch", "state", "binding_generation", "state_revision")}
+        ident = notify.identity("refusal", type(exc).__name__, json.dumps(stable, sort_keys=True, default=str),
+                                exc.message)
+        work_item = evidence_block.get("work_item_id")
+        event = DerivedEvent("lane_blocked", ident, f"Blocked: {type(exc).__name__}", work_item, exc.message[:1000])
+        _send_derived([event], notify.repository_name(repo))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _outcome_lines(runtime_root: Path, run_id: str) -> "list[dict] | None":
+    """The lines of ``runs/<run_id>/notifications.jsonl``, or ``None`` when
+    the log does not exist or cannot be read."""
+    path = Path(runtime_root) / "runs" / run_id / notify.NOTIFICATIONS_LOG
+    try:
+        if path.stat().st_size > (1 << 22):
+            return None
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = []
+    for raw in text.splitlines():
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            lines.append(parsed)
+    return lines
+
+
+#: The outcome states that mean "the notice was handled" (D13 iii): attempts
+#: were spent or the server holds the key. A server-422 ``duplicate`` counts;
+#: an in-process ``duplicate`` says nothing about the first copy.
+_HANDLED_OUTCOMES = frozenset({notify.SENT, notify.CONFLICT, notify.REJECTED, notify.FAILED})
+
+
+def _recoverable(record: Mapping, runtime_root: Path, event: DerivedEvent, repository: str,
+                 config_events: Mapping | None) -> bool:
+    """D13 (ii)-(iv): the run that wrote the record had an active notifier,
+    its log holds no handled outcome for the derived key, and the event type
+    is enabled now."""
+    run_id = record.get("run_id")
+    if not run_id:
+        return False
+    lines = _outcome_lines(runtime_root, str(run_id))
+    if not lines or not any(line.get("status") == "notifier_active" for line in lines):
+        return False
+    key = event.key(repository)
+    for line in lines:
+        if line.get("idempotency_key") != key:
+            continue
+        status = line.get("status")
+        if status in _HANDLED_OUTCOMES or (status == notify.DUPLICATE and line.get("source") == "server"):
+            return False
+    return notify.resolve(event.event_type, config_events).enabled
+
+
+def _recover_job_notices(results: "list[JobRecord]", runtime_root: Path, managed_repo: Any) -> None:
+    """`resume`'s recovery of job events (D13): a record this call
+    reconciled to terminal, or a terminal record written within
+    :data:`RECOVERY_WINDOW_SECONDS` (at most the :data:`RECOVERY_RECORD_LIMIT`
+    most recent), is re-derived and enqueued when :func:`_recoverable`. The
+    keys and bodies equal the original's, so a notice the server holds
+    answers ``200``. Never raises, and never changes a record."""
+    try:
+        notifier = notify.installed()
+        if notifier is None or not notifier.active:
+            return
+        repository = notify.repository_name(managed_repo.root)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        terminal = [r for r in results if r.get("status") in TERMINAL_STATUSES and isinstance(r.get("job_id"), str)]
+        terminal.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
+        for record in terminal[:RECOVERY_RECORD_LIMIT]:
+            if not record.get("reconciled_this_call"):
+                try:
+                    age = (now - datetime.datetime.fromisoformat(str(record.get("updated_at")))).total_seconds()
+                except ValueError:
+                    continue
+                if age > RECOVERY_WINDOW_SECONDS:
+                    continue
+            new_id = None
+            if (record.get("status") == STATUS_FINISHED and not record.get("work_item_id")
+                    and _record_command(record) == "/milestone-plan"):
+                new_id = _bootstrap_work_item(record)
+            eligible = [e for e in derive_job_event(record, new_work_item_id=new_id)
+                        if _recoverable(record, runtime_root, e, repository, notifier.config.events)]
+            _send_derived(eligible, repository, run_id=record.get("run_id"), recovered=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Run records (`workflow-controller-release-runtime-observability` CP5):
 # `runs/<run_id>.json` and `runs/<run_id>/events.jsonl`, written by the one
 # process that owns the run. Both are best-effort and read by no lifecycle
@@ -4740,6 +5142,7 @@ class RunRecord:
         }
         self._flush()
         self.event("run_started")
+        notify.note_run_opened(self.run_id)
 
     def _flush(self) -> None:
         self.record["updated_at"] = _now()
@@ -4767,7 +5170,30 @@ class RunRecord:
         self.record.update(state=RUN_STATE_ENDED, exit_code=exit_code, ended_at=_now())
         self._flush()
         self.event("run_ended", exit_code=exit_code)
+        self._notify_finished(exit_code)
         _OPEN_RUNS.pop(self.run_id, None)
+
+    def _notify_finished(self, exit_code: int) -> None:
+        """``run_finished`` (D2, D5): enqueued before the final flush so it
+        is never lost with the daemon thread, then the counts at close are
+        written to this log from the main thread (single writer). Not sent
+        for exit 16 (``--max-steps``, the run's normal end, D11). Never
+        raises."""
+        try:
+            notifier = notify.installed()
+            if notifier is None:
+                return
+            if exit_code != 16:
+                meaning = RUN_EXIT_MEANING.get(exit_code, f"exit {exit_code}")
+                notify.send("run_finished", repository=notify.repository_name(str(self.record["target_repo"])),
+                            ident=str(self.run_id), title=f"Run finished: {meaning}",
+                            message=f"The {self.record['command']} run ended with exit code {exit_code}: {meaning}.",
+                            run_id=self.run_id)
+            notify.flush()
+            if notifier.active:
+                self.event("notifications_summary", **notify.summary())
+        except Exception:  # noqa: BLE001
+            pass
 
     def interrupt(self) -> None:
         """Ctrl-C: ``current_job_id`` is kept -- its worker may still run."""
@@ -4811,10 +5237,15 @@ def _run_job_started(run_id: str | None, job_id: str) -> None:
         run.job_started(job_id)
 
 
-def _run_job_ended(run_id: str | None, job_id: str, status: str) -> None:
+def _run_job_ended(run_id: str | None, job_id: str, status: str, record: Mapping | None = None) -> None:
+    """Mirror a job's end into its run, then hand the terminal ``record`` it
+    wrote to the notifier (`derive_job_event` is the single source of the
+    job-outcome events; this only passes the record on)."""
     run = _OPEN_RUNS.get(run_id) if run_id is not None else None
     if run is not None:
         run.job_ended(job_id, status)
+    if record is not None:
+        _notify_job_record(record, run_id)
 
 
 def _pending_handoff(runtime_root: Path) -> dict | None:
@@ -4897,7 +5328,7 @@ def _no_launch_record(
         details["what_is_required"] = decision.gate.what_is_required
     _run_job_started(run_id, job_id)
     record = _persist(runtime_root, job_id, record, event=_final_event(status), details=details)
-    _run_job_ended(run_id, job_id, status)
+    _run_job_ended(run_id, job_id, status, record)
     return record
 
 
@@ -5681,8 +6112,16 @@ def _execute_step_locked(
     branch_ctx = milestone_branch.Context(repo_root=managed_repo.root, runtime_root=runtime,
                                           events=preflight_events, auto_merge=auto_merge,
                                           wait_seconds=wait_seconds, poll_seconds=poll_seconds)
-    preflight = milestone_branch.waiting_preflight(branch_ctx, requested_work_item_id=work_item_id,
-                                                   on_wait=on_wait)
+    # Notifications (D2, D13): a binding already at MERGED/MERGED_SQUASHED is
+    # recovered before the preflight moves it, and a merge this preflight
+    # observes is sent on every exit, by return or by raise.
+    step_started = branch_ctx.clock()
+    _recover_merge_notices(managed_repo, runtime, run_id)
+    try:
+        preflight = milestone_branch.waiting_preflight(branch_ctx, requested_work_item_id=work_item_id,
+                                                       on_wait=on_wait)
+    finally:
+        _notify_merge_events(managed_repo, runtime, step_started, preflight_events, run_id)
     # Step 1c (workflow-controller-workflow-2-6-integration CP3, I3): the
     # installed Workflow release must still be the admitted one -- checked
     # here, after the preflight (close-out switches to the trunk, which may
@@ -5692,9 +6131,11 @@ def _execute_step_locked(
     # manifest refuses (exit 20), naming what the preflight did.
     _refuse_changed_release(managed_repo, preflight, preflight_events)
     if isinstance(preflight, milestone_branch.Gate):
+        _notify_branch_gate(managed_repo, runtime, preflight, wait_seconds=wait_seconds, run_id=run_id)
         return _branch_gate_record(runtime, managed_repo, identity, target_state.read(managed_repo), preflight,
                                    run_id=run_id)
     if preflight.stop:
+        _notify_release_published(managed_repo, preflight.binding, run_id)
         return closed_out_decision(preflight.binding)
     binding = preflight.binding
     if binding is not None or preflight.action != "none":
@@ -6011,7 +6452,7 @@ def _launch_job(
             "reconciliation_evidence": reconciliation_evidence,
             "updated_at": _now(),
         }, event="worker_not_started", details={"error": error})
-        _run_job_ended(run_id, job_id, STATUS_FAILED)
+        _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
         return failed
 
     def worker_not_started(exc: ControllerError) -> None:
@@ -6219,7 +6660,7 @@ def _launch_job(
             "observed_phase_after": record["observed_phase_after"],
             "transition_verified": record.get("transition_verified", False),
         })
-        _run_job_ended(run_id, job_id, record["status"])
+        _run_job_ended(run_id, job_id, record["status"], record)
         return record
 
     # Step 7 (CP6B): re-read the target repository's Workflow state fresh
@@ -6299,5 +6740,5 @@ def _launch_job(
     record = _persist(runtime, job_id, record, event=_final_event(final_status), details={
         "observed_phase_after": record["observed_phase_after"], "transition_verified": verified,
     })
-    _run_job_ended(run_id, job_id, final_status)
+    _run_job_ended(run_id, job_id, final_status, record)
     return record

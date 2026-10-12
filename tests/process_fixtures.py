@@ -314,6 +314,7 @@ LEFTOVER_INVENTORY = (
      "_CHILD_STEP, _CHILD_CLI and _CHILD_WAITING_STEP are pinned -c scripts and take the parent guard (D11)"),
     ("test_lock.py", "start:Popen", 1, "bounded",
      "the _spawn wrapper: its callers start sleepers of LEFTOVER_LIFETIME_SECONDS or short helpers"),
+    ("test_notify.py", "start:run", 1, "short", "a python -c snippet (the key never reaches a log); exits at once"),
     ("test_observation_equivalence.py", "start:helper:popen_bounded", 2, "deadline",
      "python -m controller children supervising a worker (controller and follower); popen_bounded (D14)"),
     ("test_observe.py", "sleep", 1, "exception",

@@ -36,7 +36,7 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from controller import runtime
+from controller import notify, runtime
 from controller.errors import UsageRecordError
 
 PROVIDER_CLAUDE = "claude"
@@ -530,16 +530,144 @@ def _iso(epoch: float) -> str:
     return datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).isoformat(timespec="seconds")
 
 
+#: How many of the most recent ``usage-events.jsonl`` lines the ``occurrence``
+#: read looks at (notifications D4), and the bytes read to find them.
+OCCURRENCE_TAIL_LINES = 50
+OCCURRENCE_TAIL_BYTES = 1 << 17
+
+#: The usage events that are notifications (notifications D8); every other
+#: line (the diagnostics) sends nothing.
+NOTIFIED_EVENTS = ("usage_paused", "usage_resumed", "usage_released", "usage_reservation_expired")
+
+
 def append_event(runtime_root: str | os.PathLike, event: str, *, now: float, **fields: Any) -> bool:
     """Append one line to ``<runtime_root>/usage-events.jsonl`` (D8), best
     effort: ``{event, at, provider, window, percent, forecast, resume_at,
     reason, token, repository, run_id}`` with every field not given ``None``.
-    Returns whether the line was written."""
+    A ``usage_paused`` line also carries the additive ``occurrence`` (the
+    notification identity of the hold, never read by a usage decision).
+    Returns whether the line was written, then hands the line to the
+    notifier."""
     line = {"event": event, "at": _iso(now), "provider": None, "window": None, "percent": None,
             "forecast": None, "resume_at": None, "reason": None, "token": None, "repository": None,
             "run_id": None}
     line.update(fields)
-    return runtime.append_jsonl_best_effort(Path(runtime_root), EVENTS_FILE, line)
+    if event == "usage_paused":
+        line["occurrence"] = _occurrence(Path(runtime_root), line, now)
+    written = runtime.append_jsonl_best_effort(Path(runtime_root), EVENTS_FILE, line)
+    _notify(line)
+    return written
+
+
+def _tail_lines(path: Path) -> list[dict]:
+    """The most recent parseable lines of ``path`` (at most
+    :data:`OCCURRENCE_TAIL_LINES`), oldest first; ``[]`` for a missing or
+    unreadable file. A malformed line is skipped."""
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - OCCURRENCE_TAIL_BYTES))
+            raw = handle.read()
+    except OSError:
+        return []
+    lines = raw.decode("utf-8", errors="replace").splitlines()
+    if size > OCCURRENCE_TAIL_BYTES:
+        lines = lines[1:]  # the first line of a mid-file read is partial
+    out: list[dict] = []
+    for text in lines[-OCCURRENCE_TAIL_LINES:]:
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            out.append(parsed)
+    return out
+
+
+def _number(value: Any) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _epoch_of(at: Any) -> float | None:
+    try:
+        return datetime.datetime.fromisoformat(str(at)).timestamp()
+    except ValueError:
+        return None
+
+
+def _occurrence(runtime_root: Path, line: Mapping, now: float) -> Any:
+    """The notification identity of a ``usage_paused`` line (notifications
+    D4): the first value of the chain of consecutive matching lines whose
+    ``resume_at`` (timed) or ``window_resets_at`` (cap) lie within
+    :data:`WINDOW_JITTER_SECONDS` of each other, so a hold that creeps by a
+    second per pass keeps one identity. Only the immediately preceding
+    matching line is read (a bounded local tail; no lock, no network). A
+    missing, unreadable or malformed tail means no earlier line. Never
+    raises: the value feeds the notifier only."""
+    try:
+        own = _number(line.get("resume_at"))
+        resets = _number(line.get("window_resets_at"))
+        if own is None and line.get("window") == "run_cap":
+            return None
+        if own is None and line.get("window") not in ("run_cap", "repository_cap"):
+            return line.get("at")  # a stale reading: nothing to wait for, a new hold
+        value = own if own is not None else resets
+        tail = _tail_lines(runtime_root / EVENTS_FILE)
+        same = [(i, e) for i, e in enumerate(tail)
+                if e.get("event") == "usage_paused" and e.get("provider") == line.get("provider")
+                and e.get("window") == line.get("window") and e.get("repository") == line.get("repository")]
+        prev_index, prev = same[-1] if same else (None, None)
+        if prev is not None:
+            # A line written before 1.9.0 carries neither field: it reads as
+            # its own resume_at, window_resets_at or at.
+            prev_value = _number(prev.get("resume_at") if own is not None else prev.get("window_resets_at"))
+            prev_occurrence = prev.get("occurrence")
+            if prev_occurrence is None:
+                prev_occurrence = prev_value if prev_value is not None else prev.get("at")
+            if value is not None and prev_value is not None:
+                if abs(prev_value - value) <= WINDOW_JITTER_SECONDS:
+                    return prev_occurrence
+            elif value is None:
+                resumed = any(e.get("event") == "usage_resumed" and e.get("provider") == line.get("provider")
+                              and e.get("repository") == line.get("repository") for e in tail[prev_index + 1:])
+                prev_at = _epoch_of(prev.get("at"))
+                if not resumed and prev_at is not None and now - prev_at <= WINDOW_SECONDS[FIVE_HOUR]:
+                    return prev_occurrence
+        return value if value is not None else line.get("at")
+    except Exception:  # noqa: BLE001 -- notification history never steers usage
+        return line.get("at")
+
+
+def _notify(line: Mapping) -> None:
+    """Hand a written usage line to the notifier (D8): only the four
+    notification events, once whether or not the run log also got the
+    event. Never raises."""
+    try:
+        event = line.get("event")
+        if event not in NOTIFIED_EVENTS or notify.installed() is None:
+            return
+        repository_path = line.get("repository")
+        repository = notify.repository_name(repository_path) if repository_path else notify.DEFAULT_CONTEXT
+        provider, window = line.get("provider"), line.get("window")
+        if event == "usage_paused":
+            occurrence = line.get("occurrence")
+            ident = notify.usage_paused_identity(provider, window, repository, occurrence, line.get("run_id"))
+            if window in ("run_cap", "repository_cap"):
+                message = f"The {provider} {' '.join(window.split('_'))} holds new jobs; it is not lifted by waiting."
+            else:
+                message = (f"The {provider} {' '.join(str(window).split('_'))} window is paused; jobs resume when it "
+                           f"resets ({_iso(occurrence) if isinstance(occurrence, (int, float)) else 'unknown'}).")
+            title = f"Usage paused: {provider} {' '.join(str(window).split('_'))}"
+        else:
+            ident = notify.usage_identity(event, line.get("at"), provider, line.get("token"),
+                                          line.get("run_id"), repository)
+            title = {"usage_resumed": "Usage resumed", "usage_released": "Usage reservation released",
+                     "usage_reservation_expired": "Usage reservation expired"}[event]
+            message = f"{title} for {provider}."
+        notify.send(event, repository=repository, ident=ident, title=title, message=message)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def current_readings(record: dict, provider: str) -> dict:
@@ -759,6 +887,17 @@ def repository_spent(record: dict, provider: str, repository: str | None, now: f
     return entry["charged"]
 
 
+def repository_window_resets_at(record: dict, provider: str, repository: str | None, now: float) -> float | None:
+    """The reset of the repository's current spend window (the one
+    :func:`repository_spent` counts), or ``None`` when it has none."""
+    if not repository:
+        return None
+    entry = record["spend"]["repository"].get(provider, {}).get(repository)
+    if entry is None or entry["window_resets_at"] <= now:
+        return None
+    return entry["window_resets_at"]
+
+
 def _all_reservations(record: dict) -> list:
     return list(record["reservations"].values()) + list(record["lapsed"].values())
 
@@ -817,7 +956,8 @@ def _label(window: str) -> str:
 def evaluate(provider: str, readings: Mapping, reservations: Iterable[dict], settings: Limits,
              forecast: tuple[float, float], run_spent: float, run_outstanding: float, repository_spent: float,
              repository_outstanding: float, now: float, *, notes: list | None = None,
-             run_named: bool = True, repository_named: bool = True) -> Hold | str:
+             run_named: bool = True, repository_named: bool = True,
+             repository_window_resets_at: float | None = None) -> Hold | str:
     """The pure strictest-wins decision of D5: ``GO`` or a :class:`Hold`.
 
     A job is held when ``reading + reserved + forecast`` reaches a window's
@@ -851,7 +991,7 @@ def evaluate(provider: str, readings: Mapping, reservations: Iterable[dict], set
                              f"the repository's {provider} spend {repository_spent:.0f}% + outstanding "
                              f"{repository_outstanding:.0f}% + forecast {five:.0f}% exceeds the repository cap "
                              f"{settings.repository_cap_percent}%",
-                             False, resets_at=reading["resets_at"] if reading else None,
+                             False, resets_at=reading["resets_at"] if reading else repository_window_resets_at,
                              outstanding=repository_outstanding > 0))
     if caps:
         return caps[0]
@@ -919,7 +1059,8 @@ def admit(runtime_root: str | os.PathLike, *, provider: str, role: str | None, m
             run_spent(record, provider, run_id), run_outstanding(record, provider, run_id),
             repository_spent(record, provider, repository, now),
             repository_outstanding(record, provider, repository, now), now, notes=notes,
-            run_named=run_id is not None, repository_named=repository is not None)
+            run_named=run_id is not None, repository_named=repository is not None,
+            repository_window_resets_at=repository_window_resets_at(record, provider, repository, now))
         if result == GO and not reserve:
             admission = Admission(None, None, fc, tuple(notes))
         elif result == GO:

@@ -28,8 +28,8 @@ from pathlib import Path
 from typing import Any
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, observe, protocol_decision, routing,
-    runtime, settings, target_state, telemetry, usage, worker,
+    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
+    routing, runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -1216,6 +1216,8 @@ def _usage_event_fields(*, provider: str | None, repository: str, run_id: str | 
         "provider": provider, "window": getattr(hold, "window", None), "percent": getattr(hold, "percent", None),
         "forecast": getattr(hold, "forecast", None), "resume_at": getattr(hold, "resume_at", None),
         "reason": getattr(hold, "reason", None), "token": token, "repository": repository, "run_id": run_id,
+        # Additive (signalhub-notifications D4): only a cap hold carries the window's reset.
+        **({"window_resets_at": hold.resets_at} if getattr(hold, "resets_at", None) is not None else {}),
     }
 
 
@@ -1659,7 +1661,10 @@ def cmd_usage(args: argparse.Namespace) -> int:
     terminal job record a crash left unaccounted ``accounting: "done"``."""
     runtime_root, row = _follow_runtime_root_row(args)
     runtime.ensure_runtime_root(runtime_root, ladder_row=row)
-    values = _effective(args).values
+    effective = _effective(args)
+    values = effective.values
+    if args.check or args.wait:
+        _install_notifier(effective, runtime_root)  # a pause here sends usage_paused
     if args.renew is not None:
         return _usage_renew(args, runtime_root, values)
     if args.release is not None:
@@ -2099,7 +2104,26 @@ def _resolve_settings(args: argparse.Namespace, *, write: bool | None) -> settin
     return settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
 
 
-def _apply_settings(args: argparse.Namespace, *, write: bool) -> settings.EffectiveSettings:
+def _install_notifier(effective: settings.EffectiveSettings, runtime_root: Path) -> None:
+    """Install the process-wide notifier from the effective settings
+    (signalhub-notifications D1): the sender's own credential lookup,
+    outcome log and queue. Replaces any earlier one; :func:`main` removes it
+    again after the final flush. Never raises into the command."""
+    try:
+        values = effective.values
+        notifier = notify.install(notify.NotifierConfig(
+            enabled=values["notifications.enabled"], url=values["notifications.url"],
+            api_key_file=values["notifications.api_key_file"],
+            timeout_seconds=values["notifications.timeout_seconds"], attempts=values["notifications.attempts"],
+            retry_seconds=values["notifications.retry_seconds"], events=values["notifications.events"]),
+            runtime_root=runtime_root)
+        notify.warn_once(notifier)
+    except Exception:  # noqa: BLE001 -- notification can never stop a command
+        notify.uninstall()
+
+
+def _apply_settings(args: argparse.Namespace, *, write: bool,
+                    runtime_root: Path | None = None) -> settings.EffectiveSettings:
     """:func:`main`'s one settings resolution, after the re-exec and before
     dispatch: the resolved settings are put on ``args`` for the commands
     (``args.effective_settings``), and the process-wide leaf values are set
@@ -2109,6 +2133,8 @@ def _apply_settings(args: argparse.Namespace, *, write: bool) -> settings.Effect
     effective = _resolve_settings(args, write=write)
     settings.apply_process_defaults(effective)
     args.effective_settings = effective
+    if runtime_root is not None:
+        _install_notifier(effective, runtime_root)
     return effective
 
 
@@ -2234,7 +2260,7 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     # dispatched -- a refusal (exit 20) leaves the ordinary dispatch
     # footprint, `identity.json` and no job record. A writing command fills
     # the file first (A.4).
-    _apply_settings(args, write=not read_only)
+    _apply_settings(args, write=not read_only, runtime_root=None if read_only else runtime_root)
 
     if command == "status":
         return cmd_status(args, runtime_root, ident, pre_existing=pre_existing)
@@ -2259,6 +2285,7 @@ def main(argv: list[str] | None = None) -> int:
     if _open_run is not None:
         _open_run.discard()  # only a run this invocation creates is closed below
     _open_run = None
+    notify.uninstall()  # an earlier invocation's notifier never serves this one
     _stop_follower(join=False)
     exit_code: int | None = None
     interrupted = False
@@ -2274,6 +2301,8 @@ def main(argv: list[str] | None = None) -> int:
         except ControllerError as exc:
             print(f"error: {exc.message}", file=sys.stderr)
             exit_code = EXIT_FAIL_CLOSED
+            if args.command in ("step", "run", "resume"):
+                job.notify_refusal(args.repo, exc)  # lane_blocked; no exit code depends on it
         return exit_code
     except milestone_branch.WaitInterrupted as exc:
         # Ctrl-C in a `run`'s wait for checks, the merge or the release: the
@@ -2287,7 +2316,21 @@ def main(argv: list[str] | None = None) -> int:
         raise
     finally:
         _close_open_run(exit_code, interrupted=interrupted)
+        _flush_notifier(interrupted=interrupted)
         _stop_follower(join=not interrupted)
+
+
+def _flush_notifier(*, interrupted: bool) -> None:
+    """The last act of :func:`main`: drain the notifier (the first flush of a
+    process fixed the shared deadline; a normally closed run was already
+    flushed in ``RunRecord.close``), then remove it. After an interrupt the
+    wait is at most 2 s. Never raises into the exit path."""
+    try:
+        notify.flush(interrupted=interrupted)
+    except BaseException:  # noqa: BLE001 -- a second Ctrl-C abandons the flush
+        pass
+    finally:
+        notify.uninstall()
 
 
 def _close_open_run(exit_code: int | None, *, interrupted: bool) -> None:

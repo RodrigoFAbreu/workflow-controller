@@ -749,6 +749,24 @@ def note_run_opened(run_id: str) -> bool:
     return False if notifier is None else notifier.note_run_opened(run_id)
 
 
+def send(event_type: str, *, repository: str, ident: str, title: str, work_item: str | None = None,
+         message: str | None = None, link: str | None = None, occurred_at: str | None = None,
+         metadata: Mapping[str, Any] | None = None, run_id: str | None = None, recovered: bool = False) -> None:
+    """Build and queue one event on the installed notifier (the callers' one
+    entry): a no-op with none installed, and never raises -- notification
+    can never steer the lifecycle."""
+    notifier = _installed
+    if notifier is None:
+        return
+    try:
+        event = build_event(event_type, repository=repository, ident=ident, title=title,
+                            events_config=notifier.config.events, work_item=work_item, message=message,
+                            link=link, occurred_at=occurred_at, metadata=metadata)
+        notifier.emit(event, run_id=run_id, recovered=recovered)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def summary() -> dict[str, int]:
     notifier = _installed
     return {} if notifier is None else notifier.counts()
@@ -770,5 +788,5 @@ def warn_once(notifier: Notifier, stream: Any = None) -> None:
 
 __all__ = [
     "Event", "Notifier", "NotifierConfig", "Resolved", "Credentials", "EventsMappingError",
-    "EVENT_TABLE", "KINDS", "build_event", "resolve", "validate_events_mapping", "install", "emit", "flush",
+    "EVENT_TABLE", "KINDS", "build_event", "resolve", "validate_events_mapping", "install", "emit", "send", "flush",
 ]

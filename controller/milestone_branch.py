@@ -165,6 +165,51 @@ GATE_CODES = frozenset({
     GATE_RELEASE_NOTES_INVALID, GATE_MERGE_PENDING, GATE_MERGE_HELD, GATE_RELEASE_PENDING, GATE_RELEASE_FAILED,
 })
 
+#: How the notifications (``controller.job.derive_branch_gate_event``) read a
+#: gate (notifications D2). ``blocker``: needs a person to repair;
+#: ``user_gate``: a human decision (merge permission); ``wait``: a normal
+#: end, a notice only when a run that waited ends on it with the wait spent.
+GATE_BLOCKER, GATE_USER, GATE_WAIT = "blocker", "user_gate", "wait"
+BLOCKER_GATES = frozenset({
+    GATE_CHECKS_FAILING, GATE_CHECKS_CANCELLED, GATE_RELEASE_FAILED, GATE_MERGE_METHOD_REWROTE_HISTORY,
+    GATE_PR_CLOSED_UNMERGED, GATE_MERGED_BEFORE_ACCEPTANCE, GATE_POST_ACCEPTANCE_COMMITS,
+    GATE_UNMERGED_COMMITS, GATE_INTEGRATION_REQUIRED, GATE_PR_TITLE_INVALID, GATE_RELEASE_NOTES_INVALID,
+    GATE_DIRTY_TREE, GATE_BOUND_ITEM_MISSING, GATE_SWITCH_TO_TRUNK, GATE_FAST_FORWARD_TRUNK,
+})
+USER_GATES = frozenset({GATE_MERGE_PULL_REQUEST, GATE_MERGE_HELD})
+WAIT_GATES = frozenset({GATE_CHECKS_PENDING, GATE_MERGE_PENDING, GATE_RELEASE_PENDING, GATE_PR_HEAD_NOT_ACCEPTED})
+
+#: The occurrence component of a branch gate's notification identity (D4),
+#: chosen per gate: ``release_event`` (the ``at`` of the latest
+#: ``release_failed`` binding event), ``streak`` (the stored ``gate.streak``
+#: alone) and ``head`` (the pull request head, the latest binding event
+#: ``at`` and the streak; the work item's ``state_revision`` when the gate
+#: has neither head nor event).
+OCCURRENCE_RELEASE_EVENT, OCCURRENCE_STREAK, OCCURRENCE_HEAD = "release_event", "streak", "head"
+GATE_OCCURRENCE = {
+    **{code: OCCURRENCE_HEAD for code in GATE_CODES},
+    GATE_RELEASE_FAILED: OCCURRENCE_RELEASE_EVENT,
+    GATE_CHECKS_FAILING: OCCURRENCE_STREAK,
+    GATE_CHECKS_CANCELLED: OCCURRENCE_STREAK,
+}
+
+
+def classify(gate: "Gate") -> str | None:
+    """``blocker``, ``user_gate`` or ``wait`` for ``gate`` (D2). A wait code
+    is a wait by the outcome, not by the code alone: a non-waitable
+    outcome of a wait code (GitHub's ``DIRTY`` conflict is ``merge_pending``
+    with ``waitable`` false) needs a person, so it is a blocker. ``None``
+    for a code in no class (a test fails if a member of
+    :data:`GATE_CODES` is one)."""
+    if gate.code in BLOCKER_GATES:
+        return GATE_BLOCKER
+    if gate.code in USER_GATES:
+        return GATE_USER
+    if gate.code in WAIT_GATES:
+        return GATE_WAIT if gate.waitable else GATE_BLOCKER
+    return None
+
+
 #: The Controller's own merge attempts per ``READY`` record (C.3 step 4):
 #: after the third refused send it sends nothing more for the record.
 MERGE_ATTEMPTS = 3
@@ -801,6 +846,11 @@ def _observe_branch(ctx: Context, key: str, record: dict, head: gitrepo.HeadStat
     fresh = _ancestor(ctx, refs[trunk], tip)
     behind = gitrepo.ahead_behind(ctx.repo_root, tip, refs[trunk], runner=ctx.runner)[1]
     observation: dict[str, Any] = {} if push is None else {"push": push}
+    gate = (record.get("last_observation") or {}).get("gate")
+    if gate is not None:
+        # The notification streak (see :func:`_record_gate`): carried across
+        # this rewrite, else it would restart before every gate is computed.
+        observation["gate"] = gate
     observation.update({"tip": tip, "remote_branch": remote_branch, "remote_trunk": refs[trunk],
                         "fresh": fresh, "behind": behind, "observed_at": ctx.clock()})
     return _write(ctx, key, dict(record, last_observation=observation))
@@ -1424,7 +1474,7 @@ class _ReleaseOutcome:
 
 
 def _runs_text(runs: tuple[forge_mod.Run, ...]) -> str:
-    return ", ".join(f"run {run.id} ({run.status}" + (f", {run.conclusion}" if run.conclusion else "")
+    return ", ".join(f"run {run.id} attempt {run.attempt} ({run.status}" + (f", {run.conclusion}" if run.conclusion else "")
                      + f") {run.url}" for run in runs)
 
 
@@ -2731,8 +2781,37 @@ def repository_preflight(ctx: Context, *, requested_work_item_id: str | None = N
     found = probe(ctx)
     if found.inactive:
         return Proceed()
-    return preflight(ctx, requested_work_item_id=requested_work_item_id,
-                     head_policy=_UNSET if found.policy_committed else None)
+    outcome = preflight(ctx, requested_work_item_id=requested_work_item_id,
+                        head_policy=_UNSET if found.policy_committed else None)
+    _record_gate(ctx, found.key, outcome)
+    return outcome
+
+
+def _record_gate(ctx: Context, key: str, outcome: Proceed | Gate) -> None:
+    """Store ``gate: {code, streak}`` in the bound record's
+    ``last_observation`` (notifications D4): the code of this outcome (``None``
+    for a Proceed) and a ``streak`` that advances each time the observed code
+    differs from the stored one, so a gate that recurs after another
+    observation (a checks re-run, a draft toggled back) is a new occurrence
+    and an unchanged gate seen on two steps is one. Written with no event
+    name, so the binding's latest-event ``at`` does not move; nothing is
+    written for an unbound, terminal or close-out record, nor while
+    ``last_observation`` is ``None`` (a new binding is a new generation)."""
+    work_item_id = outcome.work_item_id if isinstance(outcome, Gate) else (outcome.binding or {}).get("work_item_id")
+    if work_item_id is None:
+        return
+    record = read_record(ctx.runtime_root, key, work_item_id)
+    if record is None or record["state"] in TERMINAL_STATES or record["state"] in CLOSE_OUT_STATES:
+        return
+    observation = record.get("last_observation")
+    if not isinstance(observation, dict):
+        return
+    code = outcome.code if isinstance(outcome, Gate) else None
+    stored = observation.get("gate")
+    if isinstance(stored, dict) and stored.get("code") == code:
+        return
+    streak = (stored.get("streak", 0) if isinstance(stored, dict) else 0) + 1
+    _write(ctx, key, dict(record, last_observation=dict(observation, gate={"code": code, "streak": streak})))
 
 
 class WaitInterrupted(KeyboardInterrupt):

@@ -2879,7 +2879,7 @@ class ReleaseWaitTest(_ReleaseWait):
                            "publish by hand with `tools/release.py`")
         self.assertEqual(self.head().branch, BRANCH)
         run_id = self.add_run(m, "queued")
-        self.assertPending(self.preflight(), f"run {run_id} (queued) {RUNS_URL}/{run_id}")
+        self.assertPending(self.preflight(), f"run {run_id} attempt 1 (queued) {RUNS_URL}/{run_id}")
         self.tag("v1.0.0", m)
         url = self.publish("v1.0.0")
         self.finish_run(run_id, "success")
@@ -2922,7 +2922,7 @@ class ReleaseWaitTest(_ReleaseWait):
         self.assertPending(outcome)
         self.assertPending(self.preflight(), "not reported yet")
         run_id = self.add_run(m, "queued")
-        self.assertPending(self.preflight(), f"run {run_id} (queued)")
+        self.assertPending(self.preflight(), f"run {run_id} attempt 1 (queued)")
         self.finish_run(run_id, "success")
         self.tag("v1.0.0", m)
         url = self.publish("v1.0.0")
@@ -2945,7 +2945,7 @@ class ReleaseWaitTest(_ReleaseWait):
         a, m, outcome = self.merge()
         run_id = self.add_run(m, "completed", "failure")
         gate = self.assertFailed(self.preflight(), f"the main.yml run(s) for {m} did not succeed",
-                                 f"run {run_id} (completed, failure) {RUNS_URL}/{run_id}")
+                                 f"run {run_id} attempt 1 (completed, failure) {RUNS_URL}/{run_id}")
         self.assertEqual(gate.exits[0], f"re-run the failed jobs of {RUNS_URL}/{run_id} on GitHub (the release "
                                         f"transaction resumes safely)")
         self.assertEqual(self.preflight(), gate)
@@ -3035,7 +3035,7 @@ class ReleaseWaitTest(_ReleaseWait):
         self.assertPending(outcome)
         self.git("switch", "-q", "main")
         run_id = self.add_run(m)
-        self.assertPending(self.preflight(), f"run {run_id} (in_progress)")
+        self.assertPending(self.preflight(), f"run {run_id} attempt 1 (in_progress)")
         self.finish_run(run_id, "success")
         self.tag("v1.0.0", m)
         url = self.publish("v1.0.0")
@@ -3070,7 +3070,7 @@ class SupersededReleaseTest(_ReleaseWait):
         self.assertPending(self.preflight(), f"the main.yml run(s) for {m} ended without publishing",
                            f"the run(s) for {d} on the trunk can still publish", "not reported yet")
         later = self.add_run(d)
-        self.assertPending(self.preflight(), f"run {later} (in_progress)")
+        self.assertPending(self.preflight(), f"run {later} attempt 1 (in_progress)")
         self.tag("v1.0.0", d)
         url = self.publish("v1.0.0")
         self.finish_run(later, "success")
@@ -3084,7 +3084,7 @@ class SupersededReleaseTest(_ReleaseWait):
         d = self.push_trunk("later.txt", version="1.1.0")
         self.finish_run(mine, "cancelled")
         later = self.add_run(d)
-        self.assertPending(self.preflight(), f"run {mine} (completed, cancelled)", f"run {later} (in_progress)")
+        self.assertPending(self.preflight(), f"run {mine} attempt 1 (completed, cancelled)", f"run {later} attempt 1 (in_progress)")
         self.tag("v1.1.0", d)
         url = self.publish("v1.1.0")
         self.finish_run(later, "success")
@@ -3096,7 +3096,7 @@ class SupersededReleaseTest(_ReleaseWait):
         mine = self.add_run(m, "completed", "failure")
         d = self.push_trunk("later.txt")
         later = self.add_run(d)
-        gate = self.assertPending(self.preflight(), f"run {mine} (completed, failure)", f"run {later} (in_progress)")
+        gate = self.assertPending(self.preflight(), f"run {mine} attempt 1 (completed, failure)", f"run {later} attempt 1 (in_progress)")
         self.assertIn(f"re-run the failed jobs of {RUNS_URL}/{mine} on GitHub (the release transaction resumes "
                       f"safely)", gate.exits)
         self.assertEqual(self.events_named("release_failed"), [])
@@ -3112,7 +3112,7 @@ class SupersededReleaseTest(_ReleaseWait):
         mine = self.add_run(m, "completed", "failure")
         d = self.push_trunk("later.txt")
         later = self.add_run(d)
-        self.assertPending(self.preflight(), f"run {mine} (completed, failure)", f"run {later} (in_progress)")
+        self.assertPending(self.preflight(), f"run {mine} attempt 1 (completed, failure)", f"run {later} attempt 1 (in_progress)")
         url = self.publish("v1.0.0")
         self.finish_run(later, "success")
         self.assertStopped(self.preflight(), {"state": "ALREADY_RELEASED", "version": "1.0.0", "tag": "v1.0.0",
@@ -3128,11 +3128,11 @@ class SupersededReleaseTest(_ReleaseWait):
                 self.finish_run(mine, "cancelled")
                 self.tag("v1.0.0", d1)
                 first = self.add_run(d1, "completed", "failure")
-                self.assertFailed(self.preflight(), f"run {first} (completed, failure)")
+                self.assertFailed(self.preflight(), f"run {first} attempt 1 (completed, failure)")
                 d2 = self.push_trunk("second.txt")
                 second = self.add_run(d2)
-                self.assertPending(self.preflight(), f"run {first} (completed, failure)",
-                                   f"the run(s) for {d2} on the trunk can still publish", f"run {second} (in_progress)")
+                self.assertPending(self.preflight(), f"run {first} attempt 1 (completed, failure)",
+                                   f"the run(s) for {d2} on the trunk can still publish", f"run {second} attempt 1 (in_progress)")
                 self.finish_run(second, "success")
                 if publishes:
                     url = self.publish("v1.0.0")
@@ -3141,9 +3141,9 @@ class SupersededReleaseTest(_ReleaseWait):
                                                                 "tag": "v1.0.0", "url": url, "commit": d1})
                     self.assertEqual(len(self.events_named("release_failed")), 1)  # the gate at d1, before d2
                 else:
-                    self.assertFailed(self.preflight(), f"run {first} (completed, failure)",
+                    self.assertFailed(self.preflight(), f"run {first} attempt 1 (completed, failure)",
                                       f"completed successfully for {d2} and published nothing",
-                                      f"run {second} (completed, success)")
+                                      f"run {second} attempt 1 (completed, success)")
 
     def test_no_run_of_m_reported_and_a_later_run_publishes_at_the_descendant(self) -> None:
         for version in (None, "1.1.0"):
@@ -3168,7 +3168,7 @@ class SupersededReleaseTest(_ReleaseWait):
                 a, m, outcome = self.merge()
                 mine = self.add_run(m, "completed", conclusion)
                 self.assertEqual(self.origin_ref("refs/heads/main"), m)
-                self.assertFailed(self.preflight(), f"run {mine} (completed, {conclusion})")
+                self.assertFailed(self.preflight(), f"run {mine} attempt 1 (completed, {conclusion})")
 
 
 class ReleaseWaitSkippedTest(_ReleaseWait):

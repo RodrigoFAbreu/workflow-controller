@@ -96,7 +96,10 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
     regenerated it again, adding only the sixteen ``usage.*`` keys the same
     way, so those are removed (and checked) too. Its CP3 added only each
     launched job's ``usage`` block and the one ``usage_accounted`` write
-    (``event_seq`` + 1), so those are removed (and checked) as well."""
+    (``event_seq`` + 1), so those are removed (and checked) as well.
+    ``workflow-controller-signalhub-notifications`` CP2 added the seven
+    ``notifications.*`` rows (table generation 5) the same way, removed and
+    checked here too."""
 
     #: The SHA-256 of ``tests/golden/no_policy_lifecycle.json`` at
     #: ``854d25c`` (1.5.0).
@@ -109,6 +112,9 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
         "default_job_percent", "default_job_weekly_percent", "codex_default_job_percent",
         "codex_default_job_weekly_percent", "run_cap_percent", "repository_cap_percent",
         "codex_run_cap_percent", "codex_repository_cap_percent"))
+    #: Table generation 5's rows, at their defaults.
+    NOTIFICATIONS_KEYS = tuple(f"notifications.{name}" for name in (
+        "enabled", "url", "api_key_file", "timeout_seconds", "attempts", "retry_seconds", "events"))
 
     def test_the_golden_differs_from_the_base_only_by_the_merge_rows(self) -> None:
         data = json.loads(golden.GOLDEN_PATH.read_text())
@@ -145,6 +151,10 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 self.assertEqual(usage, {key: settings.default_value(settings._table()[key])
                                          if part == "values" else "file" for key in self.USAGE_KEYS})
                 self.assertFalse([key for key in block[part] if key.startswith("usage.")])
+                notifications = {key: block[part].pop(key) for key in self.NOTIFICATIONS_KEYS}
+                self.assertEqual(notifications, {key: settings.default_value(settings._table()[key])
+                                                 if part == "values" else "file" for key in self.NOTIFICATIONS_KEYS})
+                self.assertFalse([key for key in block[part] if key.startswith("notifications.")])
         self.assertEqual(hashlib.sha256(golden.render(data).encode("utf-8")).hexdigest(), self.BASE_SHA256)
 
 

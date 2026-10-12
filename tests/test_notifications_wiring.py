@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, job, milestone_branch as mb, notify, runtime, usage  # noqa: E402
 from controller.notify import Credentials, NotifierConfig  # noqa: E402
-from tests import process_fixtures, test_job, test_milestone_branch, test_trunk_preflight  # noqa: E402
+from tests import process_fixtures, test_job, test_milestone_branch, test_trunk_preflight, test_usage_command  # noqa: E402
 from tests.fake_signalhub import FakeSignalHub  # noqa: E402
 
 KEY = "shpk1_wiring-test-key"
@@ -839,9 +839,40 @@ class RecoveryTest(_StepCase):
         job._recover_job_notices([failed], self.runtime_root, self.managed_repo)
         self.assertEqual(self.request_types(), ["lane_blocked"])
 
-    def test_the_recovery_bound_examines_at_most_fifty_records(self) -> None:
-        self.assertEqual(job.RECOVERY_RECORD_LIMIT, 50)
-        self.assertEqual(job.RECOVERY_WINDOW_SECONDS, 1800)
+    def test_the_recovery_bound_examines_at_most_fifty_historical_records(self) -> None:
+        record = self.finish_job_unnotified()
+        self.active_log({"status": "notifier_active"})
+        install_notifier(self, self.hub, self.runtime_root)
+        recent = job._now()
+        many = [{**record, "job_id": f"20261012T0000{i:02d}Z-{i:04x}", "updated_at": recent} for i in range(60)]
+        examined: list[str] = []
+        real = job.derive_job_event
+
+        def counting(rec, **kwargs):
+            examined.append(rec["job_id"])
+            return real(rec, **kwargs)
+
+        with unittest.mock.patch.object(job, "derive_job_event", counting):
+            job._recover_job_notices(many, self.runtime_root, self.managed_repo)
+            self.assertEqual(len(examined), job.RECOVERY_RECORD_LIMIT)
+            # D13: records reconciled in this call are outside the historical bound.
+            examined.clear()
+            fresh = [{**r, "reconciled_this_call": True} for r in many[:55]]
+            job._recover_job_notices(fresh + many[55:], self.runtime_root, self.managed_repo)
+            self.assertEqual(len(examined), 55 + 5)
+        self.assertTrue(notify.flush(10))
+
+    def test_each_examined_run_log_is_read_once(self) -> None:
+        record = self.finish_job_unnotified()
+        self.active_log({"status": "notifier_active"})
+        install_notifier(self, self.hub, self.runtime_root)
+        real = job._outcome_lines
+        reads: list[str] = []
+        with unittest.mock.patch.object(job, "_outcome_lines", lambda root, run_id: (reads.append(run_id),
+                                                                                    real(root, run_id))[1]):
+            job._recover_job_notices([record], self.runtime_root, self.managed_repo)
+        self.assertEqual(len(reads), len(set(reads)))
+        self.assertTrue(notify.flush(10))
 
     def test_an_inert_notifier_recovers_nothing(self) -> None:
         self.finish_job_unnotified()
@@ -849,6 +880,28 @@ class RecoveryTest(_StepCase):
         install_notifier(self, self.hub, self.runtime_root, key=None)
         self.resume()
         self.assertEqual(self.hub.requests, [])
+
+
+class UsageReleaseWiringTest(test_usage_command._UsageCommandCase):
+    """``usage --release`` installs the notifier: an enabled ``usage_released`` reaches the fake SignalHub once."""
+
+    def test_an_enabled_release_sends_one_usage_released_notification(self) -> None:
+        hub = FakeSignalHub().start()
+        self.addCleanup(hub.stop)
+        self.reading(10, weekly=1)
+        token = self.reserve_token("--role", "plan", "--model", "m", "--repo", str(self.repo), "--run-id", "r1")
+        self.now += 120
+        self.reading(15, weekly=2)
+        self.settings_path.write_text(json.dumps({
+            "usage": {"resume_grace_seconds": 1},
+            "notifications": {"events": {"events": {"usage_released": {"enabled": True}}}}}))
+        env = {"SIGNALHUB_URL": hub.url, "SIGNALHUB_API_KEY": KEY}
+        with unittest.mock.patch.dict(os.environ, env):
+            code, out, _err = self.run_cmd("usage", "--release", token)
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("released; measured delta, charged 5.0%", out)
+        self.assertEqual([r["body"]["metadata"]["event_type"] for r in hub.requests], ["usage_released"])
+        self.assertEqual(self.shared()["spend"]["run"]["claude"]["r1"]["charged"], 5)
 
 
 class BranchWiringTest(test_trunk_preflight.RunWaitTest):

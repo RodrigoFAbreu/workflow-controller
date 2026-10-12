@@ -5048,14 +5048,18 @@ _HANDLED_OUTCOMES = frozenset({notify.SENT, notify.CONFLICT, notify.REJECTED, no
 
 
 def _recoverable(record: Mapping, runtime_root: Path, event: DerivedEvent, repository: str,
-                 config_events: Mapping | None) -> bool:
+                 config_events: Mapping | None, logs: dict | None = None) -> bool:
     """D13 (ii)-(iv): the run that wrote the record had an active notifier,
     its log holds no handled outcome for the derived key, and the event type
     is enabled now."""
     run_id = record.get("run_id")
     if not run_id:
         return False
-    lines = _outcome_lines(runtime_root, str(run_id))
+    if logs is None:
+        logs = {}
+    if str(run_id) not in logs:  # D6: each examined run's log is read once
+        logs[str(run_id)] = _outcome_lines(runtime_root, str(run_id))
+    lines = logs[str(run_id)]
     if not lines or not any(line.get("status") == "notifier_active" for line in lines):
         return False
     key = event.key(repository)
@@ -5083,7 +5087,11 @@ def _recover_job_notices(results: "list[JobRecord]", runtime_root: Path, managed
         now = datetime.datetime.now(datetime.timezone.utc)
         terminal = [r for r in results if r.get("status") in TERMINAL_STATUSES and isinstance(r.get("job_id"), str)]
         terminal.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
-        for record in terminal[:RECOVERY_RECORD_LIMIT]:
+        # D13: the bound is on historical records; those reconciled in this call are all examined.
+        fresh = [r for r in terminal if r.get("reconciled_this_call")]
+        history = [r for r in terminal if not r.get("reconciled_this_call")][:RECOVERY_RECORD_LIMIT]
+        logs: dict = {}
+        for record in fresh + history:
             if not record.get("reconciled_this_call"):
                 try:
                     age = (now - datetime.datetime.fromisoformat(str(record.get("updated_at")))).total_seconds()
@@ -5096,7 +5104,7 @@ def _recover_job_notices(results: "list[JobRecord]", runtime_root: Path, managed
                     and _record_command(record) == "/milestone-plan"):
                 new_id = _bootstrap_work_item(record)
             eligible = [e for e in derive_job_event(record, new_work_item_id=new_id)
-                        if _recoverable(record, runtime_root, e, repository, notifier.config.events)]
+                        if _recoverable(record, runtime_root, e, repository, notifier.config.events, logs)]
             _send_derived(eligible, repository, run_id=record.get("run_id"), recovered=True)
     except Exception:  # noqa: BLE001
         pass

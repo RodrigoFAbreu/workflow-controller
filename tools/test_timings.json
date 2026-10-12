@@ -2535,9 +2535,34 @@
       "seconds": 0.849,
       "tests": 1
     },
+    "tests.test_scenarios.Scenario_scenario_notifications_never_steer": {
+      "samples": 1,
+      "seconds": 8.24,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_read_only_commands_change_nothing": {
+      "samples": 1,
+      "seconds": 3.401,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_settings_file_effect": {
+      "samples": 1,
+      "seconds": 0.597,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_squash_merge_and_release_classification": {
+      "samples": 1,
+      "seconds": 2.7,
+      "tests": 1
+    },
     "tests.test_scenarios.Scenario_scenario_trunk_drift": {
       "samples": 1,
       "seconds": 2.25,
+      "tests": 1
+    },
+    "tests.test_scenarios.Scenario_scenario_usage_pause_and_resume": {
+      "samples": 1,
+      "seconds": 1.348,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_worker_failure_fails_closed": {
@@ -2590,9 +2615,34 @@
       "seconds": 0.598,
       "tests": 1
     },
+    "tests.test_scenarios_negative.Mutation_scenario_notifications_never_steer_steering_hub": {
+      "samples": 1,
+      "seconds": 7.757,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_read_only_commands_change_nothing_step_as_status": {
+      "samples": 1,
+      "seconds": 0.497,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_settings_file_effect_show_writes": {
+      "samples": 1,
+      "seconds": 0.196,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_squash_merge_and_release_classification_docs_as_feat": {
+      "samples": 1,
+      "seconds": 2.751,
+      "tests": 1
+    },
     "tests.test_scenarios_negative.Mutation_scenario_trunk_drift_no_drift": {
       "samples": 1,
       "seconds": 1.8,
+      "tests": 1
+    },
+    "tests.test_scenarios_negative.Mutation_scenario_usage_pause_and_resume_no_reading": {
+      "samples": 1,
+      "seconds": 1.348,
       "tests": 1
     },
     "tests.test_scenarios_negative.Mutation_scenario_worker_failure_fails_closed_advancing_worker": {

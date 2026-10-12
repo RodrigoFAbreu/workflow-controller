@@ -34,7 +34,22 @@ stdin anchor holding the lock until `resume` reconciles it to `FINISHED`; `job-b
 the bound step's end state (exit 10, `BRANCH_BOUND`, each worker command run exactly once). Two kit fixes came out
 of this: `tempfile.tempdir` was cached before `TMPDIR` pointed at the scratch tree (case directories landed in the
 real `/tmp`), and a per-shard `TMPDIR` that lacks `workflow-controller-tests` made the plan cover the temporary
-directory read-only. CP4 (scenarios 6-10) is next.
+directory read-only.
+
+Checkpoint **CP4** (scenarios 6-10) is complete. `tests/scenarios/features.py` registers
+`squash-merge-and-release-classification` (the squash lifecycle over a policy with the release enabled and a published
+`v1.0.0`: a `docs:` commit classifies `NO_CHANGE`, the `feat:` squash `RELEASE_DUE` 1.1.0),
+`notifications-never-steer` (the fake SignalHub up, answering 500, slow and down: identical exit codes and normalised
+job records, the up case's ordered events with distinct `Idempotency-Key`s, the key in no file or output),
+`usage-pause-and-resume` (admission only: a timed hold and a run-cap hold exit 17 with no worker and no job record and
+no sleep; after the injected clock passes the reset a second `run` launches all six workers), `read-only-commands-
+change-nothing` (`status`, `explain`, `inspect`, `follow` and `status --json` before each of the eleven steps of the
+whole lifecycle; only `identity.json` may be added under the runtime root) and `settings-file-effect` (observation
+writes nothing; `settings clean`, `step` and a malformed file each with an exact footprint). Measured while writing
+them: `status` takes no repository, `follow` writes nothing at all (not even `identity.json`), and the settings lock
+file persists, so only a first use shows it as added. Each scenario has a mutation check in
+`tests/test_scenarios_negative.py`, and the timings are in `tools/test_timings.json`. CP5 (documentation, the full
+suite and the compared full runs) is next.
 
 The sections below describe the previous milestone and stay until CP5 rewrites them.
 

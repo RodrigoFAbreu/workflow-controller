@@ -98,6 +98,50 @@ kit test is gone. Not applied (optional): extra pipe copies in `pass_fds`, unlis
 parent is a system directory, two small error-path leaks, stale records left in a reused `--output`, and the
 Git-metadata test's loose `update-ref` check.
 
+## Functional review checklist
+
+Implementation revision 8, technical approval by policy (`90706ee`), implementation head `2597dee`. This milestone
+adds test-side code only (`tests/scenarios/`, `tools/run_scenarios.py`, docs, one CI step); `controller/` is
+byte-unchanged and there is no release. Expected results were measured on this head.
+
+**Setup.** A clean checkout of the branch (`git status` empty). Linux with unprivileged user namespaces (`unshare -Urn true`
+exits 0). No data to seed and no feature flags: scenarios build their own disposable repositories, a scratch origin
+and fake `claude`, `gh`, `workflow-manager` and SignalHub. Use a fresh output directory: `OUT=$(mktemp -d)/ev`.
+
+**Flows.**
+
+1. *Catalogue lists.* `python3 tools/run_scenarios.py list`. Expect 15 flow ids, `scenario-full-lifecycle-to-merge` first and
+   `scenario-settings-file-effect` last (six `scenario-kill-and-resume-<point>` among them: binding-before/after,
+   job-before/after, run-before/after).
+2. *Full run.* `python3 tools/run_scenarios.py run --output $OUT`. Expect `ok` for all 15, `total` about 37 s against the
+   120 s budget, exit 0.
+3. *Evidence is well formed.* `ls $OUT` shows 15 `<flow_id>.json` plus `index.json`. Each record has `flow_id`, `status`
+   (`passed`), `head` (= `git rev-parse HEAD`), `ran_at`, `summary`, `log_digest`, `run_ref`, `reporter`.
+   `python3 tools/run_scenarios.py check --output $OUT` prints `ok`.
+4. *Determinism.* Run step 2 again into a second directory. `diff -r` of the two differs only in `ran_at` (and `index.json`
+   timestamps).
+5. *Single scenario and failure exit.* `run scenario-trunk-drift --output $OUT2` runs only that flow (exit 0). An unknown
+   id is refused with a named error and nothing is written.
+6. *Refusal on a dirty tree.* Append a blank line to `tools/run_scenarios.py`, run `run --output $OUT3`. Expect exit 2, a
+   message that the code differs from `HEAD`, and `$OUT3` empty or absent. Revert the edit (`git checkout tools/run_scenarios.py`).
+7. *Sandbox fail-closed.* If you can, run with user namespaces disabled (or inspect `tests/scenarios/sandbox_setup.py`): without the
+   sandbox `run` exits 2 and writes nothing; `--degraded-diagnostic` writes reports that are not evidence.
+8. *Nothing real is touched.* After steps 2 and 4, `git status` is clean, `~/.config/workflow-controller` and the real
+   runtime root show no new files, and no stray directories appeared in `/tmp` beyond your own `mktemp`.
+9. *Mutation checks.* `python3 -m unittest tests.test_scenarios_negative` passes: every scenario claim, once broken, makes
+   the scenario fail.
+10. *Documentation.* `docs/guide/development.md` "Lifecycle scenarios" matches what you saw in steps 1-7;
+    `docs/ROADMAP.md` marks C6 complete; `python3 tools/check_docs.py` passes.
+11. *CI.* `tools/ci_workflows.py` has the `apparmor_restrict_unprivileged_userns=0` step before the shard in the `tests`
+    job, `validate.yml` is regenerated from it, and the pull request's shards run the scenario atoms (not skipped).
+
+**Known limitations / out of scope.** Mid-job usage-limit handling is not covered by a scenario (admission only). The
+two Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated. `job-before`
+deviates from the approved plan's oracle (`resume` exits 45 until the scenario ends the stdin anchor; no amendment was
+made). Optional self-review items were not applied (extra pipe copies in `pass_fds`, unlisted real locations under a
+system directory, two small error-path leaks, stale records in a reused `--output`, the loose `update-ref` check).
+No release is cut; the pull request is not pushed from this session.
+
 The sections below describe the previous milestone and stay until the milestone is accepted.
 
 ## Status

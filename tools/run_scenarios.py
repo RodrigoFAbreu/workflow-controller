@@ -26,6 +26,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -214,10 +215,8 @@ def _previous_outputs(output: Path) -> "tuple[Path | None, list[Path]]":
     data = _load_json(index)
     if _index_problems(data):
         return None, []
-    listed = subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", str(REPO_ROOT), "ls-files", "-z"],
-                            capture_output=True, env=kit.sanitised_git_env())
-    tracked = {(REPO_ROOT / name).resolve() for name in listed.stdout.decode(errors="replace").split("\0") if name}
-    if index.resolve() in tracked:
+    tracked = _tracked_paths()
+    if index.resolve() in tracked or index.stat().st_nlink > 1:
         return None, []
     owned = []
     for flow_id, digest in sorted(data["records"].items()):
@@ -230,6 +229,47 @@ def _previous_outputs(output: Path) -> "tuple[Path | None, list[Path]]":
         except OSError:
             continue
     return index, owned
+
+
+def _publish(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` as a new file renamed into place. The destination's old inode is never opened for
+    writing, so a hard link to it (a tracked file, a file elsewhere) keeps its content."""
+    handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(handle, "w") as stream:
+            stream.write(text)
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def _tracked_paths() -> "set[Path]":
+    listed = subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", str(REPO_ROOT), "ls-files", "-z"],
+                            capture_output=True, env=kit.sanitised_git_env())
+    return {(REPO_ROOT / name).resolve() for name in listed.stdout.decode(errors="replace").split("\0") if name}
+
+
+def _unowned_degraded(output: Path, flow_ids: list) -> list[str]:
+    """What a diagnostic run would overwrite that it did not write: a ``degraded/`` that is not a plain directory,
+    and a destination that is a symlink, a hard-linked or tracked file, not a regular file, or not shaped like the
+    runner's own degraded report or index. Absent destinations are free."""
+    target = output / "degraded"
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        return ["degraded/"]
+    tracked = _tracked_paths()
+    found = []
+    for name in [*(f"{f}.report.json" for f in flow_ids), INDEX_NAME]:
+        path = target / name
+        if not (path.exists() or path.is_symlink()):
+            continue
+        if (path.is_symlink() or not path.is_file() or path.stat().st_nlink > 1 or path.resolve() in tracked
+                or not _generated_content_ok(path, ("degraded", name))):
+            found.append(f"degraded/{name}")
+    return found
 
 
 def _canonical(record: dict) -> str:
@@ -287,6 +327,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     if mode == "namespace" and not probe.ok:
         raise Refused(f"isolation unavailable at step {probe.step!r}: {probe.detail}")
     ids = selected(args.module, args.names, args.module != DEFAULT_MODULE, mode)
+    if mode == "degraded":
+        foreign = _unowned_degraded(output, ids)
+        if foreign:
+            raise Refused("the output directory holds files this runner did not write, which a diagnostic run would "
+                          "overwrite: " + ", ".join(foreign))
     reporter, outcomes = _reporter(), []
     total = 0.0
     for flow_id in ids:
@@ -326,24 +371,29 @@ def cmd_run(args: argparse.Namespace) -> int:
         stale.unlink()
     texts = {flow_id: _canonical(record) for flow_id, record in records.items()}
     for flow_id, text in texts.items():
-        (output / f"{flow_id}.json").write_text(text)
+        _publish(output / f"{flow_id}.json", text)
     index = {"head": outcomes[0].head if outcomes else kit.head_of(REPO_ROOT), "isolation": "namespace",
              "reporter": reporter, "order": ids, "exit_status": status,
              "records": {flow_id: _digest(text) for flow_id, text in texts.items()}}
-    (output / INDEX_NAME).write_text(_canonical(index))
+    _publish(output / INDEX_NAME, _canonical(index))
     return status
 
 
 def _write_degraded(output: Path, outcomes: list, probe: "kit.Probe") -> None:
     """Reports that are not evidence: no ``flow_id``/``head``/``status`` keys."""
     target = output / "degraded"
-    target.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True)
+    foreign = _unowned_degraded(output, [o.flow_id for o in outcomes])
+    if foreign:
+        raise Refused("the output directory holds files this runner did not write, which a diagnostic run would "
+                      "overwrite: " + ", ".join(foreign))
+    target.mkdir(exist_ok=True)
     for outcome in outcomes:
         report = {"scenario": outcome.flow_id, "passed": outcome.passed, "observations":
                   outcome.result.get("observations", []), "message": outcome.result.get("message", ""),
                   "problems": outcome.problems}
-        (target / f"{outcome.flow_id}.report.json").write_text(_canonical(report))
-    (target / INDEX_NAME).write_text(_canonical({
+        _publish(target / f"{outcome.flow_id}.report.json", _canonical(report))
+    _publish(target / INDEX_NAME, _canonical({
         "evidence": False, "isolation": "degraded", "failed_step": probe.step, "detail": probe.detail,
         "reports": [o.flow_id for o in outcomes]}))
 

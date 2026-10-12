@@ -508,7 +508,7 @@ class SymlinkedEvidenceTest(_GitCase):
 class OutputOwnershipTest(_GitCase):
     """A run deletes or overwrites only what an earlier run's own index attests (round 5, I3)."""
 
-    def run_with(self, output: Path, ids: list, status: str = "passed") -> int:
+    def run_with(self, output: Path, ids: list, status: str = "passed", degraded: bool = False) -> int:
         outcomes = [kit.Outcome(i, "namespace", {"status": status}, "", "0" * 40, True, [], 0.0) for i in ids]
         err = io.StringIO()
         with mock.patch.object(self.runner, "dirty_code_paths", return_value=[]), \
@@ -516,7 +516,7 @@ class OutputOwnershipTest(_GitCase):
                 mock.patch.object(self.runner, "selected", return_value=ids), \
                 mock.patch.object(self.runner.kit, "run_scenario", side_effect=outcomes), \
                 contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-            code = self.runner.main(["run", "--output", str(output)])
+            code = self.runner.main(["run", "--output", str(output), *(["--degraded-diagnostic"] if degraded else [])])
         self.err = err.getvalue()
         return code
 
@@ -571,6 +571,59 @@ class OutputOwnershipTest(_GitCase):
         self.assertEqual(self.run_with(out, ["flow-a"]), 0)
         self.assertTrue((out / "flow-b.json").is_symlink())
         self.assertEqual(target.read_text(), "precious")
+
+    def test_a_degraded_run_preserves_a_foreign_report_and_index(self) -> None:
+        out = self.root / "out"
+        (out / "degraded").mkdir(parents=True)
+        (out / "degraded" / "flow-a.report.json").write_text("mine")
+        (out / "degraded" / "index.json").write_text('{"mine": true}')
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 2)
+        self.assertIn("did not write", self.err)
+        self.assertEqual((out / "degraded" / "flow-a.report.json").read_text(), "mine")
+        self.assertEqual((out / "degraded" / "index.json").read_text(), '{"mine": true}')
+
+    def test_a_degraded_run_never_follows_a_linked_destination(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 0)
+        target = self.root / "precious.json"
+        target.write_text("precious")
+        for name in ("flow-a.report.json", "index.json"):
+            (out / "degraded" / name).unlink()
+        os.symlink(target, out / "degraded" / "flow-a.report.json")
+        os.link(target, out / "degraded" / "index.json")
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 2)
+        self.assertEqual(target.read_text(), "precious")
+
+    def test_a_degraded_run_refuses_a_linked_degraded_directory(self) -> None:
+        out, elsewhere = self.root / "out", self.root / "elsewhere"
+        out.mkdir()
+        elsewhere.mkdir()
+        os.symlink(elsewhere, out / "degraded")
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 2)
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_a_degraded_run_replaces_its_own_earlier_output(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a"], degraded=True), 0)
+        self.assertEqual(self.run_with(out, ["flow-a", "flow-b"], degraded=True), 0)
+        self.assertTrue((out / "degraded" / "flow-b.report.json").is_file())
+
+    def test_a_hard_linked_namespace_index_is_refused_and_its_other_name_keeps_its_content(self) -> None:
+        out = self.root / "out"
+        self.assertEqual(self.run_with(out, ["flow-a"]), 0)
+        alias = self.root / "alias.json"
+        os.link(out / "index.json", alias)
+        before = alias.read_text()
+        self.assertEqual(self.run_with(out, ["flow-a"]), 2)
+        self.assertEqual(alias.read_text(), before)
+
+    def test_publication_never_writes_through_the_old_inode(self) -> None:
+        target = self.root / "shared.txt"
+        target.write_text("shared")
+        os.link(target, self.root / "dest.txt")
+        self.runner._publish(self.root / "dest.txt", "new")
+        self.assertEqual(target.read_text(), "shared")
+        self.assertEqual((self.root / "dest.txt").read_text(), "new")
 
 
 if __name__ == "__main__":

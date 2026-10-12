@@ -47,13 +47,14 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from controller import forge, gitrepo, release_txn, routing, runtime, workflow_contract
+from controller import forge, gitrepo, notify, release_txn, routing, runtime, workflow_contract
 from controller.errors import RoutingConfigError, RuntimeContainmentError, SettingsError
 
 SCHEMA_VERSION = 1
@@ -69,10 +70,18 @@ TYPE_INT = "int"
 TYPE_OPTIONAL_INT = "optional-int"
 #: Only JSON ``true``/``false`` (auto-merge-release-wait A.2).
 TYPE_BOOL = "bool"
+#: A string of ``minimum``-``maximum`` characters, or ``null``; ``url`` rows
+#: must also be ``http(s)`` URLs (signalhub-notifications D3).
+TYPE_OPTIONAL_STRING = "optional-string"
+#: The ``notifications.events`` mapping
+#: (:func:`controller.notify.validate_events_mapping`).
+TYPE_NOTIFICATIONS = "notifications"
 #: The routing section (:func:`controller.routing.validate_routing_mapping`).
 TYPE_ROUTING = "routing"
 
 ROUTING_KEY = "routing"
+NOTIFICATIONS_EVENTS_KEY = "notifications.events"
+NOTIFICATIONS_URL_KEY = "notifications.url"
 
 #: Where an effective value came from (``settings show``, the job record).
 SOURCE_CLI = "cli"
@@ -142,6 +151,16 @@ TABLE: tuple[Setting, ...] = (
     Setting("usage.repository_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, None, 4),
     Setting("usage.codex_run_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, "usage --usage-codex-cap", 4),
     Setting("usage.codex_repository_cap_percent", TYPE_OPTIONAL_INT, None, 1, 100, None, 4),
+    # workflow-controller-signalhub-notifications D3: the SignalHub producer.
+    # The string rows' bounds are lengths; the key itself is never a row
+    # (api_key_file names a file).
+    Setting("notifications.enabled", TYPE_BOOL, True, None, None, None, 5),
+    Setting(NOTIFICATIONS_URL_KEY, TYPE_OPTIONAL_STRING, None, 1, 2048, None, 5),
+    Setting("notifications.api_key_file", TYPE_OPTIONAL_STRING, None, 1, 1024, None, 5),
+    Setting("notifications.timeout_seconds", TYPE_INT, 5, 1, 60, None, 5),
+    Setting("notifications.attempts", TYPE_INT, 3, 1, 10, None, 5),
+    Setting("notifications.retry_seconds", TYPE_INT, 2, 1, 60, None, 5),
+    Setting(NOTIFICATIONS_EVENTS_KEY, TYPE_NOTIFICATIONS, {"kinds": {}, "events": {}}, None, None, None, 5),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -150,8 +169,9 @@ TABLE: tuple[Setting, ...] = (
 #: that adds or retires a key or a routing role. Only ever increases. 3:
 #: the roles ``prepare-functional-review`` and ``apply-functional-review``
 #: (orchestration-protocol-v1 C.3). 4: the ``usage.*`` rows
-#: (workflow-controller-usage-budget D4).
-TABLE_GENERATION = 4
+#: (workflow-controller-usage-budget D4). 5: the ``notifications.*`` rows
+#: (workflow-controller-signalhub-notifications D3).
+TABLE_GENERATION = 5
 
 
 def _table() -> dict[str, Setting]:
@@ -301,6 +321,9 @@ def _is_int(value: Any) -> bool:
 def _check_setting(path: Path, setting: Setting, value: Any) -> None:
     if setting.type == TYPE_OPTIONAL_INT and value is None:
         return
+    if setting.type == TYPE_OPTIONAL_STRING:
+        _check_string(path, setting, value)
+        return
     if setting.type == TYPE_BOOL:
         if type(value) is not bool:
             raise _refuse(path, setting.key, f"{setting.key} must be true or false, got {json.dumps(value)}",
@@ -311,6 +334,54 @@ def _check_setting(path: Path, setting: Setting, value: Any) -> None:
     if not _is_int(value) or not setting.minimum <= value <= setting.maximum:
         raise _refuse(path, setting.key, f"{setting.key} must be {expected}, got {json.dumps(value)}",
                       value=value, minimum=setting.minimum, maximum=setting.maximum)
+
+
+def _check_string(path: Path, setting: Setting, value: Any) -> None:
+    if value is None:
+        return
+    expected = f"a string of {setting.minimum} to {setting.maximum} characters, or null"
+    if not isinstance(value, str) or not setting.minimum <= len(value) <= setting.maximum:
+        raise _refuse(path, setting.key, f"{setting.key} must be {expected}, got {json.dumps(value)}",
+                      value=value, minimum=setting.minimum, maximum=setting.maximum)
+    if setting.key == NOTIFICATIONS_URL_KEY and not re.fullmatch(r"https?://[^\s/?#]+\S*", value):
+        raise _refuse(path, setting.key, f"{setting.key} must be an http or https URL, got {json.dumps(value)}",
+                      value=value)
+
+
+def _dotted_segments(node: Any, tokens: list[str]) -> tuple[str, ...] | None:
+    """The key path in ``node`` that the dotted ``tokens`` name, joining
+    tokens when a key itself contains a dot; ``None`` when none is there."""
+    if not tokens:
+        return ()
+    if not isinstance(node, dict):
+        return None
+    for count in range(1, len(tokens) + 1):
+        key = ".".join(tokens[:count])
+        if key in node:
+            rest = _dotted_segments(node[key], tokens[count:])
+            if rest is not None:
+                return (key, *rest)
+    return None
+
+
+def _events_unknown(value: Any, ignored: Sequence[str]) -> list[tuple[str, tuple[str, ...]]]:
+    """Each dotted path :func:`notify.validate_events_mapping` left out of
+    the ``notifications.events`` ``value``, with its key segments."""
+    base = _segments(NOTIFICATIONS_EVENTS_KEY)
+    found = []
+    for dotted in dict.fromkeys(ignored):
+        segments = _dotted_segments(value, dotted.split("."))
+        if segments is not None:
+            found.append((f"{NOTIFICATIONS_EVENTS_KEY}.{dotted}", (*base, *segments)))
+    return found
+
+
+def _check_events(path: Path, value: Any) -> tuple[dict, list[str]]:
+    try:
+        return notify.validate_events_mapping(value)
+    except notify.EventsMappingError as exc:
+        raise _refuse(path, f"{NOTIFICATIONS_EVENTS_KEY}.{exc.path}".rstrip("."),
+                      str(exc), reason=exc.reason) from None
 
 
 def _check_routing(path: Path, value: Any) -> tuple[routing.RoutingConfig, list[str]]:
@@ -371,6 +442,10 @@ def _validate(data: dict, path: Path) -> _Checked:
             routing_config, ignored = _check_routing(path, value)
             unknown.extend(_routing_unknown(value, ignored))
             value = routing_mapping(routing_config)
+        elif setting.type == TYPE_NOTIFICATIONS:
+            clean_events, ignored = _check_events(path, value)
+            unknown.extend(_events_unknown(value, ignored))
+            value = clean_events
         else:
             _check_setting(path, setting, value)
         values[setting.key] = value

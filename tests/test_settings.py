@@ -30,7 +30,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import tests  # noqa: E402
 from tests import fixtures  # noqa: E402
-from controller import cli, routing, runtime, settings  # noqa: E402
+from controller import cli, notify, routing, runtime, settings  # noqa: E402
 from controller.errors import RoutingConfigError, SettingsError  # noqa: E402
 
 S = settings.Setting
@@ -79,8 +79,20 @@ V4_ROWS = (
     ("usage.codex_repository_cap_percent", "optional-int", None, 1, 100, 4),
 )
 
+#: The rows generation 5 added (workflow-controller-signalhub-notifications
+#: D3), before ``routing``. The string rows' bounds are lengths.
+V5_ROWS = (
+    ("notifications.enabled", "bool", True, None, None, 5),
+    ("notifications.url", "optional-string", None, 1, 2048, 5),
+    ("notifications.api_key_file", "optional-string", None, 1, 1024, 5),
+    ("notifications.timeout_seconds", "int", 5, 1, 60, 5),
+    ("notifications.attempts", "int", 3, 1, 10, 5),
+    ("notifications.retry_seconds", "int", 2, 1, 60, 5),
+    ("notifications.events", "notifications", {"kinds": {}, "events": {}}, None, None, 5),
+)
+
 #: This release's table, pinned.
-TABLE_ROWS = V1_TABLE[:-1] + V2_ROWS + V4_ROWS + V1_TABLE[-1:]
+TABLE_ROWS = V1_TABLE[:-1] + V2_ROWS + V4_ROWS + V5_ROWS + V1_TABLE[-1:]
 
 #: Every generation's type and bounds of each key, oldest first. A release
 #: that changes a default appends nothing here (the rule forbids changing
@@ -99,7 +111,7 @@ V1_ROLES = frozenset({
 })
 
 
-def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 4) -> dict:
+def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 5) -> dict:
     """The file this release's fill writes over a missing one (``rows``
     and ``table_generation``: another release's)."""
     data: dict = {"schema_version": 1, "_table_generation": table_generation, "_defaults_written": {}}
@@ -178,10 +190,11 @@ class TableTest(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
         rows = tuple((s.key, s.type, s.default, s.minimum, s.maximum, s.generation) for s in settings.TABLE)
         self.assertEqual(rows, TABLE_ROWS)
-        # 4: the usage rows (workflow-controller-usage-budget D4) were added at
-        # generation 4, so the table's generation equals its highest row's
-        # (generation 3 only added routing roles, which raise it alone).
-        self.assertEqual(settings.TABLE_GENERATION, 4)
+        # 5: the notifications rows (workflow-controller-signalhub-notifications
+        # D3) were added at generation 5, so the table's generation equals its
+        # highest row's (generation 3 only added routing roles, which raise it
+        # alone; generation 4 added the usage rows).
+        self.assertEqual(settings.TABLE_GENERATION, 5)
         self.assertGreaterEqual(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
         self.assertEqual(routing.ROLES, V1_ROLES)
         self.assertEqual(routing.FIELDS, ("model", "effort"))
@@ -205,6 +218,11 @@ class TableTest(unittest.TestCase):
                     elif kind == "bool":
                         self.assertIs(type(setting.default), bool)
                         self.assertEqual((minimum, maximum), (None, None))
+                    elif kind == "notifications":
+                        self.assertEqual(notify.validate_events_mapping(setting.default),
+                                         (setting.default, []))
+                    elif kind == "optional-string":
+                        self.assertIsNone(setting.default)
                     elif setting.default is not None:
                         self.assertIs(type(setting.default), int)
                         self.assertTrue(minimum <= setting.default <= maximum)
@@ -390,11 +408,13 @@ class MergeRowsTest(_TempSettings):
         self.assertEqual(data["merge"], {"auto": True, "wait_seconds": 3600, "poll_seconds": 30})
         for key, value in (("merge.auto", True), ("merge.wait_seconds", 3600), ("merge.poll_seconds", 30)):
             self.assertEqual(data["_defaults_written"][key], {"value": value, "generation": 2})
-        self.assertEqual(data["_table_generation"], 4)
-        for key in [key for key in data if key not in ("merge", "usage", "_defaults_written", "_table_generation")]:
+        self.assertEqual(data["_table_generation"], 5)
+        for key in [key for key in data
+                    if key not in ("merge", "usage", "notifications", "_defaults_written", "_table_generation")]:
             self.assertEqual(data[key], old[key], key)
         self.assertEqual({key: value for key, value in data["_defaults_written"].items()
-                          if not key.startswith(("merge.", "usage."))}, old["_defaults_written"])
+                          if not key.startswith(("merge.", "usage.", "notifications."))},
+                         old["_defaults_written"])
 
     def test_clean_of_a_generation_1_file_fills_the_rows_and_removes_nothing_known(self) -> None:
         _write(self.path, _defaults_file(V1_TABLE, 1))
@@ -511,12 +531,12 @@ class UnknownKeyTest(_TempSettings):
 
     def test_a_newer_release_s_file_says_so(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 5
+        data["_table_generation"] = 6
         data["forge"]["new_thing"] = 1
         _write(self.path, data)
         _loaded, err = self.stderr_of(settings.load, self.path)
         self.assertIn("forge.new_thing", err)
-        self.assertIn("last filled by a newer Controller release (table generation 5", err)
+        self.assertIn("last filled by a newer Controller release (table generation 6", err)
 
 
 class UsageRowsTest(_TempSettings):
@@ -564,15 +584,16 @@ class UsageRowsTest(_TempSettings):
         _write(self.path, old)
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data["_table_generation"], 4)
+        self.assertEqual(data["_table_generation"], 5)
         self.assertEqual(data["usage"], {name: default for (key, _k, default, *_r) in V4_ROWS
                                          for name in [key.partition(".")[2]]})
         for key, _kind, default, _minimum, _maximum, generation in V4_ROWS:
             self.assertEqual(data["_defaults_written"][key], {"value": default, "generation": generation})
-        for key in [key for key in data if key not in ("usage", "_defaults_written", "_table_generation")]:
+        for key in [key for key in data
+                    if key not in ("usage", "notifications", "_defaults_written", "_table_generation")]:
             self.assertEqual(data[key], old[key], key)
         self.assertEqual({key: value for key, value in data["_defaults_written"].items()
-                          if not key.startswith("usage.")}, old["_defaults_written"])
+                          if not key.startswith(("usage.", "notifications."))}, old["_defaults_written"])
 
     def test_a_fill_does_not_move_a_set_usage_value(self) -> None:
         old = _defaults_file(V1_TABLE[:-1] + V2_ROWS + V1_TABLE[-1:], 3)
@@ -587,12 +608,13 @@ class UsageRowsTest(_TempSettings):
     def test_an_older_release_ignores_the_rows_with_one_warning(self) -> None:
         settings.fill(self.path)
         before = self.path.read_bytes()
-        old_table = tuple(row for row in settings.TABLE if not row.key.startswith("usage."))
+        old_table = tuple(row for row in settings.TABLE
+                          if not row.key.startswith(("usage.", "notifications.")))
         with _release(old_table, 3):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertEqual(err.count("warning:"), 1)
-            self.assertIn("unknown key(s) usage;", err)  # the whole section is new to it
-            self.assertIn("last filled by a newer Controller release (table generation 4", err)
+            self.assertIn("unknown key(s) notifications, usage;", err)  # the whole sections are new to it
+            self.assertIn("last filled by a newer Controller release (table generation 5", err)
             self.assertEqual(settings.resolve(loaded)["run.max_steps"], 20)
             with self.assertRaises(SettingsError):
                 settings.clean(self.path)
@@ -695,19 +717,173 @@ class CleanTest(_TempSettings):
 
     def test_clean_refuses_a_file_filled_by_a_newer_release(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 5
+        data["_table_generation"] = 6
         data["run"]["speed"] = "fast"
         _write(self.path, data)
         before = self.path.read_bytes()
         with self.assertRaises(SettingsError) as ctx:
             settings.clean(self.path)
-        self.assertIn("table generation 5", ctx.exception.message)
+        self.assertIn("table generation 6", ctx.exception.message)
         self.assertIn("newest installed release", ctx.exception.message)
         self.assertEqual(ctx.exception.evidence["key"], "_table_generation")
         self.assertEqual(self.path.read_bytes(), before)
         code, _out, err = _main(["--settings", str(self.path), "settings", "clean"])
         self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
         self.assertEqual(self.path.read_bytes(), before)
+
+
+class NotificationsRowsTest(_TempSettings):
+    """workflow-controller-signalhub-notifications D3: the seven
+    ``notifications.*`` rows of table generation 5."""
+
+    def test_each_row_refuses_a_bad_value_with_exit_20_and_leaves_the_file(self) -> None:
+        bad = {
+            "notifications.enabled": [0, "yes", None],
+            "notifications.url": ["", "ftp://hub", "hub.example", "http://", 5, "https://h/" + "x" * 2048, True],
+            "notifications.api_key_file": ["", "x" * 1025, 5, True],
+            "notifications.timeout_seconds": [0, 61, "5", True, 1.5],
+            "notifications.attempts": [0, 11, "3", True, 1.5],
+            "notifications.retry_seconds": [0, 61, "2", True, 1.5],
+        }
+        for key, values in bad.items():
+            section, _, name = key.partition(".")
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    _write(self.path, {section: {name: value}})
+                    before = self.path.read_bytes()
+                    with self.assertRaises(SettingsError) as ctx:
+                        settings.load(self.path)
+                    self.assertEqual(ctx.exception.evidence["key"], key)
+                    code, _out, _err = _main(["--settings", str(self.path), "settings", "show"])
+                    self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
+                    self.assertEqual(self.path.read_bytes(), before)
+
+    def test_each_row_accepts_its_bounds(self) -> None:
+        good = {
+            "notifications.enabled": [True, False],
+            "notifications.url": [None, "http://h", "https://hub.example:8443/base"],
+            "notifications.api_key_file": [None, "k", "~/.config/signalhub/api-key"],
+            "notifications.timeout_seconds": [1, 60],
+            "notifications.attempts": [1, 10],
+            "notifications.retry_seconds": [1, 60],
+        }
+        for key, values in good.items():
+            section, _, name = key.partition(".")
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    _write(self.path, {section: {name: value}})
+                    self.assertEqual(settings.load(self.path).values[key], value)
+
+    def test_the_defaults_and_the_fill(self) -> None:
+        effective = settings.resolve(settings.load(self.path))
+        for key, _kind, default, *_rest in V5_ROWS:
+            self.assertEqual(effective[key], default, key)
+            self.assertEqual(effective.sources[key], "default", key)
+        settings.fill(self.path)
+        data = _read(self.path)
+        self.assertEqual(data["notifications"], {
+            "enabled": True, "url": None, "api_key_file": None, "timeout_seconds": 5, "attempts": 3,
+            "retry_seconds": 2, "events": {"kinds": {}, "events": {}}})
+        self.assertEqual(data["_table_generation"], 5)
+        self.assertEqual(data["_defaults_written"]["notifications.events"]["generation"], 5)
+        before = self.path.read_bytes()
+        settings.fill(self.path)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_an_unconfigured_event_resolves_to_the_lanes_mapping(self) -> None:
+        events = settings.resolve(settings.load(self.path))["notifications.events"]
+        table = {row.event_type: row for row in notify.effective_table(events)}
+        self.assertEqual((table["user_gate"].category, table["user_gate"].severity),
+                         ("ACTION_REQUIRED", "HIGH"))
+        self.assertEqual((table["lane_blocked"].category, table["lane_blocked"].severity),
+                         ("BLOCKED", "CRITICAL"))
+        self.assertFalse(table["usage_released"].enabled)
+        self.assertFalse(table["usage_reservation_expired"].enabled)
+        self.assertTrue(table["step_done"].enabled)
+
+    def test_the_events_mapping_is_validated_and_stored_clean(self) -> None:
+        _write(self.path, {"notifications": {"events": {
+            "kinds": {"state": {"enabled": False, "severity": "high", "_what": "x"}},
+            "events": {"user_gate": {"category": "blocked"}},
+            "_help": "ignored silently"}}})
+        loaded, err = self.stderr_of(settings.load, self.path)
+        self.assertEqual(err, "")
+        self.assertEqual(loaded.values["notifications.events"], {
+            "kinds": {"state": {"enabled": False, "severity": "HIGH"}},
+            "events": {"user_gate": {"category": "BLOCKED"}}})
+
+    def test_a_bad_category_severity_or_enabled_refuses_and_leaves_the_file(self) -> None:
+        for events, path in (
+            ({"events": {"user_gate": {"category": "LOUD"}}}, "events.user_gate.category"),
+            ({"kinds": {"gate": {"severity": "URGENT"}}}, "kinds.gate.severity"),
+            ({"kinds": {"gate": {"enabled": "yes"}}}, "kinds.gate.enabled"),
+            ({"events": {"user_gate": 5}}, "events.user_gate"),
+            ({"kinds": []}, "kinds"),
+        ):
+            with self.subTest(path=path):
+                _write(self.path, {"notifications": {"events": events}})
+                before = self.path.read_bytes()
+                with self.assertRaises(SettingsError) as ctx:
+                    settings.fill(self.path)
+                self.assertEqual(ctx.exception.evidence["key"], f"notifications.events.{path}")
+                code, _out, _err = _main(["--settings", str(self.path), "settings", "show"])
+                self.assertEqual(code, cli.EXIT_FAIL_CLOSED)
+                self.assertEqual(self.path.read_bytes(), before)
+        _write(self.path, {"notifications": {"events": 5}})
+        with self.assertRaises(SettingsError) as ctx:
+            settings.load(self.path)
+        self.assertEqual(ctx.exception.evidence["key"], "notifications.events")
+
+    def test_an_unknown_name_is_ignored_with_one_warning_and_clean_removes_it(self) -> None:
+        _write(self.path, {"notifications": {"events": {
+            "kinds": {"loud": {"enabled": False}, "gate": {"enabled": False, "volume": 3}},
+            "events": {"nonsense": {"enabled": False}, "user.gate": {}},
+            "extra": 1}}})
+        loaded, err = self.stderr_of(settings.load, self.path)
+        self.assertEqual(err.count("warning:"), 1)
+        for name in ("kinds.loud", "kinds.gate.volume", "events.nonsense", "events.user.gate", "extra"):
+            self.assertIn(f"notifications.events.{name}", err)
+        self.assertEqual(loaded.values["notifications.events"]["kinds"], {"gate": {"enabled": False}})
+        _loaded, err = self.stderr_of(settings.load, self.path)
+        self.assertEqual(err, "")
+        settings._warned.clear()
+        _loaded, removed = settings.clean(self.path)
+        self.assertEqual(len(removed), 5)
+        data = _read(self.path)
+        self.assertEqual(data["notifications"]["events"], {"kinds": {"gate": {"enabled": False}}, "events": {}})
+        settings._warned.clear()
+        _loaded, err = self.stderr_of(settings.load, self.path)
+        self.assertEqual(err, "")
+
+    def test_a_generation_4_file_is_filled_and_an_older_release_leaves_it_alone(self) -> None:
+        old = _defaults_file(V1_TABLE[:-1] + V2_ROWS + V4_ROWS + V1_TABLE[-1:], 4)
+        old["run"]["max_steps"] = 7
+        del old["_defaults_written"]["run.max_steps"]
+        _write(self.path, old)
+        settings.fill(self.path)
+        data = _read(self.path)
+        self.assertEqual(data["_table_generation"], 5)
+        self.assertEqual(data["run"]["max_steps"], 7)
+        self.assertEqual(data["notifications"]["timeout_seconds"], 5)
+        before = self.path.read_bytes()
+        old_table = tuple(row for row in settings.TABLE if not row.key.startswith("notifications."))
+        with _release(old_table, 4):
+            loaded, err = self.stderr_of(settings.load, self.path)
+            self.assertIn("unknown key(s) notifications;", err)
+            self.assertIn("table generation 5", err)
+            self.assertEqual(settings.resolve(loaded)["run.max_steps"], 7)
+            with self.assertRaises(SettingsError):
+                settings.clean(self.path)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_show_lists_the_rows(self) -> None:
+        _write(self.path, {"notifications": {"timeout_seconds": 9}})
+        code, out, _err = _main(["--settings", str(self.path), "--json", "settings", "show"])
+        self.assertEqual(code, 0)
+        shown = json.loads(out)
+        self.assertEqual(shown["values"]["notifications.timeout_seconds"], 9)
+        self.assertEqual(shown["sources"]["notifications.timeout_seconds"], "file")
+        self.assertEqual(shown["values"]["notifications.events"], {"kinds": {}, "events": {}})
 
 
 class TwoReleasesTest(_TempSettings):
@@ -814,14 +990,14 @@ class SharedRoutingTest(_TempSettings):
         old_roles = routing.ROLES - {"prepare-functional-review", "apply-functional-review"}
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data["_table_generation"], 4)
+        self.assertEqual(data["_table_generation"], 5)
         data["routing"]["roles"] = {"apply-functional-review": {"model": "m-fix"}, "review-plan": {"model": "m-rp"}}
         _write(self.path, data)
         before = self.path.read_bytes()
         with _release(settings.TABLE, 2, old_roles):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertIn("routing.roles.apply-functional-review", err)
-            self.assertIn("table generation 4", err)
+            self.assertIn("table generation 5", err)
             route = routing.resolve_route("review-plan", config=loaded.routing_config)
             self.assertEqual((route.model, route.model_source), ("m-rp", "config-role"))
             settings.fill(self.path)

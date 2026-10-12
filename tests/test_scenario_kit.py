@@ -348,7 +348,7 @@ class RemoteGuardTest(unittest.TestCase):
         self.kit.scratch = self.scratch
         self.kit.workdir = self.scratch
         self.repo = self.scratch / "repo"
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        fixtures.git_init(self.repo)
 
     def guard(self, url: str) -> None:
         subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", url], check=True)

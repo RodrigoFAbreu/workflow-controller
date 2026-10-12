@@ -47,8 +47,9 @@ ALL_COMMANDS = frozenset({
 })
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
-#: "Exit codes"). ``2`` is argparse's own default usage-error code and is
-#: never returned explicitly by this module.
+#: "Exit codes"). ``2`` is argparse's own default usage-error code; this
+#: module also returns it for a bad ``--stream`` and, as ``_NOTIFY_EXIT_INERT``,
+#: for ``notifications --test`` when nothing was sent.
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_GATE = 10

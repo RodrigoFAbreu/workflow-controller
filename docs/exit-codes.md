@@ -10,8 +10,8 @@ copy, which the Controller's own tests compare with the code, is
 | Code | Meaning | What to do |
 |---|---|---|
 | 0 | the requested work completed and nothing is pending | nothing |
-| 1 | `usage --renew` or `--release` named a token the usage record does not know (`--renew` also refuses one already accounted); nothing was changed | check the token the `usage --reserve` call printed |
-| 2 | the command line did not parse | put global options such as `--work-item` before the subcommand and the repository last: `workflow-controller --work-item <id> explain <repo>` |
+| 1 | `usage --renew` or `--release` named a token the usage record does not know (`--renew` also refuses one already accounted); nothing was changed. For `notifications --test`: the server rejected the test event, or answered `422` (a conflict) | check the token the `usage --reserve` call printed; for the test event, see [no notifications arrive](common-problems.md#no-notifications-arrive) |
+| 2 | the command line did not parse; `notifications --test` also returns it when nothing was sent because the notifier is not configured or is disabled | put global options such as `--work-item` before the subcommand and the repository last: `workflow-controller --work-item <id> explain <repo>` |
 | 10 | stopped cleanly at a [gate stop](glossary.md#gate-stop), waiting for you | the normal end of a run. Run `workflow-controller explain <repo>`, do what it says, then run again |
 | 15 | the next action is valid but not automated, so it was reported and not launched | do it yourself; `explain` names the phase and the command |
 | 16 | `run` reached `--max-steps` with work still outstanding | run again, or raise `--max-steps` |
@@ -23,6 +23,13 @@ copy, which the Controller's own tests compare with the code, is
 | 45 | the worktree is held: another Controller, or a worker that may still be running, holds its lock, so nothing was launched | wait, or follow the message; the hold is not a failure |
 | 50 | a generation handoff is pending: a newer Controller generation is installed and the running one stopped on purpose | run again with the new version |
 | 130 | you pressed Ctrl-C during `step`, `run` or `resume` (while `run` waited for checks, a merge or a release it prints one line; otherwise you get a traceback); Ctrl-C in `follow` is exit 0 and the run is unaffected; the shell reports 130 as 128 plus the interrupt signal | `workflow-controller resume <repo>` if a job was left running |
+
+`notifications --test` has one more status, 3: the test event failed, that is
+every attempt was spent on network errors, timeouts, `429` or `5xx`. It is
+returned by that command alone, so it has no row above, which lists the
+statuses the table check ties to the Controller's own constants. The meanings
+of 0, 1, 2 and 3 for that command are in
+[the `notifications` command](guide/commands.md#notifications).
 
 Exit 10 and exit 50 are successes of the design, not errors, and exit 45 is a
 wait. An outer script should treat them differently from 0 and from 20.

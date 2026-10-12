@@ -926,6 +926,44 @@ class UsageRenewWiringTest(test_usage_command._UsageCommandCase):
         self.assertIn(second, self.shared()["lapsed"])
 
 
+class UsageShowWiringTest(test_usage_command._UsageCommandCase):
+    """Plain ``usage`` runs the accounting sweep, which can write ``usage_reservation_expired``; the
+    notifier is installed so that event is sent once, and a display with nothing to sweep stays silent."""
+
+    def _enable(self) -> dict:
+        self.settings_path.write_text(json.dumps({
+            "notifications": {"events": {"events": {"usage_reservation_expired": {"enabled": True}}}}}))
+        return {"SIGNALHUB_URL": self.hub.url, "SIGNALHUB_API_KEY": KEY}
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.hub = FakeSignalHub().start()
+        self.addCleanup(self.hub.stop)
+
+    def test_plain_usage_sweep_expiring_reservations_sends_one_notice_each(self) -> None:
+        self.reading(10, weekly=1)
+        for run_id in ("r1", "r2"):  # bound to a job whose record was never written
+            token = self.reserve_token("--role", "plan", "--model", "m", "--repo", str(self.repo),
+                                       "--run-id", run_id)
+            usage.bind_job(self.runtime_root, token, f"job-{run_id}", now=self.now)
+        env = self._enable()
+        self.now += 10 * 3600  # past both leases
+        with unittest.mock.patch.dict(os.environ, env):
+            code, _out, _err = self.run_cmd("usage", "--json")
+            again, _o, _e = self.run_cmd("usage", "--json")
+        self.assertEqual((code, again), (cli.EXIT_OK, cli.EXIT_OK))
+        self.assertEqual(sorted(r["body"]["metadata"]["event_type"] for r in self.hub.requests),
+                         ["usage_reservation_expired"] * 2)
+
+    def test_plain_usage_with_nothing_to_sweep_is_silent(self) -> None:
+        self.reading(10, weekly=1)
+        env = self._enable()
+        with unittest.mock.patch.dict(os.environ, env):
+            code, _out, err = self.run_cmd("usage")
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual((self.hub.requests, err), ([], ""))
+
+
 class BranchWiringTest(test_trunk_preflight.RunWaitTest):
     """The branch-gate, merge, release and refusal events over the fake forge and fake SignalHub (the
     ``RunWaitTest`` fixture: an auto-merge binding with releases)."""

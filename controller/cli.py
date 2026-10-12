@@ -1675,11 +1675,12 @@ def cmd_usage(args: argparse.Namespace) -> int:
     runtime.ensure_runtime_root(runtime_root, ladder_row=row)
     effective = _effective(args)
     values = effective.values
-    if args.check or args.wait or args.release is not None or args.renew is not None:
-        # a pause sends usage_paused; a release, usage_released; every one of the three lapses expired
-        # reservations (_maintain), which is when usage_reservation_expired is written -- once, by whoever
-        # runs first, and D13 does not recover usage events
-        _install_notifier(effective, runtime_root)
+    # a pause sends usage_paused; a release, usage_released; every mode lapses expired reservations (the
+    # replay sweep or _maintain), which is when usage_reservation_expired is written -- once, by whoever
+    # runs first, and D13 does not recover usage events. The plain display installs it too, but without
+    # the credential warning: it is silent unless the sweep wrote an enabled event.
+    _install_notifier(effective, runtime_root,
+                      warn=bool(args.check or args.wait or args.release is not None or args.renew is not None))
     if args.renew is not None:
         return _usage_renew(args, runtime_root, values)
     if args.release is not None:
@@ -2119,7 +2120,7 @@ def _resolve_settings(args: argparse.Namespace, *, write: bool | None) -> settin
     return settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
 
 
-def _install_notifier(effective: settings.EffectiveSettings, runtime_root: Path) -> None:
+def _install_notifier(effective: settings.EffectiveSettings, runtime_root: Path, *, warn: bool = True) -> None:
     """Install the process-wide notifier from the effective settings
     (signalhub-notifications D1): the sender's own credential lookup,
     outcome log and queue. Replaces any earlier one; :func:`main` removes it
@@ -2132,7 +2133,8 @@ def _install_notifier(effective: settings.EffectiveSettings, runtime_root: Path)
             timeout_seconds=values["notifications.timeout_seconds"], attempts=values["notifications.attempts"],
             retry_seconds=values["notifications.retry_seconds"], events=values["notifications.events"]),
             runtime_root=runtime_root)
-        notify.warn_once(notifier)
+        if warn:
+            notify.warn_once(notifier)
     except Exception:  # noqa: BLE001 -- notification can never stop a command
         notify.uninstall()
 

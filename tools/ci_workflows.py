@@ -158,6 +158,11 @@ def _pipx_smoke(version: str) -> str:
 
 #: ``validate``'s smoke test: the local build's version.
 PIPX_SMOKE = _pipx_smoke("$(python3 tools/release.py version)")
+
+#: Lifts the AppArmor restriction on unprivileged user namespaces that
+#: ubuntu-latest sets; the existence guard lets an image without it pass.
+ALLOW_USERNS = ("if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then "
+                "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi")
 #: ``main.yml``'s ``build`` job's smoke test: the version ``release-plan``
 #: classified, which the job receives as ``RELEASE_VERSION``. Under
 #: ``version_change`` that is the committed version, and a ``RESUME`` target
@@ -328,6 +333,11 @@ def validate_workflow() -> dict:
                     _checkout(pinned=False),
                     _setup_python(pinned=False),
                     _install_editable(),
+                    # The scenario atoms need unprivileged user namespaces, which
+                    # the runner image restricts through AppArmor. Guarded, so an
+                    # image without the sysctl passes unchanged; never
+                    # continue-on-error, since an ignored failure is a silent pass.
+                    {"name": "allow unprivileged user namespaces", "run": ALLOW_USERNS},
                     {"name": "shard", "run": exec_shard},
                     {"if": "always()", "uses": "actions/upload-artifact@v4",
                      "with": {"name": RESULTS_ARTIFACT, "path": f"{RESULTS_DIR}/"}},

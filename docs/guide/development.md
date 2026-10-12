@@ -259,6 +259,90 @@ holds. The per-page numbers already in the file are historical, so a new
 page uses the current `ACTIVE_THROUGH` value. When a release changes a page,
 update its "Last checked with" line by hand; the check only asserts the line is there and has that shape.
 
+## Lifecycle scenarios
+
+A scenario is a scripted run of one whole lifecycle path (a full lifecycle to
+merge, a human gate, a worker failure, a killed Controller and its recovery,
+a squash release, notifications, a usage pause, the read-only commands, the
+settings file) against disposable repositories, a scratch origin and the
+fake `claude`, `gh`, `workflow-manager` and SignalHub. It launches no model
+and touches no network. Scenarios are test-side code: they live in
+`tests/scenarios/`, the runner is `tools/run_scenarios.py`, and `controller/`
+gains nothing, so adding one is never a release.
+
+```bash
+python3 tools/run_scenarios.py list                  # the catalogue
+python3 tools/run_scenarios.py run                   # all of it, about 40 s
+python3 tools/run_scenarios.py run scenario-trunk-drift
+python3 tools/run_scenarios.py check                 # re-validate what run wrote
+```
+
+`list` and `run` both load the scenarios inside the sandbox, so on a machine
+without user namespaces they exit 2 unless `--degraded-diagnostic` is passed
+(its reports are not evidence).
+
+`run` writes one `<flow_id>.json` per scenario and an `index.json` under
+`.ai-review/scenario-evidence/` (or `--output DIR`). Each record has the keys
+of the protocol's `functional_evidence` (`flow_id`, `status`, `head`,
+`ran_at`, `summary`, `log_digest`, `run_ref`, `reporter`), and the Workflow's
+own `ingest_functional_evidence` accepts it. Flow ids are
+`scenario-<name>`, and `scenario-kill-and-resume-<point>` for the six kill
+points. The `summary` is the ordered observations (exit codes, phases,
+commit subjects, worker invocation counts, normalised record digests), with
+scratch paths, timestamps, pids, tokens and commit ids normalised, so two
+runs against the same commit give the same `summary`. `run` exits 0 when
+every scenario passed, 1 when one failed (a `failed` record is still
+written), and 2 when it is refused and writes nothing: the code paths
+(`controller/`, `tests/`, `tools/`, packaging) differ from `HEAD`, or the
+sandbox is unavailable. `--check-budget` makes the runner exit 1 when the
+catalogue exceeds 120 s.
+
+**The sandbox.** Every scenario runs in user, network and mount namespaces
+that each descendant inherits: no connection beyond loopback, every real
+location (the checkout and its Git directories, the Controller's config and
+state directories, the real runtime root) read-only, a `PATH` of only the
+fakes and the allowed tools, and a sanitised Git environment. It is set up
+in a privileged phase and then runs as your uid with no capability. There is
+no PID namespace, on purpose: the Controller's liveness and lock answers
+must match a host run. Without user namespaces (some distributions
+restrict them) the runner exits 2 and the suite skips the scenarios; under
+`CI` they fail instead, so a green CI run means the sandbox was exercised.
+GitHub's `ubuntu-latest` image restricts them through AppArmor
+(`kernel.apparmor_restrict_unprivileged_userns=1`), so the generated
+`validate.yml` lifts the restriction in the `tests` job before the shard runs;
+on such an image locally, run
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` or use the
+diagnostic.
+`--degraded-diagnostic` runs without enforcement for local debugging and
+writes reports that are not evidence.
+
+**What is enforced, and what is only detected.** The namespaces and the
+`PATH` are enforcement. An audit hook that fails a scenario launching an
+executable outside the scratch `bin/` is a detector only: it covers the
+in-process Controller and child Controllers started through the kit's
+bootstrap, not what an allowed shell or git hook launches, a `python -E`
+child, or a re-exec.
+
+**What a `passed` record proves.** That a scripted path ran on that commit
+and produced those observations. It does not prove a real worker behaves:
+the fakes follow the contract suite in `tests/test_fake_claude_contract.py`,
+and the live-worker test stays opt-in. Two paths are not covered: a usage
+limit reached *mid-job* (the usage scenario covers the admission pause
+only; the mid-job case is step C8b), and anything a real forge or SignalHub
+does that the fakes do not. Records carry no signature; the gate policy
+(step C10) decides what to require and whether the reporter and commit are
+trusted.
+
+**Adding a scenario.** Register a function with `@scenario(flow_id,
+covers=...)` in a module `tests/scenarios/catalogue.py` imports. It receives
+the kit, drives the real `cli.main`, records `kit.observe(name, value)` and
+asserts outcomes only, never a function's branches (those stay in the unit
+tests). Add a mutation check to `tests/test_scenarios_negative.py` that
+breaks its claim and requires the scenario to fail, so it cannot pass
+vacuously. `tests/test_scenarios.py` generates one `TestCase` class per
+scenario, which the shard planner treats as one atom; add its measured time
+to `tools/test_timings.json` with `tools/run_tests.py timings merge`.
+
 ## Throwaway Git repositories
 
 Every Git repository a test creates goes through `fixtures.git_init` or

@@ -2,47 +2,55 @@
 
 ## Status
 
-**Complete.** `workflow-controller-signalhub-notifications` (`docs/ROADMAP.md` step C5, section 11.4)
-reached `MILESTONE_COMPLETE` on 2026-10-12. The Controller is now a SignalHub producer: it sends 14 event
-types (progress, human gates, blockers, merges, releases and the usage events of ADR 0011) to SignalHub's
-`POST /api/v1/events` from the records it already keeps. Each type is configurable in
-`notifications.events` (on/off, category, severity), every send is idempotent and runs off the lifecycle's
-thread, delivery never changes a step's outcome, and `workflow-controller notifications [--test]` checks the
-wiring. ADR `docs/adr/0012-signalhub-notifications.md` records the design. The milestone ships as the minor
-release **1.9.0** when its `feat:` pull request merges.
+**Complete.** `workflow-controller-automated-lifecycle-scenarios` (`docs/ROADMAP.md` step C6, section 11.5)
+reached `MILESTONE_COMPLETE` on 2026-10-12. Whole lifecycle paths now run as automated scenarios: ten scenarios
+(fifteen flows, the kill-and-resume path having six variants) build disposable repositories with a scratch origin
+and fake `claude`, `gh`, `workflow-manager` and SignalHub, run inside a namespace sandbox with no model usage, and
+write `functional_evidence` records through `tools/run_scenarios.py` (`list`, `run`, `check`). Each scenario has a
+mutation check (`tests/test_scenarios_negative.py`), and the CI `tests` job lifts the runner's AppArmor
+restriction on unprivileged user namespaces so the scenario atoms run there fully protected. `controller/` is
+byte-unchanged. The milestone is a `test:` change and releases nothing.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1 found
-three Minor issues, fixed by a bounded fix (`5a8233a`, `117449a`). Round 2 (implementation revision 7),
-checked against evidence commit `fe70047`, passed every flow (flow-1 to flow-9). An independent tester on
+acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1
+(implementation revision 8), checked against evidence commit `cdf8870`, passed every flow (flow-1 to flow-11,
+flow 7 partly by kit tests and code reading) with no findings. An independent tester on
 `anthropic/claude-sonnet-5-5` ran the flows.
-- Plan revision 16 was approved by policy at `8056cc3`. The base commit is `e0f400e`.
-- Technical approval `9db833f` was recorded by policy and is `CURRENT`: review content id `a706b67c`,
-  reviewed implementation head `117449a`.
-- The Workflow's own GitHub query found pull request #41 at head `fe70047` with every check passing and no
-  standing objection.
+- Plan revision 10 (amendment 0, requested by the user: run the scenarios fully protected on CI) was approved by
+  policy at `191eaac`. The base commit is `651f7da`.
+- Technical approval `90706ee` was recorded by policy and is `CURRENT`: review content id `60430a8a`,
+  reviewed implementation head `2597dee`.
+- The Workflow's own GitHub query found pull request #43 at head `cdf8870` with every check passing (CI run
+  38317047808, Workflow conformance, PR title) and no standing objection.
 
-All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, including its `acceptance_satisfaction` evidence, and
-`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C5 complete. The full milestone
-narrative is archived verbatim at `docs/milestones/completed/workflow-controller-signalhub-notifications.md`.
+All registry checkpoints (CP1-CP6) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
+ground-truth record of this transition, including its eleven `functional_evidence` records and its
+`acceptance_satisfaction` evidence, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C6
+complete. The full milestone narrative is archived verbatim at
+`docs/milestones/completed/workflow-controller-automated-lifecycle-scenarios.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Merge and release.** Pull request #41, titled `feat: push run events to SignalHub as configurable
-  notifications`, is merged once every check passes; `main.yml` then releases 1.9.0.
-- **Lane coordination after the release** (ROADMAP 11.4, plan D9). The lane orchestrators stop
-  hand-sending the events the Controller now sends, run `resume` before `run --max-steps 1` after a killed
-  process, and give every launch path a key (`notifications.api_key_file`, or `SIGNALHUB_API_KEY_FILE` in
-  `start-run.sh`).
-- **Two Minor observations from functional review round 2** (no change needed; see
-  `.ai-review/archive/workflow-controller-signalhub-notifications/functional-review-round2-PASSED.md`):
-  `--json` is a global option placed before the subcommand, and a plain `usage` lapses only job-bound
-  reservations (an unbound one lapses on the next reserve, check, renew or release).
-- **Known limitations kept out of scope:** no persistent outbox, no SignalHub changes, and no
-  notifications for the Manager or Workflow repositories.
+- **Merge.** Pull request #43, titled `test: run whole lifecycle paths as scenarios that produce functional
+  evidence`, is merged once every check passes; it releases nothing.
+- **The `job-before` oracle deviation.** A kill before the job record that names a spawned worker leaves a
+  stdin anchor that `resume` cannot reconcile (exit 45) until the scenario ends the anchor; the approved
+  plan's oracle for that variant does not hold, and no plan amendment was made.
+- **Codex optional findings** (see
+  `.ai-review/archive/workflow-controller-automated-lifecycle-scenarios/external-implementation-review-rev8-APPROVE.md`
+  and the earlier rounds): O2 (`$WORKFLOW_CONTROLLER_SETTINGS` and some missing locations lack mount
+  protection), O4 (the namespace watchdog permits `timeout + 15`; degraded workers lack an independent deadline
+  after parent death), O6 (most negative checks accept generic assertion failures), O7 (registry tests import
+  selftest scenario code on the host), O8 (ignored inputs, special Git index flags and external
+  committed-symlink targets can evade provenance checks), O9 (flow id `index` collides with `index.json`) and
+  O10 (configured Git clean filters can run during dirty checks).
+- **Optional self-review items not applied:** extra pipe copies in `pass_fds`, unlisted real locations under a
+  system directory, two small error-path leaks, stale records left in a reused `--output`, and the
+  Git-metadata test's loose `update-ref` check.
+- **Known limitations kept out of scope:** a mid-job usage limit is not covered by a scenario (admission only;
+  C8b), and the two Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally
+  and are unrelated.
 
 ## Next action
 
-1. Pull request #41 merges (a `feat:` pull request, releasing 1.9.0).
-2. `/milestone-plan` for C6, the next step in `docs/ROADMAP.md`'s order (C6, C7, C10, C12, C11, then
-   O1-O7).
+1. Pull request #43 merges (a `test:` pull request, no release).
+2. `/milestone-plan` for C7, the next step in `docs/ROADMAP.md`'s order (C7, C10, C12, C11, then O1-O7).

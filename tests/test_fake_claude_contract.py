@@ -1531,7 +1531,13 @@ class OrphanWatchdogTest(unittest.TestCase):
     def test_the_bounds_cannot_regress_and_the_inventory_is_complete(self):
         from tests import process_fixtures
 
-        sources = {path.name: path.read_text() for path in Path(__file__).parent.glob("*.py")}
+        tests_dir = Path(__file__).parent
+        # Scenario-kit extension: every tests/**/*.py, keyed by its path relative to tests/, so
+        # tests/scenarios/__init__.py never collides with tests/__init__.py (plan D8).
+        # Only packages hold test code: the vendored Workflow release trees and the harness contract
+        # capture are data, not tests.
+        sources = {path.relative_to(tests_dir).as_posix(): path.read_text() for path in tests_dir.rglob("*.py")
+                   if all((tests_dir / parent / "__init__.py").exists() for parent in path.relative_to(tests_dir).parents)}
         self.assertEqual(process_fixtures.check_inventory(sources, process_fixtures.LEFTOVER_INVENTORY), [])
         self.assertLessEqual(process_fixtures.LEFTOVER_LIFETIME_SECONDS, 600)
 

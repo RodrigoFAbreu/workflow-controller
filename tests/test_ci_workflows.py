@@ -429,6 +429,18 @@ class ValidatePlanTest(unittest.TestCase):
                                         "path": "results/selected/"})])
         self.assertEqual(timings[0], _steps(self.jobs["tests-result"])[-1])
 
+    def test_tests_job_allows_user_namespaces_before_the_shard(self) -> None:
+        guarded = ("if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then "
+                   "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi")
+        for job_name, job in self.jobs.items():
+            named = [s for s in _steps(job) if s.get("name") == "allow unprivileged user namespaces"]
+            with self.subTest(job=job_name):
+                self.assertEqual(len(named), 1 if job_name == "tests" else 0)
+        steps = _steps(self.jobs["tests"])
+        step_index = _index(steps, lambda s: s.get("name") == "allow unprivileged user namespaces")
+        self.assertLess(step_index, _index(steps, lambda s: s.get("name") == "shard"))
+        self.assertEqual(steps[step_index], {"name": "allow unprivileged user namespaces", "run": guarded})
+
     def test_validate_keeps_major_tag_actions(self) -> None:
         # ADR 0002: only main.yml's own jobs are pinned to commits.
         for job_name, job in self.jobs.items():

@@ -10157,7 +10157,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-lifecycle-scenarios-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-lifecycle-scenarios-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 10,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -10307,8 +10307,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 73,
-      "last_transition": "2026-10-12T19:17:31Z",
+      "state_revision": 75,
+      "last_transition": "2026-10-12T19:35:05.144443+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -10472,7 +10472,20 @@
           "resolved_review_content_id": "1db6be09a988f50c2df5ee424bc2fe05b0a8d628600c6d4fb120d345a1b53063"
         }
       ],
-      "amendment_base_commit": "a6f58d69c948b4de2023af6dc2378bb059f5ad5b"
+      "amendment_base_commit": "a6f58d69c948b4de2023af6dc2378bb059f5ad5b",
+      "implementation_review_stages": {
+        "review_content_id": "f213174d372915f80da167d86c7dce8ad8837d552e7d598c50c67fd800dcab7d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "dd26ae4a07b7df2e4a1be90f2148a80532dd6ddadd8543cb6417bf9384a725b8",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-12T19:26:27Z",
+          "verdict_sha256": "0c49f24d3273602c942b7f5ddb8d4886b359091620040b935705dc5c34677484",
+          "run_ref": "session:local .ai-review/workflow-controller-automated-lifecycle-scenarios/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

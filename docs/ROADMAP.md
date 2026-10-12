@@ -24,7 +24,7 @@ request (#34). C8, the usage budget (accepted 2026-10-10 by gate policy), is com
 released as 1.8.0. A `chore:` pull request then moved this repository to Workflow 2.9.2 (the
 Workflow fix release for workflow#19 and workflow#20; 2026-10-11). A small milestone
 (C12a, accepted 2026-10-12 by gate policy) then fixed the test side of the recurring drain hang from leftover test processes
-(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and was released as 1.9.0. Next (user decisions, 2026-10-09 and 2026-10-10): C6, C7, C10 (with the automated functional review), C12 (self-recovery),
+(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and was released as 1.9.0. C6, the automated lifecycle scenarios (no release), is complete. Next (user decisions, 2026-10-09 and 2026-10-10): C7, C10 (with the automated functional review), C12 (self-recovery),
 C11, then the orchestrator series O1-O7.
 Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
 
@@ -73,7 +73,7 @@ ahead of C5. That move is done (2026-10-11), so the drain-hang milestone is next
 | C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
 | C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
-| C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage | — | [11.5](#115-automated-lifecycle-scenarios) |
+| C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, no release)  | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
@@ -1446,6 +1446,14 @@ needs no special case.
   SignalHub's own Python SDK uses.
 
 ## 11.5 Automated lifecycle scenarios
+
+**Status:** Complete (`workflow-controller-automated-lifecycle-scenarios`, plan
+`docs/ai-workflow/CONTROLLER_AUTOMATED_LIFECYCLE_SCENARIOS_PLAN.md`; a `test:` change, no release). Ten
+scenarios (fifteen flows, the kill-and-resume path having six variants) run in a namespace sandbox and write
+`functional_evidence` records through `tools/run_scenarios.py`; the guide is
+`docs/guide/development.md` ("Lifecycle scenarios"). C10 consumes the runner's output (`<flow_id>.json` and
+`index.json`, bound to a `HEAD`) and names required flows in `gates.acceptance.required_flows`. A mid-job usage
+limit is not covered (C8b). The description below is the original problem statement.
 
 **Step C6.**
 

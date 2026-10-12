@@ -48,10 +48,17 @@ whole lifecycle; only `identity.json` may be added under the runtime root) and `
 writes nothing; `settings clean`, `step` and a malformed file each with an exact footprint). Measured while writing
 them: `status` takes no repository, `follow` writes nothing at all (not even `identity.json`), and the settings lock
 file persists, so only a first use shows it as added. Each scenario has a mutation check in
-`tests/test_scenarios_negative.py`, and the timings are in `tools/test_timings.json`. CP5 (documentation, the full
-suite and the compared full runs) is next.
+`tests/test_scenarios_negative.py`, and the timings are in `tools/test_timings.json`. 
 
-The sections below describe the previous milestone and stay until CP5 rewrites them.
+Checkpoint **CP5** (documentation and the full run) is complete. `docs/guide/development.md` has a "Lifecycle
+scenarios" section (what a scenario is, running the catalogue, the evidence record, the sandbox and the enforced-versus-
+detected split, what a `passed` record proves and the uncovered mid-job usage path, adding a scenario),
+`docs/guide/automation.md` a short paragraph, and `docs/ROADMAP.md` marks step C6 complete. A whole-catalogue
+determinism test (`CatalogueDeterminismTest`) runs the complete catalogue twice and compares every normalised summary.
+`controller/` is byte-unchanged and no release is cut. Verification results are in the checkpoint's final report and
+in the implementation bundle.
+
+The sections below describe the previous milestone and stay until the milestone is accepted.
 
 ## Status
 

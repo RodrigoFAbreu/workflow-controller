@@ -2355,6 +2355,11 @@
       "seconds": 0.0,
       "tests": 3
     },
+    "tests.test_run_scenarios.CatalogueDeterminismTest": {
+      "samples": 1,
+      "seconds": 85.602,
+      "tests": 1
+    },
     "tests.test_run_scenarios.CheckTest": {
       "samples": 2,
       "seconds": 3.595,

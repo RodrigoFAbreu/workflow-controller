@@ -134,6 +134,15 @@ worker could build on the completion or commit it. A human commits the
 completion as the Workflow step would have, with its trailers, or
 discards it and reruns the step.
 
+## Scenario evidence
+
+The Controller does not run the lifecycle scenarios; they are test-side
+(`tools/run_scenarios.py`, see [Lifecycle scenarios](development.md#lifecycle-scenarios)).
+They run whole lifecycle paths against fake workers in a sandbox and write
+`functional_evidence` records bound to a commit. A `passed` record means a
+scripted path ran on that commit, not that a real worker behaves; a later
+step lets the gate policy accept a milestone on such records.
+
 ## Notifications from an unattended run
 
 From 1.9.0 the Controller is a producer for SignalHub, so a run you are not

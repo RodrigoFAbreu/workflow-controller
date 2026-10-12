@@ -293,5 +293,23 @@ class DeterminismTest(CloneCase):
         self.assertNotEqual(self.summaries("selftest-unnormalised"), self.summaries("selftest-unnormalised"))
 
 
+class CatalogueDeterminismTest(CloneCase):
+    """D9, whole catalogue: two complete runs against one HEAD agree on every summary."""
+
+    def complete_run(self) -> dict:
+        folder = Path(tempfile.mkdtemp(prefix="run-scenarios-cat-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        done = self.runner("run", output=folder, module=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return {k: v["summary"] for k, v in self.records(folder).items()}
+
+    def test_two_complete_runs_agree_on_every_normalised_summary(self) -> None:
+        first = self.complete_run()
+        second = self.complete_run()
+        self.assertGreaterEqual(len(first), 15)
+        self.assertFalse([name for name in first if name.startswith("selftest")])
+        self.assertEqual(first, second)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -154,6 +154,9 @@ def build_record(outcome: "kit.Outcome", reporter: str, ran_at: str) -> dict:
 
 def selected(module: str, names: list[str], include_selftest: bool) -> list[str]:
     import importlib
+    if module.split(".")[0] != "tests":
+        raise Refused(f"module {module!r} is outside the tests package: scenario code must come from the dirty-checked "
+                      "code paths, or a record for it binds to no commit")
     importlib.import_module(module)
     if include_selftest:
         importlib.import_module("tests.scenarios.selftest")

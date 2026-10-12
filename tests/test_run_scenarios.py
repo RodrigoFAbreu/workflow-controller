@@ -209,6 +209,17 @@ class ScopedRefusalTest(CloneCase):
         (self.clone / "tools" / "stray.py").write_text("x = 1\n")
         self.refused("untracked")
 
+    def test_a_module_outside_the_tests_package_is_refused(self) -> None:
+        stray = self.clone / "docs" / "evil"
+        stray.mkdir()
+        self.addCleanup(shutil.rmtree, stray, ignore_errors=True)
+        (stray / "fake.py").write_text("x = 1\n")
+        for module in ("docs.evil.fake", "scripts.x"):
+            done = self.runner("run", "selftest-basic", "--module", module, module=False)
+            self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+            self.assertIn("outside the tests package", done.stderr)
+            self.assertEqual(list(self.out.glob("*")), [], "a refused run writes nothing")
+
     def test_the_output_directory_inside_the_tree_is_not_code(self) -> None:
         inside = self.clone / "tools" / "evidence-out"
         done = self.runner("run", "selftest-basic", output=inside)

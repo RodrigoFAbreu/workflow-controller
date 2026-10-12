@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-signalhub-notifications",
+  "requirements": {
+    "R1": {
+      "description": "A closed table of notification event types, each with a kind and a derivation from existing records, covers a step done, milestone started/planned/accepted, an approval, a gate, a blocker, a merge, a release, the four usage events and a run finished",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R2": {
+      "description": "Every event type is configurable in the settings file: on/off, category and severity, per event type over per kind; defaults equal the lanes' mapping; a bad value refuses with exit 20 and an unknown name is ignored with a warning",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Each event carries an `Idempotency-Key` from the identity of the occurrence (run, job, event, or gate state), so a retry, a `resume` or a repeated `step` at an unchanged gate never sends one twice, and a gate that recurs (new head, new hold window, a draft toggled back) is never lost; keys are namespaced by repository; the body is a function of the identity, so a re-derived event is `200`, not `422`; an event whose record outlived the process that was to send it is re-derived on `resume` within an explicit bound, so a stale or already-delivered record sends nothing (D13)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Delivery is asynchronous, bounded (timeout, attempts, queue, breaker, flush) and recorded; an unreachable, slow or failing server changes no exit code, job record or step count",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The API key and URL come from the environment or a file (the lanes' per-lane key files through `SIGNALHUB_API_KEY_FILE` or the non-secret `notifications.api_key_file` path; the lanes' `disabled` switch honoured), never from the repository or the settings file, and the key appears in no log, record or output",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "R6": {
+      "description": "Every `milestone_branch.GATE_CODES` member is classified as a blocker, a user gate or a wait, and a stuck wait notifies when the run ends on it",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R7": {
+      "description": "`workflow-controller notifications` shows the effective configuration and `--test` proves the transport end to end",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R8": {
+      "description": "The design record, guides, task pages, roadmap and glossary agree; `check_docs` and the full suite are green",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

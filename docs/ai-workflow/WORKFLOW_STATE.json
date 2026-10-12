@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-signalhub-notifications",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -9385,6 +9385,179 @@
         "evaluated_at": "2026-10-11T23:48:52Z",
         "workflow_release": "2.9.2"
       }
+    },
+    "workflow-controller-signalhub-notifications": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-signalhub-notifications",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_SIGNALHUB_NOTIFICATIONS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-signalhub-notifications-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-signalhub-notifications-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 16,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "e0f400ef0135173e5fef111644f6759321bed333",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+        "approved_review_content_id": "9e1f7d8890a2935922ea05b91deb1d968d87b1107afa626332c08f0f22dadc5b",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_SIGNALHUB_NOTIFICATIONS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "899827dbeb8d900ac905ba1a9ec493c02cad2b03"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-signalhub-notifications-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "98fe0665a969af29dab05823646e55723902e99d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-signalhub-notifications-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8ad95e3e6a794e412c4017bd9352ce95d849e1e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-12T03:36:35.975783+00:00",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9e1f7d8890a2935922ea05b91deb1d968d87b1107afa626332c08f0f22dadc5b",
+            "ledger": {
+              "local": {
+                "bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+                "verdict": "APPROVE",
+                "round": 16,
+                "verdict_sha256": "8fc4dc8f518bd3060ebcb9ca0b4864f4fab1de93e601f4c6a89ba85d12f6ff00",
+                "ledger_entry_sha256": "b7a0d929fba0d2bf4fe5afc97b2756729c9a4b9e4b195f4185246b2b254e50f0",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+                "verdict": "APPROVE",
+                "round": 16,
+                "verdict_sha256": "f039e6e894caf4634a861d0c7dfc69bc3ee4766688a2d30abb1929d2752c505c",
+                "ledger_entry_sha256": "14e024bd1c4e7546ec3056f4f31e4554b3a716b156e3bee53dcaf0db1f4a979c",
+                "run_ref": "session:local .ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-12T03:36:35.975783+00:00",
+          "workflow_release": "2.9.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "9e1f7d8890a2935922ea05b91deb1d968d87b1107afa626332c08f0f22dadc5b",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+          "verdict": "APPROVE",
+          "round": 16,
+          "completed_at": "2026-10-12T03:26:48Z",
+          "verdict_sha256": "8fc4dc8f518bd3060ebcb9ca0b4864f4fab1de93e601f4c6a89ba85d12f6ff00",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+          "verdict": "APPROVE",
+          "round": 16,
+          "completed_at": "2026-10-12T03:34:24.692241+00:00",
+          "verdict_sha256": "f039e6e894caf4634a861d0c7dfc69bc3ee4766688a2d30abb1929d2752c505c",
+          "run_ref": "session:local .ai-review/workflow-controller-signalhub-notifications/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 54,
+      "last_transition": "2026-10-12T03:36:35.975783+00:00",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-12T03:23:56Z",
+        "consumed": {
+          "review_content_id": "5feed25c748cee3984f8190b3bb76ba248c28b404458e1a08ddda96186ccf77f",
+          "plan_revision": 15,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "9e1f7d8890a2935922ea05b91deb1d968d87b1107afa626332c08f0f22dadc5b",
+          "plan_revision": 16
+        },
+        "bound": {
+          "review_content_id": "9e1f7d8890a2935922ea05b91deb1d968d87b1107afa626332c08f0f22dadc5b",
+          "bundle_id": "09e25b3d66afd1086c51e821123b759ae2518cf3a5f600799fea0e3b60d4ed90",
+          "plan_revision": 16
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0f693c5f9694ce87edd1782967d64196af87417822552d417a6a8ccb037e9011",
+        "352a6e52fdbad661e561dba8d7bb18347c656b067abbf761b83b8f970cb62ab5",
+        "3681eaaddb862b8c3b061b89a46d19f31bffca95df44de0184a42c7ced471b8f",
+        "3e5004fed488183c75d669f796dc461f4882843131f30415818026bacc48058a",
+        "43a22051b561726aefac1c174bdfcf101f2d09fe3926cbbbf6e8db5387d23afc",
+        "58823201c3caadba9775c378d022a3ccb6595570fb72bc597e1cf3bd1cdb5a21",
+        "5feed25c748cee3984f8190b3bb76ba248c28b404458e1a08ddda96186ccf77f",
+        "7769a685229c169c5fc85c8bbc7ef5adca3669579d1f7acee4f82e494fc3c270",
+        "887abd07b11e2a6e854470d28e83ff9db1bea59aa013337b173fa20aaf48aae7",
+        "9a5dabb2ff27940226b524b85fd1d7ae403249628d2f6050a8c433fb2831708a",
+        "9f5fc451b9b034a6aa2b649104e62d4c68ac665ff9ed7c09bf5edb477896334f",
+        "9f8ed6bdbe82bdade82c909bf1287cecb697813d8130570cbf6201a9e0e4bbd6",
+        "b2f9e54c69a3a6d1af95827b269a997023b020598ecb467303688c324530fd11",
+        "b6dc328fb23c8591430f14baf8db62e5275eec802470d3ee31d0bfe504e0d6ca",
+        "d5f658d762e0a420dc0306dfec347e69b406abd13e1d292bbc19474724c64bef"
+      ]
     }
   }
 }

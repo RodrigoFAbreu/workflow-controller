@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-signalhub-notifications",
+  "plan_revision": 16,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "controller/notify.py (closed event table, per-event resolution, idempotency keys, credential lookup, bounded asynchronous sender with retry, breaker and flush, outcome log) and a fake SignalHub, pinned by contract tests; notify joins the dependency order before settings",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The notifications.* settings rows (enabled, url, api_key_file, timeout, attempts, retry, and the kinds/events mapping), validation, fill and clean, TABLE_GENERATION 5",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Deriving and emitting the events from run-log lines, job records, branch preflight events and usage events; installed and flushed in cli.main; every gate code classified; a failing, hung or unreachable server changes no exit code, job record or step count",
+      "depends_on": [
+        "CP1",
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The notifications command: effective table without secrets, and --test through the real transport",
+      "depends_on": [
+        "CP2",
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documentation and roadmap: ADR 0012, guides, task pages, glossary, roadmap step C5, check_docs and the full suite green",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

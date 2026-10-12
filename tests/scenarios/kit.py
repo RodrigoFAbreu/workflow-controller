@@ -784,7 +784,17 @@ class Kit:
         for line in self.git("remote", "-v", cwd=repo).splitlines():
             parts = line.split()
             if len(parts) > 1:
-                self.assert_inside_scratch(parts[1])
+                self.assert_inside_scratch(self.remote_path(parts[1]))
+
+    @staticmethod
+    def remote_path(url: str) -> str:
+        """The filesystem path a remote names: an absolute path, or a ``file://`` URL for one. A network URL or an
+        scp-style ``host:path`` is no scratch path, and ``realpath`` would resolve it against the working directory
+        and pass it, so it is refused here."""
+        path = url[len("file://"):] if url.startswith("file://") else url
+        if not os.path.isabs(path) or "://" in path:
+            raise ScenarioFailure(f"remote {url} resolves outside the scratch tree: it is not a scratch path")
+        return path
 
     # --- observations --------------------------------------------------------
 

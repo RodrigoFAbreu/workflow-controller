@@ -336,6 +336,40 @@ class KillPointTest(SandboxCase):
             instance.child_controller([], kill_at="job-after")
 
 
+class RemoteGuardTest(unittest.TestCase):
+    """D3: a remote is a path to a scratch bare repository; any other form is refused at the guard (R2-I1)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="scenario-remote-guard-")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.scratch = self.tmp / "scratch"
+        self.scratch.mkdir()
+        self.kit = object.__new__(kit.Kit)
+        self.kit.scratch = self.scratch
+        self.kit.workdir = self.scratch
+        self.repo = self.scratch / "repo"
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+
+    def guard(self, url: str) -> None:
+        subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", url], check=True)
+        self.kit.assert_remote_in_scratch(self.repo)
+
+    def test_a_remote_outside_the_scratch_tree_is_refused_at_the_guard(self) -> None:
+        for url in (str(self.tmp / "elsewhere"), f"file://{self.tmp}/elsewhere",
+                                     "https://github.com/o/r.git", "ssh://git@github.com/o/r.git",
+                                     "git@github.com:o/r.git"):
+            with self.subTest(url=url):
+                subprocess.run(["git", "-C", str(self.repo), "remote", "remove", "origin"], check=False,
+                               capture_output=True)
+                with self.assertRaisesRegex(ScenarioFailure, "resolves outside the scratch tree"):
+                    self.guard(url)
+
+    def test_a_scratch_path_remote_is_accepted(self) -> None:
+        self.guard(str(self.scratch / "origin.git"))
+        subprocess.run(["git", "-C", str(self.repo), "remote", "remove", "origin"], check=True)
+        self.guard(f"file://{self.scratch}/origin.git")
+
+
 class CheckoutSnapshotTest(unittest.TestCase):
     """D3b: content-sensitive, token-free changes included."""
 

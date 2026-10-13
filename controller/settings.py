@@ -161,6 +161,16 @@ TABLE: tuple[Setting, ...] = (
     Setting("notifications.attempts", TYPE_INT, 3, 1, 10, None, 5),
     Setting("notifications.retry_seconds", TYPE_INT, 2, 1, 60, None, 5),
     Setting(NOTIFICATIONS_EVENTS_KEY, TYPE_NOTIFICATIONS, {"kinds": {}, "events": {}}, None, None, None, 5),
+    # workflow-controller-codex-reviewer D10: the cross-model reviewer the
+    # Controller starts at a configured external gate. ``harness`` unset (the
+    # default) keeps the gate; ``model``, ``effort`` and ``binary`` unset use
+    # the review harness's built-ins (``gpt-6.1-sol``, ``high``, ``codex``).
+    # The string rows' bounds are lengths.
+    Setting("reviewer.harness", TYPE_OPTIONAL_STRING, None, 1, 64, None, 6),
+    Setting("reviewer.model", TYPE_OPTIONAL_STRING, None, 1, 128, None, 6),
+    Setting("reviewer.effort", TYPE_OPTIONAL_STRING, None, 1, 32, None, 6),
+    Setting("reviewer.timeout_seconds", TYPE_INT, 3600, 60, 86400, None, 6),
+    Setting("reviewer.binary", TYPE_OPTIONAL_STRING, None, 1, 1024, None, 6),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -170,8 +180,9 @@ TABLE: tuple[Setting, ...] = (
 #: the roles ``prepare-functional-review`` and ``apply-functional-review``
 #: (orchestration-protocol-v1 C.3). 4: the ``usage.*`` rows
 #: (workflow-controller-usage-budget D4). 5: the ``notifications.*`` rows
-#: (workflow-controller-signalhub-notifications D3).
-TABLE_GENERATION = 5
+#: (workflow-controller-signalhub-notifications D3). 6: the ``reviewer.*``
+#: rows (workflow-controller-codex-reviewer D10).
+TABLE_GENERATION = 6
 
 
 def _table() -> dict[str, Setting]:

@@ -73,7 +73,9 @@ WORKER_LIFECYCLE_NOTE = (
     "background work and delivers every background-task, Monitor and subagent notification to you "
     "as a new turn. Do not schedule fallback wakeups (ScheduleWakeup) in case a notification never "
     "arrives, and cancel any wakeup you no longer need (ScheduleWakeup with stop: true) before "
-    "ending your final turn."
+    "ending your final turn. In a background command use `command rm -f` and `command cp -f`, never "
+    "plain `rm` or `cp`: the operator's shell may alias them to `rm -i` / `cp -i`, which wait for an "
+    "answer nobody gives."
 )
 
 SUBAGENT_TOOLS = ("Agent", "Workflow", "Skill")

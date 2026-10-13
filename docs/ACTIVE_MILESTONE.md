@@ -2,55 +2,34 @@
 
 ## Status
 
-**Complete.** `workflow-controller-automated-lifecycle-scenarios` (`docs/ROADMAP.md` step C6, section 11.5)
-reached `MILESTONE_COMPLETE` on 2026-10-12. Whole lifecycle paths now run as automated scenarios: ten scenarios
-(fifteen flows, the kill-and-resume path having six variants) build disposable repositories with a scratch origin
-and fake `claude`, `gh`, `workflow-manager` and SignalHub, run inside a namespace sandbox with no model usage, and
-write `functional_evidence` records through `tools/run_scenarios.py` (`list`, `run`, `check`). Each scenario has a
-mutation check (`tests/test_scenarios_negative.py`), and the CI `tests` job lifts the runner's AppArmor
-restriction on unprivileged user namespaces so the scenario atoms run there fully protected. `controller/` is
-byte-unchanged. The milestone is a `test:` change and releases nothing.
+**Implementing.** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7) runs the cross-model review
+with a Codex reviewer the Controller starts itself, opt-in through `reviewer.harness`. Plan revision 15 was
+approved by policy (commit `3d304d3`); the base commit is `dea2125`. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_REVIEWER_PLAN.md`.
 
-The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1
-(implementation revision 8), checked against evidence commit `cdf8870`, passed every flow (flow-1 to flow-11,
-flow 7 partly by kit tests and code reading) with no findings. An independent tester on
-`anthropic/claude-sonnet-5-5` ran the flows.
-- Plan revision 10 (amendment 0, requested by the user: run the scenarios fully protected on CI) was approved by
-  policy at `191eaac`. The base commit is `651f7da`.
-- Technical approval `90706ee` was recorded by policy and is `CURRENT`: review content id `60430a8a`,
-  reviewed implementation head `2597dee`.
-- The Workflow's own GitHub query found pull request #43 at head `cdf8870` with every check passing (CI run
-  38317047808, Workflow conformance, PR title) and no standing objection.
+| Checkpoint | State |
+| --- | --- |
+| CP1 settings rows, `record_external_result`, `rm -f` note | implemented, awaiting its commit |
+| CP2 Codex harness | not started |
+| CP3 review job | not started |
+| CP4 lifecycle scenarios | not started |
+| CP5 documentation and full suite | not started |
 
-All registry checkpoints (CP1-CP6) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, including its eleven `functional_evidence` records and its
-`acceptance_satisfaction` evidence, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C6
-complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-automated-lifecycle-scenarios.md`.
+CP1 changes:
+- `controller/settings.py`: the five `reviewer.*` rows (`harness`, `model`, `effort`, `timeout_seconds`,
+  `binary`), `TABLE_GENERATION` 6. Nothing reads them yet; no `cli_flag` is wired (a flag with no reader would be
+  dead, so CP3 adds any it needs).
+- `controller/protocol.py`: `record_external_result` and `ExternalResult`, validated against the vendored schema;
+  `not_applicable` and `refused` are returned, every other refusal raises.
+- `controller/worker.py` and `tests/harness_contract/capture.py`: the `command rm -f` / `command cp -f` sentence
+  in `WORKER_LIFECYCLE_NOTE` (follow-up 24). The recorded `*.meta.json` captures are historical recordings of
+  runs made before the sentence and are left as recorded.
+- `tests/golden/no_policy_lifecycle.json` regenerated; `tests/test_trunk_preflight.py` removes the reviewer rows
+  and the added sentence and still matches the 1.5.0 base hash (R2).
 
-Deferred follow-ups, not conditions of acceptance:
-- **Merge.** Pull request #43, titled `test: run whole lifecycle paths as scenarios that produce functional
-  evidence`, is merged once every check passes; it releases nothing.
-- **The `job-before` oracle deviation.** A kill before the job record that names a spawned worker leaves a
-  stdin anchor that `resume` cannot reconcile (exit 45) until the scenario ends the anchor; the approved
-  plan's oracle for that variant does not hold, and no plan amendment was made.
-- **Codex optional findings** (see
-  `.ai-review/archive/workflow-controller-automated-lifecycle-scenarios/external-implementation-review-rev8-APPROVE.md`
-  and the earlier rounds): O2 (`$WORKFLOW_CONTROLLER_SETTINGS` and some missing locations lack mount
-  protection), O4 (the namespace watchdog permits `timeout + 15`; degraded workers lack an independent deadline
-  after parent death), O6 (most negative checks accept generic assertion failures), O7 (registry tests import
-  selftest scenario code on the host), O8 (ignored inputs, special Git index flags and external
-  committed-symlink targets can evade provenance checks), O9 (flow id `index` collides with `index.json`) and
-  O10 (configured Git clean filters can run during dirty checks).
-- **Optional self-review items not applied:** extra pipe copies in `pass_fds`, unlisted real locations under a
-  system directory, two small error-path leaks, stale records left in a reused `--output`, and the
-  Git-metadata test's loose `update-ref` check.
-- **Known limitations kept out of scope:** a mid-job usage limit is not covered by a scenario (admission only;
-  C8b), and the two Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally
-  and are unrelated.
+**Open acceptance condition for CP1 (D2):** the Workflow side has not yet confirmed the obligation-5 reading. It
+is an issue on the Workflow repository whose answer is recorded in ADR 0013; CP1 does not pass without it.
 
 ## Next action
 
-1. Pull request #43 merges (a `test:` pull request, no release).
-2. `/milestone-plan` for C7, the next step in `docs/ROADMAP.md`'s order (C7, C10, C12, C11, then O1-O7).
+Commit CP1, then invoke `/milestone-implement` again for CP2.

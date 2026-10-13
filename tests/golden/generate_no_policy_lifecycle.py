@@ -70,6 +70,12 @@ CP3), whose seven ``notifications.*`` settings rows (table generation 5)
 appear in each launched job's ``controller_settings`` ``values`` and
 ``sources``. Nothing else moved.
 
+And once by ``workflow-controller-codex-reviewer`` CP1, whose five
+``reviewer.*`` settings rows (table generation 6) appear in each launched
+job's ``controller_settings`` ``values`` and ``sources`` and whose one added
+sentence to ``WORKER_LIFECYCLE_NOTE`` (follow-up 24) appears in each worker
+argv. Nothing else moved (``tests/test_trunk_preflight.py`` pins that).
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

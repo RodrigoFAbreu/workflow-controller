@@ -107,7 +107,15 @@ the helper process dies, the shard fails with exit 2; the shard's step log
 says the executor refused it, and the `REFUSED` lines in its log name the
 conformance lane. The helper ends with the executor by every path: it
 watches a pipe from the executor, so a signal, a crash or `os._exit` in a
-test ends the helper and the suite it is running too. Expected with the 2026-10-13 profile: the shard holding the
+test ends the helper and the suite it is running too. A suite's
+survivors are reported as leaked processes before they are cleaned up, the
+same as in serial mode (the shard fails). SIGINT and SIGTERM to the
+executor also end the helper's whole process group, descendants included.
+Known residual: a SIGKILL of the executor cannot run any cleanup. The
+helper and its suites still end (the pipe guard and a parent-death signal),
+but a descendant that left the helper's process group (`setsid`) can
+survive; GitHub tears the job down, and a local run's supervisor marker scan
+reports the leftovers, the same as the serial design. Expected with the 2026-10-13 profile: the shard holding the
 acceptance matrix runs only that suite (about 11 minutes), the other three
 run a conformance lane of 4 to 5 minutes beside about 11 minutes of
 Controller tests, so the longest shard is about 12.4 minutes and a pull

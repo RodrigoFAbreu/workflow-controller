@@ -1550,6 +1550,18 @@ class _ConformanceLane:
             [sys.executable, str(Path(__file__).resolve()), LANE_FLAG, str(self.repo_root),
              str(self.prefix), *self.keys],
             stdin=subprocess.PIPE, start_new_session=True)
+        threading.Thread(target=self._monitor, name="lane-monitor", daemon=True).start()
+
+    def _monitor(self) -> None:
+        """If the helper dies any way but a clean exit (a kill, a crash), end
+        its whole group now: its suite and their descendants would otherwise
+        outlive it. A clean exit leaves the group for the leak scan."""
+        process = self.process
+        if process.wait() != 0:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
 
     def join(self) -> None:
         if self.process is None:
@@ -1632,28 +1644,36 @@ def _lane_main(argv: list[str]) -> int:
     os._exit(0)  # the guard thread may be blocked in read(); do not wait for it
 
 
-def _stop_lane_on_sigterm(lane):
-    """While a lane runs, SIGTERM first ends the lane's session, then
-    terminates this process as the default disposition would (raising
-    ``SystemExit`` instead would be swallowed by a running test). Only from
-    the main thread and only over the default disposition. Returns what
-    ``_restore_sigterm`` needs."""
-    try:
-        if signal.getsignal(signal.SIGTERM) is signal.SIG_DFL:
-            def handler(signum, frame):
-                lane.stop()
-                signal.signal(signal.SIGTERM, signal.SIG_DFL)
-                os.kill(os.getpid(), signal.SIGTERM)
-            return signal.signal(signal.SIGTERM, handler)
-    except ValueError:  # not the main thread
-        pass
-    return None
-
-
-def _restore_sigterm(previous) -> None:
-    if previous is not None:
+def _stop_lane_on_signals(lane):
+    """While a lane runs, SIGTERM first ends the lane's session (the
+    helper, its suite and their descendants, which share the helper's process
+    group), then terminates this process as the default disposition would
+    (raising ``SystemExit`` instead would be swallowed by a running test).
+    Only from the main thread and only over the default disposition. SIGINT
+    stays at its default (the runner promises shards that, and a test checks
+    it): an executor ended by SIGINT is covered by the helper's pipe guard and
+    the lane's monitor. Returns what ``_restore_signals`` needs. A SIGKILL of the executor cannot run
+    this; the helper's pipe guard and its suites' parent-death signal still
+    end the helper and its suites, and a descendant that left the group is
+    left to the supervisor's marker scan (ADR 0005)."""
+    previous = {}
+    for number in (signal.SIGTERM,):
         try:
-            signal.signal(signal.SIGTERM, previous)
+            if signal.getsignal(number) is signal.SIG_DFL:
+                def handler(signum, frame):
+                    lane.stop()
+                    signal.signal(signum, signal.SIG_DFL)
+                    os.kill(os.getpid(), signum)
+                previous[number] = signal.signal(number, handler)
+        except ValueError:  # not the main thread
+            break
+    return previous
+
+
+def _restore_signals(previous) -> None:
+    for number, handler in previous.items():
+        try:
+            signal.signal(number, handler)
         except ValueError:
             pass
 
@@ -1707,6 +1727,7 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
     atoms: dict[str, float] = {}
     problems: list[str] = []
     was_successful = None
+    lane = None
     with open(log_path(results_dir, index), "a", encoding="utf-8") as log:
         try:
             units = load_shard(shard, repo_root)
@@ -1719,7 +1740,7 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
             lane = _ConformanceLane(
                 [key for key, suite in units if suite is None] if concurrent else [],
                 Path(repo_root), results_dir, f"lane-{index}")
-            previous = _stop_lane_on_sigterm(lane)
+            previous = _stop_lane_on_signals(lane)
             try:
                 if lane.keys:
                     lane.start()
@@ -1737,9 +1758,11 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
                     atoms.update(sequence.seconds)
                     problems += [f"unmapped unittest event: {event}" for event in result.unmapped]
                 lane.join()
+            except BaseException:
+                lane.stop()
+                raise
             finally:
-                lane.stop()  # the helper's group is gone after a clean join
-                _restore_sigterm(previous)
+                _restore_signals(previous)
             lane.write_to(log)
             if not concurrent:
                 # The serial reference (``--serial``, ``conformance_lane`` false):
@@ -1760,6 +1783,10 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
         if marker:
             leaks = scan_marked_processes(marker, exclude={os.getpid()})
             kill_processes(leaks)
+        if lane is not None:
+            # After the scan, so a suite's survivors are reported as leaks exactly
+            # as in serial mode; this ends what carried no marker.
+            lane.stop()
         record = {
             "schema_version": RESULT_SCHEMA_VERSION, "run_attempt": run_attempt,
             "plan_digest": plan["plan_digest"], "shard": index, "argv": list(argv),

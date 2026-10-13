@@ -2677,11 +2677,11 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         while not (self.sync / "suite").exists():
             self.assertLess(time.monotonic(), deadline, "the suite never started")
             time.sleep(0.05)
-        if mode == "helper-first":
+        if mode.startswith("helper-first"):
             for pid in self.helpers():
                 os.kill(pid, signal.SIGKILL)
             time.sleep(0.5)
-            process.send_signal(signal.SIGTERM)
+            process.send_signal(getattr(signal, mode.partition(":")[2] or "SIGTERM"))
         elif mode != "exit":
             process.send_signal(getattr(signal, mode))
         process.wait(timeout=30)
@@ -2697,10 +2697,35 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                         os._exit(3)
                     __import__("time").sleep(60)
             """ % mode
-        return self.build(body, {"a_test.py": "meet('suite', 'controller') and __import__('time').sleep(600)\n"})
+        return self.build(body, {"a_test.py": (
+            "import subprocess, sys, time\n"
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+            "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+            "meet('suite', 'controller') and time.sleep(600)\n")})
 
     def test_a_helper_killed_first_and_then_the_executor_leaves_no_suite(self) -> None:
-        self.run_directly(self.direct_plan("SIGTERM"), "helper-first")
+        self.run_directly(self.direct_plan("SIGTERM"), "helper-first:SIGTERM")
+
+    def test_a_helper_killed_first_and_then_sigint_leaves_no_suite_or_descendant(self) -> None:
+        self.run_directly(self.direct_plan("SIGINT"), "helper-first:SIGINT")
+
+    def test_a_suite_that_leaves_a_child_fails_the_shard_in_both_modes(self) -> None:
+        for lane in (True, False):
+            with self.subTest(conformance_lane=lane):
+                self.setUp()
+                plan = self.build(
+                    "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
+                    {"a_test.py": "import subprocess, sys\n"
+                                  "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+            "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"},
+                    conformance_lane=lane)
+                marker = f"leaktest-{uuid.uuid4().hex}/0"
+                with unittest.mock.patch.dict(os.environ, {shards.SHARD_MARKER_ENV: marker}):
+                    record, status = self.run_shard(plan, {shards.SHARD_MARKER_ENV: marker})
+                self.assertEqual(status, 1, record)
+                self.assertTrue(record["tests"] and shards.record_passes(record))
+                self.assertEqual(len(record["leaked_processes"]), 1)
+                self.assertTrue(self.gone(), "the survivor was not cleaned up")
 
     def test_a_direct_executor_ended_by_sigint_leaves_no_process(self) -> None:
         self.run_directly(self.direct_plan("SIGINT"), "SIGINT")

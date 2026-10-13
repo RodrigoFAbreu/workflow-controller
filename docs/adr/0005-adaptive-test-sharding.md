@@ -77,7 +77,14 @@ leak scan after both lanes end, the exit status, the timings artifact); each
 suite's output is written to the log as one section after the `unittest`
 output; a helper that dies fails the shard (exit 2, named in the log). The helper
 watches a pipe from the executor and ends its session on EOF, so no exit
-path of the executor leaves a suite running. `--serial` plans
+path of the executor leaves a suite running; SIGINT and SIGTERM also end
+the helper's process group, and a suite's survivors are reported as leaked
+processes before they are killed, as in serial mode. Residual, accepted:
+a SIGKILL of the executor runs no cleanup, so a descendant of a suite that
+left the group (`setsid`) can survive it; GitHub tears the job down and a
+local run's supervisor marker scan reports it, as with the serial design.
+A monitor thread in the executor kills the helper's group at once when the helper dies any way but a clean exit. SIGINT stays at its default disposition in a shard (the runner promises that), so it is covered by the pipe guard and the monitor, not a handler. The executor is not made a child subreaper, which would change how the
+Controller's own worker tests see adopted children. `--serial` plans
 `conformance_lane: false` and runs the suites after the Controller tests, so
 the serial reference of I5 is unchanged. The plan
 records `conformance_lane: true`, and a shard's estimate is the longer of its

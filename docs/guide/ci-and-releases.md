@@ -1,6 +1,6 @@
 # Continuous integration and releases
 
-> For: maintainers of a repository that releases through the Controller, and of this one. Last checked with: Controller 1.8.0; Workflow 2.9.0.
+> For: maintainers of a repository that releases through the Controller, and of this one. Last checked with: Controller 1.9.0; Workflow 2.10.0.
 
 [Back to the documentation map](../README.md)
 
@@ -18,7 +18,9 @@ each on `ubuntu-latest` with Python 3.12 and read-only permissions:
   their count and the plan's digest, and it uploads `plan.json`;
 - `tests`: one matrix job per planned shard (`fail-fast: false`). Each
   recomputes the plan from the checked-out commit, refuses to run unless
-  its digest equals `plan`'s, runs its shard and uploads its result
+  its digest equals `plan`'s, runs its shard (its Controller tests and,
+  beside them in a second process, its Workflow conformance suites; see
+  [How a shard runs](#how-a-shard-runs)) and uploads its result
   record and log as the `results-<i>-attempt-<a>` artifact, where `<a>`
   is the run attempt (`github.run_attempt`), also written into the
   record. A shard that does not pass, or that leaked a process, fails its
@@ -57,22 +59,23 @@ Two workflows call it:
   pinned to a commit SHA.
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
-untouched. It still runs the nine conformance suites serially, in one
-job, on every pull request (15 to 21 minutes in recent runs), so it, not
-`validate`, is the floor on when all of a pull request's checks finish.
+untouched. It still runs the nine conformance suites in one job, on every
+pull request (10 to 14 minutes in recent runs with Workflow 2.10.0).
 `validate` runs the same suites through the planner as well; the
-acceptance-matrix suite (5 to 8 minutes on CI) is its own largest atom.
+acceptance-matrix suite (8 to 12 minutes on CI) is its own largest atom.
+Both are now close to the floor on when all of a pull request's checks
+finish, so the wall time of a shard counts.
 `release.yml` is gone: pushing a `v*` tag by hand triggers nothing.
 
 The CI plan uses the `ci` profile: a target of 180 s of work per shard,
 at least 2 and at most 4 shards, from the committed `tools/test_timings.json`
-only. The maximum wins today, so CI runs four shards of about 11 minutes
-each. The maximum is a runner budget: 4 shards, `package` and the managed
-`workflow-conformance` job hold at most 6 Linux runners for one pull
-request, on an account that shares 20 jobs. The longer shards do not delay
-a pull request, because the conformance job finishes later. Refresh
-`tools/test_timings.json` (see the development guide) when the longest
-shard passes about 15 minutes. A stale or missing entry costs wall time
+only. The maximum wins today, so CI runs four shards. The maximum is a
+runner budget: 4 shards, `package` and the managed `workflow-conformance`
+job hold at most 6 Linux runners for one pull request, on an account that
+shares 20 jobs. Refresh `tools/test_timings.json` (see the development
+guide) when the longest shard passes about 14 minutes; it was refreshed on
+2026-10-13 and drifts within days as the acceptance matrix and the
+scenario tests grow. A stale or missing entry costs wall time
 (the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
 digest mismatch, so the matrix carries only shard indexes. Every
@@ -81,6 +84,32 @@ run's summary also names each failing test, its shard, the shard's log,
 the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 `test-plan` the `plan.json` the replay command reads) and the
 reproduction commands.
+
+### How a shard runs
+
+A shard has two lanes that run at the same time on its runner. The
+Controller lane runs the shard's Controller tests through `unittest`, as
+before. The conformance lane runs the shard's frozen Workflow suites, one
+at a time in plan order, each as `cd scripts && python3 <file>`, in a helper
+process (`python3 tools/test_shards.py --conformance-lane`) that the shard
+starts before its first test. A shard therefore lasts as long as its longer
+lane, and the planner balances that: the conformance suites are placed
+first, longest first, and each Controller atom then goes where the shard's
+estimate (the longer lane, times 1.15 when both lanes have work) ends up
+smallest. The plan records `conformance_lane: true`, so its digest tells
+the modes apart.
+
+Nothing else changes: the same per-atom results, the exact-coverage proof,
+the leak scan (after both lanes end) and the exit status. A suite's output
+is appended to `shard-<i>.log` as one section after the `unittest` output,
+so a conformance failure is found after the Controller tests in the log. If
+the helper process dies, the shard fails with exit 2 and the summary names
+the lane. Expected with the 2026-10-13 profile: the shard holding the
+acceptance matrix runs only that suite (about 11 minutes), the other three
+run a conformance lane of 4 to 5 minutes beside about 11 minutes of
+Controller tests, so the longest shard is about 12.4 minutes and a pull
+request's checks finish in about 14. A local run (`tools/run_tests.py`
+without `exec-shard`) uses the same executor and so the same two lanes.
 
 ### Re-running failed jobs
 

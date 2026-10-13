@@ -147,7 +147,11 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   durations: about 60 s of work per shard, at least 2, at most
   `min(8, CPUs)`. `--shards N` pins it, `--jobs J` runs at most `J` at
   once, and `--target-seconds`, `--min-shards` and `--max-shards`
-  override the planning parameters.
+  override the planning parameters. A shard runs its conformance suites
+  in a helper process beside its Controller tests (the same executor in
+  CI and locally), so it lasts as long as its longer lane and the planner
+  balances by that; see
+  [How a shard runs](ci-and-releases.md#how-a-shard-runs).
 - **Proof.** A run passes only if every planned test ran exactly once and
   passed; a missing, extra, duplicated or substituted test id fails the
   run and is named. The summary states the check's verdict either way

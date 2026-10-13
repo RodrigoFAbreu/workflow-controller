@@ -940,7 +940,8 @@ class PlanTest(unittest.TestCase):
         return shards.build_plan(_selection(*seconds), _params(**overrides), _timed(seconds))
 
     def test_lpt_assigns_longest_first_to_the_least_loaded_shard(self) -> None:
-        plan = self.plan({self.A: 3, self.B: 5, self.C: 4, self.D: 2, self.S: 1}, shards=2)
+        plan = self.plan({self.A: 3, self.B: 5, self.C: 4, self.D: 2, self.S: 1}, shards=2,
+                         conformance_lane=False)
         # B(5)->0, C(4)->1, A(3)->1, D(2)->0, S(1)->0; each shard in canonical order
         self.assertEqual([s["atoms"] for s in plan["shards"]],
                          [[self.B.key, self.D.key, self.S.key], [self.A.key, self.C.key]])
@@ -953,7 +954,8 @@ class PlanTest(unittest.TestCase):
                          [[self.A.key, self.D.key], [self.B.key], [self.C.key]])
 
     def test_zero_estimates_still_leave_no_shard_empty(self) -> None:
-        plan = self.plan({self.A: 0, self.B: 0, self.C: 0, self.D: 0, self.S: 0}, shards=4)
+        plan = self.plan({self.A: 0, self.B: 0, self.C: 0, self.D: 0, self.S: 0}, shards=4,
+                         conformance_lane=False)
         self.assertEqual([len(s["atoms"]) for s in plan["shards"]], [2, 1, 1, 1])
         self.assertEqual(plan["shards"][0]["estimate_seconds"], 0.002)
 
@@ -973,7 +975,8 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(plan["selection_names"], ["tests.test_a.ATest", "conformance"])
         self.assertEqual(plan["selected_ids"], list(selection.test_ids))
         self.assertEqual(plan["parameters"],
-                         {"target_shard_seconds": 10, "min_shards": 1, "max_shards": 32})
+                         {"target_shard_seconds": 10, "min_shards": 1, "max_shards": 32,
+                          "conformance_lane": True})
         self.assertEqual(plan["shard_count"], 2)
         self.assertEqual(plan["plan_digest"], hashlib.sha256(json.dumps(
             {k: v for k, v in plan.items() if k != "plan_digest"}, sort_keys=True,
@@ -1042,7 +1045,8 @@ class PlanTest(unittest.TestCase):
 
         with unittest.mock.patch.object(shards, "assign_atoms", side_effect=drop_one):
             with self.assertRaisesRegex(shards.PlanError, "in no shard"):
-                self.plan({self.A: 3, self.B: 2, self.C: 1}, shards=1)
+                self.plan({self.A: 3, self.B: 2, self.C: 1}, shards=1,
+                          conformance_lane=False)
 
 
 class LocalFloorTest(unittest.TestCase):
@@ -2427,6 +2431,223 @@ class CommittedTimingsTest(unittest.TestCase):
                                * profile.atoms[key]["tests"])
         plan = shards.build_plan(selection, _params(), ((shards.CI_TIMINGS, stale),))
         self.assertIs(shards.validate_plan(plan, selection), plan)
+
+
+class LanePlanningTest(unittest.TestCase):
+    """The conformance lane (ADR 0005, amendment 2026-10-13): a shard lasts as
+    long as its longer lane, and the planner balances exactly that."""
+
+    @staticmethod
+    def suite(name: str):
+        return _atom(f"conformance:{name}.py", 1, family="conformance")
+
+    def plan(self, conformance: dict, controller: dict, **overrides) -> dict:
+        seconds = {self.suite(name): s for name, s in conformance.items()}
+        seconds.update({_atom(f"tests.test_{name}.XTest", 1): s
+                        for name, s in controller.items()})
+        atoms = sorted(seconds, key=lambda atom: atom.family == "conformance")
+        return shards.build_plan(_selection(*atoms), _params(**overrides),
+                                 _timed(seconds))
+
+    def lanes(self, plan: dict) -> list[tuple[list[str], list[str]]]:
+        return [([k for k in s["atoms"] if not k.startswith("conformance:")],
+                 [k for k in s["atoms"] if k.startswith("conformance:")])
+                for s in plan["shards"]]
+
+    def test_the_estimate_is_the_longer_lane_with_the_contention_factor(self) -> None:
+        plan = self.plan({"m": 100, "p": 40}, {"a": 30, "b": 20, "c": 10}, shards=2)
+        self.assertEqual(plan["parameters"]["conformance_lane"], True)
+        for shard, (controller, conformance) in zip(plan["shards"], self.lanes(plan)):
+            by_key = {f"tests.test_{n}.XTest": s for n, s in
+                      {"a": 30, "b": 20, "c": 10}.items()}
+            by_key.update({"conformance:m.py": 100, "conformance:p.py": 40})
+            ctl = sum(by_key[k] for k in controller)
+            conf = sum(by_key[k] for k in conformance)
+            expected = max(ctl, conf) * (shards.LANE_CONTENTION if ctl and conf else 1)
+            self.assertAlmostEqual(shard["estimate_seconds"], expected, places=2)
+
+    def test_a_long_conformance_atom_leaves_the_controller_work_to_the_others(self) -> None:
+        # The measured shape: one 641 s suite, 3 shorter ones, a lot of controller work.
+        plan = self.plan({"matrix": 641, "protocol": 319, "state": 227, "gate": 223},
+                         {f"c{i}": 160 for i in range(12)}, shards=4)
+        lanes = self.lanes(plan)
+        longest = max(s["estimate_seconds"] for s in plan["shards"])
+        # serial LPT would put 641 + 160 on one shard; the lane plan keeps every
+        # shard within one controller atom of the matrix lane times the contention
+        self.assertLessEqual(longest, (641 + 160) * shards.LANE_CONTENTION)
+        matrix = next(i for i, (_, conf) in enumerate(lanes) if "conformance:matrix.py" in conf)
+        self.assertLessEqual(len(lanes[matrix][0]), 1)
+        self.assertEqual(sum(len(c) for c, _ in lanes), 12)
+
+    def test_the_serial_plan_is_still_available(self) -> None:
+        serial = self.plan({"m": 100}, {"a": 30, "b": 20}, shards=1, conformance_lane=False)
+        self.assertEqual(serial["shards"][0]["estimate_seconds"], 150.0)
+        self.assertEqual(serial["parameters"]["conformance_lane"], False)
+        lane = self.plan({"m": 100}, {"a": 30, "b": 20}, shards=1)
+        self.assertEqual(lane["shards"][0]["estimate_seconds"], 115.0)
+        self.assertNotEqual(serial["plan_digest"], lane["plan_digest"])
+
+    def test_no_shard_is_left_empty_and_every_atom_is_placed_once(self) -> None:
+        plan = self.plan({"m": 900}, {"a": 1, "b": 1, "c": 1, "d": 1}, shards=4)
+        self.assertEqual(sorted(len(s["atoms"]) for s in plan["shards"]), [1, 1, 1, 2])
+        placed = [k for s in plan["shards"] for k in s["atoms"]]
+        self.assertEqual(len(placed), len(set(placed)), 5)
+
+    def test_without_conformance_atoms_it_is_the_plain_assignment(self) -> None:
+        controller = {"a": 9, "b": 7, "c": 6, "d": 5, "e": 4}
+        lane = self.plan({}, controller, shards=2)
+        serial = self.plan({}, controller, shards=2, conformance_lane=False)
+        self.assertEqual([s["atoms"] for s in lane["shards"]],
+                         [s["atoms"] for s in serial["shards"]])
+
+    def test_the_planning_is_deterministic(self) -> None:
+        args = ({"m": 641, "p": 319}, {f"c{i}": 10 * i + 1 for i in range(9)})
+        self.assertEqual(self.plan(*args, shards=3), self.plan(*args, shards=3))
+
+
+class ConformanceLaneExecutionTest(unittest.TestCase):
+    """``execute_shard`` runs the shard's conformance suites beside its
+    controller tests and still collects both exactly as before."""
+
+    RENDEZVOUS = textwrap.dedent("""
+        import os, sys, time
+        def meet(mine, theirs):
+            open(os.path.join("DIR", mine), "w").close()
+            deadline = time.monotonic() + 30
+            while not os.path.exists(os.path.join("DIR", theirs)):
+                if time.monotonic() > deadline:
+                    return False
+                time.sleep(0.02)
+            return True
+    """)
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.sync = self.root / "sync"
+        self.sync.mkdir()
+        self.results = self.root / "results"
+
+    def build(self, controller_body: str, suites: dict[str, str], *, shard_atoms=None):
+        prelude = self.RENDEZVOUS.replace("DIR", str(self.sync))
+        tree = SyntheticTree(self, {"test_lane": prelude + textwrap.dedent(controller_body)})
+        self.top = tree.top  # the synthetic tree's temp dir doubles as the repo root
+        (self.top / "scripts").mkdir(exist_ok=True)
+        for name, body in suites.items():
+            (self.top / "scripts" / name).write_text(prelude + textwrap.dedent(body))
+        ids, atoms = tree.family()
+        conformance = [shards.Atom(key=f"conformance:{n}", family="conformance", kind="suite",
+                                   module="conformance", test_ids=(f"conformance:{n}",))
+                       for n in suites]
+        everything = list(atoms) + conformance
+        selection = _selection(*everything)
+        plan = shards.build_plan(selection, _params(shards=1))
+        self.assertEqual(plan["shard_count"], 1)
+        self.tree = tree
+        return plan
+
+    def run_shard(self, plan, environ=None):
+        return shards.execute_shard(plan, 0, self.results, self.top, argv=["exec-shard"],
+                                    environ=environ or {})
+
+    def sleepers(self) -> list[str]:
+        """Live processes running a suite from this test's scripts directory."""
+        found = []
+        for name in os.listdir("/proc"):
+            try:
+                if Path(f"/proc/{name}/cwd").resolve() == (self.top / "scripts").resolve():
+                    found.append(name)
+            except OSError:
+                continue
+        return found
+
+    def test_the_lanes_overlap_and_both_are_recorded(self) -> None:
+        plan = self.build(
+            """
+            import unittest
+            class XTest(unittest.TestCase):
+                def test_meets_the_suite(self):
+                    self.assertTrue(meet("controller", "suite"))
+            """,
+            {"a_test.py": """
+                import sys
+                sys.exit(0 if meet("suite", "controller") else 3)
+            """})
+        record, status = self.run_shard(plan)
+        self.assertEqual(status, 0, record)
+        outcomes = {entry["id"]: entry["outcome"] for entry in record["tests"]}
+        self.assertEqual(set(outcomes), set(plan["selected_ids"]))
+        self.assertEqual(set(outcomes.values()), {"pass"})
+        self.assertEqual(set(record["atoms"]), set(plan["shards"][0]["atoms"]))
+
+    def test_both_lanes_report_their_failures(self) -> None:
+        plan = self.build(
+            """
+            import unittest
+            class XTest(unittest.TestCase):
+                def test_fails(self):
+                    self.fail("controller boom")
+            """,
+            {"a_test.py": "import sys; print('suite boom'); sys.exit(4)\n"})
+        record, status = self.run_shard(plan)
+        self.assertEqual(status, 1)
+        outcomes = {e["id"]: e for e in record["tests"]}
+        self.assertEqual(outcomes["conformance:a_test.py"]["outcome"], "fail")
+        self.assertIn("suite boom", outcomes["conformance:a_test.py"]["detail"])
+        self.assertEqual([e["outcome"] for i, e in outcomes.items()
+                          if not i.startswith("conformance:")], ["fail"])
+
+    def test_the_log_has_whole_sections_in_plan_order(self) -> None:
+        plan = self.build(
+            "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
+            {"a_test.py": "print('A1'); print('A2')\n", "b_test.py": "print('B1')\n"})
+        self.run_shard(plan)
+        log = shards.log_path(self.results, 0).read_text()
+        order = [log.index(text) for text in
+                 ("Ran 1 test", "=== conformance:a_test.py:", "A1\nA2",
+                  "=== conformance:a_test.py: exit status", "=== conformance:b_test.py:",
+                  "B1", "=== conformance:b_test.py: exit status")]
+        self.assertEqual(order, sorted(order))
+
+    def test_a_crashed_lane_refuses_the_shard_but_the_controller_tests_ran(self) -> None:
+        plan = self.build(
+            "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
+            {"a_test.py": "import os, signal; os.kill(os.getppid(), signal.SIGKILL)\n",
+             "b_test.py": "pass\n"})
+        record, status = self.run_shard(plan)
+        self.assertEqual(status, 2)
+        self.assertIn("the conformance lane crashed", shards.log_path(self.results, 0).read_text())
+        self.assertEqual([e["id"] for e in record["tests"] if e["outcome"] == "pass"],
+                         [i for i in plan["selected_ids"] if not i.startswith("conformance:")])
+        self.assertEqual(list(self.results.glob("lane-*")), [])
+
+    def test_a_controller_lane_crash_stops_the_suites_and_propagates(self) -> None:
+        plan = self.build(
+            "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
+            {"a_test.py": "import time; time.sleep(60)\n"})
+        with unittest.mock.patch.object(shards, "_backfill", side_effect=RuntimeError("boom")):
+            started = time.monotonic()
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                self.run_shard(plan)
+        self.assertLess(time.monotonic() - started, 30)
+        time.sleep(0.2)
+        self.assertEqual(self.sleepers(), [])
+
+    def test_the_leak_scan_runs_after_both_lanes(self) -> None:
+        plan = self.build(
+            "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
+            {"a_test.py": "import time; time.sleep(0.5); open(r'%s', 'w').close()\n"
+                          % (self.sync / "done")})
+        seen = []
+
+        def scan(marker, *, exclude=()):
+            seen.append((self.sync / "done").exists())
+            return []
+
+        with unittest.mock.patch.object(shards, "scan_marked_processes", scan):
+            record, status = self.run_shard(plan, {shards.SHARD_MARKER_ENV: "run/0"})
+        self.assertEqual((status, seen), (0, [True]))
 
 
 if __name__ == "__main__":

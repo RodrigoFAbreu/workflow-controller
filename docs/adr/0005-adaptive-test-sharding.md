@@ -58,6 +58,36 @@ was refreshed from the timings artifacts of 12 recent green `CI` and `Main`
 runs (92 shard records, 657 atoms); the planner then estimates four shards of
 about 661 s each. No workflow file and no required check changed.
 
+Amendment (2026-10-13, the conformance lane, a `ci:` pull request): a shard
+now runs its conformance suites at the same time as its Controller tests.
+Since Workflow 2.10.0 the managed job takes 10 to 14 minutes, so `validate`
+(17.7 to 19.3 minutes, set by the shard holding the acceptance matrix) became
+the slowest check; 41% of the shard work (1410 s of 3427 s) was these suites.
+`exec-shard` starts one helper process, `python3 tools/test_shards.py
+--conformance-lane`, before the first test; the helper runs the shard's
+suites one at a time, in plan order, each as the managed workflow does, while
+the shard runs its Controller atoms through `unittest` as before. The helper
+is a process, not a thread, and the suites are its children, not the
+shard's: the Controller's worker tests start real workers in the shard
+process and kill any new child of it as an adopted escapee, which killed a
+suite started mid-test (exit -9, found by replaying the shards). The helper
+starts first, so it is in every launch's baseline. Both lanes' results enter
+the record as before (same per-atom results, the exact-coverage proof, the
+leak scan after both lanes end, the exit status, the timings artifact); each
+suite's output is written to the log as one section after the `unittest`
+output; a helper that dies fails the shard (exit 2, named). The plan
+records `conformance_lane: true`, and a shard's estimate is the longer of its
+two lanes, times 1.15 when both have work (two processes on a 4-vCPU runner
+measured 1.05 locally and up to 1.3 on CI): the conformance atoms are placed
+first, longest first, then each Controller atom goes where the shard's
+estimate ends up smallest. The shard count and the maximum of 4 do not
+change, so the peak stays 6 runners. `tools/test_timings.json` was refreshed
+from the timings artifacts of 8 recent runs (32 shard records, 747 atoms);
+the stale file had estimated the acceptance matrix at 429 s (measured median
+641 s) and lacked 41 atoms. The expected longest shard is about 12.4 minutes
+(from 14.5 to 19.4) and `validate` about 13.4. The earlier sentence that
+longer shards cost nothing no longer holds.
+
 ## Context
 
 Measured at the base commit (`405f050`, 2026-09-26) on the reference
@@ -288,7 +318,8 @@ found, both first-sighting races:
 - **A timeout-multiplier knob** (D6). It changes what the timing tests assert
   and can hide regressions.
 - **Threads instead of processes.** Process-global state is per process, and
-  signal and session handling need separate processes.
+  signal and session handling need separate processes. (The conformance
+  lane's helper is a separate process for the same reason.)
 
 ## Consequences
 

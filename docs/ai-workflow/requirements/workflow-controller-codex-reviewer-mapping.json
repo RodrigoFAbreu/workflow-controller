@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-reviewer",
+  "requirements": {
+    "R1": {
+      "description": "with `reviewer.harness = \"codex\"`, an external plan or implementation review gate runs a Codex job and ingests a verified verdict through `record-external-result`; the phase advances without a Claude record worker; only rows 14 and 28 are affected (selected by `action.id` and `snapshot.phase`), rows 21/31a/35 are unchanged",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R2": {
+      "description": "without the setting, every gate decision, route, status, job record, exit code and usage decision is unchanged, except the two named exceptions of Goal 4 (the `reviewer.*` settings rows and the one note line)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R3": {
+      "description": "the review is review-only: disposable copy removed on every path; enforced, not merely detected: the worker's sandbox denies writes outside the copy (real worktree, feedback, Workflow state, Controller runtime) and network access for commands, with no escalation, inherited startup/plugin hooks, inherited `notify` commands (top level and profile-selected) and every inherited or later-added MCP server, including project-layer ones, are excluded before startup by a Controller-written minimal Codex home (`config.toml` digest, no startup-loaded entry and only pinned Codex-written state, checked before every launch including the D5 retry, `mcp list` empty; its credential file a private writable copy, copied back under a lock only when the operator's file is unchanged, so the operator is never left logged out), for the review and the `features list` preflight alike, built-in web search is off, and the tool surface is an allowlist (every other feature the pinned Codex reports enabled is disabled, and a feature added by an upgrade refuses the launch), and a launch without the pinned boundary, including the minimal home, is refused; layers outside the home (system, managed, MDM and cloud-managed configuration) are inventoried and either absent, excluded by outer isolation, or validated after composition against the pinned effective policy (OpenAI provider, model, effort, tier, sandbox, network, approval, no servers, hooks or notify), the child environment is an exact allowlist, and any difference refuses the launch naming the source and value; a changed real repository (HEAD, status, refs, config, per-file digests, state identity) additionally voids the verdict; no gitlink is copied (CP2, CP3, CP4).",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R4": {
+      "description": "every verdict header label, including the stage revision (`Plan revision reviewed:` / `Implementation revision reviewed:`), is verified exactly against the bundle's `MANIFEST.md` values through one key-to-label table; one bounded retry, then `FAILED`; the Controller never edits or composes a verdict",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "the Codex job passes the usage gate with fresh Codex allowance readings on every admission attempt (provider-separated from Claude; the operator's home merged with the retained minimal homes of earlier reviews, the end readings from the job's own minimal home), a hold naming the Codex provider and its cap settings: admit before launch, bind, renewal, complete with Codex readings, hold and resume as for Claude",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R6": {
+      "description": "a limit, timeout or empty run ends `INCOMPLETE` (exit 35, a new `run` re-admits) and completes its reservation with outcome `ok`, charged by the measured delta; an in-run Ctrl-C kills the Codex group, ends the record `INCOMPLETE`, completes the reservation the same way and exits 130 as documented (D9); an `INTERRUPTED` job with durable pre-spawn launch intent, including a Controller killed between spawn and the process-evidence flush, is charged at the forecast, while only a confirmed never-started one is released, idempotently by reservation token (D9); a refused ingest ends `FAILED` with the Workflow's code and leaves the gate open",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "the process is supervised: own session, ownership tag, deadline, process-group kill, no survivor, including after a killed Controller with the fake Codex still alive when `resume` starts, via the `resume` review-job branch in phase 2 (the Codex group holds no lifecycle lock)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R8": {
+      "description": "the five `reviewer.*` settings rows exist at generation 6 (the opt-in changes nothing else: R2 lists the two named exceptions), an unset harness keeps the gate and an unknown harness name refuses",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R9": {
+      "description": "the typed `record_external_result` wrapper matches the vendored protocol schema",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R10": {
+      "description": "follow-up 24: `WORKER_LIFECYCLE_NOTE` carries the `command rm -f` and `command cp -f` line and the pinned captures agree",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R11": {
+      "description": "the fake Codex and its contract tests exist, with a bounded orphan life and an inventory entry, and the real `codex exec` shape is pinned",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R12": {
+      "description": "documentation, ADR and roadmap agree with the behaviour; docs check and full suite pass",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

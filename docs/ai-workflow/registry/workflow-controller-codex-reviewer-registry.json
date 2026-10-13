@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-reviewer",
+  "plan_revision": 15,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Settings rows (reviewer.harness, model, effort, timeout_seconds, binary; settings generation 6), the typed record_external_result protocol wrapper validated against the vendored schema, and the command rm -f and command cp -f line in WORKER_LIFECYCLE_NOTE with its pinned captures refreshed (follow-up 24); no run behaviour changes; acceptance requires the Workflow-side confirmation of the obligation-5 reading",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The Codex review harness behind a closed registry: disposable worktree copy removed on every path, prompt built from the bundle MANIFEST values, bounded runner (own session, ownership tag, deadline, process-group kill), enforced sandbox/environment boundary (no extra writable roots, no command network, approval never, inherited hooks and inherited notify commands disabled, MCP servers excluded by a Controller-written minimal Codex home verified by digest and mcp list, its credential copy refreshed in place and copied back under a lock only when the operator's file is unchanged, built-in web search off, layers outside the home (system, managed, MDM) inventoried and validated against a pinned effective policy with an OpenAI provider pin and an exact environment allowlist, every non-allowlisted default-on Codex feature disabled by an allowlisted tool surface, pinned model/effort/non-fast tier, launch refused without it), exact verdict verification of every header label including the stage revision, real-repository before/after guard (HEAD, status, refs, config, per-file digests, state identity) with a linked-worktree test (no gitlink copied), plus tests/fake_codex.py with orphan watchdog, its contract tests, inventory entry and a captured real codex exec fixture (operator pre-step); nothing calls it yet",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The review job: usage gate generalised to a provider with fresh Codex readings on every admission attempt (operator home merged with the retained review homes; end readings from the job's own minimal home), job records with harness route and Codex usage block (admit, bind, renew, complete), one bounded header retry, ingest through record_external_result, FINISHED/FAILED/INCOMPLETE mapping, durable pre-spawn launch intent (conservative settlement of an uncertain launch, a replay killed after spawn and before the process-evidence flush), the resume review-job branch (process-group kill or verify-dead, terminal status without reconcile, sweep settlement, re-run) with a killed-Controller replay, state-identity checks before launch and ingest, unknown-harness refusal, user_gate suppression, and the execute_step hook at a configured external_gate; unconfigured behaviour pinned unchanged, and the Ctrl-C path (group killed, INCOMPLETE, reservation completed as ok by the measured delta, exit 130; limit/timeout/empty run exit 35)",
+      "depends_on": [
+        "CP1",
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Lifecycle scenarios for plan-stage and implementation-stage external review by the fake Codex (usage hold, limit ending INCOMPLETE with exit 35 and re-admitted by a second run) with mutation checks in the negative suite; the effective-configuration check and environment allowlist covered by mutation checks; all fake-based with isolated configuration homes",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documentation, ADR 0013, roadmap (C7 complete, follow-up 24 fixed), check_docs, golden --check forms and the full suite green, with the D15 downgrade note in docs/compatibility.md",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

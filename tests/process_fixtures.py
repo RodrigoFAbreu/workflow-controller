@@ -357,9 +357,10 @@ LEFTOVER_INVENTORY = (
     ("test_settings.py", "start:Popen", 1, "short", "a python -c snippet that exits"),
     ("test_settings.py", "start:run:controller", 1, "short",
      "a unittest child (matched by its _child_env name, not a Controller) that runs one test and exits"),
-    ("test_test_shards.py", "start:Popen", 3, "bounded",
+    ("test_test_shards.py", "start:Popen", 4, "bounded",
      "300 s sleepers, ended by exact pid, and a shard executor on a synthetic tree whose 600 s "
-     "suites its lane helper ends with the executor (the test kills the executor otherwise)"),
+     "suites its lane guard ends with the executor (the test kills the executor otherwise), and the "
+     "same executor under a subreaper wrapper that never reaps (60 s wait, then killed)"),
     ("test_test_shards.py", "wait", 2, "deadline", "the executor started by run_directly (30 s) and the 10 s wait on a killed child"),
     ("test_test_shards.py", "start:run", 1, "short", "a python -c probe the test waits for"),
     ("test_trunk_orchestration_e2e.py", "start:run", 1, "short", "a bash command the test waits for"),

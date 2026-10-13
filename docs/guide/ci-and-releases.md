@@ -105,7 +105,7 @@ is appended to `shard-<i>.log` as one section after the `unittest` output,
 so a conformance failure is found after the Controller tests in the log. If
 the helper process dies, the shard fails with exit 2; the shard's step log
 says the executor refused it, and the `REFUSED` lines in its log name the
-conformance lane. The lane files are named per run (`lane-<shard>-<run id>.*` in the results directory) and a shard removes its earlier ones first, so an aborted run's leftovers are never accepted. If the helper dies at any point before the executor ends it, even after the suites finished, the shard fails ("conformance lane crashed") and the group's survivors are listed as leaked processes. The helper is started through a launcher that exits at once, so it is not a child of the shard process (Controller tests there kill and reap children they did not start). The helper stays alive after its suites finish (as a child subreaper, so
+conformance lane. The lane files are named per run (`lane-<shard>-<run id>.*` in the results directory) and a shard removes its earlier ones first, so an aborted run's leftovers are never accepted. If the helper dies at any point before the executor ends the lane, even after the suites finished, the shard fails ("conformance lane crashed") and the group's survivors are listed as leaked processes; the guard notices at once, whether or not the executor is still polling, and the executor watches the guard with a pidfd, so an unreaped (zombie) process is seen as dead. The helper is started through a launcher that exits at once, so it is not a child of the shard process (Controller tests there kill and reap children they did not start). The helper stays alive after its suites finish (as a child subreaper, so
 a suite's surviving child is not adopted by a Controller test in the shard
 process) until the executor has run its leak scan and ends it. It ends with the executor by every path: it
 watches a pipe from the executor, so a signal, a crash or `os._exit` in a
@@ -113,10 +113,10 @@ test ends the helper and the suite it is running too. A suite's
 survivors are reported as leaked processes before they are cleaned up, the
 same as in serial mode (the shard fails). SIGINT and SIGTERM to the
 executor also end the helper's whole process group, descendants included.
-Known residual: a SIGKILL of the executor cannot run any cleanup. The
-helper and its suites still end (the pipe guard and a parent-death signal),
-but a descendant that left the helper's process group (`setsid`) can
-survive; GitHub tears the job down, and a local run's supervisor marker scan
+Known residual: a SIGKILL of the executor cannot run any cleanup in the
+executor, but a small guard process holds a pipe from it and ends the whole
+lane session when the pipe closes, so only a descendant that left the
+session (`setsid`) can survive; GitHub tears the job down, and a local run's supervisor marker scan
 reports the leftovers, the same as the serial design. Expected with the 2026-10-13 profile: the shard holding the
 acceptance matrix runs only that suite (about 11 minutes), the other three
 run conformance lanes of about 5.2, 3.4 and 3.0 minutes beside about 11 minutes of

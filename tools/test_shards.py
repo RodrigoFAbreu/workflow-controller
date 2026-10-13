@@ -78,6 +78,7 @@ import json
 import math
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
@@ -1548,6 +1549,12 @@ def _group_survivors(pgid: int) -> list[dict]:
     return found
 
 
+#: Captured at import, before any test patches ``os`` or ``select``.
+_PIDFD_OPEN = getattr(os, "pidfd_open", None)
+_SELECT = select.select
+_CLOSE = os.close
+
+
 class _ConformanceLane:
     """A shard's conformance suites, run one at a time in plan order by a
     helper process (``python3 test_shards.py --conformance-lane ...``) while
@@ -1575,6 +1582,8 @@ class _ConformanceLane:
         self.process: subprocess.Popen | None = None  # the launcher, gone at once
         self.helper_pid: int | None = None
         self.pid_file = Path(f"{self.prefix}.pid")
+        self.crash_file = Path(f"{self.prefix}.crash")
+        self._pidfd: int | None = None
         self.finished: list[tuple[str, Path, dict, float]] = []
         self.error: str | None = None
 
@@ -1583,9 +1592,9 @@ class _ConformanceLane:
             [sys.executable, str(Path(__file__).resolve()), LANE_FLAG, str(self.repo_root),
              str(self.prefix), *self.keys],
             stdin=subprocess.PIPE)
-        # The launcher forks the helper into its own session and exits, so the
-        # helper is not this process's child: Controller tests in this process
-        # kill or reap children they did not start.
+        # The launcher forks the guard (which forks the helper) into its own
+        # session and exits, so neither is this process's child: Controller
+        # tests in this process kill or reap children they did not start.
         self.process.wait()
         deadline = time.monotonic() + 30
         while self.helper_pid is None:
@@ -1593,75 +1602,92 @@ class _ConformanceLane:
                 self.helper_pid = int(self.pid_file.read_text())
             except (OSError, ValueError):
                 if time.monotonic() > deadline:
-                    raise RuntimeError("the conformance lane helper did not start")
+                    raise RuntimeError("the conformance lane guard did not start")
                 time.sleep(0.02)
+        if _PIDFD_OPEN is not None:
+            try:
+                self._pidfd = _PIDFD_OPEN(self.helper_pid)
+            except OSError:
+                self._pidfd = None
         self._monitor_thread = threading.Thread(target=self._monitor, name="lane-monitor",
                                                 daemon=True)
         self._monitor_thread.start()
 
     @property
     def pid(self) -> int | None:
+        """The guard's pid, which is also its process group id."""
         return self.helper_pid
 
-    def _alive(self) -> bool:
-        """Whether the helper still runs. Asked of libc directly, not of
-        ``Popen``, ``os`` or /proc: tests in this process patch ``os`` and the
-        /proc readers, ignore SIGCHLD (``Popen`` then reports a live child as
-        exited with status 0) and reap with ``waitpid(-1)``. ``waitpid`` with
-        WNOHANG answers for a child nobody has reaped; once it is reaped
-        (ECHILD) ``kill(pid, 0)`` says whether the pid still exists."""
-        libc = ctypes.CDLL(None, use_errno=True)
-        pid = self.helper_pid
-        reaped = libc.waitpid(pid, None, os.WNOHANG)
-        if reaped == pid:
-            return False
-        if reaped == 0:
-            return True
-        return libc.kill(pid, 0) == 0
+    def own_pids(self) -> list[int]:
+        """The lane's own processes (the guard and the helper), which the
+        leak scan must not report."""
+        if self.helper_pid is None:
+            return []
+        return [self.helper_pid] + [
+            member["pid"] for member in _group_survivors(self.helper_pid)
+            if LANE_FLAG in member["argv"] and str(self.prefix) in member["argv"]]
+
+    def _alive(self, wait: float = 0.0) -> bool:
+        """Whether the guard still runs, waiting up to ``wait`` seconds for it
+        to end. A pidfd becomes readable when the process exits, zombie or
+        not, and is asked through ``select`` captured at import: tests in
+        this process patch ``os`` and /proc readers, ignore SIGCHLD and
+        reap with ``waitpid(-1)``. Without pidfd (before Linux 5.3) it falls
+        back to ``kill(pid, 0)``, which a zombie evades."""
+        if self._pidfd is not None:
+            readable, _, _ = _SELECT([self._pidfd], [], [], wait)
+            return not readable
+        if wait:
+            time.sleep(wait)
+        return ctypes.CDLL(None, use_errno=True).kill(self.helper_pid, 0) == 0
+
+    def _crash(self) -> None:
+        """The guard is gone without ``stop``: take the survivors it listed
+        (or list the group's), and end the group."""
+        try:
+            self.survivors = json.loads(self.crash_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self.survivors = _group_survivors(self.helper_pid)
+        self.crashed = True
+        try:
+            os.killpg(self.helper_pid, signal.SIGKILL)
+        except OSError:
+            pass
 
     def _monitor(self) -> None:
-        """If the helper ends before ``stop`` (a kill, a crash), end its whole
-        group now: its suites and their descendants would otherwise outlive
-        it. The helper never exits on its own while the executor lives."""
-        pid = self.helper_pid
-        while self._alive() and not self.stopping:
-            time.sleep(0.1)
+        while not self.stopping and self._alive(0.2):
+            pass
         if not self.stopping:
-            # An unexpected death, even after the suites finished: list what
-            # the group still holds (the shard fails with it as leaks) before
-            # ending it.
-            self.survivors = _group_survivors(pid)
-            self.crashed = True
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except OSError:
-                pass
+            self._crash()
 
     def join(self) -> None:
-        """Wait until the helper reports every suite done (or has died), and
-        read the results. The helper stays alive, with its adopted orphans
-        and its pipe guard, until ``stop``."""
+        """Wait until the helper reports every suite done, or the lane fails,
+        and read the results. The guard stays alive, with the helper's
+        adopted orphans, until ``stop``."""
         if self.process is None:
             return
-        while not self.done_file.exists() and self._alive():
-            time.sleep(0.05)
+        while (not self.done_file.exists() and not self.crash_file.exists()
+               and self._alive(0.05)):
+            pass
+        if self.crash_file.exists() or not self._alive():
+            if self._monitor_thread is not None:
+                self._monitor_thread.join(timeout=10)
         try:
             document = json.loads(self.result_file.read_text(encoding="utf-8"))
             self.finished = [(item["key"], Path(item["part"]), item["entry"], item["seconds"])
                              for item in document]
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self.error = f"no readable result file ({type(exc).__name__}: {exc})"
-        if not self._alive() and self._monitor_thread is not None:
-            self._monitor_thread.join(timeout=10)
         if self.crashed or not self.done_file.exists() or (self.error is None
                                            and len(self.finished) != len(self.keys)):
             self.error = (self.error or "") + (f" the lane process died unexpectedly after "
                                                f"{len(self.finished)} of {len(self.keys)} suites")
 
     def stop(self) -> None:
-        """End the lane: the helper, its suites and every descendant in its
-        session (the group id is the helper's pid and stays ours while any
-        member lives, so this also works after the helper died)."""
+        """End the lane: the guard, the helper, its suites and every
+        descendant in the guard's session (the group id is the guard's pid
+        and stays ours while any member lives, so this also works after the
+        guard died)."""
         pid = self.helper_pid
         if pid is None:
             return
@@ -1671,14 +1697,16 @@ class _ConformanceLane:
         except OSError:
             pass
         deadline = time.monotonic() + 5
-        while self._alive() and time.monotonic() < deadline:
-            time.sleep(0.02)
+        while self._alive(0.02) and time.monotonic() < deadline:
+            pass
+        if self._pidfd is not None:
+            _CLOSE(self._pidfd)
+            self._pidfd = None
         if self.process is not None and self.process.stdin is not None \
                 and not self.process.stdin.closed:
             self.process.stdin.close()
-        self.pid_file.unlink(missing_ok=True)
-        self.result_file.unlink(missing_ok=True)
-        self.done_file.unlink(missing_ok=True)
+        for path in (self.pid_file, self.result_file, self.done_file, self.crash_file):
+            path.unlink(missing_ok=True)
 
     def write_to(self, log) -> None:
         for _, part, _, _ in self.finished:
@@ -1698,33 +1726,10 @@ class _ConformanceLane:
 LANE_FLAG = "--conformance-lane"
 
 
-def _lane_main(argv: list[str]) -> int:
-    """The conformance helper: ``<repo_root> <prefix> <key>...``. Runs each
-    suite with ``_run_conformance``, output to ``<prefix>.<n>.part``, and
-    rewrites ``<prefix>.json`` after every suite."""
-    repo_root, prefix, keys = Path(argv[0]), argv[1], argv[2:]
-    if os.fork():
-        os._exit(0)  # the launcher: the executor needs it gone at once
-    os.setsid()      # the helper leads its own session and process group
-    write_json_atomic(Path(f"{prefix}.pid"), os.getpid())
-    try:  # PR_SET_CHILD_SUBREAPER: orphans of the suites stay in this session
-        import ctypes
-        ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
-    except Exception:  # noqa: BLE001 - best effort, Linux only
-        pass
-
-    def guard() -> None:
-        # The executor holds the write end of our stdin and never writes. EOF
-        # means it ended, by any path (a signal, os._exit, SIGKILL): end this
-        # session, the helper and the suite it is running.
-        try:
-            while os.read(0, 4096):
-                pass
-        except OSError:
-            pass
-        os.killpg(os.getpgrp(), signal.SIGKILL)
-
-    threading.Thread(target=guard, name="parent-guard", daemon=True).start()
+def _run_lane_suites(repo_root: Path, prefix: str, keys: list[str]) -> None:
+    """The helper: run each suite with ``_run_conformance``, output to
+    ``<prefix>.<n>.part``, rewrite ``<prefix>.json`` after every suite, mark
+    ``<prefix>.done`` and then wait to be ended."""
     document = []
     for number, key in enumerate(keys):
         part = Path(f"{prefix}.{number}.part")
@@ -1733,15 +1738,62 @@ def _lane_main(argv: list[str]) -> int:
         document.append({"key": key, "part": str(part), "entry": entry, "seconds": seconds})
         write_json_atomic(Path(f"{prefix}.json"), document)
     write_json_atomic(Path(f"{prefix}.done"), True)
-    # Stay alive, as the subreaper of the suites' orphans, until the executor
-    # ends us: it lists survivors in its leak scan first, then kills the
-    # session (or closes our stdin, and the guard does). Reap, never kill.
+    while True:  # ended by the guard with the rest of the session
+        time.sleep(3600)
+
+
+def _lane_main(argv: list[str]) -> int:
+    """The lane's processes: ``<repo_root> <prefix> <key>...``. This process is
+    the launcher: it forks the GUARD and exits at once. The guard leads a new
+    session and process group and is a child subreaper, writes its pid to
+    ``<prefix>.pid`` and forks the HELPER (``_run_lane_suites``) in that
+    session. The guard
+
+    - ends the whole session when the executor's pipe (our stdin) reaches EOF,
+      which any end of the executor causes (a signal, ``os._exit``, SIGKILL);
+    - ends the whole session when the helper exits at all, after writing the
+      group's live survivors to ``<prefix>.crash`` for the executor's leak
+      list: it is the helper's parent, so it sees the exit at once, zombie or
+      not, and needs no executor to be alive or polling;
+    - reaps the orphans of the suites it adopts, and never kills them before
+      the executor has run its leak scan.
+
+    It keeps no other state and runs no shard code."""
+    repo_root, prefix, keys = Path(argv[0]), argv[1], argv[2:]
+    if os.fork():
+        os._exit(0)  # the launcher: the executor needs it gone at once
+    os.setsid()
+    try:  # PR_SET_CHILD_SUBREAPER: orphans of the suites stay in this session
+        ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
+    except Exception:  # noqa: BLE001 - best effort, Linux only
+        pass
+    write_json_atomic(Path(f"{prefix}.pid"), os.getpid())
+    helper = os.fork()
+    if helper == 0:
+        try:
+            _die_with_parent()
+            _run_lane_suites(repo_root, prefix, keys)
+        finally:
+            os._exit(1)
+
+    def eof_guard() -> None:
+        try:
+            while os.read(0, 4096):
+                pass
+        except OSError:
+            pass
+        os.killpg(os.getpgrp(), signal.SIGKILL)
+
+    threading.Thread(target=eof_guard, name="eof-guard", daemon=True).start()
     while True:
         try:
-            os.waitpid(-1, os.WNOHANG)
+            reaped, _ = os.waitpid(-1, 0)
         except ChildProcessError:
-            pass
-        time.sleep(0.2)
+            time.sleep(0.2)
+            continue
+        if reaped == helper:
+            write_json_atomic(Path(f"{prefix}.crash"), _group_survivors(os.getpid()))
+            os.killpg(os.getpgrp(), signal.SIGKILL)
 
 
 def _stop_lane_on_signals(lane):
@@ -1884,7 +1936,7 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
         marker = environ.get(SHARD_MARKER_ENV)
         if marker:
             leaks = scan_marked_processes(
-                marker, exclude={os.getpid(), *([lane.pid] if lane and lane.pid else [])})
+                marker, exclude={os.getpid(), *(lane.own_pids() if lane else [])})
             kill_processes(leaks)
         if lane is not None:
             # After the scan, so a suite's survivors are reported as leaks exactly

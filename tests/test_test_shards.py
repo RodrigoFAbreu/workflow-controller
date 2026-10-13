@@ -2521,6 +2521,19 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                     return False
                 time.sleep(0.02)
             return True
+        def kill_helper():
+            import glob, pathlib, signal
+            for pidfile in glob.glob("RESULTS_DIR/lane-0-*.pid"):
+                guard = int(open(pidfile).read())
+                for name in os.listdir("/proc"):
+                    try:
+                        stat = pathlib.Path("/proc/" + name + "/stat").read_text()
+                        cmd = pathlib.Path("/proc/" + name + "/cmdline").read_bytes()
+                    except OSError:
+                        continue
+                    if int(stat[stat.rindex(")") + 2:].split()[1]) == guard \\
+                            and b"--conformance-lane" in cmd:
+                        os.kill(int(name), signal.SIGKILL)
     """)
 
     def setUp(self) -> None:
@@ -2532,7 +2545,8 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         self.results = self.root / "results"
 
     def build(self, controller_body: str, suites: dict[str, str], **parameters):
-        prelude = self.RENDEZVOUS.replace("DIR", str(self.sync))
+        prelude = (self.RENDEZVOUS.replace("RESULTS_DIR", str(self.results))
+                   .replace("DIR", str(self.sync)))
         tree = SyntheticTree(self, {"test_lane": prelude + textwrap.dedent(controller_body)})
         self.top = tree.top  # the synthetic tree's temp dir doubles as the repo root
         (self.top / "scripts").mkdir(exist_ok=True)
@@ -2653,6 +2667,21 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                 found.append(int(name))
         return found
 
+    def helper_children(self) -> list[int]:
+        """The lane helpers: children of a lane guard of this test."""
+        guards = self.helpers()
+        found = []
+        for name in os.listdir("/proc"):
+            try:
+                stat = Path(f"/proc/{name}/stat").read_text()
+                cmdline = Path(f"/proc/{name}/cmdline").read_bytes().split(b"\0")
+            except OSError:
+                continue
+            if b"--conformance-lane" in cmdline and \
+                    int(stat[stat.rindex(")") + 2:].split()[1]) in guards:
+                found.append(int(name))
+        return found
+
     def gone(self) -> bool:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
@@ -2679,9 +2708,8 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
             self.assertLess(time.monotonic(), deadline, "the suite never started")
             time.sleep(0.05)
         if mode.startswith("helper-first"):
-            for pid in self.helpers():
+            for pid in self.helper_children():
                 os.kill(pid, signal.SIGKILL)
-            time.sleep(0.5)
             process.send_signal(getattr(signal, mode.partition(":")[2] or "SIGTERM"))
         elif mode != "exit":
             process.send_signal(getattr(signal, mode))
@@ -2705,10 +2733,16 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
             "meet('suite', 'controller') and time.sleep(600)\n")})
 
     def test_a_helper_killed_first_and_then_the_executor_leaves_no_suite(self) -> None:
-        self.run_directly(self.direct_plan("SIGTERM"), "helper-first:SIGTERM")
+        for attempt in range(5):  # no pause between the two: the window was the bug
+            with self.subTest(attempt=attempt):
+                self.setUp()
+                self.run_directly(self.direct_plan("SIGTERM"), "helper-first:SIGTERM")
 
     def test_a_helper_killed_first_and_then_sigint_leaves_no_suite_or_descendant(self) -> None:
-        self.run_directly(self.direct_plan("SIGINT"), "helper-first:SIGINT")
+        for attempt in range(5):
+            with self.subTest(attempt=attempt):
+                self.setUp()
+                self.run_directly(self.direct_plan("SIGINT"), "helper-first:SIGINT")
 
     def test_the_lane_done_and_the_executor_signalled_leaves_no_process(self) -> None:
         for mode in ("SIGINT", "SIGTERM"):
@@ -2738,15 +2772,9 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                     while not glob.glob(r"%s"):
                         time.sleep(0.05)
                     time.sleep(0.5)
-                    for name in os.listdir("/proc"):
-                        try:
-                            cmdline = __import__("pathlib").Path("/proc/" + name + "/cmdline").read_bytes()
-                        except OSError:
-                            continue
-                        if b"--conformance-lane" in cmdline and %r in cmdline:
-                            os.kill(int(name), signal.SIGKILL)
+                    kill_helper()
                     time.sleep(1)
-            """ % (str(self.results / "lane-0-*.done"), str(self.results).encode()),
+            """ % (str(self.results / "lane-0-*.done"),),
             {"a_test.py": "import subprocess, sys\n"
                           "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
                           "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"})
@@ -2756,6 +2784,76 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         self.assertNotEqual(status, 0, record)
         self.assertEqual(len(record["leaked_processes"]), 1, record)
         self.assertIn("conformance lane crashed", shards.log_path(self.results, 0).read_text())
+        self.assertTrue(self.gone())
+
+    SUBREAPER = (
+        "import ctypes, subprocess, sys\n"
+        "ctypes.CDLL(None).prctl(36, 1, 0, 0, 0)\n"
+        "sys.exit(subprocess.Popen(sys.argv[1:], stdin=subprocess.DEVNULL,\n"
+        "    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).wait())\n")
+
+    def run_under_a_subreaper(self, plan, when: str) -> int:
+        """Run the executor under a child subreaper that never reaps what it
+        adopts, kill the lane guard (so it stays a zombie) at ``when``
+        ('before-done' or 'after-done') and return the executor's status.
+        The executor must end within a bound."""
+        plan_file = self.root / "plan.json"
+        plan_file.write_text(json.dumps(plan))
+        command = [sys.executable, "-c", self.SUBREAPER, sys.executable,
+                   str(fixtures.REPO_ROOT / "tools" / "run_tests.py"), "exec-shard",
+                   "--plan", str(plan_file), "--shard", "0", "--results-dir", str(self.results),
+                   "--repo-root", str(self.top)]
+        wrapper = subprocess.Popen(command, stdin=subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(lambda: wrapper.poll() is None and wrapper.kill())
+        deadline = time.monotonic() + 30
+        while True:
+            pids = list(self.results.glob("lane-0-*.pid"))
+            dones = list(self.results.glob("lane-0-*.done"))
+            if pids and (dones if when == "after-done" else (self.sync / "suite").exists()):
+                break
+            self.assertLess(time.monotonic(), deadline, "the lane never reached the point")
+            time.sleep(0.05)
+        guard = int(pids[0].read_text())
+        os.kill(guard, signal.SIGKILL)
+        deadline = time.monotonic() + 10
+        while Path(f"/proc/{guard}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z":
+            self.assertLess(time.monotonic(), deadline, "the guard did not become a zombie")
+            time.sleep(0.02)
+        (self.sync / "killed").touch()
+        status = wrapper.wait(timeout=60)  # a hang here is the bug
+        return status
+
+    def zombie_plan(self):
+        return self.build(
+            """
+            import time, unittest
+            class XTest(unittest.TestCase):
+                def test_waits_to_be_released(self):
+                    deadline = time.monotonic() + 30
+                    while not os.path.exists(os.path.join(r"%s", "killed")) \\
+                            and time.monotonic() < deadline:
+                        time.sleep(0.05)
+            """ % self.sync,
+            {"a_test.py": "import subprocess, sys, time\n"
+                          "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+                          "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+                          "open(r'%s', 'w').close()\n" % (self.sync / "suite")
+                          + "time.sleep(%s)\n" % self.suite_sleep})
+
+    suite_sleep = 0
+
+    def test_a_zombie_guard_after_done_fails_the_shard(self) -> None:
+        plan = self.zombie_plan()
+        status = self.run_under_a_subreaper(plan, "after-done")
+        self.assertNotEqual(status, 0)
+        self.assertIn("conformance lane crashed", shards.log_path(self.results, 0).read_text())
+        self.assertTrue(self.gone())
+
+    def test_a_zombie_guard_before_done_does_not_hang_the_executor(self) -> None:
+        self.suite_sleep = 600
+        plan = self.zombie_plan()
+        status = self.run_under_a_subreaper(plan, "before-done")
+        self.assertEqual(status, 2)
         self.assertTrue(self.gone())
 
     def test_a_second_run_in_the_same_results_directory_runs_the_suite_again(self) -> None:

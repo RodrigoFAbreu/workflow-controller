@@ -103,13 +103,18 @@ Nothing else changes: the same per-atom results, the exact-coverage proof,
 the leak scan (after both lanes end) and the exit status. A suite's output
 is appended to `shard-<i>.log` as one section after the `unittest` output,
 so a conformance failure is found after the Controller tests in the log. If
-the helper process dies, the shard fails with exit 2 and the summary names
-the lane. Expected with the 2026-10-13 profile: the shard holding the
+the helper process dies, the shard fails with exit 2; the shard's step log
+says the executor refused it, and the `REFUSED` lines in its log name the
+conformance lane. The helper ends with the executor by every path: it
+watches a pipe from the executor, so a signal, a crash or `os._exit` in a
+test ends the helper and the suite it is running too. Expected with the 2026-10-13 profile: the shard holding the
 acceptance matrix runs only that suite (about 11 minutes), the other three
 run a conformance lane of 4 to 5 minutes beside about 11 minutes of
 Controller tests, so the longest shard is about 12.4 minutes and a pull
 request's checks finish in about 14. A local run (`tools/run_tests.py`
-without `exec-shard`) uses the same executor and so the same two lanes.
+without `exec-shard`) uses the same executor and so the same two lanes,
+except `--serial`, which plans `conformance_lane: false`: the suites then
+run one at a time after the Controller tests, as the serial reference.
 
 ### Re-running failed jobs
 

@@ -75,7 +75,11 @@ starts first, so it is in every launch's baseline. Both lanes' results enter
 the record as before (same per-atom results, the exact-coverage proof, the
 leak scan after both lanes end, the exit status, the timings artifact); each
 suite's output is written to the log as one section after the `unittest`
-output; a helper that dies fails the shard (exit 2, named). The plan
+output; a helper that dies fails the shard (exit 2, named in the log). The helper
+watches a pipe from the executor and ends its session on EOF, so no exit
+path of the executor leaves a suite running. `--serial` plans
+`conformance_lane: false` and runs the suites after the Controller tests, so
+the serial reference of I5 is unchanged. The plan
 records `conformance_lane: true`, and a shard's estimate is the longer of its
 two lanes, times 1.15 when both have work (two processes on a 4-vCPU runner
 measured 1.05 locally and up to 1.3 on CI): the conformance atoms are placed

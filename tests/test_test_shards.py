@@ -25,6 +25,7 @@ import math
 import os
 import random
 import shutil
+import signal
 import re
 import subprocess
 import sys
@@ -2529,7 +2530,7 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         self.sync.mkdir()
         self.results = self.root / "results"
 
-    def build(self, controller_body: str, suites: dict[str, str], *, shard_atoms=None):
+    def build(self, controller_body: str, suites: dict[str, str], **parameters):
         prelude = self.RENDEZVOUS.replace("DIR", str(self.sync))
         tree = SyntheticTree(self, {"test_lane": prelude + textwrap.dedent(controller_body)})
         self.top = tree.top  # the synthetic tree's temp dir doubles as the repo root
@@ -2542,7 +2543,7 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                        for n in suites]
         everything = list(atoms) + conformance
         selection = _selection(*everything)
-        plan = shards.build_plan(selection, _params(shards=1))
+        plan = shards.build_plan(selection, _params(shards=1, **parameters))
         self.assertEqual(plan["shard_count"], 1)
         self.tree = tree
         return plan
@@ -2624,15 +2625,94 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
 
     def test_a_controller_lane_crash_stops_the_suites_and_propagates(self) -> None:
         plan = self.build(
-            "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
-            {"a_test.py": "import time; time.sleep(60)\n"})
+            """
+            import unittest
+            class XTest(unittest.TestCase):
+                def test_waits_for_the_suite(self):
+                    self.assertTrue(meet("controller", "suite"))
+            """,
+            {"a_test.py": "meet('suite', 'controller') and __import__('time').sleep(60)\n"})
         with unittest.mock.patch.object(shards, "_backfill", side_effect=RuntimeError("boom")):
             started = time.monotonic()
             with self.assertRaisesRegex(RuntimeError, "boom"):
                 self.run_shard(plan)
         self.assertLess(time.monotonic() - started, 30)
-        time.sleep(0.2)
-        self.assertEqual(self.sleepers(), [])
+        self.assertTrue((self.sync / "suite").exists(), "the suite never started")
+        self.assertTrue(self.gone(), "a helper or suite process is still alive")
+
+    def gone(self) -> bool:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if not self.sleepers():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def run_directly(self, plan, mode: str):
+        """Start ``run_tests.py exec-shard --plan`` on the synthetic tree as CI
+        does, wait until the suite is running, then end the executor by
+        ``mode``: ``SIGINT``, ``SIGTERM``, or ``exit`` (the test calls
+        ``os._exit``)."""
+        plan_file = self.root / "plan.json"
+        plan_file.write_text(json.dumps(plan))
+        command = [sys.executable, str(fixtures.REPO_ROOT / "tools" / "run_tests.py"),
+                   "exec-shard", "--plan", str(plan_file), "--shard", "0",
+                   "--results-dir", str(self.results), "--repo-root", str(self.top)]
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 30
+        while not (self.sync / "suite").exists():
+            self.assertLess(time.monotonic(), deadline, "the suite never started")
+            time.sleep(0.05)
+        if mode != "exit":
+            process.send_signal(getattr(signal, mode))
+        process.wait(timeout=30)
+        self.assertTrue(self.gone(), f"a helper or suite process outlived the executor ({mode})")
+
+    def direct_plan(self, mode: str):
+        body = """
+            import os, unittest
+            class XTest(unittest.TestCase):
+                def test_waits(self):
+                    meet("controller", "suite")
+                    if "%s" == "exit":
+                        os._exit(3)
+                    __import__("time").sleep(60)
+            """ % mode
+        return self.build(body, {"a_test.py": "meet('suite', 'controller') and __import__('time').sleep(600)\n"})
+
+    def test_a_direct_executor_ended_by_sigint_leaves_no_process(self) -> None:
+        self.run_directly(self.direct_plan("SIGINT"), "SIGINT")
+
+    def test_a_direct_executor_ended_by_sigterm_leaves_no_process(self) -> None:
+        self.run_directly(self.direct_plan("SIGTERM"), "SIGTERM")
+
+    def test_a_direct_executor_that_calls_os_exit_leaves_no_process(self) -> None:
+        self.run_directly(self.direct_plan("exit"), "exit")
+
+    def test_the_serial_plan_runs_the_suites_after_the_controller_tests(self) -> None:
+        marker = self.sync / "controller-done"
+        plan = self.build(
+            """
+            import time, unittest
+            class XTest(unittest.TestCase):
+                def test_slow(self):
+                    time.sleep(1)
+                    open(r"%s", "w").close()
+            """ % marker,
+            {"a_test.py": "import sys, os\nsys.exit(0 if os.path.exists(r'%s') else 5)\n" % marker},
+            conformance_lane=False)
+        self.assertFalse(plan["parameters"]["conformance_lane"])
+        record, status = self.run_shard(plan)
+        self.assertEqual(status, 0, record)
+
+    def test_serial_planning_turns_the_lane_off(self) -> None:
+        out = subprocess.run([sys.executable, str(fixtures.REPO_ROOT / "tools" / "run_tests.py"),
+                              "--serial", "--plan-only", "tests.test_test_shards.PlanTest"],
+                             capture_output=True, text=True, cwd=fixtures.REPO_ROOT, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn('"conformance_lane": false', out.stdout)
 
     def test_the_leak_scan_runs_after_both_lanes(self) -> None:
         plan = self.build(

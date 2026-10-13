@@ -62,7 +62,7 @@ through ``unittest``'s own text runner with a recording result that keys every
 event to a planned id or to a fixture, runs each conformance suite as the
 managed workflow does (in a second lane beside the controller tests, so a
 shard lasts as long as its longer lane; the planner balances that, see
-``assign_lanes``), and writes ``shard-<i>.json``. ``aggregate`` turns a
+``assign_lanes``; a plan with ``conformance_lane`` false runs them after), and writes ``shard-<i>.json``. ``aggregate`` turns a
 plan and its shards' records into verdicts, the run-time coverage proof (I2),
 an exit status and a summary with reproduction commands.
 
@@ -870,7 +870,8 @@ class PlanParameters:
 def profile_parameters(profile: str, *, cpu_count: int | None = None,
                        target_shard_seconds: float | None = None,
                        min_shards: int | None = None, max_shards: int | None = None,
-                       shards: int | None = None) -> PlanParameters:
+                       shards: int | None = None,
+                       conformance_lane: bool = True) -> PlanParameters:
     """``profile``'s parameters, each overridable. The local maximum is
     ``min(LOCAL_MAX_SHARDS, cpu_count)``: one shard per CPU is the measured
     safe default (``cpu_count`` defaults to ``os.cpu_count()``)."""
@@ -888,7 +889,7 @@ def profile_parameters(profile: str, *, cpu_count: int | None = None,
         else target_shard_seconds,
         min_shards=defaults[1] if min_shards is None else min_shards,
         max_shards=defaults[2] if max_shards is None else max_shards,
-        shards=shards)
+        shards=shards, conformance_lane=conformance_lane)
     problems = []
     if not (_is_seconds(parameters.target_shard_seconds)
             and parameters.target_shard_seconds > 0):
@@ -1535,12 +1536,14 @@ class _ConformanceLane:
         self.process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), LANE_FLAG, str(self.repo_root),
              str(self.prefix), *self.keys],
-            stdin=subprocess.DEVNULL, start_new_session=True)
+            stdin=subprocess.PIPE, start_new_session=True)
 
     def join(self) -> None:
         if self.process is None:
             return
         status = self.process.wait()
+        if self.process.stdin is not None:
+            self.process.stdin.close()
         try:
             document = json.loads(self.result_file.read_text(encoding="utf-8"))
             self.finished = [(item["key"], Path(item["part"]), item["entry"], item["seconds"])
@@ -1556,12 +1559,16 @@ class _ConformanceLane:
         """Abandon the lane (the controller lane raised): end the helper and
         the suite it is running."""
         process = self.process
-        if process is not None and process.poll() is None:
+        if process is None:
+            return
+        if process.poll() is None:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except OSError:
                 pass
             process.wait()
+        if process.stdin is not None and not process.stdin.closed:
+            process.stdin.close()
 
     def write_to(self, log) -> None:
         for _, part, _, _ in self.finished:
@@ -1586,6 +1593,19 @@ def _lane_main(argv: list[str]) -> int:
     suite with ``_run_conformance``, output to ``<prefix>.<n>.part``, and
     rewrites ``<prefix>.json`` after every suite."""
     repo_root, prefix, keys = Path(argv[0]), argv[1], argv[2:]
+
+    def guard() -> None:
+        # The executor holds the write end of our stdin and never writes. EOF
+        # means it ended, by any path (a signal, os._exit, SIGKILL): end this
+        # session, the helper and the suite it is running.
+        try:
+            while os.read(0, 4096):
+                pass
+        except OSError:
+            pass
+        os.killpg(os.getpgrp(), signal.SIGKILL)
+
+    threading.Thread(target=guard, name="parent-guard", daemon=True).start()
     document = []
     for number, key in enumerate(keys):
         part = Path(f"{prefix}.{number}.part")
@@ -1593,7 +1613,8 @@ def _lane_main(argv: list[str]) -> int:
             entry, seconds = _run_conformance(key, repo_root, out)
         document.append({"key": key, "part": str(part), "entry": entry, "seconds": seconds})
         write_json_atomic(Path(f"{prefix}.json"), document)
-    return 0
+    sys.stdout.flush()
+    os._exit(0)  # the guard thread may be blocked in read(); do not wait for it
 
 
 def shard_status(record: Mapping, was_successful: bool | None,
@@ -1624,8 +1645,9 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
     ``<results_dir>/shard-<index>.json`` (appending the runner output to
     ``shard-<index>.log``), and return the record and the exit status: ``0``
     pass, ``1`` fail (a failing test or a leaked process), ``2`` refused.
-    The shard's conformance suites run in a second thread (each suite a
-    separate process, one at a time) beside the controller tests, and the
+    The shard's conformance suites run in a helper process (each suite its
+    own process, one at a time) beside the controller tests, or after them
+    when the plan has ``conformance_lane`` false (``--serial``), and the
     leak scan runs after both lanes end; a lane that crashes refuses the
     shard. The loaded ids are checked against the planned ids before anything runs;
     any event the recording rules cannot map, any planned id left without an
@@ -1652,11 +1674,13 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
             problems.append(str(exc))
         if units is not None:
             controller = [(key, suite) for key, suite in units if suite is not None]
-            lane = _ConformanceLane([key for key, suite in units if suite is None],
-                                    Path(repo_root), results_dir, f"lane-{index}")
-            if lane.keys:
-                lane.start()
+            concurrent = plan["parameters"].get("conformance_lane", True)
+            lane = _ConformanceLane(
+                [key for key, suite in units if suite is None] if concurrent else [],
+                Path(repo_root), results_dir, f"lane-{index}")
             try:
+                if lane.keys:
+                    lane.start()
                 if controller:
                     atom_of = {test.id(): key for key, suite in controller for test in suite}
                     sequence = _AtomSequence(controller)
@@ -1670,11 +1694,16 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
                     fixture_errors, fixture_skips = result.fixture_errors, result.fixture_skips
                     atoms.update(sequence.seconds)
                     problems += [f"unmapped unittest event: {event}" for event in result.unmapped]
-            except BaseException:
-                lane.stop()
-                raise
-            lane.join()
+                lane.join()
+            finally:
+                lane.stop()  # a no-op once the helper has ended cleanly
             lane.write_to(log)
+            if not concurrent:
+                # The serial reference (``--serial``, ``conformance_lane`` false):
+                # the suites run here, after the controller tests, one at a time.
+                for key, suite in units:
+                    if suite is None:
+                        entries[key], atoms[key] = _run_conformance(key, repo_root, log)
             for key, _, entry, seconds in lane.finished:
                 entries[key], atoms[key] = entry, seconds
             if lane.error is not None:

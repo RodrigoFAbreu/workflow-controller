@@ -2614,7 +2614,7 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
     def test_a_crashed_lane_refuses_the_shard_but_the_controller_tests_ran(self) -> None:
         plan = self.build(
             "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
-            {"a_test.py": "import os, signal; os.kill(os.getppid(), signal.SIGKILL)\n",
+            {"a_test.py": "import os, signal, time; os.kill(os.getppid(), signal.SIGKILL); time.sleep(600)\n",
              "b_test.py": "pass\n"})
         record, status = self.run_shard(plan)
         self.assertEqual(status, 2)
@@ -2622,6 +2622,7 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         self.assertEqual([e["id"] for e in record["tests"] if e["outcome"] == "pass"],
                          [i for i in plan["selected_ids"] if not i.startswith("conformance:")])
         self.assertEqual(list(self.results.glob("lane-*")), [])
+        self.assertTrue(self.gone(), "the suite outlived its killed helper")
 
     def test_a_controller_lane_crash_stops_the_suites_and_propagates(self) -> None:
         plan = self.build(
@@ -2639,6 +2640,17 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 30)
         self.assertTrue((self.sync / "suite").exists(), "the suite never started")
         self.assertTrue(self.gone(), "a helper or suite process is still alive")
+
+    def helpers(self) -> list[int]:
+        found = []
+        for name in os.listdir("/proc"):
+            try:
+                cmdline = Path(f"/proc/{name}/cmdline").read_bytes().split(b"\0")
+            except OSError:
+                continue
+            if b"--conformance-lane" in cmdline and str(self.top).encode() in cmdline:
+                found.append(int(name))
+        return found
 
     def gone(self) -> bool:
         deadline = time.monotonic() + 10
@@ -2665,7 +2677,12 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         while not (self.sync / "suite").exists():
             self.assertLess(time.monotonic(), deadline, "the suite never started")
             time.sleep(0.05)
-        if mode != "exit":
+        if mode == "helper-first":
+            for pid in self.helpers():
+                os.kill(pid, signal.SIGKILL)
+            time.sleep(0.5)
+            process.send_signal(signal.SIGTERM)
+        elif mode != "exit":
             process.send_signal(getattr(signal, mode))
         process.wait(timeout=30)
         self.assertTrue(self.gone(), f"a helper or suite process outlived the executor ({mode})")
@@ -2681,6 +2698,9 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                     __import__("time").sleep(60)
             """ % mode
         return self.build(body, {"a_test.py": "meet('suite', 'controller') and __import__('time').sleep(600)\n"})
+
+    def test_a_helper_killed_first_and_then_the_executor_leaves_no_suite(self) -> None:
+        self.run_directly(self.direct_plan("SIGTERM"), "helper-first")
 
     def test_a_direct_executor_ended_by_sigint_leaves_no_process(self) -> None:
         self.run_directly(self.direct_plan("SIGINT"), "SIGINT")

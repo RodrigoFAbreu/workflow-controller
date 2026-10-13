@@ -1481,7 +1481,19 @@ def _backfill(result: RecordingResult, planned: list[str], atom_of: Mapping[str,
                 "detail": f"skipped by {skip['description']}: {skip['reason']}"}
 
 
-def _run_conformance(key: str, repo_root: Path, log) -> tuple[dict, float]:
+def _die_with_parent() -> None:
+    """``preexec_fn`` for a suite the helper starts: SIGKILL it when the
+    helper dies (Linux ``PR_SET_PDEATHSIG``; elsewhere a no-op, and the
+    helper's session kill still applies)."""
+    try:
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0)
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+
+
+def _run_conformance(key: str, repo_root: Path, log,
+                     die_with_parent: bool = False) -> tuple[dict, float]:
     """Run one frozen suite as the managed workflow does (``cd scripts &&
     python3 <file>``), with this interpreter and the inherited environment,
     appending its output to the log."""
@@ -1491,7 +1503,8 @@ def _run_conformance(key: str, repo_root: Path, log) -> tuple[dict, float]:
     start = time.monotonic()
     process = subprocess.Popen([sys.executable, suite], cwd=Path(repo_root) / SCRIPTS_DIR,
                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
+                               stderr=subprocess.STDOUT,
+                               preexec_fn=_die_with_parent if die_with_parent else None)
     tail: deque[str] = deque(maxlen=TRACEBACK_TAIL_LINES)
     for raw in process.stdout:
         line = raw.decode("utf-8", "replace")
@@ -1561,12 +1574,14 @@ class _ConformanceLane:
         process = self.process
         if process is None:
             return
-        if process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            process.wait()
+        # The helper is a session leader, so its process group id is its pid
+        # and stays ours while any member lives: kill it even when the
+        # helper has already exited, so a suite it left behind ends too.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        process.wait()
         if process.stdin is not None and not process.stdin.closed:
             process.stdin.close()
 
@@ -1610,11 +1625,37 @@ def _lane_main(argv: list[str]) -> int:
     for number, key in enumerate(keys):
         part = Path(f"{prefix}.{number}.part")
         with open(part, "w", encoding="utf-8") as out:
-            entry, seconds = _run_conformance(key, repo_root, out)
+            entry, seconds = _run_conformance(key, repo_root, out, die_with_parent=True)
         document.append({"key": key, "part": str(part), "entry": entry, "seconds": seconds})
         write_json_atomic(Path(f"{prefix}.json"), document)
     sys.stdout.flush()
     os._exit(0)  # the guard thread may be blocked in read(); do not wait for it
+
+
+def _stop_lane_on_sigterm(lane):
+    """While a lane runs, SIGTERM first ends the lane's session, then
+    terminates this process as the default disposition would (raising
+    ``SystemExit`` instead would be swallowed by a running test). Only from
+    the main thread and only over the default disposition. Returns what
+    ``_restore_sigterm`` needs."""
+    try:
+        if signal.getsignal(signal.SIGTERM) is signal.SIG_DFL:
+            def handler(signum, frame):
+                lane.stop()
+                signal.signal(signal.SIGTERM, signal.SIG_DFL)
+                os.kill(os.getpid(), signal.SIGTERM)
+            return signal.signal(signal.SIGTERM, handler)
+    except ValueError:  # not the main thread
+        pass
+    return None
+
+
+def _restore_sigterm(previous) -> None:
+    if previous is not None:
+        try:
+            signal.signal(signal.SIGTERM, previous)
+        except ValueError:
+            pass
 
 
 def shard_status(record: Mapping, was_successful: bool | None,
@@ -1678,6 +1719,7 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
             lane = _ConformanceLane(
                 [key for key, suite in units if suite is None] if concurrent else [],
                 Path(repo_root), results_dir, f"lane-{index}")
+            previous = _stop_lane_on_sigterm(lane)
             try:
                 if lane.keys:
                     lane.start()
@@ -1696,7 +1738,8 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
                     problems += [f"unmapped unittest event: {event}" for event in result.unmapped]
                 lane.join()
             finally:
-                lane.stop()  # a no-op once the helper has ended cleanly
+                lane.stop()  # the helper's group is gone after a clean join
+                _restore_sigterm(previous)
             lane.write_to(log)
             if not concurrent:
                 # The serial reference (``--serial``, ``conformance_lane`` false):

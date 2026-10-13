@@ -71,6 +71,7 @@ Nothing in ``controller/`` imports this file.
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import heapq
 import json
@@ -84,6 +85,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from dataclasses import dataclass, field, replace
@@ -1522,6 +1524,30 @@ def _run_conformance(key: str, repo_root: Path, log,
     return entry, seconds
 
 
+def _group_survivors(pgid: int) -> list[dict]:
+    """Live (not zombie) members of process group ``pgid`` other than ``pgid``
+    itself, as ``{pid, argv, age_seconds}`` like ``scan_marked_processes``."""
+    found = []
+    try:
+        pids = sorted(int(name) for name in os.listdir("/proc") if name.isdigit())
+    except OSError:
+        return found
+    for pid in pids:
+        if pid == pgid:
+            continue
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            fields = stat[stat.rindex(")") + 2:].split()
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except (OSError, ValueError):
+            continue
+        if fields[0] in ("Z", "X", "x") or int(fields[2]) != pgid:
+            continue
+        argv = [part.decode("utf-8", "replace") for part in cmdline.split(b"\0") if part]
+        found.append({"pid": pid, "argv": argv, "age_seconds": _process_age(pid)})
+    return found
+
+
 class _ConformanceLane:
     """A shard's conformance suites, run one at a time in plan order by a
     helper process (``python3 test_shards.py --conformance-lane ...``) while
@@ -1543,7 +1569,12 @@ class _ConformanceLane:
         self.result_file = Path(f"{self.prefix}.json")
         self.done_file = Path(f"{self.prefix}.done")
         self.stopping = False
-        self.process: subprocess.Popen | None = None
+        self.crashed = False
+        self.survivors: list[dict] = []
+        self._monitor_thread: threading.Thread | None = None
+        self.process: subprocess.Popen | None = None  # the launcher, gone at once
+        self.helper_pid: int | None = None
+        self.pid_file = Path(f"{self.prefix}.pid")
         self.finished: list[tuple[str, Path, dict, float]] = []
         self.error: str | None = None
 
@@ -1551,22 +1582,58 @@ class _ConformanceLane:
         self.process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), LANE_FLAG, str(self.repo_root),
              str(self.prefix), *self.keys],
-            stdin=subprocess.PIPE, start_new_session=True)
-        threading.Thread(target=self._monitor, name="lane-monitor", daemon=True).start()
+            stdin=subprocess.PIPE)
+        # The launcher forks the helper into its own session and exits, so the
+        # helper is not this process's child: Controller tests in this process
+        # kill or reap children they did not start.
+        self.process.wait()
+        deadline = time.monotonic() + 30
+        while self.helper_pid is None:
+            try:
+                self.helper_pid = int(self.pid_file.read_text())
+            except (OSError, ValueError):
+                if time.monotonic() > deadline:
+                    raise RuntimeError("the conformance lane helper did not start")
+                time.sleep(0.02)
+        self._monitor_thread = threading.Thread(target=self._monitor, name="lane-monitor",
+                                                daemon=True)
+        self._monitor_thread.start()
 
     @property
     def pid(self) -> int | None:
-        return self.process.pid if self.process is not None else None
+        return self.helper_pid
+
+    def _alive(self) -> bool:
+        """Whether the helper still runs. Asked of libc directly, not of
+        ``Popen``, ``os`` or /proc: tests in this process patch ``os`` and the
+        /proc readers, ignore SIGCHLD (``Popen`` then reports a live child as
+        exited with status 0) and reap with ``waitpid(-1)``. ``waitpid`` with
+        WNOHANG answers for a child nobody has reaped; once it is reaped
+        (ECHILD) ``kill(pid, 0)`` says whether the pid still exists."""
+        libc = ctypes.CDLL(None, use_errno=True)
+        pid = self.helper_pid
+        reaped = libc.waitpid(pid, None, os.WNOHANG)
+        if reaped == pid:
+            return False
+        if reaped == 0:
+            return True
+        return libc.kill(pid, 0) == 0
 
     def _monitor(self) -> None:
         """If the helper ends before ``stop`` (a kill, a crash), end its whole
         group now: its suites and their descendants would otherwise outlive
         it. The helper never exits on its own while the executor lives."""
-        process = self.process
-        process.wait()
+        pid = self.helper_pid
+        while self._alive() and not self.stopping:
+            time.sleep(0.1)
         if not self.stopping:
+            # An unexpected death, even after the suites finished: list what
+            # the group still holds (the shard fails with it as leaks) before
+            # ending it.
+            self.survivors = _group_survivors(pid)
+            self.crashed = True
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                os.killpg(pid, signal.SIGKILL)
             except OSError:
                 pass
 
@@ -1576,7 +1643,7 @@ class _ConformanceLane:
         and its pipe guard, until ``stop``."""
         if self.process is None:
             return
-        while not self.done_file.exists() and self.process.poll() is None:
+        while not self.done_file.exists() and self._alive():
             time.sleep(0.05)
         try:
             document = json.loads(self.result_file.read_text(encoding="utf-8"))
@@ -1584,27 +1651,32 @@ class _ConformanceLane:
                              for item in document]
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self.error = f"no readable result file ({type(exc).__name__}: {exc})"
-        if not self.done_file.exists() or (self.error is None
+        if not self._alive() and self._monitor_thread is not None:
+            self._monitor_thread.join(timeout=10)
+        if self.crashed or not self.done_file.exists() or (self.error is None
                                            and len(self.finished) != len(self.keys)):
-            status = self.process.poll()
-            self.error = (self.error or "") + (f" the lane process exited with status {status} "
-                                               f"after {len(self.finished)} of {len(self.keys)} suites")
+            self.error = (self.error or "") + (f" the lane process died unexpectedly after "
+                                               f"{len(self.finished)} of {len(self.keys)} suites")
 
     def stop(self) -> None:
         """End the lane: the helper, its suites and every descendant in its
         session (the group id is the helper's pid and stays ours while any
         member lives, so this also works after the helper died)."""
-        process = self.process
-        if process is None:
+        pid = self.helper_pid
+        if pid is None:
             return
         self.stopping = True
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(pid, signal.SIGKILL)
         except OSError:
             pass
-        process.wait()
-        if process.stdin is not None and not process.stdin.closed:
-            process.stdin.close()
+        deadline = time.monotonic() + 5
+        while self._alive() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        if self.process is not None and self.process.stdin is not None \
+                and not self.process.stdin.closed:
+            self.process.stdin.close()
+        self.pid_file.unlink(missing_ok=True)
         self.result_file.unlink(missing_ok=True)
         self.done_file.unlink(missing_ok=True)
 
@@ -1631,6 +1703,10 @@ def _lane_main(argv: list[str]) -> int:
     suite with ``_run_conformance``, output to ``<prefix>.<n>.part``, and
     rewrites ``<prefix>.json`` after every suite."""
     repo_root, prefix, keys = Path(argv[0]), argv[1], argv[2:]
+    if os.fork():
+        os._exit(0)  # the launcher: the executor needs it gone at once
+    os.setsid()      # the helper leads its own session and process group
+    write_json_atomic(Path(f"{prefix}.pid"), os.getpid())
     try:  # PR_SET_CHILD_SUBREAPER: orphans of the suites stay in this session
         import ctypes
         ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
@@ -1761,9 +1837,11 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
         if units is not None:
             controller = [(key, suite) for key, suite in units if suite is not None]
             concurrent = plan["parameters"].get("conformance_lane", True)
+            for stale in [*results_dir.glob(f"lane-{index}.*"), *results_dir.glob(f"lane-{index}-*")]:
+                stale.unlink(missing_ok=True)  # an aborted run's lane files
             lane = _ConformanceLane(
                 [key for key, suite in units if suite is None] if concurrent else [],
-                Path(repo_root), results_dir, f"lane-{index}")
+                Path(repo_root), results_dir, f"lane-{index}-{uuid.uuid4().hex[:12]}")
             previous = _stop_lane_on_signals(lane)
             try:
                 if lane.keys:
@@ -1812,6 +1890,12 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
             # After the scan, so a suite's survivors are reported as leaks exactly
             # as in serial mode; this ends what carried no marker.
             lane.stop()
+            if lane.crashed:
+                if lane.error is None:
+                    problems.append("the conformance lane crashed: the lane process died "
+                                    "after the suites finished")
+                known = {leak["pid"] for leak in leaks}
+                leaks += [leak for leak in lane.survivors if leak["pid"] not in known]
         record = {
             "schema_version": RESULT_SCHEMA_VERSION, "run_attempt": run_attempt,
             "plan_digest": plan["plan_digest"], "shard": index, "argv": list(argv),

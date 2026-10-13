@@ -2719,15 +2719,66 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                     import time, unittest
                     class XTest(unittest.TestCase):
                         def test_sleeps_after_the_lane_is_done(self):
-                            while not os.path.exists(r"%s"):
+                            while not __import__("glob").glob(r"%s"):
                                 time.sleep(0.05)
                             open(os.path.join(r"%s", "suite"), "w").close()
                             time.sleep(60)
-                    """ % (self.results / "lane-0.done", self.sync),
+                    """ % (self.results / "lane-0-*.done", self.sync),
                     {"a_test.py": "import subprocess, sys\n"
                                   "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
                                   "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"})
                 self.run_directly(plan, mode)
+
+    def test_a_helper_that_dies_after_done_fails_the_shard_and_lists_the_survivor(self) -> None:
+        plan = self.build(
+            """
+            import glob, signal, time, unittest
+            class XTest(unittest.TestCase):
+                def test_kills_the_helper_after_the_lane_is_done(self):
+                    while not glob.glob(r"%s"):
+                        time.sleep(0.05)
+                    time.sleep(0.5)
+                    for name in os.listdir("/proc"):
+                        try:
+                            cmdline = __import__("pathlib").Path("/proc/" + name + "/cmdline").read_bytes()
+                        except OSError:
+                            continue
+                        if b"--conformance-lane" in cmdline and %r in cmdline:
+                            os.kill(int(name), signal.SIGKILL)
+                    time.sleep(1)
+            """ % (str(self.results / "lane-0-*.done"), str(self.results).encode()),
+            {"a_test.py": "import subprocess, sys\n"
+                          "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+                          "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"})
+        marker = f"helperdies-{uuid.uuid4().hex}/0"
+        with unittest.mock.patch.dict(os.environ, {shards.SHARD_MARKER_ENV: marker}):
+            record, status = self.run_shard(plan, {shards.SHARD_MARKER_ENV: marker})
+        self.assertNotEqual(status, 0, record)
+        self.assertEqual(len(record["leaked_processes"]), 1, record)
+        self.assertIn("conformance lane crashed", shards.log_path(self.results, 0).read_text())
+        self.assertTrue(self.gone())
+
+    def test_a_second_run_in_the_same_results_directory_runs_the_suite_again(self) -> None:
+        counter = self.sync / "runs"
+        plan = self.build(
+            """
+            import glob, time, unittest
+            class XTest(unittest.TestCase):
+                def test_sleeps_unless_told_not_to(self):
+                    if os.path.exists(r"%s"):
+                        return
+                    while not glob.glob(r"%s"):
+                        time.sleep(0.05)
+                    open(os.path.join(r"%s", "suite"), "w").close()
+                    time.sleep(60)
+            """ % (self.sync / "second", self.results / "lane-0-*.done", self.sync),
+            {"a_test.py": "open(r'%s', 'a').write('x')\n" % counter})
+        self.run_directly(plan, "SIGINT")
+        self.assertEqual(counter.read_text(), "x")
+        (self.sync / "second").touch()
+        record, status = self.run_shard(plan)
+        self.assertEqual(status, 0, record)
+        self.assertEqual(counter.read_text(), "xx", "the stale lane files were accepted")
 
     def test_a_controller_test_that_adopts_orphans_does_not_see_the_suites_child(self) -> None:
         """What a Controller worker test does (the shard process is a child

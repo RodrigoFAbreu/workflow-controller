@@ -828,7 +828,12 @@ class TestRouteWorkItemResumeBranchDeclarationFacts(unittest.TestCase):
             repo.write_plan_docs(work_item_id=work_item_id, plan_revision=1)
             repo.commit_plan_docs_as_base()
 
-            config = self._config()
+            # A new item cannot start on "2.1" from 2.10.0, so the creation
+            # branch runs under the "2.2" default the release prescribes.
+            config = dict(
+                self._config(), default_workflow_version="2.2",
+                supported_versions=["1", "2.1", "2.2"],
+            )
             state = {"schema_version": 1, "active_work_item_id": None, "work_items": {}}
             self.assertNotIn(work_item_id, state["work_items"])
             new_state = ws.route_work_item(
@@ -876,6 +881,23 @@ class TestRouteWorkItemResumeBranchDeclarationFacts(unittest.TestCase):
             manifest_text = (bundle_dir / "MANIFEST.md").read_text()
             self.assertIn(f"work_item_id: {work_item_id}", manifest_text)
             self.assertIn(f"review_content_id: {digest}", manifest_text)
+
+    def test_creation_branch_refuses_under_a_2_1_default(self):
+        """workflow-2.10.0: the same fresh id, the same inputs, but the
+        configuration still names "2.1" -- the creation branch refuses
+        before returning any state, and the input state is untouched."""
+        state = {"schema_version": 1, "active_work_item_id": None, "work_items": {}}
+        before = json.dumps(state, sort_keys=True)
+        with self.assertRaises(ws.DefaultWorkflowVersionRetiredError) as ctx:
+            ws.route_work_item(
+                state, self._config(), work_item_id="fresh-item", work_item_type="process",
+                work_item_kind="process", plan_path="docs/ai-workflow/WORKFLOW_V2_PLAN.md",
+                registry_path="docs/ai-workflow/registry/fresh-item-registry.json",
+                mapping_path="docs/ai-workflow/requirements/fresh-item-mapping.json",
+                base_commit="a" * 40, plan_revision=1, now="t0",
+            )
+        self.assertTrue(str(ctx.exception).endswith(ws.RETIRED_DEFAULT_NEXT_STEP))
+        self.assertEqual(json.dumps(state, sort_keys=True), before)
 
 
 class TestArtifactsDeclarationsGenerator(unittest.TestCase):

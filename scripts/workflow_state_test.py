@@ -36,6 +36,7 @@ from pathlib import Path
 
 import workflow_fingerprint as fingerprint
 import workflow_state as ws
+import workflow_test_harness as h
 
 
 def _run(args, cwd):
@@ -7753,10 +7754,19 @@ class TestRemediationChildWorkItem(unittest.TestCase):
                 config = dict(ws.default_config(), default_workflow_version=default_version)
                 state = _base_state(parent=_base_work_item(work_item_id="parent"))
                 state["active_work_item_id"] = "parent"
-                created, child_id = ws.create_remediation_child_work_item(
-                    state, config, parent_work_item_id="parent", plan_path="p",
-                    registry_path="r", base_commit="feedcafe", now="t1",
-                )
+                if default_version == "2.1":
+                    # Creating a "2.1" child is refused from 2.10.0; this case
+                    # tests what an existing one selects, so seed it as the
+                    # earlier release that created it did.
+                    created, child_id = h.seed_existing_remediation_child(
+                        state, "parent", governing_workflow_version="2.1",
+                        plan_path="p", registry_path="r", base_commit="feedcafe", now="t1",
+                    )
+                else:
+                    created, child_id = ws.create_remediation_child_work_item(
+                        state, config, parent_work_item_id="parent", plan_path="p",
+                        registry_path="r", base_commit="feedcafe", now="t1",
+                    )
                 child = created["work_items"][child_id]
                 self.assertEqual(child["governing_workflow_version"], default_version)
                 self.assertEqual(child["phase"], "PLANNING")
@@ -19344,6 +19354,150 @@ class TestCommitPendingApplyingReviewFeedbackEntry(unittest.TestCase):
                 ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
             self.assertEqual(self._count(repo), count)
 
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.10.0 (RETIRE_21_FOR_NEW_WORK_PLAN.md, CP1): a new work item is no
+# longer created on "2.1". Existing "2.1" items, legacy adoption and the "1" and
+# "2.2" defaults are untouched.
+# ---------------------------------------------------------------------------
+
+_RETIRED_DEFAULT_CONFIG = {
+    "schema_version": 1,
+    "default_workflow_version": "2.1",
+    "supported_versions": ["1", "2.1", "2.2"],
+}
+
+
+def _route_fresh(state, config, work_item_id="wi"):
+    return ws.route_work_item(
+        state, config, work_item_id=work_item_id, work_item_type="process",
+        work_item_kind="process", plan_path="p", registry_path="r",
+        plan_revision=1, now="t1",
+    )
+
+
+def _create_child(state, config, parent="parent"):
+    return ws.create_remediation_child_work_item(
+        state, config, parent_work_item_id=parent, plan_path="p",
+        registry_path="r", base_commit="feedcafe", now="t1",
+    )
+
+
+class TestNewWorkItemsAreRefusedUnderARetiredDefault(unittest.TestCase):
+    def test_the_retired_set_is_exactly_2_1(self):
+        self.assertEqual(ws.NEW_WORK_RETIRED_VERSIONS, frozenset({"2.1"}))
+
+    def test_assert_default_admits_returns_a_non_retired_default(self):
+        for version in ("1", "2.2"):
+            config = dict(_RETIRED_DEFAULT_CONFIG, default_workflow_version=version)
+            self.assertEqual(ws.assert_default_admits_new_work_item(config), version)
+
+    def test_assert_default_admits_refuses_2_1_with_the_next_step(self):
+        with self.assertRaises(ws.DefaultWorkflowVersionRetiredError) as ctx:
+            ws.assert_default_admits_new_work_item(_RETIRED_DEFAULT_CONFIG)
+        message = str(ctx.exception)
+        self.assertIn("'2.1'", message)
+        self.assertTrue(message.endswith(ws.RETIRED_DEFAULT_NEXT_STEP))
+        self.assertIn("Workflow-Activation: 2.2", ws.RETIRED_DEFAULT_NEXT_STEP)
+
+    def test_an_unsupported_default_still_raises_the_unsupported_error_first(self):
+        config = dict(_RETIRED_DEFAULT_CONFIG, supported_versions=["1"])
+        with self.assertRaises(ws.UnsupportedGoverningVersionError):
+            ws.assert_default_admits_new_work_item(config)
+
+    def test_route_work_item_refuses_a_fresh_id_and_returns_no_state(self):
+        state = _base_state()
+        before = copy.deepcopy(state)
+        with self.assertRaises(ws.DefaultWorkflowVersionRetiredError) as ctx:
+            _route_fresh(state, _RETIRED_DEFAULT_CONFIG)
+        self.assertTrue(str(ctx.exception).endswith(ws.RETIRED_DEFAULT_NEXT_STEP))
+        self.assertEqual(state, before)
+
+    def test_create_remediation_child_refuses_for_a_2_1_and_a_2_2_parent(self):
+        for parent_version in ("2.1", "2.2"):
+            with self.subTest(parent_version=parent_version):
+                state = _base_state(parent=_base_work_item(
+                    work_item_id="parent", governing_workflow_version=parent_version))
+                before = copy.deepcopy(state)
+                with self.assertRaises(ws.DefaultWorkflowVersionRetiredError) as ctx:
+                    _create_child(state, _RETIRED_DEFAULT_CONFIG)
+                self.assertTrue(str(ctx.exception).endswith(ws.RETIRED_DEFAULT_NEXT_STEP))
+                self.assertEqual(state, before)
+
+    def test_a_2_2_and_a_1_default_create_exactly_as_before(self):
+        for version in ("2.2", "1"):
+            config = dict(_RETIRED_DEFAULT_CONFIG, default_workflow_version=version)
+            with self.subTest(version=version):
+                created = _route_fresh(_base_state(), config)["work_items"]["wi"]
+                self.assertEqual(created["governing_workflow_version"], version)
+                self.assertEqual(created["phase"], "PLANNING")
+                state = _base_state(parent=_base_work_item(work_item_id="parent"))
+                new_state, child_id = _create_child(state, config)
+                child = new_state["work_items"][child_id]
+                self.assertEqual(child["governing_workflow_version"], version)
+                self.assertEqual(child["parent_work_item_id"], "parent")
+
+    def test_the_resume_branch_of_an_existing_2_1_item_still_advances_under_a_2_1_default(self):
+        state = _base_state(wi=_base_work_item(
+            work_item_id="wi", governing_workflow_version="2.1", phase="PLANNING"))
+        advanced = ws.route_work_item(
+            state, _RETIRED_DEFAULT_CONFIG, work_item_id="wi", work_item_type="process",
+            work_item_kind="process", plan_path="p", registry_path="r",
+            plan_revision=2, now="t2",
+        )
+        entry = advanced["work_items"]["wi"]
+        self.assertEqual(entry["plan_revision"], 2)
+        self.assertEqual(entry["governing_workflow_version"], "2.1")
+
+    def test_a_2_1_default_still_validates_and_2_1_stays_supported(self):
+        ws.validate_config(_RETIRED_DEFAULT_CONFIG)
+        ws.validate_config(dict(_RETIRED_DEFAULT_CONFIG, supported_versions=["1", "2.1"]))
+        ws.validate_governing_version("2.1", ws.default_config())
+
+    def test_the_shipped_template_default_is_not_retired(self):
+        self.assertNotIn(
+            _SHIPPED_TEMPLATE_CONFIG["default_workflow_version"], ws.NEW_WORK_RETIRED_VERSIONS)
+
+    def test_legacy_adoption_still_writes_the_literal_2_1(self):
+        source = Path(ws.__file__).read_text()
+        tree = ast.parse(source)
+        function = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "promote_legacy_work_item"
+        )
+        body = ast.get_source_segment(source, function)
+        self.assertIn('new_work_item["governing_workflow_version"] = "2.1"', body)
+        # It never reads the configuration: an adopted item is not new work.
+        code = [n for n in ast.walk(function) if isinstance(n, (ast.Name, ast.Subscript))]
+        self.assertFalse([n for n in code if isinstance(n, ast.Name) and n.id == "config"])
+
+    def test_every_default_work_item_caller_is_admitted_or_a_literal(self):
+        """A source scan, so a third creator cannot appear unnoticed: each
+        `default_work_item(...)` call in `workflow_state.py` passes the version
+        `assert_default_admits_new_work_item` returned, or a string literal."""
+        source = Path(ws.__file__).read_text()
+        tree = ast.parse(source)
+        callers = 0
+        for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
+            for call in (n for n in ast.walk(function) if isinstance(n, ast.Call)):
+                if not (isinstance(call.func, ast.Name) and call.func.id == "default_work_item"):
+                    continue
+                callers += 1
+                keyword = next(k for k in call.keywords if k.arg == "governing_workflow_version")
+                if isinstance(keyword.value, ast.Constant):
+                    self.assertIsInstance(keyword.value.value, str, function.name)
+                    continue
+                self.assertIsInstance(keyword.value, ast.Name, function.name)
+                admitted = [
+                    n for n in ast.walk(function)
+                    if isinstance(n, ast.Assign)
+                    and any(isinstance(t, ast.Name) and t.id == keyword.value.id for t in n.targets)
+                    and isinstance(n.value, ast.Call)
+                    and getattr(n.value.func, "id", None) == "assert_default_admits_new_work_item"
+                ]
+                self.assertTrue(admitted, f"{function.name} passes a version that was not admitted")
+        self.assertEqual(callers, 3)  # route_work_item, create_remediation_child_work_item, import_legacy_work_item
 
 def _git_out(repo, args):
     return subprocess.run(["git", *args], cwd=repo.root, check=True, capture_output=True, text=True).stdout

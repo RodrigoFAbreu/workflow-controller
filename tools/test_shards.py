@@ -11,8 +11,11 @@ collide:
   ``SkipTest`` at import, a duplicate id) refuses the whole inventory; it
   is never planned around;
 - ``conformance``: one id per frozen Workflow suite, ``conformance:<file>``,
-  read from the managed ``.github/workflows/workflow-conformance.yml``'s own
-  ``run: python3 <file>`` lines, in that file's order.
+  read from the managed ``.github/workflows/workflow-conformance.yml``, in
+  that file's order: either one ``run: python3 <file>`` line per suite (up to
+  Workflow 2.9.x) or a single ``suites="a.py b.py ..."`` shell assignment
+  (Workflow 2.10.0). A file mixing both forms, or with more than one
+  ``suites=`` assignment, is refused rather than guessed at.
 
 An *atom* is the unit of placement and is never split: a ``TestCase`` class
 keyed ``<loading module>.<ClassName>``, the whole module when the module
@@ -106,6 +109,11 @@ MODULE_FIXTURES = ("setUpModule", "tearDownModule")
 #: The managed conformance workflow's own step command, the same pattern
 #: ``tests.test_ci_workflows`` checks.
 CONFORMANCE_RUN_RE = re.compile(r"(?m)^\s*run: python3 (\S+)\s*$")
+
+#: Workflow 2.10.0 runs the suites in one bash step that lists them in a
+#: single double-quoted shell assignment.
+CONFORMANCE_LIST_RE = re.compile(r'(?m)^\s*suites="([^"\n]*)"\s*$')
+CONFORMANCE_LIST_START_RE = re.compile(r"(?m)^\s*suites=")
 
 #: Tests unittest substitutes for something it could not load. Any of them
 #: in the loaded suite refuses the inventory.
@@ -333,15 +341,36 @@ def controller_family(start_dir: Path, top_level_dir: Path) -> tuple[list[str], 
 
 
 def conformance_suites(workflow: Path, scripts_dir: Path) -> list[str]:
-    """The managed workflow's ``run: python3 <file>`` suites, in its order."""
+    """The managed workflow's suites, in its order.
+
+    Two formats are read: one ``run: python3 <file>`` line per suite, or one
+    ``suites="a.py b.py"`` assignment. Both together, or several assignments,
+    are ambiguous and refuse.
+    """
     try:
         text = workflow.read_text(encoding="utf-8")
     except OSError as exc:
         raise InventoryError(f"cannot read the managed conformance workflow {workflow}: {exc}")
-    suites = CONFORMANCE_RUN_RE.findall(text)
+    run_suites = CONFORMANCE_RUN_RE.findall(text)
+    assignments = CONFORMANCE_LIST_START_RE.findall(text)
     problems = []
+    if run_suites and assignments:
+        problems.append(f"{workflow} declares both 'run: python3 <file>' lines and a "
+                        "'suites=' assignment; the inventory is ambiguous")
+    if len(assignments) > 1:
+        problems.append(f"{workflow} declares {len(assignments)} 'suites=' assignments; "
+                        "the inventory is ambiguous")
+    suites = run_suites
+    if assignments and not run_suites and len(assignments) == 1:
+        lists = CONFORMANCE_LIST_RE.findall(text)
+        if not lists:
+            problems.append(f"{workflow} has a 'suites=' assignment that is not one "
+                            'double-quoted line suites="<file> <file> ..."')
+        else:
+            suites = lists[0].split()
     if not suites:
-        problems.append(f"{workflow} declares no 'run: python3 <file>' suite")
+        problems.append(f"{workflow} declares no 'run: python3 <file>' suite "
+                        "and no non-empty 'suites=\"<file> ...\"' assignment")
     problems += [f"duplicate conformance suite {suite}"
                  for suite in sorted({s for s in suites if suites.count(s) > 1})]
     problems += [f"conformance suite {suite} is not a file in {scripts_dir}"

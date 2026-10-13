@@ -231,5 +231,68 @@ class TestBundleFixtures(unittest.TestCase):
             work_item = h.read_state(repo)["work_items"]["wi"]
             self.assertTrue(ws.implementing_entry_reachable(repo.root, work_item, repo.base))
 
+
+_TWO_TWO_CONFIG = {"schema_version": 1, "default_workflow_version": "2.2",
+                   "supported_versions": ["1", "2.1", "2.2"]}
+
+
+class TestSeedExistingWorkItems(unittest.TestCase):
+    """workflow-2.10.0 (`D-Fixtures`): the seeds an existing "2.1" item is
+    built from, pinned field for field against the real creators under a
+    "2.2" default, with only the version different."""
+
+    FACTS = dict(
+        work_item_id="wi", work_item_type="process", work_item_kind="process",
+        plan_path="p", registry_path="r", plan_revision=1, now="t1",
+        mapping_path="m", base_commit="b" * 40,
+    )
+
+    def test_seed_existing_work_item_equals_the_fresh_branch_but_for_the_version(self):
+        for state in ({"schema_version": 1, "active_work_item_id": None, "work_items": {}},
+                      {"schema_version": 1, "active_work_item_id": "other", "work_items": {}}):
+            with self.subTest(active=state["active_work_item_id"]):
+                real = ws.route_work_item(state, _TWO_TWO_CONFIG, **self.FACTS)
+                seeded = h.seed_existing_work_item(
+                    state, governing_workflow_version="2.1", **self.FACTS)
+                self.assertEqual(seeded["active_work_item_id"], real["active_work_item_id"])
+                real["work_items"]["wi"]["governing_workflow_version"] = "2.1"
+                self.assertEqual(seeded, real)
+
+    def test_seed_existing_remediation_child_equals_the_real_creator_but_for_the_version(self):
+        parent = h.base_work_item(work_item_id="parent")
+        state = h.base_state(parent=parent)
+        state["active_work_item_id"] = "parent"
+        facts = dict(plan_path="p", registry_path="r", base_commit="feedcafe", now="t1")
+        real, real_id = ws.create_remediation_child_work_item(
+            state, _TWO_TWO_CONFIG, parent_work_item_id="parent", **facts)
+        seeded, seeded_id = h.seed_existing_remediation_child(
+            state, "parent", governing_workflow_version="2.1", **facts)
+        self.assertEqual(seeded_id, real_id)
+        self.assertEqual(seeded["active_work_item_id"], "parent")
+        real["work_items"][real_id]["governing_workflow_version"] = "2.1"
+        self.assertEqual(seeded, real)
+        # A second child is numbered after the first, in both.
+        real2, real2_id = ws.create_remediation_child_work_item(
+            real, _TWO_TWO_CONFIG, parent_work_item_id="parent", **facts)
+        seeded2, seeded2_id = h.seed_existing_remediation_child(
+            seeded, "parent", governing_workflow_version="2.1", **facts)
+        self.assertEqual((seeded2_id, real2_id), ("parent-remediation-2",) * 2)
+        self.assertEqual(sorted(seeded2["work_items"]), sorted(real2["work_items"]))
+
+    def test_seed_existing_remediation_child_keeps_the_collision_refusal(self):
+        state = h.base_state(parent=h.base_work_item(work_item_id="parent"))
+        state["work_items"]["parent-remediation-1"] = h.base_work_item(
+            work_item_id="parent-remediation-1")
+        # The child numbering counts children by parent_work_item_id, so an
+        # unrelated entry already holding the next id collides, as in the real one.
+        facts = dict(plan_path="p", registry_path="r", base_commit="feedcafe", now="t1")
+        with self.assertRaises(ws.RemediationChildAlreadyExistsError):
+            ws.create_remediation_child_work_item(
+                state, _TWO_TWO_CONFIG, parent_work_item_id="parent", **facts)
+        with self.assertRaises(ws.RemediationChildAlreadyExistsError):
+            h.seed_existing_remediation_child(
+                state, "parent", governing_workflow_version="2.1", **facts)
+
+
 if __name__ == "__main__":
     unittest.main()

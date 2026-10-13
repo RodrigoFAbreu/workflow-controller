@@ -876,7 +876,10 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # milestone-plan.md further updated, D-Consumed-History (workflow-2.7.0,
     # CP2, v2.6.0-001): the withdrawal report names the durable
     # consumed_plan_review_content_ids history -- intentional content change.
-    "milestone-plan.md": "e3f1c979871fe65b1f6d20aedabb2e6afe797b40af19944a314a96ee247e6ed3",
+    # workflow-2.10.0 (retire-21-for-new-work, CP3): step 0 stops a fresh milestone
+    # under a "2.1" default with DefaultWorkflowVersionRetiredError -- intentional
+    # content change.
+    "milestone-plan.md": "aede94f75d7c4091311e39b200bd24261188fd33970a3dfd83187cff14619508",
     # milestone-implement.md further updated, OPUS-R129-001: step 1f's
     # checkpoint-completion commit instruction now states explicitly that
     # the Workflow-Checkpoint/Workflow-Work-Item trailer must be the
@@ -1405,7 +1408,12 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # the bounded branch names the version's post-fix target phase, says a mixed
     # round's new child entry stays uncommitted, and words the stale-write rerun
     # by state_revision -- intentional content change.
-    "apply-functional-review.md": "15fbf8e3d9f788345a269b5f820f5a82d800312289dbd679e48302f5571413da",
+    # workflow-2.10.0 (retire-21-for-new-work, CP3): the retired-default check at the
+    # branch decision, before the first bounded sub-step -- intentional content change.
+    "apply-functional-review.md": "fb014dca648d03a1593005f85b06185a6ae7974773f1310eb9850cf5ecabdf28",
+    # workflow-2.10.0 (retire-21-for-new-work, CP3): first recorded hash; the broad
+    # fix's refusal under a "2.1" default and the re-run from `already_reopened`.
+    "apply-pr-review.md": "218ee7107a9af1450e1c34c67f374edcf6a40788b13377247c809ff5eff0d269",
 }
 
 
@@ -2693,6 +2701,36 @@ class TestGoldenCommandFileHashes(unittest.TestCase):
                     f"{filename} content changed since this golden hash was recorded -- "
                     f"if intentional, update _GOLDEN_COMMAND_FILE_SHA256",
                 )
+
+
+class TestRetiredDefaultCommandConformance(unittest.TestCase):
+    """workflow-2.10.0 (retire-21-for-new-work, CP3): the three commands that
+    can create a new work item stop under a "2.1" default before any write."""
+
+    def test_milestone_plan_step_0_stops_before_step_1(self):
+        text = _command_text("milestone-plan.md")
+        step0 = text[text.index("0. **Dual-mode branch**"):text.index("   - **`governing_workflow_version: \"1\"`**")]
+        self.assertIn("DefaultWorkflowVersionRetiredError", step0)
+        self.assertIn("RETIRED_DEFAULT_NEXT_STEP", step0)
+        self.assertIn("before\n   step 1 writes anything", step0)
+
+    def test_apply_functional_review_check_precedes_the_bounded_branch(self):
+        text = _command_text("apply-functional-review.md")
+        check = text.index("**Retired-default check, before the first bounded sub-step**")
+        self.assertEqual(text.count("assert_default_admits_new_work_item"), 1)
+        self.assertLess(check, text.index("- **Bounded code change**"))
+        self.assertLess(check, text.index("  1. **Stale-before-edit"))
+        self.assertLess(check, text.index("mark_technical_approval_stale(state, work_item_id,"))
+        self.assertIn("nothing written", text[check:text.index("- **No code change**")])
+
+    def test_apply_pr_review_broad_fix_names_the_refusal_and_the_rerun(self):
+        text = _command_text("apply-pr-review.md")
+        broad = text[text.index("- **Broad fix**"):text.index("## Step 3")]
+        self.assertIn("DefaultWorkflowVersionRetiredError", broad)
+        self.assertIn("neither the child nor `mark_pr_key_applied` is written", broad)
+        self.assertIn("step 1's write\n  stands", broad)
+        self.assertIn("AWAITING_FUNCTIONAL_REVIEW", broad)
+        self.assertIn("already_reopened", broad)
 
 
 class TestFunctionalFixCommitOrderConformance(unittest.TestCase):

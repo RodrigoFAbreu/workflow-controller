@@ -140,7 +140,15 @@ branches:
   invocations, the first reopens and ends, the second runs this branch
   (`LPR-R25-001`).
 - **Broad fix**: work spanning several checkpoints or genuinely uncertain in
-  scope. Do not edit the parent's tree. In one mutator call
+  scope. Do not edit the parent's tree. The child is new work, so under a
+  `"2.1"` default `create_remediation_child_work_item` raises
+  `workflow_state.DefaultWorkflowVersionRetiredError` inside that one mutator
+  and neither the child nor `mark_pr_key_applied` is written: step 1's write
+  stands (the stored fact, or the reopen) and the item stays at
+  `AWAITING_FUNCTIONAL_REVIEW`, with the key in `reopened_for` and not in
+  `applied`. Report the error with `workflow_state.RETIRED_DEFAULT_NEXT_STEP`
+  and stop; after the configuration edit, the re-run gets `already_reopened`
+  and continues into this branch. In one mutator call
   `workflow_state.create_remediation_child_work_item(...)` exactly as
   `/apply-functional-review`'s broad branch does and `mark_pr_key_applied` on
   the parent. The parent waits for the child as today. Name the child id on

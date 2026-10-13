@@ -64,6 +64,15 @@ def _discover_ids(start: Path, top: Path) -> list[str]:
     return ids
 
 
+def _managed_suites(text: str) -> list[str]:
+    """Suites of the managed workflow: ``run: python3 <file>`` lines (up to
+    Workflow 2.9.x) or one ``suites="a.py b.py"`` assignment (2.10.0)."""
+    runs = re.findall(r"(?m)^\s*run: python3 (\S+)\s*$", text)
+    if runs:
+        return runs
+    return [s for m in re.findall(r'(?m)^\s*suites="([^"\n]*)"\s*$', text) for s in m.split()]
+
+
 class SyntheticTree:
     """A throwaway test package ``<pkg>`` under a temporary directory."""
 
@@ -224,8 +233,7 @@ class ConformanceFamilyTest(unittest.TestCase):
         return root / "wf.yml", root / "scripts"
 
     def test_the_real_family_equals_the_managed_run_lines(self) -> None:
-        managed = re.findall(r"(?m)^\s*run: python3 (\S+)\s*$",
-                             CONFORMANCE_YML.read_text(encoding="utf-8"))
+        managed = _managed_suites(CONFORMANCE_YML.read_text(encoding="utf-8"))
         self.assertTrue(managed)
         ids, atoms = shards.conformance_family(CONFORMANCE_YML, fixtures.REPO_ROOT / "scripts")
         self.assertEqual(ids, [f"conformance:{suite}" for suite in managed])
@@ -241,6 +249,30 @@ class ConformanceFamilyTest(unittest.TestCase):
                 run: python3 a_test.py
         """)
         self.assertEqual(shards.conformance_suites(wf, scripts), ["b_test.py", "a_test.py"])
+
+    def test_the_suites_assignment_is_read_in_order(self) -> None:
+        wf, scripts = self._workflow("""
+            steps:
+              - run: |
+                  suites="b_test.py a_test.py"
+                  for s in $suites; do python3 $s; done
+        """)
+        self.assertEqual(shards.conformance_suites(wf, scripts), ["b_test.py", "a_test.py"])
+
+    def test_suites_assignment_refusals(self) -> None:
+        cases = {
+            "empty": ('suites=""\n', r"declares no"),
+            "missing file": ('suites="a_test.py gone_test.py"\n', r"gone_test\.py is not a file"),
+            "duplicate": ('suites="a_test.py a_test.py"\n', r"duplicate conformance suite"),
+            "two assignments": ('suites="a_test.py"\nsuites="b_test.py"\n', r"2 'suites='"),
+            "both formats": ('run: python3 a_test.py\nsuites="b_test.py"\n', r"both"),
+            "unquoted": ("suites=a_test.py\n", r"not one double-quoted line"),
+        }
+        for label, (text, pattern) in cases.items():
+            with self.subTest(label):
+                wf, scripts = self._workflow(text)
+                with self.assertRaisesRegex(shards.InventoryError, pattern):
+                    shards.conformance_suites(wf, scripts)
 
     def test_refusals(self) -> None:
         cases = {

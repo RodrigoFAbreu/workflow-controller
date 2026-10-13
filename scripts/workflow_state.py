@@ -9518,6 +9518,43 @@ def validate_governing_version(governing_workflow_version: str, config: dict) ->
         )
 
 
+# Governing versions a *new* work item can no longer be created on
+# (workflow-2.10.0, `D-Refuse`). Existing items of these versions keep
+# running to completion; only creation is refused.
+NEW_WORK_RETIRED_VERSIONS = frozenset({"2.1"})
+
+RETIRED_DEFAULT_NEXT_STEP = (
+    'Set `default_workflow_version` to "2.2" in '
+    '`docs/ai-workflow/WORKFLOW_CONFIG.json` (with "2.2" in '
+    '`supported_versions`), commit it with the trailer `Workflow-Activation: '
+    '2.2`, then run the command again. Existing "2.1" work items are not '
+    'affected.'
+)
+
+
+class DefaultWorkflowVersionRetiredError(Exception):
+    """Raised, before any write, when a new work item would be created while
+    `WORKFLOW_CONFIG.json` names a retired version (`NEW_WORK_RETIRED_VERSIONS`)
+    as `default_workflow_version` (workflow-2.10.0, `D-Refuse`). The Workflow
+    never picks a version the configuration does not name and never rewrites
+    the configuration; the message ends with `RETIRED_DEFAULT_NEXT_STEP`."""
+
+
+def assert_default_admits_new_work_item(config: dict) -> str:
+    """Validates the configuration's default against `supported_versions`,
+    refuses with `DefaultWorkflowVersionRetiredError` when it is in
+    `NEW_WORK_RETIRED_VERSIONS`, and otherwise returns it: the governing
+    version a new work item is created on."""
+    default_version = config["default_workflow_version"]
+    validate_governing_version(default_version, config)
+    if default_version in NEW_WORK_RETIRED_VERSIONS:
+        raise DefaultWorkflowVersionRetiredError(
+            f"default_workflow_version is {default_version!r}, and new work "
+            f"items no longer start on it. {RETIRED_DEFAULT_NEXT_STEP}"
+        )
+    return default_version
+
+
 # ---------------------------------------------------------------------------
 # Registry: topological order + registry x mapping bidirectional coverage
 # ---------------------------------------------------------------------------
@@ -10165,7 +10202,9 @@ def route_work_item(
     - A fresh id creates a new `work_items[id]` entry, fixing
       `governing_workflow_version` from the config's current
       `default_workflow_version` (validated against `supported_versions`,
-      `OPUS-R6-024`) and never re-read afterward.
+      `OPUS-R6-024`) and never re-read afterward. A default in
+      `NEW_WORK_RETIRED_VERSIONS` ("2.1") refuses with
+      `DefaultWorkflowVersionRetiredError` before any write (workflow-2.10.0).
     - An id naming an existing *non-terminal* entry resumes it: only
       `plan_revision`/`state_revision`/`last_transition` advance
       unconditionally -- identity fields (`work_item_type`/`kind`/
@@ -10227,12 +10266,12 @@ def route_work_item(
     if existing is None:
         if repo_root is not None:
             identity_reference_admits(repo_root, work_item_id, None)
-        validate_governing_version(config["default_workflow_version"], config)
+        governing_version = assert_default_admits_new_work_item(config)
         work_items[work_item_id] = default_work_item(
             work_item_id=work_item_id, work_item_type=work_item_type,
             work_item_kind=work_item_kind, plan_path=plan_path,
             registry_path=registry_path,
-            governing_workflow_version=config["default_workflow_version"],
+            governing_workflow_version=governing_version,
             plan_revision=plan_revision, last_transition=now,
             mapping_path=mapping_path, base_commit=base_commit,
         )
@@ -12842,7 +12881,9 @@ def create_remediation_child_work_item(
     implementation head at the moment broad remediation was needed), and
     otherwise `default_work_item`'s ordinary fresh-`PLANNING`-phase shape.
     `governing_workflow_version` is fixed from the config's current
-    default, exactly like any other freshly created work item (D1) --
+    default, exactly like any other freshly created work item (D1), and a
+    default in `NEW_WORK_RETIRED_VERSIONS` refuses with
+    `DefaultWorkflowVersionRetiredError` (workflow-2.10.0) --
     because a remediation child *is* one, routed through the full normal
     plan/implement/review/accept cycle by the ordinary commands from here.
 
@@ -12871,12 +12912,12 @@ def create_remediation_child_work_item(
             f"{child_id!r} already exists -- remediation-child numbering should "
             f"never collide; check for a hand-edited state file"
         )
-    validate_governing_version(config["default_workflow_version"], config)
+    governing_version = assert_default_admits_new_work_item(config)
     child = default_work_item(
         work_item_id=child_id, work_item_type=parent["work_item_type"],
         work_item_kind=parent["work_item_kind"], plan_path=plan_path,
         registry_path=registry_path,
-        governing_workflow_version=config["default_workflow_version"],
+        governing_workflow_version=governing_version,
         plan_revision=1, last_transition=now,
     )
     child["parent_work_item_id"] = parent_work_item_id

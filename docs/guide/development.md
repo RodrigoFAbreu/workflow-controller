@@ -132,7 +132,11 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   `python3 -m unittest discover -s tests -t .` loads plus the frozen
   Workflow conformance suites of the installed release (seven up to 2.7.0; nine
   from 2.9.0, which adds `workflow_protocol_test.py` and
-  `workflow_gate_policy_test.py`). A name is a unittest dotted name (`tests`,
+  `workflow_gate_policy_test.py`). The planner reads the suites from the managed
+  `workflow-conformance.yml`: one `run: python3 <file>` line per suite (up to
+  2.9.x) or the single `suites="a.py b.py ..."` assignment of 2.10.0; a file
+  with both forms, several assignments, an empty list or a missing script is
+  refused. A name is a unittest dotted name (`tests`,
   a module, a class or a test), `conformance` (every suite) or
   `conformance:<file>`. A name that matches nothing is refused.
 - **Shards.** A class is the smallest unit of placement (a whole module

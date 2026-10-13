@@ -105,7 +105,9 @@ is appended to `shard-<i>.log` as one section after the `unittest` output,
 so a conformance failure is found after the Controller tests in the log. If
 the helper process dies, the shard fails with exit 2; the shard's step log
 says the executor refused it, and the `REFUSED` lines in its log name the
-conformance lane. The helper ends with the executor by every path: it
+conformance lane. The helper stays alive after its suites finish (as a child subreaper, so
+a suite's surviving child is not adopted by a Controller test in the shard
+process) until the executor has run its leak scan and ends it. It ends with the executor by every path: it
 watches a pipe from the executor, so a signal, a crash or `os._exit` in a
 test ends the helper and the suite it is running too. A suite's
 survivors are reported as leaked processes before they are cleaned up, the

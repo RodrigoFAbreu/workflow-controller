@@ -360,7 +360,7 @@ LEFTOVER_INVENTORY = (
     ("test_test_shards.py", "start:Popen", 3, "bounded",
      "300 s sleepers, ended by exact pid, and a shard executor on a synthetic tree whose 600 s "
      "suites its lane helper ends with the executor (the test kills the executor otherwise)"),
-    ("test_test_shards.py", "wait", 1, "deadline", "the executor started by run_directly, 30 s"),
+    ("test_test_shards.py", "wait", 3, "deadline", "the executor started by run_directly (30 s) and the 10 s wait on a killed child; the scan counts three"),
     ("test_test_shards.py", "start:run", 1, "short", "a python -c probe the test waits for"),
     ("test_trunk_orchestration_e2e.py", "start:run", 1, "short", "a bash command the test waits for"),
     ("test_trunk_preflight.py", "start:Popen:controller", 1, "parent-guard",

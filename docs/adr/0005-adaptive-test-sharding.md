@@ -83,7 +83,7 @@ processes before they are killed, as in serial mode. Residual, accepted:
 a SIGKILL of the executor runs no cleanup, so a descendant of a suite that
 left the group (`setsid`) can survive it; GitHub tears the job down and a
 local run's supervisor marker scan reports it, as with the serial design.
-A monitor thread in the executor kills the helper's group at once when the helper dies any way but a clean exit. SIGINT stays at its default disposition in a shard (the runner promises that), so it is covered by the pipe guard and the monitor, not a handler. The executor is not made a child subreaper, which would change how the
+The helper does not exit when its suites finish: it marks the lane done, then stays alive as a child subreaper (`PR_SET_CHILD_SUBREAPER`) of its own subtree, reaping but never killing, with its pipe guard active, until the executor ends it. A suite's surviving descendant is therefore reparented to the helper, not to the shard process, where a Controller worker test would adopt and kill it before the leak scan saw it. The executor waits for the lane to be done, runs the leak scan (listing those survivors as in serial mode, helper excluded), and only then kills the helper's session. A monitor thread in the executor kills the helper's group at once if the helper dies before that. SIGINT stays at its default disposition in a shard (the runner promises that), so it is covered by the pipe guard and the monitor, not a handler. The executor is not made a child subreaper, which would change how the
 Controller's own worker tests see adopted children. `--serial` plans
 `conformance_lane: false` and runs the suites after the Controller tests, so
 the serial reference of I5 is unchanged. The plan

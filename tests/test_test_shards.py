@@ -18,6 +18,7 @@ directory, then drop it from ``sys.modules`` and ``sys.path`` again.
 from __future__ import annotations
 
 import copy
+import ctypes
 import hashlib
 import importlib.util
 import json
@@ -2655,7 +2656,7 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
     def gone(self) -> bool:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            if not self.sleepers():
+            if not self.sleepers() and not self.helpers():
                 return True
             time.sleep(0.05)
         return False
@@ -2708,6 +2709,71 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
 
     def test_a_helper_killed_first_and_then_sigint_leaves_no_suite_or_descendant(self) -> None:
         self.run_directly(self.direct_plan("SIGINT"), "helper-first:SIGINT")
+
+    def test_the_lane_done_and_the_executor_signalled_leaves_no_process(self) -> None:
+        for mode in ("SIGINT", "SIGTERM"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                plan = self.build(
+                    """
+                    import time, unittest
+                    class XTest(unittest.TestCase):
+                        def test_sleeps_after_the_lane_is_done(self):
+                            while not os.path.exists(r"%s"):
+                                time.sleep(0.05)
+                            open(os.path.join(r"%s", "suite"), "w").close()
+                            time.sleep(60)
+                    """ % (self.results / "lane-0.done", self.sync),
+                    {"a_test.py": "import subprocess, sys\n"
+                                  "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+                                  "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"})
+                self.run_directly(plan, mode)
+
+    def test_a_controller_test_that_adopts_orphans_does_not_see_the_suites_child(self) -> None:
+        """What a Controller worker test does (the shard process is a child
+        subreaper that kills any new child it did not start): the suite's
+        surviving child must not be reparented to it, so the leak scan
+        still lists it and the shard fails, as it does serially."""
+        libc = ctypes.CDLL(None, use_errno=True)
+        self.addCleanup(libc.prctl, 36, 0, 0, 0, 0)
+        plan = self.build(
+            """
+            import ctypes, os, signal, time, unittest
+            class XTest(unittest.TestCase):
+                def test_adopts_and_kills_new_children(self):
+                    ctypes.CDLL(None).prctl(36, 1, 0, 0, 0)
+                    def children():
+                        me = str(os.getpid())
+                        found = set()
+                        for name in os.listdir("/proc"):
+                            try:
+                                stat = __import__("pathlib").Path("/proc/%%s/stat" %% name).read_text()
+                            except OSError:
+                                continue
+                            if stat.rsplit(")", 1)[1].split()[1] == me:
+                                found.add(int(name))
+                        return found
+                    baseline = children()
+                    while not os.path.exists(r"%s"):
+                        time.sleep(0.05)
+                    time.sleep(1.5)
+                    for pid in children() - baseline:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                    time.sleep(0.5)
+            """ % (self.sync / "suite-done"),
+            {"a_test.py": "import subprocess, sys\n"
+                          "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+                          "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+                          "open(r'%s', 'w').close()\n" % (self.sync / "suite-done")})
+        marker = f"adopt-{uuid.uuid4().hex}/0"
+        with unittest.mock.patch.dict(os.environ, {shards.SHARD_MARKER_ENV: marker}):
+            record, status = self.run_shard(plan, {shards.SHARD_MARKER_ENV: marker})
+        self.assertEqual(status, 1, record)
+        self.assertEqual(len(record["leaked_processes"]), 1)
+        self.assertTrue(self.gone())
 
     def test_a_suite_that_leaves_a_child_fails_the_shard_in_both_modes(self) -> None:
         for lane in (True, False):

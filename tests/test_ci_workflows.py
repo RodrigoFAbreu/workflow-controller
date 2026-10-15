@@ -157,7 +157,7 @@ class CommittedFilesTest(unittest.TestCase):
         self.assertEqual(hashlib.sha256(CONFORMANCE_YML.read_bytes()).hexdigest(), expected)
 
     def test_the_generated_files(self) -> None:
-        self.assertEqual(sorted(ci.WORKFLOWS), ["ci.yml", "main.yml", "pr-title.yml", "validate.yml"])
+        self.assertEqual(sorted(ci.WORKFLOWS), ["ci.yml", "main-reuse-report.yml", "main.yml", "pr-title.yml", "validate.yml"])
         self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
         self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
@@ -514,10 +514,10 @@ class AllJobsTest(unittest.TestCase):
         found = sorted((name, job_name, _uses(step).split("@")[0])
                        for name, job_name, _, step in _all_steps()
                        if "-artifact" in _uses(step))
-        self.assertEqual(found, [("main.yml", "build", "actions/upload-artifact"),
+        self.assertEqual(found, [("main-reuse-report.yml", "reuse-report", "actions/download-artifact"),
+                                 ("main.yml", "build", "actions/upload-artifact"),
                                  ("main.yml", "publish", "actions/download-artifact"),
                                  ("main.yml", "reuse", "actions/download-artifact"),
-                                 ("main.yml", "reuse-report", "actions/download-artifact"),
                                  ("validate.yml", "plan", "actions/upload-artifact"),
                                  ("validate.yml", "tests", "actions/upload-artifact"),
                                  ("validate.yml", "tests-result", "actions/download-artifact"),
@@ -648,12 +648,13 @@ class MainWorkflowTest(unittest.TestCase):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
 
     def test_needs_chain(self) -> None:
-        self.assertEqual(list(self.jobs), ["reuse", "reuse-report", "validate", "release-plan", "build", "publish"])
+        self.assertEqual(list(self.jobs), ["reuse", "validate", "release-plan", "build", "publish"])
         self.assertEqual(self.jobs["validate"], {
             "needs": ["reuse"], "if": "!cancelled()",
             "permissions": {"contents": "read", "actions": "read"},
             "uses": "./.github/workflows/validate.yml",
-            "with": {"tests-from-run": "${{ needs.reuse.outputs.run-id }}"}})
+            "with": {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
+                                       "needs.reuse.outputs.run-id || '' }}"}})
         self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
         self.assertEqual(self.jobs["build"]["needs"], ["validate", "release-plan"])
         self.assertEqual(self.jobs["publish"]["needs"], ["validate", "release-plan", "build"])
@@ -696,7 +697,7 @@ class MainWorkflowTest(unittest.TestCase):
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
         uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()["main.yml"])
         actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
-        self.assertEqual(len(actions), 14)
+        self.assertEqual(len(actions), 11)
         for ref, comment in actions:
             with self.subTest(ref=ref):
                 self.assertRegex(ref, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
@@ -786,7 +787,8 @@ class ReuseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.main = ci.main_workflow()
         self.reuse = _jobs(self.main)["reuse"]
-        self.report = _jobs(self.main)["reuse-report"]
+        self.report_workflow = ci.reuse_report_workflow()
+        self.report = _jobs(self.report_workflow)["reuse-report"]
         self.validate = _jobs(ci.validate_workflow())
 
     def test_reuse_job_is_least_privilege_and_cannot_write(self) -> None:
@@ -806,9 +808,17 @@ class ReuseTest(unittest.TestCase):
             on = value == "on"
             report = value != "on" and value != "off"
             self.assertEqual((on, report), expected)
-        # Nothing waits for the report, it cannot fail Main, and it hands out no run id.
-        for job in _jobs(self.main).values():
-            self.assertNotIn("reuse-report", job.get("needs", []))
+        # The report is a workflow of its own: Main has no report job, so nothing in
+        # Main can wait for it or be held by it, and it shares no concurrency group.
+        self.assertNotIn("reuse-report", _jobs(self.main))
+        self.assertNotIn("reuse-report:", ci.render()["main.yml"])
+        wf = self.report_workflow
+        self.assertEqual(wf["on"], {"push": {"branches": ["main"]}})
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        self.assertEqual(wf["concurrency"],
+                         {"group": "main-reuse-report-${{ github.sha }}", "cancel-in-progress": False})
+        self.assertNotEqual(wf["concurrency"]["group"], self.main["concurrency"]["group"])
+        self.assertEqual(list(_jobs(wf)), ["reuse-report"])
         self.assertIs(self.report["continue-on-error"], True)
         self.assertNotIn("outputs", self.report)
         self.assertNotIn("continue-on-error", self.reuse)
@@ -824,11 +834,10 @@ class ReuseTest(unittest.TestCase):
         for name, text in ci.render().items():
             for line in text.splitlines():
                 if "vars." in line:
-                    self.assertEqual(name, "main.yml")
-                    self.assertIn(line.strip(), ('CI_MAIN_REUSE: "${{ vars.CI_MAIN_REUSE }}"',
-                                                 'if: "vars.CI_MAIN_REUSE == \'on\'"',
-                                                 'if: "vars.CI_MAIN_REUSE != \'on\' && '
-                                                 'vars.CI_MAIN_REUSE != \'off\'"'))
+                    self.assertIn(name, ("main.yml", "main-reuse-report.yml"))
+                    self.assertRegex(line.strip(), r"^(CI_MAIN_REUSE: \"\$\{\{ vars\.CI_MAIN_REUSE \}\}\"|"
+                                                   r"if: \"vars\.CI_MAIN_REUSE (==|!=) 'o[nf]+'.*|"
+                                                   r"tests-from-run: .*)$")
         find = self.reuse["steps"][_index(self.reuse["steps"], lambda s: s.get("id") == "find")]
         self.assertIn('--mode "$CI_MAIN_REUSE"', find["run"])
         self.assertNotIn("${{", find["run"])
@@ -857,7 +866,10 @@ class ReuseTest(unittest.TestCase):
 
     def test_validate_gets_the_run_id_and_survives_a_failed_reuse_job(self) -> None:
         validate = _jobs(self.main)["validate"]
-        self.assertEqual(validate["with"], {"tests-from-run": "${{ needs.reuse.outputs.run-id }}"})
+        # The id is forwarded only while the variable is still "on" at evaluation
+        # time: "Re-run failed jobs" keeps a successful reuse job's old output.
+        self.assertEqual(validate["with"], {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
+                                                              "needs.reuse.outputs.run-id || '' }}"})
         self.assertEqual(validate["if"], "!cancelled()")
         self.assertEqual(validate["permissions"], {"contents": "read", "actions": "read"})
 
@@ -916,7 +928,9 @@ class ReuseTest(unittest.TestCase):
 
     def test_the_generated_reuse_job_is_readable_and_documented_in_the_header(self) -> None:
         text = ci.render()["main.yml"]
-        self.assertIn("# reuse and reuse-report (read-only) are switched by the repository variable", text)
+        self.assertIn("# reuse (read-only) is switched by the repository variable CI_MAIN_REUSE", text)
+        self.assertIn("main-reuse-report.yml", text)
+        self.assertIn("A workflow apart from main.yml", ci.render()["main-reuse-report.yml"])
         self.assertIn("tests-from-run", ci.render()["validate.yml"].split("name: Validate")[0])
 
 

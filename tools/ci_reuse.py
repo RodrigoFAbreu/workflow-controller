@@ -64,11 +64,14 @@ class ReuseError(Exception):
 def parse_mode(raw: str | None) -> tuple[str, str]:
     """``(mode, note)`` for the variable's raw value; ``note`` is empty
     unless the value was not understood and is treated as ``off``."""
-    value = (raw or "").strip()
-    if value in ("", REPORT):
+    # Actions compares strings without regard to case and without trimming,
+    # so the workflow's conditions and this parser must agree on both: the
+    # value is lowercased, never stripped (" on " is not "on" in either).
+    value = raw or ""
+    if value.lower() in ("", REPORT):
         return REPORT, ""
-    if value in (ON, OFF):
-        return value, ""
+    if value.lower() in (ON, OFF):
+        return value.lower(), ""
     return OFF, f"{VARIABLE}={value!r} is not on, report or off; treated as off"
 
 

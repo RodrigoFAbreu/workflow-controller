@@ -64,15 +64,19 @@ def find(api: FakeApi, event: str = "push", ref: str = "refs/heads/main") -> dic
 
 class ModeTest(unittest.TestCase):
     def test_unset_or_report_is_report_only(self) -> None:
-        for raw in (None, "", "  ", "report"):
+        for raw in (None, "", "report", "Report", "REPORT"):
             self.assertEqual(reuse.parse_mode(raw), ("report", ""))
 
     def test_on_and_off(self) -> None:
-        self.assertEqual(reuse.parse_mode("on"), ("on", ""))
-        self.assertEqual(reuse.parse_mode("off"), ("off", ""))
+        # Actions compares without regard to case, so ON starts the reuse job.
+        for raw in ("on", "ON", "On"):
+            self.assertEqual(reuse.parse_mode(raw), ("on", ""))
+        for raw in ("off", "Off", "OFF"):
+            self.assertEqual(reuse.parse_mode(raw), ("off", ""))
 
     def test_anything_else_is_off_and_says_so(self) -> None:
-        for raw in ("ON", "true", "1", "reuse"):
+        # Actions does not trim, so " on " matches neither job's condition as "on".
+        for raw in (" on ", "  ", "true", "1", "reuse"):
             mode, note = reuse.parse_mode(raw)
             self.assertEqual(mode, "off")
             self.assertIn("treated as off", note)

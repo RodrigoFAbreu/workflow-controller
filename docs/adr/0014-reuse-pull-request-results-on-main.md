@@ -32,15 +32,21 @@ release decision that is made on the tree.
    Going back is a variable change. It ships report-only, and is switched on
    by the owner after at least three merges whose reports were cross-checked
    against the full run.
-3. **Report mode costs no wall time.** `reuse` (which `validate` waits for)
-   runs only for `on`. For unset, `report` and unknown values a separate
-   `reuse-report` job runs beside `validate`; nothing needs it and it is
-   `continue-on-error`. `off` runs neither.
+3. **Report mode costs no wall time and holds no slot.** `reuse` (which
+   `validate` waits for) runs only for `on`. The report for unset, `report`
+   and unknown values is a workflow of its own, `main-reuse-report.yml`
+   (read-only, its own concurrency group per commit), so it can neither
+   delay `Main` nor hold the serialised `main-release` slot. `off` runs
+   neither. Values compare without regard to case and untrimmed, as in
+   Actions.
 4. **Fail closed, twice.** The `reuse` job (read-only: `actions`, `contents`
    and `pull-requests` read) passes a run id only when every check passes. A
    failed lookup, a missing artifact, an artifact from before reuse, an
-   ambiguous pull request, a fork, a rebase merge, a moved base,
-   `workflow_dispatch` or a non-`main` ref passes none, so the shards run. A
+   ambiguous pull request, a fork, a moved base,
+   `workflow_dispatch` or a non-`main` ref passes none, so the shards run. A rebase merge is reused only when its
+   merge commit has exactly the recorded tree and plan digest; safety rests on
+   the tree check. `validate` is handed the run id only while the variable is
+   still `on`, so a retry after the owner sets `off` does not reuse. A
    crashed `reuse` job also passes none (`validate` runs with `!cancelled()`).
    `tests-result` then verifies the tree and digest again, from the downloaded
    artifact, and fails the run on any mismatch (no release), then re-runs

@@ -226,7 +226,12 @@ and wait.
    `n` is the same widened `CP<digits>[A-Z]?` shape named in step 1 above) --
    `/approve-review plan` step 4c's `validate_post_anchor_coverage` refuses
    approval outright, naming the first uncovered id, for any registry
-   checkpoint with no well-formed pair in the plan text, so add the anchors
-   while drafting or revising the amended plan, not after a refusal.
+   checkpoint with no well-formed pair in the plan text. Since workflow-2.11.0
+   the amended plan is refused earlier too: at `/milestone-plan`'s and
+   `/apply-plan-review`'s publish and at plan-stage bundle generation, with
+   the same error classes and one next step, `workflow_state.PLAN_ANCHOR_NEXT_STEP`
+   (give every registry checkpoint a well-formed pair, then run the command
+   again), so add the anchors while drafting or revising the amended plan, not
+   after a refusal.
    Report the new phase and **stop** -- never chain into drafting the
    amended plan in the same invocation.

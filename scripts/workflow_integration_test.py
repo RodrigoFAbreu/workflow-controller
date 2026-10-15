@@ -767,6 +767,10 @@ class TestVersion21OnlyCommandsRefuseCleanlyForV1(unittest.TestCase):
 # below, for the two files where a real pre-v2.1 copy is actually
 # available to diff against.
 _GOLDEN_COMMAND_FILE_SHA256 = {
+    # workflow-2.11.0 (checkpoint-anchors-early, CP3): `milestone-plan.md` and
+    # `apply-plan-review.md` gain the anchor instruction and the early anchor
+    # check (before the publish and before the bind); `request-plan-amendment.md`
+    # names the early refusals -- intentional content changes, not regressions.
     # workflow-2.9.1 (review-stage-write-durability, CP2): `review-implementation.md`,
     # `record-manual-implementation-review.md` and `apply-implementation-review.md`
     # gain the commit rule for review-stage writes (REVISE commits through
@@ -879,7 +883,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # workflow-2.10.0 (retire-21-for-new-work, CP3): step 0 stops a fresh milestone
     # under a "2.1" default with DefaultWorkflowVersionRetiredError -- intentional
     # content change.
-    "milestone-plan.md": "aede94f75d7c4091311e39b200bd24261188fd33970a3dfd83187cff14619508",
+    "milestone-plan.md": "168f4b80fd8a31d376d2fcac626b5649bc89705708610c8ed7f19bb0e52644a1",
     # milestone-implement.md further updated, OPUS-R129-001: step 1f's
     # checkpoint-completion commit instruction now states explicitly that
     # the Workflow-Checkpoint/Workflow-Work-Item trailer must be the
@@ -1124,7 +1128,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # assert_apply_review_feedback_binding (D-Apply-Binding): a two-stage
     # REVISE stating a review_content_id is bound by content --
     # intentional content change.
-    "apply-plan-review.md": "878527ae17e3cc2cb207a90ee6de20b414e8a702eb6c3edb4da8374d96c66821",
+    "apply-plan-review.md": "d43282b2e7405ee232e552586d8a066aa4a6ac15dceaa8c3b54e1522d2566ca9",
     # apply-implementation-review.md (WF8c item (c)): step 7's
     # record_bundle_generation call site widened to first resolve the
     # outcome (resolve_bundle_generation_outcome) and write the matching
@@ -2701,6 +2705,71 @@ class TestGoldenCommandFileHashes(unittest.TestCase):
                     f"{filename} content changed since this golden hash was recorded -- "
                     f"if intentional, update _GOLDEN_COMMAND_FILE_SHA256",
                 )
+
+
+class TestCheckpointAnchorsEarlyCommandConformance(unittest.TestCase):
+    """workflow-2.11.0 (checkpoint-anchors-early, CP3): the plan-stage commands
+    write anchors from revision 1 and call `assert_plan_checkpoint_anchors`
+    before the publish and before the bind, in that order."""
+
+    CHECK = "assert_plan_checkpoint_anchors"
+
+    def test_milestone_plan_checks_before_publish_and_after_staging(self):
+        steps = _extract_numbered_steps(_command_text("milestone-plan.md"))
+        step5 = steps["5"]
+        first = step5.index(self.CHECK)
+        self.assertLess(step5.index("write_registry_and_mapping"), first)
+        self.assertLess(step5.index("render_registry_markdown"), first)
+        self.assertLess(step5.index("add -N"), first)
+        self.assertLess(first, step5.index("publish_plan_revision"))
+        self.assertIn("PLAN_ANCHOR_NEXT_STEP", step5)
+
+    def test_milestone_plan_checks_before_the_bind(self):
+        step6 = _extract_numbered_steps(_command_text("milestone-plan.md"))["6"]
+        self.assertLess(step6.index(self.CHECK), step6.index("verify_plan_review_bundle"))
+        self.assertIn("PLAN_ANCHOR_NEXT_STEP", step6)
+        self.assertIn("AmendmentAnchorCoverageError", step6)
+
+    def test_milestone_plan_step3_states_the_anchor_instruction(self):
+        step3 = _extract_numbered_steps(_command_text("milestone-plan.md"))["3"]
+        self.assertIn("<!-- CPn -->", step3)
+        self.assertIn("<!-- /CPn -->", step3)
+        self.assertIn("CP<digits>[A-Z]?", step3)
+
+    def test_milestone_plan_step4_self_review_confirms_the_anchors(self):
+        step4 = _extract_numbered_steps(_command_text("milestone-plan.md"))["4"]
+        self.assertIn("anchor pair", step4)
+
+    def test_apply_plan_review_checks_before_publish_and_after_staging(self):
+        step5 = _extract_numbered_steps(_command_text("apply-plan-review.md"))["5"]
+        first = step5.index(self.CHECK)
+        self.assertLess(step5.index("write_registry_and_mapping"), first)
+        self.assertLess(step5.index("render_registry_markdown"), first)
+        self.assertLess(step5.index("add -N"), first)
+        self.assertLess(first, step5.index("publish_plan_revision"))
+        self.assertIn("PLAN_ANCHOR_NEXT_STEP", step5)
+
+    def test_apply_plan_review_checks_before_the_bind(self):
+        # `7'` is not a plain digit step, so read the text from its heading.
+        text = _command_text("apply-plan-review.md")
+        step7 = text[text.index("7'. **`governing_workflow_version"):]
+        self.assertLess(step7.index(self.CHECK), step7.index("verify_plan_review_bundle"))
+        self.assertIn("PLAN_ANCHOR_NEXT_STEP", step7)
+
+    def test_request_plan_amendment_names_the_early_refusals(self):
+        text = _command_text("request-plan-amendment.md")
+        self.assertIn("workflow-2.11.0", text)
+        self.assertIn("plan-stage bundle generation", text)
+        self.assertIn("PLAN_ANCHOR_NEXT_STEP", text)
+
+    def test_all_three_commands_name_the_next_step_and_every_refusal_class(self):
+        for name in ("milestone-plan.md", "apply-plan-review.md", "request-plan-amendment.md"):
+            self.assertIn("PLAN_ANCHOR_NEXT_STEP", _command_text(name), name)
+        for name in ("milestone-plan.md", "apply-plan-review.md"):
+            text = _command_text(name)
+            for cls in ("AmendmentAnchorCoverageError", "AmendmentAnchorMalformedError",
+                        "AmendmentCheckpointIdShapeError", "AmendmentPostRegistryMalformedError"):
+                self.assertIn(cls, text, (name, cls))
 
 
 class TestRetiredDefaultCommandConformance(unittest.TestCase):

@@ -207,6 +207,16 @@ normative definition.
    generation-record commit at the plan stage, the plan-approval commit
    takes the whole working-tree state, and a commit of its own would raise
    `bundle_generation_mismatch` at the plan-approval gate.
+   **[2.1] Anchor check, immediately before the publish** (workflow-2.11.0,
+   `D-Command`): call `workflow_state.assert_plan_checkpoint_anchors(repo_root,
+   work_item_id)`. It reads the registry and plan document this step just
+   wrote, so every checkpoint of this revision needs its well-formed
+   `<!-- CPn -->`/`<!-- /CPn -->` pair. A refusal
+   (`AmendmentAnchorCoverageError`, `AmendmentAnchorMalformedError`,
+   `AmendmentCheckpointIdShapeError` or `AmendmentPostRegistryMalformedError`,
+   together `workflow_state._PLAN_ANCHOR_ERRORS`) ends with
+   `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop, with nothing
+   published.
    Then publish, in the same operation and before the bundle below is
    regenerated (`D-Plan-Revision-Publication`, `WFR-65`), by calling
    `workflow_state.state_transaction(repo_root, lambda state:
@@ -316,9 +326,11 @@ normative definition.
        workflow-2.6.0, section 5.3 item 3; `MPR-R1-O1`: `2.5.1`'s second
        generation here is removed, so step 5 is the round's single
        generation and nothing between the publish and this bind can exit
-       unreported): call `binding =
-       workflow_state.verify_plan_review_bundle(repo_root, work_item_id)`,
-       then `workflow_state.state_transaction(repo_root, lambda state:
+       unreported): first call `workflow_state.assert_plan_checkpoint_anchors(
+       repo_root, work_item_id)` (a refusal ends with
+       `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop), then call
+       `binding = workflow_state.verify_plan_review_bundle(repo_root,
+       work_item_id)`, then `workflow_state.state_transaction(repo_root, lambda state:
        workflow_state.bind_plan_review_bundle(state, work_item_id,
        binding=binding, now=now))` -- the **sole** writer of
        `AWAITING_LOCAL_PLAN_REVIEW`, writing that phase, `current_bundle_id`

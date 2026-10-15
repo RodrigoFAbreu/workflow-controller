@@ -221,6 +221,34 @@ if [[ "$STAGE" == "plan" ]]; then
     --work-item-id "$WORK_ITEM_ID" --derive-plan-stage-document --staging-token "$STAGING_TOKEN"
 fi
 
+# --- BEGIN early checkpoint-anchor check (workflow-2.11.0, D-Check/D-Where 2)
+# Checks the PINNED plan and registry bytes just captured -- exactly the bytes
+# PLAN.md and review_content_id describe -- so an edit between a worktree
+# check and the pin cannot slip a plan without checkpoint anchors into review.
+# A refusal exits 1 through `cleanup`: the staging area and staging pin are
+# removed, the previous current/, archive and .pin are untouched, nothing is
+# marked REJECTED and no state is written. `python3 -B` keeps __pycache__ out
+# of the repository (an untracked file would change the next bundle_id). The
+# governing version is read inside the function, never named here.
+if [[ "$STAGE" == "plan" ]]; then
+  PYTHONPATH="$REPO_ROOT/scripts:${PYTHONPATH:-}" python3 -B - "$REPO_ROOT" "$WORK_ITEM_ID" "$STAGING_PIN_DIR" <<'PYEOF'
+import sys
+from pathlib import Path
+import workflow_state as state
+
+repo_root, work_item_id = Path(sys.argv[1]), sys.argv[2]
+try:
+    state.assert_plan_checkpoint_anchors(
+        repo_root, work_item_id, pin_dir=repo_root / sys.argv[3],
+        allow_bound_regeneration=True,
+    )
+except state._PLAN_ANCHOR_ERRORS as exc:
+    print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+fi
+# --- END early checkpoint-anchor check
+
 # --- round-identity preflight (GPT-R42-001, GPT-R43-001, GPT-R43-003): run
 # before any other write below, never after (GPT-R43-003 -- `current/` is
 # "the bundle currently under review" per REVIEW_PROTOCOL.md, not a

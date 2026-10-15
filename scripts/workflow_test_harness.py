@@ -509,7 +509,18 @@ def seed_bundle_item(
         "schema_version": SCHEMA_VERSION, "work_item_id": work_item_id, "plan_revision": 1,
         "checkpoints": registry_checkpoints or [],
     }) + "\n"
-    repo.write_plan_docs(work_item_id=work_item_id, plan_revision=1, registry_text=registry_text)
+    # workflow-2.11.0: a plan revision of a two-stage item must carry an anchor
+    # pair per registry checkpoint, so a fixture that declares checkpoints
+    # gets the same shape the acceptance matrix's `plan_anchors` writes. With
+    # no checkpoints the default plan is unchanged.
+    plan_text = None
+    if registry_checkpoints:
+        plan_text = "# Plan (Revision 1)\n\nplan v1\n\n" + "".join(
+            f"<!-- {c['id']} -->\n{c['id']} -- {c.get('name', c['id'])}.\n<!-- /{c['id']} -->\n\n"
+            for c in registry_checkpoints
+        )
+    repo.write_plan_docs(
+        work_item_id=work_item_id, plan_text=plan_text, plan_revision=1, registry_text=registry_text)
     registry_path = f"docs/ai-workflow/registry/{work_item_id}-registry.json"
     declarations = ws.generate_artifacts_declarations(
         work_item_id, "docs/ai-workflow/WORKFLOW_V2_PLAN.md", registry_path,

@@ -2811,5 +2811,152 @@ class TestPrepareAiReviewShPlanStageStaging(unittest.TestCase):
             )
 
 
+class TestPrepareAiReviewShEarlyAnchorCheck(unittest.TestCase):
+    """workflow-2.11.0 CP2 (`D-Check`, `D-Where` 2): plan-stage generation
+    refuses, on the pinned bytes, a plan lacking a well-formed checkpoint
+    anchor pair for a registry checkpoint -- before any review round, with
+    the previous bundle untouched, nothing `REJECTED` and no state written.
+    Driven through the real `prepare-ai-review.sh`."""
+
+    WI = "wi"
+    CHECKPOINTS = [{"id": "CP1", "depends_on": []}, {"id": "CP2", "depends_on": ["CP1"]}]
+    ANCHORLESS_PLAN = "# Plan (Revision 1)\n\nplan v1 with no checkpoint sections\n"
+
+    def _item_root(self, repo):
+        return repo.root / ".ai-review" / self.WI
+
+    def _prepare(self, repo):
+        digest, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(repo.root, self.WI)
+        bundle_dir = self._item_root(repo) / "current"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        (bundle_dir / "REVIEW_REQUEST.md").write_text(f"stage: plan\nreview_content_id: {digest}\n")
+        _, head = fingerprint.current_worktree_root_and_head(repo.root)
+        revision = h.read_state(repo)["work_items"][self.WI]["plan_revision"]
+        (bundle_dir / "TEST_RESULTS.md").write_text(f"stage: plan (revision {revision})\nhead: {head}\n")
+
+    def _run(self, repo):
+        return subprocess.run(
+            ["bash", "scripts/prepare-ai-review.sh", h.read_state(repo)["work_items"][self.WI]["base_commit"],
+             "plan", self.WI],
+            cwd=repo.root, capture_output=True, text=True,
+        )
+
+    def _generate(self, repo):
+        self._prepare(repo)
+        return self._run(repo)
+
+    def _snapshot(self, repo):
+        root = self._item_root(repo)
+        snapshot = {}
+        for name in ("current", "review-bundle.tar.gz", ".pin"):
+            path = root / name
+            files = [path] if path.is_file() else sorted(q for q in path.rglob("*") if q.is_file())
+            snapshot[name] = {q.relative_to(root).as_posix(): hashlib.sha256(q.read_bytes()).hexdigest() for q in files}
+        return snapshot
+
+    def _write_plan(self, repo, text):
+        (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").write_text(text)
+
+    def _seed(self, repo, **kwargs):
+        kwargs.setdefault("phase", "PLANNING")
+        return h.seed_bundle_item(repo, self.WI, registry_checkpoints=self.CHECKPOINTS, **kwargs)
+
+    def _assert_refused_cleanly(self, repo, result, before, error_class="AmendmentAnchorCoverageError"):
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"error: {error_class}:", result.stderr)
+        self.assertIn("CP2", result.stderr)
+        self.assertEqual(self._snapshot(repo), before)
+        names = sorted(q.name for q in self._item_root(repo).iterdir())
+        self.assertEqual([n for n in names if n.startswith(("current.staging-", ".pin.staging-"))], [], names)
+        self.assertFalse((self._item_root(repo) / "REJECTED").exists())
+        self.assertEqual(list(self._item_root(repo).glob("current.rejected-*")), [])
+        fingerprint.assert_bundle_not_rejected(repo.root, self.WI)
+
+    def test_a_plan_with_a_pair_per_checkpoint_generates(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            result = self._generate(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_plan_without_a_pair_is_refused_and_the_previous_bundle_is_untouched(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            self.assertEqual(self._generate(repo).returncode, 0)
+            state_bytes = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes()
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            self._write_plan(repo, plan.replace("<!-- CP2 -->", "").replace("<!-- /CP2 -->", ""))
+            self._prepare(repo)
+            before = self._snapshot(repo)
+            result = self._run(repo)
+            self._assert_refused_cleanly(repo, result, before)
+            self.assertEqual(
+                (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes(), state_bytes)
+
+    def test_a_refusal_during_an_open_amendment_says_so(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo, phase="AMENDING_PLAN", amendment_history=[{"resolved_at_plan_revision": None}])
+            self._write_plan(repo, self.ANCHORLESS_PLAN)
+            before = self._snapshot(repo) if (self._item_root(repo) / "current").exists() else None
+            result = self._generate(repo)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("error: AmendmentAnchorCoverageError:", result.stderr)
+            self.assertIn("(amendment open)", result.stderr)
+            self.assertIn("CP1", result.stderr)
+            self.assertIsNone(before)
+            self.assertFalse((self._item_root(repo) / "review-bundle.tar.gz").exists())
+
+    def test_a_version_1_item_without_anchors_generates_as_before(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo, governing_workflow_version="1")
+            self._write_plan(repo, self.ANCHORLESS_PLAN)
+            result = self._generate(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_bound_ready_item_regenerates_without_the_check_but_other_phases_are_refused(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            h.publish_and_bind_plan_bundle(repo, self.WI)
+            h.commit_state(repo, "bound")
+            # Row 4a: the worktree plan drifted at a ready phase; the readers
+            # accept only the bound review_content_id, so regenerating is safe.
+            self._write_plan(repo, self.ANCHORLESS_PLAN)
+            self.assertEqual(self._generate(repo).returncode, 0)
+            for variant in ("non-ready phase", "no binding record"):
+                with self.subTest(variant=variant):
+                    state = h.read_state(repo)
+                    item = state["work_items"][self.WI]
+                    original = json.loads(json.dumps(item))
+                    if variant == "non-ready phase":
+                        item["phase"] = "REVISING_PLAN"
+                    else:
+                        item.pop("plan_review_binding", None)
+                    h.write_state(repo, state)
+                    self._prepare(repo)
+                    before = self._snapshot(repo)
+                    result = self._run(repo)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("error: AmendmentAnchorCoverageError:", result.stderr)
+                    self.assertEqual(self._snapshot(repo), before)
+                    state["work_items"][self.WI] = original
+                    h.write_state(repo, state)
+
+    def test_the_check_decides_on_the_pinned_bytes(self):
+        """The generator calls the function with `pin_dir`; the pinned bytes,
+        not the worktree, decide."""
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            self._write_plan(repo, self.ANCHORLESS_PLAN)
+            pin = repo.root / "pin"
+            pin.mkdir()
+            metadata = fingerprint.resolve_plan_stage_metadata(repo.root, self.WI)
+            for rel in metadata.protected_paths:
+                source = repo.root / rel
+                if source.is_file():
+                    (pin / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(source, pin / rel)
+            with self.assertRaises(ws.AmendmentAnchorCoverageError):
+                ws.assert_plan_checkpoint_anchors(repo.root, self.WI, pin_dir=pin, allow_bound_regeneration=True)
+
+
 if __name__ == "__main__":
     unittest.main()

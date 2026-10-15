@@ -11,16 +11,13 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 **Where things stand (2026-10-15).** Controller 1.10.0 is the latest release (PR #45, squash
 `6aa8f66`): with `reviewer.harness` set, the Controller runs the cross-model review itself (C7). It
 admits Workflow 2.5.1 and 2.6.0, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and
-later). This repository runs Workflow 2.10.0 with automatic gates. What is complete is marked in the
+later). This repository runs Workflow 2.11.0 with automatic gates (since 2026-10-15). What is complete is marked in the
 tables below; what each release changed is in the [release history](release-history.md).
 
-**Next, in order** (owner decisions, 2026-10-14 and 2026-10-15), after the documentation pull
-request with the 1.10.0 release notes:
-1. move this repository to the latest Workflow (2.11.0, or 2.12.0 if it is out by then): a `chore:`
-   pull request, no release;
-2. C13, review convergence ([11.13](#1113-review-convergence));
-3. C14, review modes ([11.14](#1114-review-modes));
-4. C10, C12 and C11, then the orchestrator series O1-O7.
+**Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
+1. C13, review convergence ([11.13](#1113-review-convergence)), once Workflow 2.12.0 (W8) is out;
+2. C14, review modes ([11.14](#1114-review-modes));
+3. C10, C12 and C11, then the orchestrator series O1-O7.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then

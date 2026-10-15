@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-usage-limit-mid-job",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -11921,6 +11921,168 @@
         "evaluated_at": "2026-10-15T16:19:59Z",
         "workflow_release": "2.10.0"
       }
+    },
+    "workflow-controller-usage-limit-mid-job": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-usage-limit-mid-job",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_USAGE_LIMIT_MID_JOB_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-usage-limit-mid-job-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-usage-limit-mid-job-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "988e8c3fb750e3f86227539e8957be7458b396fc",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+        "approved_review_content_id": "ed69f4d2ef9116af495bea6fa0d477dbf2b21d2cf8ebec093ebdef9112c016d8",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_USAGE_LIMIT_MID_JOB_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d5b6559c2916f868135d91e81fb142de2e601699"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-usage-limit-mid-job-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2fe8fac3c8014e2769a7b3a5a6c0ad0faca037df"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-usage-limit-mid-job-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f1bf2c432672f2c0a5c2396e250adb3501e8dc51"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-15T20:43:41Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "ed69f4d2ef9116af495bea6fa0d477dbf2b21d2cf8ebec093ebdef9112c016d8",
+            "ledger": {
+              "local": {
+                "bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "f0496d6dc28ba60510da1df536d39840c773bb1699542d2778373353989d8e85",
+                "ledger_entry_sha256": "91ddb93997eb403d9ccf11fb435ad3df59f6097a889031b08459317eb8f2b0aa",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-limit-mid-job/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "4433aea0c068d352682acc2a59a9b8326cb964b97654a1f0aa7963d9e018f0ef",
+                "ledger_entry_sha256": "bf01d32a5e367a7d59d7979de6cecf1f2bdcba6574758ceeedfb2c7371b4c738",
+                "run_ref": "session:local .ai-review/workflow-controller-usage-limit-mid-job/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-15T20:43:41Z",
+          "workflow_release": "2.11.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "ed69f4d2ef9116af495bea6fa0d477dbf2b21d2cf8ebec093ebdef9112c016d8",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-15T20:40:07Z",
+          "verdict_sha256": "f0496d6dc28ba60510da1df536d39840c773bb1699542d2778373353989d8e85",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-limit-mid-job/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-15T20:42:25Z",
+          "verdict_sha256": "4433aea0c068d352682acc2a59a9b8326cb964b97654a1f0aa7963d9e018f0ef",
+          "run_ref": "session:local .ai-review/workflow-controller-usage-limit-mid-job/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 20,
+      "last_transition": "2026-10-15T20:43:41Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-15T20:38:25.733326+00:00",
+        "consumed": {
+          "review_content_id": "35be3ffbd4a83363e68026e745a700771abe84558ca3a9ff263deffc18e8761a",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "ed69f4d2ef9116af495bea6fa0d477dbf2b21d2cf8ebec093ebdef9112c016d8",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "ed69f4d2ef9116af495bea6fa0d477dbf2b21d2cf8ebec093ebdef9112c016d8",
+          "bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "2356356ec7aa30d98b3f88b11e594f3c606efdfe8da6f99fb8e3a523eee6911f",
+        "35be3ffbd4a83363e68026e745a700771abe84558ca3a9ff263deffc18e8761a",
+        "484be56b4df6e028cc0074de2855be8a2b09b794165d2d2f624aedda5f06dcd3",
+        "8f69abe42b3b201dd915dfb5861dd009f547ff53fcf1b0173b1f3f523b0539b8"
+      ]
     }
   }
 }

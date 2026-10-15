@@ -874,6 +874,16 @@ class ReplayTest(_ReviewCase):
         self.assertEqual(resumed["review"]["credentials"], "copied")
         self.assertEqual(json.loads((operator / "auth.json").read_text()), {"tokens": {"refresh_token": "rotated"}})
 
+    def test_a_verdict_the_dead_run_left_is_kept_by_the_resume_branch(self) -> None:
+        record, proc = self.killed_controller(flush_process=True)
+        layout = review.JobLayout(self.runtime_root, record["job_id"])
+        layout.verdict.write_text("Status: REVISE\n")
+        [resumed] = self.resume()
+        [entry] = resumed["review"]["verdicts"]
+        self.assertEqual((entry["status"], entry["disposition"]), (None, "not-ingested: interrupted"))
+        self.assertEqual((self.runtime_root / entry["path"]).read_text(), "Status: REVISE\n")
+        self.assertFalse(layout.verdict.exists())
+
     def test_a_changed_operator_file_is_never_overwritten_by_the_resume_branch(self) -> None:
         operator = Path(self.reviewer["operator_home"])
         record, proc = self.killed_controller(flush_process=True)

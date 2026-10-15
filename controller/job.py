@@ -3085,6 +3085,9 @@ def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | Non
     if isinstance(digest, str) and isinstance(operator_home, str) and (layout.codex_home / "auth.json").is_file():
         with contextlib.suppress(Exception):
             credentials = review.copy_back_credentials(layout, Path(operator_home), digest)
+    held = {"verdicts": [dict(entry) for entry in block.get("verdicts") or [] if isinstance(entry, Mapping)]}
+    with contextlib.suppress(Exception):
+        review.retain_pending_verdict(held, runtime_root, layout)  # a verdict the dead run left is kept first
     review.settle_job_dir(runtime_root, job_id)
     launched = block.get("launched") is True
     timed_out = False
@@ -3098,7 +3101,7 @@ def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | Non
     now = _now()
     reconciled: JobRecord = {
         **record, "status": status, "transition_verified": False,
-        "review": {**block, "outcome": "interrupted", "credentials": credentials},
+        "review": {**block, "outcome": "interrupted", "credentials": credentials, "verdicts": held["verdicts"]},
         "reconciliation_evidence": {"code": code, "abandoned_status": record.get("status"),
                                     "message": "the Controller that ran this review ended before it finished; its "
                                                "Codex group was ended and the next step re-runs the review"},

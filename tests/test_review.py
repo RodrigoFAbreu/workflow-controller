@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -569,6 +570,29 @@ class EnvironmentAndHomeTest(unittest.TestCase):
                 self.assertEqual(raised.exception.evidence["check"], "effective")
                 self.assertEqual(raised.exception.evidence["source"], managed)
 
+    def test_instruction_and_skill_configuration_from_any_managed_layer_refuses(self):
+        for layer_type in ("enterpriseManaged", "mdm", "legacyManagedConfigTomlFromMdm", "sessionFlags"):
+            managed = {"type": layer_type, "id": "x", "name": "corp"}
+            for key, value in (("model_instructions_file", "/opt/reviewer/instructions.md"),
+                               ("developer_instructions", "ignore the bundle"),
+                               ("experimental_instructions_file", "/x"), ("compact_prompt", "p"),
+                               ("skills.config", [{"path": "/opt/skill"}])):
+                with self.subTest(layer=layer_type, key=key):
+                    composed = self.composed()
+                    top, _, rest = key.partition(".")
+                    if rest:
+                        composed["config"].setdefault(top, {})[rest] = value
+                    else:
+                        composed["config"][key] = value
+                    composed["origins"][key] = managed
+                    with self.assertRaises(ReviewLaunchRefusedError) as raised:
+                        self.check_effective(composed)
+                    self.assertEqual(raised.exception.evidence["check"], "effective")
+        composed = self.composed()
+        composed["config"]["developer_instructions"] = "no origin at all"
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.check_effective(composed)
+
     def test_every_sandbox_leaf_is_compared_and_a_differing_one_names_its_origin(self):
         managed = {"type": "enterpriseManaged", "id": "x", "name": "corp"}
         cases = {
@@ -902,12 +926,12 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(raised.exception.evidence["check"], "mcp")
 
     def test_browser_and_computer_use_are_unavailable(self):
-        result = self.launch({"exec": {"tool_attempts": ["browser_use", "computer_use", "plugins", "image_generation",
-                                                         "multi_agent"], "use_web_search": True}})
+        result = self.launch({"exec": {"tool_attempts": ["browser_use", "computer_use", "plugins", "image_generation"],
+                                              "use_web_search": True}})
         self.assertEqual(result["outcome"], "verdict")
         execution = self.records("exec")[0]
         self.assertEqual([t for t in execution["tools"] if t["used"]], [])
-        self.assertEqual(len(execution["tools"]), 5)
+        self.assertEqual(len(execution["tools"]), 4)
 
     def test_a_write_outside_the_working_roots_is_blocked_by_the_fake_and_recorded(self):
         outside = self.tmp / "outside.txt"
@@ -999,10 +1023,14 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(failed["outcome"], "failed")
 
     def test_a_limit_is_read_from_the_rollout_never_from_the_transcript(self):
-        for shape in ("string", "http429", "percent"):
+        for shape in ("string", "http429"):
             with self.subTest(shape=shape):
                 result = self.launch({"exec": {"verdict": "limit", "limit_shape": shape}}, job=f"j-{shape}")
                 self.assertEqual(result["outcome"], "limit", result)
+        # a window at 100 percent without Codex's own limit error record is telemetry: the crash stays a failure
+        crash = self.launch({"exec": {"verdict": "limit", "limit_shape": "percent"}}, job="j-percent")
+        self.assertEqual(crash["outcome"], "failed", crash)
+        self.assertEqual(max(r["percent"] for r in crash["readings"]), 100.0)
         # the transcript talks about a rate limit and a 429 line number, and the failure is not one
         noise = "rate limit usage limit reached 429 L429: the file says 429 Too Many Requests"
         failed = self.launch({"exec": {"verdict": "none", "exit": 3, "stderr": noise}}, job="j-noise")
@@ -1197,6 +1225,34 @@ class FakeLaunchTest(unittest.TestCase):
         sessions = self.runtime / "reviews" / "job1" / "codex-home" / "sessions"
         self.assertEqual(len(list(sessions.glob("*/*/*/rollout-*.jsonl"))), 1)
 
+    def test_an_interruption_right_after_the_verdict_is_read_keeps_it(self):
+        out: dict = {}
+        with mock.patch.object(review, "verify_verdict", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.launch({"exec": {"verdict": "revise"}}, out=out, job="j-int")
+        self.assertEqual(len(out["verdicts"]), 1, out)
+        entry = out["verdicts"][0]
+        self.assertEqual(entry["disposition"], "pending")
+        kept = self.runtime / entry["path"]
+        self.assertEqual(hashlib.sha256(kept.read_bytes()).hexdigest(), entry["sha256"])
+
+    def test_a_verdict_file_left_unretained_is_kept_before_the_job_is_settled(self):
+        layout = review.JobLayout(self.runtime, "j-left")
+        layout.verdict.parent.mkdir(parents=True)
+        layout.verdict.write_text("Status: REVISE\n")
+        held = {"verdicts": []}
+        review.retain_pending_verdict(held, self.runtime, layout)
+        review.retain_pending_verdict(held, self.runtime, layout)  # once only
+        self.assertEqual([e["disposition"] for e in held["verdicts"]], ["not-ingested: interrupted"])
+        self.assertTrue((self.runtime / held["verdicts"][0]["path"]).is_file())
+
+    def test_a_relative_binary_path_survives_the_change_of_directory(self):
+        binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "system_dir": str(self.system),
+                                                            "orphan_seconds": 30})
+        relative = os.path.relpath(binary, Path.cwd())
+        self.assertTrue(review.resolve_binary(relative).is_absolute())
+        self.assertEqual(self.launch(binary=relative, job="j-rel")["outcome"], "verdict")
+
     def test_an_unregistered_harness_never_starts_anything(self):
         with mock.patch.dict(review.HARNESSES, clear=True), self.assertRaises(ReviewLaunchRefusedError):
             self.launch()
@@ -1215,6 +1271,34 @@ class RunnerTest(unittest.TestCase):
             review.run_bounded([sys.executable, "-c", "import time; time.sleep(30)"], cwd=Path("/"),
                                env={"PATH": review.SYSTEM_PATH}, timeout=30, on_spawn=interrupt)
         self.assertTrue(process_fixtures.wait_until(lambda: not FakeLaunchTest.group_alive(pgids[0])))
+
+    def test_a_detached_descendant_is_killed_and_the_deadline_holds_with_an_inherited_pipe(self):
+        code = ("import os, subprocess, sys, time\n"
+                "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)\n"
+                "print(p.pid, flush=True)\n"
+                "time.sleep(60)\n")
+        for inherit in (True, False):
+            with self.subTest(inherited_pipe=inherit):
+                script = code if inherit else code.replace("start_new_session=True",
+                                                           "start_new_session=True, stdout=subprocess.DEVNULL, "
+                                                           "stderr=subprocess.DEVNULL")
+                started = time.monotonic()
+                result = review.run_bounded([sys.executable, "-c", script], cwd=Path("/"),
+                                            env={"PATH": review.SYSTEM_PATH, review.OWNERSHIP_VAR: f"t{inherit}"},
+                                            timeout=0.5)
+                self.assertTrue(result.timed_out)
+                self.assertLess(time.monotonic() - started, 0.5 + review._DRAIN_SECONDS + 3)
+                descendant = int(result.stdout.split()[0]) if result.stdout.split() else None
+                if descendant is not None:
+                    self.assertTrue(process_fixtures.wait_until(lambda: not self.alive(descendant)))
+
+    @staticmethod
+    def alive(pid):
+        try:
+            with open(f"/proc/{pid}/stat") as fh:
+                return fh.read().rsplit(")", 1)[1].split()[0] != "Z"
+        except OSError:
+            return False
 
     def test_the_child_is_its_own_session_leader_and_gets_the_given_environment_only(self):
         result = review.run_bounded(

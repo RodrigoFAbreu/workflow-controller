@@ -189,7 +189,12 @@ EFFECTIVE_POLICY = {
 #: empty table or a null is unset; ``chatgpt_base_url`` always reports its packaged
 #: default value, which carries no origin.
 FORBIDDEN_EFFECTIVE_KEYS = ("model_providers", "openai_base_url", "chatgpt_base_url", "auto_review",
-                            "permissions", "default_permissions", "profiles", "profile")
+                            "permissions", "default_permissions", "profiles", "profile",
+                            # instruction- and skill-bearing configuration: the reviewer's instructions are the
+                            # prompt and the empty ``instructionSources`` alone, whichever layer would add more
+                            "model_instructions_file", "developer_instructions", "instructions",
+                            "base_instructions", "user_instructions", "experimental_instructions_file",
+                            "compact_prompt", "experimental_compact_prompt_file")
 
 #: The child environment is exactly these names (control (d)).
 ENV_ALLOWLIST = ("PATH", "HOME", "TMPDIR", "CODEX_HOME", "GIT_CEILING_DIRECTORIES", "LANG", "LC_ALL", OWNERSHIP_VAR)
@@ -523,7 +528,7 @@ def resolve_binary(name: str) -> Path:
     ``codex.js`` directory does not."""
     candidate = Path(name)
     if candidate.is_absolute() or "/" in name:
-        resolved = candidate
+        resolved = Path(os.path.abspath(candidate))  # lexical: the launcher symlink's directory is kept
     else:
         resolved = next((Path(d) / name for d in os.environ.get("PATH", "").split(":")
                          if d and (Path(d) / name).is_file()), candidate)
@@ -866,15 +871,25 @@ def check_effective(composed: Mapping, *, model: str = DEFAULT_MODEL, effort: st
         raise _refuse(f"the composed configuration sets {leaf} to {got_leaves.get(leaf, '<unset>')!r}, expected "
                       f"{wanted_leaves.get(leaf, '<unset>')!r}", check="effective", key=leaf,
                       value=got_leaves.get(leaf), source=_origin(origins, leaf))
+    for key in INSTRUCTION_KEYS:
+        if config.get(key) and _origin(origins, key) is None:
+            raise _refuse(f"the composed configuration sets {key} from no layer the Controller can judge",
+                          check="effective", key=key, value=config.get(key))
     for name in sorted(origins):
         origin = origins[name]
         # the bare layer source, or the documented ``{name: <layer source>, version: <sha256>}`` wrapper
         source = origin.get("name", origin) if isinstance(origin, Mapping) else origin
         if isinstance(source, Mapping) and source.get("type") == "packagedDefaults":
             continue
-        if name.split(".", 1)[0] in FORBIDDEN_EFFECTIVE_KEYS:
+        if name.split(".", 1)[0] in FORBIDDEN_EFFECTIVE_KEYS or (
+                name.startswith("skills.") and name != "skills.bundled.enabled"):
             raise _refuse(f"the composed configuration sets {name}", check="effective", key=name,
                           value=flatten(config).get(name), source=origin)
+
+
+INSTRUCTION_KEYS = ("model_instructions_file", "developer_instructions", "instructions", "base_instructions",
+                    "user_instructions", "experimental_instructions_file", "compact_prompt",
+                    "experimental_compact_prompt_file")
 
 
 def _check_layers(layers: Sequence, codex_home: Path | None) -> None:
@@ -951,17 +966,25 @@ class RunResult:
     pgid: int
 
 
+#: How long the output of a killed child is drained before its pipes are closed.
+_DRAIN_SECONDS = 2.0
+
+
 def run_bounded(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], timeout: float,
                 stdin_text: str | None = None, on_spawn: Callable[[int, int], None] | None = None) -> RunResult:
     """Run ``command`` in its own session with ``env`` exactly as given, under
     a hard deadline. On the deadline, or on any exception (``KeyboardInterrupt``
-    included), the whole process group is killed and the leader reaped before
-    the outcome or the exception is returned. The group gets no inherited
-    descriptor. ``on_spawn(pid, pgid)`` is called straight after the spawn."""
+    included), the whole process group is killed, and so is every process still
+    carrying the child's ownership tag (a descendant that left the group with
+    its own session), and the leader is reaped before the outcome or the
+    exception is returned. Draining the output after the kill is itself
+    bounded. The group gets no inherited descriptor. ``on_spawn(pid, pgid)`` is
+    called straight after the spawn."""
     proc = subprocess.Popen(list(command), cwd=cwd, env=dict(env), stdin=subprocess.PIPE if stdin_text is not None
                             else subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             start_new_session=True, close_fds=True)
     pgid = proc.pid
+    tag = env.get(OWNERSHIP_VAR)
     try:
         if on_spawn is not None:
             on_spawn(proc.pid, pgid)
@@ -969,23 +992,62 @@ def run_bounded(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], ti
             out, err = proc.communicate(stdin_text.encode() if stdin_text is not None else None, timeout=timeout)
             timed_out = False
         except subprocess.TimeoutExpired:
-            _kill_group(pgid)
-            out, err = proc.communicate()
+            _kill_owned(pgid, tag)
+            out, err = _drain(proc)
             timed_out = True
-        # descendants that outlive the leader belong to the same group
-        _kill_group(pgid)
+        # descendants that outlive the leader, in its group or not
+        _kill_owned(pgid, tag)
         return RunResult(proc.returncode, timed_out, out, err, proc.pid, pgid)
     except BaseException:
-        _kill_group(pgid)
+        _kill_owned(pgid, tag)
         with contextlib.suppress(Exception):
-            proc.communicate(timeout=5)
+            _drain(proc)
         proc.wait()
         raise
+
+
+def _drain(proc: "subprocess.Popen[bytes]") -> tuple[bytes, bytes]:
+    """What a killed child left on its pipes, within :data:`_DRAIN_SECONDS`; a
+    pipe still held open after that is closed and its remainder dropped."""
+    try:
+        return proc.communicate(timeout=_DRAIN_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        for pipe in (proc.stdout, proc.stderr, proc.stdin):
+            with contextlib.suppress(Exception):
+                if pipe is not None:
+                    pipe.close()
+        proc.wait()
+        return exc.output or b"", exc.stderr or b""
 
 
 def _kill_group(pgid: int) -> None:
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(pgid, signal.SIGKILL)
+
+
+def _kill_owned(pgid: int, tag: str | None) -> None:
+    """Kill the group, then every other process of this user whose environment
+    carries ``tag`` (the job's ownership tag, which a descendant inherits)."""
+    _kill_group(pgid)
+    if not tag:
+        return
+    wanted = f"{OWNERSHIP_VAR}={tag}".encode()
+    me = os.getpid()
+    try:
+        pids = [int(name) for name in os.listdir("/proc") if name.isdigit()]
+    except OSError:
+        return
+    for pid in pids:
+        if pid == me:
+            continue
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as fh:
+                variables = fh.read().split(b"\0")
+        except OSError:
+            continue
+        if wanted in variables:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signal.SIGKILL)
 
 
 # ---------------------------------------------------------------------------
@@ -1055,6 +1117,9 @@ class RolloutScan:
 
     limit: bool = False
     limit_detail: str | None = None
+    #: Codex's own limit error record (``task_complete.error``): what classifies a failed run as a limit.
+    #: ``limit`` alone (telemetry at 100 percent) feeds admission and accounting, never a failure's class.
+    limit_error: bool = False
     subagents: list[dict] = dataclasses.field(default_factory=list)
 
 
@@ -1110,7 +1175,7 @@ def scan_rollouts(codex_home: Path) -> RolloutScan:
                     error = payload.get("error")
                     info = error.get("codex_error_info") if isinstance(error, dict) else None
                     if _is_limit_error(info):
-                        scan.limit, scan.limit_detail = True, json.dumps(info)
+                        scan.limit, scan.limit_error, scan.limit_detail = True, True, json.dumps(info)
         if subagent:
             scan.subagents.append({"rollout": str(path.relative_to(root)), "total_tokens": tokens})
     return scan
@@ -1258,38 +1323,43 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
             scan = scan_rollouts(layout.codex_home)
             result["subagents"] = scan.subagents
             verdict = layout.verdict.read_text("utf-8") if layout.verdict.is_file() else ""
-            status = verify_verdict(verdict, expected).status if verdict.strip() else None
+            # kept the moment it is read: nothing below, an interruption included, can lose it
+            kept = (_retain_verdict(runtime_root, job_id, attempt, verdict, None, "pending")
+                    if verdict.strip() else None)
+            if kept is not None:
+                result["verdicts"].append(kept)
+            status = verify_verdict(verdict, expected).status if kept is not None else None
+            if kept is not None:
+                kept["status"] = status
             if run.timed_out:
-                if verdict.strip():
-                    result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, status, "not-ingested: timeout"))
+                if kept is not None:
+                    kept["disposition"] = "not-ingested: timeout"
                 result.update(outcome="timeout", detail="the review passed its deadline")
                 break
-            if run.exit_code != 0 or not verdict.strip():
-                if verdict.strip():
-                    result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, status,
-                                                              f"not-ingested: exit {run.exit_code}"))
+            if run.exit_code != 0 or kept is None:
+                if kept is not None:
+                    kept["disposition"] = f"not-ingested: exit {run.exit_code}"
                 text = run.stdout.decode("utf-8", "replace") + run.stderr.decode("utf-8", "replace")
-                result.update(outcome="limit" if scan.limit else ("empty" if run.exit_code == 0 else "failed"),
-                              detail=(f"Codex reported a limit ({scan.limit_detail})" if scan.limit
+                result.update(outcome="limit" if scan.limit_error else ("empty" if run.exit_code == 0 else "failed"),
+                              detail=(f"Codex reported a limit ({scan.limit_detail})" if scan.limit_error
                                       else text.strip()[-400:]))
                 break
             check = verify_verdict(verdict, expected)
             result.update(check=check, status=check.status)
-            if check.ok and retry_changed_status(result["verdicts"], attempt, check.status):
+            earlier = result["verdicts"][:-1]
+            if check.ok and retry_changed_status(earlier, attempt, check.status):
                 # workflow#28 condition 2: a header retry never turns a verdict into a different status
-                result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, check.status,
-                                                          "not-ingested: status changed on the header retry"))
+                kept["disposition"] = "not-ingested: status changed on the header retry"
                 result.update(outcome="status_changed", detail=(
-                    f"the two attempts disagreed: the first verdict said {result['verdicts'][0]['status']}, "
+                    f"the two attempts disagreed: the first verdict said {earlier[0]['status']}, "
                     f"the retry {check.status}; both verdicts are in the record"))
                 break
             if check.ok:
-                result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, check.status, "returned"))
+                kept["disposition"] = "returned"
                 result.update(outcome="verdict", verdict=verdict, detail=None)
                 break
-            result["verdicts"].append(_retain_verdict(
-                runtime_root, job_id, attempt, verdict, check.status,
-                "not-ingested: header mismatch, retried once" if attempt == 1 else "not-ingested: header mismatch"))
+            kept["disposition"] = ("not-ingested: header mismatch, retried once" if attempt == 1
+                                   else "not-ingested: header mismatch")
             result.update(outcome="mismatch", detail=mismatch_note(check))
             note = mismatch_note(check)
             runtime.remove_tree(runtime_root, layout.rel("verdict.md"))
@@ -1305,6 +1375,22 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     return result
 
 
+def retain_pending_verdict(result: dict, runtime_root: Path, layout: JobLayout) -> None:
+    """Keep a verdict file still on disk that no entry holds (an interruption between the run and
+    its retention, or a half-written file), before the job's files are removed."""
+    try:
+        text = layout.verdict.read_text("utf-8")
+    except (OSError, ValueError):
+        return
+    if not text.strip():
+        return
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if any(entry["sha256"] == digest for entry in result["verdicts"]):
+        return
+    result["verdicts"].append(_retain_verdict(runtime_root, layout.job_id, len(result["verdicts"]) + 1, text, None,
+                                              "not-ingested: interrupted"))
+
+
 def _settle(result: dict, runtime_root: Path, layout: JobLayout, operator_home: Path, captured: str | None,
             selected: ReviewHarness) -> None:
     """The three clean-up steps of every path, each guarded: one failing step
@@ -1313,6 +1399,7 @@ def _settle(result: dict, runtime_root: Path, layout: JobLayout, operator_home: 
     with nothing in flight the first failure is raised."""
     failures: list[Exception] = []
     steps: list[Callable[[], None]] = []
+    steps.append(lambda: retain_pending_verdict(result, runtime_root, layout))
     if captured is not None:
         steps.append(lambda: result.__setitem__("credentials", copy_back_credentials(layout, operator_home, captured)))
     steps.append(lambda: result.__setitem__("readings", selected.end_readings(layout.codex_home)))

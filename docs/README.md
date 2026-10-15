@@ -89,6 +89,7 @@ stay stable; the code and the guides must agree with them.
 | [0010](adr/0010-orchestration-protocol-admission-by-capability.md) | admission of a Workflow release by capability (protocol major 1), the protocol's decisions and outcomes, and what stays the Controller's; amends 0006 |
 | [0011](adr/0011-usage-budget.md) | the usage budget: readings, reservations and a ledger shared by all lanes, the gate before every job, exit 17, and what is deferred (C8b, C8c) |
 | [0012](adr/0012-signalhub-notifications.md) | SignalHub notifications: the closed event table, per-event configuration, idempotent keys, delivery off the lifecycle's thread with no outbox, and credentials |
+| [0013](adr/0013-review-only-harness-seam.md) | The review-only harness seam: the Controller couriers a verdict from a distinct Codex reviewer in a disposable copy, the obligation-5 reading, the enforced boundary and what C10 reuses |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

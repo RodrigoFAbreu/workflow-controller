@@ -12,8 +12,8 @@ approved by policy (commit `3d304d3`); the base commit is `dea2125`. The plan is
 | CP1 settings rows, `record_external_result`, `rm -f` note | committed (`f880306`) |
 | CP2 Codex harness | committed (`f9a14f2`); the D12 operator pre-step is open, so the harness stays unregistered |
 | CP3 review job | committed (`078879e`) |
-| CP4 lifecycle scenarios | implemented, verified; commit follows |
-| CP5 documentation and full suite | not started |
+| CP4 lifecycle scenarios | committed (`1bd2639`) |
+| CP5 documentation and full suite | committed |
 
 CP1 changes:
 - `controller/settings.py`: the five `reviewer.*` rows (`harness`, `model`, `effort`, `timeout_seconds`,
@@ -111,8 +111,22 @@ CP4 changes:
 
 Verified: `tests.test_scenarios`, `tests.test_scenarios_negative`, `tests.test_scenario_kit` (110 tests).
 
+CP5 changes:
+- `docs/adr/0013-review-only-harness-seam.md` (new; records the obligation-5 reading, which the Workflow side has
+  not yet confirmed, so the ADR marks it open), `docs/README.md` (ADR map).
+- `docs/guide/runtime.md` (the five `reviewer.*` rows, generation 6), `docs/run.md` (letting the Controller run the
+  external review), `docs/common-problems.md` (a review that did not finish; the `rm -i` hang),
+  `docs/compatibility.md` (the D15 downgrade note: a runtime holding a review record cannot be read by 1.9.0;
+  `resume` it with 1.10.0 first; the `command rm -f` / `command cp -f` note), `docs/ROADMAP.md` (C7 complete,
+  follow-up 24 fixed, what C10 reuses; `excluded` as workflow bookkeeping).
+- `docs/release-history.md` and `docs/releases/1.10.0.md` are written after the release, as for earlier releases.
+
+Verified: `tools/check_docs.py` clean; golden `--check` clean for three of four generators (`plan_stage_decisions`
+differs on a clean HEAD as well, so it predates CP5 and is not caused by it); full suite 3821 tests, only the two
+known Git 2.56 trailer tests fail.
+
 ## Next action
 
-CP4 is committed once the checkpoint commit lands. The harness still cannot be registered until the operator records
-the D12 pre-step under `tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`; the tests patch the registry.
-Invoke `/milestone-implement` again for CP5.
+All five checkpoints are implemented. Invoke `/milestone-implement` again for the self-review, the full
+verification and the implementation-review bundle. The `codex` harness still cannot be registered until the
+operator records the D12 pre-step under `tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`.

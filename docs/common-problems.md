@@ -74,6 +74,17 @@ A notice for a step that was cut off when the process died is derived again
 by `resume`, for a job that ended in the last 30 minutes. See
 [unattended runs](guide/automation.md#notifications-from-an-unattended-run).
 
+## A review the Controller ran did not finish
+
+Only with `reviewer.harness` set. The Controller started the external review itself and the job did not hand a verdict to the Workflow. `explain` and the job record say which of these it was; the external review gate is still open in every case, so you can always do the review by hand and paste the verdict.
+
+- **Exit 35, `INCOMPLETE`**: the reviewer hit a usage limit, passed `reviewer.timeout_seconds`, ended with no verdict, or the repository or the Workflow state changed while it ran (the verdict is then never ingested). Run again. After a limit, that `run` is held at admission (exit 17 for `step`) until the Codex window resets, because the review's retained rollout is counted.
+- **Exit 30, `FAILED`**: the verdict's header did not match the bundle exactly even after the one retry, the Workflow refused the ingest (`refused`, or `not_applicable` because the stage had moved), or the reviewer failed with no limit text. Nothing was ingested. Fix what the record names, or review by hand.
+- **Exit 20 before anything started**: `reviewer.harness` names a harness that is not registered, or the launch boundary was not reproduced (an outside Codex configuration layer, an unlisted feature, a managed provider, no credential file). The message names the check. Nothing was recorded.
+- **After Ctrl-C or a crash**: `workflow-controller resume <repo>` ends the review's process group, copies the credentials back, removes the copy and closes the record.
+
+See [pausing for usage limits](run.md#pausing-for-usage-limits), [`resume`](guide/workers.md#restart-resume-re-attaches) and [ADR 0013](adr/0013-review-only-harness-seam.md).
+
 ## The usage record cannot be read
 
 `step` or `run` stops with "the usage record ... is not a version 2 object" or "cannot be read". `usage.json` in the runtime root is either damaged or was written by a newer Controller release than this one. It is never overwritten. To keep working, set `usage.enabled: false` (the budget is then off and the record is not touched), or install the release that wrote it. Deleting the file also works but forgets every lane's reservations and spend. A job whose accounting was pending is settled by repairing or restoring the original record in place, but only before the next `step`, `run` or `resume`: one of those that runs on a fresh record finds the job's reservation unknown and marks its accounting done with no charge (an `usage_accounting_orphan` event), and restoring the record afterwards no longer settles it. Restore the record first. (`usage` alone does not do this.) `step`, `run` and `resume` never lose a job's outcome to it: the accounting is skipped with a warning, the job stays unaccounted, and a release that can read the record settles it later. The `usage` view itself reports the error.
@@ -81,6 +92,10 @@ by `resume`, for a job that ended in the last 30 minutes. See
 ## A worker hit a usage limit while it ran
 
 The budget forecasts, it cannot stop a job that exceeds its forecast. A job that meets the limit mid-way fails (exit 30). Check `workflow-controller usage`, wait for the reset, then run `explain` and run again. Recognising this case and waiting for it automatically is a roadmap item (C8b).
+
+## A worker's shell command waits for a y/n answer
+
+An operator's shell can alias `rm` to `rm -i` and `cp` to `cp -i`, and a background command in a worker then waits for an answer nobody gives. The worker lifecycle note now tells workers to use `command rm -f` and `command cp -f`. In a command you run for a worker, or in a script it calls, do the same.
 
 ## I pressed Ctrl-C
 

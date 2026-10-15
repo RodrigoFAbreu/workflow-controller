@@ -121,6 +121,27 @@ workflow-controller run --max-steps 1 .
 
 A run that stops because it used all its steps with work outstanding exits 16; run again to continue.
 
+## Letting the Controller run the external review
+
+By default a run stops at an external review gate (`plan.review.external`,
+`implementation.review.external`) and waits for a person to give the bundle
+to a reviewer of another model family and paste the verdict. With
+`reviewer.harness` set in the [settings file](guide/runtime.md#what-it-holds)
+the Controller starts that reviewer itself, in a disposable copy of the
+worktree, checks that the verdict's header matches the bundle exactly and
+hands it to the Workflow. The review passes the same usage gate as a
+worker, against the Codex windows, so a hold exits `17` like any other.
+Every other gate, and every repository with `reviewer.harness` unset, is
+unchanged.
+
+A review that ends without a verdict leaves the gate open, so the manual
+route still works. A limit, a timeout or an empty run ends the job
+`INCOMPLETE` (exit `35`) and needs a new `run`, which waits at admission for
+the reset. See [the troubleshooting entry](common-problems.md#a-review-the-controller-ran-did-not-finish).
+The design is [ADR 0013](adr/0013-review-only-harness-seam.md); the harness
+is not yet selectable until its operator pre-step is recorded, which the ADR
+describes.
+
 ## Notifications
 
 A run you leave alone can push its events to SignalHub: a finished step, a

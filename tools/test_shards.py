@@ -60,7 +60,9 @@ process: it loads each atom by name, refuses (exit 2) before running anything
 unless the loaded ids equal the planned ids exactly, runs the controller atoms
 through ``unittest``'s own text runner with a recording result that keys every
 event to a planned id or to a fixture, runs each conformance suite as the
-managed workflow does, and writes ``shard-<i>.json``. ``aggregate`` turns a
+managed workflow does (in a second lane beside the controller tests, so a
+shard lasts as long as its longer lane; the planner balances that, see
+``assign_lanes``; a plan with ``conformance_lane`` false runs them after), and writes ``shard-<i>.json``. ``aggregate`` turns a
 plan and its shards' records into verdicts, the run-time coverage proof (I2),
 an exit status and a summary with reproduction commands.
 
@@ -69,18 +71,22 @@ Nothing in ``controller/`` imports this file.
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import heapq
 import json
 import math
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from dataclasses import dataclass, field, replace
@@ -175,9 +181,16 @@ MAX_UPDATED_FROM = 20
 #: about the unavoidable conformance floor. The CI maximum is a runner
 #: budget: 4 shards + ``package`` + the managed ``workflow-conformance`` job
 #: hold 6 Linux runners per pull request, on an account limit of 20 jobs.
-#: The conformance job (15-21 minutes), not ``validate``, sets when a pull
-#: request's checks finish, so longer shards cost nothing there.
+#: The managed conformance job (10-14 minutes with Workflow 2.10.0) and
+#: ``validate`` now end at about the same time, so a shard's wall time counts
+#: (amendment 2026-10-13: the conformance lane).
 PLAN_SCHEMA_VERSION = 1
+#: A shard runs its conformance suites in a second process beside its
+#: controller tests (ADR 0005, amendment 2026-10-13), so its expected
+#: duration is the longer of the two lanes, times this factor when both lanes
+#: have work: two processes share the runner's CPUs and the measured slowdown
+#: was 1.05 locally and up to 1.3 on CI.
+LANE_CONTENTION = 1.15
 LOCAL = "local"
 CI = "ci"
 LOCAL_TARGET_SHARD_SECONDS = 60
@@ -845,10 +858,13 @@ class PlanParameters:
     min_shards: int
     max_shards: int
     shards: int | None = None
+    #: Plan for the two-lane executor: balance by the longer lane.
+    conformance_lane: bool = True
 
     def document(self) -> dict:
         doc = {"target_shard_seconds": self.target_shard_seconds,
-               "min_shards": self.min_shards, "max_shards": self.max_shards}
+               "min_shards": self.min_shards, "max_shards": self.max_shards,
+               "conformance_lane": self.conformance_lane}
         if self.shards is not None:
             doc["shards"] = self.shards
         return doc
@@ -857,7 +873,8 @@ class PlanParameters:
 def profile_parameters(profile: str, *, cpu_count: int | None = None,
                        target_shard_seconds: float | None = None,
                        min_shards: int | None = None, max_shards: int | None = None,
-                       shards: int | None = None) -> PlanParameters:
+                       shards: int | None = None,
+                       conformance_lane: bool = True) -> PlanParameters:
     """``profile``'s parameters, each overridable. The local maximum is
     ``min(LOCAL_MAX_SHARDS, cpu_count)``: one shard per CPU is the measured
     safe default (``cpu_count`` defaults to ``os.cpu_count()``)."""
@@ -875,7 +892,7 @@ def profile_parameters(profile: str, *, cpu_count: int | None = None,
         else target_shard_seconds,
         min_shards=defaults[1] if min_shards is None else min_shards,
         max_shards=defaults[2] if max_shards is None else max_shards,
-        shards=shards)
+        shards=shards, conformance_lane=conformance_lane)
     problems = []
     if not (_is_seconds(parameters.target_shard_seconds)
             and parameters.target_shard_seconds > 0):
@@ -960,6 +977,41 @@ def assign_atoms(estimates_ms: list[int], count: int) -> list[list[int]]:
     return [sorted(shard) for shard in shards]
 
 
+def lane_seconds(controller_ms: int, conformance_ms: int) -> float:
+    """A shard's expected duration in milliseconds: the longer of its two
+    lanes, times ``LANE_CONTENTION`` when both have work."""
+    if controller_ms and conformance_ms:
+        return max(controller_ms, conformance_ms) * LANE_CONTENTION
+    return float(controller_ms + conformance_ms)
+
+
+def assign_lanes(estimates_ms: list[int], is_conformance: list[bool],
+                 count: int) -> list[list[int]]:
+    """Two-lane assignment for ``count`` shards: the conformance atoms first,
+    by LPT onto the least-loaded shard; then the controller atoms, longest
+    first, each onto the shard whose expected duration (``lane_seconds``)
+    is smallest after the atom joins, ties to the lower load and index. A
+    shard that has no atom yet is filled before any shard gets a second one,
+    so none is left empty. Each shard's atoms back in canonical order."""
+    conformance = [0] * count
+    controller = [0] * count
+    shards: list[list[int]] = [[] for _ in range(count)]
+    order = sorted(range(len(estimates_ms)), key=lambda i: (-estimates_ms[i], i))
+    for atom in (i for i in order if is_conformance[i]):
+        target = min(range(count), key=lambda s: (conformance[s], s))
+        conformance[target] += estimates_ms[atom]
+        shards[target].append(atom)
+    for atom in (i for i in order if not is_conformance[i]):
+        candidates = [s for s in range(count) if not shards[s]] \
+            or list(range(count))
+        target = min(candidates, key=lambda s: (
+            lane_seconds(controller[s] + estimates_ms[atom], conformance[s]),
+            controller[s] + conformance[s], s))
+        controller[target] += estimates_ms[atom]
+        shards[target].append(atom)
+    return [sorted(shard) for shard in shards]
+
+
 def canonical_json(value) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
                       allow_nan=False).encode("utf-8")
@@ -1012,16 +1064,27 @@ def build_plan(selection: Selection, parameters: PlanParameters,
     if parallel:
         parallel_ms = [estimates_ms[i] for i in parallel]
         count = shard_count(parallel_ms, parameters, floor_ms)
-        groups = [[parallel[i] for i in members]
-                  for members in assign_atoms(parallel_ms, count)]
+        if parameters.conformance_lane:
+            lanes = [selection.atoms[i].family == CONFORMANCE for i in parallel]
+            assigned = assign_lanes(parallel_ms, lanes, count)
+        else:
+            assigned = assign_atoms(parallel_ms, count)
+        groups = [[parallel[i] for i in members] for members in assigned]
     if alone:
         groups.append(alone)
     shards = []
     for index, members in enumerate(groups):
         atoms = [selection.atoms[i] for i in members]
+        if parameters.conformance_lane:
+            conformance_ms = sum(estimates_ms[i] for i in members
+                                 if selection.atoms[i].family == CONFORMANCE)
+            expected_ms = lane_seconds(sum(estimates_ms[i] for i in members) - conformance_ms,
+                                       conformance_ms)
+        else:
+            expected_ms = sum(estimates_ms[i] for i in members)
         shard = {"index": index, "atoms": [atom.key for atom in atoms],
                  "test_ids": [test_id for atom in atoms for test_id in atom.test_ids],
-                 "estimate_seconds": sum(estimates_ms[i] for i in members) / 1000}
+                 "estimate_seconds": round(expected_ms) / 1000}
         if members is alone:
             shard[EXCLUSIVE] = True
         shards.append(shard)
@@ -1421,7 +1484,19 @@ def _backfill(result: RecordingResult, planned: list[str], atom_of: Mapping[str,
                 "detail": f"skipped by {skip['description']}: {skip['reason']}"}
 
 
-def _run_conformance(key: str, repo_root: Path, log) -> tuple[dict, float]:
+def _die_with_parent() -> None:
+    """``preexec_fn`` for a suite the helper starts: SIGKILL it when the
+    helper dies (Linux ``PR_SET_PDEATHSIG``; elsewhere a no-op, and the
+    helper's session kill still applies)."""
+    try:
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0)
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+
+
+def _run_conformance(key: str, repo_root: Path, log,
+                     die_with_parent: bool = False) -> tuple[dict, float]:
     """Run one frozen suite as the managed workflow does (``cd scripts &&
     python3 <file>``), with this interpreter and the inherited environment,
     appending its output to the log."""
@@ -1431,12 +1506,14 @@ def _run_conformance(key: str, repo_root: Path, log) -> tuple[dict, float]:
     start = time.monotonic()
     process = subprocess.Popen([sys.executable, suite], cwd=Path(repo_root) / SCRIPTS_DIR,
                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
+                               stderr=subprocess.STDOUT,
+                               preexec_fn=_die_with_parent if die_with_parent else None)
     tail: deque[str] = deque(maxlen=TRACEBACK_TAIL_LINES)
     for raw in process.stdout:
         line = raw.decode("utf-8", "replace")
         log.write(line)
         tail.append(line.rstrip("\n"))
+    process.stdout.close()
     status = process.wait()
     seconds = round(time.monotonic() - start, 6)
     log.write(f"=== {key}: exit status {status} in {seconds:.3f}s ===\n")
@@ -1446,6 +1523,325 @@ def _run_conformance(key: str, repo_root: Path, log) -> tuple[dict, float]:
         entry["detail"] = (f"{suite} exited with status {status}; its last output:\n"
                            + "\n".join(tail))
     return entry, seconds
+
+
+def _group_survivors(pgid: int) -> list[dict]:
+    """Live (not zombie) members of process group ``pgid`` other than ``pgid``
+    itself, as ``{pid, argv, age_seconds}`` like ``scan_marked_processes``."""
+    found = []
+    try:
+        pids = sorted(int(name) for name in os.listdir("/proc") if name.isdigit())
+    except OSError:
+        return found
+    for pid in pids:
+        if pid == pgid:
+            continue
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            fields = stat[stat.rindex(")") + 2:].split()
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except (OSError, ValueError):
+            continue
+        if fields[0] in ("Z", "X", "x") or int(fields[2]) != pgid:
+            continue
+        argv = [part.decode("utf-8", "replace") for part in cmdline.split(b"\0") if part]
+        found.append({"pid": pid, "argv": argv, "age_seconds": _process_age(pid)})
+    return found
+
+
+#: Captured at import, before any test patches ``os`` or ``select``.
+_PIDFD_OPEN = getattr(os, "pidfd_open", None)
+_SELECT = select.select
+_CLOSE = os.close
+
+
+class _ConformanceLane:
+    """A shard's conformance suites, run one at a time in plan order by a
+    helper process (``python3 test_shards.py --conformance-lane ...``) while
+    the caller runs the controller tests (ADR 0005, amendment 2026-10-13).
+
+    The suites are the helper's children, not this process's: the Controller
+    tests start real workers in this process and treat any new child of it as
+    an adopted escapee to kill, so a suite started as this process's child
+    mid-test was killed (exit -9). The helper starts before the first test,
+    so it is part of every launch's baseline. It runs in its own session, so
+    ``stop`` can end it and its suite together. Each suite's output goes to
+    its own part file, appended to the log by ``write_to`` after the
+    ``unittest`` output, so the log gets whole sections."""
+
+    def __init__(self, keys: list[str], repo_root: Path, work_dir: Path, name: str) -> None:
+        self.keys = keys
+        self.repo_root = repo_root
+        self.prefix = Path(work_dir) / name
+        self.result_file = Path(f"{self.prefix}.json")
+        self.done_file = Path(f"{self.prefix}.done")
+        self.stopping = False
+        self.crashed = False
+        self.survivors: list[dict] = []
+        self._monitor_thread: threading.Thread | None = None
+        self._crash_lock = threading.Lock()
+        self.process: subprocess.Popen | None = None  # the launcher, gone at once
+        self.helper_pid: int | None = None
+        self.pid_file = Path(f"{self.prefix}.pid")
+        self.crash_file = Path(f"{self.prefix}.crash")
+        self._pidfd: int | None = None
+        self.finished: list[tuple[str, Path, dict, float]] = []
+        self.error: str | None = None
+
+    def start(self) -> None:
+        self.process = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), LANE_FLAG, str(self.repo_root),
+             str(self.prefix), *self.keys],
+            stdin=subprocess.PIPE)
+        # The launcher forks the guard (which forks the helper) into its own
+        # session and exits, so neither is this process's child: Controller
+        # tests in this process kill or reap children they did not start.
+        self.process.wait()
+        deadline = time.monotonic() + 30
+        while self.helper_pid is None:
+            try:
+                self.helper_pid = int(self.pid_file.read_text())
+            except (OSError, ValueError):
+                if time.monotonic() > deadline:
+                    raise RuntimeError("the conformance lane guard did not start")
+                time.sleep(0.02)
+        if _PIDFD_OPEN is not None:
+            try:
+                self._pidfd = _PIDFD_OPEN(self.helper_pid)
+            except OSError:
+                self._pidfd = None
+        self._monitor_thread = threading.Thread(target=self._monitor, name="lane-monitor",
+                                                daemon=True)
+        self._monitor_thread.start()
+
+    @property
+    def pid(self) -> int | None:
+        """The guard's pid, which is also its process group id."""
+        return self.helper_pid
+
+    def own_pids(self) -> list[int]:
+        """The lane's own processes (the guard and the helper), which the
+        leak scan must not report."""
+        if self.helper_pid is None:
+            return []
+        return [self.helper_pid] + [
+            member["pid"] for member in _group_survivors(self.helper_pid)
+            if LANE_FLAG in member["argv"] and str(self.prefix) in member["argv"]]
+
+    def _alive(self, wait: float = 0.0) -> bool:
+        """Whether the guard still runs, waiting up to ``wait`` seconds for it
+        to end. A pidfd becomes readable when the process exits, zombie or
+        not, and is asked through ``select`` captured at import: tests in
+        this process patch ``os`` and /proc readers, ignore SIGCHLD and
+        reap with ``waitpid(-1)``. Without pidfd (before Linux 5.3) it falls
+        back to ``kill(pid, 0)``, which a zombie evades."""
+        if self._pidfd is not None:
+            readable, _, _ = _SELECT([self._pidfd], [], [], wait)
+            return not readable
+        if wait:
+            time.sleep(wait)
+        return ctypes.CDLL(None, use_errno=True).kill(self.helper_pid, 0) == 0
+
+    def _crash(self) -> None:
+        """The guard is gone without ``stop``: take the survivors it listed
+        (or list the group's), and end the group. Called by the monitor and
+        by ``stop``, once: the lock makes the second call a no-op."""
+        with self._crash_lock:
+            if self.crashed:
+                return
+            self._record_crash()
+
+    def _record_crash(self) -> None:
+        try:
+            self.survivors = json.loads(self.crash_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self.survivors = _group_survivors(self.helper_pid)
+        self.crashed = True
+        try:
+            os.killpg(self.helper_pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+    def _monitor(self) -> None:
+        while not self.stopping and self._alive(0.2):
+            pass
+        if not self.stopping:
+            self._crash()
+
+    def join(self) -> None:
+        """Wait until the helper reports every suite done, or the lane fails,
+        and read the results. The guard stays alive, with the helper's
+        adopted orphans, until ``stop``."""
+        if self.process is None:
+            return
+        while (not self.done_file.exists() and not self.crash_file.exists()
+               and self._alive(0.05)):
+            pass
+        if self.crash_file.exists() or not self._alive():
+            if self._monitor_thread is not None:
+                self._monitor_thread.join(timeout=10)
+        try:
+            document = json.loads(self.result_file.read_text(encoding="utf-8"))
+            self.finished = [(item["key"], Path(item["part"]), item["entry"], item["seconds"])
+                             for item in document]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            self.error = f"no readable result file ({type(exc).__name__}: {exc})"
+        if self.crashed or not self.done_file.exists() or (self.error is None
+                                           and len(self.finished) != len(self.keys)):
+            self.error = (self.error or "") + (f" the lane process died unexpectedly after "
+                                               f"{len(self.finished)} of {len(self.keys)} suites")
+
+    def stop(self) -> None:
+        """End the lane: the guard, the helper, its suites and every
+        descendant in the guard's session (the group id is the guard's pid
+        and stays ours while any member lives, so this also works after the
+        guard died)."""
+        pid = self.helper_pid
+        if pid is None or self.stopping:
+            return
+        self.stopping = True
+        # The monitor may not have run yet (it polls, and can be descheduled
+        # for the whole final scan). Look for the lane's own evidence before
+        # anything is deleted: a guard that is gone, or a crash file it wrote,
+        # means the lane died before ``stop`` and its survivors are leaks.
+        if self.crash_file.exists() or not self._alive():
+            self._crash()
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        deadline = time.monotonic() + 5
+        while self._alive(0.02) and time.monotonic() < deadline:
+            pass
+        if self._pidfd is not None:
+            _CLOSE(self._pidfd)
+            self._pidfd = None
+        if self.process is not None and self.process.stdin is not None \
+                and not self.process.stdin.closed:
+            self.process.stdin.close()
+        for path in (self.pid_file, self.result_file, self.done_file, self.crash_file):
+            path.unlink(missing_ok=True)
+
+    def write_to(self, log) -> None:
+        for _, part, _, _ in self.finished:
+            try:
+                log.write(part.read_text(encoding="utf-8", errors="replace"))
+            except OSError as exc:
+                log.write(f"\n[conformance output {part.name} unreadable: {exc}]\n")
+            part.unlink(missing_ok=True)
+        for part in sorted(self.prefix.parent.glob(f"{self.prefix.name}.*.part")):
+            # A suite the lane did not finish (the lane crashed or was stopped).
+            log.write(f"\n=== unfinished conformance output ({part.name}) ===\n")
+            log.write(part.read_text(encoding="utf-8", errors="replace"))
+            part.unlink(missing_ok=True)
+        log.flush()
+
+
+LANE_FLAG = "--conformance-lane"
+
+
+def _run_lane_suites(repo_root: Path, prefix: str, keys: list[str]) -> None:
+    """The helper: run each suite with ``_run_conformance``, output to
+    ``<prefix>.<n>.part``, rewrite ``<prefix>.json`` after every suite, mark
+    ``<prefix>.done`` and then wait to be ended."""
+    document = []
+    for number, key in enumerate(keys):
+        part = Path(f"{prefix}.{number}.part")
+        with open(part, "w", encoding="utf-8") as out:
+            entry, seconds = _run_conformance(key, repo_root, out, die_with_parent=True)
+        document.append({"key": key, "part": str(part), "entry": entry, "seconds": seconds})
+        write_json_atomic(Path(f"{prefix}.json"), document)
+    write_json_atomic(Path(f"{prefix}.done"), True)
+    while True:  # ended by the guard with the rest of the session
+        time.sleep(3600)
+
+
+def _lane_main(argv: list[str]) -> int:
+    """The lane's processes: ``<repo_root> <prefix> <key>...``. This process is
+    the launcher: it forks the GUARD and exits at once. The guard leads a new
+    session and process group and is a child subreaper, writes its pid to
+    ``<prefix>.pid`` and forks the HELPER (``_run_lane_suites``) in that
+    session. The guard
+
+    - ends the whole session when the executor's pipe (our stdin) reaches EOF,
+      which any end of the executor causes (a signal, ``os._exit``, SIGKILL);
+    - ends the whole session when the helper exits at all, after writing the
+      group's live survivors to ``<prefix>.crash`` for the executor's leak
+      list: it is the helper's parent, so it sees the exit at once, zombie or
+      not, and needs no executor to be alive or polling;
+    - reaps the orphans of the suites it adopts, and never kills them before
+      the executor has run its leak scan.
+
+    It keeps no other state and runs no shard code."""
+    repo_root, prefix, keys = Path(argv[0]), argv[1], argv[2:]
+    if os.fork():
+        os._exit(0)  # the launcher: the executor needs it gone at once
+    os.setsid()
+    try:  # PR_SET_CHILD_SUBREAPER: orphans of the suites stay in this session
+        ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
+    except Exception:  # noqa: BLE001 - best effort, Linux only
+        pass
+    write_json_atomic(Path(f"{prefix}.pid"), os.getpid())
+    helper = os.fork()
+    if helper == 0:
+        try:
+            _die_with_parent()
+            _run_lane_suites(repo_root, prefix, keys)
+        finally:
+            os._exit(1)
+
+    def eof_guard() -> None:
+        try:
+            while os.read(0, 4096):
+                pass
+        except OSError:
+            pass
+        os.killpg(os.getpgrp(), signal.SIGKILL)
+
+    threading.Thread(target=eof_guard, name="eof-guard", daemon=True).start()
+    while True:
+        try:
+            reaped, _ = os.waitpid(-1, 0)
+        except ChildProcessError:
+            time.sleep(0.2)
+            continue
+        if reaped == helper:
+            write_json_atomic(Path(f"{prefix}.crash"), _group_survivors(os.getpid()))
+            os.killpg(os.getpgrp(), signal.SIGKILL)
+
+
+def _stop_lane_on_signals(lane):
+    """While a lane runs, SIGTERM first ends the lane's session (the
+    helper, its suite and their descendants, which share the helper's process
+    group), then terminates this process as the default disposition would
+    (raising ``SystemExit`` instead would be swallowed by a running test).
+    Only from the main thread and only over the default disposition. SIGINT
+    stays at its default (the runner promises shards that, and a test checks
+    it): an executor ended by SIGINT is covered by the helper's pipe guard and
+    the lane's monitor. Returns what ``_restore_signals`` needs. A SIGKILL of the executor cannot run
+    this; the helper's pipe guard and its suites' parent-death signal still
+    end the helper and its suites, and a descendant that left the group is
+    left to the supervisor's marker scan (ADR 0005)."""
+    previous = {}
+    for number in (signal.SIGTERM,):
+        try:
+            if signal.getsignal(number) is signal.SIG_DFL:
+                def handler(signum, frame):
+                    lane.stop()
+                    signal.signal(signum, signal.SIG_DFL)
+                    os.kill(os.getpid(), signum)
+                previous[number] = signal.signal(number, handler)
+        except ValueError:  # not the main thread
+            break
+    return previous
+
+
+def _restore_signals(previous) -> None:
+    for number, handler in previous.items():
+        try:
+            signal.signal(number, handler)
+        except ValueError:
+            pass
 
 
 def shard_status(record: Mapping, was_successful: bool | None,
@@ -1476,7 +1872,11 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
     ``<results_dir>/shard-<index>.json`` (appending the runner output to
     ``shard-<index>.log``), and return the record and the exit status: ``0``
     pass, ``1`` fail (a failing test or a leaked process), ``2`` refused.
-    The loaded ids are checked against the planned ids before anything runs;
+    The shard's conformance suites run in a helper process (each suite its
+    own process, one at a time) beside the controller tests, or after them
+    when the plan has ``conformance_lane`` false (``--serial``), and the
+    leak scan runs after both lanes end; a lane that crashes refuses the
+    shard. The loaded ids are checked against the planned ids before anything runs;
     any event the recording rules cannot map, any planned id left without an
     entry, or a disagreement with ``unittest``'s own verdict refuses the
     shard after it ran. The record
@@ -1493,6 +1893,7 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
     atoms: dict[str, float] = {}
     problems: list[str] = []
     was_successful = None
+    lane = None
     with open(log_path(results_dir, index), "a", encoding="utf-8") as log:
         try:
             units = load_shard(shard, repo_root)
@@ -1501,22 +1902,46 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
             problems.append(str(exc))
         if units is not None:
             controller = [(key, suite) for key, suite in units if suite is not None]
-            if controller:
-                atom_of = {test.id(): key for key, suite in controller for test in suite}
-                sequence = _AtomSequence(controller)
-                runner = unittest.TextTestRunner(
-                    stream=log, verbosity=2,
-                    resultclass=partial(RecordingResult, planned=atom_of))
-                result = runner.run(sequence)
-                was_successful = result.wasSuccessful()
-                _backfill(result, planned, atom_of)
-                entries.update(result.entries)
-                fixture_errors, fixture_skips = result.fixture_errors, result.fixture_skips
-                atoms.update(sequence.seconds)
-                problems += [f"unmapped unittest event: {event}" for event in result.unmapped]
-            for key, suite in units:
-                if suite is None:
-                    entries[key], atoms[key] = _run_conformance(key, repo_root, log)
+            concurrent = plan["parameters"].get("conformance_lane", True)
+            for stale in [*results_dir.glob(f"lane-{index}.*"), *results_dir.glob(f"lane-{index}-*")]:
+                stale.unlink(missing_ok=True)  # an aborted run's lane files
+            lane = _ConformanceLane(
+                [key for key, suite in units if suite is None] if concurrent else [],
+                Path(repo_root), results_dir, f"lane-{index}-{uuid.uuid4().hex[:12]}")
+            previous = _stop_lane_on_signals(lane)
+            try:
+                if lane.keys:
+                    lane.start()
+                if controller:
+                    atom_of = {test.id(): key for key, suite in controller for test in suite}
+                    sequence = _AtomSequence(controller)
+                    runner = unittest.TextTestRunner(
+                        stream=log, verbosity=2,
+                        resultclass=partial(RecordingResult, planned=atom_of))
+                    result = runner.run(sequence)
+                    was_successful = result.wasSuccessful()
+                    _backfill(result, planned, atom_of)
+                    entries.update(result.entries)
+                    fixture_errors, fixture_skips = result.fixture_errors, result.fixture_skips
+                    atoms.update(sequence.seconds)
+                    problems += [f"unmapped unittest event: {event}" for event in result.unmapped]
+                lane.join()
+            except BaseException:
+                lane.stop()
+                raise
+            finally:
+                _restore_signals(previous)
+            lane.write_to(log)
+            if not concurrent:
+                # The serial reference (``--serial``, ``conformance_lane`` false):
+                # the suites run here, after the controller tests, one at a time.
+                for key, suite in units:
+                    if suite is None:
+                        entries[key], atoms[key] = _run_conformance(key, repo_root, log)
+            for key, _, entry, seconds in lane.finished:
+                entries[key], atoms[key] = entry, seconds
+            if lane.error is not None:
+                problems.append(f"the conformance lane crashed: {lane.error}")
             missing = [test_id for test_id in planned if test_id not in entries]
             if missing:
                 problems.append(f"{len(missing)} planned ids have no outcome: "
@@ -1524,8 +1949,19 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
         leaks = []
         marker = environ.get(SHARD_MARKER_ENV)
         if marker:
-            leaks = scan_marked_processes(marker, exclude={os.getpid()})
+            leaks = scan_marked_processes(
+                marker, exclude={os.getpid(), *(lane.own_pids() if lane else [])})
             kill_processes(leaks)
+        if lane is not None:
+            # After the scan, so a suite's survivors are reported as leaks exactly
+            # as in serial mode; this ends what carried no marker.
+            lane.stop()
+            if lane.crashed:
+                if lane.error is None:
+                    problems.append("the conformance lane crashed: the lane process died "
+                                    "after the suites finished")
+                known = {leak["pid"] for leak in leaks}
+                leaks += [leak for leak in lane.survivors if leak["pid"] not in known]
         record = {
             "schema_version": RESULT_SCHEMA_VERSION, "run_attempt": run_attempt,
             "plan_digest": plan["plan_digest"], "shard": index, "argv": list(argv),
@@ -2101,3 +2537,7 @@ def render_summary(plan: Mapping, result: Aggregate, results_dir: Path, *,
         lines += [f"- shard {index}: pid {leak['pid']}, age {leak['age_seconds']:.1f} s: "
                   f"`{' '.join(leak['argv'])}`" for index, leak in result.leaks]
     return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__" and sys.argv[1:2] == [LANE_FLAG]:
+    sys.exit(_lane_main(sys.argv[2:]))

@@ -101,14 +101,15 @@ def _planning_given(args) -> list[str]:
 
 def compute_plan(repo_root: Path, profile: str, names, *, ci_placement: bool = False,
                  target_shard_seconds=None, min_shards=None, max_shards=None,
-                 shards=None) -> tuple[dict, ts.Inventory, dict[str, float]]:
+                 shards=None, conformance_lane=True
+                 ) -> tuple[dict, ts.Inventory, dict[str, float]]:
     """The plan ``plan`` and ``exec-shard`` compute from the planning inputs,
     with the inventory and each selected atom's estimate."""
     inventory = ts.build_inventory(repo_root)
     selection = inventory.select(names, ci_placement=ci_placement)
     parameters = ts.profile_parameters(profile, target_shard_seconds=target_shard_seconds,
                                        min_shards=min_shards, max_shards=max_shards,
-                                       shards=shards)
+                                       shards=shards, conformance_lane=conformance_lane)
     timings = ts.timings_for(profile, repo_root)
     plan = ts.build_plan(selection, parameters, timings, repo_root)
     estimates = ts.estimate_atoms(selection.atoms, [loaded for _, loaded in timings])
@@ -514,7 +515,8 @@ def cmd_run(args) -> int:
         plan, inventory, estimates = compute_plan(
             repo_root, ts.LOCAL, args.names, target_shard_seconds=args.target_shard_seconds,
             min_shards=args.min_shards, max_shards=args.max_shards,
-            shards=1 if args.serial else args.shards)
+            shards=1 if args.serial else args.shards,
+            conformance_lane=not args.serial)
     if args.plan_only:
         print(describe_plan(plan, estimates))
         return 0

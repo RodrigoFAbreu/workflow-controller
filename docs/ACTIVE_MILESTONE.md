@@ -11,8 +11,8 @@ approved by policy (commit `3d304d3`); the base commit is `dea2125`. The plan is
 | --- | --- |
 | CP1 settings rows, `record_external_result`, `rm -f` note | committed (`f880306`) |
 | CP2 Codex harness | committed (`f9a14f2`); the D12 operator pre-step is open, so the harness stays unregistered |
-| CP3 review job | implemented, verified; commit follows |
-| CP4 lifecycle scenarios | not started |
+| CP3 review job | committed (`078879e`) |
+| CP4 lifecycle scenarios | implemented, verified; commit follows |
 | CP5 documentation and full suite | not started |
 
 CP1 changes:
@@ -89,8 +89,30 @@ CP3 changes:
 
 Full suite: 3806 tests, only the two known Git 2.56 trailer tests fail (follow-up, unrelated).
 
+CP4 changes:
+- `tests/scenarios/review.py` (catalogue scenarios 11-12; `inventory.CATALOGUE_MODULES` and `catalogue.py` name it):
+  a `World` over a real vendored 2.9.0 Workflow at a `AWAITING_MANUAL_EXTERNAL_*_REVIEW` gate, `reviewer.harness`
+  `codex`, the real `review.launch_review` against `tests/fake_codex.py` written into the scratch `bin/`, the registry
+  patched, the usage clock injected and a scratch operator Codex home.
+  - `scenario-codex-review-plan-stage`: a usage hold at admission starts nothing (exit 17); a verdict whose revision
+    label is missing is retried once then `FAILED` (exit 30), nothing ingested; a review that writes into the real
+    repository is voided (exit 35); the exact verdict is ingested with the whole boundary pinned from the fake's log
+    (sandbox, approval, network, web search, provider pin, `notify`, features, environment, minimal home, no inherited
+    server/hook/notify run, launch intent flushed before the spawn, copy removed, credential copied back); and a
+    boundary sweep of direct launches (outside layer, managed provider, MCP server, unlisted feature, startup-loaded
+    entry) refuses each by its named check and starts no review.
+  - `scenario-codex-review-implementation-stage-limit`: a limit ends `INCOMPLETE` (exit 35) with a `lane_blocked`
+    notification and the reservation charged by the measured delta; with the shared reading forgotten, a second `run` is
+    held (exit 17, no new job) by the retained rollout alone; after the reset a third `run` is re-admitted and the
+    Workflow records the verdict; an operator file changed meanwhile is never overwritten.
+- `tests/test_scenarios_negative.py`: `MUTATIONS_REVIEW`, 19 mutations (each patches one product check, and the scenario
+  must end in an assertion). `tests/test_scenarios.py`: 17 flow ids. `tests/scenarios/kit.py`: `tar` and `gzip` join
+  `ALLOWED_TOOLS` (`prepare-ai-review.sh` archives the bundle; the sandbox `PATH` had neither).
+
+Verified: `tests.test_scenarios`, `tests.test_scenarios_negative`, `tests.test_scenario_kit` (110 tests).
+
 ## Next action
 
-CP3 is committed. The harness still cannot be registered until the operator records the D12 pre-step under
-`tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`; the tests patch the registry. Invoke
-`/milestone-implement` again for CP4.
+CP4 is committed once the checkpoint commit lands. The harness still cannot be registered until the operator records
+the D12 pre-step under `tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`; the tests patch the registry.
+Invoke `/milestone-implement` again for CP5.

@@ -40,5 +40,5 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-`/milestone-plan` for C13, the next step in `docs/ROADMAP.md`'s order (C13, C14, C10, C12, C11, then O1-O7),
-once Workflow 2.12.0 (W8) is out and this repository has moved to it.
+`/milestone-plan` for C8b (a usage limit reached mid-job, `docs/ROADMAP.md` section 11.6.1), the next step in
+`docs/ROADMAP.md`'s order (C8b, then C13 once Workflow 2.12.0 is out, C14, C10, C12, C11, then O1-O7).

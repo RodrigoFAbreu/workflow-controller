@@ -137,6 +137,28 @@ SHARDS_DIR = f"{RESULTS_DIR}/shards"
 SELECTED_DIR = f"{RESULTS_DIR}/selected"
 PLAN_JOB_OUTPUTS = ("shards", "count", "digest")
 
+#: ``validate.yml``'s only input: the id of a pull request run whose recorded
+#: results ``tests-result`` re-verifies instead of the shards running.
+#: Empty (the default, and every pull request) runs the shards.
+REUSE_INPUT = "tests-from-run"
+RUN_SHARDS = f"inputs.{REUSE_INPUT} == ''"
+REUSE_RESULTS = f"inputs.{REUSE_INPUT} != ''"
+#: The recorded tree, written next to the plan and the shard records.
+TREE_FILE = "tree.txt"
+#: Where ``tests-result`` puts the reused run's timings artifact.
+REUSED_DIR = "reused"
+#: ``main.yml``'s ``reuse`` job: the switch, its work files and its output.
+REUSE_VARIABLE = "CI_MAIN_REUSE"
+REUSE_WORK_DIR = "reuse"
+REUSE_FACTS = f"{REUSE_WORK_DIR}/facts.json"
+REUSE_PLAN = f"{REUSE_WORK_DIR}/plan.json"
+REUSE_RECORDED_DIR = f"{REUSE_WORK_DIR}/recorded"
+REUSE_PERMISSIONS = {"actions": "read", "contents": "read", "pull-requests": "read"}
+#: What a job that calls ``validate.yml`` grants it: ``tests-result`` reads
+#: another run's artifact when it reuses results (a called workflow can only
+#: narrow its caller's permissions, so ``ci.yml`` grants it too).
+VALIDATE_CALL_PERMISSIONS = {"contents": "read", "actions": "read"}
+
 DIST_DIR = "dist"
 ARTIFACT_NAME = "dist"
 
@@ -305,7 +327,9 @@ def validate_workflow() -> dict:
                   f"--results-dir {RESULTS_DIR} --run-attempt {RUN_ATTEMPT}")
     return {
         "name": "Validate",
-        "on": {"workflow_call": None},
+        "on": {"workflow_call": {"inputs": {REUSE_INPUT: {
+            "description": "Id of a pull request run to reuse the results of; empty runs the shards.",
+            "type": "string", "required": False, "default": ""}}}},
         "jobs": {
             "plan": {
                 "runs-on": RUNNER,
@@ -325,6 +349,7 @@ def validate_workflow() -> dict:
             "tests": {
                 "name": "tests (${{ matrix.shard }})",
                 "needs": ["plan"],
+                "if": RUN_SHARDS,
                 "runs-on": RUNNER,
                 "permissions": read,
                 "strategy": {"fail-fast": False,
@@ -351,15 +376,28 @@ def validate_workflow() -> dict:
                 "needs": ["plan", "tests"],
                 "if": "always()",
                 "runs-on": RUNNER,
-                "permissions": read,
+                # actions: read only for the download of a reused run's artifact.
+                "permissions": {"contents": "read", "actions": "read"},
                 "steps": [
                     _checkout(pinned=False),
                     _setup_python(pinned=False),
                     {"uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"name": PLAN_ARTIFACT, "path": RESULTS_DIR}},
-                    {"uses": "actions/download-artifact@v4", "continue-on-error": True,
+                    {"if": RUN_SHARDS, "uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"pattern": RESULTS_ARTIFACT_PREFIX + "*", "path": SHARDS_DIR}},
-                    {"name": "aggregate",
+                    # Reuse (main.yml, CI_MAIN_REUSE=on): the pull request run's
+                    # records stand in for the shards, but only when its tree
+                    # and plan digest equal this run's (verify fails closed),
+                    # and they are re-aggregated: exactly once, all passed.
+                    {"if": REUSE_RESULTS, "uses": "actions/download-artifact@v4", "continue-on-error": True,
+                     "with": {"pattern": "timings-ci-attempt-*", "path": REUSED_DIR,
+                              "run-id": f"${{{{ inputs.{REUSE_INPUT} }}}}",
+                              "github-token": "${{ github.token }}",
+                              "repository": "${{ github.repository }}"}},
+                    {"name": "verify the reused results", "id": "verify", "if": REUSE_RESULTS,
+                     "run": f"python3 tools/ci_reuse.py verify --reused-dir {REUSED_DIR} "
+                            f"--plan {RESULTS_DIR}/{PLAN_FILE}"},
+                    {"name": "aggregate", "if": RUN_SHARDS,
                      "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
                             f"--results-dir {SHARDS_DIR} --run-attempt {RUN_ATTEMPT} "
                             f"--write-selected {SELECTED_DIR} "
@@ -367,6 +405,15 @@ def validate_workflow() -> dict:
                             "--upstream-result tests=${{ needs.tests.result }} "
                             f"--plan-artifact {PLAN_ARTIFACT} "
                             f"--results-artifact-prefix {RESULTS_ARTIFACT_PREFIX}"},
+                    {"name": "aggregate the reused results", "if": REUSE_RESULTS,
+                     "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
+                            "--results-dir ${{ steps.verify.outputs.selected-dir }} "
+                            f"--write-selected {SELECTED_DIR} "
+                            "--upstream-result plan=${{ needs.plan.result }}"},
+                    # The tree these results validate, for a later reuse.
+                    {"name": "record the tree", "if": "always()",
+                     "run": f"mkdir -p {SELECTED_DIR} && "
+                            f"git rev-parse 'HEAD^{{tree}}' > {SELECTED_DIR}/{TREE_FILE}"},
                     # The run's per-atom durations, for
                     # tools/run_tests.py timings merge --into tools/test_timings.json.
                     {"if": "always()", "uses": "actions/upload-artifact@v4",
@@ -401,7 +448,8 @@ def ci_workflow() -> dict:
         "concurrency": {"group": "${{ github.workflow }}-${{ github.ref }}",
                         "cancel-in-progress": True},
         "permissions": {"contents": "read"},
-        "jobs": {"validate": {"uses": "./.github/workflows/validate.yml"}},
+        "jobs": {"validate": {"permissions": dict(VALIDATE_CALL_PERMISSIONS),
+                              "uses": "./.github/workflows/validate.yml"}},
     }
 
 
@@ -422,10 +470,74 @@ GIT_CREDENTIAL_ENV = {
 }
 
 
+def _after(*jobs: str) -> str:
+    """Every job in ``jobs`` must have succeeded, explicitly. ``validate``
+    has a skipped ``reuse`` ancestor whenever ``CI_MAIN_REUSE`` is not
+    ``on``, and the implicit ``success()`` of a job looks at its whole
+    ``needs`` ancestry, so without this the release jobs would never run in
+    the default mode. ``!cancelled()`` is not ``always()``: a cancelled run
+    still stops, and each prerequisite is still required to be ``success``."""
+    return " && ".join(["!cancelled()", *(f"needs.{job}.result == 'success'" for job in jobs)])
+
+
 def _publishing_condition() -> str:
     states = " || ".join(f"needs.release-plan.outputs.state == '{state}'"
                          for state in PUBLISHING_STATES)
     return f"{ON_TRUNK} && ({states})"
+
+
+#: ``reuse`` (in ``main.yml``) blocks ``validate`` and runs only for ``on``.
+#: ``reuse-report`` (in ``main-reuse-report.yml``, a workflow of its own so
+#: that it can never hold ``main.yml``'s serialised ``main-release`` slot)
+#: runs for unset, ``report`` and unknown values (which its summary names as
+#: off), and for no other. ``off`` runs neither. Actions compares strings
+#: without regard to case and without trimming; ``tools/ci_reuse.py`` parses
+#: the value the same way.
+REUSE_ON = f"vars.{REUSE_VARIABLE} == 'on'"
+REUSE_REPORT = f"vars.{REUSE_VARIABLE} != 'on' && vars.{REUSE_VARIABLE} != 'off'"
+
+
+def _reuse_job(report: bool = False) -> dict:
+    """``reuse`` (``CI_MAIN_REUSE=on``): decides whether ``validate`` may
+    reuse the merged pull request's CI run. With ``report`` it is
+    ``reuse-report``: the same decision logged beside ``validate``, which
+    nothing needs and which cannot fail ``Main``. The modes are described in
+    ``tools/ci_reuse.py``."""
+    have_candidate = "steps.find.outputs.candidate != ''"
+    job = {
+        "if": REUSE_REPORT if report else REUSE_ON,
+        "runs-on": RUNNER,
+        "permissions": dict(REUSE_PERMISSIONS),
+        "env": {"GH_TOKEN": "${{ github.token }}",
+                REUSE_VARIABLE: f"${{{{ vars.{REUSE_VARIABLE} }}}}"},
+        "steps": [
+            _checkout(pinned=True),
+            _setup_python(pinned=True),
+            {"name": "find the pull request run", "id": "find",
+             "run": 'python3 tools/ci_reuse.py find --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" '
+                    f'--event "$GITHUB_EVENT_NAME" --ref "$GITHUB_REF" --mode "${REUSE_VARIABLE}" '
+                    f"--facts {REUSE_FACTS}"},
+            {"if": have_candidate, "uses": Pinned("actions/download-artifact"),
+             "continue-on-error": True,
+             "with": {"pattern": "timings-ci-attempt-*", "path": REUSE_RECORDED_DIR,
+                      "run-id": "${{ steps.find.outputs.candidate }}",
+                      "github-token": "${{ github.token }}",
+                      "repository": "${{ github.repository }}"}},
+            # The report must never turn a green Main red: a failing install or
+            # plan leaves no digest, which decide reports as "would not reuse".
+            {"if": have_candidate, "continue-on-error": True, **_install_editable()},
+            {"if": have_candidate, "continue-on-error": True, "name": "plan (to compare its digest)",
+             "run": f"python3 tools/run_tests.py plan {PLANNING_ARGS} --output {REUSE_PLAN}"},
+            {"name": "decide", "id": "decide",
+             "run": f"python3 tools/ci_reuse.py decide --facts {REUSE_FACTS} "
+                    f"--reused-dir {REUSE_RECORDED_DIR} --plan {REUSE_PLAN}"},
+        ],
+    }
+    if report:
+        job["continue-on-error"] = True
+    else:
+        job["outputs"] = {"run-id": "${{ steps.decide.outputs.run-id }}"}
+    return job
 
 
 def main_workflow() -> dict:
@@ -437,10 +549,23 @@ def main_workflow() -> dict:
         "concurrency": {"group": "main-release", "cancel-in-progress": False},
         "permissions": {"contents": "read"},
         "jobs": {
-            "validate": {"uses": "./.github/workflows/validate.yml"},
+            "reuse": _reuse_job(),
+            # !cancelled(): a reuse job that crashed leaves run-id empty, so
+            # the shards run. Nothing is skipped on a doubt.
+            "validate": {
+                "needs": ["reuse"],
+                "if": "!cancelled()",
+                "permissions": dict(VALIDATE_CALL_PERMISSIONS),
+                "uses": "./.github/workflows/validate.yml",
+                # Forwarded only while the variable is still "on": a "Re-run
+                # failed jobs" keeps a successful reuse job's old output, and
+                # must not reuse again after the owner set the variable off.
+                "with": {REUSE_INPUT: f"${{{{ vars.{REUSE_VARIABLE} == 'on' && "
+                                      "needs.reuse.outputs.run-id || '' }}"},
+            },
             "release-plan": {
                 "needs": ["validate"],
-                "if": ON_TRUNK,
+                "if": f"{_after('validate')} && {ON_TRUNK}",
                 "runs-on": RUNNER,
                 "env": {"GH_TOKEN": "${{ github.token }}"},
                 "outputs": {name: f"${{{{ steps.classify.outputs.{name} }}}}" for name in PLAN_OUTPUTS},
@@ -452,7 +577,7 @@ def main_workflow() -> dict:
             },
             "build": {
                 "needs": ["validate", "release-plan"],
-                "if": _publishing_condition(),
+                "if": f"{_after('validate', 'release-plan')} && {_publishing_condition()}",
                 "runs-on": RUNNER,
                 # tools/release.py build and verify read it; their command
                 # lines stay 1.3.0's, which a RESUME target's tooling accepts.
@@ -470,7 +595,7 @@ def main_workflow() -> dict:
             },
             "publish": {
                 "needs": ["validate", "release-plan", "build"],
-                "if": _publishing_condition(),
+                "if": f"{_after('validate', 'release-plan', 'build')} && {_publishing_condition()}",
                 "runs-on": RUNNER,
                 "permissions": {"contents": "write"},
                 "env": {"GH_TOKEN": "${{ github.token }}",
@@ -518,12 +643,26 @@ def pr_title_workflow() -> dict:
     }
 
 
+def reuse_report_workflow() -> dict:
+    """A workflow of its own, so that a slow report can never hold
+    ``main.yml``'s ``main-release`` concurrency slot or delay a release."""
+    return {
+        "name": "Main reuse report",
+        "on": {"push": {"branches": ["main"]}},
+        "concurrency": {"group": "main-reuse-report-${{ github.sha }}", "cancel-in-progress": False},
+        "permissions": {"contents": "read"},
+        "jobs": {"reuse-report": _reuse_job(report=True)},
+    }
+
+
 _GENERATED = ("Generated by tools/ci_workflows.py -- do not edit by hand.\n"
               "Change the model there and run: python3 tools/ci_workflows.py --write")
 
 WORKFLOWS = {
     "validate.yml": (validate_workflow,
-                     "The required validation, called by ci.yml and main.yml."),
+                     "The required validation, called by ci.yml and main.yml. Its input tests-from-run is\n"
+                     "empty except when main.yml reuses a pull request run (CI_MAIN_REUSE=on); then the\n"
+                     "shards are skipped and tests-result re-verifies that run's recorded results."),
     "ci.yml": (ci_workflow, "Runs the required validation on pull requests. Milestone branches are\n"
                             "validated through their Draft PR."),
     "main.yml": (main_workflow,
@@ -532,7 +671,17 @@ WORKFLOWS = {
                  "(tools/release.py over controller/release_txn.py). Runs never cancel one another.\n"
                  "Every action outside validate is pinned to a full commit SHA; publish is the only\n"
                  "job that can write.\n\n"
+                 "reuse (read-only) is switched by the repository variable CI_MAIN_REUSE. on: reuse\n"
+                 "runs first and validate skips the shards when the recorded tree and plan digest\n"
+                 "match. Any other value: reuse does not run and validate starts at once. The\n"
+                 "report-only mode is the separate workflow main-reuse-report.yml. See docs/guide/ci-and-releases.md.\n\n"
                  + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
+    "main-reuse-report.yml": (reuse_report_workflow,
+                              "Report-only reuse (CI_MAIN_REUSE unset, report or an unknown value): logs, in\n"
+                              "its job summary, whether the merged pull request's CI run could have stood in\n"
+                              "for main's shards. A workflow apart from main.yml: nothing waits for it, it does\n"
+                              "not share main-release's concurrency group, and it cannot fail Main. Read-only;\n"
+                              "the logic is tools/ci_reuse.py, shared with main.yml's reuse job."),
     "pr-title.yml": (pr_title_workflow,
                      "Checks every pull request's title against the policy committed on its merge ref\n"
                      "(tools/release.py check-title). The title becomes the squash commit's subject,\n"

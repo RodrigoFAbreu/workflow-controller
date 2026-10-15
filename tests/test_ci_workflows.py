@@ -157,7 +157,7 @@ class CommittedFilesTest(unittest.TestCase):
         self.assertEqual(hashlib.sha256(CONFORMANCE_YML.read_bytes()).hexdigest(), expected)
 
     def test_the_generated_files(self) -> None:
-        self.assertEqual(sorted(ci.WORKFLOWS), ["ci.yml", "main.yml", "pr-title.yml", "validate.yml"])
+        self.assertEqual(sorted(ci.WORKFLOWS), ["ci.yml", "main-reuse-report.yml", "main.yml", "pr-title.yml", "validate.yml"])
         self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
         self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
@@ -352,7 +352,8 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertEqual(self.jobs["tests"]["needs"], ["plan"])
         self.assertEqual(self.jobs["tests-result"]["needs"], ["plan", "tests"])
         self.assertEqual(self.jobs["tests-result"]["if"], "always()")
-        self.assertNotIn("if", self.jobs["tests"])
+        # The shards are skipped only when a reused run's id is passed in.
+        self.assertEqual(self.jobs["tests"]["if"], "inputs.tests-from-run == ''")
         self.assertNotIn("needs", self.jobs["package"])
 
     def test_check_names(self) -> None:
@@ -396,7 +397,7 @@ class ValidatePlanTest(unittest.TestCase):
 
     def test_tests_result_aggregates_the_plan_and_every_result(self) -> None:
         steps = _steps(self.jobs["tests-result"])
-        self.assertEqual(self._argv("tests-result", "aggregate"),
+        self.assertEqual(self._argv("tests-result", "--plan-artifact"),
                          ["python3", "tools/run_tests.py", "aggregate", "--plan",
                           "results/plan.json", "--results-dir", "results/shards",
                           "--run-attempt", "${{", "github.run_attempt", "}}",
@@ -408,15 +409,17 @@ class ValidatePlanTest(unittest.TestCase):
         downloads = [s for s in steps if "download-artifact" in _uses(s)]
         # Every attempt's results artifacts, each into its own directory:
         # merged, the last writer of shard-<i>.json would win.
-        self.assertEqual([s["with"] for s in downloads],
+        self.assertEqual([s["with"] for s in downloads[:2]],
                          [{"name": "test-plan", "path": "results"},
                           {"pattern": "results-*", "path": "results/shards"}])
+        self.assertEqual(downloads[1]["if"], "inputs.tests-from-run == ''")
         self.assertNotIn("merge-multiple", ci.emit(ci.validate_workflow()))
         # A missing artifact must reach aggregate (which exits 2, naming it),
         # not end the job before it can say so.
         self.assertTrue(all(s["continue-on-error"] is True for s in downloads))
-        aggregate = _index(steps, lambda s: "aggregate" in _run(s))
+        aggregate = _index(steps, lambda s: s.get("name") == "aggregate")
         self.assertTrue(all(steps.index(s) < aggregate for s in downloads))
+        self.assertEqual(steps[aggregate]["if"], "inputs.tests-from-run == ''")
         self.assertNotIn("continue-on-error", steps[aggregate])
 
     def test_artifact_names(self) -> None:
@@ -436,6 +439,10 @@ class ValidatePlanTest(unittest.TestCase):
                          [("always()", {"name": "timings-ci-attempt-${{ github.run_attempt }}",
                                         "path": "results/selected/"})])
         self.assertEqual(timings[0], _steps(self.jobs["tests-result"])[-1])
+        # The tree is recorded before the upload, whatever the verdict.
+        tree = _index(_steps(self.jobs["tests-result"]), lambda s: s.get("name") == "record the tree")
+        self.assertEqual(_steps(self.jobs["tests-result"])[tree]["if"], "always()")
+        self.assertIn("results/selected/tree.txt", _run(_steps(self.jobs["tests-result"])[tree]))
 
     def test_tests_job_allows_user_namespaces_before_the_shard(self) -> None:
         guarded = ("if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then "
@@ -481,7 +488,10 @@ class AllJobsTest(unittest.TestCase):
     def test_validate_jobs_are_read_only(self) -> None:
         for job_name, job in _jobs(ci.validate_workflow()).items():
             with self.subTest(job=job_name):
-                self.assertEqual(job["permissions"], {"contents": "read"})
+                # tests-result alone may read another run's artifact (reuse).
+                expected = {"contents": "read", "actions": "read"} \
+                    if job_name == "tests-result" else {"contents": "read"}
+                self.assertEqual(job["permissions"], expected)
 
     def test_only_publish_can_write(self) -> None:
         writers = [(name, job_name) for name, workflow in _models().items()
@@ -504,10 +514,13 @@ class AllJobsTest(unittest.TestCase):
         found = sorted((name, job_name, _uses(step).split("@")[0])
                        for name, job_name, _, step in _all_steps()
                        if "-artifact" in _uses(step))
-        self.assertEqual(found, [("main.yml", "build", "actions/upload-artifact"),
+        self.assertEqual(found, [("main-reuse-report.yml", "reuse-report", "actions/download-artifact"),
+                                 ("main.yml", "build", "actions/upload-artifact"),
                                  ("main.yml", "publish", "actions/download-artifact"),
+                                 ("main.yml", "reuse", "actions/download-artifact"),
                                  ("validate.yml", "plan", "actions/upload-artifact"),
                                  ("validate.yml", "tests", "actions/upload-artifact"),
+                                 ("validate.yml", "tests-result", "actions/download-artifact"),
                                  ("validate.yml", "tests-result", "actions/download-artifact"),
                                  ("validate.yml", "tests-result", "actions/download-artifact"),
                                  ("validate.yml", "tests-result", "actions/upload-artifact")])
@@ -580,8 +593,8 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, True)
                 else:
                     self.assertIs(persist, False)
-        # validate.yml's four jobs, release-plan, build and publish, then title.
-        self.assertEqual(checkouts, 8)
+        # validate.yml's four jobs, reuse, reuse-report, release-plan, build and publish, then title.
+        self.assertEqual(checkouts, 10)
 
 
 class CiWorkflowTest(unittest.TestCase):
@@ -595,11 +608,21 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertEqual(ci.ci_workflow()["permissions"], {"contents": "read"})
 
     def test_calls_validate(self) -> None:
+        # Pull requests never pass tests-from-run: the shards always run. The
+        # job grants actions: read only because the called workflow may not
+        # ask for more than its caller.
         self.assertEqual(_jobs(ci.ci_workflow()),
-                         {"validate": {"uses": "./.github/workflows/validate.yml"}})
+                         {"validate": {"permissions": {"contents": "read", "actions": "read"},
+                                       "uses": "./.github/workflows/validate.yml"}})
 
     def test_validate_is_workflow_call_only(self) -> None:
-        self.assertEqual(ci.validate_workflow()["on"], {"workflow_call": None})
+        on = ci.validate_workflow()["on"]
+        self.assertEqual(list(on), ["workflow_call"])
+        self.assertEqual(list(on["workflow_call"]), ["inputs"])
+        inputs = on["workflow_call"]["inputs"]
+        self.assertEqual(list(inputs), ["tests-from-run"])
+        self.assertEqual((inputs["tests-from-run"]["type"], inputs["tests-from-run"]["default"],
+                          inputs["tests-from-run"]["required"]), ("string", "", False))
 
 
 class MainWorkflowTest(unittest.TestCase):
@@ -625,19 +648,86 @@ class MainWorkflowTest(unittest.TestCase):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
 
     def test_needs_chain(self) -> None:
-        self.assertEqual(list(self.jobs), ["validate", "release-plan", "build", "publish"])
-        self.assertEqual(self.jobs["validate"], {"uses": "./.github/workflows/validate.yml"})
+        self.assertEqual(list(self.jobs), ["reuse", "validate", "release-plan", "build", "publish"])
+        self.assertEqual(self.jobs["validate"], {
+            "needs": ["reuse"], "if": "!cancelled()",
+            "permissions": {"contents": "read", "actions": "read"},
+            "uses": "./.github/workflows/validate.yml",
+            "with": {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
+                                       "needs.reuse.outputs.run-id || '' }}"}})
         self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
         self.assertEqual(self.jobs["build"]["needs"], ["validate", "release-plan"])
         self.assertEqual(self.jobs["publish"]["needs"], ["validate", "release-plan", "build"])
 
     def test_conditions(self) -> None:
         on_trunk = "github.ref == 'refs/heads/main'"
-        self.assertEqual(self.jobs["release-plan"]["if"], on_trunk)
         publishing = (f"{on_trunk} && (needs.release-plan.outputs.state == 'RELEASE_DUE' || "
                       "needs.release-plan.outputs.state == 'RESUME')")
-        self.assertEqual(self.jobs["build"]["if"], publishing)
-        self.assertEqual(self.jobs["publish"]["if"], publishing)
+        # Each release job requires every job it needs to be explicitly success:
+        # validate has a skipped reuse ancestor unless CI_MAIN_REUSE is on, and a
+        # job's implicit success() looks at its whole needs ancestry. No always().
+        self.assertEqual(self.jobs["release-plan"]["if"],
+                         f"!cancelled() && needs.validate.result == 'success' && {on_trunk}")
+        self.assertEqual(self.jobs["build"]["if"],
+                         "!cancelled() && needs.validate.result == 'success' && "
+                         f"needs.release-plan.result == 'success' && {publishing}")
+        self.assertEqual(self.jobs["publish"]["if"],
+                         "!cancelled() && needs.validate.result == 'success' && "
+                         "needs.release-plan.result == 'success' && needs.build.result == 'success' "
+                         f"&& {publishing}")
+
+    def test_every_job_downstream_of_reuse_states_its_condition(self) -> None:
+        downstream = {"validate"}
+        for name, job in self.jobs.items():
+            if set(job.get("needs", [])) & ({"reuse"} | downstream):
+                downstream.add(name)
+        for name in downstream - {"validate"}:
+            expression = self.jobs[name]["if"]
+            self.assertNotIn("always()", expression)
+            self.assertIn("!cancelled()", expression)
+            for needed in self.jobs[name]["needs"]:
+                self.assertIn(f"needs.{needed}.result == 'success'", expression, (name, needed))
+        # validate itself is the only job that tolerates reuse not succeeding.
+        self.assertEqual(self.jobs["validate"]["if"], "!cancelled()")
+
+    def _would_run(self, name: str, results: dict, state: str, ref: str = "refs/heads/main") -> bool:
+        """The job's ``if`` evaluated over ``results`` (job -> result)."""
+        expression = self.jobs[name]["if"]
+        expression = expression.replace("!cancelled()", "True")
+        expression = re.sub(r"needs\.([a-z-]+)\.result == '(\w+)'",
+                            lambda m: repr(results.get(m.group(1)) == m.group(2)), expression)
+        expression = re.sub(r"needs\.release-plan\.outputs\.state == '(\w+)'",
+                            lambda m: repr(state == m.group(1)), expression)
+        expression = re.sub(r"github\.ref == '([^']+)'", lambda m: repr(ref == m.group(1)), expression)
+        self.assertRegex(expression, r"^[A-Za-z() &|]+$")
+        return bool(eval(expression.replace("&&", "and").replace("||", "or"), {"__builtins__": {}}))
+
+    def test_release_jobs_run_when_reuse_is_skipped_and_validate_passes(self) -> None:
+        def run(reuse: str, validate: str, state: str = "RELEASE_DUE", **more) -> tuple:
+            results = {"reuse": reuse, "validate": validate}
+            plan = self._would_run("release-plan", results, state)
+            results["release-plan"] = "success" if plan else "skipped"
+            build = self._would_run("build", results, state)
+            results["build"] = "success" if build else "skipped"
+            return plan, build, self._would_run("publish", results, state)
+        # report / off: reuse skipped, full validate passed -> the release proceeds.
+        self.assertEqual(run("skipped", "success"), (True, True, True))
+        self.assertEqual(run("skipped", "success", "RESUME"), (True, True, True))
+        self.assertEqual(run("skipped", "success", "NOT_DUE"), (True, False, False))
+        # on: reuse succeeded, or failed and validate fell back to the full shards.
+        self.assertEqual(run("success", "success"), (True, True, True))
+        self.assertEqual(run("failure", "success"), (True, True, True))
+        # A failed or skipped validate stops everything, in every mode.
+        for reuse in ("skipped", "success", "failure"):
+            for validate in ("failure", "skipped", "cancelled"):
+                with self.subTest(reuse=reuse, validate=validate):
+                    self.assertEqual(run(reuse, validate), (False, False, False))
+        # Not on main: nothing releases.
+        self.assertFalse(self._would_run("release-plan", {"validate": "success"}, "RELEASE_DUE",
+                                         ref="refs/heads/other"))
+        # A failed build does not publish.
+        self.assertFalse(self._would_run("publish", {"validate": "success", "release-plan": "success",
+                                                      "build": "failure"}, "RELEASE_DUE"))
 
     def test_permissions(self) -> None:
         self.assertNotIn("permissions", self.jobs["release-plan"])
@@ -669,7 +759,7 @@ class MainWorkflowTest(unittest.TestCase):
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
         uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()["main.yml"])
         actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
-        self.assertEqual(len(actions), 8)
+        self.assertEqual(len(actions), 11)
         for ref, comment in actions:
             with self.subTest(ref=ref):
                 self.assertRegex(ref, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
@@ -749,6 +839,161 @@ class MainWorkflowTest(unittest.TestCase):
         main = ci.render()["main.yml"]
         self.assertIn("Tip commit pushed to the ref", main)
         self.assertIn("gh_release_create", main)
+
+
+class ReuseTest(unittest.TestCase):
+    """``CI_MAIN_REUSE``: ``off`` and ``report`` run the shards exactly as
+    before (the ``reuse`` job passes no run id), ``on`` passes one and
+    ``tests-result`` re-verifies it, failing closed."""
+
+    def setUp(self) -> None:
+        self.main = ci.main_workflow()
+        self.reuse = _jobs(self.main)["reuse"]
+        self.report_workflow = ci.reuse_report_workflow()
+        self.report = _jobs(self.report_workflow)["reuse-report"]
+        self.validate = _jobs(ci.validate_workflow())
+
+    def test_reuse_job_is_least_privilege_and_cannot_write(self) -> None:
+        self.assertEqual(self.reuse["permissions"],
+                         {"actions": "read", "contents": "read", "pull-requests": "read"})
+        self.assertNotIn("needs", self.reuse)
+        self.assertEqual(self.reuse["outputs"], {"run-id": "${{ steps.decide.outputs.run-id }}"})
+
+    def test_reuse_runs_only_for_on_and_report_only_beside_validate(self) -> None:
+        self.assertEqual(self.reuse["if"], "vars.CI_MAIN_REUSE == 'on'")
+        self.assertEqual(self.report["if"],
+                         "vars.CI_MAIN_REUSE != 'on' && vars.CI_MAIN_REUSE != 'off'")
+        # off matches neither; unset, empty, report and unknown match the report only.
+        for value, expected in (("on", (True, False)), ("off", (False, False)),
+                                ("", (False, True)), ("report", (False, True)),
+                                ("maybe", (False, True))):
+            on = value == "on"
+            report = value != "on" and value != "off"
+            self.assertEqual((on, report), expected)
+        # The report is a workflow of its own: Main has no report job, so nothing in
+        # Main can wait for it or be held by it, and it shares no concurrency group.
+        self.assertNotIn("reuse-report", _jobs(self.main))
+        self.assertNotIn("reuse-report:", ci.render()["main.yml"])
+        wf = self.report_workflow
+        self.assertEqual(wf["on"], {"push": {"branches": ["main"]}})
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        self.assertEqual(wf["concurrency"],
+                         {"group": "main-reuse-report-${{ github.sha }}", "cancel-in-progress": False})
+        self.assertNotEqual(wf["concurrency"]["group"], self.main["concurrency"]["group"])
+        self.assertEqual(list(_jobs(wf)), ["reuse-report"])
+        self.assertIs(self.report["continue-on-error"], True)
+        self.assertNotIn("outputs", self.report)
+        self.assertNotIn("continue-on-error", self.reuse)
+        self.assertEqual(self.report["permissions"], self.reuse["permissions"])
+        self.assertEqual(ci.emit({"steps": self.report["steps"]}), ci.emit({"steps": self.reuse["steps"]}))
+        # on still blocks validate and passes the run id; a skipped reuse still lets validate start.
+        validate = _jobs(self.main)["validate"]
+        self.assertEqual(validate["needs"], ["reuse"])
+        self.assertEqual(validate["if"], "!cancelled()")
+
+    def test_the_variable_reaches_the_script_only_through_the_environment(self) -> None:
+        self.assertEqual(self.reuse["env"]["CI_MAIN_REUSE"], "${{ vars.CI_MAIN_REUSE }}")
+        for name, text in ci.render().items():
+            for line in text.splitlines():
+                if "vars." in line:
+                    self.assertIn(name, ("main.yml", "main-reuse-report.yml"))
+                    self.assertRegex(line.strip(), r"^(CI_MAIN_REUSE: \"\$\{\{ vars\.CI_MAIN_REUSE \}\}\"|"
+                                                   r"if: \"vars\.CI_MAIN_REUSE (==|!=) 'o[nf]+'.*|"
+                                                   r"tests-from-run: .*)$")
+        find = self.reuse["steps"][_index(self.reuse["steps"], lambda s: s.get("id") == "find")]
+        self.assertIn('--mode "$CI_MAIN_REUSE"', find["run"])
+        self.assertNotIn("${{", find["run"])
+        # Only main.yml knows the variable; pull requests and validate.yml do not.
+        self.assertNotIn("vars.", ci.render()["ci.yml"] + ci.render()["validate.yml"])
+
+    def test_the_lookup_steps_only_run_with_a_candidate_and_the_report_cannot_fail_main(self) -> None:
+        steps = self.reuse["steps"]
+        guarded = [s for s in steps if s.get("if")]
+        self.assertEqual(len(guarded), 3)
+        for step in guarded:
+            self.assertEqual(step["if"], "steps.find.outputs.candidate != ''")
+            self.assertIs(step["continue-on-error"], True)
+        for step in steps:
+            if step not in guarded:
+                self.assertNotIn("continue-on-error", step)
+        decide = steps[-1]
+        self.assertEqual(decide["id"], "decide")
+        self.assertIn("ci_reuse.py decide", decide["run"])
+
+    def test_reuse_downloads_only_the_candidates_timings_artifact(self) -> None:
+        download = [s for s in self.reuse["steps"] if "download-artifact" in _uses(s)]
+        self.assertEqual(len(download), 1)
+        self.assertEqual(download[0]["with"]["pattern"], "timings-ci-attempt-*")
+        self.assertEqual(download[0]["with"]["run-id"], "${{ steps.find.outputs.candidate }}")
+
+    def test_validate_gets_the_run_id_and_survives_a_failed_reuse_job(self) -> None:
+        validate = _jobs(self.main)["validate"]
+        # The id is forwarded only while the variable is still "on" at evaluation
+        # time: "Re-run failed jobs" keeps a successful reuse job's old output.
+        self.assertEqual(validate["with"], {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
+                                                              "needs.reuse.outputs.run-id || '' }}"})
+        self.assertEqual(validate["if"], "!cancelled()")
+        self.assertEqual(validate["permissions"], {"contents": "read", "actions": "read"})
+
+    def test_the_release_jobs_still_need_validate(self) -> None:
+        jobs = _jobs(self.main)
+        for name in ("release-plan", "build", "publish"):
+            with self.subTest(job=name):
+                self.assertIn("validate", jobs[name]["needs"])
+                self.assertNotIn("reuse", jobs[name]["needs"])
+
+    def test_the_shards_run_unless_a_run_is_reused(self) -> None:
+        self.assertEqual(self.validate["tests"]["if"], "inputs.tests-from-run == ''")
+        steps = _steps(self.validate["tests-result"])
+        by_name = {s.get("name"): s for s in steps}
+        self.assertEqual(by_name["aggregate"]["if"], "inputs.tests-from-run == ''")
+        for name in ("verify the reused results", "aggregate the reused results"):
+            self.assertEqual(by_name[name]["if"], "inputs.tests-from-run != ''")
+        # The plan is this run's own, in both cases: plan runs whatever the input.
+        self.assertNotIn("if", self.validate["plan"])
+        self.assertNotIn("if", self.validate["package"])
+
+    def test_reused_results_are_verified_then_aggregated_and_never_continue_on_error(self) -> None:
+        steps = _steps(self.validate["tests-result"])
+        verify = _index(steps, lambda s: s.get("id") == "verify")
+        aggregate = _index(steps, lambda s: s.get("name") == "aggregate the reused results")
+        download = _index(steps, lambda s: "run-id" in s.get("with", {}))
+        self.assertLess(download, verify)
+        self.assertLess(verify, aggregate)
+        self.assertEqual(steps[download]["with"]["run-id"], "${{ inputs.tests-from-run }}")
+        self.assertEqual(steps[download]["with"]["repository"], "${{ github.repository }}")
+        self.assertEqual(shlex.split(_run(steps[verify])),
+                         ["python3", "tools/ci_reuse.py", "verify", "--reused-dir", "reused",
+                          "--plan", "results/plan.json"])
+        self.assertNotIn("continue-on-error", steps[verify])
+        self.assertNotIn("continue-on-error", steps[aggregate])
+        argv = shlex.split(_run(steps[aggregate]))
+        self.assertEqual(argv[:4], ["python3", "tools/run_tests.py", "aggregate", "--plan"])
+        self.assertEqual(argv[argv.index("--plan") + 1], "results/plan.json")
+        self.assertEqual(argv[argv.index("--results-dir") + 1:argv.index("--results-dir") + 5],
+                         ["${{", "steps.verify.outputs.selected-dir", "}}", "--write-selected"])
+        # Only the plan job's result is judged: the shards did not run.
+        self.assertIn("plan=${{", argv)
+        self.assertNotIn("tests=${{", argv)
+
+    def test_the_full_aggregate_is_unchanged(self) -> None:
+        steps = _steps(self.validate["tests-result"])
+        run = _run(steps[_index(steps, lambda s: s.get("name") == "aggregate")])
+        self.assertTrue(run.startswith("python3 tools/run_tests.py aggregate --plan results/plan.json "
+                                       "--results-dir results/shards --run-attempt "))
+        self.assertIn("--upstream-result tests=${{ needs.tests.result }}", run)
+
+    def test_callers_grant_actions_read_for_the_artifact_download(self) -> None:
+        self.assertEqual(_jobs(ci.ci_workflow())["validate"]["permissions"],
+                         {"contents": "read", "actions": "read"})
+        self.assertNotIn("with", _jobs(ci.ci_workflow())["validate"])
+
+    def test_the_generated_reuse_job_is_readable_and_documented_in_the_header(self) -> None:
+        text = ci.render()["main.yml"]
+        self.assertIn("# reuse (read-only) is switched by the repository variable CI_MAIN_REUSE", text)
+        self.assertIn("main-reuse-report.yml", text)
+        self.assertIn("A workflow apart from main.yml", ci.render()["main-reuse-report.yml"])
+        self.assertIn("tests-from-run", ci.render()["validate.yml"].split("name: Validate")[0])
 
 
 class PrTitleWorkflowTest(unittest.TestCase):

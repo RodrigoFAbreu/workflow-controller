@@ -13,4 +13,7 @@ permissions:
   contents: read
 jobs:
   validate:
+    permissions:
+      contents: read
+      actions: read
     uses: "./.github/workflows/validate.yml"

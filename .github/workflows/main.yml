@@ -7,6 +7,12 @@
 # Every action outside validate is pinned to a full commit SHA; publish is the only
 # job that can write.
 #
+# reuse (read-only) is switched by the repository variable CI_MAIN_REUSE. on: reuse
+# runs first and validate skips the shards when the recorded tree and plan digest
+# match. Any other value: reuse does not run and validate starts at once. The
+# report-only mode is the separate workflow main-reuse-report.yml. See
+# docs/guide/ci-and-releases.md.
+#
 # GitHub documents GITHUB_SHA for a push event as the "Tip commit pushed to the ref"
 # (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push),
 # and for workflow_dispatch as the last commit on the dispatched ref. release-plan peels it with
@@ -31,12 +37,62 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  reuse:
+    if: "vars.CI_MAIN_REUSE == 'on'"
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: "${{ github.token }}"
+      CI_MAIN_REUSE: "${{ vars.CI_MAIN_REUSE }}"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: "find the pull request run"
+        id: find
+        run: "python3 tools/ci_reuse.py find --repo \"$GITHUB_REPOSITORY\" --sha \"$GITHUB_SHA\" --event \"$GITHUB_EVENT_NAME\" --ref \"$GITHUB_REF\" --mode \"$CI_MAIN_REUSE\" --facts reuse/facts.json"
+      - if: "steps.find.outputs.candidate != ''"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: "timings-ci-attempt-*"
+          path: reuse/recorded
+          run-id: "${{ steps.find.outputs.candidate }}"
+          github-token: "${{ github.token }}"
+          repository: "${{ github.repository }}"
+      - if: "steps.find.outputs.candidate != ''"
+        continue-on-error: true
+        name: "install (editable)"
+        run: "pip install -e ."
+      - if: "steps.find.outputs.candidate != ''"
+        continue-on-error: true
+        name: "plan (to compare its digest)"
+        run: "python3 tools/run_tests.py plan --profile ci --ci-placement --output reuse/plan.json"
+      - name: decide
+        id: decide
+        run: "python3 tools/ci_reuse.py decide --facts reuse/facts.json --reused-dir reuse/recorded --plan reuse/plan.json"
+    outputs:
+      run-id: "${{ steps.decide.outputs.run-id }}"
   validate:
+    needs:
+      - reuse
+    if: "!cancelled()"
+    permissions:
+      contents: read
+      actions: read
     uses: "./.github/workflows/validate.yml"
+    with:
+      tests-from-run: "${{ vars.CI_MAIN_REUSE == 'on' && needs.reuse.outputs.run-id || '' }}"
   release-plan:
     needs:
       - validate
-    if: "github.ref == 'refs/heads/main'"
+    if: "!cancelled() && needs.validate.result == 'success' && github.ref == 'refs/heads/main'"
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: "${{ github.token }}"
@@ -65,7 +121,7 @@ jobs:
     needs:
       - validate
       - release-plan
-    if: "github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
+    if: "!cancelled() && needs.validate.result == 'success' && needs.release-plan.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: "${{ needs.release-plan.outputs.version }}"
@@ -103,7 +159,7 @@ jobs:
       - validate
       - release-plan
       - build
-    if: "github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
+    if: "!cancelled() && needs.validate.result == 'success' && needs.release-plan.result == 'success' && needs.build.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -30,7 +30,7 @@ from typing import Any
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
-    routing, runtime, settings, target_state, telemetry, usage, worker,
+    review, routing, runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -1236,25 +1236,33 @@ def _usage_event_fields(*, provider: str | None, repository: str, run_id: str | 
 def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run: job.RunRecord | None,
                 effective: settings.EffectiveSettings, pause: _UsagePause | None):
     """``execute_step``'s ``usage_gate`` from the settings (usage-budget
-    CP3, D7): ``usage.admit`` for a Claude job of the route's role and
-    model, in this repository and run, against the Claude limits. ``None``
-    when ``usage.enabled`` is false. After an earlier hold in this run, the
-    first admission that passes emits ``usage_resumed`` -- never a wake-up
-    alone."""
-    limits = usage.limits_from_values(effective.values, usage.PROVIDER_CLAUDE)
-    if not limits.enabled:
+    CP3, D7): ``usage.admit`` for a job of the route's role and model, in
+    this repository and run, against the limits of the job's provider. Claude
+    unless the caller names ``provider`` (the review job names Codex,
+    codex-reviewer D7), and a Codex admission passes fresh Codex readings --
+    the operator's home merged with every retained review home -- on **every**
+    attempt, the first, each one after a hold wait and the first of a second
+    ``run``, so allowance spent outside the Controller is seen. ``None`` when
+    ``usage.enabled`` is false. After an earlier hold in this run, the first
+    admission that passes emits ``usage_resumed`` -- never a wake-up alone."""
+    if not usage.limits_from_values(effective.values, usage.PROVIDER_CLAUDE).enabled:
         return None
     repository = str(target.root)
     run_id = None if run is None else run.run_id
 
-    def gate(route: routing.ResolvedRoute) -> Any:
-        admission = usage.admit(runtime_root, provider=usage.PROVIDER_CLAUDE, role=route.role, model=route.model,
-                                repository=repository, run_id=run_id, limits=limits, now=job.usage_now())
+    def gate(route: routing.ResolvedRoute, provider: str = usage.PROVIDER_CLAUDE) -> Any:
+        limits = usage.limits_from_values(effective.values, provider)
+        readings = ()
+        if provider == usage.PROVIDER_CODEX:
+            readings = usage.read_codex_homes([_codex_home(), *review.retained_codex_homes(runtime_root)])
+        admission = usage.admit(runtime_root, provider=provider, role=route.role, model=route.model,
+                                repository=repository, run_id=run_id, limits=limits, now=job.usage_now(),
+                                readings=readings)
         if admission.hold is not None:
             return admission.hold
         if pause is not None and pause.held:
             pause.held = False
-            fields = _usage_event_fields(provider=usage.PROVIDER_CLAUDE, repository=repository, run_id=run_id,
+            fields = _usage_event_fields(provider=provider, repository=repository, run_id=run_id,
                                          token=admission.token)
             if run is not None:
                 run.event("usage_resumed", **fields)
@@ -1262,6 +1270,24 @@ def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run:
         return admission.token
 
     return gate
+
+
+def _reviewer_options(effective: settings.EffectiveSettings) -> dict | None:
+    """The ``reviewer.*`` settings as ``execute_step``'s ``reviewer`` argument:
+    ``None`` while ``reviewer.harness`` is unset (today's gate), else the
+    harness, model, effort, deadline and binary, each with its built-in
+    default (codex-reviewer D10)."""
+    harness = effective["reviewer.harness"]
+    if harness is None:
+        return None
+    return {
+        "harness": harness,
+        "model": effective["reviewer.model"] or review.DEFAULT_MODEL,
+        "effort": effective["reviewer.effort"] or review.DEFAULT_EFFORT,
+        "timeout_seconds": effective["reviewer.timeout_seconds"],
+        "binary": effective["reviewer.binary"] or "codex",
+        "operator_home": str(_codex_home()),
+    }
 
 
 def _local_time(epoch: float) -> str:
@@ -1274,22 +1300,28 @@ def usage_hold_message(hold: job.UsageHold, *, max_wait_seconds: int | None = No
     """The one stderr line of exit 17 (D10): a timed pause names its resume
     time; a run cap says no reset lifts it; a repository cap says a new run
     does not clear it and names the window reset. Outstanding work is named
-    when it is part of what holds a cap."""
-    head = f"workflow-controller: stopped for the usage budget, nothing was started: {hold.reason}"
+    when it is part of what holds a cap. A Codex hold (the review job's) names
+    the Codex provider and the ``usage.codex_*`` settings that apply."""
+    codex = hold.provider == usage.PROVIDER_CODEX
+    prefix = "usage.codex_" if codex else "usage."
+    head = (f"workflow-controller: stopped for the Codex usage budget, nothing was started: {hold.reason}" if codex
+            else f"workflow-controller: stopped for the usage budget, nothing was started: {hold.reason}")
     if hold.window == "run_cap":
-        text = f"{head} -- no reset will lift this; raise usage.run_cap_percent or start a new run"
+        text = f"{head} -- no reset will lift this; raise {prefix}run_cap_percent or start a new run"
     elif hold.window == "repository_cap":
         when = (f"run again after the window resets at {_local_time(hold.resets_at)} (the spending then falls)"
                 if hold.resets_at is not None else
                 "run again after the five-hour window resets (the spending then falls)")
         text = (f"{head} -- a new run does not clear this repository's spending, which is counted per five-hour "
-                f"window; {when}, or raise usage.repository_cap_percent")
+                f"window; {when}, or raise {prefix}repository_cap_percent")
     elif hold.resume_at is not None:
         text = f"{head} -- a timed pause: run again after the resume time {_local_time(hold.resume_at)}"
         if max_wait_seconds is not None:
             text += f" (waiting for it would exceed usage.max_wait_seconds, {max_wait_seconds} s)"
     else:
         text = f"{head} -- the window has no reset left to wait for; run again once a newer reading is recorded"
+    if codex:
+        text += f" (the caps are {prefix}pause_at_percent and {prefix}weekly_pause_at_percent)"
     if hold.outstanding:
         text += "; outstanding work (reservations of jobs not yet accounted) is part of what holds the cap"
     return text
@@ -1749,6 +1781,7 @@ def _run_one_step(
         poll_seconds=effective["merge.poll_seconds"],
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
         usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
+        reviewer=_reviewer_options(effective),
     )
 
     if isinstance(result, job.UsageHold):

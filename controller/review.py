@@ -43,7 +43,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
-from . import gitrepo, runtime
+from . import gitrepo, runtime, usage
 from .anchor import OWNERSHIP_VAR
 from .errors import ReviewLaunchRefusedError
 
@@ -872,7 +872,6 @@ class ReviewHarness:
 
 
 def _codex_end_readings(codex_home: Path) -> list[dict]:
-    from . import usage
     return usage.read_codex_home(codex_home)
 
 
@@ -919,7 +918,7 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
                   timeout: float, feedback_dir: Path | None = None, state_identity: Callable[[], str | None] | None = None,
                   compose: Callable[[Mapping[str, str]], Mapping] | None = None, system_dir: Path = SYSTEM_LAYER_DIR,
                   inherited_env: Mapping[str, str] | None = None, on_spawn: Callable[[int, int], None] | None = None,
-                  ) -> dict:
+                  out: dict | None = None) -> dict:
     """Run one review end to end and return ``{"status", "verdict", "check",
     "outcome", "credentials", "detail"}``: the copy is built, the boundary
     checked before each of the (at most two) invocations, the verdict compared
@@ -929,7 +928,10 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     ``mismatch`` (second mismatch), ``changed`` (the repository or the state
     identity moved: the verdict is void), ``empty`` (no verdict), ``limit``,
     ``timeout`` or ``failed``. The harness is called only for a registered
-    name; the caller (CP3) records nothing about it here."""
+    name; the caller (CP3) records nothing about it here. ``out``, when given,
+    is the dict the result is built in, so a caller whose run is interrupted
+    (an exception propagating out) still reads the ``readings`` and
+    ``credentials`` the ``finally`` below left in it."""
     layout = JobLayout(runtime_root, job_id)
     selected = harness(harness_name)  # refuses an unregistered name before anything is built
     binary = resolve_binary(binary_name)
@@ -941,8 +943,9 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
         own = []  # the review's own files are not part of the worktree being guarded
     before = snapshot_repository(worktree, feedback_dir=feedback_dir, state_identity=identity(), exclude=own)
     captured = None
-    result: dict = {"status": None, "verdict": None, "check": None, "outcome": "failed", "credentials": None,
-                    "detail": None}
+    result: dict = out if out is not None else {}
+    result.update({"status": None, "verdict": None, "check": None, "outcome": "failed", "credentials": None,
+                   "detail": None, "readings": []})
     try:
         build_copy(worktree, runtime_root, job_id)
         captured = build_home(layout, operator_home)
@@ -988,3 +991,50 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
         result["readings"] = selected.end_readings(layout.codex_home)
         settle_job_dir(runtime_root, job_id)
     return result
+
+
+# ---------------------------------------------------------------------------
+# The retained sessions (D4, D7): what a later admission must still see
+# ---------------------------------------------------------------------------
+
+#: The usage role a review job is admitted and routed under.
+REVIEW_ROLE = "external-review"
+
+
+def retained_codex_homes(runtime_root: Path) -> list[Path]:
+    """Every retained review home, ``<runtime>/reviews/*/codex-home``: the
+    rollouts of earlier Controller reviews (one that hit a limit included),
+    which a later admission reads beside the operator's own home."""
+    base = Path(runtime_root) / "reviews"
+    try:
+        return sorted(p for p in base.glob("*/codex-home") if (p / "sessions").is_dir())
+    except OSError:
+        return []
+
+
+def sweep_retained(runtime_root: Path, *, now: float) -> list[str]:
+    """Remove the retained ``sessions/`` of every settled review job whose
+    rate-limit windows have all passed their reset, together with the (then
+    empty) job directory. A directory that still holds anything but the
+    sessions (a running job's copy and home) is never touched. Returns the
+    job ids removed."""
+    base = Path(runtime_root) / "reviews"
+    removed: list[str] = []
+    try:
+        jobs = sorted(p for p in base.iterdir() if p.is_dir())
+    except OSError:
+        return removed
+    for path in jobs:
+        try:
+            names = {p.name for p in path.iterdir()}
+            home = path / "codex-home"
+            inner = {p.name for p in home.iterdir()} if home.is_dir() else set()
+        except OSError:
+            continue
+        if not names <= {"codex-home"} or not inner <= {"sessions"}:
+            continue
+        if any(reading["resets_at"] > now for reading in usage.read_codex_home(home)):
+            continue
+        runtime.remove_tree(runtime_root, job_dir(path.name))
+        removed.append(path.name)
+    return removed

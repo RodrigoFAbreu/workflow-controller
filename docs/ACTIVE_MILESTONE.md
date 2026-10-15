@@ -10,8 +10,8 @@ approved by policy (commit `3d304d3`); the base commit is `dea2125`. The plan is
 | Checkpoint | State |
 | --- | --- |
 | CP1 settings rows, `record_external_result`, `rm -f` note | committed (`f880306`) |
-| CP2 Codex harness | implemented; the D12 operator pre-step is open, so the harness stays unregistered |
-| CP3 review job | not started |
+| CP2 Codex harness | committed (`f9a14f2`); the D12 operator pre-step is open, so the harness stays unregistered |
+| CP3 review job | implemented, verified; commit follows |
 | CP4 lifecycle scenarios | not started |
 | CP5 documentation and full suite | not started |
 
@@ -57,8 +57,40 @@ constants that depend on them (`TOOL_ALLOWLIST`, `DISABLED_FEATURES`, `SERVICE_T
 `review.PRE_STEP_CAPTURED` is false and `review.HARNESSES` is empty, so the harness cannot be selected; a test pins
 both. The captured-invocation contract test and the sandbox-probe fixture are therefore not written.
 
+CP3 changes:
+- `controller/job.py`: the review job. `execute_step` takes `reviewer` (None while `reviewer.harness` is unset: every
+  decision, record, route and exit code is unchanged) and, at an `external_gate` whose action id is
+  `plan.review.external` / `implementation.review.external` **and** whose snapshot phase is the matching
+  `AWAITING_MANUAL_EXTERNAL_*` phase (`_review_gate`; rows 21, 31a and 35 stay gates), runs `_run_review_job`
+  instead of recording `GATE_BLOCKED`. An unknown or unregistered harness refuses before anything is recorded. The
+  record is kind `review`, job `schema_version` 2 (`REVIEW_SCHEMA_VERSION`; a 1.9.0 reader refuses it at
+  `validate_record` case 1), with `worker_route.harness`, a `review` block and the Codex `usage` block. Launch
+  intent (`review.launched`, `ownership_tag`) is flushed before the spawn; `worker_process` after it. The Codex
+  group holds no lifecycle-lock descriptor. Outcomes: an exact verdict is handed to `protocol.record_external_result`
+  (`--run-ref codex:<job id>`) after an `expect_state_identity` check, FINISHED; the Workflow's `refused` /
+  `not_applicable`, a header mismatch after the one retry and a failure without limit text are FAILED (gate open);
+  a limit, timeout, empty run, changed repository or moved state are INCOMPLETE (exit 35); Ctrl-C kills the group,
+  ends the record INCOMPLETE, completes the reservation by the measured delta and propagates. A boundary refusal
+  before the exec spawn is FAILED and released. `never_launched` has a review case (launch intent decides);
+  `validate_record` has the review-kind case; `derive_job_event` names the open gate and the manual route for a failed
+  or incomplete review; no `user_gate` is sent for a gate the Controller runs.
+- `resume` / `resume --abandon`: the review-job branch `_reconcile_review` (phase 2, before any `reconcile`): ends the
+  group by recorded identity and ownership tag, copies the credentials back, removes the copy, writes the record
+  `INTERRUPTED` (`INCOMPLETE` past the deadline); the sweep settles it at the forecast, a never-started one is
+  released. `review.sweep_retained` removes retained `sessions/` once their windows have reset.
+- `controller/cli.py`: `_usage_gate` takes a provider; a Codex admission passes fresh readings from the operator's
+  home merged with every retained review home (`usage.read_codex_homes`) on every attempt; the Codex hold message
+  names the provider and the `usage.codex_*` settings; `_reviewer_options` passes the `reviewer.*` settings.
+- `controller/protocol.py`: `resolve_artifact`; `controller/review.py`: `launch_review(out=)`, `retained_codex_homes`,
+  `sweep_retained`; `controller/__init__.py` and the dependency order name `review`.
+- `tests/test_review_job.py` (51 tests): the discriminator, the happy path on both stages against a real 2.9.0
+  Workflow, outcome mapping, usage, record shape, replays with a real tagged process group (with and without the
+  `worker_process` flush), credentials on the resume branch, the real `launch_review` against `tests/fake_codex.py`.
+
+Full suite: 3806 tests, only the two known Git 2.56 trailer tests fail (follow-up, unrelated).
+
 ## Next action
 
-Commit CP2. CP3 cannot register the harness until the operator records the D12 pre-step under
-`tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`; CP3's own tests patch the registry. Then invoke
-`/milestone-implement` again for CP3.
+CP3 is committed. The harness still cannot be registered until the operator records the D12 pre-step under
+`tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`; the tests patch the registry. Invoke
+`/milestone-implement` again for CP4.

@@ -537,6 +537,27 @@ def verify(root: Path, *, timeout: float | None = None,
     return Verify(result["healthy"], tuple(Check(c["id"], c["status"], c["detail"]) for c in result["checks"]))
 
 
+@dataclasses.dataclass(frozen=True)
+class Artifact:
+    """One ``resolve-artifact`` answer: ``path`` is the Workflow's own
+    resolution, relative to the repository root, ``None`` when the kind has
+    none for this item."""
+
+    kind: str
+    path: str | None
+    exists: bool
+    basis: Basis | None
+
+
+def resolve_artifact(root: Path, work_item: str, kind: str, *, timeout: float | None = None,
+                     expected_digests: Mapping[str, str] | None = None) -> Artifact:
+    """Where the Workflow keeps ``kind`` for ``work_item`` (protocol section
+    5.3): for display and hand-off to a reviewer, never to read state."""
+    result = _answer(root, "resolve-artifact", ["--work-item", work_item, "--kind", kind], timeout,
+                     expected_digests).result
+    return Artifact(result["kind"], result["path"], result["exists"], _basis(result["basis"]))
+
+
 def next_action(root: Path, work_item: str | None = None, *, expect_state_identity: str | None = None,
                 timeout: float | None = None, expected_digests: Mapping[str, str] | None = None) -> Decision:
     args: list[str] = []

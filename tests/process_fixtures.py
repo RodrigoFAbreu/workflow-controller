@@ -318,6 +318,9 @@ LEFTOVER_INVENTORY = (
     ("test_cli.py", "start:helper:run_controller_module", 3, "short",
      "read-only follow/--workflow-manager commands that exit, waited by the test"),
     ("test_cli.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+    ("test_review_job.py", "start:Popen", 1, "bounded",
+     "ReplayTest's Codex stand-in: a 120 s sleep in its own session carrying the ownership tag; `resume` ends its group, "
+     "and the test's cleanup kills it by exact pid"),
     ("test_fake_codex_contract.py", "start:Popen", 1, "bounded",
      "the intermediate launcher of the orphan test: it waits on a fake with hang_seconds 120 and orphan_seconds 1; the test kills it and ends the fake's group by exact pid"),
     ("test_fake_claude_contract.py", "start:Popen", 9, "bounded",

@@ -262,9 +262,18 @@ class RegistryAndContractTest(unittest.TestCase):
             self.assertEqual(raised.exception.evidence["entry"], flag)
 
 
+class BuildDirTest(unittest.TestCase):
+    def test_build_dir_is_created_when_missing(self):
+        with tempfile.TemporaryDirectory() as raw:
+            missing = Path(raw) / "build"
+            with mock.patch.object(process_fixtures, "BUILD_DIR", missing):
+                self.assertEqual(process_fixtures.build_dir(), missing)
+            self.assertTrue(missing.is_dir())
+
+
 class CopyTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="review-copy-", dir=REPO_ROOT / "build"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="review-copy-", dir=process_fixtures.build_dir()))
         self.addCleanup(runtime.remove_tree, self.tmp, ".")
         self.repo = self.tmp / "repo"
         fixtures.git_init(self.repo)
@@ -348,7 +357,7 @@ class CopyTest(unittest.TestCase):
 
 class GuardTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="review-guard-", dir=REPO_ROOT / "build"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="review-guard-", dir=process_fixtures.build_dir()))
         self.addCleanup(runtime.remove_tree, self.tmp, ".")
         self.repo = self.tmp / "repo"
         fixtures.git_init(self.repo)
@@ -406,7 +415,7 @@ class GuardTest(unittest.TestCase):
 
 class EnvironmentAndHomeTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="review-env-", dir=REPO_ROOT / "build"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="review-env-", dir=process_fixtures.build_dir()))
         self.addCleanup(runtime.remove_tree, self.tmp, ".")
         self.layout = review.JobLayout(self.tmp, "job1")
         self.operator = self.tmp / "operator-home"
@@ -731,7 +740,7 @@ class EnvironmentAndHomeTest(unittest.TestCase):
 
 class CredentialTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="review-cred-", dir=REPO_ROOT / "build"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="review-cred-", dir=process_fixtures.build_dir()))
         self.addCleanup(runtime.remove_tree, self.tmp, ".")
         self.layout = review.JobLayout(self.tmp, "job1")
         self.operator = self.tmp / "operator-home"
@@ -776,7 +785,7 @@ class FakeLaunchTest(unittest.TestCase):
         patch = mock.patch.dict(review.HARNESSES, {"codex": review.CODEX})
         patch.start()
         self.addCleanup(patch.stop)
-        self.tmp = Path(tempfile.mkdtemp(prefix="review-launch-", dir=REPO_ROOT / "build"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="review-launch-", dir=process_fixtures.build_dir()))
         self.addCleanup(runtime.remove_tree, self.tmp, ".")
         self.repo = self.tmp / "repo"
         fixtures.git_init(self.repo)

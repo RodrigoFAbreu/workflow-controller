@@ -31,7 +31,7 @@ def review_sources():
 
 class FakeCodexContractTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="fake-codex-", dir=process_fixtures.BUILD_DIR))
+        self.tmp = Path(tempfile.mkdtemp(prefix="fake-codex-", dir=process_fixtures.build_dir()))
         self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)], check=False)
         self.home = self.tmp / "home"
         self.home.mkdir()

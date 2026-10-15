@@ -42,6 +42,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = REPO_ROOT / "build"
 
+
+def build_dir() -> Path:
+    """``BUILD_DIR``, created if a fresh checkout does not have it yet."""
+    BUILD_DIR.mkdir(exist_ok=True)
+    return BUILD_DIR
+
 #: The most a process a test starts may live when a killed test could leave
 #: it behind in a new session or group (leftover-lifetime plan D12). A new
 #: long-lived helper takes this instead of re-introducing a 3,600 s sleep.
@@ -785,8 +791,7 @@ def run_in_child_pid_namespace(target_root: Path) -> dict:
 def scratch_git_repo(test_case: unittest.TestCase) -> Path:
     """A fresh git repository under the checkout's gitignored ``build/``,
     removed by ``test_case``'s cleanup."""
-    BUILD_DIR.mkdir(exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="cp5-lock-", dir=BUILD_DIR))
+    root = Path(tempfile.mkdtemp(prefix="cp5-lock-", dir=build_dir()))
     test_case.addCleanup(shutil.rmtree, root, True)
     from tests import fixtures
 

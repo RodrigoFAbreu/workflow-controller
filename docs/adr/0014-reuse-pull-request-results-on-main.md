@@ -1,4 +1,4 @@
-# ADR 0013: Reuse a pull request's validated results on `main` for the identical tree
+# ADR 0014: Reuse a pull request's validated results on `main` for the identical tree
 
 Status: accepted (2026-10-15). Amends the validation decisions of
 [ADR 0003](0003-trunk-branch-pr-release-orchestration.md) (every push to
@@ -32,7 +32,11 @@ release decision that is made on the tree.
    Going back is a variable change. It ships report-only, and is switched on
    by the owner after at least three merges whose reports were cross-checked
    against the full run.
-3. **Fail closed, twice.** The `reuse` job (read-only: `actions`, `contents`
+3. **Report mode costs no wall time.** `reuse` (which `validate` waits for)
+   runs only for `on`. For unset, `report` and unknown values a separate
+   `reuse-report` job runs beside `validate`; nothing needs it and it is
+   `continue-on-error`. `off` runs neither.
+4. **Fail closed, twice.** The `reuse` job (read-only: `actions`, `contents`
    and `pull-requests` read) passes a run id only when every check passes. A
    failed lookup, a missing artifact, an artifact from before reuse, an
    ambiguous pull request, a fork, a rebase merge, a moved base,
@@ -42,7 +46,7 @@ release decision that is made on the tree.
    artifact, and fails the run on any mismatch (no release), then re-runs
    `aggregate` on the recorded records: each planned test exactly once, all
    passed, no leaked process. A reuse never turns a failure into a pass.
-4. **Nothing else weakens.** Pull request runs are unchanged (the input is
+5. **Nothing else weakens.** Pull request runs are unchanged (the input is
    empty, so the shards run). `release-plan`, `build` and `publish` keep
    `needs: validate`. The `package` job always runs, on `main`'s own commit.
    The managed conformance workflow is untouched. The caller jobs

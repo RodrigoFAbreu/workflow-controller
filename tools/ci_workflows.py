@@ -476,17 +476,26 @@ def _publishing_condition() -> str:
     return f"{ON_TRUNK} && ({states})"
 
 
-def _reuse_job() -> dict:
-    """``reuse``: decides whether ``validate`` may reuse the merged pull
-    request's CI run. It changes nothing unless ``CI_MAIN_REUSE`` is ``on``.
-    The three modes are described in ``tools/ci_reuse.py``."""
+#: ``reuse`` blocks ``validate`` and runs only for ``on``; ``reuse-report``
+#: runs beside ``validate`` for unset, ``report`` and unknown values (which
+#: its summary names as off), and for no other. ``off`` runs neither.
+REUSE_ON = f"vars.{REUSE_VARIABLE} == 'on'"
+REUSE_REPORT = f"vars.{REUSE_VARIABLE} != 'on' && vars.{REUSE_VARIABLE} != 'off'"
+
+
+def _reuse_job(report: bool = False) -> dict:
+    """``reuse`` (``CI_MAIN_REUSE=on``): decides whether ``validate`` may
+    reuse the merged pull request's CI run. With ``report`` it is
+    ``reuse-report``: the same decision logged beside ``validate``, which
+    nothing needs and which cannot fail ``Main``. The modes are described in
+    ``tools/ci_reuse.py``."""
     have_candidate = "steps.find.outputs.candidate != ''"
-    return {
+    job = {
+        "if": REUSE_REPORT if report else REUSE_ON,
         "runs-on": RUNNER,
         "permissions": dict(REUSE_PERMISSIONS),
         "env": {"GH_TOKEN": "${{ github.token }}",
                 REUSE_VARIABLE: f"${{{{ vars.{REUSE_VARIABLE} }}}}"},
-        "outputs": {"run-id": "${{ steps.decide.outputs.run-id }}"},
         "steps": [
             _checkout(pinned=True),
             _setup_python(pinned=True),
@@ -510,6 +519,11 @@ def _reuse_job() -> dict:
                     f"--reused-dir {REUSE_RECORDED_DIR} --plan {REUSE_PLAN}"},
         ],
     }
+    if report:
+        job["continue-on-error"] = True
+    else:
+        job["outputs"] = {"run-id": "${{ steps.decide.outputs.run-id }}"}
+    return job
 
 
 def main_workflow() -> dict:
@@ -522,6 +536,7 @@ def main_workflow() -> dict:
         "permissions": {"contents": "read"},
         "jobs": {
             "reuse": _reuse_job(),
+            "reuse-report": _reuse_job(report=True),
             # !cancelled(): a reuse job that crashed leaves run-id empty, so
             # the shards run. Nothing is skipped on a doubt.
             "validate": {
@@ -627,10 +642,12 @@ WORKFLOWS = {
                  "(tools/release.py over controller/release_txn.py). Runs never cancel one another.\n"
                  "Every action outside validate is pinned to a full commit SHA; publish is the only\n"
                  "job that can write.\n\n"
-                 "reuse (read-only) is switched by the repository variable CI_MAIN_REUSE: unset or\n"
-                 "report logs whether the merged pull request's CI run could stand in for the shards\n"
-                 "and still runs them; on skips them when the recorded tree and plan digest match;\n"
-                 "off, or any other value, changes nothing. See docs/guide/ci-and-releases.md.\n\n"
+                 "reuse and reuse-report (read-only) are switched by the repository variable\n"
+                 "CI_MAIN_REUSE. Unset or report: reuse-report logs, beside validate and without\n"
+                 "blocking it, whether the merged pull request's CI run could stand in for the\n"
+                 "shards; the shards still run. on: reuse runs first and validate skips the shards\n"
+                 "when the recorded tree and plan digest match. off: neither job runs; any other\n"
+                 "value is reported as off. See docs/guide/ci-and-releases.md.\n\n"
                  + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
     "pr-title.yml": (pr_title_workflow,
                      "Checks every pull request's title against the policy committed on its merge ref\n"

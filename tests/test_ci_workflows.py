@@ -517,6 +517,7 @@ class AllJobsTest(unittest.TestCase):
         self.assertEqual(found, [("main.yml", "build", "actions/upload-artifact"),
                                  ("main.yml", "publish", "actions/download-artifact"),
                                  ("main.yml", "reuse", "actions/download-artifact"),
+                                 ("main.yml", "reuse-report", "actions/download-artifact"),
                                  ("validate.yml", "plan", "actions/upload-artifact"),
                                  ("validate.yml", "tests", "actions/upload-artifact"),
                                  ("validate.yml", "tests-result", "actions/download-artifact"),
@@ -592,8 +593,8 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, True)
                 else:
                     self.assertIs(persist, False)
-        # validate.yml's four jobs, reuse, release-plan, build and publish, then title.
-        self.assertEqual(checkouts, 9)
+        # validate.yml's four jobs, reuse, reuse-report, release-plan, build and publish, then title.
+        self.assertEqual(checkouts, 10)
 
 
 class CiWorkflowTest(unittest.TestCase):
@@ -647,7 +648,7 @@ class MainWorkflowTest(unittest.TestCase):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
 
     def test_needs_chain(self) -> None:
-        self.assertEqual(list(self.jobs), ["reuse", "validate", "release-plan", "build", "publish"])
+        self.assertEqual(list(self.jobs), ["reuse", "reuse-report", "validate", "release-plan", "build", "publish"])
         self.assertEqual(self.jobs["validate"], {
             "needs": ["reuse"], "if": "!cancelled()",
             "permissions": {"contents": "read", "actions": "read"},
@@ -695,7 +696,7 @@ class MainWorkflowTest(unittest.TestCase):
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
         uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()["main.yml"])
         actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
-        self.assertEqual(len(actions), 11)
+        self.assertEqual(len(actions), 14)
         for ref, comment in actions:
             with self.subTest(ref=ref):
                 self.assertRegex(ref, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
@@ -785,6 +786,7 @@ class ReuseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.main = ci.main_workflow()
         self.reuse = _jobs(self.main)["reuse"]
+        self.report = _jobs(self.main)["reuse-report"]
         self.validate = _jobs(ci.validate_workflow())
 
     def test_reuse_job_is_least_privilege_and_cannot_write(self) -> None:
@@ -793,13 +795,40 @@ class ReuseTest(unittest.TestCase):
         self.assertNotIn("needs", self.reuse)
         self.assertEqual(self.reuse["outputs"], {"run-id": "${{ steps.decide.outputs.run-id }}"})
 
+    def test_reuse_runs_only_for_on_and_report_only_beside_validate(self) -> None:
+        self.assertEqual(self.reuse["if"], "vars.CI_MAIN_REUSE == 'on'")
+        self.assertEqual(self.report["if"],
+                         "vars.CI_MAIN_REUSE != 'on' && vars.CI_MAIN_REUSE != 'off'")
+        # off matches neither; unset, empty, report and unknown match the report only.
+        for value, expected in (("on", (True, False)), ("off", (False, False)),
+                                ("", (False, True)), ("report", (False, True)),
+                                ("maybe", (False, True))):
+            on = value == "on"
+            report = value != "on" and value != "off"
+            self.assertEqual((on, report), expected)
+        # Nothing waits for the report, it cannot fail Main, and it hands out no run id.
+        for job in _jobs(self.main).values():
+            self.assertNotIn("reuse-report", job.get("needs", []))
+        self.assertIs(self.report["continue-on-error"], True)
+        self.assertNotIn("outputs", self.report)
+        self.assertNotIn("continue-on-error", self.reuse)
+        self.assertEqual(self.report["permissions"], self.reuse["permissions"])
+        self.assertEqual(ci.emit({"steps": self.report["steps"]}), ci.emit({"steps": self.reuse["steps"]}))
+        # on still blocks validate and passes the run id; a skipped reuse still lets validate start.
+        validate = _jobs(self.main)["validate"]
+        self.assertEqual(validate["needs"], ["reuse"])
+        self.assertEqual(validate["if"], "!cancelled()")
+
     def test_the_variable_reaches_the_script_only_through_the_environment(self) -> None:
         self.assertEqual(self.reuse["env"]["CI_MAIN_REUSE"], "${{ vars.CI_MAIN_REUSE }}")
         for name, text in ci.render().items():
             for line in text.splitlines():
-                if "CI_MAIN_REUSE" in line and "vars." in line:
-                    self.assertEqual((name, line.strip()),
-                                     ("main.yml", 'CI_MAIN_REUSE: "${{ vars.CI_MAIN_REUSE }}"'))
+                if "vars." in line:
+                    self.assertEqual(name, "main.yml")
+                    self.assertIn(line.strip(), ('CI_MAIN_REUSE: "${{ vars.CI_MAIN_REUSE }}"',
+                                                 'if: "vars.CI_MAIN_REUSE == \'on\'"',
+                                                 'if: "vars.CI_MAIN_REUSE != \'on\' && '
+                                                 'vars.CI_MAIN_REUSE != \'off\'"'))
         find = self.reuse["steps"][_index(self.reuse["steps"], lambda s: s.get("id") == "find")]
         self.assertIn('--mode "$CI_MAIN_REUSE"', find["run"])
         self.assertNotIn("${{", find["run"])
@@ -887,7 +916,7 @@ class ReuseTest(unittest.TestCase):
 
     def test_the_generated_reuse_job_is_readable_and_documented_in_the_header(self) -> None:
         text = ci.render()["main.yml"]
-        self.assertIn("# reuse (read-only) is switched by the repository variable CI_MAIN_REUSE", text)
+        self.assertIn("# reuse and reuse-report (read-only) are switched by the repository variable", text)
         self.assertIn("tests-from-run", ci.render()["validate.yml"].split("name: Validate")[0])
 
 

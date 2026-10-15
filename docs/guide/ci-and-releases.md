@@ -192,12 +192,12 @@ Actions, Variables):
 
 | Value | What `Main` does |
 | --- | --- |
-| unset, empty or `report` | **Report only (the default).** The `reuse` job works out what it would do and writes it to its job summary. The full validation still runs, exactly as without it. |
-| `on` | **Reuse.** When every check passes, `validate` does not run the shards: `tests-result` verifies the recorded tree and plan digest and re-aggregates the recorded records. Any failed check runs the full shards. |
-| `off` | Nothing is looked up and nothing changes. |
-| anything else | Treated as `off`, and the `reuse` job summary says so. |
+| unset, empty or `report` | **Report only (the default).** The separate `reuse-report` job works out what it would do and writes it to its job summary. It runs beside `validate`, nothing waits for it and it cannot fail `Main`, so `Main` is no slower. The full validation runs exactly as without it. |
+| `on` | **Reuse.** The `reuse` job runs first (about a minute, which `validate` waits for). When every check passes, `validate` does not run the shards: `tests-result` verifies the recorded tree and plan digest and re-aggregates the recorded records. Any failed check runs the full shards. |
+| `off` | Neither job runs; nothing is looked up and nothing changes. |
+| anything else | Treated as `off` (nothing is looked up), and the `reuse-report` job summary says so. |
 
-**What the `reuse` job checks** (job `reuse`, permissions `actions: read`,
+**What the jobs check** (`reuse` and `reuse-report` share the logic in `tools/ci_reuse.py`; permissions `actions: read`,
 `contents: read`, `pull-requests: read`; it cannot write). It finds the pull
 request that was merged as this commit, requires that it came from this
 repository, and takes its latest successful `CI` run on the pull request's
@@ -213,7 +213,7 @@ re-runs `aggregate` on the records: each planned test exactly once, all
 passed, no leaked process. `release-plan`, `build` and `publish` keep
 `needs: validate`.
 
-**Reading the report.** Open the `Main` run, then the `reuse` job's summary.
+**Reading the report.** Open the `Main` run, then the `reuse-report` job's summary (`reuse`'s, once the variable is `on`).
 It lists this commit's tree, the merged pull request and its head, the
 candidate `CI` run id, the recorded tree and plan digest next to this
 commit's (each marked `equal` or `DIFFERENT`), and a last line: `Decision:
@@ -234,7 +234,7 @@ run is wrong, set `off` (or `report`) and re-run: the full shards run.
 What it gives up: with `on`, a tree is tested once, on the pull request. The
 second execution would only catch a flaky pass, a change of the runner image
 between the two runs, or a time-dependent test. See
-[ADR 0013](../adr/0013-reuse-pull-request-results-on-main.md).
+[ADR 0014](../adr/0014-reuse-pull-request-results-on-main.md).
 
 ## Releasing
 

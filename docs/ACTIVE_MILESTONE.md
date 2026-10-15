@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7) runs the cross-model review
+**Awaiting functional review (implementation revision 7, technically approved).** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7) runs the cross-model review
 with a Codex reviewer the Controller starts itself, opt-in through `reviewer.harness`. Plan revision 15 was
 approved by policy (commit `3d304d3`); the base commit is `dea2125`. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_REVIEWER_PLAN.md`.
@@ -147,3 +147,51 @@ Git 2.56 trailer tests fail.
 The self-review and the full verification are done. The next step is the implementation-review bundle (revision 1)
 and the local implementation review. The `codex` harness still cannot be registered until the operator records the
 D12 pre-step under `tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`.
+
+## Functional review checklist
+
+Scope: C7, the Controller-run Codex reviewer (`reviewer.harness`). Everything below is manual; the automated suite
+(3821 tests, only the two known Git 2.56 trailer tests fail) and the lifecycle scenarios 11-12 already cover the
+mechanics against `tests/fake_codex.py`.
+
+**Setup**
+- Check out `milestone/workflow-controller-codex-reviewer` and run the Controller from it
+  (`PYTHONPATH=<repo> python3 -m controller ...`); use a scratch repository on Workflow 2.9.x, never this one.
+- A working `codex` CLI (`codex-cli 0.162.1` was used for the D12 captures), logged in, with allowance left.
+- Settings file: `reviewer.harness = "codex"`; optionally `reviewer.model`, `reviewer.effort`,
+  `reviewer.timeout_seconds`, `reviewer.binary`.
+- A scratch work item parked at `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` (and, for flow 4, the implementation
+  equivalent).
+
+**Flows and expected results**
+1. *Unset is unchanged.* With `reviewer.harness` unset, `run` at an external review gate stops at the gate
+   exactly as on 1.9.0 (gate event, no job of kind `review`).
+2. *Happy path, plan stage.* With `harness = codex`, `run` starts a review job: a `review` job record
+   (schema_version 2) with launch intent before spawn, the verdict header matching the bundle exactly, the verdict
+   ingested via the Workflow (`--run-ref codex:<job id>`), job `FINISHED`, the disposable copy removed, only
+   `sessions/` kept, the real repository untouched.
+3. *Boundary.* The job record and `codex` log show: read-only sandbox, no network or web search, minimal Codex
+   home (not your `~/.codex` config), no MCP servers, hooks or notify run. Your own `~/.codex` files are unchanged
+   afterwards except refreshed credentials.
+4. *Implementation stage.* Same as flow 2 at `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
+5. *Bad header.* If the reviewer's verdict header is wrong it is retried once; after a second mismatch the job is
+   `FAILED` (exit 30), nothing is ingested and the gate stays open for the manual route.
+6. *Limit / timeout.* Lower `reviewer.timeout_seconds` to 60 (or use an exhausted allowance): the job ends
+   `INCOMPLETE` (exit 35), reservation charged by the measured delta; a following `run` is held at admission
+   (exit 17) until the reset, then re-admitted.
+7. *Ctrl-C and resume.* Interrupt a running review: the Codex group is killed, the record ends `INCOMPLETE`;
+   `resume` (and `resume --abandon`) settle the record and remove the copy, with no orphan `codex` process left.
+8. *Refusals.* An unknown `reviewer.harness` value refuses before anything is recorded; a managed Codex
+   configuration (managed provider, `model_catalog_json`, MCP server in an outer layer) refuses by its named check
+   and starts no review.
+9. *Other gates.* A gate that is not a manual external review (e.g. acceptance, rows 21/31a/35) still stops with
+   `GATE_BLOCKED`.
+10. *Docs.* `python3 tools/check_docs.py` is clean; `docs/run.md` (letting the Controller run the external review),
+    `docs/common-problems.md` and `docs/compatibility.md` (D15 downgrade note) match what you saw.
+
+**Known limitations / out of scope**
+- Only Codex is registered; other harnesses are refused.
+- A reviewer may spawn a sub-agent (Codex cannot remove the tool); the job record names the spawn and its tokens.
+- The Workflow-side protocol paragraph is pending in Workflow 2.12.0 (workflow#28 stays open).
+- Two Git 2.56 trailer tests fail locally (separate follow-up); `plan_stage_decisions` golden differs on base too.
+- Release notes (`docs/releases/1.10.0.md`) are written after release.

@@ -563,7 +563,11 @@ class LeakScanTest(unittest.TestCase):
         (self.real / "existing.txt").write_text("someone else's data\n")
         self.token, self.scratch = "scn-flow-AbCdEf123", "/tmp/scn-flow-AbCdEf123"
         time.sleep(0.02)
-        self.since = time.time()
+        # `since` comes from the filesystem's own clock: the kernel stamps files with a coarse clock that can
+        # lag time.time(), so a file written in a test could otherwise get an mtime earlier than `since`.
+        marker = self.tmp / "since"
+        marker.touch()
+        self.since = marker.stat().st_mtime
 
     def scan(self) -> list[str]:
         return kit.leak_scan([self.real], self.token, self.scratch, self.since)

@@ -8,25 +8,19 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-13).** Controller 1.9.0 is the latest release (PR #41, squash `04923f8`). It admits Workflow
-2.5.1 and 2.6.0 as before, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later); this
-repository runs Workflow 2.10.0 with automatic gates (since 2026-10-13; 2.9.2 from 2026-10-11, 2.9.0 from 2026-10-09). Every milestone through C9, the Controller
-on Orchestration Protocol v1 (1.7, accepted 2026-10-03), is complete; C9 was released as 1.7.0 (PR #21, squash
-`fd4e9a6`). C4 was released as 1.6.0 (PR #18, squash `f2ca24d`). D1, the documentation
-reorganisation (11.8, accepted 2026-10-09), is complete and merges as a `docs:` pull request (#25)
-that releases nothing. C9b, the patch that accepts the protocol's `warn` check status and protocol
-1.2 (follow-up 11, accepted 2026-10-09), is complete and was released as 1.7.1. C9c, which
-prepares this repository's move to Workflow 2.9.0 (follow-up 15, accepted 2026-10-09), is complete
-and merged as a `test:` pull request that released nothing (PR #32); a `chore:` pull request then
-moved this repository to Workflow 2.9.0. C9d, the installed-release test made version-agnostic
-(follow-up 16, accepted 2026-10-10 by gate policy), is complete and merged as a `test:` pull
-request (#34). C8, the usage budget (accepted 2026-10-10 by gate policy), is complete and was
-released as 1.8.0. A `chore:` pull request then moved this repository to Workflow 2.9.2 (the
-Workflow fix release for workflow#19 and workflow#20; 2026-10-11). A small milestone
-(C12a, accepted 2026-10-12 by gate policy) then fixed the test side of the recurring drain hang from leftover test processes
-(follow-up 8). C5, the SignalHub notifications (accepted 2026-10-12 by gate policy), is complete and was released as 1.9.0. C6, the automated lifecycle scenarios (accepted 2026-10-12 by gate policy), is complete and merged as a `test:` pull request (#43, squash `febdf7e`) that released nothing. A `chore:` pull request then moved this repository to Workflow 2.10.0. C7, the review-only harness seam with a Codex reviewer (accepted 2026-10-15 by gate policy), is complete and is released as 1.10.0 when its `feat:` pull request (#45) merges (see its row; the Codex harness is registered since its operator pre-step was recorded on 2026-10-15). Next (user decisions, 2026-10-09 and 2026-10-10): C10 (with the automated functional review), C12 (self-recovery),
-C11, then the orchestrator series O1-O7.
-Workflow Manager runs Workflow 2.6.0 and has its adaptive test sharding on `main`.
+**Where things stand (2026-10-15).** Controller 1.10.0 is the latest release (PR #45, squash
+`6aa8f66`): with `reviewer.harness` set, the Controller runs the cross-model review itself (C7). It
+admits Workflow 2.5.1 and 2.6.0, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and
+later). This repository runs Workflow 2.10.0 with automatic gates. What is complete is marked in the
+tables below; what each release changed is in the [release history](release-history.md).
+
+**Next, in order** (owner decisions, 2026-10-14 and 2026-10-15), after the documentation pull
+request with the 1.10.0 release notes:
+1. move this repository to the latest Workflow (2.11.0, or 2.12.0 if it is out by then): a `chore:`
+   pull request, no release;
+2. C13, review convergence ([11.13](#1113-review-convergence));
+3. C14, review modes ([11.14](#1114-review-modes));
+4. C10, C12 and C11, then the orchestrator series O1-O7.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -46,16 +40,13 @@ with a finding, what comes next. It acts only within a closed list of allowed ac
 user for everything else (user decisions, 2026-10-09 and 2026-10-10).
 
 **Two lanes run in parallel**, one milestone at a time in each: this repository, and Workflow
-Manager together with the new `workflow` repository. The lanes meet at two points only: C9 needs
-Workflow 2.7 (W1), and C10 needs Workflow 2.8 (W2).
+Manager together with the new `workflow` repository. The lanes meet where a Controller step needs a
+Workflow release: C9 needed Workflow 2.7 (W1), C10 needs 2.8 (W2) and C13 needs 2.12 (W8).
 
-**Controller lane, in order.** Each step is one small milestone that is released on its own. On
-2026-10-03 the user reordered the steps after C4: C9 first (Workflow 2.7.0 is published), then C8,
-then C5, then C6, C7, C10 and C11. The step numbers stay as they were. On 2026-10-03, while the
-lane waits for W2 before C8, the user added D1, a documentation milestone, to run first.
-On 2026-10-10 the user placed a small milestone for the leftover-test-process drain hang
-([follow-up 8](#known-follow-ups-carried-forward)) right after this repository's move to Workflow 2.9.2,
-ahead of C5. That move is done (2026-10-11), so the drain-hang milestone is next.
+**Controller lane, in order.** Each step is one small milestone, released on its own when it changes
+the Controller. The table is the current order; the steps keep their historical numbers, so the
+numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09, 2026-10-10,
+2026-10-14 and 2026-10-15.
 
 | # | Step | Needs | Section |
 |---|---|---|---|
@@ -74,14 +65,16 @@ ahead of C5. That move is done (2026-10-11), so the drain-hang milestone is next
 | C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, accepted 2026-10-12 by gate policy, no release) | — | [11.5](#115-automated-lifecycle-scenarios) |
-| C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) (complete, accepted 2026-10-15 by gate policy, `feat:` 1.10.0; ADR 0013; the `codex` harness is registered since the operator recorded the D12 pre-step (2026-10-15); C10 reuses the seam, the supervision precedent and `record_external_result`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
+| C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) (complete, released as 1.10.0, PR #45, squash `6aa8f66`; accepted 2026-10-15 by gate policy; ADR 0013; C10 reuses the seam, the supervision precedent and `record_external_result`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
+| C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage | C7, W8 | [11.13](#1113-review-convergence) |
+| C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review | C13, the Workflow's answers | [11.14](#1114-review-modes) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
 
 **Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
-because C9 and C10 depend on them.
+because C9, C10 and C13 depend on them.
 
 | # | Step | Repository |
 |---|---|---|
@@ -89,6 +82,7 @@ because C9 and C10 depend on them.
 | M2 | Distribution rework: Workflow moves to its own repository and releases as downloadable packages (every earlier release published too); the Manager downloads, verifies, caches and installs them; its tests cover only the release in development and the upgrade path | Workflow Manager, `workflow` |
 | W1 | Workflow 2.7, the first packaged release: Orchestration Protocol v1 and the `v2.6.0-001` follow-up | `workflow` |
 | W2 | Workflow 2.8: gate policy, and a red or changes-requested pull request reopening the same work item | `workflow` |
+| W8 | Workflow 2.12: review convergence rules (see [11.13](#1113-review-convergence)) | `workflow` |
 | M3 | Workflow Manager and `workflow` driven by the Controller's loop | both |
 
 **After C11: the orchestrator series, in order** ([11.11](#1111-the-orchestrator-a-person-only-for-escalation);
@@ -383,7 +377,9 @@ Required CI structure:
 - tagged release runs should not be casually cancelled by unrelated newer tags;
 - standard Ubuntu runners;
 - a pull request holds at most 6 Linux runners at once (the account shares 20 jobs); the CI shard
-  plan is capped at 4 shards;
+  plan is capped at 4 shards. Since PR #46 each shard runs its conformance suites beside its
+  Controller tests, which cut a pull request's checks from about 18-19 to about 14 minutes at the
+  same peak ([measured](guide/ci-and-releases.md#how-a-shard-runs));
 - hermetic jobs with no shared mutable state;
 - no live Claude/API-spend dependency for normal CI unless explicitly justified.
 
@@ -923,6 +919,11 @@ implementation
 Workflow must never encode provider/model names as lifecycle semantics.
 
 Do not weaken Workflow guarantees to accommodate a provider.
+
+C7 delivered the smallest slice: a review-only seam with a Codex reviewer (1.10.0, ADR 0013).
+The advisor tool and cheaper models through another provider (for example OpenRouter) are only
+experiments to measure later, after C13's before/after data ([11.13](#1113-review-convergence));
+they are not planned steps.
 
 ---
 
@@ -1787,6 +1788,72 @@ A possible path, to refine:
 The roadmap already builds towards it: the orchestrator series (11.11), concurrency (6), the forge
 adapter (7.6) and harness portability (5).
 
+## 11.13 Review convergence
+
+**Status:** Planned. Step C13 (owner decision, 2026-10-14).
+
+**Why.** Review loops take most of a milestone's worker usage. Measured on 2026-10-14 over six
+milestones of Controller worker usage since 2026-10-04 (list prices as the yardstick), they took about
+65%:
+
+| Part of the review loop | Share of worker usage |
+|---|---|
+| local plan review | 30% |
+| local implementation review | 18% |
+| applying plan reviews | 10% |
+| applying implementation reviews | 7% |
+
+Plans took 11 to 16 local review rounds each. The Workflow Manager lane measured 53% to 79% for its
+milestones.
+
+**What, on the Controller side.**
+- A round cap per review stage (proposed default 4).
+- At the cap with only minor findings left, the Controller stops and asks the owner: accept at the
+  cap through the existing user-only `/approve-review` override, or continue.
+- Rounds and usage recorded per round and per stage, and a before/after table from the job records.
+
+**What, on the Workflow side** (W8, expected in Workflow 2.12.0).
+- Rounds 2 and later review the changes since the last bundle plus the previous findings; the final
+  round is a full review.
+- A `REVISE` must name at least one Blocking or Important finding, or it is refused as malformed. The
+  gate policy is unchanged.
+- Protocol 1.4 adds the review round per stage (an additive change).
+- Plan-size guidance, with a soft warning above a number of checkpoints.
+
+**Needs:** C7 and W8.
+
+**Out of scope:** changing who approves.
+
+## 11.14 Review modes
+
+**Status:** Planned. Step C14 (owner decision, 2026-10-15): a small step of its own, not part of C10.
+
+**Why.** A user with only one provider (Claude only today; later Codex only) must never be blocked by
+the cross-model review.
+
+**What.** A setting `review.mode`:
+
+| Mode | The external review |
+|---|---|
+| `auto` (default) | a distinct provider when it is installed and logged in, else `single-provider` |
+| `cross-model` | a distinct provider; refused without one |
+| `single-provider` | a fresh, independent session of the same provider, ideally a stronger model, through a second harness on C7's seam. It needs the owner to adopt a lowered `distinct_reviewer_models` gate policy, and such approvals are labelled lowered |
+| `manual` | today's behaviour: the gate waits for a person |
+
+Two independent review stages stay mandatory in every mode. The automatic run stays the default, with
+the cross-model review enabled.
+
+**Open Workflow questions** (asked 2026-10-15):
+- whether workflow#28's condition 5 (opt-in) is amended for `auto`;
+- whether a same-provider courier is admissible when distinct models are not required;
+- falling back to `single-provider` only where the owner already adopted the lowered policy;
+- how it combines with W8.
+
+**Needs:** C13 and the Workflow's answers.
+
+**Out of scope:** the automated functional review (C10), and lowering a gate policy on the owner's
+behalf.
+
 # Execution order
 
 The current order is the tables in [At a glance](#at-a-glance). Completed so far, in order:
@@ -1808,6 +1875,11 @@ The current order is the tables in [At a glance](#at-a-glance). Completed so far
 fu 11  C9b: the protocol's warn status, Workflow 2.9.0 schema COMPLETE (released as 1.7.1)
 fu 15  C9c: preparing the move to Workflow 2.9.0              COMPLETE (test, no release)
 fu 16  C9d: the installed-release test made version-agnostic COMPLETE (test, no release; first by gate policy)
+11.6   C8: usage budget                                      COMPLETE (released as 1.8.0)
+fu 8   C12a: test leftovers end with their test              COMPLETE (test, no release)
+11.4   C5: SignalHub notifications                           COMPLETE (released as 1.9.0)
+11.5   C6: automated lifecycle scenarios                     COMPLETE (test, no release)
+5      C7: review-only harness seam, Codex reviewer          COMPLETE (released as 1.10.0)
 ```
 
 ---

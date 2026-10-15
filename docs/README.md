@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.10.0](releases/1.10.0.md) | opt-in: the Controller runs the cross-model review itself with a Codex reviewer in a disposable copy, behind an enforced boundary, and hands the verdict to the Workflow (`reviewer` settings, settings generation 6) |
 | [1.9.0](releases/1.9.0.md) | SignalHub notifications: the Controller pushes 14 configurable event types, idempotently and off the lifecycle's thread (`notifications` command, settings generation 5, `notifications --test`) |
 | [1.8.0](releases/1.8.0.md) | a usage budget: the Claude and Codex windows are read, each job is forecast and reserved across lanes, and a run pauses before a limit (`usage` command, settings generation 4, `--usage-cap`, exit code 17) |
 | [1.7.1](releases/1.7.1.md) | a Workflow `verify` check with status `warn` is advisory, not a refusal; the Workflow 2.9.0 protocol schema (protocol 1.2) is vendored |
@@ -89,9 +90,8 @@ stay stable; the code and the guides must agree with them.
 | [0010](adr/0010-orchestration-protocol-admission-by-capability.md) | admission of a Workflow release by capability (protocol major 1), the protocol's decisions and outcomes, and what stays the Controller's; amends 0006 |
 | [0011](adr/0011-usage-budget.md) | the usage budget: readings, reservations and a ledger shared by all lanes, the gate before every job, exit 17, and what is deferred (C8b, C8c) |
 | [0012](adr/0012-signalhub-notifications.md) | SignalHub notifications: the closed event table, per-event configuration, idempotent keys, delivery off the lifecycle's thread with no outbox, and credentials |
-| [0013](adr/0013-review-only-harness-seam.md) | The review-only harness seam: the Controller couriers a verdict from a distinct Codex reviewer in a disposable copy, the obligation-5 reading, the enforced boundary and what C10 reuses |
-
-ADR [0014](adr/0014-reuse-pull-request-results-on-main.md) records that `main` reuses a pull request's validated results for the identical tree, behind the `CI_MAIN_REUSE` switch, and what that gives up; it amends 0003 and 0005.
+| [0013](adr/0013-review-only-harness-seam.md) | the review-only harness seam: the Controller couriers a verdict from a distinct Codex reviewer in a disposable copy, the obligation-5 reading, the enforced boundary and what C10 reuses |
+| [0014](adr/0014-reuse-pull-request-results-on-main.md) | reusing a pull request's validated results on `main` for the identical tree, behind the `CI_MAIN_REUSE` switch, and what that gives up; amends 0003 and 0005 |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

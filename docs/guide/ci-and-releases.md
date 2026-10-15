@@ -8,7 +8,9 @@
 
 `.github/workflows/validate.yml` is the single definition of required
 validation. It is called, never triggered directly, and has four jobs,
-each on `ubuntu-latest` with Python 3.12 and read-only permissions:
+each on `ubuntu-latest` with Python 3.12 and read-only permissions
+(`tests-result` also has `actions: read`, which only the reuse path below
+uses):
 
 - `plan`: plans the whole CI selection with
   `tools/run_tests.py plan --profile ci --ci-placement`: every test
@@ -177,6 +179,62 @@ The checks are `validate / plan`, `validate / tests (<i>)`,
 `validate / tests-result`, `validate / package` and `PR title`. See
 [Repository settings](#repository-settings) for which of them `main`
 requires.
+
+### Reusing a pull request's results on `main` (`CI_MAIN_REUSE`)
+
+A squash merge makes a new commit, but its **tree** (the files) equals the
+tree of the pull request's merge ref whenever `main` did not move after the
+pull request's last CI run. For that tree the whole validation already ran.
+`main.yml` can therefore skip the shards and re-check the recorded results
+instead of running the same tests a second time. Whether it does is set by
+one repository variable, `CI_MAIN_REUSE` (Settings, Secrets and variables,
+Actions, Variables):
+
+| Value | What `Main` does |
+| --- | --- |
+| unset, empty or `report` | **Report only (the default).** The `reuse` job works out what it would do and writes it to its job summary. The full validation still runs, exactly as without it. |
+| `on` | **Reuse.** When every check passes, `validate` does not run the shards: `tests-result` verifies the recorded tree and plan digest and re-aggregates the recorded records. Any failed check runs the full shards. |
+| `off` | Nothing is looked up and nothing changes. |
+| anything else | Treated as `off`, and the `reuse` job summary says so. |
+
+**What the `reuse` job checks** (job `reuse`, permissions `actions: read`,
+`contents: read`, `pull-requests: read`; it cannot write). It finds the pull
+request that was merged as this commit, requires that it came from this
+repository, and takes its latest successful `CI` run on the pull request's
+final head. It downloads that run's `timings-ci-attempt-<a>` artifact (the
+highest attempt) and computes the plan for this commit. It reuses only if the
+artifact's recorded tree equals this commit's tree **and** the recorded plan
+digest equals the plan computed here. It never reuses for `workflow_dispatch`,
+a fork pull request, a rebase merge, a moved base, no successful run, a run
+from before reuse existed (its artifact has no `tree.txt`), or any API
+error. A reused run still goes through `tests-result`, which verifies the
+tree and digest again and fails the run (no release) on a mismatch, and
+re-runs `aggregate` on the records: each planned test exactly once, all
+passed, no leaked process. `release-plan`, `build` and `publish` keep
+`needs: validate`.
+
+**Reading the report.** Open the `Main` run, then the `reuse` job's summary.
+It lists this commit's tree, the merged pull request and its head, the
+candidate `CI` run id, the recorded tree and plan digest next to this
+commit's (each marked `equal` or `DIFFERENT`), and a last line: `Decision:
+would reuse.` or `Decision: would not reuse: <reason>.` To check a decision
+against reality, open the candidate run (it is the id in the summary) and
+compare: if the report said "would reuse", the full `validate` of this `Main`
+run should be green, and its test count equal to the pull request's. A
+"would reuse" next to a red `validate` is a bug in the decision. Do three or
+more merges before switching to `on`.
+
+**Switching.** `gh variable set CI_MAIN_REUSE --body on` turns reuse on and
+`gh variable set CI_MAIN_REUSE --body report` goes back to report only;
+`gh variable delete CI_MAIN_REUSE` is the same as `report`, and
+`--body off` removes the job's work as well. It is a variable change, not a
+code change, and takes effect on the next push to `main`. If a reused `Main`
+run is wrong, set `off` (or `report`) and re-run: the full shards run.
+
+What it gives up: with `on`, a tree is tested once, on the pull request. The
+second execution would only catch a flaky pass, a change of the runner image
+between the two runs, or a time-dependent test. See
+[ADR 0013](../adr/0013-reuse-pull-request-results-on-main.md).
 
 ## Releasing
 

@@ -470,6 +470,16 @@ GIT_CREDENTIAL_ENV = {
 }
 
 
+def _after(*jobs: str) -> str:
+    """Every job in ``jobs`` must have succeeded, explicitly. ``validate``
+    has a skipped ``reuse`` ancestor whenever ``CI_MAIN_REUSE`` is not
+    ``on``, and the implicit ``success()`` of a job looks at its whole
+    ``needs`` ancestry, so without this the release jobs would never run in
+    the default mode. ``!cancelled()`` is not ``always()``: a cancelled run
+    still stops, and each prerequisite is still required to be ``success``."""
+    return " && ".join(["!cancelled()", *(f"needs.{job}.result == 'success'" for job in jobs)])
+
+
 def _publishing_condition() -> str:
     states = " || ".join(f"needs.release-plan.outputs.state == '{state}'"
                          for state in PUBLISHING_STATES)
@@ -555,7 +565,7 @@ def main_workflow() -> dict:
             },
             "release-plan": {
                 "needs": ["validate"],
-                "if": ON_TRUNK,
+                "if": f"{_after('validate')} && {ON_TRUNK}",
                 "runs-on": RUNNER,
                 "env": {"GH_TOKEN": "${{ github.token }}"},
                 "outputs": {name: f"${{{{ steps.classify.outputs.{name} }}}}" for name in PLAN_OUTPUTS},
@@ -567,7 +577,7 @@ def main_workflow() -> dict:
             },
             "build": {
                 "needs": ["validate", "release-plan"],
-                "if": _publishing_condition(),
+                "if": f"{_after('validate', 'release-plan')} && {_publishing_condition()}",
                 "runs-on": RUNNER,
                 # tools/release.py build and verify read it; their command
                 # lines stay 1.3.0's, which a RESUME target's tooling accepts.
@@ -585,7 +595,7 @@ def main_workflow() -> dict:
             },
             "publish": {
                 "needs": ["validate", "release-plan", "build"],
-                "if": _publishing_condition(),
+                "if": f"{_after('validate', 'release-plan', 'build')} && {_publishing_condition()}",
                 "runs-on": RUNNER,
                 "permissions": {"contents": "write"},
                 "env": {"GH_TOKEN": "${{ github.token }}",

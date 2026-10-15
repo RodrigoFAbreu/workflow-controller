@@ -92,7 +92,7 @@ jobs:
   release-plan:
     needs:
       - validate
-    if: "github.ref == 'refs/heads/main'"
+    if: "!cancelled() && needs.validate.result == 'success' && github.ref == 'refs/heads/main'"
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: "${{ github.token }}"
@@ -121,7 +121,7 @@ jobs:
     needs:
       - validate
       - release-plan
-    if: "github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
+    if: "!cancelled() && needs.validate.result == 'success' && needs.release-plan.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: "${{ needs.release-plan.outputs.version }}"
@@ -159,7 +159,7 @@ jobs:
       - validate
       - release-plan
       - build
-    if: "github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
+    if: "!cancelled() && needs.validate.result == 'success' && needs.release-plan.result == 'success' && needs.build.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME')"
     runs-on: ubuntu-latest
     permissions:
       contents: write

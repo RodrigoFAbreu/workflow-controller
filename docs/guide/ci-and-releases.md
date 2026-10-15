@@ -211,7 +211,9 @@ error. A reused run still goes through `tests-result`, which verifies the
 tree and digest again and fails the run (no release) on a mismatch, and
 re-runs `aggregate` on the records: each planned test exactly once, all
 passed, no leaked process. `release-plan`, `build` and `publish` keep
-`needs: validate`.
+`needs: validate`, and each states in its own `if` that every job it needs
+must be `success` (a skipped `reuse` upstream, as in report and `off` modes,
+must not suppress a release; `!cancelled()`, never `always()`).
 
 **Reading the report.** Open the `Main reuse report` run for the push (the `reuse` job's summary in the `Main` run, once the variable is `on`).
 It lists this commit's tree, the merged pull request and its head, the

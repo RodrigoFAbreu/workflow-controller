@@ -661,11 +661,73 @@ class MainWorkflowTest(unittest.TestCase):
 
     def test_conditions(self) -> None:
         on_trunk = "github.ref == 'refs/heads/main'"
-        self.assertEqual(self.jobs["release-plan"]["if"], on_trunk)
         publishing = (f"{on_trunk} && (needs.release-plan.outputs.state == 'RELEASE_DUE' || "
                       "needs.release-plan.outputs.state == 'RESUME')")
-        self.assertEqual(self.jobs["build"]["if"], publishing)
-        self.assertEqual(self.jobs["publish"]["if"], publishing)
+        # Each release job requires every job it needs to be explicitly success:
+        # validate has a skipped reuse ancestor unless CI_MAIN_REUSE is on, and a
+        # job's implicit success() looks at its whole needs ancestry. No always().
+        self.assertEqual(self.jobs["release-plan"]["if"],
+                         f"!cancelled() && needs.validate.result == 'success' && {on_trunk}")
+        self.assertEqual(self.jobs["build"]["if"],
+                         "!cancelled() && needs.validate.result == 'success' && "
+                         f"needs.release-plan.result == 'success' && {publishing}")
+        self.assertEqual(self.jobs["publish"]["if"],
+                         "!cancelled() && needs.validate.result == 'success' && "
+                         "needs.release-plan.result == 'success' && needs.build.result == 'success' "
+                         f"&& {publishing}")
+
+    def test_every_job_downstream_of_reuse_states_its_condition(self) -> None:
+        downstream = {"validate"}
+        for name, job in self.jobs.items():
+            if set(job.get("needs", [])) & ({"reuse"} | downstream):
+                downstream.add(name)
+        for name in downstream - {"validate"}:
+            expression = self.jobs[name]["if"]
+            self.assertNotIn("always()", expression)
+            self.assertIn("!cancelled()", expression)
+            for needed in self.jobs[name]["needs"]:
+                self.assertIn(f"needs.{needed}.result == 'success'", expression, (name, needed))
+        # validate itself is the only job that tolerates reuse not succeeding.
+        self.assertEqual(self.jobs["validate"]["if"], "!cancelled()")
+
+    def _would_run(self, name: str, results: dict, state: str, ref: str = "refs/heads/main") -> bool:
+        """The job's ``if`` evaluated over ``results`` (job -> result)."""
+        expression = self.jobs[name]["if"]
+        expression = expression.replace("!cancelled()", "True")
+        expression = re.sub(r"needs\.([a-z-]+)\.result == '(\w+)'",
+                            lambda m: repr(results.get(m.group(1)) == m.group(2)), expression)
+        expression = re.sub(r"needs\.release-plan\.outputs\.state == '(\w+)'",
+                            lambda m: repr(state == m.group(1)), expression)
+        expression = re.sub(r"github\.ref == '([^']+)'", lambda m: repr(ref == m.group(1)), expression)
+        self.assertRegex(expression, r"^[A-Za-z() &|]+$")
+        return bool(eval(expression.replace("&&", "and").replace("||", "or"), {"__builtins__": {}}))
+
+    def test_release_jobs_run_when_reuse_is_skipped_and_validate_passes(self) -> None:
+        def run(reuse: str, validate: str, state: str = "RELEASE_DUE", **more) -> tuple:
+            results = {"reuse": reuse, "validate": validate}
+            plan = self._would_run("release-plan", results, state)
+            results["release-plan"] = "success" if plan else "skipped"
+            build = self._would_run("build", results, state)
+            results["build"] = "success" if build else "skipped"
+            return plan, build, self._would_run("publish", results, state)
+        # report / off: reuse skipped, full validate passed -> the release proceeds.
+        self.assertEqual(run("skipped", "success"), (True, True, True))
+        self.assertEqual(run("skipped", "success", "RESUME"), (True, True, True))
+        self.assertEqual(run("skipped", "success", "NOT_DUE"), (True, False, False))
+        # on: reuse succeeded, or failed and validate fell back to the full shards.
+        self.assertEqual(run("success", "success"), (True, True, True))
+        self.assertEqual(run("failure", "success"), (True, True, True))
+        # A failed or skipped validate stops everything, in every mode.
+        for reuse in ("skipped", "success", "failure"):
+            for validate in ("failure", "skipped", "cancelled"):
+                with self.subTest(reuse=reuse, validate=validate):
+                    self.assertEqual(run(reuse, validate), (False, False, False))
+        # Not on main: nothing releases.
+        self.assertFalse(self._would_run("release-plan", {"validate": "success"}, "RELEASE_DUE",
+                                         ref="refs/heads/other"))
+        # A failed build does not publish.
+        self.assertFalse(self._would_run("publish", {"validate": "success", "release-plan": "success",
+                                                      "build": "failure"}, "RELEASE_DUE"))
 
     def test_permissions(self) -> None:
         self.assertNotIn("permissions", self.jobs["release-plan"])

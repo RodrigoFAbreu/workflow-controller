@@ -9,7 +9,8 @@ reviewer works in a disposable copy behind an enforced launch boundary, passes t
 ingested through the Workflow. With `reviewer.harness` unset, the gate stops as before. ADR
 `docs/adr/0013-review-only-harness-seam.md` records the design and the Workflow side's answer on workflow#28 (*yes,
 with five conditions*). The `codex` harness is registered since the operator recorded the D12 pre-step on
-2026-10-15. The milestone ships as the minor release **1.10.0** when its `feat:` pull request merges.
+2026-10-15. It merged as pull request #45 (squash `6aa8f66`), which releases the minor release **1.10.0**
+(release notes `docs/releases/1.10.0.md`).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1 (an
@@ -31,9 +32,6 @@ complete. The full milestone narrative is archived verbatim at
 `docs/milestones/completed/workflow-controller-codex-reviewer.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Merge and release.** Pull request #45, titled `feat: run the cross-model review with a Codex reviewer the
-  Controller starts`, is merged once every check passes; `main.yml` then releases 1.10.0.
-  `docs/release-history.md` and `docs/releases/1.10.0.md` are written after the release.
 - **workflow#28 stays open** until its protocol paragraph ships in W8 (Workflow 2.12.0).
 - **Known limitations kept out of scope:** only Codex is registered (other harnesses are refused); a reviewer
   may spawn a sub-agent, which the job record names with its tokens; the two Git 2.56 trailer tests
@@ -42,5 +40,5 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-1. Pull request #45 merges (a `feat:` pull request, releasing 1.10.0).
-2. `/milestone-plan` for C10, the next step in `docs/ROADMAP.md`'s order (C10, C12, C11, then O1-O7).
+1. Move this repository to the latest Workflow (a `chore:` pull request, no release).
+2. `/milestone-plan` for C13, the next step in `docs/ROADMAP.md`'s order (C13, C14, C10, C12, C11, then O1-O7).

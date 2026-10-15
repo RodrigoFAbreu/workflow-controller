@@ -120,6 +120,14 @@ without `exec-shard`) uses the same executor and so the same two lanes,
 except `--serial`, which plans `conformance_lane: false`: the suites then
 run one at a time after the Controller tests, as the serial reference.
 
+Measured on the run of PR #46, which added the conformance lane:
+
+| | Before PR #46 | After |
+|---|---|---|
+| A pull request's checks finish after | 17.7 to 19.3 minutes | about 14.0 minutes (the `CI` workflow alone 12.7) |
+| Peak Linux runners | 6 | 6 |
+| Runner-minutes | about 69.5 | about 63.0 |
+
 ### Re-running failed jobs
 
 GitHub's "Re-run failed jobs" counts. Each attempt uploads its own
@@ -224,7 +232,8 @@ against reality, open the candidate run (it is the id in the summary) and
 compare: if the report said "would reuse", the full `validate` of this `Main`
 run should be green, and its test count equal to the pull request's. A
 "would reuse" next to a red `validate` is a bug in the decision. Do three or
-more merges before switching to `on`.
+more merges before switching to `on`. By 2026-10-15 two cross-checks were made
+and both matched; switching to `on` after the third is the owner's decision.
 
 **Switching.** `gh variable set CI_MAIN_REUSE --body on` turns reuse on and
 `gh variable set CI_MAIN_REUSE --body report` goes back to report only;

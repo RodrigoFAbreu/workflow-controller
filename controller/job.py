@@ -5868,6 +5868,10 @@ class UsageHold:
     resets_at: float | None = None
     outstanding: bool = False
     preflight_events: tuple = ()
+    #: The hold is a usage limit reached *mid-job* (usage-limit-mid-job D6): a
+    #: worker ran and changed nothing, so the messages must not say "nothing
+    #: was started". False for every hold the usage gate produces.
+    mid_job: bool = False
 
 
 def _as_usage_hold(hold: Any, preflight_events: list[str]) -> UsageHold:

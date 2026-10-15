@@ -293,6 +293,118 @@ def worker_failure_fails_closed(kit) -> None:
             kit.observe(name + "-rerun", {"workers": case.processes(lc)})
 
 
+def _limited_first_attempts(kit, count: int):
+    """A ``job.worker.launch`` wrapper whose first ``count`` launches replay the golden usage-limit stream at exit 1
+    (and no scripted action); under the ``plain-failure`` mutation they exit 1 without the stream's structured fact."""
+    from controller import job
+    from tests.test_job import UsageLimitLegacyTest
+    real, seen = job.worker.launch, [0]
+
+    def launch(task, **kwargs):
+        seen[0] += 1
+        if seen[0] > count:
+            return real(task, **kwargs)
+        env = {"FAKE_CLAUDE_EXIT": "1"}
+        if mutation(kit) != "plain-failure":
+            env["FAKE_CLAUDE_STDOUT"] = UsageLimitLegacyTest.GOLDEN.read_text()
+        saved = {key: os.environ.pop(key, None) for key in ("FAKE_CLAUDE_SCRIPT", "FAKE_CLAUDE_STDOUT")}
+        os.environ.update(env)
+        try:
+            return real(task, **kwargs)
+        finally:
+            for key in env:
+                os.environ.pop(key, None)
+            os.environ.update({key: value for key, value in saved.items() if value is not None})
+
+    return launch
+
+
+@scenario("scenario-usage-limit-mid-job-waits-and-repeats", covers=("C8b",))
+def usage_limit_mid_job_waits_and_repeats(kit) -> None:
+    """A worker that reaches the usage limit having changed nothing is ``INTERRUPTED``; ``run`` waits for the reset with
+    no lock held, records ``usage_paused`` and repeats the step without counting it; a wait over the bound stops with
+    17 and the bound line; three limited attempts in a row stop with 17 and the third-attempt line; ``step`` exits 17."""
+    from controller import cli, job, lock
+    from tests import test_lifecycle_orchestration as lo
+    from tests.scenarios.features import write_settings
+
+    reset = 1790287800.0  # the golden stream's resetsAt
+    clock = [reset - 3600.0]
+    sleeps: list[float] = []
+    lock_free: list[bool] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        try:
+            lock.acquire_lifecycle_lock(case_root[0]).release()
+            lock_free.append(True)
+        except Exception:  # noqa: BLE001 -- any refusal means the lock was held
+            lock_free.append(False)
+        clock[0] += seconds
+
+    case_root: list = [None]
+    with opened(kit, seeded_class()) as case, \
+            unittest.mock.patch.object(job, "usage_now", lambda: clock[0]), \
+            unittest.mock.patch.object(cli, "_usage_sleep", sleep):
+        write_settings(kit, {"usage": {"max_wait_seconds": 7200, "resume_grace_seconds": 1}})
+        lc = case.seed("repeat", lo.IMPLEMENTING)
+        case_root[0] = lc.root
+        lo.script_full_lifecycle(lc)
+        with unittest.mock.patch.object(job.worker, "launch", _limited_first_attempts(kit, 1)):
+            result = case.cli(lc, "run", "--max-steps", "1")
+        statuses = [record["status"] for record in result.records]
+        kit.equal(statuses, ["INTERRUPTED", "FINISHED"], "the limited attempt and the repeat: job statuses")
+        kit.equal(result.code, cli.EXIT_MAX_STEPS, "the repeat is the one counted step")
+        kit.equal(result.records[0]["reconciliation_evidence"]["code"], "UsageLimitReached", "the evidence code")
+        kit.equal(case.processes(lc), 2, "workers launched")
+        kit.check(bool(sleeps) and sum(sleeps) >= 3601.0, "the run did not wait for the reset plus grace")
+        kit.check(all(lock_free), "the lifecycle lock was held while waiting")
+        paused = [e for e in _usage_events(lc.runtime) if e["event"] == "usage_paused"]
+        kit.equal([e["window"] for e in paused], ["five_hour"], "usage_paused window")
+        kit.observe("wait-and-repeat", {"exit": result.code, "statuses": statuses, "workers": case.processes(lc)})
+
+        stepped = case.seed("step", lo.IMPLEMENTING)
+        lo.script_full_lifecycle(stepped)
+        clock[0] = reset - 3600.0
+        with unittest.mock.patch.object(job.worker, "launch", _limited_first_attempts(kit, 1)):
+            one = case.cli(stepped, "step")
+        kit.equal((one.code, [r["status"] for r in one.records]), (cli.EXIT_USAGE_PAUSED, ["INTERRUPTED"]),
+                  "step: exit status and job status")
+        kit.check("usage limit reached mid-job" in one.stderr and "nothing was started" not in one.stderr,
+                  "the step line names the mid-job limit")
+        kit.observe("step", {"exit": one.code})
+
+        write_settings(kit, {"usage": {"max_wait_seconds": 60, "resume_grace_seconds": 1}})
+        bound = case.seed("bound", lo.IMPLEMENTING)
+        lo.script_full_lifecycle(bound)
+        clock[0] = reset - 3600.0
+        before = len(sleeps)
+        with unittest.mock.patch.object(job.worker, "launch", _limited_first_attempts(kit, 1)):
+            over = case.cli(bound, "run")
+        kit.equal(over.code, cli.EXIT_USAGE_PAUSED, "over the bound: exit status")
+        kit.check("would exceed usage.max_wait_seconds (60 s); run again after it" in over.stderr
+                  and "nothing was started" not in over.stderr, "the bound line")
+        kit.equal(len(sleeps), before, "a wait over the bound must not sleep")
+        kit.observe("over-bound", {"exit": over.code})
+
+        write_settings(kit, {"usage": {"enabled": False, "max_wait_seconds": 20000,
+                                      "resume_grace_seconds": 1}})  # the wait holds with the budget off, too
+        three = case.seed("three", lo.IMPLEMENTING)
+        lo.script_full_lifecycle(three)
+        clock[0] = reset - 3600.0
+        with unittest.mock.patch.object(job.worker, "launch", _limited_first_attempts(kit, 99)):
+            stopped = case.cli(three, "run")
+        kit.equal((stopped.code, case.processes(three)), (cli.EXIT_USAGE_PAUSED, 3), "three attempts: exit, workers")
+        kit.check("the last 3 attempts all reached the limit" in stopped.stderr, "the third-attempt line")
+        kit.observe("three-attempts", {"exit": stopped.code, "workers": case.processes(three)})
+
+
+def _usage_events(runtime) -> list[dict]:
+    from controller import usage
+    path = runtime / usage.EVENTS_FILE
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
 # ---------------------------------------------------------------------------
 # Scenario 5
 # ---------------------------------------------------------------------------

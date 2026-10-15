@@ -16,6 +16,14 @@ reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); th
   legacy mode and `resume`; any other limited job is `FAILED` with `usage_limit` in its evidence. A package-order
   fix (`usage` before `worker_stream`) and the `no_policy_lifecycle` golden were updated with it.
 
+- CP3 complete: `controller/cli.py` waits out a limit reached mid-job. `run` builds a `mid_job` `UsageHold` at the
+  fact's reset, waits through `_usage_wait` (no lock, `usage_paused`, bounded by `usage.max_wait_seconds`, with or
+  without `usage.enabled`), repeats the step without counting it and stops after three limited attempts in a row;
+  both stops print their own line, never "nothing was started". `step` exits 17 with a line naming the reset, an
+  `INTERRUPTED` job without the fact exits 40 (it used to raise `KeyError`), `resume` names the reset, and Ctrl-C
+  in the mid-job wait says the worker ran. `tests/test_usage_limit_mid_job.py` and the lifecycle scenario
+  `scenario-usage-limit-mid-job-waits-and-repeats` cover it.
+
 The previous milestone's record follows.
 
 ---

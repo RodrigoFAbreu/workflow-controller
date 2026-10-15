@@ -884,3 +884,21 @@ class UsageRecordError(ControllerError):
     """
 
     code = "USAGE_RECORD_UNREADABLE"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-codex-reviewer CP2 -- the review harness
+# (``controller.review``).
+# ---------------------------------------------------------------------------
+
+
+class ReviewLaunchRefusedError(ControllerError):
+    """A review harness launch was refused before anything started: the
+    command line does not reproduce the pinned boundary, the Codex home is
+    not the Controller's own, a configuration layer outside the home carries
+    content, a feature outside the allowlist is enabled, or the operator has
+    no credential file. ``evidence`` names the ``check``, and where one
+    applies the ``source`` layer or ``entry`` and the conflicting ``value``.
+    """
+
+    code = "REVIEW_LAUNCH_REFUSED"

@@ -125,8 +125,23 @@ Verified: `tools/check_docs.py` clean; golden `--check` clean for three of four 
 differs on a clean HEAD as well, so it predates CP5 and is not caused by it); full suite 3821 tests, only the two
 known Git 2.56 trailer tests fail.
 
+Self-review (`SELF_REVIEWING_IMPLEMENTATION`, the whole diff from `dea2125`):
+- `controller/review.py` `snapshot_repository`: the status filter that drops the job's own directory also dropped any
+  untracked path that was only a string prefix of it (an untracked `r` beside a runtime directory `run/...`), so a
+  status change could go unseen there; the file manifest still caught it. The collapsed-parent clause now requires a
+  directory entry. `tests/test_review.py` `GuardTest` pins both sides (it fails without the fix).
+- No other defect found in `review.py`, the review job and resume branch of `job.py`, `cli.py`, `protocol.py`,
+  `runtime.py`, `settings.py` or `usage.py`.
+- Still open, and neither one can be closed from inside the implementation: the D2 acceptance condition (the Workflow
+  side's confirmation of the obligation-5 reading, which ADR 0013 marks open) and the D12 operator pre-step (the
+  harness stays unregistered until it is recorded).
+
+Full verification after the fix: `tools/check_docs.py` clean; golden `--check` clean for three of four generators
+(`plan_stage_decisions` differs on base `dea2125` as well); `tools/run_tests.py` coverage exact, only the two known
+Git 2.56 trailer tests fail.
+
 ## Next action
 
-All five checkpoints are implemented. Invoke `/milestone-implement` again for the self-review, the full
-verification and the implementation-review bundle. The `codex` harness still cannot be registered until the
-operator records the D12 pre-step under `tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`.
+The self-review and the full verification are done. The next step is the implementation-review bundle (revision 1)
+and the local implementation review. The `codex` harness still cannot be registered until the operator records the
+D12 pre-step under `tests/harness_contract/codex/` and sets `PRE_STEP_CAPTURED`.

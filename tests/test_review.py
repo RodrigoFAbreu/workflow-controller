@@ -316,6 +316,18 @@ class GuardTest(unittest.TestCase):
                 self.assertIn(name, review.compare_snapshots(fresh, self.snap()))
         self.assertIn("state_identity", review.compare_snapshots(before, self.snap("s2")))
 
+    def test_only_the_excluded_directory_and_its_collapsed_parent_leave_the_status(self):
+        exclude = ["run/review-x"]
+        before = review.snapshot_repository(self.repo, exclude=exclude)
+        (self.repo / "run" / "review-x").mkdir(parents=True)
+        (self.repo / "run" / "review-x" / "copy").write_text("c")   # untracked `run/` collapses to its parent
+        self.assertEqual(review.compare_snapshots(before, review.snapshot_repository(self.repo, exclude=exclude)), [])
+        (self.repo / "run" / "review-x" / "copy").unlink()
+        (self.repo / "run" / "review-x").rmdir()
+        (self.repo / "run").rmdir()
+        (self.repo / "r").write_text("r")                            # a name that is only a string prefix of it
+        self.assertIn("status", review.compare_snapshots(before, review.snapshot_repository(self.repo, exclude=exclude)))
+
     def test_an_ignored_file_is_not_part_of_the_manifest(self):
         before = self.snap()
         (self.repo / "ignored").mkdir()

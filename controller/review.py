@@ -426,7 +426,8 @@ def snapshot_repository(root: Path, *, feedback_dir: Path | None = None, state_i
     status = gitrepo._git(root, [*quiet, "status", "--porcelain=v1", "-z"], None)
     if exclude:  # the job's own directory, and a collapsed untracked parent of it, are not the worktree's change
         status = "\0".join(entry for entry in status.split("\0") if not any(
-            entry[3:].rstrip("/") == e or entry[3:].startswith(f"{e}/") or f"{e}/".startswith(entry[3:])
+            entry[3:].rstrip("/") == e or entry[3:].startswith(f"{e}/")
+            or (entry[3:].endswith("/") and f"{e}/".startswith(entry[3:]))
             for e in exclude if entry[3:]))
     refs = gitrepo._git(root, [*quiet, "for-each-ref", "--format=%(refname) %(objectname)"], None)
     listing = gitrepo._git(root, [*quiet, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], None)

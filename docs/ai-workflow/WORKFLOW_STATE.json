@@ -11173,7 +11173,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "6cbb701446c48752f5549b892ad74bc46bd4c34c7520407623cc92833db9c613",
         "approved_review_content_id": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
@@ -11556,8 +11556,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 88,
-      "last_transition": "2026-10-15T14:54:37Z",
+      "state_revision": 89,
+      "last_transition": "2026-10-15T15:33:14Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -11612,6 +11612,167 @@
           "verdict_sha256": "c5afba84a93fb10f6f87dbf5b5187703b6a1b08107decc4ab89d773b9c758b4d",
           "run_ref": "session:local .ai-review/workflow-controller-codex-reviewer/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "reviewer.harness unset: external gate stops as before, no review job",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "plan-stage review job FINISHED and verdict ingested (fake and one real Codex run)",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "launch boundary: workspace-write copy only, network and web search off, minimal home, no MCP/hooks/notify, sub-agent reported",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "implementation-stage review job FINISHED and verdict ingested",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "header mismatch retried once, second mismatch FAILED exit 30, nothing ingested",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "limit and timeout INCOMPLETE exit 35, usage charged, held until reset then re-admitted",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "Ctrl-C and resume/abandon settle the record, copy removed, no orphan",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:38Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "unknown harness exit 20; managed configuration refused ReviewLaunchRefused exit 30 before exec",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:39Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "other gates stay GATE_BLOCKED, no review",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:39Z"
+          },
+          "flow-10": {
+            "flow_id": "flow-10",
+            "status": "passed",
+            "head": "d71863c58a4904b537c5aabdfde116666d67cb00",
+            "ran_at": "2026-10-15T14:56:23Z",
+            "summary": {
+              "result": "docs check clean; troubleshooting exit codes and boundary text match behaviour after the round-1 fix",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone plus one real Codex review by the operator; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "31c74887f08dad3e6df43baaba40577aa5e8f2c1ad73621664930d041375dbc1",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-codex-reviewer/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "e081540a116768808ecf4a34856cb911c9a75263309cda54504d71dbbfac5502",
+            "recorded_at": "2026-10-15T14:56:39Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
         }
       }
     }

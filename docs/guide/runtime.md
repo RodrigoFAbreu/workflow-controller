@@ -53,6 +53,16 @@ sweeps more than once, such as `run` or `resume`, can print it again) and a `usa
 `accounting` as it is; a release that can read the record settles it later,
 exactly once.
 
+A job record can carry a `usage_limit` block (the reset time and the window
+name) when its worker reached the provider's usage limit. An `INTERRUPTED`
+job with that block changed nothing, and a new `step` or `run` repeats the
+step; a `FAILED` job with it had changed state. The pre-state of every job
+also records `tracked_changes`, the digest of each dirty tracked path, which
+is how "changed nothing" is decided
+([how the limit is recognised](workers.md#how-a-usage-limit-is-recognised)).
+The accounting charges such a job as a job that ran, never as one that never
+launched.
+
 This tree is disposable by design. It is never part of any managed
 target repository's own state, and the Controller never writes into a
 target repository's `WORKFLOW_STATE.json` -- only a worker running a

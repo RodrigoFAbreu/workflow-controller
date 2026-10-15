@@ -11931,14 +11931,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-usage-limit-mid-job-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-usage-limit-mid-job-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 5,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "988e8c3fb750e3f86227539e8957be7458b396fc",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP4",
+      "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -11955,6 +11955,10 @@
         "CP4": {
           "status": "COMPLETE",
           "start_commit": "db7b3b65e31a4302c74bba24c6b86000441c60c9"
+        },
+        "CP5": {
+          "status": "COMPLETE",
+          "start_commit": "0aef9410c2dba20072f839152bee9429d3743521"
         }
       },
       "current_bundle_id": "cdcc53b7b5af63f295546235433bc984481071bae1ce7c2d6f7cfea8ffa50051",
@@ -12073,8 +12077,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 28,
-      "last_transition": "2026-10-15T21:57:24.806371+00:00",
+      "state_revision": 30,
+      "last_transition": "2026-10-15T23:01:10.549273+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

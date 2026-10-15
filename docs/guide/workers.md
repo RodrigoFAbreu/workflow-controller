@@ -399,6 +399,29 @@ recorded in ADR 0004:
   worker's process group is not owned by tag;
 - daemon recognition is by name.
 
+### How a usage limit is recognised
+
+A worker that meets the provider's usage limit is recognised from three
+structured fields of its stream, all required: a `rate_limit_event` whose
+status is `rejected`, a `result` that is an error with API status 429, and a
+finite reset time. Localised text alone never counts, and neither does an
+earlier `rejected` event followed by a successful turn. The fact (reason
+`usage_limit`, the reset time and the window name when known) is part of the
+stream diagnosis; the outcome stays `FAILURE`, a timeout or a signal keeps its
+own reason, and the row sits above the exit status, so exit 0 and exit 1 give
+the same answer.
+
+The job is then `INTERRUPTED` (with the record's `usage_limit` and the
+reconciliation code `UsageLimitReached`) only if it verifiably changed
+nothing: `HEAD` and the tracked-change list are unchanged, where the
+comparison covers each dirty tracked path's status entry, worktree bytes,
+executable bit and staged blob. Untracked files do not count. In protocol mode
+`reconcile` must also answer `no_progress`; in the legacy path the phase must
+be unchanged. Any other limited job, including one whose transition verified,
+stays `FAILED` and carries the fact in its evidence. `run` then waits and
+repeats an interrupted one; see
+[pausing for usage limits](../run.md#pausing-for-usage-limits).
+
 ## Job dispositions
 
 Every job is recorded under `<runtime>/jobs/<job_id>.json` before its

@@ -7,6 +7,11 @@ reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); th
 `docs/ai-workflow/CONTROLLER_USAGE_LIMIT_MID_JOB_PLAN.md`. Checkpoint state is in
 `docs/ai-workflow/WORKFLOW_STATE.json`.
 
+- CP5 complete: `docs/exit-codes.md` (rows 17, 30, 40), `docs/common-problems.md` (the mid-job entry and a pointer
+  from the exit-17 entry; no heading renamed), `docs/run.md`, `docs/guide/runtime.md`, `docs/guide/workers.md` ("How a
+  usage limit is recognised"), `docs/guide/development.md` and `docs/ROADMAP.md` (C8b complete, D9 follow-up
+  fixed, "Next" starts at C13) agree with the behaviour. `tools/check_docs.py` and three of four golden `--check`
+  forms pass; `generate_plan_stage_decisions.py --check` fails with this milestone's changes stashed too.
 - CP1 complete: `controller/worker_stream.py` records the `usage_limit` fact (rejected `rate_limit_event`, 429
   error `result`, finite `resetsAt`) in the stream diagnosis, with reason `usage_limit` above `exit_status`.
 

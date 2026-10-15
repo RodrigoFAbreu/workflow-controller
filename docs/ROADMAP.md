@@ -15,11 +15,10 @@ later). This repository runs Workflow 2.11.0 with automatic gates (since 2026-10
 tables below; what each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
-1. C8b, a usage limit reached mid-job ([11.6.1](#1161-step-c8b-a-limit-reached-mid-job)): small and
-   independent, it runs while Workflow 2.12.0 (W8) is not out yet;
-2. C13, review convergence ([11.13](#1113-review-convergence)), once this repository runs Workflow 2.12.0;
-3. C14, review modes ([11.14](#1114-review-modes));
-4. C10, C12 and C11, then the orchestrator series O1-O7.
+1. C13, review convergence ([11.13](#1113-review-convergence)), once this repository runs Workflow 2.12.0
+   (C8b, a usage limit reached mid-job, is complete);
+2. C14, review modes ([11.14](#1114-review-modes));
+3. C10, C12 and C11, then the orchestrator series O1-O7.
 
 C10 waits for C13 on purpose: it is the largest step left, and C13 makes its review rounds cheaper.
 
@@ -62,7 +61,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C9d | The installed-release test made version-agnostic: drop the requirement that this repository's own installed Workflow has a vendored tree, and admit it through the Controller's capability rule or `inspect`, with no vendored copy and no version literal, so a later Workflow move needs no test change (complete) | C9c | [follow-up 16](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, repository and run (complete) | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
-| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
+| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it (complete) | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
 | C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, accepted 2026-10-12 by gate policy, no release) | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -309,8 +308,7 @@ These are not blockers for the baseline, but should remain visible in later mile
    negative checks accept a generic assertion failure (O6); registry tests import selftest scenario
    code on the host (O7); ignored inputs, special Git index flags and external committed-symlink
    targets can evade provenance checks (O8); flow id `index` collides with `index.json` (O9);
-   configured Git clean filters can execute during dirty checks (O10). Mid-job usage-limit handling
-   has no scenario (admission only).
+   configured Git clean filters can execute during dirty checks (O10).
 
 ---
 
@@ -1547,9 +1545,16 @@ and `.../20260924T211904Z-73845184/worker.stdout`: each ends in a `rate_limit_ev
   that ended this way, so the step is repeated and not left failed. The wait is a pause in the sense of
   C8: it holds no lock and records `usage_paused`.
 - It needs C8.
-- Follow-up from C8 review: the first job after a window reset is never measured, because an expired
-  stored reading is not baselined as an unknown window (`usage._component`/`_window_delta`). The
-  effect is a conservative over-charge and one fewer forecast sample per window.
+- Follow-up from C8 review, **fixed in C8b**: the first job after a window reset was never measured,
+  because an expired stored reading was not baselined as an unknown window
+  (`usage._component`/`_window_delta`). A job admitted after the reset now takes its first new-window
+  reading as the baseline and is `measured`, with a forecast sample; a job admitted before the reset
+  keeps the conservative `after_reset` charge. No schema change.
+- **As built:** only a job that verifiably changed nothing (no `HEAD` move, no tracked-file change,
+  compared by content; untracked files ignored) is `INTERRUPTED` and repeated, up to three limited
+  attempts in a row; one that changed state stays `FAILED` and carries the fact in its evidence.
+  This is narrower than the first promise, which said both observed streams would be repeated: the
+  implementation sample is the second case.
 
 ### 11.6.2 Step C8c: per-repository caps and per-lane budgets
 

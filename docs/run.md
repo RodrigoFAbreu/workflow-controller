@@ -138,9 +138,12 @@ A review that ends without a verdict leaves the gate open, so the manual
 route still works. A limit, a timeout or an empty run ends the job
 `INCOMPLETE` (exit `35`) and needs a new `run`, which waits at admission for
 the reset. See [the troubleshooting entry](common-problems.md#a-review-the-controller-ran-did-not-finish).
-The design is [ADR 0013](adr/0013-review-only-harness-seam.md); the harness
-is not yet selectable until its operator pre-step is recorded, which the ADR
-describes.
+A reviewer may spawn a sub-agent (Codex offers no way to remove that tool); the
+prompt asks it not to, and when it does the job record and the step's event
+name the spawn and its token usage, because a spawn roughly doubles the spend.
+Every verdict the reviewer produced, a header-mismatch first attempt and a
+`REVISE` included, is kept in the job record with its digest, status and what
+became of it. The design is [ADR 0013](adr/0013-review-only-harness-seam.md).
 
 ## Notifications
 

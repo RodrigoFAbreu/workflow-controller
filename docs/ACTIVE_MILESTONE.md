@@ -10,7 +10,7 @@ approved by policy (commit `3d304d3`); the base commit is `dea2125`. The plan is
 | Checkpoint | State |
 | --- | --- |
 | CP1 settings rows, `record_external_result`, `rm -f` note | committed (`f880306`) |
-| CP2 Codex harness | committed (`f9a14f2`); the D12 operator pre-step is open, so the harness stays unregistered |
+| CP2 Codex harness | committed (`f9a14f2`); the D12 pre-step was recorded 2026-10-15 and the harness is registered (implementation review round 2 fixes) |
 | CP3 review job | committed (`078879e`) |
 | CP4 lifecycle scenarios | committed (`1bd2639`) |
 | CP5 documentation and full suite | committed |
@@ -27,8 +27,11 @@ CP1 changes:
 - `tests/golden/no_policy_lifecycle.json` regenerated; `tests/test_trunk_preflight.py` removes the reviewer rows
   and the added sentence and still matches the 1.5.0 base hash (R2).
 
-**Open acceptance condition for CP1 (D2):** the Workflow side has not yet confirmed the obligation-5 reading. It
-is an issue on the Workflow repository whose answer is recorded in ADR 0013; CP1 does not pass without it.
+**CP1 acceptance condition (D2) met:** the Workflow side answered *yes, with conditions* on 2026-10-15
+(workflow#28, `https://github.com/RodrigoFAbreu/workflow/issues/28`). The answer and its five conditions are
+recorded verbatim in ADR 0013 decision 2 with the code that meets each (the checkpoint record in
+`WORKFLOW_STATE.json` holds only `status` and `start_commit`, so this section is the CP1 evidence). The pending
+follow-up is the protocol paragraph in W8 / Workflow 2.12.0; the issue stays open until then.
 
 CP2 changes:
 - `controller/review.py`: the review-only seam. `ReviewHarness` and the closed registry `HARNESSES`; the exact
@@ -48,14 +51,13 @@ CP2 changes:
   watchdog with a ready file), `tests/test_fake_codex_contract.py`, `tests/test_review.py` (71 tests), two
   `LEFTOVER_INVENTORY` rows, and `tests/harness_contract/codex/` with the one capture that spends no allowance.
 
-**D12 pre-step is open, so CP2 stops at its boundary as the plan requires.** Not captured: the real
-`codex exec` argv and rollout, the sandbox probe, the command that composes the configuration layers without
-starting anything, the state entries Codex writes into an empty home, the `ENV_ALLOWLIST` the installed Codex needs
-(the `PATH` directories included), and whether `--ignore-rules` and a system-layer relocation are accepted. The
-constants that depend on them (`TOOL_ALLOWLIST`, `DISABLED_FEATURES`, `SERVICE_TIER`, `CODEX_STATE_ENTRIES`,
-`CODEX_STARTUP_SUBENTRIES`, `COMPOSE_COMMAND`) are marked *provisional* in `controller/review.py`.
-`review.PRE_STEP_CAPTURED` is false and `review.HARNESSES` is empty, so the harness cannot be selected; a test pins
-both. The captured-invocation contract test and the sandbox-probe fixture are therefore not written.
+**D12 pre-step recorded (2026-10-15).** The operator ran it against `codex-cli 0.162.1` (seven real runs); the
+captures are under `tests/harness_contract/codex/` with their digests, `review.PRE_STEP_CAPTURED` is true and
+`review.HARNESSES` registers Codex. The implementation review (round 2) corrected the first CP2 build against them:
+`code_mode_host` is an allowed tool (the reviewer had none), the project is marked untrusted and the bundled skills
+are off (otherwise Codex rewrites the minimal home), control (b) is the app-server `config/read` command driven by
+`compose_config` and judges origins, the argv contract is complete, and a limit is read from the rollouts. The
+captured-invocation contract test is written (`test_review_argv_is_the_captured_recommended_invocation`).
 
 CP3 changes:
 - `controller/job.py`: the review job. `execute_step` takes `reviewer` (None while `reviewer.harness` is unset: every
@@ -105,7 +107,7 @@ CP4 changes:
     notification and the reservation charged by the measured delta; with the shared reading forgotten, a second `run` is
     held (exit 17, no new job) by the retained rollout alone; after the reset a third `run` is re-admitted and the
     Workflow records the verdict; an operator file changed meanwhile is never overwritten.
-- `tests/test_scenarios_negative.py`: `MUTATIONS_REVIEW`, 19 mutations (each patches one product check, and the scenario
+- `tests/test_scenarios_negative.py`: `MUTATIONS_REVIEW`, 21 mutations (each patches one product check, and the scenario
   must end in an assertion). `tests/test_scenarios.py`: 17 flow ids. `tests/scenarios/kit.py`: `tar` and `gzip` join
   `ALLOWED_TOOLS` (`prepare-ai-review.sh` archives the bundle; the sandbox `PATH` had neither).
 

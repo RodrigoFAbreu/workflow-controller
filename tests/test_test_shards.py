@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import textwrap
 import time
 import unittest
@@ -2638,6 +2639,61 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                          [i for i in plan["selected_ids"] if not i.startswith("conformance:")])
         self.assertEqual(list(self.results.glob("lane-*")), [])
         self.assertTrue(self.gone(), "the suite outlived its killed helper")
+
+    def test_a_helper_killed_after_done_during_the_final_scan_is_not_hidden(self) -> None:
+        """The monitor is held back through the whole final scan, and the helper
+        is killed after ``.done`` during it: the guard records the suite's
+        survivor and ends the session, and ``stop`` must still read that
+        evidence before it deletes the lane files."""
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        original_monitor = shards._ConformanceLane._monitor
+        original_scan = shards.scan_marked_processes
+        recorded: list[dict] = []
+
+        def delayed_monitor(lane):
+            gate.wait(30)
+            original_monitor(lane)
+
+        def scan_after_helper_crash(marker, *, exclude=()):
+            helper = self.helper_children()
+            self.assertEqual(len(helper), 1, helper)
+            os.kill(helper[0], signal.SIGKILL)
+            deadline = time.monotonic() + 10
+            while not list(self.results.glob("lane-0-*.crash")):
+                self.assertLess(time.monotonic(), deadline, "the guard wrote no crash file")
+                time.sleep(0.002)
+            recorded.extend(json.loads(next(self.results.glob("lane-0-*.crash")).read_text()))
+            guard = int(next(self.results.glob("lane-0-*.pid")).read_text())
+            while True:  # the guard has ended the session and is gone
+                try:
+                    state = Path(f"/proc/{guard}/stat").read_text().rsplit(")", 1)[1].split()[0]
+                except OSError:
+                    break
+                if state == "Z":
+                    break
+                self.assertLess(time.monotonic(), deadline, "the guard did not end")
+                time.sleep(0.002)
+            return original_scan(marker, exclude=exclude)
+
+        plan = self.build(
+            "import unittest\nclass XTest(unittest.TestCase):\n    def test_ok(self): pass\n",
+            {"a_test.py": "import subprocess, sys\n"
+                          "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
+                          "                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n"
+                          "                 stderr=subprocess.DEVNULL)\n"})
+        marker = "race-" + uuid.uuid4().hex
+        with unittest.mock.patch.object(shards._ConformanceLane, "_monitor", delayed_monitor), \
+                unittest.mock.patch.object(shards, "scan_marked_processes",
+                                           scan_after_helper_crash), \
+                unittest.mock.patch.dict(os.environ, {shards.SHARD_MARKER_ENV: marker}):
+            record, status = self.run_shard(plan, {shards.SHARD_MARKER_ENV: marker})
+        self.assertEqual(len(recorded), 1, recorded)
+        self.assertEqual(status, 2, record)
+        self.assertEqual([leak["pid"] for leak in record["leaked_processes"]],
+                         [leak["pid"] for leak in recorded])
+        self.assertIn("the conformance lane crashed", shards.log_path(self.results, 0).read_text())
+        self.assertTrue(self.gone(), "the leaked suite child is still alive")
 
     def test_a_controller_lane_crash_stops_the_suites_and_propagates(self) -> None:
         plan = self.build(

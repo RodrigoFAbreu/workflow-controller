@@ -63,27 +63,9 @@ now runs its conformance suites at the same time as its Controller tests.
 Since Workflow 2.10.0 the managed job takes 10 to 14 minutes, so `validate`
 (17.7 to 19.3 minutes, set by the shard holding the acceptance matrix) became
 the slowest check; 41% of the shard work (1410 s of 3427 s) was these suites.
-`exec-shard` starts one helper process, `python3 tools/test_shards.py
---conformance-lane`, before the first test; the helper runs the shard's
-suites one at a time, in plan order, each as the managed workflow does, while
-the shard runs its Controller atoms through `unittest` as before. The helper
-is a process, not a thread, and the suites are its children, not the
-shard's: the Controller's worker tests start real workers in the shard
-process and kill any new child of it as an adopted escapee, which killed a
-suite started mid-test (exit -9, found by replaying the shards). The helper
-starts first, so it is in every launch's baseline. Both lanes' results enter
-the record as before (same per-atom results, the exact-coverage proof, the
-leak scan after both lanes end, the exit status, the timings artifact); each
-suite's output is written to the log as one section after the `unittest`
-output; a helper that dies fails the shard (exit 2, named in the log). The helper
-watches a pipe from the executor and ends its session on EOF, so no exit
-path of the executor leaves a suite running; SIGINT and SIGTERM also end
-the helper's process group, and a suite's survivors are reported as leaked
-processes before they are killed, as in serial mode. Residual, accepted:
-a SIGKILL of the executor runs no cleanup, so a descendant of a suite that
-left the group (`setsid`) can survive it; GitHub tears the job down and a
-local run's supervisor marker scan reports it, as with the serial design.
-The executor starts a launcher that forks the helper into its own session and exits, so the helper is not a child of the shard process: Controller worker tests that sweep or reap "children they did not start" (some with an empty baseline) killed it, which a first version tolerated silently once the suites were done. The launcher forks a small GUARD that leads a new session and process group and is a child subreaper, and the guard forks the HELPER that runs the suites. The guard holds the executor's pipe and ends the whole session on EOF (so any end of the executor, SIGINT and SIGKILL included, ends the lane at once); as the helper's parent it sees any exit of the helper immediately, zombie or not, lists the group's live survivors in `lane-*.crash`, and ends the session, so a helper death needs no executor to be alive or polling. The executor watches the guard through a pidfd (`os.pidfd_open`, Linux 5.3 and later; readable when the process exits, zombie or not), captured with `select` at import because tests in the shard patch `os` and ignore SIGCHLD; without pidfd it falls back to `kill(pid, 0)`, which a zombie evades. Lane files are named per run (`lane-<shard>-<run id>.*`) and a shard removes its earlier ones first; any death of the helper before the executor's own `stop()` fails the shard, with the group's survivors listed as leaked processes before the group is killed. The helper does not exit when its suites finish: it marks the lane done and waits; the guard stays alive as the subreaper (`PR_SET_CHILD_SUBREAPER`) of the whole subtree, reaping but never killing, until the executor ends it. A suite's surviving descendant is therefore reparented to the guard, not to the shard process, where a Controller worker test would adopt and kill it before the leak scan saw it. The executor waits for the lane to be done, runs the leak scan (listing those survivors as in serial mode, helper excluded), and only then kills the helper's session. A monitor thread in the executor ends the group and records the survivors if the guard itself is killed. SIGINT stays at its default disposition in a shard (the runner promises that), so it is covered by the guard's pipe EOF, not a handler. Residual, accepted: a SIGKILL of the executor runs no cleanup in the executor, but the guard still ends the session, so only a descendant of a suite that left the session (`setsid`) can survive it; GitHub tears the job down and a local run's supervisor marker scan reports it. The executor is not made a child subreaper, which would change how the
+`exec-shard` runs the shard's conformance suites in a second process lane before the first test; the lane runs the suites one at a time, in plan order, each as the managed workflow does, while the shard runs its Controller atoms through `unittest` as before. The lane is made of processes, not threads, and the suites are not children of the shard: the Controller's worker tests start real workers in the shard process and kill or reap any new child of it as an adopted escapee ("children they did not start", some with an empty baseline), which killed a suite started mid-test (exit -9, found by replaying the shards). Both lanes' results enter the record as before (same per-atom results, the exact-coverage proof, the leak scan after both lanes end, the exit status, the timings artifact); each suite's output is written to the log as one section after the `unittest` output.
+
+The executor starts a launcher that forks a small GUARD and exits at once. The guard leads a new session and process group, is a child subreaper (`PR_SET_CHILD_SUBREAPER`) and forks the HELPER that runs the suites, with a parent-death signal. The guard holds the executor's pipe and ends the whole session on EOF, so any end of the executor (SIGINT, SIGTERM, `os._exit`, SIGKILL) ends the lane at once. As the helper's parent it sees any exit of the helper immediately, zombie or not, writes the group's live survivors to `lane-*.crash` and ends the session, so a helper death needs no executor to be alive or polling. The helper does not exit when its suites finish: it marks the lane done and waits. The guard stays alive, reaping but never killing, until the executor ends it, so a suite's surviving descendant is reparented to the guard, not to the shard process, where a Controller worker test would adopt and kill it before the leak scan saw it. The executor waits for the lane to be done, runs the leak scan (listing those survivors as in serial mode, lane processes excluded) and only then kills the session. The executor is not made a child subreaper, which would change how the
 Controller's own worker tests see adopted children. `--serial` plans
 `conformance_lane: false` and runs the suites after the Controller tests, so
 the serial reference of I5 is unchanged. The plan
@@ -98,6 +80,13 @@ the stale file had estimated the acceptance matrix at 429 s (measured median
 641 s) and lacked 41 atoms. The expected longest shard is about 12.4 minutes
 (from 14.5 to 19.4) and `validate` about 13.4. The earlier sentence that
 longer shards cost nothing no longer holds.
+
+How the lane fails and what it leaves (same amendment). The executor watches the guard through a pidfd (`os.pidfd_open`, Linux 5.3 and later; readable when the process exits, zombie or not), captured with `select` at import because tests in the shard patch `os` and ignore SIGCHLD; without pidfd it falls back to `kill(pid, 0)`, which a zombie evades. A monitor thread records the survivors and ends the group if the guard dies. Lane files are named per run (`lane-<shard>-<run id>.*`) and a shard removes its earlier ones first. Any death of the helper or the guard before the executor's own `stop()` fails the shard (exit 2, "the conformance lane crashed"), with the group's survivors listed as leaked processes. `stop()` does not rely on the monitor having run: before it deletes any lane file it reads the guard's `.crash` file (or notices that the guard is gone) and treats the recorded survivors as the monitor would, so a helper that dies after the suites finished, while the monitor is not scheduled, is still reported. SIGINT stays at its default disposition in a shard (the runner promises that), so it is covered by the guard's pipe EOF, not a handler.
+
+Residuals, accepted:
+
+- A SIGKILL of the executor runs no cleanup in the executor, but the guard still ends the session, so only a descendant of a suite that left the session (`setsid`) can survive it. GitHub tears the job down and a local run's supervisor marker scan reports it, as with the serial design.
+- The guard SIGKILLed by an outside actor, immediately followed by a SIGINT to the executor, can leave suite descendants running: the guard's own cleanup never runs, and the executor stops before its monitor has ended the group. This is a double fault (an external kill of the lane's own guard plus an interrupt within the monitor's polling window). On CI the job teardown kills everything; locally the supervisor marker scan still runs and reports the leftovers.
 
 ## Context
 

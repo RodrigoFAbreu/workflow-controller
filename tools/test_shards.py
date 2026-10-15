@@ -1579,6 +1579,7 @@ class _ConformanceLane:
         self.crashed = False
         self.survivors: list[dict] = []
         self._monitor_thread: threading.Thread | None = None
+        self._crash_lock = threading.Lock()
         self.process: subprocess.Popen | None = None  # the launcher, gone at once
         self.helper_pid: int | None = None
         self.pid_file = Path(f"{self.prefix}.pid")
@@ -1643,7 +1644,14 @@ class _ConformanceLane:
 
     def _crash(self) -> None:
         """The guard is gone without ``stop``: take the survivors it listed
-        (or list the group's), and end the group."""
+        (or list the group's), and end the group. Called by the monitor and
+        by ``stop``, once: the lock makes the second call a no-op."""
+        with self._crash_lock:
+            if self.crashed:
+                return
+            self._record_crash()
+
+    def _record_crash(self) -> None:
         try:
             self.survivors = json.loads(self.crash_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -1689,9 +1697,15 @@ class _ConformanceLane:
         and stays ours while any member lives, so this also works after the
         guard died)."""
         pid = self.helper_pid
-        if pid is None:
+        if pid is None or self.stopping:
             return
         self.stopping = True
+        # The monitor may not have run yet (it polls, and can be descheduled
+        # for the whole final scan). Look for the lane's own evidence before
+        # anything is deleted: a guard that is gone, or a crash file it wrote,
+        # means the lane died before ``stop`` and its survivors are leaks.
+        if self.crash_file.exists() or not self._alive():
+            self._crash()
         try:
             os.killpg(pid, signal.SIGKILL)
         except OSError:

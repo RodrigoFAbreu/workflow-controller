@@ -231,6 +231,26 @@ class TestBundleFixtures(unittest.TestCase):
             work_item = h.read_state(repo)["work_items"]["wi"]
             self.assertTrue(ws.implementing_entry_reachable(repo.root, work_item, repo.base))
 
+    def test_a_seeded_plan_carries_an_anchor_pair_per_registry_checkpoint(self):
+        """workflow-2.11.0: a plan revision of a two-stage item must carry one
+        pair per checkpoint, so the default plan of a fixture that declares
+        checkpoints does, and `assert_plan_checkpoint_anchors` accepts it."""
+        checkpoints = [{"id": "CP1", "depends_on": []}, {"id": "CP2", "depends_on": ["CP1"]}]
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, phase="PLANNING", registry_checkpoints=checkpoints)
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            for checkpoint_id in ("CP1", "CP2"):
+                self.assertIn(f"<!-- {checkpoint_id} -->", plan)
+                self.assertIn(f"<!-- /{checkpoint_id} -->", plan)
+            ws.assert_plan_checkpoint_anchors(repo.root, "wi")
+
+    def test_a_seeded_plan_without_checkpoints_is_unchanged(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, phase="PLANNING")
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            self.assertEqual(plan, "# Plan (Revision 1)\n\nplan v1\n")
+            self.assertNotIn("<!-- CP", plan)
+
 
 _TWO_TWO_CONFIG = {"schema_version": 1, "default_workflow_version": "2.2",
                    "supported_versions": ["1", "2.1", "2.2"]}

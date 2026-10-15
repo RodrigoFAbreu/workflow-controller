@@ -771,7 +771,9 @@ class AmendmentAnchorCoverageError(Exception):
     when a checkpoint id present in `post_registry` has zero well-formed
     `<!-- CP<n> -->`/`<!-- /CP<n> -->` anchor pairs in `post_plan_text` --
     a forgotten anchor on the side where a refusal is always actionable
-    (D-Plan-Amendment-4, B5-new)."""
+    (D-Plan-Amendment-4, B5-new). Since workflow-2.11.0 also raised, with
+    the same class, by `assert_plan_checkpoint_anchors` when a plan
+    revision is published, bound or turned into a plan-review bundle."""
 
 
 class AmendmentAnchorMalformedError(Exception):
@@ -779,7 +781,10 @@ class AmendmentAnchorMalformedError(Exception):
     only for `post_plan_text`) when a checkpoint id's own anchor tags are
     not a closed, non-nesting, per-id balanced grammar: an unmatched open
     tag, an orphan close tag, or a tag nested inside another open span for
-    the same id (D-Plan-Amendment-4, B5-new/I5-new)."""
+    the same id (D-Plan-Amendment-4, B5-new/I5-new). Since
+    workflow-2.11.0 also raised, with the same class, by
+    `assert_plan_checkpoint_anchors` for any new plan revision of a
+    two-stage work item."""
 
 
 class AmendmentPostRegistryMalformedError(Exception):
@@ -802,7 +807,9 @@ class AmendmentCheckpointIdShapeError(Exception):
     `"CP" + digits + one uppercase letter`, so
     `validate_post_anchor_coverage` is unsatisfiable for any such id --
     there is no text an author could write in the amended plan that would
-    ever satisfy it. Raised *before* `plan_approval` is superseded, the
+    ever satisfy it. Since workflow-2.11.0 `assert_plan_checkpoint_anchors`
+    raises it too, for any new plan revision of a two-stage item. Raised
+    *before* `plan_approval` is superseded, the
     same "refuse before any supersede" discipline
     `AmendmentApprovalCommitUnreachableError` already follows, naming
     every offending id at once rather than wedging the item at
@@ -4494,7 +4501,9 @@ def validate_post_anchor_coverage(post_plan_text: str, post_registry: dict) -> N
     """D-Plan-Amendment-4's post-side validation, run by `apply_plan_approval`
     before it computes any reconciliation outcome: every checkpoint id
     present in `post_registry` must have at least one well-formed anchor
-    pair in `post_plan_text`. A missing id raises
+    pair in `post_plan_text`. Since workflow-2.11.0 it is also called, through
+    `assert_plan_checkpoint_anchors`, when a plan revision is published,
+    bound or turned into a plan-review bundle. A missing id raises
     `AmendmentAnchorCoverageError`; a malformed tag anywhere in
     `post_plan_text` raises `AmendmentAnchorMalformedError` (propagated
     from the strict parse below) -- both before any silent partial
@@ -4525,6 +4534,103 @@ def validate_post_anchor_coverage(post_plan_text: str, post_registry: dict) -> N
                 f"{checkpoint_id} has no well-formed anchor pair in the plan document "
                 f"being approved -- every registry checkpoint id must have at least one"
             )
+
+
+def _assert_post_registry_well_formed(work_item_id: str, post_registry: dict) -> None:
+    """The two `AmendmentPostRegistryMalformedError` checks
+    `apply_plan_approval` makes ahead of `validate_post_anchor_coverage`,
+    moved here verbatim (same order, same messages) so
+    `assert_plan_checkpoint_anchors` shares them (workflow-2.11.0)."""
+    # IMPL2-O2: `validate_post_anchor_coverage` reads
+    # `post_registry.get("checkpoints", [])` (vacuously passes a
+    # registry missing the key), but `validate_registry_topological_order`
+    # reads `registry["checkpoints"]` directly and would raise an
+    # unnamed `KeyError` for the same malformed input -- against this
+    # branch's own "refuse and name it" discipline. Named here, once,
+    # before either validator runs.
+    if "checkpoints" not in post_registry:
+        raise AmendmentPostRegistryMalformedError(
+            f"{work_item_id}'s post_registry has no 'checkpoints' key -- cannot "
+            f"validate anchor coverage or topological order for this amendment"
+        )
+    # IMPL4-O1: both `validate_post_anchor_coverage` and
+    # `reconcile_checkpoints_after_amendment` directly read `entry["id"]`
+    # from `post_registry["checkpoints"]` -- a row with no `id` key
+    # would otherwise escape as a bare, unnamed `KeyError` from either
+    # call below. Named here, once, ahead of both call paths, the same
+    # "refuse and name it" discipline the "checkpoints"-key check just
+    # above already applies to the coarser malformation.
+    missing_id_indices = [
+        i for i, entry in enumerate(post_registry.get("checkpoints", []))
+        if "id" not in entry
+    ]
+    if missing_id_indices:
+        raise AmendmentPostRegistryMalformedError(
+            f"{work_item_id}'s post_registry has checkpoint entries with no 'id' "
+            f"key at index/indices {missing_id_indices} -- cannot validate anchor "
+            f"coverage or topological order for this amendment"
+        )
+
+
+PLAN_ANCHOR_NEXT_STEP = (
+    "give every registry checkpoint an id of the shape `CP<digits>[A-Z]?` and a "
+    "well-formed `<!-- CPn -->` ... `<!-- /CPn -->` pair around its section of the "
+    "plan document, then run the command again"
+)
+
+_PLAN_ANCHOR_ERRORS = (
+    AmendmentAnchorCoverageError,
+    AmendmentAnchorMalformedError,
+    AmendmentCheckpointIdShapeError,
+    AmendmentPostRegistryMalformedError,
+)
+
+
+def assert_plan_checkpoint_anchors(
+    repo_root: Path, work_item_id: str, *, state: dict | None = None,
+    pin_dir: Path | None = None, allow_bound_regeneration: bool = False,
+) -> None:
+    """workflow-2.11.0, `D-Check`: the one early anchor check for a plan
+    revision of a two-stage work item. Read-only. Returns at once for a
+    work item whose governing version is not two-stage (a "1" item's plan
+    stage is unchanged) and, only with `allow_bound_regeneration` (the
+    plan-stage generator's call), for an item at a ready plan-review phase
+    whose `plan_review_binding` is `BOUND` (a wrapper-only regeneration of
+    an already-bound review is never re-judged). Otherwise reads the plan
+    document and registry the work item declares, from `pin_dir` when given
+    (the bytes a bundle is derived from) else from the working tree, and
+    runs `_assert_post_registry_well_formed` then
+    `validate_post_anchor_coverage` -- the same rule `apply_plan_approval`
+    applies to an amendment. A refusal re-raises the same error class with
+    the work item, the registry's `plan_revision`, whether an amendment is
+    open, the original message and `PLAN_ANCHOR_NEXT_STEP`, chained from
+    the original."""
+    if state is None:
+        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    work_item = (state.get("work_items") or {}).get(work_item_id)
+    if work_item is None:
+        raise fingerprint.UnknownWorkItemError(work_item_id)
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        return
+    if allow_bound_regeneration and work_item.get("phase") in PLAN_REVIEW_READY_PHASES:
+        record = _plan_review_binding_record(work_item, work_item_id)
+        if record is not None and record["status"] == PLAN_REVIEW_BINDING_BOUND:
+            return
+    metadata = fingerprint.resolve_plan_stage_metadata(repo_root, work_item_id)
+    base = pin_dir if pin_dir is not None else repo_root
+    plan_text = (base / metadata.plan_path).read_text(encoding="utf-8")
+    registry = json.loads((base / metadata.registry_path).read_text(encoding="utf-8"))
+    revision = registry.get("plan_revision") if isinstance(registry, dict) else None
+    revision_text = f"revision {revision}" if revision is not None else "unknown revision"
+    history = work_item.get("amendment_history") or []
+    amendment = " (amendment open)" if history and history[-1].get("resolved_at_plan_revision") is None else ""
+    try:
+        _assert_post_registry_well_formed(work_item_id, registry)
+        validate_post_anchor_coverage(plan_text, registry)
+    except _PLAN_ANCHOR_ERRORS as exc:
+        raise type(exc)(
+            f"{work_item_id} plan {revision_text}{amendment}: {exc} -- {PLAN_ANCHOR_NEXT_STEP}"
+        ) from exc
 
 
 _RECONCILIATION_ROW_FIELDS = ("name", "depends_on", "complexity", "session_target")
@@ -13849,35 +13955,7 @@ def apply_plan_approval(
                 f"{work_item_id} has an open amendment -- reconciliation requires all of "
                 f"pre_registry/pre_plan_text/post_registry/post_plan_text; missing: {missing}"
             )
-        # IMPL2-O2: `validate_post_anchor_coverage` reads
-        # `post_registry.get("checkpoints", [])` (vacuously passes a
-        # registry missing the key), but `validate_registry_topological_order`
-        # reads `registry["checkpoints"]` directly and would raise an
-        # unnamed `KeyError` for the same malformed input -- against this
-        # branch's own "refuse and name it" discipline. Named here, once,
-        # before either validator runs.
-        if "checkpoints" not in post_registry:
-            raise AmendmentPostRegistryMalformedError(
-                f"{work_item_id}'s post_registry has no 'checkpoints' key -- cannot "
-                f"validate anchor coverage or topological order for this amendment"
-            )
-        # IMPL4-O1: both `validate_post_anchor_coverage` and
-        # `reconcile_checkpoints_after_amendment` directly read `entry["id"]`
-        # from `post_registry["checkpoints"]` -- a row with no `id` key
-        # would otherwise escape as a bare, unnamed `KeyError` from either
-        # call below. Named here, once, ahead of both call paths, the same
-        # "refuse and name it" discipline the "checkpoints"-key check just
-        # above already applies to the coarser malformation.
-        missing_id_indices = [
-            i for i, entry in enumerate(post_registry.get("checkpoints", []))
-            if "id" not in entry
-        ]
-        if missing_id_indices:
-            raise AmendmentPostRegistryMalformedError(
-                f"{work_item_id}'s post_registry has checkpoint entries with no 'id' "
-                f"key at index/indices {missing_id_indices} -- cannot validate anchor "
-                f"coverage or topological order for this amendment"
-            )
+        _assert_post_registry_well_formed(work_item_id, post_registry)
         validate_post_anchor_coverage(post_plan_text, post_registry)
         validate_registry_topological_order(post_registry)
         reconciliation = reconcile_checkpoints_after_amendment(

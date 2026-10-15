@@ -3204,6 +3204,220 @@ class TestApprovalFreshnessAndEntry(unittest.TestCase):
                 )
 
 
+class TestAssertPlanCheckpointAnchors(unittest.TestCase):
+    """workflow-2.11.0 CP1: the one early anchor check, through a real
+    scratch repository whose plan-stage metadata resolves (the module's own
+    real `PLAN_STAGE_PROTECTED` paths stand in, as in
+    `TestApprovalFreshnessAndEntry`)."""
+
+    PLAN_DOC = "docs/ai-workflow/WORKFLOW_V2_PLAN.md"
+    REGISTRY_PATH = "docs/ai-workflow/registry/workflow-v2-1-core-registry.json"
+    MAPPING_PATH = "docs/ai-workflow/requirements/workflow-v2-1-core-mapping.json"
+    ARTIFACTS_PATH = "docs/ai-workflow/registry/wi-artifacts.json"
+    STATE_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
+    GOOD = "# Plan (Revision 2)\n<!-- CP1 -->\n### CP1\n<!-- /CP1 -->\n<!-- CP2 -->\n### CP2\n<!-- /CP2 -->\n"
+    NO_CP2 = "# Plan (Revision 2)\n<!-- CP1 -->\n### CP1\n<!-- /CP1 -->\n"
+    MALFORMED = "# Plan (Revision 2)\n<!-- CP1 -->\n### CP1\n<!-- CP2 -->\n<!-- /CP2 -->\n"
+    BOUND_ID = "a" * 64
+
+    def _registry(self, ids=("CP1", "CP2"), revision=2):
+        return {
+            "work_item_id": "wi", "plan_revision": revision,
+            "checkpoints": [{"id": i, "name": i, "depends_on": [], "complexity": 1, "session_target": 1} for i in ids],
+        }
+
+    def _entry(self, version="2.2", phase="PLANNING", **extra):
+        entry = {
+            "work_item_id": "wi", "work_item_type": "process", "plan_path": self.PLAN_DOC,
+            "registry_path": self.REGISTRY_PATH, "mapping_path": self.MAPPING_PATH,
+            "base_commit": self.repo.base, "governing_workflow_version": version,
+            "phase": phase, "plan_revision": 2,
+        }
+        entry.update(extra)
+        return entry
+
+    def _bound(self):
+        return {
+            "status": ws.PLAN_REVIEW_BINDING_BOUND, "at": "2026-01-01T00:00:00Z",
+            "consumed": None, "published": None,
+            "bound": {"review_content_id": self.BOUND_ID, "bundle_id": self.BOUND_ID, "plan_revision": 2},
+        }
+
+    def _write(self, plan=None, registry=None, root=None, **entry_args):
+        root = root or self.repo.root
+        plan = self.GOOD if plan is None else plan
+        registry = self._registry() if registry is None else registry
+        for rel, content in (
+            (self.PLAN_DOC, plan),
+            (self.REGISTRY_PATH, registry if isinstance(registry, str) else json.dumps(registry)),
+            (self.MAPPING_PATH, json.dumps({"work_item_id": "wi", "requirements": {}})),
+        ):
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text(content)
+        if root == self.repo.root:
+            for rel in fingerprint.PLAN_STAGE_PROTECTED:
+                full = root / rel
+                if not full.exists():
+                    full.parent.mkdir(parents=True, exist_ok=True)
+                    full.write_text("placeholder\n")
+            (root / self.ARTIFACTS_PATH).write_text(json.dumps({
+                "schema_version": 2, "work_item_id": "wi",
+                "plan_stage": {
+                    "protected_paths": sorted(fingerprint.PLAN_STAGE_PROTECTED),
+                    "excluded_paths": dict(fingerprint.PLAN_STAGE_EXCLUDED_PATHS),
+                    "excluded_prefixes": dict(fingerprint.PLAN_STAGE_EXCLUDED_PREFIXES),
+                },
+            }))
+            self.state = {
+                "schema_version": 1, "active_work_item_id": "wi",
+                "work_items": {"wi": self._entry(**entry_args)},
+            }
+            (root / self.STATE_PATH).write_text(json.dumps(self.state))
+            _run(["git", "add", "-A"], cwd=root)
+        return self.state
+
+    def setUp(self):
+        self.repo = ScratchRepo().__enter__()
+        self.addCleanup(self.repo.__exit__, None, None, None)
+
+    def _check(self, **kwargs):
+        return ws.assert_plan_checkpoint_anchors(self.repo.root, "wi", **kwargs)
+
+    def test_anchored_plan_passes_for_both_two_stage_versions_and_from_a_pin(self):
+        for version in ("2.1", "2.2"):
+            self._write(governing_workflow_version=version)
+            self._check()
+        pin = Path(tempfile.mkdtemp(prefix="wf-pin-"))
+        self.addCleanup(__import__("shutil").rmtree, pin, True)
+        self._write(plan=self.NO_CP2)  # worktree refuses...
+        with self.assertRaises(ws.AmendmentAnchorCoverageError):
+            self._check()
+        self._write(root=pin)  # ...but the pinned bytes decide
+        self._check(pin_dir=pin)
+        self._write(plan=self.GOOD)
+        self._write(plan=self.NO_CP2, root=pin)
+        with self.assertRaises(ws.AmendmentAnchorCoverageError):
+            self._check(pin_dir=pin)
+
+    def test_each_error_class_names_item_revision_id_and_next_step(self):
+        cases = (
+            (self.NO_CP2, self._registry(), ws.AmendmentAnchorCoverageError, "CP2"),
+            (self.MALFORMED, self._registry(), ws.AmendmentAnchorMalformedError, "CP"),
+            (self.GOOD, self._registry(ids=("CP1", "step-2")), ws.AmendmentCheckpointIdShapeError, "step-2"),
+        )
+        for plan, registry, error, needle in cases:
+            self._write(plan=plan, registry=registry)
+            with self.assertRaises(error) as ctx:
+                self._check()
+            message = str(ctx.exception)
+            self.assertIn("wi plan revision 2:", message)
+            self.assertIn(needle, message)
+            self.assertTrue(message.endswith(ws.PLAN_ANCHOR_NEXT_STEP), message)
+            self.assertNotIn("(amendment open)", message)
+            self.assertIsNotNone(ctx.exception.__cause__)
+
+    def test_amendment_open_appears_exactly_when_last_entry_is_unresolved(self):
+        for resolved, expect in ((None, True), (2, False)):
+            self._write(plan=self.NO_CP2, amendment_history=[{"resolved_at_plan_revision": resolved}])
+            with self.assertRaises(ws.AmendmentAnchorCoverageError) as ctx:
+                self._check()
+            self.assertEqual("(amendment open)" in str(ctx.exception), expect)
+
+    def test_revision_comes_from_the_registry_of_the_same_source(self):
+        plan3 = self.NO_CP2.replace("(Revision 2)", "(Revision 3)")
+        self._write(plan=plan3, registry=self._registry(revision=3), plan_revision=2)
+        with self.assertRaisesRegex(ws.AmendmentAnchorCoverageError, "plan revision 3"):
+            self._check()
+        # a pin whose registry differs from the working tree names the pin's revision
+        pin = Path(tempfile.mkdtemp(prefix="wf-pin-"))
+        self.addCleanup(__import__("shutil").rmtree, pin, True)
+        self._write(plan=self.NO_CP2, registry=self._registry(revision=2))
+        self._write(plan=self.NO_CP2, registry=self._registry(revision=4), root=pin)
+        with self.assertRaisesRegex(ws.AmendmentAnchorCoverageError, "plan revision 4"):
+            self._check(pin_dir=pin)
+        self._write(plan=self.NO_CP2, registry={"checkpoints": [{"id": "CP1"}, {"id": "CP2"}]}, root=pin)
+        with self.assertRaisesRegex(ws.AmendmentAnchorCoverageError, "unknown revision"):
+            self._check(pin_dir=pin)
+
+    def test_allow_bound_regeneration_skips_only_a_bound_ready_item(self):
+        for phase in sorted(ws.PLAN_REVIEW_READY_PHASES):
+            self._write(plan=self.NO_CP2, phase=phase, plan_review_binding=self._bound())
+            self._check(allow_bound_regeneration=True)
+            with self.assertRaises(ws.AmendmentAnchorCoverageError):
+                self._check()
+            self._write(plan=self.NO_CP2, phase=phase)  # row 4c: no binding record
+            with self.assertRaises(ws.AmendmentAnchorCoverageError):
+                self._check(allow_bound_regeneration=True)
+        for phase in sorted(ws.PLAN_REVIEW_NON_READY_PHASES):
+            self._write(plan=self.NO_CP2, phase=phase, plan_review_binding=self._bound())
+            with self.assertRaises(ws.AmendmentAnchorCoverageError):
+                self._check(allow_bound_regeneration=True)
+        published = self._bound()
+        published.update(status=ws.PLAN_REVIEW_BINDING_PUBLISHED, bound=None,
+                         published={"review_content_id": self.BOUND_ID, "plan_revision": 2})
+        self._write(plan=self.NO_CP2, phase="AWAITING_LOCAL_PLAN_REVIEW", plan_review_binding=published)
+        with self.assertRaises(ws.AmendmentAnchorCoverageError):
+            self._check(allow_bound_regeneration=True)
+
+    def test_registry_shape_errors_are_wrapped_and_approval_message_is_unchanged(self):
+        for registry, fragment in (
+            ({"work_item_id": "wi", "plan_revision": 2}, "has no 'checkpoints' key"),
+            ({"work_item_id": "wi", "plan_revision": 2, "checkpoints": [{"name": "x"}]}, "no 'id' key at index/indices [0]"),
+        ):
+            self._write(registry=registry)
+            with self.assertRaises(ws.AmendmentPostRegistryMalformedError) as ctx:
+                self._check()
+            message = str(ctx.exception)
+            self.assertIn(fragment, message)
+            self.assertIn("wi plan revision 2:", message)
+            self.assertIn("wi's post_registry", message)
+            self.assertTrue(message.endswith(ws.PLAN_ANCHOR_NEXT_STEP))
+            with self.assertRaises(ws.AmendmentPostRegistryMalformedError) as direct:
+                ws._assert_post_registry_well_formed("wi", registry)
+            self.assertNotIn(ws.PLAN_ANCHOR_NEXT_STEP, str(direct.exception))
+            self.assertIn(str(direct.exception), message)
+
+    def test_zero_checkpoint_registry_passes(self):
+        self._write(plan="# Plan (Revision 2)\n", registry=self._registry(ids=()))
+        self._check()
+
+    def test_version_one_is_not_checked(self):
+        self._write(plan=self.NO_CP2, governing_workflow_version="1")
+        self._check()
+        (self.repo.root / self.REGISTRY_PATH).unlink()
+        self._check()
+
+    def test_reads_only_and_writes_nothing(self):
+        self._write(plan=self.NO_CP2)
+        before = (self.repo.root / self.STATE_PATH).read_bytes()
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout
+        with self.assertRaises(ws.AmendmentAnchorCoverageError):
+            self._check()
+        self.assertEqual(before, (self.repo.root / self.STATE_PATH).read_bytes())
+        self.assertEqual(status, subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout)
+
+    def test_early_check_and_approval_refuse_the_same_inputs_with_the_same_class(self):
+        pairs = (
+            (self.GOOD, self._registry(), None),
+            (self.NO_CP2, self._registry(), ws.AmendmentAnchorCoverageError),
+            (self.MALFORMED, self._registry(), ws.AmendmentAnchorMalformedError),
+            (self.GOOD, self._registry(ids=("CP1", "step-2")), ws.AmendmentCheckpointIdShapeError),
+            (self.GOOD, {"work_item_id": "wi", "plan_revision": 2}, ws.AmendmentPostRegistryMalformedError),
+        )
+        for plan, registry, error in pairs:
+            self._write(plan=plan, registry=registry)
+            for call in (
+                lambda: self._check(),
+                lambda: (ws._assert_post_registry_well_formed("wi", registry),
+                         ws.validate_post_anchor_coverage(plan, registry)),
+            ):
+                if error is None:
+                    call()
+                else:
+                    with self.assertRaises(error):
+                        call()
+
+
 class TestImplementationStageApprovalSecondItem(unittest.TestCase):
     """Missing-test item 164 (`OPUS-R27-002`/`OPUS-R28-001`, `GPT-R30-004`
     correction #7): `approval_is_current(stage="implementation")` and

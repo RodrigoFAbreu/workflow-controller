@@ -316,6 +316,13 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      registry, mapping, `<work_item_id>-artifacts.json` and table written
      here, and the staging step below, stay here so self-review reads a
      complete, index-visible plan.
+   - **[2.1]** **Checkpoint anchors, in every revision** (workflow-2.11.0,
+     `D-Command`): write a well-formed `<!-- CPn -->` ... `<!-- /CPn -->`
+     pair around every registry checkpoint's section of the plan document,
+     each id of the shape `CP<digits>[A-Z]?`. Use more than one disjoint pair
+     per checkpoint where its design is spread out; a pair may wrap the
+     checkpoint's heading. A revision without them is refused at the
+     publication point and at generation, not first at approval.
    - **[2.1]** **Staging step, required before any publish and before any
      bundle is generated** (salvage audit `B6`; `LPR-R3-003`, workflow-2.6.0:
      the publish now computes the fresh plan-stage id, which reads these
@@ -356,6 +363,8 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
    requirements, migration risk, usability gaps, unnecessary complexity, and
    missing tests. Revise the plan in place — do not write a separate
    self-review journal.
+   - **[2.1]** Confirm that every checkpoint, including one this review
+     added, has its well-formed anchor pair (step 3).
 5. Check the plan against every "Open decision" row in
    `docs/TECHNICAL_DECISIONS.md` it touches — flag any it would silently
    finalize instead of deciding for the user.
@@ -376,7 +385,20 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      3. re-apply step 3's intent-to-add staging step (`git
         --literal-pathspecs add -N`,
         idempotent -- it covers any plan-stage file step 4 created);
-     4. call `workflow_state.state_transaction(repo_root, lambda state:
+     4. **[2.11.0] anchor check**: call
+        `workflow_state.assert_plan_checkpoint_anchors(repo_root,
+        work_item_id)` after item 3's staging and immediately before the
+        publish. It reads the registry items 1-2 just regenerated, so a
+        checkpoint a self-review removed is not asked for, and one it added
+        without a pair is refused here. A refusal
+        (`workflow_state.AmendmentAnchorCoverageError`,
+        `workflow_state.AmendmentAnchorMalformedError`,
+        `workflow_state.AmendmentCheckpointIdShapeError` or
+        `workflow_state.AmendmentPostRegistryMalformedError`, together
+        `workflow_state._PLAN_ANCHOR_ERRORS`) ends with
+        `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop, with
+        nothing written;
+     5. call `workflow_state.state_transaction(repo_root, lambda state:
         workflow_state.publish_plan_revision(state, work_item_id,
         plan_revision, now, review_content_id=F))`, where `F` is the fresh
         plan-stage id computed inside that same mutator, after items 1-3,
@@ -450,9 +472,17 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      the failure and name the explicit-id re-run, `/milestone-plan
      <work_item_id>`, whose entry resumes at row 9 (regenerate, then bind,
      never re-advancing the revision) -- never a review command, since
-     `/review-plan` refuses at a non-ready phase. Stop.
+     `/review-plan` refuses at a non-ready phase. Stop. A generator refusal
+     of a plan without checkpoint anchors (`error: AmendmentAnchorCoverageError:`
+     or any other `workflow_state._PLAN_ANCHOR_ERRORS` class) is the same case: nothing was promoted, and the
+     message ends with `workflow_state.PLAN_ANCHOR_NEXT_STEP` -- add the
+     pairs, then run that re-run.
    - **[2.1] Bind, straight after the generator succeeds**
      (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0, section 5.3 item 3):
+     first call `workflow_state.assert_plan_checkpoint_anchors(repo_root,
+     work_item_id)` (a bundle an older generator left behind for a published,
+     unbound item is not otherwise re-checked; a refusal ends with
+     `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop), then
      call `binding = workflow_state.verify_plan_review_bundle(repo_root,
      work_item_id)`, then `workflow_state.state_transaction(repo_root,
      lambda state: workflow_state.bind_plan_review_bundle(state,

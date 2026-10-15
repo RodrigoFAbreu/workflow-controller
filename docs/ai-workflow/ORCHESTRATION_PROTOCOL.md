@@ -39,7 +39,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** (protocol `1.3`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`).
 
 ## 2. Invocation and the envelope
 

@@ -172,7 +172,10 @@ generate), nothing writes `current/` until that final rename.
 `WFR-67` requires that a failed closing binding assertion leave no
 review-ready artifact. A failed plan-stage generation's artifacts exist
 only in the staging directory, the staging pin and the staging archive, and
-the failure path removes exactly those: it **does not** call
+the failure path removes exactly those (2.11.0: a new or unbound plan revision whose pinned bytes lack
+a registry checkpoint's `<!-- CPn -->`/`<!-- /CPn -->` anchor pair fails the
+plan-stage generation this way, through `assert_plan_checkpoint_anchors`): it
+**does not** call
 `withdraw_bundle` on `current/` and **writes no `REJECTED` marker**. The
 previous `current/`, its archive and `.pin` are left byte-identical. That
 previous bundle is review-ready only for its own content, and only while it

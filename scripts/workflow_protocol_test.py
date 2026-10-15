@@ -3908,7 +3908,7 @@ class TestOperatorDocuments(unittest.TestCase):
 # The lifecycle end to end, by protocol only (CP6)
 # ---------------------------------------------------------------------------
 
-LIFECYCLE_CHECKPOINTS = [{"id": "C1", "depends_on": []}, {"id": "C2", "depends_on": ["C1"]}]
+LIFECYCLE_CHECKPOINTS = [{"id": "CP1", "depends_on": []}, {"id": "CP2", "depends_on": ["CP1"]}]
 _PLAN_DOC = "docs/ai-workflow/WORKFLOW_V2_PLAN.md"
 
 
@@ -4256,13 +4256,13 @@ class TestLifecycleEndToEnd2_2(unittest.TestCase):
             decision = run.drive(until="human_gate")  # the plan approval gate
             decision = run.run(decision)
             self.assertEqual((decision["row"], decision["action"]["arguments"]),
-                             ("23", {"work_item_id": WI, "checkpoint_id": "C1"}))
+                             ("23", {"work_item_id": WI, "checkpoint_id": "CP1"}))
             run.implementation_checkpoint(decision["action"]["arguments"])
             result = reconciled(self, repo, decision)
             self.assertEqual((result["class"], result["from"]["phase"], result["to"]["phase"],
                               result["evidence"]["completed_checkpoints"]),
-                             ("progress", "IMPLEMENTING", "IMPLEMENTING", ["C1"]))
-            self.assertEqual(result["next"]["action"]["arguments"]["checkpoint_id"], "C2")
+                             ("progress", "IMPLEMENTING", "IMPLEMENTING", ["CP1"]))
+            self.assertEqual(result["next"]["action"]["arguments"]["checkpoint_id"], "CP2")
 
     def test_a_gates_own_decision_is_refused_by_reconcile(self):
         with h.ScratchRepo() as repo:
@@ -5467,7 +5467,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         body, code = call("describe")
         self.assertEqual(code, wp.EXIT_OK)
         result = body["result"]
-        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.3", "2.10.0"))
+        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.3", "2.11.0"))
         caps = result["capabilities"]
         self.assertEqual(sorted(set(NEW_ACTION_IDS + NEW_1_2_ACTION_IDS) - set(caps["action_ids"])), [])
         self.assertEqual(caps["reserved_result_kinds"], [])
@@ -5477,7 +5477,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         self.assertIn("validation", caps["dispositions"])
 
     def test_the_release_constant_and_the_protocol_version(self):
-        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.10.0", "1.3", 1))
+        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.11.0", "1.3", 1))
         self.assertIn("validator", wp.WORKER_ROLES)
         self.assertEqual(wp.ACTIONS["acceptance.satisfy"]["role"], "validator")
         self.assertEqual(wp.ACTIONS["pr.apply_review"]["role"], "applier")

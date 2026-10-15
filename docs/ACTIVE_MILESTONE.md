@@ -40,5 +40,5 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-1. Move this repository to the latest Workflow (a `chore:` pull request, no release).
-2. `/milestone-plan` for C13, the next step in `docs/ROADMAP.md`'s order (C13, C14, C10, C12, C11, then O1-O7).
+`/milestone-plan` for C13, the next step in `docs/ROADMAP.md`'s order (C13, C14, C10, C12, C11, then O1-O7),
+once Workflow 2.12.0 (W8) is out and this repository has moved to it.

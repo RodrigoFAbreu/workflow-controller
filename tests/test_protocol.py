@@ -29,6 +29,7 @@ from controller.errors import (  # noqa: E402
     WorkflowReleaseChangedError,
 )
 from tests import fixtures  # noqa: E402
+from tests.test_protocol_schema import BASIS as BASIS_FOR_RECORD  # noqa: E402
 from tests.test_protocol_schema import DECISION, envelope, refusal  # noqa: E402
 
 
@@ -378,6 +379,82 @@ class TypedOperationsTest(_TargetCase):
         self.assertEqual(seen[0]["argv"][-4:], ["--decision", "/x/decision.json", "--work-item", "wi"])
         self.assertEqual((outcome.outcome, outcome.from_.phase, outcome.to), ("progress", "PLANNING", None))
         self.assertEqual(outcome.invalid_reasons, (("illegal_edge", "t"),))
+
+
+class RecordExternalResultTest(_TargetCase):
+    """The typed ``record-external-result`` wrapper (codex-reviewer CP1, R9),
+    over recorded envelopes."""
+
+    RECORDED = {"stage": "plan", "verdict": "APPROVE", "review_content_id": "c" * 64, "round": 3,
+                "bundle_id": "b" * 64, "advisory": None, "basis": BASIS_FOR_RECORD}
+
+    def answer(self, body: dict, returncode: int = 0, seen: list | None = None):
+        with self.fake(completed(body, returncode), seen):
+            return protocol.record_external_result(self.root, "wi", "plan_review_verdict",
+                                                   Path("/x/verdict.md"), run_ref="codex:job-1")
+
+    def test_an_ingested_verdict_is_a_typed_result_and_the_argv_is_exact(self) -> None:
+        seen: list = []
+        got = self.answer(envelope("record-external-result", self.RECORDED), seen=seen)
+        self.assertEqual(seen[0]["argv"][-9:], [
+            "record-external-result", "--work-item", "wi", "--kind", "plan_review_verdict",
+            "--input", "/x/verdict.md", "--run-ref", "codex:job-1"])
+        self.assertEqual((got.outcome, got.stage, got.verdict, got.round), ("recorded", "plan", "APPROVE", 3))
+        self.assertEqual((got.review_content_id, got.bundle_id, got.advisory), ("c" * 64, "b" * 64, None))
+        self.assertEqual(got.basis.phase, "PLANNING")
+        self.assertIsNone(got.refusal)
+
+    def test_a_feedback_only_row_has_null_round_and_bundle(self) -> None:
+        result = dict(self.RECORDED, round=None, bundle_id=None, advisory="Reviewed bundle ID: absent")
+        got = self.answer(envelope("record-external-result", result))
+        self.assertEqual((got.outcome, got.round, got.bundle_id, got.advisory),
+                         ("recorded", None, None, "Reviewed bundle ID: absent"))
+
+    def test_no_run_ref_is_not_passed(self) -> None:
+        seen: list = []
+        with self.fake(completed(envelope("record-external-result", self.RECORDED)), seen):
+            protocol.record_external_result(self.root, "wi", "implementation_review_verdict", Path("/x/v.md"))
+        self.assertNotIn("--run-ref", seen[0]["argv"])
+
+    def test_not_applicable_and_refused_are_answers_not_faults(self) -> None:
+        for code in ("not_applicable", "refused"):
+            with self.subTest(code=code):
+                body = refusal(code)
+                body["operation"] = "record-external-result"
+                got = self.answer(body, 3)
+                self.assertEqual((got.outcome, got.refusal.code, got.stage, got.basis), (code, code, None, None))
+
+    def test_every_other_refusal_raises(self) -> None:
+        for code, exit_code in (("stale_decision", 3), ("invalid_request", 2), ("state_unreadable", 3)):
+            with self.subTest(code=code):
+                body = refusal(code)
+                body["operation"] = "record-external-result"
+                with self.assertRaises(WorkflowProtocolRefusedError) as raised:
+                    self.answer(body, exit_code)
+                self.assertEqual(raised.exception.refusal["code"], code)
+
+    def test_a_malformed_result_is_a_protocol_failure(self) -> None:
+        bad_results = (
+            {k: v for k, v in self.RECORDED.items() if k != "basis"},
+            dict(self.RECORDED, verdict="MAYBE"),
+            dict(self.RECORDED, round="3"),
+        )
+        for result in bad_results:
+            with self.subTest(result=result):
+                with self.assertRaises(WorkflowProtocolFailedError) as raised:
+                    self.answer(envelope("record-external-result", result))
+                self.assertEqual(raised.exception.evidence["reason"], "protocol_envelope_invalid")
+
+    def test_a_result_of_another_kind_is_refused_as_malformed(self) -> None:
+        functional = {"stage": "functional", "flow_id": "f", "identity": "i", "basis": BASIS_FOR_RECORD}
+        with self.assertRaises(WorkflowProtocolFailedError):
+            self.answer(envelope("record-external-result", functional))
+
+    def test_only_the_verdict_kinds_are_accepted(self) -> None:
+        for kind in ("functional_evidence", "pr_review_result", "anything"):
+            with self.subTest(kind=kind):
+                with self.assertRaises(ValueError):
+                    protocol.record_external_result(self.root, "wi", kind, Path("/x/v"))
 
 
 class RealScriptsTest(unittest.TestCase):

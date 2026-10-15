@@ -60,10 +60,16 @@ class VendoredSchemaTest(unittest.TestCase):
         self.assertEqual(set(protocol_schema.SCHEMA.enum_at(pointer)), {"pass", "warn", "fail", "skip"})
         self.assertNotIn(pointer, protocol_schema.OPEN_ENUMS)
 
-    def test_no_controller_module_names_record_external_result(self) -> None:
+    def test_only_the_protocol_client_names_record_external_result(self) -> None:
+        # Until workflow-controller-codex-reviewer CP1 no module did; now the
+        # typed wrapper in protocol.py is the one place (obligation 8: every
+        # other module goes through it).
         for path in (REPO_ROOT / "controller").glob("*.py"):
             with self.subTest(path.name):
-                self.assertNotIn("record-external-result", path.read_text())
+                if path.name == "protocol.py":
+                    self.assertIn("record-external-result", path.read_text())
+                else:
+                    self.assertNotIn("record-external-result", path.read_text())
 
     def test_the_schema_is_packaged(self) -> None:
         text = (REPO_ROOT / "pyproject.toml").read_text()

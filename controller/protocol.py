@@ -483,13 +483,17 @@ def _answer(root: Path, operation: str, args: list[str], timeout: float | None,
             expected_digests: Mapping[str, str] | None = None) -> Envelope:
     envelope = run(root, operation, args, timeout=timeout, expected_digests=expected_digests)
     if not envelope.ok:
-        error = envelope.error
-        refusal = {"code": error.code, "message": error.message, "retryable": error.retryable,
-                   "native": error.native}
-        raise WorkflowProtocolRefusedError(
-            f"protocol {operation} was refused ({error.code}): {error.message}",
-            evidence={"reason": "protocol_refused", "operation": operation, "refusal": refusal})
+        return _answer_refused(envelope)
     return envelope
+
+
+def _answer_refused(envelope: Envelope):
+    error = envelope.error
+    refusal = {"code": error.code, "message": error.message, "retryable": error.retryable,
+               "native": error.native}
+    raise WorkflowProtocolRefusedError(
+        f"protocol {envelope.operation} was refused ({error.code}): {error.message}",
+        evidence={"reason": "protocol_refused", "operation": envelope.operation, "refusal": refusal})
 
 
 def _describe_of(result: dict) -> Describe:
@@ -533,6 +537,27 @@ def verify(root: Path, *, timeout: float | None = None,
     return Verify(result["healthy"], tuple(Check(c["id"], c["status"], c["detail"]) for c in result["checks"]))
 
 
+@dataclasses.dataclass(frozen=True)
+class Artifact:
+    """One ``resolve-artifact`` answer: ``path`` is the Workflow's own
+    resolution, relative to the repository root, ``None`` when the kind has
+    none for this item."""
+
+    kind: str
+    path: str | None
+    exists: bool
+    basis: Basis | None
+
+
+def resolve_artifact(root: Path, work_item: str, kind: str, *, timeout: float | None = None,
+                     expected_digests: Mapping[str, str] | None = None) -> Artifact:
+    """Where the Workflow keeps ``kind`` for ``work_item`` (protocol section
+    5.3): for display and hand-off to a reviewer, never to read state."""
+    result = _answer(root, "resolve-artifact", ["--work-item", work_item, "--kind", kind], timeout,
+                     expected_digests).result
+    return Artifact(result["kind"], result["path"], result["exists"], _basis(result["basis"]))
+
+
 def next_action(root: Path, work_item: str | None = None, *, expect_state_identity: str | None = None,
                 timeout: float | None = None, expected_digests: Mapping[str, str] | None = None) -> Decision:
     args: list[str] = []
@@ -555,3 +580,63 @@ def reconcile(root: Path, decision_file: Path, work_item: str | None = None, *,
         invalid_reasons=tuple((r["code"], r["text"]) for r in result["invalid_reasons"]),
         basis=_basis(result["basis"]), next=result["next"], raw=result,
     )
+
+
+#: The verdict kinds ``record-external-result`` takes as review text; the
+#: other kinds' inputs are JSON objects the Controller does not produce.
+VERDICT_KINDS = ("plan_review_verdict", "implementation_review_verdict")
+#: The refusals of ``record-external-result`` that are answers, not faults:
+#: "no row accepts this verdict here" and every other Workflow refusal.
+EXTERNAL_RESULT_OUTCOMES = ("recorded", "not_applicable", "refused")
+
+
+@dataclasses.dataclass(frozen=True)
+class ExternalResult:
+    """One ``record-external-result`` answer for a verdict kind. ``outcome``
+    is ``recorded`` (the Workflow stored it, or an identical retry was a
+    no-op), ``not_applicable`` (no row accepts the verdict at the item's
+    phase and governing version, or the stage is already recorded for the
+    current content) or ``refused`` (any other Workflow refusal, its code and
+    message in ``refusal``). The result fields are ``None`` unless
+    ``recorded``."""
+
+    outcome: str
+    stage: str | None
+    verdict: str | None
+    review_content_id: str | None
+    round: int | None
+    bundle_id: str | None
+    advisory: str | None
+    basis: Basis | None
+    refusal: Refusal | None
+    raw: dict
+
+
+def record_external_result(root: Path, work_item: str, kind: str, input_file: Path, *,
+                           run_ref: str | None = None, timeout: float | None = None,
+                           expected_digests: Mapping[str, str] | None = None) -> ExternalResult:
+    """Hand the external reviewer's verdict text in ``input_file`` to the
+    Workflow (protocol section 5.6). ``kind`` must be a verdict kind.
+    ``not_applicable`` and ``refused`` are returned, not raised: the caller
+    decides what each means. Any other refusal (``invalid_request``, a stale
+    or unreadable state, ...) raises :class:`WorkflowProtocolRefusedError`,
+    as every other operation does."""
+    if kind not in VERDICT_KINDS:
+        raise ValueError(f"record_external_result handles {VERDICT_KINDS}, not {kind!r}")
+    args = ["--work-item", work_item, "--kind", kind, "--input", str(input_file)]
+    if run_ref is not None:
+        args += ["--run-ref", run_ref]
+    envelope = run(root, "record-external-result", args, timeout=timeout, expected_digests=expected_digests)
+    if not envelope.ok:
+        error = envelope.error
+        if error.code in ("not_applicable", "refused"):
+            return ExternalResult(error.code, None, None, None, None, None, None, None, error, envelope.document)
+        return _answer_refused(envelope)
+    result = envelope.result
+    if result["stage"] not in ("plan", "implementation") or "verdict" not in result:
+        raise _failed(f"protocol record-external-result answered a {kind} with a result outside it: "
+                      f"stage {result['stage']!r}", reason="protocol_envelope_invalid",
+                      problem="not a verdict result", operation="record-external-result")
+    return ExternalResult(
+        "recorded", result["stage"], result["verdict"], result.get("review_content_id"), result.get("round"),
+        result.get("bundle_id"), result.get("advisory"), _basis(result["basis"]), None, envelope.document)

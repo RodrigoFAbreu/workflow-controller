@@ -44,7 +44,7 @@ CODE_PATHS = ("controller", "tests", "tools", "pyproject.toml", "setup.py")
 #: Executables the fixtures use; the first three are required.
 ALLOWED_TOOLS = ("git", "sh", "python3", "sleep", "timeout", "setsid", "env", "cat", "true", "false", "mkdir", "rm",
                  "cp", "mv", "ls", "touch", "ln", "head", "tail", "wc", "sort", "tee", "dirname", "basename",
-                 "date", "id", "kill", "bash", "printf", "echo", "test", "chmod", "tr", "grep", "sed", "uname")
+                 "date", "id", "kill", "bash", "printf", "echo", "test", "chmod", "tr", "grep", "sed", "uname", "tar", "gzip")
 REQUIRED_TOOLS = ("git", "sh", "python3")
 STEPS = ("user-namespace", "setup", "drop")
 KILL_DEADLINE_SECONDS = 10

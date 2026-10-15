@@ -1,0 +1,41 @@
+# Entries Codex 0.162.1 creates in a CODEX_HOME (top level; '/' = directory). Env = ENV_ALLOWLIST (env.txt).
+
+(a) mcp list, truly EMPTY home, review.argv('mcp'):            tmp/ 
+(b) features list, truly EMPTY home, review.argv('features'):  tmp/ 
+    (tmp/arg0/ holds codex-arg0XXXXXX/{.lock,apply_patch,applypatch,codex-execve-wrapper,codex-linux-sandbox} while
+     running; emptied on a clean exit, left behind after a failed one)
+(a') mcp list, Controller home (config.toml+auth.json):        auth.json config.toml tmp/ 
+(b') features list, Controller home:                          auth.json config.toml tmp/ 
+(c) exec, Controller home, PINNED review.argv (x1):            auth.json config.toml goals_1.sqlite installation_id logs_2.sqlite memories_1.sqlite models_cache.json queue_1.sqlite sessions/ skills/ state_5.sqlite thread_history_1.sqlite thread-writer-locks/ tmp/ 
+    skills/ children: skills/.system/ and skills/.system/.codex-system-skills.marker plus 5 bundled skill dirs
+    (imagegen, openai-docs, review-agent, skill-creator, skill-installer). No plugins/ entry. config.toml REWRITTEN
+    (project trust entry appended). sessions/2026/10/15/rollout-<ts>-<uuid>.jsonl written.
+(c') exec, Controller home, RECOMMENDED argv (x3):             auth.json config.toml goals_1.sqlite installation_id logs_2.sqlite memories_1.sqlite models_cache.json queue_1.sqlite sessions/ state_5.sqlite thread_history_1.sqlite thread-writer-locks/ tmp/ 
+    no skills/, no plugins/; config.toml byte-identical (sha256 f7321853...); auth.json unchanged.
+(c'') exec that failed (no credential, x4):                    config.toml goals_1.sqlite goals_1.sqlite-shm goals_1.sqlite-wal installation_id logs_2.sqlite logs_2.sqlite-shm logs_2.sqlite-wal memories_1.sqlite memories_1.sqlite-shm memories_1.sqlite-wal queue_1.sqlite queue_1.sqlite-shm queue_1.sqlite-wal sessions/ state_5.sqlite state_5.sqlite-shm state_5.sqlite-wal thread_history_1.sqlite thread_history_1.sqlite-shm thread_history_1.sqlite-wal thread-writer-locks/ tmp/ 
+    (-wal/-shm files stay after this run; after clean runs they were checkpointed away)
+(d) app-server config/read (compose), Controller home, review flags (cmp2): config.toml goals_1.sqlite goals_1.sqlite-shm goals_1.sqlite-wal installation_id logs_2.sqlite memories_1.sqlite memories_1.sqlite-shm memories_1.sqlite-wal queue_1.sqlite queue_1.sqlite-shm queue_1.sqlite-wal skills/ state_5.sqlite state_5.sqlite-shm state_5.sqlite-wal tmp/ 
+    with plugins NOT disabled (cmp1) it also wrote .tmp/git-XXXXXX/{HEAD,objects,refs} and .tmp/plugins.sync.lock
+(e) debug prompt-input (not a Controller invocation) additionally wrote .sandbox_migration
+
+Rewrites: auth.json never rewritten in any run (sha256 2546b1c9... before and after; no refresh happened, so
+whether the refresh token rotates is OPEN). config.toml rewritten ONLY by exec/thread-start with workspace-write
+and no explicit trust entry; not by mcp list, features list or config/read.
+
+## Comparison with controller/review.py
+Observed non-DB state entries (all runs, recommended argv): ['auth.json', 'installation_id', 'models_cache.json', 'sessions', 'thread-writer-locks', 'tmp']
+Observed DB entries (covered by _STATE_DB_SUFFIXES): ['goals_1.sqlite', 'logs_2.sqlite', 'memories_1.sqlite', 'queue_1.sqlite', 'state_5.sqlite', 'thread_history_1.sqlite'] + -wal/-shm
+CODEX_STATE_ENTRIES (provisional): ['.tmp', 'auth.json', 'cache', 'history.jsonl', 'installation_id', 'log', 'logs', 'models_cache.json', 'session_index.jsonl', 'sessions', 'shell_snapshots', 'thread-writer-locks', 'tmp', 'version.json']
+  in the constant but never created here: ['.tmp', 'cache', 'history.jsonl', 'log', 'logs', 'session_index.jsonl', 'shell_snapshots', 'version.json']
+  created here but missing from the constant: []
+CODEX_STARTUP_SUBENTRIES (provisional): ['plugins/.remote-plugin-install-staging', 'plugins/cache', 'skills/.codex-system-skills.marker', 'skills/.system']
+  real child paths with the pinned argv: skills/.system (dir) whose children are .codex-system-skills.marker and the
+  5 skill dirs; 'skills/.codex-system-skills.marker' does not exist (the marker is skills/.system/.codex-system-skills.marker);
+  no plugins/ entry was ever created (plugins/cache and plugins/.remote-plugin-install-staging never appeared).
+  _check_startup_subentries only checks direct children, so with the pinned argv it would pass skills/.system
+  wholesale, including the 5 skills that ARE loaded into the model context.
+  With skills.bundled.enabled=false no skills/ entry is created, so the set can be empty.
+STARTUP_LOADED: ('config.toml', 'hooks', 'hooks.json', 'rules', 'skills', 'plugins', 'prompts', 'instructions.md', 'AGENTS.md', 'AGENTS.override.md', 'managed_config.toml', 'requirements.toml')
+  no entry of it except config.toml (and skills/ with the pinned argv) appeared in any run.
+  Codex also reads <name>.config.toml for --profile (profile-v2); covered by the '*.toml' rule in check_home.
+  hooks.json in CODEX_HOME is read (string 'hooks/hooks.json' and hooks.json in the binary); covered by 'hooks*'.

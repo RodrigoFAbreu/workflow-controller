@@ -42,6 +42,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = REPO_ROOT / "build"
 
+
+def build_dir() -> Path:
+    """``BUILD_DIR``, created if a fresh checkout does not have it yet."""
+    BUILD_DIR.mkdir(exist_ok=True)
+    return BUILD_DIR
+
 #: The most a process a test starts may live when a killed test could leave
 #: it behind in a new session or group (leftover-lifetime plan D12). A new
 #: long-lived helper takes this instead of re-introducing a 3,600 s sleep.
@@ -278,6 +284,8 @@ LEFTOVER_INVENTORY = (
      "the non-detached orphan burst, waited by the fake; its gate wait is bounded as D6"),
     ("fake_claude.py", "wait", 4, "watchdog",
      "the fake's own pause, hang-until-file and record-path loops end with the fake (D2); the burst gate loop has its own deadline (D6)"),
+    ("fake_codex.py", "start:Popen", 1, "bounded",
+     "the scripted descendant of the exec behaviour: a 30 s sleep (the fake's own orphan watchdog ends its group too)"),
     ("fixtures.py", "start:run", 5, "short",
      "venv, pip and install runs the test waits for; each exits by itself"),
     ("fixtures.py", "start:run:controller", 1, "short",
@@ -316,6 +324,11 @@ LEFTOVER_INVENTORY = (
     ("test_cli.py", "start:helper:run_controller_module", 3, "short",
      "read-only follow/--workflow-manager commands that exit, waited by the test"),
     ("test_cli.py", "start:helper:spawn_sleeper", 7, "bounded", "spawn_sleeper: LEFTOVER_LIFETIME_SECONDS"),
+    ("test_review_job.py", "start:Popen", 1, "bounded",
+     "ReplayTest's Codex stand-in: a 120 s sleep in its own session carrying the ownership tag; `resume` ends its group, "
+     "and the test's cleanup kills it by exact pid"),
+    ("test_fake_codex_contract.py", "start:Popen", 1, "bounded",
+     "the intermediate launcher of the orphan test: it waits on a fake with hang_seconds 120 and orphan_seconds 1; the test kills it and ends the fake's group by exact pid"),
     ("test_fake_claude_contract.py", "start:Popen", 9, "bounded",
      "fakes (the watchdog, D2), the intermediate and launcher (a 600 s sleep), sleepers of 60 s, the bounded-starter intermediate; each test ends them by exact pid"),
     ("test_fake_claude_contract.py", "start:Popen:controller", 1, "deadline",
@@ -782,8 +795,7 @@ def run_in_child_pid_namespace(target_root: Path) -> dict:
 def scratch_git_repo(test_case: unittest.TestCase) -> Path:
     """A fresh git repository under the checkout's gitignored ``build/``,
     removed by ``test_case``'s cleanup."""
-    BUILD_DIR.mkdir(exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="cp5-lock-", dir=BUILD_DIR))
+    root = Path(tempfile.mkdtemp(prefix="cp5-lock-", dir=build_dir()))
     test_case.addCleanup(shutil.rmtree, root, True)
     from tests import fixtures
 

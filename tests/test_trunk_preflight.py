@@ -115,6 +115,14 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
     #: Table generation 5's rows, at their defaults.
     NOTIFICATIONS_KEYS = tuple(f"notifications.{name}" for name in (
         "enabled", "url", "api_key_file", "timeout_seconds", "attempts", "retry_seconds", "events"))
+    #: Table generation 6's rows, at their defaults.
+    REVIEWER_KEYS = tuple(f"reviewer.{name}" for name in (
+        "harness", "model", "effort", "timeout_seconds", "binary"))
+    #: The sentence ``WORKER_LIFECYCLE_NOTE`` gained (follow-up 24), removed
+    #: from each worker argv before the comparison.
+    NOTE_SENTENCE = (" In a background command use `command rm -f` and `command cp -f`, never plain `rm` or "
+                     "`cp`: the operator's shell may alias them to `rm -i` / `cp -i`, which wait for an "
+                     "answer nobody gives.")
 
     def test_the_golden_differs_from_the_base_only_by_the_merge_rows(self) -> None:
         data = json.loads(golden.GOLDEN_PATH.read_text())
@@ -155,7 +163,15 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 self.assertEqual(notifications, {key: settings.default_value(settings._table()[key])
                                                  if part == "values" else "file" for key in self.NOTIFICATIONS_KEYS})
                 self.assertFalse([key for key in block[part] if key.startswith("notifications.")])
-        self.assertEqual(hashlib.sha256(golden.render(data).encode("utf-8")).hexdigest(), self.BASE_SHA256)
+                reviewer = {key: block[part].pop(key) for key in self.REVIEWER_KEYS}
+                self.assertEqual(reviewer, {key: settings.default_value(settings._table()[key])
+                                            if part == "values" else "file" for key in self.REVIEWER_KEYS})
+                self.assertFalse([key for key in block[part] if key.startswith("reviewer.")])
+        rendered = golden.render(data)
+        self.assertIn(self.NOTE_SENTENCE.strip(), rendered)
+        # The note travels JSON-encoded inside the rendered golden.
+        rendered = rendered.replace(json.dumps(self.NOTE_SENTENCE)[1:-1], "")
+        self.assertEqual(hashlib.sha256(rendered.encode("utf-8")).hexdigest(), self.BASE_SHA256)
 
 
 class ProbeTest(unittest.TestCase):

@@ -70,11 +70,21 @@ scripts it reads before it runs anything, and refuses on a mismatch. Release
 
 A test keeps this table equal to the digests in the Controller's code.
 
+## Downgrading after a review job
+
+With `reviewer.harness` set, 1.10.0 writes a review job record into the runtime's `jobs` directory with job `schema_version` 2. Controller 1.9.0 and earlier refuse such a record (`unknown_schema_version`) instead of misreading it, so a runtime that holds one cannot be read by 1.9.0. If a review job is not settled, `resume` it with 1.10.0 first, then downgrade. Records written by 1.9.0 (version 1) stay readable by 1.10.0. The settings file is table generation 6; a 1.9.x Controller sharing it warns about the unknown `reviewer` section and ignores it.
+
+## Shell aliases and worker commands
+
+Since 1.10.0 a worker is told to use `command rm -f` and `command cp -f` in background commands, so an `rm -i` or `cp -i` alias in the operator's shell cannot make it wait for an answer. A script of your own that a worker runs needs the same.
+
 ## Where the design is recorded
 
 - [ADR 0006](adr/0006-workflow-release-admission-and-per-release-contracts.md):
   admission by exact release and per-release contracts.
 - [ADR 0010](adr/0010-orchestration-protocol-admission-by-capability.md):
   admission by capability.
+- [ADR 0013](adr/0013-review-only-harness-seam.md): the review-only harness
+  seam and the review job record.
 - [Moving a target to another Workflow release](update.md#move-a-repository-to-a-newer-workflow): the steps.
 - [Release history](release-history.md) and the [glossary](glossary.md).

@@ -380,6 +380,19 @@ def read_codex_home(codex_home: str | os.PathLike, *, max_files: int = CODEX_FIL
     return [merged[w] for w in WINDOWS if w in merged]
 
 
+def read_codex_homes(codex_homes: Iterable[str | os.PathLike]) -> list[dict]:
+    """:func:`read_codex_home` over several homes, merged by the D2 rule: the
+    newest observation per window wins, wherever it was recorded (the operator's
+    home, where allowance spent outside the Controller shows, and the retained
+    ``sessions/`` of earlier Controller reviews). A window whose reset has
+    passed is stale at admission, so it holds nothing. Codex provider only."""
+    merged: dict = {}
+    for home in codex_homes:
+        for reading in read_codex_home(home):
+            merged[reading["window"]] = merge_reading(merged.get(reading["window"]), reading)
+    return [merged[w] for w in WINDOWS if w in merged]
+
+
 # ---------------------------------------------------------------------------
 # The shared record
 # ---------------------------------------------------------------------------

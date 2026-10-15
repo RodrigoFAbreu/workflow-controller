@@ -1,0 +1,98 @@
+# stdout vs stderr of codex exec 0.162.1 (non --json mode, --color never)
+
+## (a) normal run (pinned argv, exit 0)
+stdout: ONLY the final agent message (also written to -o <verdict>):
+  | OK
+stderr: banner, the transcript (prompt, agent messages, every command run and its output), warnings, token total:
+  | OpenAI Codex v0.162.1
+  | --------
+  | workdir: /home/rodrigo/.cache/c7-prestep/work/tree
+  | model: gpt-6.1-sol
+  | provider: openai
+  | approval: never
+  | sandbox: workspace-write [workdir, /home/rodrigo/.cache/c7-prestep/work/homes/x1/tmp]
+  | reasoning effort: high
+  | reasoning summaries: none
+  | session id: 01a13e7f-1833-79a2-ad40-14fbf25edc5c
+  | --------
+  | user
+  | Reply with exactly the word OK and nothing else. Do not run any commands.
+  | warning: Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+  | codex
+  | OK
+  | tokens used
+  | 10,441
+
+## (a') normal run with commands (probe P2, exit 0): stderr carries command output verbatim, so file contents and
+##      command output a reviewer reads appear on stderr. Excerpt:
+  | exec
+  | /usr/bin/zsh -lc 'touch "$TMPDIR/inside-tmp-marker"' in /home/rodrigo/.cache/c7-prestep/work/tree-probe3
+  |  succeeded in 0ms:
+  | exec
+  | /usr/bin/zsh -lc 'touch ./inside-copy-marker' in /home/rodrigo/.cache/c7-prestep/work/tree-probe3
+  |  succeeded in 0ms:
+  | exec
+  | /usr/bin/zsh -lc "curl -sS -m 5 -o /dev/null -w '%{http_code}' https://example.com" in /home/rodrigo/.cache/c7-prestep/work/tree-probe3
+  |  exited 6 in 0ms:
+  | curl: (6) Could not resolve host: example.com
+  | 000
+  | codex
+
+## (b) failure (no credential in the home; exit 1; stdout EMPTY)
+  | OpenAI Codex v0.162.1
+  | --------
+  | workdir: /home/rodrigo/.cache/c7-prestep/work/tree-x4
+  | model: gpt-6.1-sol
+  | provider: openai
+  | approval: never
+  | sandbox: workspace-write [workdir, /home/rodrigo/.cache/c7-prestep/work/homes/x4/tmp]
+  | reasoning effort: high
+  | reasoning summaries: none
+  | session id: 01a13e84-a18a-74c1-a744-212f30867855
+  | --------
+  | user
+  | Reply OK.
+  | 2026-10-15T07:44:02.093090Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | 2026-10-15T07:44:02.164362Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | 2026-10-15T07:44:02.435263Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | ERROR: Reconnecting... 2/5
+  | 2026-10-15T07:44:02.913038Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | ERROR: Reconnecting... 3/5
+  | 2026-10-15T07:44:03.800247Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | ERROR: Reconnecting... 4/5
+  | 2026-10-15T07:44:05.605100Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | ERROR: Reconnecting... 5/5
+  | 2026-10-15T07:44:08.986887Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+  | warning: Falling back from WebSockets to HTTPS transport. unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: <redacted>MAD
+  | ERROR: Reconnecting... 1/5
+  | ERROR: Reconnecting... 2/5
+  | ERROR: Reconnecting... 3/5
+  | ERROR: Reconnecting... 4/5
+  | ERROR: Reconnecting... 5/5
+  | ERROR: unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: <redacted>MAD, request id: <redacted>
+  | ERROR: unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: <redacted>MAD, request id: <redacted>
+Codex's own lines: tracing lines '<RFC3339>Z ERROR codex_api::...', retry lines 'ERROR: Reconnecting... n/5',
+and the terminal error as 'ERROR: <message>' (printed twice). The same error is in the rollout's last
+event_msg task_complete: payload.error = {message, codex_error_info} (rollout_excerpt.jsonl, last line):
+  "error": {"message": "unexpected status 401 Unauthorized: ...", "codex_error_info": {"http_connection_failed": {"http_status_code": 401}}}
+
+## (c) config failure (exit 1, before any session): stderr 'Error loading config.toml: unknown configuration field ...'
+
+## Usage/rate-limit error shape (I3)
+No real limit event exists in the operator's ~/.codex: read-only grep of ~/.codex/sessions/**/rollout-*.jsonl and a
+query of a copy of ~/.codex/logs_2.sqlite (6320 rows, 2026-10-05..10-15) found no usage_limit/rate-limit error.
+Every 'rate_limit'/'429' hit in the operator rollouts is transcript text, e.g. a file read rendered as 'L429: ...'
+(rollout-2026-10-11T17-36-05-...jsonl), which is exactly the I3 false positive.
+Shape from the installed binary and its protocol schema (codex app-server generate-json-schema, v2/ServerNotification):
+  TurnError {message, codexErrorInfo, additionalDetails}; CodexErrorInfo enum (camelCase on the wire):
+    contextWindowExceeded sessionBudgetExceeded usageLimitExceeded rateLimitExceeded flexUnavailable serverOverloaded
+    cyberPolicy misalignmentPolicyViolation tooManyDenials internalServerError unauthorized badRequest
+    threadRollbackFailed sandboxError other | {httpConnectionFailed|responseStreamConnectionFailed|
+    responseStreamDisconnected|responseTooManyFailedAttempts: {httpStatusCode}}
+  In the rollout the same value is snake_case (binary strings: usage_limit_exceeded, rate_limit_exceeded;
+  observed form: task_complete.error.codex_error_info = {"http_connection_failed": {"http_status_code": 401}}).
+  token_count.rate_limits.rate_limit_reached_type (null in every capture) takes: rate_limit_reached,
+  workspace_member_credits_depleted, workspace_owner_usage_limit_reached, workspace_member_usage_limit_reached.
+  Human text in the binary: "You've hit your usage limit..." variants (Upgrade to Plus / Visit .../settings/usage /
+  send a request to your admin / for <model>. Switch to another model now).
+OPEN: no captured real limit event; the snake_case rollout spelling of usage_limit_exceeded is inferred from the binary.

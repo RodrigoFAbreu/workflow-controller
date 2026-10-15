@@ -1,0 +1,45 @@
+# Flag facts, codex-cli 0.162.1
+
+--ignore-rules
+  exec:          ACCEPTED (runs x1, x3 exit 0 with it). Help: "Do not load user or project execpolicy `.rules` files".
+  features list: REJECTED, exit 2 "error: unexpected argument '--ignore-rules' found".
+  mcp list:      REJECTED, exit 2 (same message).
+  app-server:    not offered by its help (not tried).
+--ignore-user-config  (exec only: "Do not load `$CODEX_HOME/config.toml`; auth still uses CODEX_HOME")
+  exists on exec; REJECTED by features list (exit 2). Not exercised on exec.
+--strict-config
+  exec:        accepted; an unknown -c key fails: exit 1 "Error loading config.toml: unknown configuration field
+               `no_such_key_xyz` in -c/--config override". All of review.argv's -c overrides passed under it.
+  app-server:  accepted; same failure for an unknown key ("Error: unknown configuration field ...").
+  features:    REJECTED: after the subcommand exit 2 "unexpected argument"; before it exit 1
+               "Error: `--strict-config` is not supported for `codex features`".
+  mcp:         REJECTED the same two ways ("... not supported for `codex mcp`").
+  KIND_FLAGS in review.py matches this for features/mcp, but lists --ignore-rules only for exec: correct.
+--disable <unknown name>
+  REJECTED, exit 1 "Error: Unknown feature flag: no_such_feature_xyz" (tested on `features list`; exec not tested).
+  So the disable set itself fails closed when a pinned name disappears in a later version.
+Dotted -c keys with a quoted segment: `-c projects."/abs/path".trust_level="untrusted"` is REJECTED under
+  --strict-config as an unknown field; the inline-table form `-c 'projects={"/abs/path"={trust_level="untrusted"}}'`
+  is accepted and composes to projects = {"/abs/path": {"trust_level": "untrusted"}}.
+Profiles: `-p/--profile <name>` layers $CODEX_HOME/<name>.config.toml (profile-v2). A legacy `profile = "x"` or
+  `[profiles.x]` in config.toml is a HARD ERROR: "legacy `profile = ...` config is no longer supported" (exit 1).
+
+Relocation of the system layers (/etc/codex)
+  NONE found. `codex --help`, `exec --help`, `app-server --help`, `debug --help`, `doctor --help`, `sandbox --help`
+  offer no such flag. The binary's CODEX_* environment names (full list extracted with strings) contain no config/
+  system/managed path variable; /etc/codex/config.toml, /etc/codex/managed_config.toml and /etc/codex/requirements.toml
+  are literal strings. Runtime log line: "codex_config::loader::layer_io: /etc/codex/managed_config.toml not found".
+  config/read lists the system layer as {"type":"system","file":"/etc/codex/config.toml"} with an empty config.
+  Only `codex sandbox --include-managed-config` mentions managed config (permissions profiles, unrelated).
+  /etc/codex does not exist on this host.
+
+Service tier (D10)
+  Config key service_tier is a free string (schema: ["string","null"]); unknown values are not rejected by
+  `features list` (service_tier="bogus" accepted, exit 0), so validity is not enforced at config load.
+  The protocol's own documentation (TurnStartParams.serviceTierForTurn): 'Use "default" for standard speed.'
+  The model catalog for gpt-6.1-sol lists service_tiers = [{"id":"priority","name":"Fast","description":"2x speed,
+  increased usage"}] and additional_speed_tiers = ["fast"]; feature fast_mode is disabled by the argv.
+  With -c service_tier="default": composed service_tier = "default" (origin sessionFlags) and thread/start reports
+  serviceTier = null (standard). Runs x1/x3 used it successfully. -> the non-fast value is "default"; the fast
+  tier is "priority" (UI "Fast"/"fast").
+  requirements: configRequirements/read -> {"supportsIndependentSpeedModes": true, "requirements": null}.

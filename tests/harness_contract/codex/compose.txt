@@ -1,0 +1,78 @@
+# The read-only composing command (codex-cli 0.162.1)
+
+There is no `codex config` subcommand and `codex doctor`/`codex debug` do not print per-key sources. The command that
+composes every layer and prints the effective values WITH their source layer is the app-server JSON-RPC method
+`config/read` with `includeLayers: true`, over stdio, after `initialize`:
+
+  <binary> app-server --strict-config <the same -c/--disable overrides as the exec> --listen stdio://
+  stdin:  {"id":1,"method":"initialize","params":{"clientInfo":{"name":"c7-prestep","version":"0"}}}
+          {"method":"initialized"}
+          {"id":2,"method":"config/read","params":{"includeLayers":true,"cwd":"<copy>"}}
+          {"id":3,"method":"configRequirements/read"}
+  then close stdin (the server exits 0).
+  Response: result.config (every key, defaults included), result.origins (LEAF dotted key -> {name: ConfigLayerSource,
+  version: sha256}), result.layers ([{name, version, config, disabledReason}], highest precedence first).
+
+Flags this invocation kind accepts: -c, --enable, --disable, --strict-config (accepted; an unknown -c key fails), --listen.
+It does NOT accept --ignore-rules, -s, -C, -m, -p is not offered. Run it with the same env and the same minimal home.
+No auth is needed (it ran in a home without auth.json).
+
+Does not start anything: with CODEX_HOME pointing at a hostile home (an MCP server, a SessionStart hook, top-level notify
+and a custom provider, every command a marker script that writes outside the copy and opens a connection), config/read
+reported all of them with source "user" and NO marker was written (sandbox_probe.txt C1). It does write Codex state into
+the home (installation_id, *.sqlite state DBs, tmp/; skills/.system/ unless skills.bundled.enabled=false; .tmp/git-*
+and .tmp/plugins.sync.lock when the plugins feature is on) and sends one remoteControl/status notification (disabled).
+
+ConfigLayerSource variants in the schema (v2/ConfigReadResponse.json): packagedDefaults{file}, mdm{domain,key} (macOS
+only), system{file} (/etc/codex/config.toml), enterpriseManaged{id,name}, user{file,profile}, project{dotCodexFolder},
+sessionFlags (-c/--disable), legacyManagedConfigTomlFromFile{file} (/etc/codex/managed_config.toml),
+legacyManagedConfigTomlFromMdm. requirements.toml is not a config layer: it is read by configRequirements/read
+(result here: {"supportsIndependentSpeedModes": true, "requirements": null}).
+
+Packaged defaults are NOT listed as a layer and have no origin, but they set values: chatgpt_base_url =
+"https://chatgpt.com/backend-api/", project_root_markers = [".git"], cli_auth_credentials_store="file",
+mcp_oauth_credentials_store="auto", history.persistence="save-all", include_*_instructions=true, ... (embedded text
+"# Fixed defaults for packaged Codex clients." in the binary). A values-only check of FORBIDDEN_EFFECTIVE_KEYS would
+therefore refuse every launch on chatgpt_base_url; the check must use origins (a key is "set" when some layer other than
+the packaged defaults is its origin) or allow the packaged default value.
+Empty arrays/tables (notify=[], mcp_servers={}) have no origin entry; arrays get per-index origins (notify.0, ...).
+
+## Sample: recommended overrides, Controller minimal home, cwd = the copy (abbreviated)
+argv: ["app-server", "--strict-config", "--disable", "apps", "--disable", "browser_annotation_api", "--disable", "browser_use", "--disable", "browser_use_external", "--disable", "browser_use_full_cdp_access", "--disable", "computer_use", "--disable", "daemon_auto_start", "--disable", "fast_mode", "--disable", "goals", "--disable", "guardian_approval", "--disable", "guardian_reuse_parent_compaction", "-- ...
+layers: [{"name": {"type": "sessionFlags"}, "disabledReason": null, "config_keys": ["approval_policy", "features", "model", "model_provider", "model_reasoning_effort", "notify", "project_root_markers", "projects", "sandbox_mode", "sandbox_workspace_write", "service_tier", "skills", "web_search"]}, {"name": {"type": "user", "file": "/home/rodrigo/.cache/c7-prestep/work/homes/cmp3/codex-home/config.toml", "profile": null}, "disabledReason": null, "config_keys": ["model_provider", "project_root_markers"]}, {"name": {"type": "system", "file": "/etc/codex/config.toml"}, "disabledReason": null, "config_keys": []}]
+  config.model = "gpt-6.1-sol"
+  config.model_provider = "openai"
+  config.model_reasoning_effort = "high"
+  config.service_tier = "default"
+  config.approval_policy = "never"
+  config.sandbox_mode = "workspace-write"
+  config.sandbox_workspace_write = {"writable_roots": ["/home/rodrigo/.cache/c7-prestep/work/homes/cmp3/tmp"], "network_access": false, "exclude_tmpdir_env_var": true, "exclude_slash_tmp": true}
+  config.web_search = "disabled"
+  config.notify = []
+  config.mcp_servers = {}
+  config.hooks = null
+  config.profiles = {}
+  config.profile = null
+  config.model_providers = {}
+  config.openai_base_url = null
+  config.chatgpt_base_url = "https://chatgpt.com/backend-api/"
+  config.auto_review = null
+  config.permissions = null
+  config.default_permissions = null
+  config.project_root_markers = [".git"]
+  config.projects = {"/home/rodrigo/.cache/c7-prestep/work/tree": {"trust_level": "untrusted"}}
+  config.skills = {"bundled": {"enabled": false}}
+  origins (sample): {"projects./home/rodrigo/.cache/c7-prestep/work/tree.trust_level": {"type": "sessionFlags"}, "project_root_markers.0": {"type": "sessionFlags"}, "sandbox_mode": {"type": "sessionFlags"}, "sandbox_workspace_write.exclude_slash_tmp": {"type": "sessionFlags"}, "service_tier": {"type": "sessionFlags"}, "model": {"type": "sessionFlags"}, "model_reasoning_effort": {"type": "sessionFlags"}, "sandbox_workspace_write.network_access": {"type": "sessionFlags"}, "sandbox_workspace_write.exclude_tmpdir_env_var": {"type": "sessionFlags"}, "approval_policy": {"type": "sessionFlags"}, "sandbox_workspace_write.writable_roots.0": {"type": "sessionFlags"}, "model_provider": {"type": "sessionFlags"}, "skills.bundled.enabled": {"type": "sessionFlags"}, "web_search": {"type": "sessionFlags"}}
+
+## Sample: hostile user home (CODEX_HOME = a seeded operator home) with -c notify=[] -c mcp_servers={} --disable hooks
+  model_provider = "evil" origin {"type": "user", "file": "/home/rodrigo/.cache/c7-prestep/work/homes/hB2/codex-home/config.toml", "profile": null}
+  notify = [] (override honoured)
+  mcp_servers = ['zz_operator_added_later'] (-c mcp_servers={} MERGES: the inherited server survives)
+  origins: {"mcp_servers.zz_operator_added_later.args.0": "user", "model_provider": "user", "notify.0": "user", "mcp_servers.zz_operator_added_later.command": "user", "model_providers.evil.base_url": "user", "hooks.SessionStart.0.hooks.0.type": "user", "model_providers.evil.name": "user", "hooks.SessionStart.0.hooks.0.command": "user", "notify.1": "user"}
+
+## Sample: minimal home + hostile $HOME/.codex + untrusted project .codex/ in the copy
+  layer {"type": "sessionFlags"} disabledReason: null
+  layer {"type": "project", "dotCodexFolder": "/home/rodrigo/.cache/c7-prestep/work/tree-probe/.codex"} disabledReason: "To load project-local config, hooks, and exec policies, add /home/rodrigo/.cache/c7-prestep/work/tree-probe as a trusted project in /home/rodrigo/.cache/c7-prestep/work/homes/hA/codex-home/config.toml."
+  layer {"type": "user", "file": "/home/rodrigo/.cache/c7-prestep/work/homes/hA/codex-home/config.toml", "profile": null} disabledReason: null
+  layer {"type": "system", "file": "/etc/codex/config.toml"} disabledReason: null
+  ($HOME/.codex is not a layer at all: only CODEX_HOME/config.toml is the user layer.)

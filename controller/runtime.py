@@ -405,3 +405,129 @@ def write_settings_atomically(path: str | os.PathLike, obj: dict) -> Path:
     :func:`settings_lock`."""
     target = settings_target(path)
     return write_json(target.parent, target.name, obj)
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-codex-reviewer CP2 -- the review harness's tree, home
+# and credential primitives. They live here because this module is the one
+# the write-containment scan exempts; every one is containment-checked
+# against a root the caller names, except :func:`replace_external_file`,
+# whose single purpose is the operator-owned credential file.
+# ---------------------------------------------------------------------------
+
+
+def copy_tree(root: Path, src: Path, dst_rel: str | os.PathLike, *, skip) -> Path:
+    """Copy the directory ``src`` to ``<root>/<dst_rel>``. ``skip(rel, is_dir)``
+    is called with each entry's ``/``-separated path relative to ``src`` and
+    drops it (a directory with its whole subtree) when true. Regular files keep
+    their permission bits, symbolic links are copied as links (never followed),
+    and anything else (a FIFO, a socket, a device) is left out."""
+    dst = root / dst_rel
+    _assert_contained(root, dst)
+    dst = dst.resolve()
+    dst.mkdir(parents=True, exist_ok=True)
+
+    def walk(directory: Path, rel: str) -> None:
+        with os.scandir(directory) as entries:
+            listing = sorted(entries, key=lambda e: e.name)
+        for entry in listing:
+            child_rel = f"{rel}/{entry.name}" if rel else entry.name
+            is_link = entry.is_symlink()
+            is_dir = entry.is_dir(follow_symlinks=False)
+            if skip(child_rel, is_dir):
+                continue
+            target = dst / child_rel
+            if is_link:
+                os.symlink(os.readlink(entry.path), target)
+            elif is_dir:
+                target.mkdir(mode=0o700)
+                walk(Path(entry.path), child_rel)
+                os.chmod(target, entry.stat(follow_symlinks=False).st_mode & 0o7777)
+            elif entry.is_file(follow_symlinks=False):
+                with open(entry.path, "rb") as source:
+                    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(fd, "wb") as out:
+                        while True:
+                            block = source.read(1 << 20)
+                            if not block:
+                                break
+                            out.write(block)
+                os.chmod(target, entry.stat(follow_symlinks=False).st_mode & 0o7777)
+
+    walk(src, "")
+    return dst
+
+
+def remove_tree(root: Path, rel_path: str | os.PathLike, *, keep: tuple[str, ...] = ()) -> None:
+    """Remove ``<root>/<rel_path>`` (a file, a link, or a directory with its
+    whole subtree), containment-checked and never following a symbolic link.
+    ``keep`` names top-level children of a directory that stay (the review
+    job's retained ``sessions/``); the directory itself then stays too. A path
+    that is already gone is not an error. Directory modes are made writable on
+    the way down, so a read-only subtree does not stop the removal."""
+    target = root / rel_path
+    _assert_contained(root, target)
+    parent = target.parent.resolve()
+    target = parent / target.name
+    _assert_contained(root, target)
+
+    def clear(path: Path, top: bool) -> None:
+        try:
+            info = os.lstat(path)
+        except FileNotFoundError:
+            return
+        if not os.path.isdir(path) or os.path.islink(path):
+            os.unlink(path)
+            return
+        os.chmod(path, info.st_mode | 0o700)
+        with os.scandir(path) as entries:
+            names = [e.name for e in entries]
+        for name in names:
+            if top and name in keep:
+                continue
+            clear(path / name, False)
+        if not (top and keep):
+            os.rmdir(path)
+
+    clear(target, True)
+
+
+def write_private_bytes(root: Path, rel_path: str | os.PathLike, data: bytes) -> Path:
+    """Atomically write ``data`` to ``<root>/<rel_path>`` with mode ``0o600``
+    (a credential copy or a Codex configuration file), containment-checked,
+    ``fsync``ed, and renamed into place."""
+    full_path = root / rel_path
+    _assert_contained(root, full_path)
+    full_path = full_path.resolve()
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = full_path.parent / f".{full_path.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, full_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return full_path
+
+
+def replace_external_file(target: Path, data: bytes, *, mode: int) -> None:
+    """Atomically replace one operator-owned file (the Codex credential file)
+    with ``data``: a temporary file with ``mode`` in the same directory,
+    ``fsync``ed and renamed over ``target``. Not containment-checked, because
+    its one caller (``controller.review``'s credential copy-back) owns the
+    check that the file is the operator's own and unchanged since the
+    capture. The target's directory must already exist."""
+    tmp_path = target.parent / f".{target.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp_path, mode)
+        os.replace(tmp_path, target)
+    finally:
+        tmp_path.unlink(missing_ok=True)

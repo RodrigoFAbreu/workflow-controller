@@ -14,7 +14,7 @@ from pathlib import Path
 
 SCENARIOS_DIR = Path(__file__).resolve().parent
 #: Registration order: ``features`` imports ``lifecycle`` first, so scenarios 1-5 register before 6-10.
-CATALOGUE_MODULES = ("lifecycle", "features")
+CATALOGUE_MODULES = ("lifecycle", "features", "review")
 
 
 def _is_scenario_call(node: ast.AST) -> bool:

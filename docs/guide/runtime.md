@@ -213,6 +213,11 @@ file is never an error: every setting then takes its built-in default.
 | `notifications.attempts` | integer | `3` | 1 to 10 | none |
 | `notifications.retry_seconds` | integer | `2` | 1 to 60 | none |
 | `notifications.events` | object | `{"kinds": {}, "events": {}}` | see [The notifications section](#the-notifications-section) | none |
+| `reviewer.harness` | string or `null` | `null` (no reviewer) | 1 to 64 characters | none |
+| `reviewer.model` | string or `null` | `null` (built-in `gpt-6.1-sol`) | 1 to 128 characters | none |
+| `reviewer.effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
+| `reviewer.timeout_seconds` | integer | `3600` | 60 to 86400 | none |
+| `reviewer.binary` | string or `null` | `null` (built-in `codex`) | a name or path, 1 to 1024 characters | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
 
 Each default is the value the Controller used before the file existed,
@@ -271,6 +276,27 @@ the shared record holds is in
 `17` ([exit codes](../exit-codes.md)), and the operator's view is
 [`usage`](commands.md#usage).
 
+The five `reviewer` rows (1.10.0) let the Controller run the cross-model
+review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
+
+- `reviewer.harness` is unset by default, and then every review gate stops
+  for a person exactly as before. Setting it to a registered name (only
+  `codex` exists) makes `step` and `run` start that reviewer at the two
+  external review gates of a work item, in a disposable copy of the
+  worktree, and hand its verdict to the Workflow. A name that is not
+  registered stops the review step with exit `20`; it is never ignored.
+  The `codex` harness was pinned against `codex-cli 0.162.1` (ADR 0013,
+  "What the pre-step fixed"); a different Codex version that renames a
+  feature, a configuration layer or a state entry stops the launch with the
+  name, until the pinned set is updated;
+- `reviewer.model` and `reviewer.effort` fall back to the built-ins when
+  unset. They are not the worker `routing` section, which does not apply
+  to a review;
+- `reviewer.timeout_seconds` is the hard deadline of one review run. A
+  review that passes it ends `INCOMPLETE` (exit `35`);
+- `reviewer.binary` is the reviewer program (a name looked up on `PATH`,
+  or a path), the test seam like `--claude-binary`.
+
 The seven `notifications` rows (1.9.0) make the Controller a SignalHub
 producer (see [ADR 0012](../adr/0012-signalhub-notifications.md) and
 [unattended runs](automation.md#notifications-from-an-unattended-run)):
@@ -300,11 +326,12 @@ entries are shortened):
 ```json
 {
   "_defaults_written": {"merge.auto": {"generation": 2, "value": true}, "...": "..."},
-  "_table_generation": 5,
+  "_table_generation": 6,
   "follow": {"heartbeat_seconds": 30, "replay_events": 20},
   "forge": {"pr_list_limit": 200},
   "merge": {"auto": true, "poll_seconds": 30, "wait_seconds": 3600},
   "notifications": {"enabled": true, "url": null, "events": {"kinds": {}, "events": {}}, "...": "..."},
+  "reviewer": {"harness": null, "model": null, "...": "..."},
   "routing": {"default": {}, "roles": {}},
   "run": {"max_steps": 20},
   "schema_version": 1,
@@ -373,6 +400,11 @@ its `settings clean` refuses.
 file filled by 1.8.x, and moves nothing else. A 1.8.x Controller sharing
 the file afterwards warns about the unknown `notifications` section,
 ignores it, and its `settings clean` refuses.
+
+1.10.0 is table generation 6: it adds the five `reviewer` rows to a file
+filled by 1.9.x, and moves nothing else. A 1.9.x Controller sharing the
+file afterwards warns about the unknown `reviewer` section, ignores it, and
+its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

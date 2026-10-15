@@ -2,55 +2,45 @@
 
 ## Status
 
-**Complete.** `workflow-controller-automated-lifecycle-scenarios` (`docs/ROADMAP.md` step C6, section 11.5)
-reached `MILESTONE_COMPLETE` on 2026-10-12. Whole lifecycle paths now run as automated scenarios: ten scenarios
-(fifteen flows, the kill-and-resume path having six variants) build disposable repositories with a scratch origin
-and fake `claude`, `gh`, `workflow-manager` and SignalHub, run inside a namespace sandbox with no model usage, and
-write `functional_evidence` records through `tools/run_scenarios.py` (`list`, `run`, `check`). Each scenario has a
-mutation check (`tests/test_scenarios_negative.py`), and the CI `tests` job lifts the runner's AppArmor
-restriction on unprivileged user namespaces so the scenario atoms run there fully protected. `controller/` is
-byte-unchanged. The milestone is a `test:` change and releases nothing.
+**Complete.** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7, the smallest slice of section 5)
+reached `MILESTONE_COMPLETE` on 2026-10-15. The Controller can now run the cross-model external review itself. With
+`reviewer.harness` set to `codex`, a run that reaches a manual external review gate starts a review job: a Codex
+reviewer works in a disposable copy behind an enforced launch boundary, passes the usage gate, and its verdict is
+ingested through the Workflow. With `reviewer.harness` unset, the gate stops as before. ADR
+`docs/adr/0013-review-only-harness-seam.md` records the design and the Workflow side's answer on workflow#28 (*yes,
+with five conditions*). The `codex` harness is registered since the operator recorded the D12 pre-step on
+2026-10-15. The milestone ships as the minor release **1.10.0** when its `feat:` pull request merges.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1
-(implementation revision 8), checked against evidence commit `cdf8870`, passed every flow (flow-1 to flow-11,
-flow 7 partly by kit tests and code reading) with no findings. An independent tester on
-`anthropic/claude-sonnet-5-5` ran the flows.
-- Plan revision 10 (amendment 0, requested by the user: run the scenarios fully protected on CI) was approved by
-  policy at `191eaac`. The base commit is `651f7da`.
-- Technical approval `90706ee` was recorded by policy and is `CURRENT`: review content id `60430a8a`,
-  reviewed implementation head `2597dee`.
-- The Workflow's own GitHub query found pull request #43 at head `cdf8870` with every check passing (CI run
-  38317047808, Workflow conformance, PR title) and no standing objection.
+acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1 (an
+independent Codex tester on `openai/gpt-6.1-sol`, plus one real Codex review by the operator) passed flows 1-9 and
+found two Optional documentation issues in flow 10, fixed by a bounded fix and re-tested in round 2. Round 3 (CI on
+pull request #45) found one Important defect: 53 new tests assumed the git-ignored `build/` directory existed. The
+bounded fix `2a427e1` creates it. Round 4 (implementation revision 9), checked against evidence commit `265e48b`,
+passed every flow (flow-1 to flow-10).
+- Plan revision 15 was approved by policy at `3d304d3`. The base commit is `dea2125`.
+- Technical approval `8f447fc` was recorded by policy and is `CURRENT`: review content id `fa4ee49c`,
+  reviewed implementation head `771496e`.
+- The Workflow's own GitHub query found pull request #45 at head `265e48b` with every check passing and no
+  standing objection.
 
-All registry checkpoints (CP1-CP6) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, including its eleven `functional_evidence` records and its
-`acceptance_satisfaction` evidence, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C6
+All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
+ground-truth record of this transition, including its ten `functional_evidence` records and its
+`acceptance_satisfaction` evidence, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C7
 complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-automated-lifecycle-scenarios.md`.
+`docs/milestones/completed/workflow-controller-codex-reviewer.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Merge.** Pull request #43, titled `test: run whole lifecycle paths as scenarios that produce functional
-  evidence`, is merged once every check passes; it releases nothing.
-- **The `job-before` oracle deviation.** A kill before the job record that names a spawned worker leaves a
-  stdin anchor that `resume` cannot reconcile (exit 45) until the scenario ends the anchor; the approved
-  plan's oracle for that variant does not hold, and no plan amendment was made.
-- **Codex optional findings** (see
-  `.ai-review/archive/workflow-controller-automated-lifecycle-scenarios/external-implementation-review-rev8-APPROVE.md`
-  and the earlier rounds): O2 (`$WORKFLOW_CONTROLLER_SETTINGS` and some missing locations lack mount
-  protection), O4 (the namespace watchdog permits `timeout + 15`; degraded workers lack an independent deadline
-  after parent death), O6 (most negative checks accept generic assertion failures), O7 (registry tests import
-  selftest scenario code on the host), O8 (ignored inputs, special Git index flags and external
-  committed-symlink targets can evade provenance checks), O9 (flow id `index` collides with `index.json`) and
-  O10 (configured Git clean filters can run during dirty checks).
-- **Optional self-review items not applied:** extra pipe copies in `pass_fds`, unlisted real locations under a
-  system directory, two small error-path leaks, stale records left in a reused `--output`, and the
-  Git-metadata test's loose `update-ref` check.
-- **Known limitations kept out of scope:** a mid-job usage limit is not covered by a scenario (admission only;
-  C8b), and the two Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally
-  and are unrelated.
+- **Merge and release.** Pull request #45, titled `feat: run the cross-model review with a Codex reviewer the
+  Controller starts`, is merged once every check passes; `main.yml` then releases 1.10.0.
+  `docs/release-history.md` and `docs/releases/1.10.0.md` are written after the release.
+- **workflow#28 stays open** until its protocol paragraph ships in W8 (Workflow 2.12.0).
+- **Known limitations kept out of scope:** only Codex is registered (other harnesses are refused); a reviewer
+  may spawn a sub-agent, which the job record names with its tokens; the two Git 2.56 trailer tests
+  (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
+  `plan_stage_decisions` golden differs on the base commit as well.
 
 ## Next action
 
-1. Pull request #43 merges (a `test:` pull request, no release).
-2. `/milestone-plan` for C7, the next step in `docs/ROADMAP.md`'s order (C7, C10, C12, C11, then O1-O7).
+1. Pull request #45 merges (a `feat:` pull request, releasing 1.10.0).
+2. `/milestone-plan` for C10, the next step in `docs/ROADMAP.md`'s order (C10, C12, C11, then O1-O7).

@@ -121,24 +121,17 @@ class World:
         binary = Path(kw["binary_name"])
         layout = review.JobLayout(kw["runtime_root"], kw["job_id"])
         return self.real_launch(**{**kw, "system_dir": self.system, "inherited_env": dict(RESERVED_ENV),
-                                   "compose": self.composer(binary, layout)})
+                                   "compose": self.composer(binary, layout, kw["model"], kw["effort"])})
 
-    def composer(self, binary: Path, layout):
+    def composer(self, binary: Path, layout, model: str = "gpt-6.1-sol", effort: str = "high"):
+        """The production composing command (``review.compose_config``, the fake's ``app-server`` mode), after the
+        interactive login the scenario may stage while a review runs."""
         from controller import review
 
         def compose(env):
             if self.change_operator_during_launch:  # an interactive login while the review runs
                 self.auth.write_text(json.dumps({"tokens": {"refresh_token": "interactive"}}))
-            pinned = review.argv("exec", binary=binary, tree=layout.tree, verdict=layout.verdict, tmpdir=layout.tmp,
-                                 prompt="-")
-            overrides = [item for i, item in enumerate(pinned) if i and pinned[i - 1] == "-c"]
-            command = [str(binary), "debug", "config", "-C", str(layout.tree)]
-            for item in overrides:
-                command += ["-c", item]
-            result = review.run_bounded(command, cwd=layout.tree, env=env, timeout=30)
-            if result.exit_code != 0:
-                raise ScenarioFailure(f"the fake's composing command failed: {result.stderr!r}")
-            return json.loads(result.stdout)
+            return review.compose_config(binary, layout, env, model=model, effort=effort, timeout=30)
         return compose
 
     def run(self, command: str = "run", *extra: str):
@@ -235,6 +228,12 @@ class World:
             patch(review, "check_argv", noop)
         elif name == "provider-pin-dropped":
             patch(review, "argv", without(("model_provider=",)))
+            patch(review, "check_argv", noop)
+        elif name == "trust-pin-dropped":
+            patch(review, "argv", without(("projects=",)))
+            patch(review, "check_argv", noop)
+        elif name == "skills-pin-dropped":
+            patch(review, "argv", without(("skills.bundled.enabled=",)))
             patch(review, "check_argv", noop)
         elif name == "features-not-disabled":
             patch(review, "DISABLED_FEATURES", ())

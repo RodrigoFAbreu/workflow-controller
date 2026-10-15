@@ -21,7 +21,8 @@ from controller import review, runtime  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import fake_codex, fixtures, process_fixtures  # noqa: E402
 
-FEATURES_CAPTURE = REPO_ROOT / "tests" / "harness_contract" / "codex" / "features_list.0.162.1.txt"
+CODEX_CAPTURES = REPO_ROOT / "tests" / "harness_contract" / "codex"
+FEATURES_CAPTURE = CODEX_CAPTURES / "features_list.0.162.1.txt"
 
 MANIFEST = {
     "bundle_id": "b" * 64, "base_commit": "c" * 40, "work_item_id": "item-1", "review_content_id": "d" * 64,
@@ -108,11 +109,12 @@ class VerifyVerdictTest(unittest.TestCase):
 
 
 class RegistryAndContractTest(unittest.TestCase):
-    def test_the_harness_is_unregistered_until_the_pre_step_is_recorded(self):
-        self.assertFalse(review.PRE_STEP_CAPTURED)
-        self.assertEqual(review.HARNESSES, {})
+    def test_the_harness_is_registered_since_the_pre_step_was_recorded(self):
+        self.assertTrue(review.PRE_STEP_CAPTURED)
+        self.assertEqual(sorted(review.HARNESSES), ["codex"])
+        self.assertIs(review.harness("codex"), review.CODEX)
         with self.assertRaises(ReviewLaunchRefusedError):
-            review.harness("codex")
+            review.harness("other")
 
     def test_the_capture_is_in_the_repository(self):
         self.assertTrue(FEATURES_CAPTURE.is_file())
@@ -147,50 +149,116 @@ class RegistryAndContractTest(unittest.TestCase):
         with self.assertRaises(ReviewLaunchRefusedError):
             review.check_features(FEATURES_CAPTURE.read_text())
 
+    KW = dict(tree=Path("/t"), verdict=Path("/v.md"), tmpdir=Path("/m"))
+
+    def exec_argv(self):
+        return review.argv("exec", binary=Path("/x/codex"), **self.KW)
+
+    def check(self, kind, command, **extra):
+        review.check_argv(kind, command, **{**self.KW, **extra})
+
     def test_the_command_line_carries_the_pinned_set(self):
         binary = Path("/x/codex")
-        exec_argv = review.argv("exec", binary=binary, tree=Path("/t"), verdict=Path("/v.md"), tmpdir=Path("/tmpd"))
-        review.check_argv("exec", exec_argv)
-        for expected in ('model="gpt-6.1-sol"', 'model_reasoning_effort="high"', 'approval_policy="never"',
-                         "sandbox_workspace_write.network_access=false", "notify=[]", 'web_search="disabled"',
-                         'model_provider="openai"', 'project_root_markers=[".git"]',
-                         'sandbox_workspace_write.writable_roots=["/tmpd"]',
-                         "sandbox_workspace_write.exclude_slash_tmp=true"):
+        exec_argv = review.argv("exec", binary=binary, **self.KW)
+        self.check("exec", exec_argv)
+        for expected in ('model="gpt-6.1-sol"', 'model_reasoning_effort="high"', 'service_tier="default"',
+                         'approval_policy="never"', "sandbox_workspace_write.network_access=false", "notify=[]",
+                         'web_search="disabled"', 'model_provider="openai"', 'project_root_markers=[".git"]',
+                         'sandbox_workspace_write.writable_roots=["/m"]',
+                         "sandbox_workspace_write.exclude_slash_tmp=true",
+                         "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+                         'projects={"/t"={trust_level="untrusted"}}', "skills.bundled.enabled=false"):
             self.assertIn(expected, exec_argv)
         self.assertIn("--strict-config", exec_argv)
         self.assertIn("--ignore-rules", exec_argv)
         self.assertEqual(exec_argv[exec_argv.index("-s") + 1], "workspace-write")
         self.assertNotIn("--approve-for-me", exec_argv)
         self.assertNotIn("--ephemeral", exec_argv)
+        self.assertNotIn("code_mode_host", exec_argv)       # the reviewer's only tool path, so allowed
         for kind in ("features", "mcp"):
             other = review.argv(kind, binary=binary)
             review.check_argv(kind, other)
             self.assertNotIn("--strict-config", other)
             self.assertNotIn("-s", other)
+        composing = review.argv("app-server", binary=binary, **self.KW)
+        self.check("app-server", composing)
+        self.assertEqual(composing[1], "app-server")
+        self.assertEqual(composing[-2:], ["--listen", "stdio://"])
+        self.assertIn("--strict-config", composing)
+        self.assertEqual([i for i in composing if i in ("-s", "-C", "-o", "--ignore-rules")], [])
+        # the composing command carries the exec's own overrides
+        overrides = lambda command: [command[i + 1] for i, a in enumerate(command[:-1]) if a == "-c"]  # noqa: E731
+        self.assertEqual(overrides(composing), overrides(exec_argv))
 
     def test_a_launch_missing_any_pinned_item_is_refused(self):
-        base = review.argv("exec", binary=Path("/x/codex"), tree=Path("/t"), verdict=Path("/v.md"), tmpdir=Path("/m"))
+        base = self.exec_argv()
         for feature in review.DISABLED_FEATURES:
             command = list(base)
             at = command.index(feature) - 1
             del command[at:at + 2]
             with self.subTest(feature=feature), self.assertRaises(ReviewLaunchRefusedError):
-                review.check_argv("exec", command)
-        for item in review.required_overrides("exec"):
+                self.check("exec", command)
+        for kind in ("exec", "app-server"):
+            full = review.argv(kind, binary=Path("/x/codex"), **self.KW)
+            for item in review.required_overrides(kind, tmpdir=Path("/m"), tree=Path("/t")):
+                command = list(full)
+                at = command.index(item) - 1
+                del command[at:at + 2]
+                with self.subTest(kind=kind, override=item), self.assertRaises(ReviewLaunchRefusedError) as raised:
+                    self.check(kind, command)
+                self.assertEqual(raised.exception.evidence["entry"], item)
+
+    def test_the_required_set_names_model_effort_tier_tmpdir_trust_and_skills(self):
+        required = review.required_overrides("exec", model="m1", effort="low", tmpdir=Path("/m"), tree=Path("/t"))
+        for key in ("model=", "model_reasoning_effort=", "service_tier=", "sandbox_workspace_write.writable_roots=",
+                    "sandbox_workspace_write.exclude_slash_tmp=", "sandbox_workspace_write.exclude_tmpdir_env_var=",
+                    "projects=", "skills.bundled.enabled="):
+            self.assertTrue(any(item.startswith(key) for item in required), key)
+        self.assertIn('model="m1"', required)
+        # a different model or tmpdir than the launch's is a missing override
+        for wrong in ({"model": "other"}, {"effort": "low"}, {"tmpdir": Path("/other")}, {"tree": Path("/elsewhere")}):
+            with self.subTest(wrong=wrong), self.assertRaises(ReviewLaunchRefusedError):
+                self.check("exec", self.exec_argv(), **wrong)
+
+    def test_an_unpinned_or_duplicate_override_and_a_disabled_code_mode_host_refuse(self):
+        base = self.exec_argv()
+        for extra in (['approval_policy="on-request"'], ["mcp_servers={}"], ['model="other"']):
+            with self.subTest(extra=extra), self.assertRaises(ReviewLaunchRefusedError):
+                self.check("exec", [*base[:1], "-c", extra[0], *base[1:]])
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            self.check("exec", [*base[:2], "--disable", "code_mode_host", *base[2:]])
+        self.assertEqual(raised.exception.evidence["entry"], "code_mode_host")
+
+    def test_each_exec_flag_is_required(self):
+        base = self.exec_argv()
+        for flag, takes_value in (("--ignore-rules", False), ("-C", True), ("-o", True), ("--strict-config", False),
+                                  ("-s", True), ("--color", True)):
             command = list(base)
-            at = command.index(item) - 1
-            del command[at:at + 2]
-            with self.subTest(override=item), self.assertRaises(ReviewLaunchRefusedError):
-                review.check_argv("exec", command)
+            at = command.index(flag)
+            del command[at:at + (2 if takes_value else 1)]
+            with self.subTest(flag=flag), self.assertRaises(ReviewLaunchRefusedError) as raised:
+                self.check("exec", command)
+            self.assertEqual(raised.exception.evidence["entry"], flag)
+        for flag, wrong in (("-C", "/elsewhere"), ("-o", "/elsewhere.md"), ("--color", "always"), ("-s", "danger-full-access")):
+            command = list(base)
+            command[command.index(flag) + 1] = wrong
+            with self.subTest(flag=flag, wrong=wrong), self.assertRaises(ReviewLaunchRefusedError):
+                self.check("exec", command)
         for extra in (["-p", "ops"], ["--approve-for-me"], ["--add-dir", "/"], ["--profile", "x"]):
             with self.subTest(extra=extra), self.assertRaises(ReviewLaunchRefusedError):
-                review.check_argv("exec", [*base, *extra])
+                self.check("exec", [*base, *extra])
         with self.assertRaises(ReviewLaunchRefusedError):
             review.check_argv("features", [*review.argv("features", binary=Path("/x")), "--strict-config"])
-        without_sandbox = list(base)
-        without_sandbox[without_sandbox.index("-s") + 1] = "danger-full-access"
-        with self.assertRaises(ReviewLaunchRefusedError):
-            review.check_argv("exec", without_sandbox)
+
+    def test_the_composing_command_requires_stdio_and_strict_config(self):
+        base = review.argv("app-server", binary=Path("/x/codex"), **self.KW)
+        for flag, takes_value in (("--strict-config", False), ("--listen", True)):
+            command = list(base)
+            at = command.index(flag)
+            del command[at:at + (2 if takes_value else 1)]
+            with self.subTest(flag=flag), self.assertRaises(ReviewLaunchRefusedError) as raised:
+                self.check("app-server", command)
+            self.assertEqual(raised.exception.evidence["entry"], flag)
 
 
 class CopyTest(unittest.TestCase):
@@ -395,19 +463,23 @@ class EnvironmentAndHomeTest(unittest.TestCase):
     def test_pinned_codex_state_entries_are_accepted_and_anything_else_names_itself(self):
         review.build_home(self.layout, self.operator)
         home = self.layout.codex_home
-        for name in ("history.jsonl", "installation_id", "models_cache.json", "logs_1.sqlite", "state.sqlite-wal"):
+        for name in ("installation_id", "models_cache.json", "goals_1.sqlite", "state_5.sqlite-wal", "logs_2.sqlite-shm"):
             (home / name).write_text("x")
-        (home / "skills" / ".system").mkdir(parents=True)
-        (home / "skills" / ".codex-system-skills.marker").write_text("1")
-        (home / "plugins" / "cache").mkdir(parents=True)
+        (home / "tmp").mkdir()
+        (home / "thread-writer-locks").mkdir()
         review.check_home(self.layout)
+        self.assertEqual(review.CODEX_STARTUP_SUBENTRIES, frozenset())
         cases = {
             "mystery": lambda: (home / "mystery").write_text("x"),
             "extra.toml": lambda: (home / "extra.toml").write_text("x"),
             "hooks.json": lambda: (home / "hooks.json").write_text("{}"),
             "rules": lambda: (home / "rules").mkdir(),
-            "skills/evil": lambda: (home / "skills" / "evil").mkdir(),
-            "plugins/evil": lambda: (home / "plugins" / "evil").mkdir(),
+            "history.jsonl": lambda: (home / "history.jsonl").write_text("x"),   # never observed: fails closed
+            "version.json": lambda: (home / "version.json").write_text("x"),
+            "skills/evil": lambda: (home / "skills" / "evil").mkdir(parents=True),
+            "skills/.system": lambda: (home / "skills" / ".system" / "imagegen").mkdir(parents=True),
+            "plugins/evil": lambda: (home / "plugins" / "evil").mkdir(parents=True),
+            "plugins/cache": lambda: (home / "plugins" / "cache").mkdir(parents=True),
         }
         for entry, create in cases.items():
             with self.subTest(entry):
@@ -415,7 +487,7 @@ class EnvironmentAndHomeTest(unittest.TestCase):
                 with self.assertRaises(ReviewLaunchRefusedError) as raised:
                     review.check_home(self.layout)
                 self.assertEqual(raised.exception.evidence["entry"], entry)
-                runtime.remove_tree(self.tmp, f"reviews/job1/codex-home/{entry}")
+                runtime.remove_tree(self.tmp, f"reviews/job1/codex-home/{entry.split('/')[0]}")
 
     def test_a_config_toml_that_differs_from_the_pinned_digest_refuses(self):
         review.build_home(self.layout, self.operator)
@@ -438,29 +510,156 @@ class EnvironmentAndHomeTest(unittest.TestCase):
                 self.assertEqual(raised.exception.evidence["source"], str(system / name))
                 (system / name).write_text("")
 
+    TREE, TMPDIR = Path("/r/job1/tree"), Path("/r/job1/tmp")
+    HOME_FILE = "/r/job1/codex-home/config.toml"
+
+    def composed(self):
+        """A ``config/read`` result of the shape ``compose.txt`` records, for the pinned launch."""
+        config = {
+            "model": "gpt-6.1-sol", "model_provider": "openai", "model_reasoning_effort": "high",
+            "service_tier": "default", "approval_policy": "never", "sandbox_mode": "workspace-write",
+            "sandbox_workspace_write": {"writable_roots": [str(self.TMPDIR)], "network_access": False,
+                                        "exclude_tmpdir_env_var": True, "exclude_slash_tmp": True},
+            "web_search": "disabled", "notify": [], "mcp_servers": {}, "hooks": None, "profiles": {}, "profile": None,
+            "model_providers": {}, "openai_base_url": None, "chatgpt_base_url": "https://chatgpt.com/backend-api/",
+            "auto_review": None, "permissions": None, "default_permissions": None, "project_root_markers": [".git"],
+            "projects": {str(self.TREE): {"trust_level": "untrusted"}}, "skills": {"bundled": {"enabled": False}},
+        }
+        flags = {"type": "sessionFlags"}
+        origins = {key: flags for key in (
+            "model", "model_provider", "model_reasoning_effort", "service_tier", "approval_policy", "sandbox_mode",
+            "sandbox_workspace_write.writable_roots.0", "sandbox_workspace_write.network_access",
+            "sandbox_workspace_write.exclude_tmpdir_env_var", "sandbox_workspace_write.exclude_slash_tmp",
+            "web_search", "project_root_markers.0", f"projects.{self.TREE}.trust_level", "skills.bundled.enabled")}
+        layers = [{"name": flags, "config": {}, "disabledReason": None},
+                  {"name": {"type": "user", "file": self.HOME_FILE, "profile": None}, "config": {},
+                   "disabledReason": None},
+                  {"name": {"type": "system", "file": "/etc/codex/config.toml"}, "config": {}, "disabledReason": None}]
+        return {"config": config, "origins": origins, "layers": layers}
+
+    def check_effective(self, composed, **extra):
+        review.check_effective(composed, tree=self.TREE, tmpdir=self.TMPDIR, codex_home=Path(self.HOME_FILE).parent,
+                               **extra)
+
+    def test_the_real_shape_passes_including_the_packaged_defaults_and_empty_tables(self):
+        self.check_effective(self.composed())
+
     def test_the_effective_policy_check_names_the_layer_and_value(self):
-        good = {k: {"value": v, "source": "override"} for k, v in review.EFFECTIVE_POLICY.items()}
-        good.update(model={"value": "gpt-6.1-sol", "source": "override"},
-                    model_reasoning_effort={"value": "high", "source": "override"},
-                    service_tier={"value": review.SERVICE_TIER, "source": "override"})
-        review.check_effective(good)
+        managed = {"type": "enterpriseManaged", "id": "x", "name": "corp"}
         bad_values = {
             "model_provider": "evil", "approval_policy": "on-request", "sandbox_mode": "danger-full-access",
-            "sandbox_workspace_write.network_access": True, "model": "other", "service_tier": "fast",
-            "mcp_servers": {"x": 1}, "notify": ["x"], "web_search": "live",
+            "model": "other", "service_tier": "fast", "model_reasoning_effort": "low", "web_search": "live",
+            "skills.bundled.enabled": True, "notify.0": "x", "mcp_servers.x": {"command": "c"},
         }
         for key, value in bad_values.items():
             with self.subTest(key):
-                changed = {**good, key: {"value": value, "source": "managed:/m.toml"}}
+                composed = self.composed()
+                top, _, rest = key.partition(".")
+                if key == "skills.bundled.enabled":
+                    composed["config"]["skills"]["bundled"]["enabled"] = value
+                elif key == "notify.0":
+                    composed["config"]["notify"] = [value]
+                elif key == "mcp_servers.x":
+                    composed["config"]["mcp_servers"] = {"x": value}
+                else:
+                    composed["config"][key] = value
+                composed["origins"][key if key != "mcp_servers.x" else "mcp_servers.x.command"] = managed
                 with self.assertRaises(ReviewLaunchRefusedError) as raised:
-                    review.check_effective(changed)
-                self.assertEqual(raised.exception.evidence["key"], key)
-                self.assertEqual(raised.exception.evidence["source"], "managed:/m.toml")
-        for key in ("model_providers.x.auth.command", "openai_base_url", "permissions.p.network", "profile"):
+                    self.check_effective(composed)
+                self.assertEqual(raised.exception.evidence["check"], "effective")
+                self.assertEqual(raised.exception.evidence["source"], managed)
+
+    def test_every_sandbox_leaf_is_compared_and_a_differing_one_names_its_origin(self):
+        managed = {"type": "enterpriseManaged", "id": "x", "name": "corp"}
+        cases = {
+            "sandbox_workspace_write.network_access": True,
+            "sandbox_workspace_write.exclude_slash_tmp": False,
+            "sandbox_workspace_write.exclude_tmpdir_env_var": False,
+            "sandbox_workspace_write.writable_roots": ["/"],
+            "sandbox_workspace_write.extra": 1,
+        }
+        for key, value in cases.items():
             with self.subTest(key):
+                composed = self.composed()
+                leaf = key.rsplit(".", 1)[1]
+                composed["config"]["sandbox_workspace_write"][leaf] = value
+                composed["origins"][key + (".0" if leaf == "writable_roots" else "")] = managed
                 with self.assertRaises(ReviewLaunchRefusedError) as raised:
-                    review.check_effective({**good, key: {"value": "x", "source": "system:/etc/codex/config.toml"}})
-                self.assertEqual(raised.exception.evidence["key"], key)
+                    self.check_effective(composed)
+                self.assertTrue(raised.exception.evidence["key"].startswith(key), raised.exception.evidence)
+                self.assertEqual(raised.exception.evidence["source"], managed)
+
+    def test_the_project_trust_table_must_be_exactly_the_untrusted_copy(self):
+        for projects in ({}, {str(self.TREE): {"trust_level": "trusted"}},
+                         {str(self.TREE): {"trust_level": "untrusted"}, "/other": {"trust_level": "trusted"}}):
+            with self.subTest(projects=projects):
+                composed = self.composed()
+                composed["config"]["projects"] = projects
+                with self.assertRaises(ReviewLaunchRefusedError):
+                    self.check_effective(composed)
+
+    def test_forbidden_keys_are_judged_by_origin_not_by_value(self):
+        # the packaged default of chatgpt_base_url has no origin and passes; a layer setting it refuses
+        for layer in ({"type": "user", "file": self.HOME_FILE, "profile": None}, {"type": "system", "file": "/etc/x"},
+                      {"type": "enterpriseManaged", "id": "i", "name": "n"}, {"type": "sessionFlags"}):
+            for key in ("chatgpt_base_url", "openai_base_url", "model_providers.x.auth.command", "permissions.p.network",
+                        "profile", "profiles.ops.model", "auto_review", "default_permissions"):
+                with self.subTest(layer=layer["type"], key=key):
+                    composed = self.composed()
+                    composed["origins"][key] = layer
+                    with self.assertRaises(ReviewLaunchRefusedError) as raised:
+                        self.check_effective(composed)
+                    self.assertEqual(raised.exception.evidence["key"], key)
+                    self.assertEqual(raised.exception.evidence["source"], layer)
+        composed = self.composed()
+        composed["origins"]["chatgpt_base_url"] = {"type": "packagedDefaults"}
+        self.check_effective(composed)
+
+    def test_a_project_path_with_dots_is_never_split(self):
+        tree = Path("/r/a.b/job.1/tree")
+        composed = self.composed()
+        composed["config"]["projects"] = {str(tree): {"trust_level": "untrusted"}}
+        composed["config"]["sandbox_workspace_write"]["writable_roots"] = ["/r/a.b/job.1/tmp"]
+        composed["origins"][f"projects.{tree}.trust_level"] = {"type": "sessionFlags"}
+        review.check_effective(composed, tree=tree, tmpdir=Path("/r/a.b/job.1/tmp"),
+                               codex_home=Path(self.HOME_FILE).parent)
+
+    def test_each_layer_type_has_a_disposition_and_an_unknown_one_refuses(self):
+        self.assertEqual(sorted(review.CONFIG_SOURCES), sorted((
+            "packagedDefaults", "mdm", "system", "enterpriseManaged", "user", "project", "sessionFlags",
+            "legacyManagedConfigTomlFromFile", "legacyManagedConfigTomlFromMdm")))
+        self.assertEqual(sorted(review.NON_LAYER_SOURCES),
+                         sorted(("execpolicy rules", "AGENTS*.md", "skills", "plugins", "hooks", "requirements.toml")))
+        composed = self.composed()
+        composed["layers"].append({"name": {"type": "brandNewLayer"}, "config": {}, "disabledReason": None})
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            self.check_effective(composed)
+        self.assertEqual(raised.exception.evidence["entry"], "brandNewLayer")
+
+    def test_layers_that_must_be_absent_or_disabled(self):
+        for layer in ({"type": "system", "file": "/etc/codex/config.toml"},
+                      {"type": "legacyManagedConfigTomlFromFile", "file": "/etc/codex/managed_config.toml"}):
+            with self.subTest(layer=layer["type"]):
+                composed = self.composed()
+                composed["layers"].append({"name": layer, "config": {"model": "x"}, "disabledReason": None})
+                with self.assertRaises(ReviewLaunchRefusedError):
+                    self.check_effective(composed)
+        project = {"type": "project", "dotCodexFolder": "/r/job1/tree/.codex"}
+        composed = self.composed()
+        composed["layers"].append({"name": project, "config": {"mcp_servers": {"x": {}}}, "disabledReason": "untrusted"})
+        self.check_effective(composed)            # disabled by the untrusted override: fine
+        composed["layers"][-1]["disabledReason"] = None
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.check_effective(composed)
+        composed = self.composed()
+        composed["layers"][1]["name"]["file"] = "/home/op/.codex/config.toml"
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.check_effective(composed)
+
+    def test_a_malformed_result_refuses(self):
+        for bad in ({}, {"config": {}, "origins": {}}, {"config": [], "origins": {}, "layers": []}):
+            with self.subTest(bad=bad), self.assertRaises(ReviewLaunchRefusedError):
+                self.check_effective(bad)
 
 
 class CredentialTest(unittest.TestCase):
@@ -528,33 +727,14 @@ class FakeLaunchTest(unittest.TestCase):
         self.system = self.tmp / "etc-codex"
         self.system.mkdir()
 
-    def launch(self, scenario=None, *, stage="plan", job="job1", timeout=60, compose=True, binary=None, **extra):
+    def launch(self, scenario=None, *, stage="plan", job="job1", timeout=60, compose=None, binary=None, **extra):
         scenario = {"log": str(self.log), "system_dir": str(self.system), "orphan_seconds": 30, **(scenario or {})}
         binary = binary or fake_codex.write_binary(self.tmp / "bin", scenario)
-        if compose is True:
-            compose = self.compose(binary, job)
         return review.launch_review(
             worktree=self.repo, runtime_root=self.runtime, job_id=job, harness_name="codex", binary_name=str(binary),
             operator_home=self.operator, stage=stage, manifest=MANIFEST, bundle_dir="/b/current", model="gpt-6.1-sol",
-            effort="high", timeout=timeout, system_dir=self.system, compose=compose or None,
+            effort="high", timeout=timeout, system_dir=self.system, compose=compose,
             inherited_env={"PATH": "/evil", "OPENAI_API_KEY": "evil"}, **extra)
-
-    def compose(self, binary, job):
-        """The fake's composing command (its own recorded shape): the pinned
-        overrides of an ``exec`` launch, printed with their source layers."""
-        layout = review.JobLayout(self.runtime, job)
-
-        def run(env):
-            pinned = review.argv("exec", binary=binary, tree=layout.tree, verdict=layout.verdict, tmpdir=layout.tmp,
-                                 prompt="-")
-            overrides = [item for i, item in enumerate(pinned) if i and pinned[i - 1] == "-c"]
-            command = [str(binary), "debug", "config", "-C", str(layout.tree)]
-            for item in overrides:
-                command += ["-c", item]
-            result = review.run_bounded(command, cwd=layout.tree, env=env, timeout=30)
-            self.assertEqual(result.exit_code, 0, result.stderr)
-            return json.loads(result.stdout)
-        return run
 
     def records(self, kind=None):
         return [r for r in fake_codex.read_log(self.log) if kind is None or r["kind"] == kind]
@@ -577,6 +757,8 @@ class FakeLaunchTest(unittest.TestCase):
                          ["sessions"])
         kinds = [r["kind"] for r in self.records()]
         self.assertEqual(kinds, ["mcp", "features", "compose", "exec"])
+        self.assertEqual(result["verdicts"][0]["disposition"], "returned")
+        self.assertEqual(result["subagents"], [])
 
     def test_every_invocation_gets_exactly_the_allowlisted_environment_and_the_minimal_home(self):
         self.launch()
@@ -642,7 +824,8 @@ class FakeLaunchTest(unittest.TestCase):
         with self.assertRaises(ReviewLaunchRefusedError) as raised:
             self.launch({"managed": str(managed)})
         self.assertEqual(raised.exception.evidence["check"], "effective")
-        self.assertEqual(raised.exception.evidence["source"], f"managed:{managed}")
+        self.assertEqual(raised.exception.evidence["source"], {"type": "enterpriseManaged", "id": "fake",
+                                                               "name": str(managed)})
         self.assertEqual(self.records("exec"), [])
         self.assertEqual(self.records("compose")[0]["ran"], [])
 
@@ -663,7 +846,7 @@ class FakeLaunchTest(unittest.TestCase):
                 with self.assertRaises(ReviewLaunchRefusedError) as raised:
                     self.launch({"managed": str(managed)}, job=f"job-{name}")
                 self.assertEqual(raised.exception.evidence["check"], "effective")
-                self.assertEqual(raised.exception.evidence["source"], f"managed:{managed}")
+                self.assertEqual(raised.exception.evidence["source"]["name"], str(managed))
         self.assertFalse(Path(f"{self.marker}.mgd").exists())
         self.assertEqual(self.records("exec"), [])
 
@@ -672,11 +855,34 @@ class FakeLaunchTest(unittest.TestCase):
             (self.system / name).write_text("")
         self.assertEqual(self.launch()["outcome"], "verdict")
 
-    def test_without_a_composing_command_the_harness_does_not_launch(self):
-        with self.assertRaises(ReviewLaunchRefusedError) as raised:
-            self.launch(compose=False)
-        self.assertEqual(raised.exception.evidence["check"], "effective")
+    def test_a_composing_command_that_fails_or_answers_nothing_does_not_launch(self):
+        for name, compose in (("error", lambda env: (_ for _ in ()).throw(ReviewLaunchRefusedError("x"))),):
+            with self.subTest(name), self.assertRaises(ReviewLaunchRefusedError):
+                self.launch(compose=compose)
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:     # a binary that is not a Codex at all
+            self.launch(binary=Path("/bin/false"))
+        self.assertIn(raised.exception.evidence["check"], ("mcp", "effective"))
         self.assertEqual(self.records("exec"), [])
+
+    def test_the_production_composing_command_speaks_json_rpc_and_returns_layers(self):
+        binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "system_dir": str(self.system),
+                                                            "orphan_seconds": 30})
+        layout = review.JobLayout(self.runtime, "jobc")
+        review.build_copy(self.repo, self.runtime, "jobc")
+        review.build_home(layout, self.operator)
+        env = review.child_environment(layout, binary, "jobc", {})
+        composed = review.compose_config(binary, layout, env, model="gpt-6.1-sol", effort="high", timeout=30)
+        self.assertEqual(sorted(composed), ["config", "layers", "origins"])
+        self.assertEqual(composed["config"]["projects"], {str(layout.tree): {"trust_level": "untrusted"}})
+        self.assertEqual(composed["config"]["skills"], {"bundled": {"enabled": False}})
+        self.assertEqual(composed["config"]["chatgpt_base_url"], "https://chatgpt.com/backend-api/")
+        types = [layer["name"]["type"] for layer in composed["layers"]]
+        self.assertIn("sessionFlags", types)
+        self.assertIn("user", types)
+        review.check_effective(composed, tree=layout.tree, tmpdir=layout.tmp, codex_home=layout.codex_home)
+        compose_log = self.records("compose")[0]
+        self.assertEqual(compose_log["argv"][0], "app-server")
+        review.check_home(layout)       # the composing command left only allowlisted state entries
 
     def test_a_feature_not_in_the_allowlist_stops_the_launch(self):
         capture = self.tmp / "features.txt"
@@ -762,6 +968,129 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(limit["outcome"], "limit")
         failed = self.launch({"exec": {"verdict": "none", "exit": 3}}, job="j-failed")
         self.assertEqual(failed["outcome"], "failed")
+
+    def test_a_limit_is_read_from_the_rollout_never_from_the_transcript(self):
+        for shape in ("string", "http429", "percent"):
+            with self.subTest(shape=shape):
+                result = self.launch({"exec": {"verdict": "limit", "limit_shape": shape}}, job=f"j-{shape}")
+                self.assertEqual(result["outcome"], "limit", result)
+        # the transcript talks about a rate limit and a 429 line number, and the failure is not one
+        noise = "rate limit usage limit reached 429 L429: the file says 429 Too Many Requests"
+        failed = self.launch({"exec": {"verdict": "none", "exit": 3, "stderr": noise}}, job="j-noise")
+        self.assertEqual(failed["outcome"], "failed")
+        empty = self.launch({"exec": {"verdict": "none", "stderr": noise}}, job="j-noise-empty")
+        self.assertEqual(empty["outcome"], "empty")
+
+    def test_a_limit_in_a_sub_agent_rollout_counts(self):
+        codex_home = self.tmp / "ch"
+        thread = fake_codex._write_rollout(codex_home, {}, {"verdict": "none"})
+        self.assertFalse(review.scan_rollouts(codex_home).limit)
+        fake_codex._write_rollout(codex_home, {}, {"verdict": "none"}, subagent_of=thread)
+        sub = next(p for p in (codex_home / "sessions").rglob("rollout-*.jsonl") if thread not in p.name)
+        lines = [json.loads(line) for line in sub.read_text().splitlines()]
+        lines[-1]["payload"]["error"] = {"message": "m", "codex_error_info": "rate_limit_exceeded"}
+        sub.write_text("".join(json.dumps(line) + "\n" for line in lines))
+        scan = review.scan_rollouts(codex_home)
+        self.assertTrue(scan.limit)
+        self.assertEqual([entry["total_tokens"] for entry in scan.subagents], [10441])
+
+    def test_the_rollout_limit_classification_over_the_captured_shapes(self):
+        captured = [json.loads(line) for line in (CODEX_CAPTURES / "rollout_excerpt.jsonl").read_text().splitlines()
+                    if line.startswith("{")]
+        failing = next(e for e in captured if e.get("payload", {}).get("error"))
+        self.assertEqual(failing["payload"]["error"]["codex_error_info"], {"http_connection_failed": {"http_status_code": 401}})
+        self.assertFalse(review._is_limit_error(failing["payload"]["error"]["codex_error_info"]))   # a 401 is not a limit
+        for info in ("usage_limit_exceeded", "rate_limit_exceeded", {"usage_limit_exceeded": {}},
+                     {"http_connection_failed": {"http_status_code": 429}}):
+            self.assertTrue(review._is_limit_error(info), info)
+        for info in (None, "other", {"http_connection_failed": {"http_status_code": 500}}, 429, []):
+            self.assertFalse(review._is_limit_error(info), info)
+
+    def test_every_verdict_obtained_is_recorded_with_its_digest_status_and_disposition(self):
+        result = self.launch({"exec": {"verdict": "wrong_id_first"}})
+        first, second = result["verdicts"]
+        self.assertEqual((first["attempt"], first["status"], first["disposition"]),
+                         (1, "APPROVE", "not-ingested: header mismatch, retried once"))
+        self.assertEqual((second["attempt"], second["disposition"]), (2, "returned"))
+        self.assertEqual(second["sha256"], hashlib.sha256(result["verdict"].encode()).hexdigest())
+        for entry in (first, second):
+            text = (self.runtime / entry["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(text).hexdigest(), entry["sha256"])
+        self.assertNotEqual(first["sha256"], second["sha256"])
+        # a REVISE is recorded like any other verdict
+        revise = self.launch({"exec": {"verdict": "revise"}}, job="j-rev")
+        self.assertEqual((revise["verdicts"][0]["status"], revise["status"]), ("REVISE", "REVISE"))
+        # a second mismatch and a void verdict are recorded and never lost
+        bad = self.launch({"exec": {"verdict": "bad_revision"}}, job="j-bad")
+        self.assertEqual([v["disposition"] for v in bad["verdicts"]],
+                         ["not-ingested: header mismatch, retried once", "not-ingested: header mismatch"])
+        escaped = self.launch({"exec": {"escape_to": str(self.repo / "escaped.txt")}}, job="j-esc")
+        self.assertEqual(escaped["outcome"], "changed")
+        self.assertTrue(escaped["verdicts"][0]["disposition"].startswith("void:"))
+        self.assertEqual(escaped["verdicts"][0]["status"], "APPROVE")
+
+    def test_a_sub_agent_spawn_is_detected_with_its_usage_and_a_retry_is_not_one(self):
+        result = self.launch({"exec": {"subagent": 43234}})
+        self.assertEqual(result["outcome"], "verdict")
+        self.assertEqual([s["total_tokens"] for s in result["subagents"]], [43234])
+        retried = self.launch({"exec": {"verdict": "wrong_id_first"}}, job="j-retry")
+        self.assertEqual(retried["subagents"], [])          # two root rollouts, no spawn
+        self.assertEqual(len(list((self.runtime / "reviews" / "j-retry" / "codex-home" / "sessions").rglob("rollout-*"))), 2)
+
+    def test_the_prompt_discourages_spawning_sub_agents(self):
+        self.assertIn("do not spawn sub-agents", review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b"))
+
+    def test_the_pinned_trust_override_keeps_config_toml_unchanged_across_the_retry(self):
+        digest = hashlib.sha256(review.HOME_CONFIG_TOML.encode()).hexdigest()
+        result = self.launch({"exec": {"verdict": "wrong_id_first"}})
+        self.assertEqual(result["outcome"], "verdict")
+        # without the override the pinned Codex appends a trust entry and the retry's home check refuses
+        layout = review.JobLayout(self.runtime, "jobt")
+        review.build_home(layout, self.operator)
+        binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "orphan_seconds": 30})
+        env = review.child_environment(layout, binary, "jobt", {})
+        tree = layout.tree
+        tree.mkdir(parents=True)
+        command = review.argv("exec", binary=binary, tree=tree, verdict=layout.verdict, tmpdir=layout.tmp)
+        without = [a for i, a in enumerate(command) if not (a.startswith("projects=") or (
+            a == "-c" and command[i + 1].startswith("projects=")))]
+        review.run_bounded(without, cwd=tree, env=env, timeout=30, stdin_text="p")
+        self.assertNotEqual(hashlib.sha256((layout.codex_home / "config.toml").read_bytes()).hexdigest(), digest)
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            review.check_home(layout)
+        self.assertEqual(raised.exception.evidence["entry"], "config.toml")
+
+    def test_the_bundled_skills_override_keeps_skills_out_of_the_home(self):
+        self.launch()
+        # settle removed the home; run the pinned exec by hand and look at it
+        layout = review.JobLayout(self.runtime, "jobs")
+        review.build_home(layout, self.operator)
+        binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "orphan_seconds": 30})
+        env = review.child_environment(layout, binary, "jobs", {})
+        layout.tree.mkdir(parents=True)
+        command = review.argv("exec", binary=binary, tree=layout.tree, verdict=layout.verdict, tmpdir=layout.tmp)
+        review.run_bounded(command, cwd=layout.tree, env=env, timeout=30, stdin_text="p")
+        self.assertEqual(sorted(p.name for p in layout.codex_home.iterdir() if not p.name.endswith(".sqlite")),
+                         ["auth.json", "config.toml", "installation_id", "models_cache.json", "sessions", "thread-writer-locks", "tmp"])
+        review.check_home(layout)
+        no_skills = [a for i, a in enumerate(command) if not (a == "skills.bundled.enabled=false" or (
+            a == "-c" and command[i + 1] == "skills.bundled.enabled=false"))]
+        review.run_bounded(no_skills, cwd=layout.tree, env=env, timeout=30, stdin_text="p")
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            review.check_home(layout)
+        self.assertEqual(raised.exception.evidence["entry"], "skills/.system")
+
+    def test_a_failing_clean_up_step_neither_skips_the_next_nor_replaces_an_exception_in_flight(self):
+        calls = []
+        with mock.patch.object(review, "copy_back_credentials", side_effect=OSError("disk")), \
+                mock.patch.object(review, "settle_job_dir", side_effect=lambda *a, **k: calls.append("settled")):
+            with self.assertRaises(KeyboardInterrupt):
+                self.launch(on_spawn=lambda pid, pgid: (_ for _ in ()).throw(KeyboardInterrupt()))
+            self.assertEqual(calls, ["settled"])              # settled although the first step failed
+            calls.clear()
+            with self.assertRaises(OSError):                  # nothing in flight: the failure is raised
+                self.launch(job="job2")
+            self.assertEqual(calls, ["settled"])
 
     def test_a_hung_review_is_killed_at_the_deadline_with_its_descendants(self):
         started = []

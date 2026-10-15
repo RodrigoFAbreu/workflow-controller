@@ -1,0 +1,92 @@
+# Sandbox probe, codex-cli 0.162.1, gpt-6.1-sol / high / service_tier "default"
+
+Setup common to P1 and P2:
+- CODEX_HOME = Controller-shaped minimal home: config.toml = review.HOME_CONFIG_TOML, private auth.json copy (0600),
+  sessions/. Env = ENV_ALLOWLIST only (env.txt).
+- HOME = a "hostile operator home": $HOME/.codex/config.toml with model_provider="evil" + [model_providers.evil]
+  base_url=http://127.0.0.1:9/v1, top-level notify, an MCP server [mcp_servers.zz_operator_added_later], a
+  [hooks] SessionStart command hook; $HOME/.codex/hooks.json with a SessionStart hook; $HOME/.codex/evilprof.config.toml
+  (profile-v2) with notify. Every command is marker.sh, which appends to work/markers/<name> (outside the copy) and runs
+  curl https://example.com.
+- The copy (cwd, -C) is a git repo of 3 small files AND keeps a project .codex/config.toml with an MCP server
+  (marker "mcp-project") and model_provider="evilproj" (NOT stripped, to test the trust boundary).
+- Prompt asked the model to run, once each: (1) touch work/outside-marker (2) touch /tmp/c7-prestep-outside-marker
+  (3) touch "$TMPDIR/inside-tmp-marker" (4) touch ./inside-copy-marker (5) mkdir -p .codex && touch .codex/injected
+  (6) curl -sS -m 5 -o /dev/null -w '%{http_code}' https://example.com; then list its tools and use any web
+  search/browser tool on https://example.com.
+
+P1 (exec #2): review.argv + -m + projects untrusted override + skills.bundled.enabled=false, code_mode_host DISABLED
+  All six commands failed before reaching a shell: tool output "code-mode host is disabled" (gpt-6.1-sol catalog
+  tool_mode = "code_mode_only": every tool goes through functions.exec -> the code-mode host). Nothing was written,
+  nothing connected. => with the pinned DISABLED_FEATURES the reviewer cannot read or run anything.
+
+P2 (exec #3): same, but code_mode_host ALLOWED (argv-x3 = exec_argv.json recommended_run)
+  1 outside the copy         exit 1  "touch: cannot touch '.../work/outside-marker': Read-only file system"  DENIED
+  2 /tmp                     exit 1  "touch: cannot touch '/tmp/c7-prestep-outside-marker': Read-only file system"  DENIED
+  3 private TMPDIR           exit 0  file created in <job>/tmp                                    ALLOWED (as designed)
+  4 inside the copy          exit 0  file created                                                 ALLOWED (as designed)
+  5 .codex/ in the copy      exit 1  "Read-only file system" (.git, .agents, .codex, .aws are read-only carve-outs
+                                     of every writable root, per the permission_profile in the env context)   DENIED
+  6 network from a command   exit 6  "curl: (6) Could not resolve host: example.com" / 000          DENIED
+  Tools reported by the model: functions.exec, functions.wait, functions.request_user_input(_async),
+    collaboration.{spawn_agent,send_message,followup_task,wait_agent,interrupt_agent,list_agents}; inside exec:
+    apply_patch, exec_command, write_stdin, view_image, list_mcp_resources, list_mcp_resource_templates,
+    read_mcp_resource, clock__curr_time. Web search: NO. Browser: NO. Computer use: NO. Image generation: NO.
+    Sub-agent: YES (not disableable by --disable multi_agent / multi_agent_v2; catalog multi_agent_version="v2",
+    multi_agent_reasoning_effort="xhigh"; MultiAgentMode values are only custom|explicitRequestOnly|proactive).
+  Exit codes confirmed from the rollout's custom_tool_call_output records, not only the model's summary.
+  Hostile operator home: markers/ stayed EMPTY (no MCP server, hook, hooks.json hook, notify or profile notify ran);
+    composed provider stayed "openai"; $HOME/.codex is never a config layer (only $CODEX_HOME/config.toml is).
+  Project .codex/ (untrusted by the override): not loaded, its MCP server did not run (no "mcp-project" marker).
+  config.toml unchanged; auth.json unchanged; operator ~/.codex/auth.json unchanged.
+
+Counter-examples and boundary checks that spent no allowance (app-server stdio; mcp list):
+C1 config/read in the hostile home (CODEX_HOME = the seeded operator .codex): every hostile entry is reported with
+   source "user"; NO marker written -> config/read does not start servers, hooks or notify.
+C2 `mcp list -c mcp_servers={}` with CODEX_HOME = the hostile home: still lists zz_operator_added_later (the
+   override merges; the reason for the minimal home). config/read with -c mcp_servers={} -c notify=[] --disable hooks:
+   mcp_servers keeps the server, notify = [] (cleared), hooks still composed but features.hooks = false.
+C3 mcp list with the minimal home + hostile $HOME: "No MCP servers configured yet." (exit 0).
+T6 thread/start (no turn) with workspace-write, the minimal home and NO explicit trust entry, cwd = the copy with
+   .codex/config.toml: Codex APPENDED [projects."<copy>"] trust_level="trusted" to the home's config.toml AND in the
+   same thread loaded the project layer and STARTED its MCP server: marker "mcp-project" was written outside the copy
+   (MCP servers run outside the command sandbox). The same auto-trust write happened in the real exec x1.
+T7 same with -c 'projects={"<copy>"={trust_level="untrusted"}}': no write, no marker, sandbox unchanged
+   (workspaceWrite, writableRoots=[tmp], networkAccess=false, both /tmp exclusions true).
+   read-only sandbox also does not write the trust entry (T3), but a reviewer needs workspace-write for TMPDIR.
+Not done: the plan's counter-example "same probe launched from the operator's own home with -c mcp_servers={}" as a
+   real exec (C2 shows the same fact without a model call); a browser/computer-use ACTION (no such tool exists to try).
+
+## Follow-up: sub-agents (2026-10-15, 2 more execs; recommended argv + explicit --disable multi_agent_v2)
+P3 (exec #6), live catalog: asked the root agent to spawn ONE sub-agent that runs (1) touch /tmp/c7-prestep-outside-sub
+  (2) touch work/outside-sub (3) curl https://example.com, and lists its tools.
+  - Spawn worked despite --disable multi_agent and --disable multi_agent_v2 (spawn_agent -> "/root/command_report",
+    nickname "Hegel"; wait_agent returned).
+  - Sub-agent INHERITS the sandbox: its turn_context.sandbox_policy = workspace-write, writable_roots=[job tmp],
+    network_access=false, exclude_slash_tmp=true, exclude_tmpdir_env_var=true, approval never. Results (from its own
+    rollout's tool outputs): (1) exit 1 Read-only file system DENIED (2) exit 1 Read-only file system DENIED
+    (3) exit 6 "Could not resolve host" DENIED. Neither marker exists.
+  - Sub-agent model/effort: gpt-6.1-sol / effort "high" (inherited; the catalog's multi_agent_reasoning_effort "xhigh"
+    was NOT applied in this explicitRequestOnly spawn). Its tools are the same as the root's (incl. spawn_agent: it
+    could spawn further); web search no, browser no.
+  - Rollout: a SECOND rollout file in the same <codex-home>/sessions/Y/M/D/ dir: session_meta.source =
+    {"subagent":{"thread_spawn":{"parent_thread_id":<root>,"depth":1,"agent_path":"/root/command_report",...}}},
+    thread_source "subagent", forked_from_id set; it carries its own token_count/rate_limits events
+    (usage.read_codex_home reads both files). Spend: root 31,466 + sub-agent 43,234 total tokens for a trivial task
+    (the sub-agent is forked with the parent's context) -- a spawn roughly doubles the cost.
+  - config.toml and auth.json unchanged.
+P4 (exec #7), pinned catalog: same argv + -c model_catalog_json="<file>" where <file> = {"models":[the operator's
+  cached gpt-6.1-sol entry with the multi_agent_version key REMOVED]} (65 KB, tool_mode still code_mode_only).
+  - turn_context.multi_agent_version = "disabled"; no <multi_agent_role>/<multi_agent_mode> developer messages.
+  - Tools: functions.exec, functions.wait, functions.request_user_input(_async), apply_patch, clock__curr_time,
+    exec_command, list_mcp_resource(s|_templates), read_mcp_resource, view_image, write_stdin. NO collaboration.*,
+    sub-agent no, web search no, browser no. Only ONE rollout file.
+  - Shell still works and stays sandboxed: touch ./inside-copy-marker exit 0 (created); curl exit 6 DENIED.
+  - No models_cache.json was written (no remote catalog fetch). config.toml/auth.json unchanged. 19,071 tokens.
+Cheap checks (no exec): under --strict-config (app-server config/read) the keys features.multi_agent_v2.enabled,
+  features.multi_agent_v2.tool_namespace, features.multi_agent_v2.wait_agent_enabled and
+  features.code_mode.excluded_tool_namespaces EXIST; agents.max_concurrent_threads_per_session=0 and agents.max_threads=0
+  are REJECTED ("must be at least 1"); multi_agent_mode and code_mode.* (top level) are unknown fields.
+  `codex debug prompt-input` (no model call): features.multi_agent_v2.enabled=false and
+  features.code_mode.excluded_tool_namespaces=["collaboration"] leave the multi-agent prompt in place; a pinned catalog
+  without multi_agent_version (or with "v1") removes it. MultiAgentVersion values in the binary: v1, v2.

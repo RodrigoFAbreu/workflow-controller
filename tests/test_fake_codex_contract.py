@@ -24,6 +24,11 @@ from tests import fake_codex, process_fixtures  # noqa: E402
 CODEX_FIXTURES = REPO_ROOT / "tests" / "harness_contract" / "codex"
 
 
+def review_sources():
+    from controller import review
+    return review.CONFIG_SOURCES
+
+
 class FakeCodexContractTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="fake-codex-", dir=process_fixtures.BUILD_DIR))
@@ -44,15 +49,78 @@ class FakeCodexContractTest(unittest.TestCase):
         return subprocess.run([str(self.fake(scenario)), *args], cwd=self.work, env=self.env, input=stdin,
                               capture_output=True, text=True, timeout=60, check=False)
 
-    def test_the_capture_digest_is_the_one_the_readme_records(self):
-        digest = hashlib.sha256((CODEX_FIXTURES / "features_list.0.162.1.txt").read_bytes()).hexdigest()
-        self.assertIn(digest, (CODEX_FIXTURES / "README.md").read_text())
+    CAPTURES = ("features_list.0.162.1.txt", "exec_argv.json", "rollout_excerpt.jsonl", "stderr_shapes.txt",
+                "compose.txt", "state_entries.txt", "env.txt", "flags.txt", "sandbox_probe.txt")
 
-    def test_the_pre_step_is_recorded_as_open_and_the_harness_unregistered(self):
+    def test_every_capture_digest_is_the_one_the_readme_records(self):
+        readme = (CODEX_FIXTURES / "README.md").read_text()
+        for name in self.CAPTURES:
+            with self.subTest(name):
+                digest = hashlib.sha256((CODEX_FIXTURES / name).read_bytes()).hexdigest()
+                self.assertIn(f"`{name}`", readme)
+                self.assertIn(digest, readme)
+
+    def test_the_pre_step_is_recorded_and_the_harness_registered(self):
         from controller import review
-        self.assertIn("pre-step is still open", re.sub(r"\s+", " ", (CODEX_FIXTURES / "README.md").read_text()))
-        self.assertFalse(review.PRE_STEP_CAPTURED)
-        self.assertEqual(review.HARNESSES, {})
+        self.assertNotIn("pre-step is still open", re.sub(r"\s+", " ", (CODEX_FIXTURES / "README.md").read_text()))
+        self.assertTrue(review.PRE_STEP_CAPTURED)
+        self.assertEqual(sorted(review.HARNESSES), ["codex"])
+
+    def test_review_argv_is_the_captured_recommended_invocation(self):
+        """`review.argv("exec", ...)` equals the real command line the pre-step ran with the recommended
+        overrides (`exec_argv.json` `recommended_run`), paths aside and without the operator-rule `-m`."""
+        from controller import review
+        captured = json.loads((CODEX_FIXTURES / "exec_argv.json").read_text())["recommended_run"]["argv"]
+        tree, tmpdir, verdict = "/home/rodrigo/.cache/c7-prestep/work/tree-probe3", \
+            "/home/rodrigo/.cache/c7-prestep/work/homes/x3/tmp", "/home/rodrigo/.cache/c7-prestep/work/homes/x3/verdict.md"
+        at = captured.index("-m")
+        without_m = captured[:at] + captured[at + 2:]
+        built = review.argv("exec", binary=Path(captured[0]), tree=Path(tree), verdict=Path(verdict),
+                            tmpdir=Path(tmpdir), prompt="-")
+        self.assertEqual(built, without_m)
+        review.check_argv("exec", built, tree=Path(tree), verdict=Path(verdict), tmpdir=Path(tmpdir))
+
+    def test_the_composing_command_carries_the_captured_exec_overrides(self):
+        from controller import review
+        composing = review.argv("app-server", binary=Path("/x/codex"), tree=Path("/t"), tmpdir=Path("/m"))
+        text = (CODEX_FIXTURES / "compose.txt").read_text()
+        self.assertIn("app-server --strict-config", text)
+        self.assertIn("includeLayers: true", text)
+        self.assertEqual(composing[1:3], ["app-server", "--strict-config"])
+        self.assertEqual(composing[-2:], ["--listen", "stdio://"])
+
+    def test_the_constants_follow_the_captures(self):
+        from controller import review
+        state = (CODEX_FIXTURES / "state_entries.txt").read_text()
+        for name in review.CODEX_STATE_ENTRIES:
+            self.assertIn(name, state)
+        self.assertEqual(review.CODEX_STARTUP_SUBENTRIES, frozenset())
+        flags = (CODEX_FIXTURES / "flags.txt").read_text()
+        for kind in ("features", "mcp"):
+            self.assertNotIn("--strict-config", review.KIND_FLAGS[kind])
+        self.assertIn("app-server:  accepted", flags)
+        for layer in review.CONFIG_SOURCES:
+            self.assertIn(layer, (CODEX_FIXTURES / "compose.txt").read_text())
+        self.assertIn("code_mode_host", review.TOOL_ALLOWLIST)
+        self.assertIn("code-mode host is disabled", (CODEX_FIXTURES / "sandbox_probe.txt").read_text())
+
+    def test_the_fakes_shapes_are_the_captured_ones(self):
+        """config/read, the rollout and the home's state entries, in the captured shapes."""
+        rollout = [json.loads(line) for line in (CODEX_FIXTURES / "rollout_excerpt.jsonl").read_text().splitlines()
+                   if line.startswith("{")]
+        failing = next(e for e in rollout if e.get("payload", {}).get("error"))
+        self.assertEqual(sorted(failing["payload"]["error"]), ["codex_error_info", "message"])
+        fake_codex._write_rollout(self.home, {}, {"verdict": "limit"})
+        written = [json.loads(line) for p in (self.home / "sessions").rglob("rollout-*.jsonl")
+                   for line in p.read_text().splitlines()]
+        self.assertEqual([e["type"] for e in written], ["session_meta", "event_msg", "event_msg"])
+        self.assertEqual(sorted(written[2]["payload"]["error"]), ["codex_error_info", "message"])
+        token_count = next(e for e in rollout if e.get("payload", {}).get("type") == "token_count")
+        self.assertEqual(set(written[1]["payload"]["rate_limits"]) - {"limit_id", "limit_name", "credits", "plan_type",
+                                                                      "rate_limit_reached_type"},
+                         {"primary", "secondary"})
+        self.assertIn("total_token_usage", token_count["payload"]["info"])
+        self.assertIn("total_token_usage", written[1]["payload"]["info"])
 
     def test_version_and_the_features_list_follow_the_capture_and_the_disable_flags(self):
         self.assertEqual(self.run_fake(["--version"]).stdout.strip(), fake_codex.VERSION)
@@ -100,12 +168,60 @@ class FakeCodexContractTest(unittest.TestCase):
         self.assertIn("No MCP servers", self.run_fake(["mcp", "list"]).stdout)
         self.assertIn("p  ", self.run_fake(["mcp", "list", "-p", "ops"]).stdout)
 
+    def config_read(self, extra_args, scenario=None):
+        requests = [{"id": 1, "method": "initialize", "params": {}}, {"method": "initialized"},
+                    {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(self.work)}}]
+        out = self.run_fake(["app-server", "--strict-config", *extra_args, "--listen", "stdio://"], scenario,
+                            "".join(json.dumps(r) + "\n" for r in requests)).stdout
+        return next(json.loads(line) for line in out.splitlines() if json.loads(line).get("id") == 2)["result"]
+
     def test_a_managed_layer_outranks_the_command_line(self):
         managed = self.tmp / "m.toml"
         managed.write_text('approval_policy = "on-request"\n')
-        out = self.run_fake(["debug", "config", "-c", 'approval_policy="never"'], {"managed": str(managed)}).stdout
-        entry = json.loads(out)["approval_policy"]
-        self.assertEqual(entry, {"value": "on-request", "source": f"managed:{managed}"})
+        result = self.config_read(["-c", 'approval_policy="never"'], {"managed": str(managed)})
+        self.assertEqual(result["config"]["approval_policy"], "on-request")
+        self.assertEqual(result["origins"]["approval_policy"]["type"], "enterpriseManaged")
+
+    def test_config_read_has_the_captured_shape(self):
+        (self.home / "config.toml").write_text('model_provider = "openai"\n')
+        overrides = ["-c", 'notify=[]', "-c", "sandbox_workspace_write.writable_roots=[\"/m\"]",
+                     "-c", f'projects={{"{self.work}"={{trust_level="untrusted"}}}}', "-c", "skills.bundled.enabled=false"]
+        result = self.config_read(overrides)
+        config = result["config"]
+        self.assertEqual(config["chatgpt_base_url"], "https://chatgpt.com/backend-api/")     # packaged default, no origin
+        self.assertNotIn("chatgpt_base_url", result["origins"])
+        for key in ("model_providers", "profiles", "mcp_servers"):
+            self.assertEqual(config[key], {})
+        for key in ("profile", "openai_base_url", "auto_review", "permissions", "default_permissions", "hooks"):
+            self.assertIsNone(config[key])
+        self.assertEqual(result["origins"]["sandbox_workspace_write.writable_roots.0"], {"type": "sessionFlags"})
+        self.assertEqual(result["origins"][f"projects.{self.work}.trust_level"], {"type": "sessionFlags"})
+        self.assertEqual(result["origins"]["model_provider"]["type"], "user")
+        types = [layer["name"]["type"] for layer in result["layers"]]
+        self.assertLessEqual({"sessionFlags", "system", "user"}, set(types))
+        self.assertLessEqual(set(types), set(review_sources()))
+        self.assertNotIn("notify", result["origins"])                                        # empty list: no origin
+
+    def test_an_untrusted_project_layer_is_reported_disabled_and_not_merged(self):
+        (self.work / ".git").mkdir()
+        (self.work / ".codex").mkdir()
+        (self.work / ".codex" / "config.toml").write_text('[mcp_servers.proj]\ncommand = "true"\n')
+        trusted = self.config_read(["-c", 'project_root_markers=[".git"]'])
+        self.assertIn("proj", trusted["config"]["mcp_servers"])
+        untrusted = self.config_read(["-c", 'project_root_markers=[".git"]', "-c",
+                                      f'projects={{"{self.work}"={{trust_level="untrusted"}}}}'])
+        self.assertEqual(untrusted["config"]["mcp_servers"], {})
+        project = next(layer for layer in untrusted["layers"] if layer["name"]["type"] == "project")
+        self.assertTrue(project["disabledReason"])
+
+    def test_exec_appends_a_trust_entry_unless_the_project_is_marked_untrusted(self):
+        (self.home / "config.toml").write_text("")
+        self.run_fake(["exec", "-C", str(self.work), "-"], stdin="p")
+        self.assertIn(f'[projects."{self.work}"]', (self.home / "config.toml").read_text())
+        (self.home / "config.toml").write_text("")
+        self.run_fake(["exec", "-C", str(self.work), "-c", f'projects={{"{self.work}"={{trust_level="untrusted"}}}}', "-"],
+                      stdin="p")
+        self.assertEqual((self.home / "config.toml").read_text(), "")
 
     def test_features_does_not_accept_strict_config_and_exec_does(self):
         # the shape the installed Codex has (`codex features --help` lists -c/--enable/--disable only)
@@ -119,8 +235,13 @@ class FakeCodexContractTest(unittest.TestCase):
         self.run_fake(["exec", "-C", str(self.work), "-"], {"rate_limits": {"primary": 61.0, "secondary": 9.0}}, "p")
         readings = {r["window"]: r["percent"] for r in usage.read_codex_home(self.home)}
         self.assertEqual(sorted(readings.values()), [9.0, 61.0])
-        for name in ("installation_id", "history.jsonl", "skills/.system", "plugins/cache"):
+        for name in ("installation_id", "models_cache.json", "thread-writer-locks", "tmp", "skills/.system"):
             self.assertTrue((self.home / name).exists(), name)
+        for name in ("history.jsonl", "version.json", "plugins"):
+            self.assertFalse((self.home / name).exists(), name)
+        self.run_fake(["exec", "-C", str(self.work), "-c", "skills.bundled.enabled=false", "-"],
+                      {}, "p")
+        self.assertTrue((self.home / "skills" / ".system").exists())    # left by the first run; the second adds nothing
 
     def test_exec_without_a_credential_fails_like_a_logged_out_codex(self):
         (self.home / "auth.json").unlink()

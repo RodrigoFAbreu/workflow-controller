@@ -17,14 +17,14 @@ What lives here:
   configuration layers outside the home, the credential copy and its copy-back;
 - the bounded runner (own session, ownership tag, deadline, group kill).
 
-**Pre-step status.** D12's operator pre-step (one real ``codex exec`` capture
-and a sandbox probe) has not been run. The constants marked *provisional* below
-come from the one capture that spends no allowance (``codex features list``),
-and the command that composes the configuration layers is unknown, so
-``PRE_STEP_CAPTURED`` is false and ``HARNESSES`` is empty: the harness stays
-unregistered, exactly as D4 and D12 require, and ``tests/test_review.py``
-pins that. Setting the constant is the only change the pre-step's answer makes
-to this module.
+**Pre-step status.** D12's operator pre-step was run against ``codex-cli
+0.162.1`` on 2026-10-15 (seven real ``codex exec`` runs, the sandbox probe, the
+composing command, the home's state entries, the environment and the flags). Its
+captures are under ``tests/harness_contract/codex/`` and every constant below is
+taken from them; ``tests/test_fake_codex_contract.py`` pins the digests and the
+captured invocation. ``PRE_STEP_CAPTURED`` is therefore true and ``HARNESSES``
+registers Codex. A Codex upgrade that renames a feature, a layer type or a state
+entry fails closed with that name.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ import re
 import secrets
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
@@ -54,25 +55,33 @@ from .errors import ReviewLaunchRefusedError
 #: The Codex version the constants below were taken from.
 PINNED_VERSION = "codex-cli 0.162.1"
 
-#: False until D12's operator pre-step (a real ``codex exec`` capture, the
-#: sandbox probe, and the command that composes the configuration layers) has
-#: been recorded under ``tests/harness_contract/codex/``. While false the
-#: registry is empty and the harness cannot be selected.
-PRE_STEP_CAPTURED = False
+#: True since D12's operator pre-step (a real ``codex exec`` capture, the
+#: sandbox probe, and the command that composes the configuration layers) was
+#: recorded under ``tests/harness_contract/codex/``. While false the registry is
+#: empty and the harness cannot be selected.
+PRE_STEP_CAPTURED = True
 
 
 DEFAULT_MODEL = "gpt-6.1-sol"
 DEFAULT_EFFORT = "high"
-#: The non-fast service tier (D10). *Provisional*: the exact tier name is a
-#: pre-step fact.
+#: The non-fast service tier (D10): ``compose.txt`` shows it composing as
+#: ``service_tier="default"`` and ``thread/start`` reporting ``serviceTier: null``
+#: (standard speed). The key is a free string, so control (b) compares the value.
 SERVICE_TIER = "default"
 
 #: Features the pinned Codex reports as enabled by default that a review may
 #: leave on: the shell and file tools a reviewer needs, plus inert non-tool
-#: features and ones the version reports ``removed``. *Provisional*: taken from
-#: ``tests/harness_contract/codex/features_list.0.162.1.txt``.
+#: features and ones the version reports ``removed``. ``code_mode_host`` is a
+#: tool: gpt-6.1-sol's catalog is ``tool_mode="code_mode_only"``, so with it
+#: disabled every shell and file call fails (``sandbox_probe.txt`` P1). The
+#: collaboration (sub-agent) tools are an allowed tool family too: no flag or
+#: ``-c`` key removes them, and a spawned sub-agent inherits the sandbox, the
+#: network-off policy, the model and the effort (``sandbox_probe.txt`` P3). The
+#: review prompt discourages spawning and the Controller reports each spawn with
+#: its token usage (ADR 0013). Taken from
+#: ``tests/harness_contract/codex/features_list.0.162.1.txt`` and ``flags.txt``.
 TOOL_ALLOWLIST = frozenset({
-    "shell_tool", "unified_exec", "unified_exec_tty", "view_image",
+    "code_mode_host", "shell_tool", "unified_exec", "unified_exec_tty", "view_image",
     "api_key_model_discovery", "auth_elicitation", "compaction_image_budget", "content_item_kinds",
     "enable_request_compression", "mentions_v2",
     # reported ``removed``: inert, cannot be switched off
@@ -83,10 +92,12 @@ TOOL_ALLOWLIST = frozenset({
 #: Every other feature the pinned Codex reports as enabled, switched off by
 #: ``--disable``. A browser, CDP or computer-use tool reaches the network or
 #: the desktop outside the command sandbox; plugin, remote-plugin and skill
-#: dependency installation are further tool and network paths. *Provisional*.
+#: dependency installation are further tool and network paths. Every name is
+#: accepted by the pinned Codex and an unknown ``--disable`` name exits 1, so the
+#: set fails closed on a rename (``flags.txt``).
 DISABLED_FEATURES = tuple(sorted({
     "apps", "browser_annotation_api", "browser_use", "browser_use_external", "browser_use_full_cdp_access",
-    "code_mode_host", "computer_use", "daemon_auto_start", "fast_mode", "goals", "guardian_approval",
+    "computer_use", "daemon_auto_start", "fast_mode", "goals", "guardian_approval",
     "guardian_reuse_parent_compaction", "hooks", "image_generation", "in_app_browser", "in_app_chat",
     "in_app_dictation", "in_app_local_automation", "in_app_updates", "in_app_voice", "instant_interrupt",
     "multi_agent", "plugin_sharing", "plugins", "realtime_conversation", "remote_plugin", "shell_snapshot",
@@ -111,18 +122,20 @@ STARTUP_LOADED = ("config.toml", "hooks", "hooks.json", "rules", "skills", "plug
                   "AGENTS.md", "AGENTS.override.md", "managed_config.toml", "requirements.toml")
 
 #: The entries Codex itself writes into an empty home, none of which is read
-#: as configuration. *Provisional*: the operator's own home shows these names.
+#: as configuration: exactly the names ``state_entries.txt`` observed from
+#: ``mcp list``, ``features list``, ``app-server`` and ``exec`` under the pinned
+#: command line, so the set fails closed. (``.tmp/`` appears only with the
+#: plugins feature on; the state databases follow the suffix rule below.)
 CODEX_STATE_ENTRIES = frozenset({
-    "auth.json", "sessions", "history.jsonl", "session_index.jsonl", "installation_id", "version.json",
-    "models_cache.json", "cache", "tmp", ".tmp", "shell_snapshots", "thread-writer-locks", "log", "logs",
+    "auth.json", "sessions", "installation_id", "models_cache.json", "tmp", "thread-writer-locks",
 })
 
 #: Exact child paths Codex creates below ``skills/`` and ``plugins/`` in an
-#: empty home, admitted because they are the pinned binary's own bundled
-#: content. *Provisional*.
-CODEX_STARTUP_SUBENTRIES = frozenset({
-    "skills/.system", "skills/.codex-system-skills.marker", "plugins/cache", "plugins/.remote-plugin-install-staging",
-})
+#: empty home. None: with ``skills.bundled.enabled=false`` no ``skills/`` or
+#: ``plugins/`` entry is created, and without the override the bundled skills
+#: (``skills/.system``) would be loaded into the model context, which D4 says
+#: must stop the launch.
+CODEX_STARTUP_SUBENTRIES: frozenset[str] = frozenset()
 
 #: ``*.sqlite``, ``-wal`` and ``-shm`` state databases.
 _STATE_DB_SUFFIXES = (".sqlite", ".sqlite-wal", ".sqlite-shm", ".sqlite3", "-wal", "-shm")
@@ -131,38 +144,52 @@ _STATE_DB_SUFFIXES = (".sqlite", ".sqlite-wal", ".sqlite-shm", ".sqlite3", "-wal
 SYSTEM_LAYER_FILES = ("config.toml", "managed_config.toml", "requirements.toml")
 SYSTEM_LAYER_DIR = Path("/etc/codex")
 
-#: One entry per layer category the pinned Codex reports, with one disposition
-#: each: ``excluded`` (by construction), ``absent`` (file-backed, must be
-#: absent or empty), ``composed`` (cannot be read here; the composed-values
-#: check covers it).
+#: One disposition per ``ConfigLayerSource`` type ``config/read`` reports
+#: (``compose.txt``): ``excluded`` (by construction: the layer is the Controller's
+#: own minimal home or is disabled), ``absent`` (file-backed outside the home: the
+#: layer, when listed, must carry no configuration), ``composed`` (cannot be read
+#: here; the composed-values and origin checks cover it) or ``own`` (the
+#: Controller's own ``-c`` layer). A layer type not in this table refuses.
 CONFIG_SOURCES = {
-    "user_file": "excluded", "profiles": "excluded", "packaged_defaults": "composed",
-    "system_config": "absent", "managed_config": "absent", "requirements": "absent",
-    "mdm": "composed", "cloud_managed": "composed", "legacy_managed": "composed",
-    "project_config": "excluded", "project_trust": "excluded", "execpolicy_rules": "excluded",
-    "instruction_files": "excluded", "skills": "excluded", "plugins": "excluded",
+    "packagedDefaults": "composed", "mdm": "composed", "system": "absent", "enterpriseManaged": "composed",
+    "user": "excluded", "project": "excluded", "sessionFlags": "own",
+    "legacyManagedConfigTomlFromFile": "absent", "legacyManagedConfigTomlFromMdm": "composed",
 }
 
-#: The values the composed configuration must equal (control (b)).
+#: Sources that are not configuration layers and the control over each
+#: (``compose.txt``): rules the ``--ignore-rules`` flag, ``AGENTS*.md`` the empty
+#: ``instructionSources``, skills the bundled-skills override plus the stripped
+#: project ``.agents/skills``, plugins and hooks the disabled features,
+#: ``requirements.toml`` control (a) (``configRequirements/read`` returned
+#: ``requirements: null``).
+NON_LAYER_SOURCES = {
+    "execpolicy rules": "--ignore-rules (exec only)",
+    "AGENTS*.md": "thread/start instructionSources is empty",
+    "skills": "skills.bundled.enabled=false and STRIPPED_COPY_PATHS",
+    "plugins": "the plugins feature is disabled and the home has no plugins/",
+    "hooks": "the hooks feature is disabled and the home has no hooks.json",
+    "requirements.toml": "control (a): absent or empty under /etc/codex",
+}
+
+#: The scalar values the composed ``config`` must equal (control (b)). The sandbox
+#: table, the project trust table and the model, effort and tier are built per
+#: launch by :func:`effective_policy`.
 EFFECTIVE_POLICY = {
     "model_provider": "openai",
     "sandbox_mode": "workspace-write",
     "approval_policy": "never",
-    "sandbox_workspace_write.network_access": False,
     "web_search": "disabled",
     "notify": [],
     "mcp_servers": {},
     "hooks": {},
     "project_root_markers": [".git"],
+    "skills.bundled.enabled": False,
 }
-#: Keys that must be absent from the composed configuration.
+#: Top-level keys that no layer other than the packaged defaults may set. An
+#: empty table or a null is unset; ``chatgpt_base_url`` always reports its packaged
+#: default value, which carries no origin.
 FORBIDDEN_EFFECTIVE_KEYS = ("model_providers", "openai_base_url", "chatgpt_base_url", "auto_review",
                             "permissions", "default_permissions", "profiles", "profile")
-
-#: The command that composes every layer and prints the composed values with
-#: their source layer without starting anything. Unknown until the pre-step;
-#: ``None`` means launch is refused unless an isolation mechanism is shown.
-COMPOSE_COMMAND: tuple[str, ...] | None = None
 
 #: The child environment is exactly these names (control (d)).
 ENV_ALLOWLIST = ("PATH", "HOME", "TMPDIR", "CODEX_HOME", "GIT_CEILING_DIRECTORIES", "LANG", "LC_ALL", OWNERSHIP_VAR)
@@ -181,6 +208,7 @@ KIND_FLAGS = {
     "exec": ("-c", "--disable", "--strict-config", "--ignore-rules", "-C", "-s", "-m", "-o", "--color"),
     "features": ("-c", "--disable"),
     "mcp": ("-c", "--disable"),
+    "app-server": ("-c", "--disable", "--strict-config", "--listen"),
 }
 
 
@@ -310,7 +338,8 @@ def build_prompt(stage: str, expected: Mapping[str, str], *, bundle_dir: str, no
     text = (
         f"You are the external {spec.name} reviewer. Review the bundle in `{bundle_dir}` (start with its "
         "`MANIFEST.md` and `REVIEW_REQUEST.md`) against the files in the current directory. You may read files and "
-        "run read-only commands; do not modify any file in this tree.\n\n"
+        "run read-only commands; do not modify any file in this tree. Do the review yourself: do not spawn "
+        "sub-agents or delegate any part of it.\n\n"
         "Write the verdict as Markdown whose first lines are exactly this header, then the sections "
         "`## Blocking findings`, `## Important findings`, `## Optional findings`, `## Missing tests` and "
         "`## Required acceptance criteria`:\n\n"
@@ -487,8 +516,11 @@ def interpreter_dir(binary: Path) -> Path | None:
 
 
 def resolve_binary(name: str) -> Path:
-    """The real path of ``reviewer.binary``: a path as given, or a name looked
-    up on the Controller's own ``PATH``. Refuses what cannot be resolved."""
+    """The path of ``reviewer.binary``: a path as given, or a name looked up on
+    the Controller's own ``PATH``. Refuses what cannot be resolved. The symlink is
+    deliberately **not** resolved (``env.txt``): its directory also holds the
+    ``node`` the ``#!/usr/bin/env node`` launcher needs, and the resolved
+    ``codex.js`` directory does not."""
     candidate = Path(name)
     if candidate.is_absolute() or "/" in name:
         resolved = candidate
@@ -555,71 +587,112 @@ class JobLayout:
         return "/".join([job_dir(self.job_id), *parts])
 
 
+def _overrides(kind: str, *, model: str, effort: str, tmpdir: Path | None, tree: Path | None) -> list[str]:
+    """The ``-c`` overrides of an invocation kind, in the order they are emitted.
+    ``exec`` and ``app-server`` (the composing command) carry the same set, so
+    the composed configuration is the one the review runs under. Every item was
+    accepted under ``--strict-config`` (``exec_argv.json``); the project trust
+    table uses the inline-table form, because the dotted quoted form is rejected."""
+    overrides = ['model_provider="openai"', "notify=[]", 'web_search="disabled"', 'project_root_markers=[".git"]']
+    if kind in ("exec", "app-server"):
+        overrides += [f'model="{model}"', f'model_reasoning_effort="{effort}"', f'service_tier="{SERVICE_TIER}"',
+                      'approval_policy="never"', 'sandbox_mode="workspace-write"',
+                      "sandbox_workspace_write.network_access=false",
+                      "sandbox_workspace_write.exclude_slash_tmp=true",
+                      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+                      f"sandbox_workspace_write.writable_roots={json.dumps([str(tmpdir)] if tmpdir else [])}",
+                      f"projects={{{json.dumps(str(tree))}={{trust_level=\"untrusted\"}}}}" if tree else "projects={}",
+                      "skills.bundled.enabled=false"]
+    return overrides
+
+
 def argv(kind: str, *, binary: Path, tree: Path | None = None, verdict: Path | None = None, model: str = DEFAULT_MODEL,
          effort: str = DEFAULT_EFFORT, tmpdir: Path | None = None, prompt: str | None = None) -> list[str]:
     """The only constructor of a Codex command line. Every invocation kind is
     built from its own pinned flag list; explicit overrides outrank the
     operator's own configuration. ``features`` and ``mcp list`` take the
-    overrides they accept and never ``--strict-config``."""
+    overrides they accept and never ``--strict-config``; ``app-server`` is the
+    command that composes the configuration layers (:func:`compose_config`)."""
     flags = KIND_FLAGS[kind]
     out = [str(binary)]
     if kind == "features":
         out += ["features", "list"]
     elif kind == "mcp":
         out += ["mcp", "list"]
-    elif kind == "exec":
-        out += ["exec"]
+    else:
+        out += [kind]
     if "--strict-config" in flags:
         out.append("--strict-config")
     for feature in DISABLED_FEATURES:
         out += ["--disable", feature]
-    overrides = ['model_provider="openai"', "notify=[]", 'web_search="disabled"', 'project_root_markers=[".git"]']
-    if kind == "exec":
-        overrides += [f'model="{model}"', f'model_reasoning_effort="{effort}"', f'service_tier="{SERVICE_TIER}"',
-                      'approval_policy="never"', 'sandbox_mode="workspace-write"', "sandbox_workspace_write.network_access=false",
-                      "sandbox_workspace_write.exclude_slash_tmp=true",
-                      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
-                      f"sandbox_workspace_write.writable_roots={json.dumps([str(tmpdir)] if tmpdir else [])}"]
-    for item in overrides:
+    for item in _overrides(kind, model=model, effort=effort, tmpdir=tmpdir, tree=tree):
         out += ["-c", item]
     if kind == "exec":
         out += ["-s", "workspace-write", "-C", str(tree), "--ignore-rules", "--color", "never", "-o", str(verdict)]
         out.append(prompt if prompt is not None else "-")
+    elif kind == "app-server":
+        out += ["--listen", "stdio://"]
     return out
 
 
-#: The overrides a launch must find in an argv (the argv contract).
-def required_overrides(kind: str) -> tuple[str, ...]:
-    base = ('model_provider="openai"', "notify=[]", 'web_search="disabled"', 'project_root_markers=[".git"]')
-    if kind != "exec":
-        return base
-    return (*base, 'approval_policy="never"', 'sandbox_mode="workspace-write"',
-            "sandbox_workspace_write.network_access=false")
+def required_overrides(kind: str, *, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT,
+                       tmpdir: Path | None = None, tree: Path | None = None) -> tuple[str, ...]:
+    """The overrides a launch must find in an argv (the argv contract): the
+    complete set, model, effort, tier, sandbox table, project trust and bundled
+    skills included."""
+    return tuple(_overrides(kind, model=model, effort=effort, tmpdir=tmpdir, tree=tree))
 
 
-def check_argv(kind: str, command: Sequence[str]) -> None:
-    """Refuse a launch whose command line omits a pinned override: a disable
-    for any feature of :data:`DISABLED_FEATURES`, one of
-    :func:`required_overrides`, the sandbox, a profile argument, a flag the
-    invocation kind does not accept, or ``--approve-for-me``."""
+def check_argv(kind: str, command: Sequence[str], *, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT,
+               tmpdir: Path | None = None, tree: Path | None = None, verdict: Path | None = None) -> None:
+    """Refuse a launch whose command line omits a pinned item: a disable for any
+    feature of :data:`DISABLED_FEATURES`, an override of :func:`required_overrides`
+    (and any ``-c`` that is not one of them, so a later duplicate cannot win),
+    the sandbox, the working copy (``-C``), the rules switch, the verdict path, a
+    profile argument, a flag the invocation kind does not accept, or
+    ``--approve-for-me``."""
     present_disables = {command[i + 1] for i, a in enumerate(command[:-1]) if a == "--disable"}
     for feature in DISABLED_FEATURES:
         if feature not in present_disables:
             raise _refuse(f"the command line does not disable the {feature!r} feature", check="argv", entry=feature)
-    present_overrides = {command[i + 1] for i, a in enumerate(command[:-1]) if a == "-c"}
-    for item in required_overrides(kind):
-        if item not in present_overrides:
+    if "code_mode_host" in present_disables:
+        raise _refuse("the command line disables the 'code_mode_host' tool", check="argv", entry="code_mode_host")
+    present = [command[i + 1] for i, a in enumerate(command[:-1]) if a == "-c"]
+    required = required_overrides(kind, model=model, effort=effort, tmpdir=tmpdir, tree=tree)
+    for item in required:
+        if item not in present:
             raise _refuse(f"the command line omits the pinned override {item!r}", check="argv", entry=item)
+    for item in present:
+        if item not in required:
+            raise _refuse(f"the command line carries the unpinned override {item!r}", check="argv", entry=item)
     banned = {"-p", "--profile", "--approve-for-me", "--dangerously-bypass-approvals-and-sandbox",
               "--dangerously-bypass-hook-trust", "--add-dir", "--oss", "--ephemeral", "--enable"}
     for arg in command[1:]:
         if arg in banned:
             raise _refuse(f"the command line carries {arg!r}", check="argv", entry=arg)
+
+    def value_of(flag: str) -> str | None:
+        return command[command.index(flag) + 1] if command.count(flag) == 1 and command.index(flag) + 1 < len(command) \
+            else None
+
     if kind == "exec":
-        if command.count("-s") != 1 or command[command.index("-s") + 1] != "workspace-write":
+        if command.count("-s") != 1 or value_of("-s") != "workspace-write":
             raise _refuse("the command line does not select the workspace-write sandbox", check="argv", entry="-s")
         if "--strict-config" not in command:
             raise _refuse("the command line omits --strict-config", check="argv", entry="--strict-config")
+        if "--ignore-rules" not in command:
+            raise _refuse("the command line omits --ignore-rules", check="argv", entry="--ignore-rules")
+        if tree is None or value_of("-C") != str(tree):
+            raise _refuse("the command line does not run in the review copy (-C)", check="argv", entry="-C")
+        if verdict is None or value_of("-o") != str(verdict):
+            raise _refuse("the command line does not write the verdict to the job's file (-o)", check="argv", entry="-o")
+        if value_of("--color") != "never":
+            raise _refuse("the command line does not pin --color never", check="argv", entry="--color")
+    elif kind == "app-server":
+        if "--strict-config" not in command:
+            raise _refuse("the command line omits --strict-config", check="argv", entry="--strict-config")
+        if value_of("--listen") != "stdio://":
+            raise _refuse("the command line does not listen on stdio", check="argv", entry="--listen")
     elif "--strict-config" in command:
         raise _refuse(f"{kind!r} does not accept --strict-config", check="argv", entry="--strict-config")
 
@@ -719,45 +792,104 @@ def check_mcp_list(output: str) -> None:
 
 
 def flatten(value: object, prefix: str = "") -> dict[str, object]:
+    """The leaves of ``value`` under dotted keys, lists by index, the way
+    ``config/read`` keys its ``origins`` (``sandbox_workspace_write.writable_roots.0``).
+    An empty table or list is itself a leaf."""
     out: dict[str, object] = {}
     if isinstance(value, dict) and value:
         for key, item in value.items():
             out.update(flatten(item, f"{prefix}.{key}" if prefix else key))
+    elif isinstance(value, list) and value:
+        for index, item in enumerate(value):
+            out.update(flatten(item, f"{prefix}.{index}" if prefix else str(index)))
     else:
         out[prefix] = value
     return out
 
 
-def check_effective(composed: Mapping[str, Mapping[str, object]], *, model: str = DEFAULT_MODEL,
-                    effort: str = DEFAULT_EFFORT) -> None:
-    """Control (b): ``composed`` maps each effective key to
-    ``{"value": ..., "source": <layer>}`` as the composing command prints it.
-    Every key of :data:`EFFECTIVE_POLICY` (and the model, effort and tier) must
-    equal the pinned value, none of :data:`FORBIDDEN_EFFECTIVE_KEYS` may be
-    set, and a custom provider's authentication command is a forbidden key. The
-    error names the source layer and the conflicting key and value."""
+def _lookup(config: Mapping, dotted: str) -> object:
+    node: object = config
+    for part in dotted.split("."):
+        if not isinstance(node, Mapping) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _origin(origins: Mapping, key: str) -> object:
+    """The origin ``config/read`` reports for ``key``: the leaf itself, or the
+    first leaf below it. Origin keys embed project paths unescaped, so they are
+    only ever matched by prefix, never split."""
+    if key in origins:
+        return origins[key]
+    for name in sorted(origins):
+        if name.startswith(f"{key}."):
+            return origins[name]
+    return None
+
+
+def effective_policy(*, model: str, effort: str, tree: Path, tmpdir: Path) -> dict[str, object]:
+    """Every value the composed ``config`` must equal for this launch: the scalar
+    table, the model, effort and tier, the sandbox table whole and the project
+    trust table whole."""
     wanted = dict(EFFECTIVE_POLICY)
-    wanted.update({"model": model, "model_reasoning_effort": effort, "service_tier": SERVICE_TIER})
-    for key, want in wanted.items():
-        if isinstance(want, dict):  # an empty table: nothing may be set below it
-            offenders = [k for k in sorted(composed) if k.startswith(f"{key}.")
-                         or (k == key and composed[k].get("value"))]
-            if offenders:
-                entry = composed[offenders[0]]
-                raise _refuse(f"the composed configuration sets {offenders[0]}", check="effective",
-                              key=offenders[0], value=entry.get("value"), source=entry.get("source"))
+    wanted.update({"model": model, "model_reasoning_effort": effort, "service_tier": SERVICE_TIER,
+                   "sandbox_workspace_write": {"writable_roots": [str(tmpdir)], "network_access": False,
+                                               "exclude_tmpdir_env_var": True, "exclude_slash_tmp": True},
+                   "projects": {str(tree): {"trust_level": "untrusted"}}})
+    return wanted
+
+
+def check_effective(composed: Mapping, *, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT, tree: Path,
+                    tmpdir: Path, codex_home: Path | None = None) -> None:
+    """Control (b): ``composed`` is the ``config/read`` result with layers
+    (``config``, ``origins``, ``layers``). Every key of :func:`effective_policy`
+    must equal the pinned value (a table compared leaf by leaf, an unexpected leaf
+    included), no layer may be of an unknown type or carry configuration where it
+    must be absent, and none of :data:`FORBIDDEN_EFFECTIVE_KEYS` may be set by a
+    layer other than the packaged defaults (an empty table or a null is unset).
+    The error names the origin layer, the key and the value."""
+    config = composed.get("config") if isinstance(composed, Mapping) else None
+    origins = composed.get("origins") if isinstance(composed, Mapping) else None
+    layers = composed.get("layers") if isinstance(composed, Mapping) else None
+    if not isinstance(config, Mapping) or not isinstance(origins, Mapping) or not isinstance(layers, list):
+        raise _refuse("the composed configuration is not a config/read result with layers", check="effective")
+    _check_layers(layers, codex_home)
+    for key, want in effective_policy(model=model, effort=effort, tree=tree, tmpdir=tmpdir).items():
+        got = _lookup(config, key)
+        if got == want or (want in ({}, []) and got is None):
             continue
-        entry = composed.get(key, {})
-        got = entry.get("value") if isinstance(entry, Mapping) else entry
-        if got != want:
-            raise _refuse(f"the composed configuration sets {key} to {got!r}, expected {want!r}", check="effective",
-                          key=key, value=got, source=entry.get("source") if isinstance(entry, Mapping) else None)
-    for key in sorted(composed):
-        top = key.split(".", 1)[0]
-        if top in FORBIDDEN_EFFECTIVE_KEYS:
-            entry = composed[key]
-            raise _refuse(f"the composed configuration sets {key}", check="effective", key=key,
-                          value=entry.get("value"), source=entry.get("source"))
+        wanted_leaves, got_leaves = flatten(want, key), flatten(got, key)
+        differing = [leaf for leaf in sorted({*wanted_leaves, *got_leaves})
+                     if wanted_leaves.get(leaf, "<unset>") != got_leaves.get(leaf, "<unset>")]
+        leaf = next((name for name in differing if name in got_leaves), differing[0] if differing else key)
+        raise _refuse(f"the composed configuration sets {leaf} to {got_leaves.get(leaf, '<unset>')!r}, expected "
+                      f"{wanted_leaves.get(leaf, '<unset>')!r}", check="effective", key=leaf,
+                      value=got_leaves.get(leaf), source=_origin(origins, leaf))
+    for name in sorted(origins):
+        origin = origins[name]
+        if isinstance(origin, Mapping) and origin.get("type") == "packagedDefaults":
+            continue
+        if name.split(".", 1)[0] in FORBIDDEN_EFFECTIVE_KEYS:
+            raise _refuse(f"the composed configuration sets {name}", check="effective", key=name,
+                          value=flatten(config).get(name), source=origin)
+
+
+def _check_layers(layers: Sequence, codex_home: Path | None) -> None:
+    for layer in layers:
+        name = layer.get("name") if isinstance(layer, Mapping) else None
+        kind = name.get("type") if isinstance(name, Mapping) else None
+        if kind not in CONFIG_SOURCES:
+            raise _refuse(f"the composed configuration has a layer of the unknown type {kind!r}", check="effective",
+                          entry=str(kind), source=name)
+        disposition = CONFIG_SOURCES[kind]
+        if disposition == "absent" and layer.get("config"):
+            raise _refuse(f"the {kind} layer carries configuration", check="effective", entry=kind, source=name)
+        if kind == "project" and not layer.get("disabledReason"):
+            raise _refuse("a project layer is enabled", check="effective", entry=kind, source=name)
+        if kind == "user" and codex_home is not None and name.get("file") != str(codex_home / "config.toml"):
+            raise _refuse("the user layer is not the minimal home's config.toml", check="effective", entry=kind,
+                          source=name)
 
 
 # ---------------------------------------------------------------------------
@@ -855,6 +987,134 @@ def _kill_group(pgid: int) -> None:
 
 
 # ---------------------------------------------------------------------------
+# The composing command (control (b)) and the job's rollouts
+# ---------------------------------------------------------------------------
+
+
+def compose_config(binary: Path, layout: "JobLayout", env: Mapping[str, str], *, model: str, effort: str,
+                   timeout: float) -> dict:
+    """Run the composing command and return the ``config/read`` result with its
+    layers. It is the app-server JSON-RPC method over stdio
+    (``compose.txt``): ``initialize``, ``initialized``, ``config/read`` with
+    ``includeLayers`` and the review copy as ``cwd``, then stdin closes and the
+    server exits. It needs no credential and starts no server, hook or notify
+    command; it writes only the state entries :data:`CODEX_STATE_ENTRIES` lists.
+    It runs under :func:`run_bounded`, so it has the same deadline and group
+    kill, and it carries the exec's own overrides, so the composed values are the
+    ones the review runs under."""
+    command = argv("app-server", binary=binary, tree=layout.tree, model=model, effort=effort, tmpdir=layout.tmp)
+    check_argv("app-server", command, model=model, effort=effort, tmpdir=layout.tmp, tree=layout.tree)
+    requests = [
+        {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "workflow-controller", "version": "1"}}},
+        {"method": "initialized"},
+        {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(layout.tree)}},
+    ]
+    result = run_bounded(command, cwd=layout.tree, env=env, timeout=timeout,
+                         stdin_text="".join(json.dumps(item) + "\n" for item in requests))
+    stderr = result.stderr.decode("utf-8", "replace")
+    if result.timed_out or result.exit_code != 0:
+        raise _refuse("the composing command did not run", check="effective", value=stderr.strip()[-400:])
+    for line in result.stdout.decode("utf-8", "replace").splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get("id") == 2:
+            if isinstance(message.get("result"), dict):
+                return message["result"]
+            raise _refuse("the composing command answered config/read with an error", check="effective",
+                          value=json.dumps(message.get("error"))[:400])
+    raise _refuse("the composing command printed no config/read answer", check="effective", value=stderr.strip()[-400:])
+
+
+#: ``codex_error_info`` values that mean a usage or rate limit (the binary's
+#: snake_case strings and the protocol's camelCase spelling).
+LIMIT_ERRORS = frozenset({"usage_limit_exceeded", "rate_limit_exceeded", "usageLimitExceeded", "rateLimitExceeded"})
+
+
+def _is_limit_error(info: object) -> bool:
+    if isinstance(info, str):
+        return info in LIMIT_ERRORS
+    if not isinstance(info, dict):
+        return False
+    if any(key in LIMIT_ERRORS for key in info):
+        return True
+    for key in ("http_connection_failed", "httpConnectionFailed"):
+        failed = info.get(key)
+        if isinstance(failed, dict) and 429 in (failed.get("http_status_code"), failed.get("httpStatusCode")):
+            return True
+    return False
+
+
+@dataclasses.dataclass
+class RolloutScan:
+    """What the job's rollouts say, across every file: whether Codex reported a
+    usage limit, and each sub-agent session with its token usage."""
+
+    limit: bool = False
+    limit_detail: str | None = None
+    subagents: list[dict] = dataclasses.field(default_factory=list)
+
+
+def scan_rollouts(codex_home: Path) -> RolloutScan:
+    """Read **every** rollout under ``<codex-home>/sessions/`` (a sub-agent
+    writes its own). A limit is the ``task_complete`` event's
+    ``payload.error.codex_error_info`` being a limit error, a non-null
+    ``token_count.rate_limits.rate_limit_reached_type`` or a window at 100
+    percent; the transcript text on stderr is never read. A sub-agent is a
+    rollout whose ``session_meta.payload.source.subagent.thread_spawn`` is set
+    (not the file count: D5's retry legitimately writes a second root rollout)."""
+    scan = RolloutScan()
+    root = Path(codex_home) / "sessions"
+    try:
+        files = sorted(p for p in root.glob("*/*/*/rollout-*.jsonl") if p.is_file())
+    except OSError:
+        return scan
+    for path in files:
+        subagent = False
+        tokens: int | None = None
+        try:
+            fh = open(path, "rb")
+        except OSError:
+            continue
+        with fh:
+            for raw in fh:
+                try:
+                    event = json.loads(raw)
+                except ValueError:
+                    continue
+                payload = event.get("payload") if isinstance(event, dict) else None
+                if not isinstance(payload, dict):
+                    continue
+                kind = event.get("type")
+                if kind == "session_meta":
+                    source = payload.get("source")
+                    spawn = source.get("subagent") if isinstance(source, dict) else None
+                    subagent = isinstance(spawn, dict) and bool(spawn.get("thread_spawn"))
+                elif payload.get("type") == "token_count":
+                    info = payload.get("info")
+                    usage_block = info.get("total_token_usage") if isinstance(info, dict) else None
+                    if isinstance(usage_block, dict) and isinstance(usage_block.get("total_tokens"), int):
+                        tokens = usage_block["total_tokens"]
+                    limits = payload.get("rate_limits")
+                    if isinstance(limits, dict):
+                        reached = limits.get("rate_limit_reached_type")
+                        full = [w for w in (limits.get("primary"), limits.get("secondary"))
+                                if isinstance(w, dict) and isinstance(w.get("used_percent"), (int, float))
+                                and w["used_percent"] >= 100]
+                        if reached is not None or full:
+                            scan.limit, scan.limit_detail = True, f"rate_limit_reached_type={reached!r}"
+                elif payload.get("type") == "task_complete":
+                    error = payload.get("error")
+                    info = error.get("codex_error_info") if isinstance(error, dict) else None
+                    if _is_limit_error(info):
+                        scan.limit, scan.limit_detail = True, json.dumps(info)
+        if subagent:
+            scan.subagents.append({"rollout": str(path.relative_to(root)), "total_tokens": tokens})
+    return scan
+
+
+# ---------------------------------------------------------------------------
 # The harness
 # ---------------------------------------------------------------------------
 
@@ -893,7 +1153,7 @@ def harness(name: str) -> ReviewHarness:
 
 
 def _preflight(layout: JobLayout, binary: Path, env: Mapping[str, str], model: str, effort: str,
-               compose: Callable[[Mapping[str, str]], Mapping] | None, system_dir: Path, timeout: float) -> None:
+               compose: Callable[[Mapping[str, str]], Mapping], system_dir: Path, timeout: float) -> None:
     """Every refusal of the boundary that can be decided before the review
     starts, each run before each invocation: the layers outside the home, the
     home itself, ``mcp list``, ``features list`` and the composed configuration."""
@@ -901,16 +1161,29 @@ def _preflight(layout: JobLayout, binary: Path, env: Mapping[str, str], model: s
     for kind in ("mcp", "features"):
         check_home(layout)
         command = argv(kind, binary=binary, model=model, effort=effort)
-        check_argv(kind, command)
+        check_argv(kind, command, model=model, effort=effort)
         result = run_bounded(command, cwd=layout.tree, env=env, timeout=timeout)
         if result.exit_code != 0 or result.timed_out:
             raise _refuse(f"`{kind} list` did not run", check=kind, value=result.stderr.decode("utf-8", "replace")[:400])
         (check_mcp_list if kind == "mcp" else check_features)(result.stdout.decode("utf-8", "replace"))
-    if compose is None:
-        raise _refuse("the installed Codex has no recorded command that composes the configuration layers",
-                      check="effective")
     check_home(layout)
-    check_effective(compose(env), model=model, effort=effort)
+    check_effective(compose(env), model=model, effort=effort, tree=layout.tree, tmpdir=layout.tmp,
+                    codex_home=layout.codex_home)
+
+
+def _retain_verdict(runtime_root: Path, job_id: str, attempt: int, text: str, status: str | None,
+                    disposition: str) -> dict:
+    """Keep a verdict the harness obtained (Workflow condition 2 of workflow#28:
+    the courier records every verdict it obtains, REVISE included): its text under
+    ``<runtime>/reviews/<job id>-verdict-<attempt>.md`` and its digest, ``Status:``
+    and disposition in the returned entry, which the job record carries."""
+    rel = f"reviews/{job_id}-verdict-{attempt}.md"
+    data = text.encode("utf-8")
+    entry = {"attempt": attempt, "sha256": hashlib.sha256(data).hexdigest(), "status": status,
+             "disposition": disposition, "path": rel}
+    with contextlib.suppress(OSError):
+        runtime.write_bytes(runtime_root, rel, data)
+    return entry
 
 
 def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_name: str, binary_name: str,
@@ -921,23 +1194,29 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
                   inherited_env: Mapping[str, str] | None = None, on_spawn: Callable[[int, int], None] | None = None,
                   out: dict | None = None) -> dict:
     """Run one review end to end and return ``{"status", "verdict", "check",
-    "outcome", "credentials", "detail"}``: the copy is built, the boundary
-    checked before each of the (at most two) invocations, the verdict compared
-    exactly with one bounded retry, the real repository compared before and
-    after, the credential copy written back, and the job's files removed on
-    every path. ``outcome`` is ``verdict`` (``verdict`` holds the text),
-    ``mismatch`` (second mismatch), ``changed`` (the repository or the state
-    identity moved: the verdict is void), ``empty`` (no verdict), ``limit``,
-    ``timeout`` or ``failed``. The harness is called only for a registered
-    name; the caller (CP3) records nothing about it here. ``out``, when given,
-    is the dict the result is built in, so a caller whose run is interrupted
-    (an exception propagating out) still reads the ``readings`` and
+    "outcome", "credentials", "detail", "readings", "verdicts", "subagents"}``:
+    the copy is built, the boundary checked before each of the (at most two)
+    invocations, the verdict compared exactly with one bounded retry, the real
+    repository compared before and after, the credential copy written back, and
+    the job's files removed on every path. ``outcome`` is ``verdict``
+    (``verdict`` holds the text), ``mismatch`` (second mismatch), ``changed``
+    (the repository or the state identity moved: the verdict is void), ``empty``
+    (no verdict), ``limit`` (Codex's own rollout says so, never the transcript),
+    ``timeout`` or ``failed``. ``verdicts`` lists every verdict obtained, with its
+    digest, status and disposition; ``subagents`` the sub-agent sessions the job's
+    rollouts show, with their token usage. The harness is called only for a
+    registered name. ``compose`` defaults to :func:`compose_config`. ``out``,
+    when given, is the dict the result is built in, so a caller whose run is
+    interrupted (an exception propagating out) still reads the ``readings`` and
     ``credentials`` the ``finally`` below left in it."""
     layout = JobLayout(runtime_root, job_id)
     selected = harness(harness_name)  # refuses an unregistered name before anything is built
     binary = resolve_binary(binary_name)
     expected = expected_headers(manifest, stage, model)
     identity = state_identity or (lambda: None)
+    if compose is None:
+        def compose(env: Mapping[str, str]) -> Mapping:
+            return compose_config(binary, layout, env, model=model, effort=effort, timeout=min(timeout, 120))
     try:
         own = [str(runtime_root.resolve().relative_to(worktree.resolve()))]
     except ValueError:
@@ -946,7 +1225,7 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     captured = None
     result: dict = out if out is not None else {}
     result.update({"status": None, "verdict": None, "check": None, "outcome": "failed", "credentials": None,
-                   "detail": None, "readings": []})
+                   "detail": None, "readings": [], "verdicts": [], "subagents": []})
     try:
         build_copy(worktree, runtime_root, job_id)
         captured = build_home(layout, operator_home)
@@ -959,39 +1238,74 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
             prompt = build_prompt(stage, expected, bundle_dir=bundle_dir, note=note)
             command = argv("exec", binary=binary, tree=layout.tree, verdict=layout.verdict, model=model, effort=effort,
                            tmpdir=layout.tmp, prompt="-")
-            check_argv("exec", command)
+            check_argv("exec", command, model=model, effort=effort, tmpdir=layout.tmp, tree=layout.tree,
+                       verdict=layout.verdict)
             check_home(layout)
             check_outside_layers(system_dir)
             run = run_bounded(command, cwd=layout.tree, env=env, timeout=timeout, stdin_text=prompt,
                               on_spawn=on_spawn if attempt == 1 else None)
-            text = run.stdout.decode("utf-8", "replace") + run.stderr.decode("utf-8", "replace")
+            scan = scan_rollouts(layout.codex_home)
+            result["subagents"] = scan.subagents
+            verdict = layout.verdict.read_text("utf-8") if layout.verdict.is_file() else ""
+            status = verify_verdict(verdict, expected).status if verdict.strip() else None
             if run.timed_out:
+                if verdict.strip():
+                    result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, status, "not-ingested: timeout"))
                 result.update(outcome="timeout", detail="the review passed its deadline")
                 break
-            verdict = layout.verdict.read_text("utf-8") if layout.verdict.is_file() else ""
             if run.exit_code != 0 or not verdict.strip():
-                limited = bool(re.search(r"\b429\b|rate.?limit|usage limit|limit reached", text, re.IGNORECASE))
-                result.update(outcome="limit" if limited else ("empty" if run.exit_code == 0 else "failed"),
-                              detail=text.strip()[-400:])
+                if verdict.strip():
+                    result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, status,
+                                                              f"not-ingested: exit {run.exit_code}"))
+                text = run.stdout.decode("utf-8", "replace") + run.stderr.decode("utf-8", "replace")
+                result.update(outcome="limit" if scan.limit else ("empty" if run.exit_code == 0 else "failed"),
+                              detail=(f"Codex reported a limit ({scan.limit_detail})" if scan.limit
+                                      else text.strip()[-400:]))
                 break
             check = verify_verdict(verdict, expected)
             result.update(check=check, status=check.status)
             if check.ok:
+                result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, check.status, "returned"))
                 result.update(outcome="verdict", verdict=verdict, detail=None)
                 break
+            result["verdicts"].append(_retain_verdict(
+                runtime_root, job_id, attempt, verdict, check.status,
+                "not-ingested: header mismatch, retried once" if attempt == 1 else "not-ingested: header mismatch"))
             result.update(outcome="mismatch", detail=mismatch_note(check))
             note = mismatch_note(check)
             runtime.remove_tree(runtime_root, layout.rel("verdict.md"))
         after = snapshot_repository(worktree, feedback_dir=feedback_dir, state_identity=identity(), exclude=own)
         differing = compare_snapshots(before, after)
         if differing:
+            for entry in result["verdicts"]:
+                if entry["disposition"] == "returned":
+                    entry["disposition"] = "void: the repository or the state identity changed"
             result.update(outcome="changed", verdict=None, detail="changed during the review: " + ", ".join(differing[:20]))
     finally:
-        if captured is not None:
-            result["credentials"] = copy_back_credentials(layout, operator_home, captured)
-        result["readings"] = selected.end_readings(layout.codex_home)
-        settle_job_dir(runtime_root, job_id)
+        _settle(result, runtime_root, layout, operator_home, captured, selected)
     return result
+
+
+def _settle(result: dict, runtime_root: Path, layout: JobLayout, operator_home: Path, captured: str | None,
+            selected: ReviewHarness) -> None:
+    """The three clean-up steps of every path, each guarded: one failing step
+    never skips the next (the private ``auth.json`` copy is always removed) and
+    never replaces the exception already propagating (a Ctrl-C still exits 130);
+    with nothing in flight the first failure is raised."""
+    failures: list[Exception] = []
+    steps: list[Callable[[], None]] = []
+    if captured is not None:
+        steps.append(lambda: result.__setitem__("credentials", copy_back_credentials(layout, operator_home, captured)))
+    steps.append(lambda: result.__setitem__("readings", selected.end_readings(layout.codex_home)))
+    steps.append(lambda: result.__setitem__("subagents", scan_rollouts(layout.codex_home).subagents))
+    steps.append(lambda: settle_job_dir(runtime_root, layout.job_id))
+    for step in steps:
+        try:
+            step()
+        except Exception as exc:  # noqa: BLE001 -- recorded; raised below only when nothing else is in flight
+            failures.append(exc)
+    if failures and sys.exc_info()[0] is None:
+        raise failures[0]
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,17 @@ composed ``hooks.*.command`` while the ``hooks`` feature is on, the composed
 output is not read); ``mcp list`` reports the composed server names without
 running them. Each run is recorded in the log.
 
+Composing command. ``app-server`` answers the JSON-RPC ``config/read`` request
+with ``includeLayers`` the way the pinned Codex does (``compose.txt``):
+``config`` (the composed table plus the packaged defaults), ``origins`` (one
+entry per leaf, lists by index, none for defaults and empty containers) and
+``layers`` (``sessionFlags``, then any managed layer, ``user``, ``system`` and
+project layers, a project layer carrying a ``disabledReason`` and no effect when
+the project is marked untrusted). ``exec`` appends the project-trust entry to
+the home's ``config.toml`` unless a ``projects`` override names the working
+root, writes only the state entries the capture lists and, with the bundled
+skills left on, ``skills/.system``.
+
 The log (``scenario["log"]``, JSON lines) records, per invocation: the
 subcommand, argv, working directory, full environment, ``CODEX_HOME``, the
 composed values with their source layer, the effective sandbox roots, network
@@ -43,7 +54,10 @@ written here once the watchdog is armed: a test that orphans a fake waits for it
 ``state_extra`` (names created in ``CODEX_HOME`` on every invocation),
 ``rate_limits`` (``{"primary": percent, "secondary": percent}``), and
 ``exec``: ``verdict`` (``exact``, ``wrong_id_first``, ``bad_revision``,
-``none``, ``limit``, ``hang``, ``missing_status``, ``block``), ``exit``,
+``none``, ``limit``, ``hang``, ``missing_status``, ``block``, ``revise``), ``exit``,
+``limit_shape`` (``string``, ``http429`` or ``percent``: how the rollout reports the
+limit), ``stderr`` (text printed on stderr, a transcript line), ``subagent``
+(write a sub-agent rollout with that many total tokens),
 ``write_outside`` (list of paths to write), ``escape_to`` (a real-worktree path
 the fake writes as if the sandbox failed), ``git`` (argvs run in the working
 root), ``tool_attempts`` (feature names), ``use_web_search``,
@@ -138,24 +152,36 @@ def _flatten(prefix: str, value, source: str, out: dict) -> None:
 
 def compose(args: list[str], scenario: dict, cwd: Path, codex_home: Path) -> tuple[dict, dict]:
     """``(merged, sourced)``: the composed configuration and the same flattened
-    with the layer each leaf came from."""
+    with the layer each leaf came from. The layers, for ``config/read``, are in
+    ``compose.layers``."""
+    compose.layers = []
     overrides = [args[i + 1] for i, a in enumerate(args[:-1]) if a == "-c"]
     parsed = [_parse_override(o) for o in overrides]
     markers = next((v for k, v in parsed if k == ["project_root_markers"]), None)
     system = Path(scenario["system_dir"]) if scenario.get("system_dir") else Path("/nonexistent-codex-system")
     low: list[tuple[str, dict]] = [(f"system:{system / 'config.toml'}", _toml(system / "config.toml")),
                                    (f"user:{codex_home / 'config.toml'}", _toml(codex_home / "config.toml"))]
-    low += [(f"project:{p}", _toml(p)) for p in _project_layers(cwd, markers)]
+    low += [(f"project:{p}", _toml(p)) for p in _project_layers(cwd, markers) if p.is_file()]
     # managed layers outrank the command line
-    high = [(f"system:{system / name}", _toml(system / name)) for name in ("managed_config.toml", "requirements.toml")]
+    high = [(f"system:{system / name}", _toml(system / name)) for name in ("managed_config.toml", "requirements.toml")
+            if (system / name).is_file()]
     if scenario.get("managed"):
         high.append((f"managed:{scenario['managed']}", _toml(Path(scenario["managed"]))))
     merged: dict = {}
     sourced: dict = {}
+    trust = next((v for k, v in parsed if k == ["projects"]), None)
+    untrusted = isinstance(trust, dict) and isinstance(trust.get(str(cwd)), dict) \
+        and trust[str(cwd)].get("trust_level") == "untrusted"
 
     def apply(layers) -> None:
         nonlocal merged
         for source, data in layers:
+            disabled = None
+            if source.startswith("project:") and untrusted:
+                disabled = f"To load project-local config, add {cwd} as a trusted project."
+                compose.layers.append((source, data, disabled))
+                continue
+            compose.layers.append((source, data, disabled))
             merged = _merge(merged, data)
             if data:
                 leaves: dict = {}
@@ -174,8 +200,71 @@ def compose(args: list[str], scenario: dict, cwd: Path, codex_home: Path) -> tup
         node[key_path[-1]] = _merge(node[key_path[-1]], value) if isinstance(value, dict) \
             and isinstance(node.get(key_path[-1]), dict) else value
         sourced[".".join(key_path)] = {"value": value, "source": "override"}
+    compose.layers.insert(0, ("override", {".".join(k): v for k, v in parsed}, None)) if parsed else None
     apply(high)
     return merged, sourced
+
+
+_DEFAULTS = {"chatgpt_base_url": "https://chatgpt.com/backend-api/", "model_providers": {}, "profiles": {},
+             "profile": None, "openai_base_url": None, "auto_review": None, "permissions": None,
+             "default_permissions": None, "hooks": None, "mcp_servers": {}, "notify": []}
+
+
+def _layer_name(source: str) -> dict:
+    if source == "override":
+        return {"type": "sessionFlags"}
+    kind, _, rest = source.partition(":")
+    if kind == "system":
+        name = Path(rest).name
+        return {"type": {"managed_config.toml": "legacyManagedConfigTomlFromFile"}.get(name, "system"), "file": rest}
+    if kind == "managed":
+        return {"type": "enterpriseManaged", "id": "fake", "name": rest}
+    if kind == "project":
+        return {"type": "project", "dotCodexFolder": str(Path(rest).parent)}
+    return {"type": "user", "file": rest, "profile": None}
+
+
+def _leaves(prefix: str, value, out: list) -> None:
+    if isinstance(value, dict) and value:
+        for key, item in value.items():
+            _leaves(f"{prefix}.{key}" if prefix else key, item, out)
+    elif isinstance(value, list) and value:
+        for index, item in enumerate(value):
+            _leaves(f"{prefix}.{index}" if prefix else str(index), item, out)
+    elif value not in ({}, []):
+        out.append(prefix)
+
+
+def config_read(args: list[str], scenario: dict, cwd: Path, codex_home: Path) -> dict:
+    """The ``config/read`` result with layers for this invocation."""
+    merged, sourced = compose(args, scenario, cwd, codex_home)
+    config = _merge(_DEFAULTS, merged)
+    origins: dict = {}
+    for key, entry in sourced.items():
+        leaves: list = []
+        _leaves(key, entry["value"], leaves)
+        for leaf in leaves:
+            origins[leaf] = _layer_name(entry["source"])
+    layers = [{"name": _layer_name(source), "config": data, "disabledReason": disabled}
+              for source, data, disabled in compose.layers]
+    system = Path(scenario["system_dir"]) if scenario.get("system_dir") else Path("/nonexistent-codex-system")
+    if not any(layer["name"]["type"] == "system" for layer in layers):
+        layers.append({"name": {"type": "system", "file": str(system / "config.toml")}, "config": {},
+                       "disabledReason": None})
+    return {"config": config, "origins": origins, "layers": layers}
+
+
+def _serve_app_server(scenario: dict, cwd: Path, home: Path, argv: list[str]) -> None:
+    for line in sys.stdin:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("method") == "initialize":
+            print(json.dumps({"id": message["id"], "result": {"userAgent": VERSION}}), flush=True)
+        elif message.get("method") == "config/read":
+            result = config_read(argv, scenario, Path(message["params"].get("cwd", cwd)), home)
+            print(json.dumps({"id": message["id"], "result": result}), flush=True)
 
 
 def features(args: list[str], scenario: dict) -> dict[str, bool]:
@@ -215,17 +304,25 @@ def _command_of(table: dict):
     return table.get("command") if isinstance(table, dict) else None
 
 
-def _write_state(home: Path, scenario: dict, kind: str) -> None:
+def _write_state(home: Path, scenario: dict, kind: str, argv: list[str]) -> None:
+    """The entries the captured runs left in a minimal home (``state_entries.txt``):
+    ``tmp/`` always; ``installation_id``, the state databases and (``exec``)
+    ``models_cache.json`` and ``thread-writer-locks/`` for the kinds that start a
+    thread or a server; ``skills/.system`` only while the bundled skills are on."""
     if not home.is_dir():
         return
-    for name in ("installation_id", "version.json", "models_cache.json"):
-        (home / name).write_text("{}")
-    (home / "skills" / ".system").mkdir(parents=True, exist_ok=True)
-    (home / "skills" / ".codex-system-skills.marker").write_text("1")
-    (home / "plugins" / "cache").mkdir(parents=True, exist_ok=True)
-    (home / "plugins" / ".remote-plugin-install-staging").mkdir(parents=True, exist_ok=True)
+    (home / "tmp").mkdir(exist_ok=True)
+    if kind in ("exec", "compose"):
+        (home / "installation_id").write_text("id")
+        for name in ("goals_1", "logs_2", "memories_1", "queue_1", "state_5", "thread_history_1"):
+            (home / f"{name}.sqlite").write_text("db")
+        bundled_off = any(a == "skills.bundled.enabled=false" for a in argv)
+        if not bundled_off:
+            (home / "skills" / ".system").mkdir(parents=True, exist_ok=True)
+            (home / "skills" / ".system" / ".codex-system-skills.marker").write_text("1")
     if kind == "exec":
-        (home / "history.jsonl").write_text("{}\n")
+        (home / "models_cache.json").write_text("{}")
+        (home / "thread-writer-locks").mkdir(exist_ok=True)
     for extra in scenario.get("state_extra", []):
         target = home / extra
         if extra.endswith("/"):
@@ -235,17 +332,40 @@ def _write_state(home: Path, scenario: dict, kind: str) -> None:
             target.write_text("x")
 
 
-def _write_rollout(home: Path, scenario: dict) -> None:
+_LIMIT_INFO = {"string": "usage_limit_exceeded", "http429": {"http_connection_failed": {"http_status_code": 429}}}
+
+
+def _write_rollout(home: Path, scenario: dict, spec: dict | None = None, *, subagent_of: str | None = None,
+                   tokens: int = 10441) -> str:
+    """One rollout in the shapes of ``rollout_excerpt.jsonl``: ``session_meta``,
+    ``token_count`` (with ``rate_limits``) and ``task_complete`` (carrying the
+    ``error`` / ``codex_error_info`` of a limit when the scenario says so)."""
+    spec = spec or {}
     now = datetime.datetime.now(datetime.timezone.utc)
     folder = home / "sessions" / f"{now:%Y}" / f"{now:%m}" / f"{now:%d}"
     folder.mkdir(parents=True, exist_ok=True)
     limits = scenario.get("rate_limits") or {"primary": 7.0, "secondary": 3.0}
-    event = {"timestamp": now.isoformat().replace("+00:00", "Z"), "payload": {"type": "token_count", "rate_limits": {
-        "primary": {"used_percent": limits["primary"], "window_minutes": 300,
-                    "resets_at": int(now.timestamp()) + 3600},
-        "secondary": {"used_percent": limits["secondary"], "window_minutes": 10080,
-                      "resets_at": int(now.timestamp()) + 86400}}}}
-    (folder / f"rollout-{now:%Y-%m-%dT%H-%M-%S}-{uuid.uuid4()}.jsonl").write_text(json.dumps(event) + "\n")
+    stamp = now.isoformat().replace("+00:00", "Z")
+    thread = str(uuid.uuid4())
+    source = {"subagent": {"thread_spawn": {"parent_thread_id": subagent_of, "depth": 1}}} if subagent_of else "exec"
+    limit = spec.get("verdict") == "limit" and subagent_of is None
+    shape = spec.get("limit_shape", "string")
+    reading = {"primary": {"used_percent": 100.0 if limit and shape == "percent" else limits["primary"],
+                           "window_minutes": 300, "resets_at": int(now.timestamp()) + 3600},
+               "secondary": {"used_percent": limits["secondary"], "window_minutes": 10080,
+                             "resets_at": int(now.timestamp()) + 86400}}
+    complete = {"type": "task_complete", "last_agent_message": None}
+    if limit and shape in _LIMIT_INFO:
+        complete["error"] = {"message": "You've hit your usage limit.", "codex_error_info": _LIMIT_INFO[shape]}
+    lines = [
+        {"timestamp": stamp, "type": "session_meta", "payload": {"id": thread, "source": source, "originator": "codex_exec"}},
+        {"timestamp": stamp, "type": "event_msg", "payload": {
+            "type": "token_count", "info": {"total_token_usage": {"total_tokens": tokens}}, "rate_limits": reading}},
+        {"timestamp": stamp, "type": "event_msg", "payload": complete},
+    ]
+    (folder / f"rollout-{now:%Y-%m-%dT%H-%M-%S}-{thread}.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in lines))
+    return thread
 
 
 def _header_from_prompt(prompt: str) -> list[str]:
@@ -261,7 +381,7 @@ def _verdict(kind: str, prompt: str) -> str | None:
         header = [line[:-5] if line.startswith("Reviewed bundle ID:") else line for line in header]
     if kind == "bad_revision":
         header = [line for line in header if "revision reviewed" not in line]
-    status = {"block": "BLOCK"}.get(kind, "APPROVE")
+    status = {"block": "BLOCK", "revise": "REVISE"}.get(kind, "APPROVE")
     lines = ["# Review Decision", ""]
     if kind != "missing_status":
         lines += [f"Status: {status}", ""]
@@ -325,7 +445,8 @@ def main() -> int:
     home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     positional = [a for i, a in enumerate(argv) if not a.startswith("-") and (i == 0 or argv[i - 1] not in (
         "-c", "--disable", "--enable", "-s", "-C", "-o", "--color", "-p", "--profile", "-m"))]
-    kind = {"features": "features", "mcp": "mcp", "exec": "exec", "debug": "compose"}.get(positional[0] if positional else "")
+    kind = {"features": "features", "mcp": "mcp", "exec": "exec", "app-server": "compose"}.get(
+        positional[0] if positional else "")
     record = {"kind": kind, "argv": argv, "cwd": str(cwd), "env": dict(os.environ), "codex_home": str(home),
               "ran": [], "tools": [], "writes": []}
     if kind is None:
@@ -341,7 +462,7 @@ def main() -> int:
     record.update(_roots(argv, cwd))
     state = features(argv, scenario)
     record["features_enabled"] = sorted(k for k, v in state.items() if v)
-    _write_state(home, scenario, kind)
+    _write_state(home, scenario, kind, [a for i, a in enumerate(argv) if i and argv[i - 1] == "-c"])
     code = 0
     if kind == "features":
         print("\n".join(f"{name:40} stable {'true' if on else 'false'}" for name, on in sorted(state.items())))
@@ -350,7 +471,7 @@ def main() -> int:
         print("\n".join(f"{n}  {_command_of(t)}" for n, t in servers.items()) if servers
               else "No MCP servers configured yet. Try `codex mcp add my-tool -- my-command`.")
     elif kind == "compose":
-        print(json.dumps(sourced, sort_keys=True))
+        _serve_app_server(scenario, cwd, home, argv)
     else:
         code = _exec(argv, scenario, merged, state, cwd, home, record)
     record["exit"] = code
@@ -400,7 +521,15 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
         record["refreshed_auth"] = True
     if spec.get("descendant"):
         subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], stdin=subprocess.DEVNULL)
-    _write_rollout(home, scenario)
+    if not any(a.startswith("projects=") and str(cwd) in a for a in argv):
+        # the pinned Codex auto-trusts the workspace-write cwd by appending to the home's config.toml
+        with open(home / "config.toml", "a") as fh:
+            fh.write(f'[projects."{cwd}"]\ntrust_level = "trusted"\n')
+    thread = _write_rollout(home, scenario, spec)
+    if spec.get("subagent"):
+        _write_rollout(home, scenario, spec, subagent_of=thread, tokens=int(spec["subagent"]))
+    if spec.get("stderr"):
+        print(spec["stderr"], file=sys.stderr)
     notify = merged.get("notify")
     verdict_kind = spec.get("verdict", "exact")
     if verdict_kind == "hang":
@@ -409,7 +538,7 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
             time.sleep(0.05)
     code = int(spec.get("exit", 0))
     if verdict_kind == "limit":
-        print("Error: 429 Too Many Requests: you have hit your usage limit", file=sys.stderr)
+        print("ERROR: You've hit your usage limit.", file=sys.stderr)
         code = code or 1
     elif verdict_kind != "none":
         out = argv[argv.index("-o") + 1] if "-o" in argv else None

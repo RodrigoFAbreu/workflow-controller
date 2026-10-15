@@ -42,7 +42,7 @@ MUTATIONS_CP4: dict[str, tuple[str, ...]] = {  # scenarios 6-10 (CP4)
 MUTATIONS_REVIEW: dict[str, tuple[str, ...]] = {  # scenarios 11-12 (codex-reviewer CP4)
     "scenario-codex-review-plan-stage": (
         "no-header-check", "no-ingest", "copy-kept", "repository-unguarded", "sandbox-dropped", "overrides-dropped",
-        "provider-pin-dropped", "features-not-disabled", "env-widened", "inherited-home", "mcp-list-unchecked",
+        "provider-pin-dropped", "trust-pin-dropped", "skills-pin-dropped", "features-not-disabled", "env-widened", "inherited-home", "mcp-list-unchecked",
         "effective-unchecked", "outside-layers-unchecked", "home-unchecked", "no-copy-back", "no-launch-intent"),
     "scenario-codex-review-implementation-stage-limit": (
         "copy-back-over-changes", "admission-without-readings", "admission-operator-only"),

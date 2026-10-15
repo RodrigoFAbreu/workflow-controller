@@ -880,7 +880,7 @@ class ReplayTest(_ReviewCase):
         layout.verdict.write_text("Status: REVISE\n")
         [resumed] = self.resume()
         [entry] = resumed["review"]["verdicts"]
-        self.assertEqual((entry["status"], entry["disposition"]), (None, "not-ingested: interrupted"))
+        self.assertEqual((entry["status"], entry["disposition"]), ("REVISE", "not-ingested: interrupted"))
         self.assertEqual((self.runtime_root / entry["path"]).read_text(), "Status: REVISE\n")
         self.assertFalse(layout.verdict.exists())
 

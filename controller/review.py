@@ -1244,9 +1244,13 @@ def _retain_verdict(runtime_root: Path, job_id: str, attempt: int, text: str, st
     the courier records every verdict it obtains, REVISE included): its text under
     ``<runtime>/reviews/<job id>-verdict-<attempt>.md`` and its digest, ``Status:``
     and disposition in the returned entry, which the job record carries."""
-    rel = f"reviews/{job_id}-verdict-{attempt}.md"
+    # never replace a file an earlier attempt (or a dead run) already retained: take the next free number
+    number = attempt
+    while (runtime_root / f"reviews/{job_id}-verdict-{number}.md").exists():
+        number += 1
+    rel = f"reviews/{job_id}-verdict-{number}.md"
     data = text.encode("utf-8")
-    entry = {"attempt": attempt, "sha256": hashlib.sha256(data).hexdigest(), "status": status,
+    entry = {"attempt": number, "sha256": hashlib.sha256(data).hexdigest(), "status": status,
              "disposition": disposition, "path": rel}
     try:
         runtime.write_bytes(runtime_root, rel, data)
@@ -1375,9 +1379,37 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     return result
 
 
+def _text_status(text: str) -> str | None:
+    """The first header ``Status:`` value among APPROVE, REVISE and BLOCK, or None."""
+    for line in text.splitlines():
+        if line.startswith("## "):
+            break
+        if (m := re.fullmatch(r"Status:\s*(\S.*?)\s*", line)) and m.group(1) in STATUSES:
+            return m.group(1)
+    return None
+
+
 def retain_pending_verdict(result: dict, runtime_root: Path, layout: JobLayout) -> None:
-    """Keep a verdict file still on disk that no entry holds (an interruption between the run and
-    its retention, or a half-written file), before the job's files are removed."""
+    """Keep every verdict of the job that no entry holds (an interruption between the run and
+    its retention, a dead run's retained file, or a half-written file), before the job's files
+    are removed. Retained files are adopted into the record, never replaced."""
+    known = {entry.get("path") for entry in result["verdicts"]}
+    digests = {entry["sha256"] for entry in result["verdicts"]}
+    prefix = f"{layout.job_id}-verdict-"
+    for path in sorted((runtime_root / "reviews").glob(f"{prefix}*.md")):
+        rel = f"reviews/{path.name}"
+        number = path.name[len(prefix):-len(".md")]
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        digest = hashlib.sha256(data).hexdigest()
+        if rel in known or digest in digests or not number.isdigit():
+            continue
+        text = data.decode("utf-8", "replace")
+        result["verdicts"].append({"attempt": int(number), "sha256": digest, "status": _text_status(text),
+                                   "disposition": "not-ingested: interrupted", "path": rel})
+        digests.add(digest)
     try:
         text = layout.verdict.read_text("utf-8")
     except (OSError, ValueError):
@@ -1385,10 +1417,10 @@ def retain_pending_verdict(result: dict, runtime_root: Path, layout: JobLayout) 
     if not text.strip():
         return
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    if any(entry["sha256"] == digest for entry in result["verdicts"]):
+    if digest in digests:
         return
-    result["verdicts"].append(_retain_verdict(runtime_root, layout.job_id, len(result["verdicts"]) + 1, text, None,
-                                              "not-ingested: interrupted"))
+    result["verdicts"].append(_retain_verdict(runtime_root, layout.job_id, len(result["verdicts"]) + 1, text,
+                                              _text_status(text), "not-ingested: interrupted"))
 
 
 def _settle(result: dict, runtime_root: Path, layout: JobLayout, operator_home: Path, captured: str | None,

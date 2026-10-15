@@ -213,8 +213,9 @@ captures changed:
   keys its layer dispositions on the nine `ConfigLayerSource` types, refusing an
   unknown one.
 - **A limit is read from Codex's own rollout**, across every rollout of the job
-  (a sub-agent writes its own): the `task_complete` event's
-  `codex_error_info`, `rate_limit_reached_type` and a window at 100 percent. The
+  (a sub-agent writes its own): a failed run is a limit only when the
+  `task_complete` event's `error` says so. Telemetry (`rate_limit_reached_type`,
+  a window at 100 percent) feeds only admission and the readings. The
   transcript on stderr includes every command's output and is never read.
 - **The home's state entries** are exactly the observed set; nothing is
   provisional, so an entry a Codex upgrade adds names itself and refuses.

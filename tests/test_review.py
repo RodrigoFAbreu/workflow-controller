@@ -1246,6 +1246,27 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual([e["disposition"] for e in held["verdicts"]], ["not-ingested: interrupted"])
         self.assertTrue((self.runtime / held["verdicts"][0]["path"]).is_file())
 
+    def test_a_resumed_run_keeps_an_earlier_retained_verdict_and_the_pending_one(self):
+        layout = review.JobLayout(self.runtime, "j-res")
+        layout.verdict.parent.mkdir(parents=True)
+        first = "Status: REVISE\nfirst\n"
+        review._retain_verdict(self.runtime, "j-res", 1, first, "REVISE", "pending")
+        layout.verdict.write_text("Status: APPROVE\nsecond\n")
+        held = {"verdicts": []}  # the dead Controller never wrote its entries
+        review.retain_pending_verdict(held, self.runtime, layout)
+        self.assertEqual([e["status"] for e in held["verdicts"]], ["REVISE", "APPROVE"])
+        self.assertEqual(len({e["path"] for e in held["verdicts"]}), 2)
+        texts = sorted((self.runtime / e["path"]).read_text() for e in held["verdicts"])
+        self.assertEqual(texts, sorted([first, "Status: APPROVE\nsecond\n"]))
+        review.retain_pending_verdict(held, self.runtime, layout)
+        self.assertEqual(len(held["verdicts"]), 2)
+
+    def test_retaining_never_replaces_an_existing_verdict_file(self):
+        one = review._retain_verdict(self.runtime, "j-n", 1, "one", None, "pending")
+        two = review._retain_verdict(self.runtime, "j-n", 1, "two", None, "pending")
+        self.assertNotEqual(one["path"], two["path"])
+        self.assertEqual((self.runtime / one["path"]).read_text(), "one")
+
     def test_a_relative_binary_path_survives_the_change_of_directory(self):
         binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "system_dir": str(self.system),
                                                             "orphan_seconds": 30})

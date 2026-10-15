@@ -89,7 +89,8 @@ stay stable; the code and the guides must agree with them.
 | [0010](adr/0010-orchestration-protocol-admission-by-capability.md) | admission of a Workflow release by capability (protocol major 1), the protocol's decisions and outcomes, and what stays the Controller's; amends 0006 |
 | [0011](adr/0011-usage-budget.md) | the usage budget: readings, reservations and a ledger shared by all lanes, the gate before every job, exit 17, and what is deferred (C8b, C8c) |
 | [0012](adr/0012-signalhub-notifications.md) | SignalHub notifications: the closed event table, per-event configuration, idempotent keys, delivery off the lifecycle's thread with no outbox, and credentials |
-| [0014](adr/0014-reuse-pull-request-results-on-main.md) | `main` reuses a pull request's validated results for the identical tree, behind the `CI_MAIN_REUSE` switch, and what that gives up; amends 0003 and 0005 |
+
+ADR [0014](adr/0014-reuse-pull-request-results-on-main.md) records that `main` reuses a pull request's validated results for the identical tree, behind the `CI_MAIN_REUSE` switch, and what that gives up; it amends 0003 and 0005.
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

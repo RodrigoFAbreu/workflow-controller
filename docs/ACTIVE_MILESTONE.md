@@ -24,6 +24,13 @@ reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); th
   in the mid-job wait says the worker ran. `tests/test_usage_limit_mid_job.py` and the lifecycle scenario
   `scenario-usage-limit-mid-job-waits-and-repeats` cover it.
 
+- CP4 complete: `controller/usage.py` `complete` measures the first job after a five-hour reset (the C8 review
+  follow-up, D9). When the baseline had already expired at reservation creation and the stream's first reading is
+  in a later window, that reading replaces the baseline `start` and `start_resets`, so the delta is `measured`
+  (`p1 - p0`) and yields a forecast sample; it was `after_reset`, charged `max(after, reserved_five)`, no sample
+  (reproduced on the unchanged code). A job admitted before the reset keeps `after_reset`. No schema change; live
+  and replay (job-record block) are pinned in `tests/test_usage.py`.
+
 The previous milestone's record follows.
 
 ---

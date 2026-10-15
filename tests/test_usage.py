@@ -798,6 +798,44 @@ class CompleteTest(TempRootCase):
         entry = usage.complete(self.root, token, end(16, 3), usage.OUTCOME_OK, now=NOW + 600, stream_start=start).entry
         self.assertEqual(entry["five_hour"], 9.0)
 
+    def _first_job_after_a_reset(self, *, admitted: float, first_percent: float, last_percent: float, replay: bool):
+        """``(entry, record)`` for a job whose stream shows only the window
+        after ``FIVE_RESETS``; the stored reading is of the window before it."""
+        new_resets = FIVE_RESETS + 5 * H
+        seed(self.root, five=40, weekly=20)
+        token = admit(self.root, now=admitted).token
+        first = {FIVE_HOUR: reading(FIVE_HOUR, first_percent, new_resets, FIVE_RESETS + 70)}
+        last = end(last_percent, 21, FIVE_RESETS + 600, five_resets=new_resets)
+        if replay:
+            block = {"five_hour_end": last_percent, "end_window_resets_at": new_resets,
+                     "end_observed_at": FIVE_RESETS + 600, "weekly_end": 21, "weekly_end_resets_at": WEEK_RESETS,
+                     "five_hour_first": first_percent, "five_hour_first_resets_at": new_resets}
+            result = usage.complete(self.root, token, None, usage.OUTCOME_OK, now=FIVE_RESETS + 600, usage_block=block)
+        else:
+            result = usage.complete(self.root, token, last, usage.OUTCOME_OK, now=FIVE_RESETS + 600, stream_start=first)
+        return result.entry, self.record()
+
+    def test_the_first_job_after_a_reset_is_measured_from_its_first_reading(self) -> None:
+        for replay in (False, True):
+            with self.subTest(replay=replay):
+                self.setUp()
+                entry, record = self._first_job_after_a_reset(admitted=FIVE_RESETS + 60, first_percent=2,
+                                                              last_percent=7, replay=replay)
+                self.assertEqual((entry["delta"], entry["five_hour"], entry["five_hour_after_reset"], entry["charged"]),
+                                 ("measured", 5.0, None, 5.0))
+                self.assertEqual(usage.forecast(record, "claude", "implement", "opus", Limits())[0], 5.0)
+
+    def test_a_job_admitted_before_the_reset_keeps_the_conservative_accounting(self) -> None:
+        for replay in (False, True):
+            with self.subTest(replay=replay):
+                self.setUp()
+                entry, record = self._first_job_after_a_reset(admitted=NOW, first_percent=5, last_percent=5,
+                                                              replay=replay)
+                self.assertEqual((entry["delta"], entry["five_hour"], entry["five_hour_after_reset"], entry["charged"]),
+                                 ("after_reset", None, 5.0, 8.0))
+                self.assertEqual(usage.forecast(record, "claude", "implement", "opus", Limits())[0],
+                                 float(Limits().default_job_percent))
+
     def test_the_repository_total_is_per_window(self) -> None:
         seed(self.root, five=0)
         for i in range(2):

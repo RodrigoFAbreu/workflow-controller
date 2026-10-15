@@ -232,8 +232,8 @@ against reality, open the candidate run (it is the id in the summary) and
 compare: if the report said "would reuse", the full `validate` of this `Main`
 run should be green, and its test count equal to the pull request's. A
 "would reuse" next to a red `validate` is a bug in the decision. Do three or
-more merges before switching to `on`. By 2026-10-15 two cross-checks were made
-and both matched; switching to `on` after the third is the owner's decision.
+more merges before switching to `on`. By 2026-10-15 three cross-checks were made
+(PRs #47, #48 and #45) and all three matched; switching to `on` is the owner's decision.
 
 **Switching.** `gh variable set CI_MAIN_REUSE --body on` turns reuse on and
 `gh variable set CI_MAIN_REUSE --body report` goes back to report only;

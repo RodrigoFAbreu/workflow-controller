@@ -170,7 +170,7 @@ mechanics against `tests/fake_codex.py`.
    (schema_version 2) with launch intent before spawn, the verdict header matching the bundle exactly, the verdict
    ingested via the Workflow (`--run-ref codex:<job id>`), job `FINISHED`, the disposable copy removed, only
    `sessions/` kept, the real repository untouched.
-3. *Boundary.* The job record and `codex` log show: read-only sandbox, no network or web search, minimal Codex
+3. *Boundary.* The job record and `codex` log show: workspace-write limited to the disposable copy and its private tmp directory, approval never, network off, web search disabled, minimal Codex
    home (not your `~/.codex` config), no MCP servers, hooks or notify run. Your own `~/.codex` files are unchanged
    afterwards except refreshed credentials.
 4. *Implementation stage.* Same as flow 2 at `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`.
@@ -188,6 +188,11 @@ mechanics against `tests/fake_codex.py`.
    `GATE_BLOCKED`.
 10. *Docs.* `python3 tools/check_docs.py` is clean; `docs/run.md` (letting the Controller run the external review),
     `docs/common-problems.md` and `docs/compatibility.md` (D15 downgrade note) match what you saw.
+
+**Functional review round 1** (independent Codex tester, 2026-10-15): flows 1-9 PASS; flow 10 two Optional documentation
+findings, both fixed in the bounded round: `docs/common-problems.md` now keeps exit 20 for the unknown harness only and
+lists launch-boundary refusals under exit 30 (`ReviewLaunchRefused`, `not_started`); flow 3 above now describes the
+workspace-write boundary. No remediation child. Re-test: flow 10 (docs) after the next implementation review and technical approval.
 
 **Known limitations / out of scope**
 - Only Codex is registered; other harnesses are refused.

@@ -21,8 +21,10 @@ reported, never retried.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import os
 import re
+import stat
 import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
@@ -239,6 +241,73 @@ def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[st
         if entry[:1] in ("R", "C") or entry[1:2] in ("R", "C"):
             i += 1  # a rename/copy's source path follows as its own field
     return entries
+
+
+#: What :func:`tracked_change_digests` records for the worktree fields of a
+#: path deleted from the worktree.
+DELETED_MARKER = "deleted"
+
+
+def _staged_identities(repo_root: Path, paths: Sequence[str],
+                       runner: Runner | None) -> dict[str, list[tuple[str, str, str]]]:
+    """``git ls-files --stage -z`` for ``paths``: path -> ``(mode, blob,
+    stage)`` per index entry. Read-only: no hook, filter or textconv runs and
+    nothing under ``.git`` is written."""
+    if not paths:
+        return {}
+    out = _git(repo_root, ["ls-files", "--stage", "-z", "--", *paths], runner)
+    found: dict[str, list[tuple[str, str, str]]] = {}
+    for item in out.split("\0"):
+        head, sep, path = item.partition("\t")
+        fields = head.split()
+        if not sep or len(fields) != 3:
+            continue
+        found.setdefault(path, []).append((fields[0], fields[1], fields[2]))
+    return found
+
+
+def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> dict[str, dict]:
+    """A content-sensitive snapshot of every changed tracked path
+    (:func:`tracked_changes`), keyed by path: the status entry, the sha256 of
+    the worktree bytes, the worktree executable bit (``S_IXUSR``, the one
+    mode bit Git tracks for a regular file) and the staged identity (index
+    mode and blob id). A deleted path carries :data:`DELETED_MARKER` for the
+    worktree fields. A path the snapshot cannot distinguish -- a symlink, a
+    directory or submodule, a path whose ``lstat`` fails, one with an
+    unmerged index stage or several entries -- is ``{"entry": ...,
+    "comparable": False}``, so a caller fails closed for it. The worktree
+    files are read here directly (no ``git hash-object``)."""
+    entries = {entry[3:]: entry for entry in tracked_changes(repo_root, runner=runner)}
+    staged = _staged_identities(repo_root, list(entries), runner)
+    snapshot: dict[str, dict] = {}
+    for path, entry in entries.items():
+        not_comparable = {"entry": entry, "comparable": False}
+        stages = staged.get(path, [])
+        if len(stages) > 1 or any(stage != "0" for _mode, _blob, stage in stages):
+            snapshot[path] = not_comparable
+            continue
+        record: dict = {"entry": entry, "comparable": True,
+                        "staged": f"{stages[0][0]} {stages[0][1]}" if stages else None}
+        target = Path(repo_root) / path
+        try:
+            info = os.lstat(target)
+        except FileNotFoundError:
+            record.update(digest=DELETED_MARKER, executable=DELETED_MARKER)
+        except OSError:
+            snapshot[path] = not_comparable
+            continue
+        else:
+            if not stat.S_ISREG(info.st_mode):
+                snapshot[path] = not_comparable
+                continue
+            try:
+                digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            except OSError:
+                snapshot[path] = not_comparable
+                continue
+            record.update(digest=digest, executable=bool(info.st_mode & stat.S_IXUSR))
+        snapshot[path] = record
+    return snapshot
 
 
 def commit_parents(repo_root: Path, commit: str, *, runner: Runner | None = None) -> list[str]:

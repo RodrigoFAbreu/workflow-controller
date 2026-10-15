@@ -10,6 +10,12 @@ reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); th
 - CP1 complete: `controller/worker_stream.py` records the `usage_limit` fact (rejected `rate_limit_event`, 429
   error `result`, finite `resetsAt`) in the stream diagnosis, with reason `usage_limit` above `exit_status`.
 
+- CP2 complete: `controller/job.py` classifies a limited `FAILURE` worker (`usage_limit_of`): `INTERRUPTED` with
+  `usage_limit` and `UsageLimitReached` when the phase, `HEAD` and the tracked-change baseline
+  (`gitrepo.tracked_change_digests`, the new `tracked_changes` pre-state member) are unchanged, in protocol mode,
+  legacy mode and `resume`; any other limited job is `FAILED` with `usage_limit` in its evidence. A package-order
+  fix (`usage` before `worker_stream`) and the `no_policy_lifecycle` golden were updated with it.
+
 The previous milestone's record follows.
 
 ---

@@ -530,3 +530,122 @@ class CliResumeDriftTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FACT = {"resets_at": 1790287800, "rate_limit_type": "five_hour", "window": "five_hour"}
+
+
+def _limited_result(fact=FACT) -> worker.WorkerResult:
+    import dataclasses
+    return dataclasses.replace(_result("FAILURE"), stream_diagnosis={"reason": "usage_limit", "usage_limit": fact})
+
+
+class UsageLimitTest(unittest.TestCase):
+    """``workflow-controller-usage-limit-mid-job`` CP2: a worker that stopped at the usage limit having moved
+    nothing is ``INTERRUPTED`` with the limit named; anything else is ``FAILED`` with the limit in its evidence."""
+
+    def _step(self, env: _Env, effect=None, fact=FACT, result=None):
+        def launch(task, *, cwd, **kwargs):
+            if effect is not None:
+                effect(env)
+            return result or _limited_result(fact)
+
+        with mock.patch.object(worker, "launch", launch):
+            return job.execute_step(env.inspect(), identity=IDENTITY, runtime=env.runtime)
+
+    def _notes(self, env: _Env) -> Path:
+        """A tracked file the Workflow classifies: the state file, edited only by trailing whitespace."""
+        return env.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+
+    def test_a_limited_worker_that_moved_nothing_is_interrupted_with_the_limit_named(self) -> None:
+        env = _Env(self)
+        record = self._step(env)
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
+        self.assertEqual(record["usage_limit"], FACT)
+        self.assertEqual(record["reconciliation_evidence"]["code"], job.USAGE_LIMIT_REACHED_CODE)
+        self.assertEqual(record["protocol"]["reconcile"]["class"], "no_progress")
+        self.assertIn("tracked_changes", record["pre_state"])
+        self.assertFalse(job.never_launched(record))
+
+    def test_untracked_files_do_not_count_as_progress(self) -> None:
+        env = _Env(self)
+        record = self._step(env, lambda e: (e.root / "scratch.txt").write_text("x\n"))
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
+
+    def test_a_moved_head_or_a_changed_tracked_file_is_failed_with_the_limit_in_its_evidence(self) -> None:
+        def edit(e: _Env) -> None:
+            notes = self._notes(e)
+            notes.write_text(notes.read_text() + " ")
+
+        def commit(e: _Env) -> None:
+            edit(e)
+            fixtures.commit_all(e.root, "worker commit")
+        for name, effect in (("tracked edit", edit), ("commit", commit)):
+            with self.subTest(name):
+                record = self._step(_Env(self), effect)
+                self.assertEqual(record["status"], job.STATUS_FAILED)
+                self.assertEqual(record["reconciliation_evidence"]["usage_limit"], FACT)
+                self.assertNotIn("usage_limit", record)
+
+    def test_a_dirty_file_edited_again_is_failed_and_one_left_identical_is_interrupted(self) -> None:
+        for edit, status in ((None, job.STATUS_INTERRUPTED), ("\n\n", job.STATUS_FAILED)):
+            with self.subTest(edit=edit):
+                env = _Env(self)
+                notes = self._notes(env)
+                notes.write_text(notes.read_text() + "\n")
+                record = self._step(env, None if edit is None else lambda e: notes.write_text(notes.read_text() + edit))
+                self.assertEqual(record["status"], status)
+
+    def test_index_only_progress_is_failed(self) -> None:
+        env = _Env(self)
+        notes = self._notes(env)
+        notes.write_text(notes.read_text() + "\n")
+        fixtures.run(["git", "add", str(notes)], cwd=env.root)
+        notes.write_text(notes.read_text() + "\n")
+
+        def restage(e: _Env) -> None:
+            blob = fixtures.run(["git", "hash-object", "-w", str(notes)], cwd=e.root).stdout.strip()
+            fixtures.run(["git", "update-index", "--cacheinfo", f"100644,{blob},docs/ai-workflow/WORKFLOW_STATE.json"],
+                         cwd=e.root)
+        self.assertEqual(self._step(env, restage)["status"], job.STATUS_FAILED)
+
+    def test_mode_only_progress_is_failed(self) -> None:
+        env = _Env(self)
+        notes = self._notes(env)
+        notes.write_text(notes.read_text() + "\n")
+        notes.chmod(0o755)
+        self.assertEqual(self._step(env, lambda e: notes.chmod(0o644))["status"], job.STATUS_FAILED)
+
+    def test_a_record_without_a_usable_baseline_fails_closed(self) -> None:
+        env = _Env(self)
+        for baseline in (None, [], {"x": {"entry": " M x", "comparable": False}}):
+            self.assertFalse(job._tracked_tree_unchanged(env.root, {"tracked_changes": baseline}))
+        self.assertFalse(job._tracked_tree_unchanged(env.root, {}))
+
+    def test_a_malformed_fact_or_an_unlimited_failure_is_an_ordinary_failure(self) -> None:
+        for fact in ({"resets_at": float("inf"), "rate_limit_type": None, "window": None}, "text", None):
+            with self.subTest(fact=fact):
+                record = self._step(_Env(self), fact=fact)
+                self.assertEqual(record["status"], job.STATUS_FAILED)
+                self.assertNotIn("usage_limit", json.dumps(record["reconciliation_evidence"]))
+
+    def test_a_non_failure_worker_that_names_the_limit_is_not_reclassified(self) -> None:
+        record = self._step(_Env(self), result=_result("INTERRUPTED"))
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
+        self.assertNotIn("usage_limit", record)
+
+    def test_resume_reconciles_a_completed_limited_job_the_same_way(self) -> None:
+        env = _Env(self)
+        notes = self._notes(env)
+        record = self._step(env)
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
+        completed = {k: v for k, v in record.items()
+                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+        completed.update(status=job.STATUS_COMPLETED)
+        completed["protocol"] = {**completed["protocol"], "reconcile": None}
+        reconciled = job._reconcile_protocol(completed, managed_repo=env.inspect(), runtime_root=env.runtime)
+        self.assertEqual(reconciled["status"], job.STATUS_INTERRUPTED)
+        notes.write_text(notes.read_text() + " ")
+        reconciled = job._reconcile_protocol(completed, managed_repo=env.inspect(), runtime_root=env.runtime)
+        self.assertEqual(reconciled["status"], job.STATUS_FAILED)
+        self.assertEqual(reconciled["reconciliation_evidence"]["usage_limit"], FACT)

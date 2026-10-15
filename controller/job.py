@@ -4926,7 +4926,8 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
     if status == STATUS_FINISHED and job_id:
         suffix = f" ({work_item})" if work_item else ""
         out.append(DerivedEvent("step_done", str(job_id), f"Step done: {command or 'job'}{suffix}", work_item,
-                                f"{command} finished; the work item is now at {after}."))
+                                f"{command} finished; the work item is now at {after}."
+                                + (review_subagent_note(record.get("review")) if record.get("kind") == REVIEW_KIND else "")))
         if command == "/milestone-plan" and record.get("observed_phase_before") == NO_PHASE_WIRE and work_item:
             out.append(DerivedEvent("milestone_started", str(work_item), f"Milestone started: {work_item}",
                                     work_item, "The first plan was requested for a new work item."))
@@ -6151,8 +6152,37 @@ def _review_message(record: Mapping) -> str:
     code = evidence_block.get("code") if isinstance(evidence_block, Mapping) else None
     word = "failed" if record.get("status") == STATUS_FAILED else "stopped without completing"
     return (f"The Codex {stage} review {word}" + (f" ({code})" if code else "")
-            + f"; the {stage} review gate of {work_item} stays open. Run again to re-run the review, or record a "
-            f"verdict by hand with {_REVIEW_MANUAL_COMMANDS[stage]} {work_item}.")
+            + f"; the {stage} review gate of {work_item} stays open." + review_subagent_note(block)
+            + f" Run again to re-run the review, or record a verdict by hand with "
+            f"{_REVIEW_MANUAL_COMMANDS[stage]} {work_item}.")
+
+
+def review_subagent_note(block: Mapping) -> str:
+    """A sentence naming the sub-agents a review spawned and what they spent
+    (a spawn roughly doubles the spend, ``sandbox_probe.txt`` P3), or ``""``."""
+    spawned = block.get("subagents") if isinstance(block, Mapping) else None
+    if not spawned:
+        return ""
+    tokens = sum(entry.get("total_tokens") or 0 for entry in spawned if isinstance(entry, Mapping))
+    return (f" The reviewer spawned {len(spawned)} sub-agent{'s' if len(spawned) != 1 else ''} "
+            f"({tokens:,} tokens), which is why it cost more than expected.")
+
+
+def _obtained(result: Mapping) -> dict:
+    """The review block's evidence of what the harness obtained: every verdict
+    with its digest, ``Status:`` and disposition (workflow#28 condition 2: the
+    courier records every verdict it obtains, REVISE included), and the
+    sub-agent sessions the job's rollouts show with their token usage."""
+    return {"verdicts": [dict(entry) for entry in result.get("verdicts") or []],
+            "subagents": [dict(entry) for entry in result.get("subagents") or []]}
+
+
+def _with_disposition(common: Mapping, disposition: str) -> dict:
+    """``common`` with the disposition of the verdict handed to the Workflow
+    (the entry the harness left as ``returned``) set to what became of it."""
+    verdicts = [({**entry, "disposition": disposition} if entry.get("disposition") == "returned" else entry)
+                for entry in common.get("verdicts") or []]
+    return {**common, "verdicts": verdicts}
 
 
 def _run_review_job(
@@ -6255,7 +6285,7 @@ def _run_review_job(
         if block is not None and started:
             fields["usage"] = _codex_end_block(block, readings or [])
         record = _persist(runtime_root, job_id, {**record, **fields}, event=event or _final_event(status), details={
-            "review": {key: fields["review"].get(key) for key in ("outcome", "detail")}})
+            "review": {key: fields["review"].get(key) for key in ("outcome", "detail", "subagents")}})
         if block is not None:
             last = {r["window"]: r for r in (readings or [])}
             record = _usage_account(runtime_root, record, end_readings=list(last.values()) if started else None,
@@ -6316,13 +6346,15 @@ def _run_review_job(
         not_started = "pid" not in spawned
         return finish(STATUS_FAILED, readings=out.get("readings"), review_fields={
             "not_started": not_started, "outcome": "refused", "detail": exc.message,
-            "credentials": out.get("credentials")}, evidence_block={
+            "credentials": out.get("credentials"), **_obtained(out)}, evidence_block={
                 "code": REVIEW_REFUSED_CODE, "message": exc.message, "evidence": exc.evidence})
     except KeyboardInterrupt:
         # Ctrl-C: the group is already killed. The record ends INCOMPLETE, the reservation is completed
         # as `ok` by the measured delta, and the interrupt propagates (run exits 130).
+        # an interrupt before the exec was spawned started nothing: released, not charged at the forecast
         finish(STATUS_INCOMPLETE, readings=out.get("readings"), review_fields={
-            "outcome": "interrupted", "credentials": out.get("credentials")}, evidence_block={
+            "outcome": "interrupted", "credentials": out.get("credentials"), **_obtained(out),
+            **({"not_started": True} if "pid" not in spawned else {})}, evidence_block={
                 "code": REVIEW_INTERRUPTED_CODE, "message": "the review was interrupted (Ctrl-C); the Codex "
                 "process group was killed"})
         raise
@@ -6330,7 +6362,7 @@ def _run_review_job(
         # A fault before the exec was spawned (the state-identity read, the copy) started nothing: released.
         finish(STATUS_FAILED, readings=out.get("readings"), review_fields={
             "not_started": "pid" not in spawned, "outcome": "error", "detail": str(exc),
-            "credentials": out.get("credentials")}, evidence_block={
+            "credentials": out.get("credentials"), **_obtained(out)}, evidence_block={
                 "code": type(exc).__name__, "message": str(exc)})
         raise
     finally:
@@ -6340,7 +6372,7 @@ def _run_review_job(
     outcome = result["outcome"]
     readings = result.get("readings")
     common = {"outcome": outcome, "credentials": result.get("credentials"), "detail": result.get("detail"),
-              "verdict_status": result.get("status")}
+              "verdict_status": result.get("status"), **_obtained(result)}
     if outcome == "verdict":
         return _ingest_review(managed_repo, runtime_root=runtime_root, job_id=job_id, work_item_id=work_item_id, kind=kind,
                               verdict=result["verdict"], digests=digests, finish=finish, common=common,
@@ -6377,12 +6409,15 @@ def _ingest_review(managed_repo: Any, *, runtime_root: Path, job_id: str, work_i
     except ControllerError as exc:
         refusal = getattr(exc, "evidence", {}).get("refusal") or {}
         if refusal.get("code") == "stale_decision":
-            return finish(STATUS_INCOMPLETE, readings=readings, review_fields=common, evidence_block={
+            return finish(STATUS_INCOMPLETE, readings=readings,
+                          review_fields=_with_disposition(common, "void: the Workflow state changed during the review"),
+                          evidence_block={
                 "code": REVIEW_STATE_CHANGED_CODE,
                 "message": "the Workflow state changed while the review ran; the verdict was discarded and the "
                            "next step re-decides"})
-        return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
-            "code": type(exc).__name__, "message": exc.message, "evidence": exc.evidence})
+        return finish(STATUS_FAILED, readings=readings,
+                      review_fields=_with_disposition(common, "not-ingested: the state identity check refused"),
+                      evidence_block={"code": type(exc).__name__, "message": exc.message, "evidence": exc.evidence})
     rel = f"reviews/{job_id}-verdict.md"
     try:
         path = runtime.write_bytes(runtime_root, rel, verdict.encode("utf-8"))
@@ -6393,15 +6428,19 @@ def _ingest_review(managed_repo: Any, *, runtime_root: Path, job_id: str, work_i
             with contextlib.suppress(Exception):
                 runtime.remove_file(runtime_root, rel)
     except ControllerError as exc:
-        return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
-            "code": type(exc).__name__, "message": exc.message, "evidence": exc.evidence})
+        return finish(STATUS_FAILED, readings=readings,
+                      review_fields=_with_disposition(common, f"not-ingested: {type(exc).__name__}"),
+                      evidence_block={"code": type(exc).__name__, "message": exc.message, "evidence": exc.evidence})
     if ingested.outcome != "recorded":
         refusal = ingested.refusal
-        return finish(STATUS_FAILED, readings=readings, review_fields={**common, "ingested": ingested.outcome},
+        return finish(STATUS_FAILED, readings=readings,
+                      review_fields={**_with_disposition(common, f"refused by the Workflow: {refusal.code}"),
+                                     "ingested": ingested.outcome},
                       evidence_block={"code": refusal.code, "message": refusal.message, "outcome": ingested.outcome})
     after = None if ingested.basis is None else ingested.basis.phase
     return finish(STATUS_FINISHED, readings=readings, after=after, verified=True, review_fields={
-        **common, "ingested": "recorded", "round": ingested.round, "bundle_id": ingested.bundle_id})
+        **_with_disposition(common, "ingested"), "ingested": "recorded", "round": ingested.round,
+        "bundle_id": ingested.bundle_id})
 
 
 # ---------------------------------------------------------------------------

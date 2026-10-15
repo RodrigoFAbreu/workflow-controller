@@ -87,11 +87,13 @@ class LaunchDouble:
             kw["on_spawn"](os.getpid(), os.getpid())
             self.at_spawn = self.record_on_disk(kw["job_id"])
         if "raise" in scenario:
-            kw["out"].update(readings=scenario.get("readings", []), credentials="unchanged")
+            kw["out"].update(readings=scenario.get("readings", []), credentials="unchanged",
+                             verdicts=scenario.get("verdicts", []), subagents=scenario.get("subagents", []))
             raise scenario["raise"]
         outcome = scenario.get("outcome", "verdict")
         result = {"status": None, "verdict": None, "check": None, "outcome": outcome, "credentials": "unchanged",
-                  "detail": scenario.get("detail"), "readings": scenario.get("readings", [])}
+                  "detail": scenario.get("detail"), "readings": scenario.get("readings", []),
+                  "verdicts": scenario.get("verdicts", []), "subagents": scenario.get("subagents", [])}
         if outcome == "verdict":
             result.update(status=scenario.get("status", "APPROVE"), verdict=verdict_text(
                 kw, scenario.get("status", "APPROVE"), wrong=scenario.get("wrong")))
@@ -272,6 +274,72 @@ class HappyPathTest(_ReviewCase):
         self.assertNotIn("worker_state", after)
 
 
+VERDICTS = [
+    {"attempt": 1, "sha256": "a" * 64, "status": "APPROVE", "disposition": "not-ingested: header mismatch, retried once",
+     "path": "reviews/j-verdict-1.md"},
+    {"attempt": 2, "sha256": "b" * 64, "status": "REVISE", "disposition": "returned", "path": "reviews/j-verdict-2.md"},
+]
+SUBAGENTS = [{"rollout": "2026/10/15/rollout-x.jsonl", "total_tokens": 43234}]
+
+
+class VerdictEvidenceTest(_ReviewCase):
+    """workflow#28 condition 2: every verdict the courier obtains is recorded in
+    the job evidence with its digest, ``Status:`` and what became of it; and a
+    sub-agent spawn is reported with its usage (I10)."""
+
+    def test_an_ingested_verdict_and_the_one_it_replaced_are_both_in_the_record(self) -> None:
+        record = self.step(verdicts=VERDICTS, subagents=SUBAGENTS)
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record)
+        self.assertEqual([(v["attempt"], v["sha256"], v["status"], v["disposition"]) for v in record["review"]["verdicts"]],
+                         [(1, "a" * 64, "APPROVE", "not-ingested: header mismatch, retried once"),
+                          (2, "b" * 64, "REVISE", "ingested")])
+        self.assertEqual(record["review"]["subagents"], SUBAGENTS)
+
+    def test_a_verdict_the_workflow_refuses_is_recorded_as_refused(self) -> None:
+        refusal = protocol.Refusal("refused", "DistinctReviewerModelsRequiredError: nope", False, None)
+        refused = protocol.ExternalResult("refused", None, None, None, None, None, None, None, refusal, {})
+        with mock.patch.object(protocol, "record_external_result", return_value=refused):
+            record = self.step(verdicts=VERDICTS)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["review"]["verdicts"][1]["disposition"], "refused by the Workflow: refused")
+
+    def test_a_verdict_voided_by_a_changed_state_identity_is_recorded_as_void(self) -> None:
+        real = protocol.next_action
+        moved = {"on": False}
+
+        def wrapped(*args, **kwargs):
+            if moved["on"] and kwargs.get("expect_state_identity") is not None:
+                refusal = {"code": "stale_decision", "message": "stale", "retryable": True, "native": None}
+                raise WorkflowProtocolRefusedError("stale", evidence={"reason": "protocol_refused", "refusal": refusal})
+            return real(*args, **kwargs)
+
+        with mock.patch.object(protocol, "next_action", wrapped):
+            record = self.step(verdicts=VERDICTS, while_running=lambda: moved.update(on=True))
+        self.assertEqual(record["status"], job.STATUS_INCOMPLETE)
+        self.assertEqual(record["review"]["verdicts"][1]["status"], "REVISE")
+        self.assertTrue(record["review"]["verdicts"][1]["disposition"].startswith("void:"))
+
+    def test_verdicts_the_harness_obtained_survive_a_refused_or_interrupted_launch(self) -> None:
+        with self.assertRaises(RuntimeError):
+            self.step(**{"raise": RuntimeError("late"), "verdicts": VERDICTS, "subagents": SUBAGENTS})
+        with self.assertRaises(KeyboardInterrupt):
+            self.step(**{"raise": KeyboardInterrupt(), "verdicts": VERDICTS, "subagents": SUBAGENTS})
+        for record in self.records():
+            self.assertEqual(len(record["review"]["verdicts"]), 2)
+            self.assertEqual(record["review"]["subagents"], SUBAGENTS)
+
+    def test_the_failure_message_and_the_step_event_name_the_sub_agent_spawn(self) -> None:
+        note = job.review_subagent_note({"subagents": SUBAGENTS})
+        self.assertIn("1 sub-agent (43,234 tokens)", note)
+        self.assertEqual(job.review_subagent_note({"subagents": []}), "")
+        failed = self.step(outcome="failed", detail="boom", subagents=SUBAGENTS + SUBAGENTS)
+        self.assertIn("2 sub-agents (86,468 tokens)", job._review_message(failed))
+        self.assertNotIn("sub-agent", job._review_message(self.step(outcome="empty")))
+        finished = self.step(subagents=SUBAGENTS)
+        [event] = [e for e in job.derive_job_event(finished) if e.event_type == "step_done"]
+        self.assertIn("43,234 tokens", event.message)
+
+
 class OutcomeMappingTest(_ReviewCase):
     def check(self, status, code, **scenario):
         record = self.step(**scenario)
@@ -399,6 +467,16 @@ class UsageTest(_ReviewCase):
         [record] = self.records()
         self.assertFalse(record["review"].get("not_started"))
         self.assertEqual(len(self.shared()["ledger"]), 1)
+
+    def test_ctrl_c_before_the_exec_spawned_releases_the_reservation_uncharged(self) -> None:
+        usage.record_reading(self.runtime_root, self.codex_reading(10.0, observed=self.now))
+        double = LaunchDouble(self, self.life, **{"raise": KeyboardInterrupt(), "spawn": False})
+        with self.assertRaises(KeyboardInterrupt):
+            self.step(double, usage_gate=self.gate())
+        [record] = self.records()
+        self.assertEqual(record["status"], job.STATUS_INCOMPLETE)
+        self.assertIs(record["review"]["not_started"], True)
+        self.assertEqual(self.shared()["ledger"], [])
 
     def test_ctrl_c_ends_the_record_incomplete_completes_the_reservation_and_propagates(self) -> None:
         usage.record_reading(self.runtime_root, self.codex_reading(10.0, observed=self.now))
@@ -565,20 +643,7 @@ class FakeCodexEndToEndTest(_ReviewCase):
         test = self
 
         def run(**kw):
-            layout = review.JobLayout(kw["runtime_root"], kw["job_id"])
-
-            def compose(env):
-                pinned = review.argv("exec", binary=binary, tree=layout.tree, verdict=layout.verdict,
-                                     tmpdir=layout.tmp, prompt="-")
-                overrides = [item for i, item in enumerate(pinned) if i and pinned[i - 1] == "-c"]
-                command = [str(binary), "debug", "config", "-C", str(layout.tree)]
-                for item in overrides:
-                    command += ["-c", item]
-                result = review.run_bounded(command, cwd=layout.tree, env=env, timeout=30)
-                test.assertEqual(result.exit_code, 0, result.stderr)
-                return json.loads(result.stdout)
-
-            return test.real(**{**kw, "binary_name": str(binary), "system_dir": test.system, "compose": compose,
+            return test.real(**{**kw, "binary_name": str(binary), "system_dir": test.system,
                                 "inherited_env": {"PATH": "/evil", "OPENAI_API_KEY": "evil"}})
         return run
 

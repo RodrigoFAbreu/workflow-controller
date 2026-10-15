@@ -15,9 +15,13 @@ later). This repository runs Workflow 2.11.0 with automatic gates (since 2026-10
 tables below; what each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
-1. C13, review convergence ([11.13](#1113-review-convergence)), once Workflow 2.12.0 (W8) is out;
-2. C14, review modes ([11.14](#1114-review-modes));
-3. C10, C12 and C11, then the orchestrator series O1-O7.
+1. C8b, a usage limit reached mid-job ([11.6.1](#1161-step-c8b-a-limit-reached-mid-job)): small and
+   independent, it runs while Workflow 2.12.0 (W8) is not out yet;
+2. C13, review convergence ([11.13](#1113-review-convergence)), once this repository runs Workflow 2.12.0;
+3. C14, review modes ([11.14](#1114-review-modes));
+4. C10, C12 and C11, then the orchestrator series O1-O7.
+
+C10 waits for C13 on purpose: it is the largest step left, and C13 makes its review rounds cheaper.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then

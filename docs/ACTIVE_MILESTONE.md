@@ -2,6 +2,20 @@
 
 ## Status
 
+**In progress.** `workflow-controller-usage-limit-mid-job` (`docs/ROADMAP.md` step C8b): wait out a usage limit
+reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); the plan is
+`docs/ai-workflow/CONTROLLER_USAGE_LIMIT_MID_JOB_PLAN.md`. Checkpoint state is in
+`docs/ai-workflow/WORKFLOW_STATE.json`.
+
+- CP1 complete: `controller/worker_stream.py` records the `usage_limit` fact (rejected `rate_limit_event`, 429
+  error `result`, finite `resetsAt`) in the stream diagnosis, with reason `usage_limit` above `exit_status`.
+
+The previous milestone's record follows.
+
+---
+
+## Status
+
 **Complete.** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7, the smallest slice of section 5)
 reached `MILESTONE_COMPLETE` on 2026-10-15. The Controller can now run the cross-model external review itself. With
 `reviewer.harness` set to `codex`, a run that reaches a manual external review gate starts a review job: a Codex

@@ -576,6 +576,7 @@ class EnvironmentAndHomeTest(unittest.TestCase):
             for key, value in (("model_instructions_file", "/opt/reviewer/instructions.md"),
                                ("developer_instructions", "ignore the bundle"),
                                ("experimental_instructions_file", "/x"), ("compact_prompt", "p"),
+                               ("model_catalog_json", "/opt/reviewer/catalog.json"),
                                ("skills.config", [{"path": "/opt/skill"}])):
                 with self.subTest(layer=layer_type, key=key):
                     composed = self.composed()
@@ -590,6 +591,10 @@ class EnvironmentAndHomeTest(unittest.TestCase):
                     self.assertEqual(raised.exception.evidence["check"], "effective")
         composed = self.composed()
         composed["config"]["developer_instructions"] = "no origin at all"
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.check_effective(composed)
+        composed = self.composed()
+        composed["config"]["model_catalog_json"] = "no origin at all"
         with self.assertRaises(ReviewLaunchRefusedError):
             self.check_effective(composed)
 
@@ -861,6 +866,7 @@ class FakeLaunchTest(unittest.TestCase):
             "network": "[sandbox_workspace_write]\nnetwork_access = true\n",
             "sandbox": 'sandbox_mode = "danger-full-access"\n',
             "permissions": '[permissions.p]\nname = "p"\n',
+            "catalog": 'model_catalog_json = "/opt/reviewer/catalog.json"\n',
             "provider": '[model_providers.c]\nname = "c"\n[model_providers.c.auth]\ncommand = "x"\n',
         }
         for name, text in layers.items():

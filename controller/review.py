@@ -194,7 +194,9 @@ FORBIDDEN_EFFECTIVE_KEYS = ("model_providers", "openai_base_url", "chatgpt_base_
                             # prompt and the empty ``instructionSources`` alone, whichever layer would add more
                             "model_instructions_file", "developer_instructions", "instructions",
                             "base_instructions", "user_instructions", "experimental_instructions_file",
-                            "compact_prompt", "experimental_compact_prompt_file")
+                            "compact_prompt", "experimental_compact_prompt_file",
+                            # an outside model catalog changes the model's tool surface and developer messages
+                            "model_catalog_json")
 
 #: The child environment is exactly these names (control (d)).
 ENV_ALLOWLIST = ("PATH", "HOME", "TMPDIR", "CODEX_HOME", "GIT_CEILING_DIRECTORIES", "LANG", "LC_ALL", OWNERSHIP_VAR)
@@ -889,7 +891,7 @@ def check_effective(composed: Mapping, *, model: str = DEFAULT_MODEL, effort: st
 
 INSTRUCTION_KEYS = ("model_instructions_file", "developer_instructions", "instructions", "base_instructions",
                     "user_instructions", "experimental_instructions_file", "compact_prompt",
-                    "experimental_compact_prompt_file")
+                    "experimental_compact_prompt_file", "model_catalog_json")
 
 
 def _check_layers(layers: Sequence, codex_home: Path | None) -> None:

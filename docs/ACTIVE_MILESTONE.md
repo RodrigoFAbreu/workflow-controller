@@ -36,6 +36,15 @@ reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); th
   (reproduced on the unchanged code). A job admitted before the reset keeps `after_reset`. No schema change; live
   and replay (job-record block) are pinned in `tests/test_usage.py`.
 
+- Self-review (`SELF_REVIEWING_IMPLEMENTATION`): no correctness defect found in the full diff. Two fixes: the
+  `tracked_changes` member of the two early `_capture_pre_state` returns was mis-indented, and
+  `tests/test_protocol_outcome.py` now covers the two CP2 cases the plan names and that were missing: index-only
+  and mode-only progress also reconciled through `resume` (`FAILED`), and a limited worker whose transition
+  verified (`FAILED` with the limit named, not `FINISHED`, D4).
+- Full verification: `tools/check_docs.py` exit 0; golden `--check` 3 of 4 current (`plan_stage_decisions`
+  differs on the base commit as well); `tools/run_tests.py` ran 4006 tests, coverage exact, with 2 failures, both
+  the Git 2.56 trailer-rule tests (follow-up 12), unrelated to this milestone.
+
 The previous milestone's record follows.
 
 ---

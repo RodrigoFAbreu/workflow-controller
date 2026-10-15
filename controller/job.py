@@ -386,7 +386,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
             "functional_review_consumed_blob": None,
             "functional_checklist_evidence": None,
             "pre_work_item_keys": pre_work_item_keys,
-        "tracked_changes": tracked_changes,
+            "tracked_changes": tracked_changes,
         }
 
     work_item_id = work_item.work_item_id
@@ -417,7 +417,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
             "functional_review_consumed_blob": None,
             "functional_checklist_evidence": None,
             "pre_work_item_keys": pre_work_item_keys,
-        "tracked_changes": tracked_changes,
+            "tracked_changes": tracked_changes,
         }
 
     bound = workflow_contract.bind_release(managed_repo.workflow_version)

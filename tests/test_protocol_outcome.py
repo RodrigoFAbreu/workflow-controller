@@ -553,6 +553,23 @@ class UsageLimitTest(unittest.TestCase):
         with mock.patch.object(worker, "launch", launch):
             return job.execute_step(env.inspect(), identity=IDENTITY, runtime=env.runtime)
 
+    @staticmethod
+    def _as_completed(record: dict) -> dict:
+        """``record`` as ``resume`` finds it: ``COMPLETED``, with nothing of its resolution."""
+        completed = {k: v for k, v in record.items()
+                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+        completed.update(status=job.STATUS_COMPLETED)
+        completed["protocol"] = {**completed["protocol"], "reconcile": None}
+        return completed
+
+    def _assert_failed_live_and_on_resume(self, env: _Env, record: dict) -> None:
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["usage_limit"], FACT)
+        reconciled = job._reconcile_protocol(self._as_completed(record), managed_repo=env.inspect(),
+                                             runtime_root=env.runtime)
+        self.assertEqual(reconciled["status"], job.STATUS_FAILED)
+        self.assertEqual(reconciled["reconciliation_evidence"]["usage_limit"], FACT)
+
     def _notes(self, env: _Env) -> Path:
         """A tracked file the Workflow classifies: the state file, edited only by trailing whitespace."""
         return env.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
@@ -607,14 +624,22 @@ class UsageLimitTest(unittest.TestCase):
             blob = fixtures.run(["git", "hash-object", "-w", str(notes)], cwd=e.root).stdout.strip()
             fixtures.run(["git", "update-index", "--cacheinfo", f"100644,{blob},docs/ai-workflow/WORKFLOW_STATE.json"],
                          cwd=e.root)
-        self.assertEqual(self._step(env, restage)["status"], job.STATUS_FAILED)
+        self._assert_failed_live_and_on_resume(env, self._step(env, restage))
 
     def test_mode_only_progress_is_failed(self) -> None:
         env = _Env(self)
         notes = self._notes(env)
         notes.write_text(notes.read_text() + "\n")
         notes.chmod(0o755)
-        self.assertEqual(self._step(env, lambda e: notes.chmod(0o644))["status"], job.STATUS_FAILED)
+        self._assert_failed_live_and_on_resume(env, self._step(env, lambda e: notes.chmod(0o644)))
+
+    def test_a_limited_worker_whose_transition_verified_is_failed_not_finished(self) -> None:
+        env = _Env(self, "ready")
+        record = self._step(env, lambda e: e.revise())
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertFalse(record["transition_verified"])
+        self.assertEqual(record["reconciliation_evidence"]["usage_limit"], FACT)
+        self.assertNotIn("usage_limit", record)
 
     def test_a_record_without_a_usable_baseline_fails_closed(self) -> None:
         env = _Env(self)
@@ -639,10 +664,7 @@ class UsageLimitTest(unittest.TestCase):
         notes = self._notes(env)
         record = self._step(env)
         self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
-        completed = {k: v for k, v in record.items()
-                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
-        completed.update(status=job.STATUS_COMPLETED)
-        completed["protocol"] = {**completed["protocol"], "reconcile": None}
+        completed = self._as_completed(record)
         reconciled = job._reconcile_protocol(completed, managed_repo=env.inspect(), runtime_root=env.runtime)
         self.assertEqual(reconciled["status"], job.STATUS_INTERRUPTED)
         notes.write_text(notes.read_text() + " ")

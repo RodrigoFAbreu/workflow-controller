@@ -43,7 +43,7 @@ MUTATIONS_REVIEW: dict[str, tuple[str, ...]] = {  # scenarios 11-12 (codex-revie
     "scenario-codex-review-plan-stage": (
         "no-header-check", "no-ingest", "copy-kept", "repository-unguarded", "sandbox-dropped", "overrides-dropped",
         "provider-pin-dropped", "trust-pin-dropped", "skills-pin-dropped", "features-not-disabled", "env-widened", "inherited-home", "mcp-list-unchecked",
-        "effective-unchecked", "outside-layers-unchecked", "home-unchecked", "no-copy-back", "no-launch-intent"),
+        "effective-unchecked", "outside-layers-unchecked", "home-unchecked", "no-copy-back", "no-launch-intent", "retry-status-unchecked"),
     "scenario-codex-review-implementation-stage-limit": (
         "copy-back-over-changes", "admission-without-readings", "admission-operator-only"),
 }

@@ -962,6 +962,35 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual([m.label for m in result["check"].mismatches], ["Plan revision reviewed:"])
         self.assertEqual(len(self.records("exec")), 2)
 
+    def test_a_header_retry_that_changes_the_status_is_not_ingested(self):
+        result = self.launch({"exec": {"verdict": "revise_then_approve"}})
+        self.assertEqual(result["outcome"], "status_changed")
+        self.assertIsNone(result["verdict"])
+        self.assertIn("REVISE", result["detail"])
+        self.assertIn("both verdicts are in the record", result["detail"])
+        self.assertEqual([(v["attempt"], v["status"], v["disposition"]) for v in result["verdicts"]],
+                         [(1, "REVISE", "not-ingested: header mismatch, retried once"),
+                          (2, "APPROVE", "not-ingested: status changed on the header retry")])
+        for entry in result["verdicts"]:
+            self.assertTrue((self.runtime / entry["path"]).is_file())
+
+    def test_a_header_retry_with_the_same_status_is_ingested(self):
+        result = self.launch({"exec": {"verdict": "revise_then_revise"}})
+        self.assertEqual((result["outcome"], result["status"]), ("verdict", "REVISE"))
+        self.assertEqual([v["disposition"] for v in result["verdicts"]],
+                         ["not-ingested: header mismatch, retried once", "returned"])
+
+    def test_a_first_verdict_without_a_status_leaves_the_retry_free_to_say_any(self):
+        result = self.launch({"exec": {"verdict": "no_status_then_exact"}})
+        self.assertEqual((result["outcome"], result["status"]), ("verdict", "APPROVE"))
+        self.assertIsNone(result["verdicts"][0]["status"])
+
+    def test_a_verdict_file_that_cannot_be_written_is_not_named(self):
+        with mock.patch.object(review.runtime, "write_bytes", side_effect=OSError("disk full")):
+            entry = review._retain_verdict(self.runtime, "j", 1, "text", "APPROVE", "returned")
+        self.assertIsNone(entry["path"])
+        self.assertIn("disk full", entry["write_error"])
+
     def test_no_verdict_a_limit_and_a_failure_are_told_apart(self):
         self.assertEqual(self.launch({"exec": {"verdict": "none"}}, job="j-empty")["outcome"], "empty")
         limit = self.launch({"exec": {"verdict": "limit"}}, job="j-limit")

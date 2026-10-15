@@ -353,6 +353,12 @@ class OutcomeMappingTest(_ReviewCase):
         self.assertEqual([m["label"] for m in record["reconciliation_evidence"]["mismatches"]],
                          ["Reviewed bundle ID:"])
 
+    def test_a_status_changed_by_the_header_retry_is_failed_with_the_gate_open(self) -> None:
+        record = self.check(job.STATUS_FAILED, job.REVIEW_STATUS_CHANGED_CODE, outcome="status_changed",
+                            detail="the two attempts disagreed: the first verdict said REVISE, the retry APPROVE; "
+                                   "both verdicts are in the record")
+        self.assertIn("disagreed", record["reconciliation_evidence"]["message"])
+
     def test_limit_timeout_empty_and_a_changed_repository_are_incomplete(self) -> None:
         self.check(job.STATUS_INCOMPLETE, job.REVIEW_LIMIT_CODE, outcome="limit", detail="429 usage limit reached")
         self.check(job.STATUS_INCOMPLETE, job.REVIEW_TIMEOUT_CODE, outcome="timeout")

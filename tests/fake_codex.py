@@ -54,7 +54,9 @@ written here once the watchdog is armed: a test that orphans a fake waits for it
 ``state_extra`` (names created in ``CODEX_HOME`` on every invocation),
 ``rate_limits`` (``{"primary": percent, "secondary": percent}``), and
 ``exec``: ``verdict`` (``exact``, ``wrong_id_first``, ``bad_revision``,
-``none``, ``limit``, ``hang``, ``missing_status``, ``block``, ``revise``), ``exit``,
+``none``, ``limit``, ``hang``, ``missing_status``, ``block``, ``revise``; the header-retry
+kinds ``revise_then_approve``, ``revise_then_revise`` and ``no_status_then_exact`` each give a wrong id first and an exact
+header on the retry, with the ``Status:`` the name says), ``exit``,
 ``limit_shape`` (``string``, ``http429`` or ``percent``: how the rollout reports the
 limit), ``stderr`` (text printed on stderr, a transcript line), ``subagent``
 (write a sub-agent rollout with that many total tokens),
@@ -377,13 +379,15 @@ def _header_from_prompt(prompt: str) -> list[str]:
 def _verdict(kind: str, prompt: str) -> str | None:
     header = _header_from_prompt(prompt)
     retry = "did not equal the required values" in prompt
-    if kind == "wrong_id_first" and not retry:
+    if kind in ("wrong_id_first", "revise_then_approve", "revise_then_revise", "no_status_then_exact") and not retry:
         header = [line[:-5] if line.startswith("Reviewed bundle ID:") else line for line in header]
     if kind == "bad_revision":
         header = [line for line in header if "revision reviewed" not in line]
-    status = {"block": "BLOCK", "revise": "REVISE"}.get(kind, "APPROVE")
+    status = {"block": "BLOCK", "revise": "REVISE", "revise_then_revise": "REVISE"}.get(kind, "APPROVE")
+    if kind == "revise_then_approve" and not retry:
+        status = "REVISE"
     lines = ["# Review Decision", ""]
-    if kind != "missing_status":
+    if kind != "missing_status" and not (kind == "no_status_then_exact" and not retry):
         lines += [f"Status: {status}", ""]
     lines += [*header, "", "## Blocking findings", "", "None.", "", "## Required acceptance criteria", "", "None.", ""]
     return "\n".join(lines)

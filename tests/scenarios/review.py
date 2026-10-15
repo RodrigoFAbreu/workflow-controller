@@ -269,6 +269,8 @@ class World:
             patch(usage, "read_codex_homes", lambda homes: [])
         elif name == "admission-operator-only":
             patch(review, "retained_codex_homes", lambda runtime_root: [])
+        elif name == "retry-status-unchecked":
+            patch(review, "retry_changed_status", lambda obtained, attempt, status: False)
         elif name == "no-launch-intent":
             def persist_without_intent(runtime_root, job_id, record, **kw):
                 body = record.get("review")
@@ -391,6 +393,18 @@ def codex_review_plan_stage(kit) -> None:
                   (job.STATUS_FAILED, job.REVIEW_HEADER_MISMATCH_CODE), "the record of a verdict with a wrong header")
         kit.equal(len(world.log_records("exec")), 2, "the exec invocations of a wrong header (one bounded retry)")
         kit.equal(world.phase(), PLAN_GATE, "nothing is ingested for a wrong header")
+
+        # 3b. a header retry that changes the verdict's Status: is not ingested (workflow#28 condition 2)
+        world.configure(world.binary({"exec": {"verdict": "revise_then_approve"}}))
+        flipped = world.run()
+        kit.equal(flipped.code, cli.EXIT_WORKER_FAILED, "a header retry that changed the status: exit status")
+        record = world.reviews()[-1]
+        kit.equal((record["status"], record["reconciliation_evidence"]["code"]),
+                  (job.STATUS_FAILED, job.REVIEW_STATUS_CHANGED_CODE), "the record of a status changed by the retry")
+        kit.equal([(v["status"], v["disposition"]) for v in record["review"]["verdicts"]],
+                  [("REVISE", "not-ingested: header mismatch, retried once"),
+                   ("APPROVE", "not-ingested: status changed on the header retry")], "both verdicts are recorded")
+        kit.equal(world.phase(), PLAN_GATE, "nothing is ingested when the retry changed the status")
 
         # 4. a sandbox escape into the real repository voids the verdict
         escaped = life.root / "ESCAPED.txt"

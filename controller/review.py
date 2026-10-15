@@ -868,7 +868,9 @@ def check_effective(composed: Mapping, *, model: str = DEFAULT_MODEL, effort: st
                       value=got_leaves.get(leaf), source=_origin(origins, leaf))
     for name in sorted(origins):
         origin = origins[name]
-        if isinstance(origin, Mapping) and origin.get("type") == "packagedDefaults":
+        # the bare layer source, or the documented ``{name: <layer source>, version: <sha256>}`` wrapper
+        source = origin.get("name", origin) if isinstance(origin, Mapping) else origin
+        if isinstance(source, Mapping) and source.get("type") == "packagedDefaults":
             continue
         if name.split(".", 1)[0] in FORBIDDEN_EFFECTIVE_KEYS:
             raise _refuse(f"the composed configuration sets {name}", check="effective", key=name,
@@ -1181,9 +1183,17 @@ def _retain_verdict(runtime_root: Path, job_id: str, attempt: int, text: str, st
     data = text.encode("utf-8")
     entry = {"attempt": attempt, "sha256": hashlib.sha256(data).hexdigest(), "status": status,
              "disposition": disposition, "path": rel}
-    with contextlib.suppress(OSError):
+    try:
         runtime.write_bytes(runtime_root, rel, data)
+    except OSError as exc:
+        entry.update(path=None, write_error=str(exc))  # the entry never names a file that was not written
     return entry
+
+
+def retry_changed_status(obtained: list[dict], attempt: int, status: str | None) -> bool:
+    """True when this is the header retry, the first verdict had a ``Status:`` and the retry's differs
+    (workflow#28 condition 2: a retry never turns a verdict into a different status)."""
+    return attempt == 2 and bool(obtained) and obtained[0]["status"] is not None and obtained[0]["status"] != status
 
 
 def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_name: str, binary_name: str,
@@ -1200,7 +1210,8 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     repository compared before and after, the credential copy written back, and
     the job's files removed on every path. ``outcome`` is ``verdict``
     (``verdict`` holds the text), ``mismatch`` (second mismatch), ``changed``
-    (the repository or the state identity moved: the verdict is void), ``empty``
+    (the repository or the state identity moved: the verdict is void),
+    ``status_changed`` (the header retry's ``Status:`` differs from the first verdict's: not ingested), ``empty``
     (no verdict), ``limit`` (Codex's own rollout says so, never the transcript),
     ``timeout`` or ``failed``. ``verdicts`` lists every verdict obtained, with its
     digest, status and disposition; ``subagents`` the sub-agent sessions the job's
@@ -1264,6 +1275,14 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
                 break
             check = verify_verdict(verdict, expected)
             result.update(check=check, status=check.status)
+            if check.ok and retry_changed_status(result["verdicts"], attempt, check.status):
+                # workflow#28 condition 2: a header retry never turns a verdict into a different status
+                result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, check.status,
+                                                          "not-ingested: status changed on the header retry"))
+                result.update(outcome="status_changed", detail=(
+                    f"the two attempts disagreed: the first verdict said {result['verdicts'][0]['status']}, "
+                    f"the retry {check.status}; both verdicts are in the record"))
+                break
             if check.ok:
                 result["verdicts"].append(_retain_verdict(runtime_root, job_id, attempt, verdict, check.status, "returned"))
                 result.update(outcome="verdict", verdict=verdict, detail=None)

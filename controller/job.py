@@ -6100,6 +6100,7 @@ REVIEW_ACTIONS: Mapping[str, tuple[str, str]] = {
 
 #: Outcome codes of a review record's `reconciliation_evidence.code`.
 REVIEW_HEADER_MISMATCH_CODE = "ReviewHeaderMismatch"
+REVIEW_STATUS_CHANGED_CODE = "ReviewStatusChangedOnRetry"
 REVIEW_CHANGED_CODE = "ReviewRepositoryChanged"
 REVIEW_LIMIT_CODE = "ReviewLimit"
 REVIEW_TIMEOUT_CODE = "ReviewTimeout"
@@ -6385,6 +6386,9 @@ def _run_review_job(
                       evidence_block={"code": REVIEW_HEADER_MISMATCH_CODE, "message": "the verdict's header lines "
                                       "did not equal the bundle's values after the one bounded retry",
                                       "mismatches": mismatches})
+    if outcome == "status_changed":
+        return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
+            "code": REVIEW_STATUS_CHANGED_CODE, "message": result.get("detail") or "the retry changed the status"})
     codes = {"changed": REVIEW_CHANGED_CODE, "limit": REVIEW_LIMIT_CODE, "timeout": REVIEW_TIMEOUT_CODE,
              "empty": REVIEW_EMPTY_CODE}
     if outcome in codes:

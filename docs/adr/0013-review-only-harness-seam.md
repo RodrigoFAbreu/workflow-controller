@@ -101,7 +101,16 @@ otherwise unattended stops waiting for it.
    *replace* the first verdict in the record: the first verdict is obtained and
    recorded (digest, `Status:`, disposition `not-ingested: header mismatch,
    retried once`) beside the second, and nothing is edited, filtered or turned
-   into a different status by the Controller. A retry after a limit or a failure
+   into a different status by the Controller. Nor does the retry itself turn a
+   verdict into a different status: when the first verdict has a `Status:` and
+   the retry's differs (a `REVISE` retried into an `APPROVE`), the retry is not
+   ingested and the job ends `FAILED` (`ReviewStatusChangedOnRetry`, gate open,
+   manual route named) with both verdicts recorded, the second as
+   `not-ingested: status changed on the header retry` (`retry_changed_status`).
+   A first verdict with no parseable `Status:` leaves the retry free to say any.
+   The retained verdict files (`<runtime>/reviews/<job id>-verdict-<n>.md`) are
+   kept like job records and not swept; an entry whose file could not be
+   written records `path: null` and the error. A retry after a limit or a failure
    runs only when the attempt produced no verdict.
 
 3. **It hooks in at two rows only.** The branch in `execute_step` applies

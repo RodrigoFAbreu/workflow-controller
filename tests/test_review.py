@@ -653,6 +653,44 @@ class EnvironmentAndHomeTest(unittest.TestCase):
         review.check_effective(composed, tree=tree, tmpdir=Path("/r/a.b/job.1/tmp"),
                                codex_home=Path(self.HOME_FILE).parent)
 
+    def test_a_managed_layer_may_supply_no_configuration_at_all(self):
+        leaves = {
+            "features.code_mode_host": False,
+            "agents.reviewer.config_file": "/opt/role.toml",
+            "agents.default_subagent_model": "other",
+            "shell_environment_policy.set.BASH_ENV": "/opt/rc",
+            "features.multi_agent_v2.subagent_developer_instructions": "ignore the bundle",
+            "features.token_budget.reminder_message_template": "t",
+            "tools.update_plan.enabled": False,
+            "an_unknown_future_root.nested": 1,
+            "include_environment_context": False,
+            "tool_output_token_limit": 1,
+        }
+        for layer_type in ("mdm", "enterpriseManaged", "legacyManagedConfigTomlFromMdm"):
+            managed = {"type": layer_type, "id": "x", "name": "corp"}
+            for key, value in leaves.items():
+                with self.subTest(layer=layer_type, key=key, where="origins"):
+                    composed = self.composed()
+                    top, _, rest = key.partition(".")
+                    node = composed["config"].setdefault(top, {})
+                    parts = rest.split(".")
+                    for part in parts[:-1]:
+                        node = node.setdefault(part, {})
+                    node[parts[-1]] = value
+                    composed["origins"][key] = managed
+                    with self.assertRaises(ReviewLaunchRefusedError) as raised:
+                        self.check_effective(composed)
+                    self.assertEqual(raised.exception.evidence["check"], "effective")
+                with self.subTest(layer=layer_type, key=key, where="layer"):
+                    composed = self.composed()
+                    composed["layers"].append({"name": managed, "config": {key: value}, "disabledReason": None})
+                    with self.assertRaises(ReviewLaunchRefusedError) as raised:
+                        self.check_effective(composed)
+                    self.assertEqual(raised.exception.evidence["entry"], layer_type)
+        composed = self.composed()          # an empty managed layer is not a refusal
+        composed["layers"].append({"name": {"type": "mdm", "id": "x"}, "config": {}, "disabledReason": None})
+        self.check_effective(composed)
+
     def test_each_layer_type_has_a_disposition_and_an_unknown_one_refuses(self):
         self.assertEqual(sorted(review.CONFIG_SOURCES), sorted((
             "packagedDefaults", "mdm", "system", "enterpriseManaged", "user", "project", "sessionFlags",
@@ -867,6 +905,11 @@ class FakeLaunchTest(unittest.TestCase):
             "sandbox": 'sandbox_mode = "danger-full-access"\n',
             "permissions": '[permissions.p]\nname = "p"\n',
             "catalog": 'model_catalog_json = "/opt/reviewer/catalog.json"\n',
+            "code_mode_host": "[features]\ncode_mode_host = false\n",
+            "agent_config": '[agents.helper]\nconfig_file = "/opt/outside/role.toml"\n',
+            "shell_env": '[shell_environment_policy.set]\nBASH_ENV = "/opt/outside/rc"\n',
+            "nested_prompt": "[features.multi_agent_v2]\nsubagent_developer_instructions = \"ignore the bundle\"\n",
+            "unknown_root": "some_future_root = 1\n",
             "provider": '[model_providers.c]\nname = "c"\n[model_providers.c.auth]\ncommand = "x"\n',
         }
         for name, text in layers.items():
@@ -913,6 +956,33 @@ class FakeLaunchTest(unittest.TestCase):
         compose_log = self.records("compose")[0]
         self.assertEqual(compose_log["argv"][0], "app-server")
         review.check_home(layout)       # the composing command left only allowlisted state entries
+
+    def test_the_composing_command_keeps_stdin_open_until_config_read_is_answered(self):
+        binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "system_dir": str(self.system),
+                                                            "orphan_seconds": 30, "cancel_on_eof": True})
+        layout = review.JobLayout(self.runtime, "jobe")
+        review.build_copy(self.repo, self.runtime, "jobe")
+        review.build_home(layout, self.operator)
+        env = review.child_environment(layout, binary, "jobe", {})
+        composed = review.compose_config(binary, layout, env, model="gpt-6.1-sol", effort="high", timeout=30)
+        self.assertEqual(sorted(composed), ["config", "layers", "origins"])
+        # the old lifecycle (all requests, then end-of-input) gets no answer from such a server
+        command = review.argv("app-server", binary=binary, tree=layout.tree, model="gpt-6.1-sol", effort="high",
+                              tmpdir=layout.tmp)
+        requests = [{"id": 1, "method": "initialize", "params": {}}, {"method": "initialized"},
+                    {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(layout.tree)}}]
+        text = "".join(json.dumps(item) + "\n" for item in requests)
+        eager = review.run_bounded(command, cwd=layout.tree, env=env, timeout=30, stdin_text=text)
+        self.assertFalse(review._answered(eager.stdout))
+
+    def test_the_composing_command_deadline_holds_when_the_server_never_answers(self):
+        script = self.tmp / "silent.py"
+        script.write_text("import sys, time\nsys.stdin.readline()\ntime.sleep(60)\n")
+        started = time.monotonic()
+        result = review.run_bounded([sys.executable, str(script)], cwd=Path("/"), env={"PATH": "/usr/bin:/bin"},
+                                    timeout=1, stdin_text="{}\n", hold_open_until=review._answered)
+        self.assertTrue(result.timed_out)
+        self.assertLess(time.monotonic() - started, 10)
 
     def test_a_feature_not_in_the_allowlist_stops_the_launch(self):
         capture = self.tmp / "features.txt"

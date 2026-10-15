@@ -37,6 +37,7 @@ import json
 import os
 import re
 import secrets
+import selectors
 import signal
 import subprocess
 import sys
@@ -151,10 +152,22 @@ SYSTEM_LAYER_DIR = Path("/etc/codex")
 #: here; the composed-values and origin checks cover it) or ``own`` (the
 #: Controller's own ``-c`` layer). A layer type not in this table refuses.
 CONFIG_SOURCES = {
-    "packagedDefaults": "composed", "mdm": "composed", "system": "absent", "enterpriseManaged": "composed",
+    "packagedDefaults": "composed", "mdm": "managed", "system": "absent", "enterpriseManaged": "managed",
     "user": "excluded", "project": "excluded", "sessionFlags": "own",
-    "legacyManagedConfigTomlFromFile": "absent", "legacyManagedConfigTomlFromMdm": "composed",
+    "legacyManagedConfigTomlFromFile": "absent", "legacyManagedConfigTomlFromMdm": "managed",
 }
+
+#: The leaves a ``managed`` layer (MDM or enterprise-managed configuration) may
+#: supply, with the value each must carry. Empty: the configuration namespace is
+#: open-ended (dynamic agent roles, environment-variable names, integration maps,
+#: nested prompt-bearing settings), so a finite list of forbidden keys cannot
+#: bound it. A managed layer must carry no configuration at all, and no leaf of
+#: the composed configuration may name one as its origin.
+MANAGED_APPROVED_LEAVES: dict[str, object] = {}
+
+#: The origin types a leaf of the composed configuration may have: the packaged
+#: defaults, the Controller's own ``-c`` layer and its minimal home.
+ORIGIN_ALLOWED = frozenset({"packagedDefaults", "sessionFlags", "user"})
 
 #: Sources that are not configuration layers and the control over each
 #: (``compose.txt``): rules the ``--ignore-rules`` flag, ``AGENTS*.md`` the empty
@@ -877,12 +890,17 @@ def check_effective(composed: Mapping, *, model: str = DEFAULT_MODEL, effort: st
         if config.get(key) and _origin(origins, key) is None:
             raise _refuse(f"the composed configuration sets {key} from no layer the Controller can judge",
                           check="effective", key=key, value=config.get(key))
+    leaves = flatten(config)
     for name in sorted(origins):
         origin = origins[name]
         # the bare layer source, or the documented ``{name: <layer source>, version: <sha256>}`` wrapper
         source = origin.get("name", origin) if isinstance(origin, Mapping) else origin
         if isinstance(source, Mapping) and source.get("type") == "packagedDefaults":
             continue
+        kind = source.get("type") if isinstance(source, Mapping) else None
+        if kind not in ORIGIN_ALLOWED and MANAGED_APPROVED_LEAVES.get(name, object()) != leaves.get(name):
+            raise _refuse(f"the composed configuration sets {name} from a {kind} layer", check="effective",
+                          key=name, value=leaves.get(name), source=origin)
         if name.split(".", 1)[0] in FORBIDDEN_EFFECTIVE_KEYS or (
                 name.startswith("skills.") and name != "skills.bundled.enabled"):
             raise _refuse(f"the composed configuration sets {name}", check="effective", key=name,
@@ -904,6 +922,12 @@ def _check_layers(layers: Sequence, codex_home: Path | None) -> None:
         disposition = CONFIG_SOURCES[kind]
         if disposition == "absent" and layer.get("config"):
             raise _refuse(f"the {kind} layer carries configuration", check="effective", entry=kind, source=name)
+        if disposition == "managed":
+            extra = sorted(leaf for leaf, value in flatten(layer.get("config") or {}).items()
+                           if leaf and MANAGED_APPROVED_LEAVES.get(leaf, object()) != value)
+            if extra:
+                raise _refuse(f"the {kind} layer sets {extra[0]}, which no managed layer may supply",
+                              check="effective", entry=kind, key=extra[0], source=name)
         if kind == "project" and not layer.get("disabledReason"):
             raise _refuse("a project layer is enabled", check="effective", entry=kind, source=name)
         if kind == "user" and codex_home is not None and name.get("file") != str(codex_home / "config.toml"):
@@ -973,7 +997,8 @@ _DRAIN_SECONDS = 2.0
 
 
 def run_bounded(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], timeout: float,
-                stdin_text: str | None = None, on_spawn: Callable[[int, int], None] | None = None) -> RunResult:
+                stdin_text: str | None = None, on_spawn: Callable[[int, int], None] | None = None,
+                hold_open_until: Callable[[bytes], bool] | None = None) -> RunResult:
     """Run ``command`` in its own session with ``env`` exactly as given, under
     a hard deadline. On the deadline, or on any exception (``KeyboardInterrupt``
     included), the whole process group is killed, and so is every process still
@@ -981,7 +1006,10 @@ def run_bounded(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], ti
     its own session), and the leader is reaped before the outcome or the
     exception is returned. Draining the output after the kill is itself
     bounded. The group gets no inherited descriptor. ``on_spawn(pid, pgid)`` is
-    called straight after the spawn."""
+    called straight after the spawn. With ``hold_open_until``, ``stdin_text`` is
+    written but stdin stays open until that predicate accepts the output read so
+    far (or the child exits, or the deadline passes): a server that cancels its
+    pending requests on end-of-input needs the transport open until it answers."""
     proc = subprocess.Popen(list(command), cwd=cwd, env=dict(env), stdin=subprocess.PIPE if stdin_text is not None
                             else subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             start_new_session=True, close_fds=True)
@@ -991,7 +1019,10 @@ def run_bounded(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], ti
         if on_spawn is not None:
             on_spawn(proc.pid, pgid)
         try:
-            out, err = proc.communicate(stdin_text.encode() if stdin_text is not None else None, timeout=timeout)
+            if hold_open_until is not None and stdin_text is not None:
+                out, err = _converse(proc, stdin_text.encode(), hold_open_until, timeout)
+            else:
+                out, err = proc.communicate(stdin_text.encode() if stdin_text is not None else None, timeout=timeout)
             timed_out = False
         except subprocess.TimeoutExpired:
             _kill_owned(pgid, tag)
@@ -1006,6 +1037,52 @@ def run_bounded(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], ti
             _drain(proc)
         proc.wait()
         raise
+
+
+def _converse(proc: "subprocess.Popen[bytes]", data: bytes, done: Callable[[bytes], bool],
+              timeout: float) -> tuple[bytes, bytes]:
+    """Write ``data``, read the output until ``done(stdout)`` accepts it or the
+    child closes both pipes, then close stdin and collect the rest. Raises
+    ``subprocess.TimeoutExpired`` at the deadline, like ``communicate``."""
+    deadline = time.monotonic() + timeout
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
+    try:
+        proc.stdin.write(data)
+        proc.stdin.flush()
+    except BrokenPipeError:
+        pass
+    out_fd, err_fd = proc.stdout.fileno(), proc.stderr.fileno()
+    chunks = {out_fd: bytearray(), err_fd: bytearray()}
+    with selectors.DefaultSelector() as selector:
+        for fd in chunks:
+            selector.register(fd, selectors.EVENT_READ)
+        while selector.get_map() and not done(bytes(chunks[out_fd])):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise subprocess.TimeoutExpired(proc.args, timeout)
+            for key, _ in selector.select(left):
+                block = os.read(key.fd, 65536)
+                if block:
+                    chunks[key.fd] += block
+                else:
+                    selector.unregister(key.fd)
+    with contextlib.suppress(OSError):
+        proc.stdin.close()
+    proc.stdin = None
+    out, err = proc.communicate(timeout=max(deadline - time.monotonic(), 0.001))
+    return bytes(chunks[out_fd]) + (out or b""), bytes(chunks[err_fd]) + (err or b"")
+
+
+def _answered(stdout: bytes, request_id: int = 2) -> bool:
+    """True once ``stdout`` holds a complete JSON-RPC message answering ``request_id``."""
+    for line in stdout.decode("utf-8", "replace").splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get("id") == request_id:
+            return True
+    return False
 
 
 def _drain(proc: "subprocess.Popen[bytes]") -> tuple[bytes, bytes]:
@@ -1076,7 +1153,7 @@ def compose_config(binary: Path, layout: "JobLayout", env: Mapping[str, str], *,
         {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(layout.tree)}},
     ]
     result = run_bounded(command, cwd=layout.tree, env=env, timeout=timeout,
-                         stdin_text="".join(json.dumps(item) + "\n" for item in requests))
+                         stdin_text="".join(json.dumps(item) + "\n" for item in requests), hold_open_until=_answered)
     stderr = result.stderr.decode("utf-8", "replace")
     if result.timed_out or result.exit_code != 0:
         raise _refuse("the composing command did not run", check="effective", value=stderr.strip()[-400:])

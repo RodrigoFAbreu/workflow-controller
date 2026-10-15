@@ -73,6 +73,7 @@ import json
 import os
 import signal
 import subprocess
+import threading
 import sys
 import time
 import tomllib
@@ -257,6 +258,10 @@ def config_read(args: list[str], scenario: dict, cwd: Path, codex_home: Path) ->
 
 
 def _serve_app_server(scenario: dict, cwd: Path, home: Path, argv: list[str]) -> None:
+    """With ``cancel_on_eof`` the server behaves like the pinned one: the
+    ``config/read`` answer takes a moment, and end-of-input before it is sent
+    cancels the pending request, so the server exits 0 without answering."""
+    pending: list[threading.Timer] = []
     for line in sys.stdin:
         try:
             message = json.loads(line)
@@ -266,7 +271,15 @@ def _serve_app_server(scenario: dict, cwd: Path, home: Path, argv: list[str]) ->
             print(json.dumps({"id": message["id"], "result": {"userAgent": VERSION}}), flush=True)
         elif message.get("method") == "config/read":
             result = config_read(argv, scenario, Path(message["params"].get("cwd", cwd)), home)
-            print(json.dumps({"id": message["id"], "result": result}), flush=True)
+            answer = json.dumps({"id": message["id"], "result": result})
+            if scenario.get("cancel_on_eof"):
+                timer = threading.Timer(0.3, lambda text=answer: print(text, flush=True))
+                timer.start()
+                pending.append(timer)
+            else:
+                print(answer, flush=True)
+    for timer in pending:
+        timer.cancel()
 
 
 def features(args: list[str], scenario: dict) -> dict[str, bool]:

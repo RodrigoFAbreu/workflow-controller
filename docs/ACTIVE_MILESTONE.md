@@ -194,6 +194,12 @@ findings, both fixed in the bounded round: `docs/common-problems.md` now keeps e
 lists launch-boundary refusals under exit 30 (`ReviewLaunchRefused`, `not_started`); flow 3 above now describes the
 workspace-write boundary. No remediation child. Re-test: flow 10 (docs) after the next implementation review and technical approval.
 
+**Functional review round 3** (CI on PR #45, 2026-10-15): one Important defect, fixed in the bounded round. Fifty-three new
+tests failed on a fresh checkout because they assumed the git-ignored `build/` directory existed. `tests/process_fixtures.py`
+now has `build_dir()`, which creates it; `tests/test_review.py` and `tests/test_fake_codex_contract.py` use it, with a
+regression test (`BuildDirTest`). Both modules pass (130 tests) in a fresh clone with no `build/`. No remediation child.
+Re-test: CI `validate / tests-result` green after the next implementation review and technical approval.
+
 **Known limitations / out of scope**
 - Only Codex is registered; other harnesses are refused.
 - A reviewer may spawn a sub-agent (Codex cannot remove the tool); the job record names the spawn and its tokens.

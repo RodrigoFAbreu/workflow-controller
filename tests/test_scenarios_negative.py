@@ -30,6 +30,7 @@ MUTATIONS: dict[str, tuple[str, ...]] = {
     "scenario-kill-and-resume-run-after": ("run-true",),
     "scenario-kill-and-resume-job-before": ("resume-true",),
     "scenario-kill-and-resume-job-after": ("resume-true",),
+    "scenario-review-round-cap-stops-and-continues": ("cap-ignored",),  # review-convergence CP2
 }
 MUTATIONS_CP4: dict[str, tuple[str, ...]] = {  # scenarios 6-10 (CP4)
     "scenario-squash-merge-and-release-classification": ("docs-as-feat",),

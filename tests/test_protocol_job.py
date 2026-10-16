@@ -433,6 +433,12 @@ class ReviewCapGateTest(unittest.TestCase):
         self.assertIsNone(self._gate(target, "plan.apply_review", snapshot, work_item=None))
         self.assertIsNone(self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}}, cap=6))
 
+    def test_a_legacy_decision_is_not_capped(self) -> None:
+        target = _Target(self)
+        legacy = type("D", (), {"protocol": None})()
+        self.assertIsNone(job._review_cap_gate(target.runtime, target.inspect(),
+                                               type("W", (), {"work_item_id": "demo"})(), legacy, 1))
+
     def test_an_absent_round_counts_from_the_records_and_says_so(self) -> None:
         target = _Target(self)
         for n, revision in enumerate((1, 2, 3), 1):

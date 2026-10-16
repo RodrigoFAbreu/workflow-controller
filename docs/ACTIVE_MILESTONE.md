@@ -3,14 +3,43 @@
 ## Status
 
 **In progress.** `workflow-controller-review-convergence` (`docs/ROADMAP.md` step C13, section 11.13), plan revision 6
-(`docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md`), base commit `45e9325`, phase `IMPLEMENTING`.
+(`docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md`), base commit `45e9325`, phase `SELF_REVIEWING_IMPLEMENTATION`.
 
 | Checkpoint | State |
 | --- | --- |
 | CP1 round count and cap setting | COMPLETE: `controller/review_rounds.py` (`current_round`, `cap_decision`), the `review.round_cap` setting (table generation 7), `--review-round-cap` on `step` and `run` forwarded to `job.execute_step`. Tests: `tests/test_review_rounds.py`, `tests/test_settings.py`, `tests/test_cli.py`. The real-reconciliation fixtures the plan lists for CP1 need the cap gate and are written with CP2's lifecycle scenario. |
 | CP2 cap gate | COMPLETE: `job._review_cap_gate` (after the loop guard in `_decide_protocol_current`, and in `explain` beside it with the setting's cap), `protocol_decision.REVIEW_ROUND_CAP_REACHED`, `execute_step` forwards `review_round_cap`. Tests: `ReviewCapGateTest` in `tests/test_protocol_job.py`, the explain wiring in `tests/test_protocol_decision.py`. The real-reconciliation and lifecycle-scenario fixtures the plan lists are not yet written (they need the fake Workflow answers of `tests/scenarios/lifecycle.py`); they are carried to the full-suite step. |
 | CP3 telemetry rounds | COMPLETE: `telemetry.rows` adds `action`, `stage`, `round` and `round_source` per job (the round stored in the job's decision snapshot, else `review_rounds.current_round` over the unfiltered records up to and including that job, the cap gate's own function; `review_rounds.record_key` made public for the shared order), `GROUPINGS` gains `action`, `stage`, `stage,round` (a `jobs`-derived round labelled `N~`, kept apart from the Workflow's `N`) and `work_item,action`; `--by` help lists them. No job record is written. Tests: `RoundsTest` in `tests/test_telemetry.py`, which pins the text of the existing groupings and the JSON row keys. |
-| CP4 documentation | COMPLETE: `docs/guide/runtime.md` (the `review.round_cap` row, the cap, the before and after procedure), `docs/guide/commands.md`, `docs/run.md`, `docs/common-problems.md`, `docs/exit-codes.md`, `docs/ROADMAP.md` (C13 complete, next C14). The full suite also needed two pins updated: the module order (`review_rounds` before `telemetry`) and `execute_step`'s parameter list. The real-reconciliation and lifecycle-scenario fixtures listed for CP1 and CP2 were not written. |
+| CP4 documentation | COMPLETE: `docs/guide/runtime.md` (the `review.round_cap` row, the cap, the before and after procedure), `docs/guide/commands.md`, `docs/run.md`, `docs/common-problems.md`, `docs/exit-codes.md`, `docs/ROADMAP.md` (C13 complete, next C14). The full suite also needed two pins updated: the module order (`review_rounds` before `telemetry`) and `execute_step`'s parameter list. The real-reconciliation and lifecycle-scenario fixtures listed for CP1 and CP2 were not written; the self-review below added them. |
+
+**Self-review** (`SELF_REVIEWING_IMPLEMENTATION`). One important finding: the plan's real-reconciliation and
+lifecycle-scenario tests were missing. Added:
+
+- `tests/test_review_round_lifecycle.py`: real vendored 2.7.0 targets (no `review_round`, so the round comes from the
+  job records) driven by the real `execute_step`, `next-action` and `reconcile`, with the worker's effect made by the
+  target's own Workflow writers and generator. A plan loop: the first local review runs at cap 1, the apply stops
+  (no worker, Workflow state and `HEAD` unchanged, one `GATE_BLOCKED` record that no count includes), a raised cap
+  applies it and reaches the next review, and a republication without a `plan_revision` rise leaves the count at 2
+  while the Workflow 2.12.0 `_plan_review_round` of the same state is 3 (a lower bound: the cap fires later, never
+  earlier). A first publication at revision 2 after unpublished `PLANNING` authoring at 1 (the shape
+  `create_remediation_child_work_item` leaves, made by routing at 1 and authoring at 2) is round 1. An
+  implementation loop: an ordinary apply opens round 2, a `same_content` apply ends `progress` with the revision
+  unchanged and opens none, the cap stops the apply at round 2, and a `"2.1"` apply that ends `gate_reached` opens a
+  round. `telemetry` derives the same round per job as the gate.
+- `scenario-review-round-cap-stops-and-continues` (`tests/scenarios/lifecycle.py`, mutation `cap-ignored`): `cli.main`
+  `run --review-round-cap 1`, `explain` under `review.round_cap` 1 (the same gate text), then
+  `run --review-round-cap 2` continues to the next review and stops again.
+- `ReviewCapGateTest.test_a_legacy_decision_is_not_capped`; `docs/guide/runtime.md` names the real group labels
+  (`stage=plan, round=4~`) and release 1.12.0; `docs/guide/development.md` lists the new scenario.
+
+Not covered through real reconciliation: a bounded functional apply (`functional.apply_findings`) with
+`same_content`; its counting is the unit-tested revision rule in `tests/test_review_rounds.py`.
+
+**Verification.** `python3 tools/check_docs.py` exit 0. Golden `--check`: three current; `plan_stage_decisions.json`
+(release 2.5.1) differs from a fresh derivation exactly as at the base commit `45e9325` (the known, permitted
+difference), untouched here. `python3 tools/run_tests.py`: 4064 tests, coverage exact, 3 failures: the two Git 2.56
+trailer-rule tests (follow-up 12, unchanged by this milestone) and the scenario-count pin (18 to 19), fixed and
+re-run green.
 
 The previous milestone follows.
 

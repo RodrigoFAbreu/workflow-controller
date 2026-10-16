@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import io
 import json
 import os
 import signal
@@ -563,3 +564,87 @@ def _register_kill_variants() -> None:
 
 
 _register_kill_variants()
+
+
+# ---------------------------------------------------------------------------
+# Scenario 13
+# ---------------------------------------------------------------------------
+
+@scenario("scenario-review-round-cap-stops-and-continues", covers=("C13",))
+def review_round_cap_stops_and_continues(kit) -> None:
+    """A protocol plan loop on a real vendored 2.7.0 Workflow (no ``review_round``, so the round is counted from the
+    job records): ``run --review-round-cap 1`` runs the first local review and stops before the apply with the
+    ``review_round_cap_reached`` gate, launching nothing and leaving the Workflow state as it was; ``explain`` under
+    ``review.round_cap`` 1 prints the same gate; ``run --review-round-cap 2`` (the flag beats the setting) applies the
+    review, runs the next one and stops again at the cap."""
+    from controller import cli, identity, job, worker
+    from tests.scenarios.features import write_settings
+    from tests.test_protocol_lifecycle import _result
+    from tests.test_review_round_lifecycle import STATE_REL, CapLoop
+
+    loop = CapLoop(None, "ready", root=kit.workdir / "cap" / "repo", stub_dir=kit.bin_dir)
+    kit.assert_inside_scratch(loop.root)
+    effects = {"/review-plan": loop.review_plan, "/apply-plan-review": loop.publish_plan}
+    tasks: list[str] = []
+
+    def claude(task, *, cwd, **kwargs):
+        tasks.append(task.split()[0])
+        if task.split()[0] not in effects:
+            raise ScenarioFailure(f"no scripted effect for {task!r}")
+        effects[task.split()[0]]()
+        return _result()
+
+    def run(command: str, *extra: str):
+        kit.install_audit_hook()
+        ident = kit._identity()
+        argv = ["--runtime-dir", str(loop.runtime), "--workflow-manager", str(loop.stub),
+                "--claude-binary", str(kit.bin_dir / "claude"), "--timeout", "60", command, *extra, str(loop.root)]
+        out, err = io.StringIO(), io.StringIO()
+        with unittest.mock.patch.object(identity, "pin", return_value=ident), \
+                unittest.mock.patch.object(identity, "current", return_value=ident), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def last_record() -> dict:
+        paths = sorted((loop.runtime / "jobs").glob("*.json"), key=lambda p: p.stat().st_mtime_ns)
+        return json.loads(paths[-1].read_text())
+
+    def gate_text() -> str:
+        record = last_record()
+        if record["status"] != job.STATUS_GATE_BLOCKED:
+            raise ScenarioFailure(f"the last job record is {record['status']}, not GATE_BLOCKED")
+        return record["human_gate_pending"]["what_is_required"]
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(unittest.mock.patch.object(worker, "launch", claude))
+        if mutation(kit) == "cap-ignored":
+            stack.enter_context(unittest.mock.patch.object(job, "_review_cap_gate", lambda *a, **k: None))
+
+        code, _out, _err = run("run", "--max-steps", "4", "--review-round-cap", "1")
+        state_at_gate = (loop.root / STATE_REL).read_bytes()
+        kit.equal((code, tasks), (cli.EXIT_GATE, ["/review-plan"]), "the first run: exit status and workers")
+        first = gate_text()
+        kit.check(first.startswith("review_round_cap_reached: demo is at plan review round 1 (counted from the "
+                                   "Controller's job records"), f"the first stop's gate text: {first!r}")
+        kit.check("at the round cap of 1" in first and "(1) raise the cap" in first, "the cap and the options")
+        kit.equal(loop.item()["phase"], "REVISING_PLAN", "the phase at the cap")
+        kit.observe("first-run", {"exit": code, "workers": list(tasks), "phase": loop.item()["phase"],
+                                  "records": len(list((loop.runtime / "jobs").glob("*.json")))})
+
+        write_settings(kit, {"review": {"round_cap": 1}})
+        code, out, _err = run("explain")
+        kit.equal(code, cli.EXIT_OK, "explain: exit status")
+        kit.check(first in out, f"explain does not print the step's gate: {out!r}")
+        kit.equal((loop.root / STATE_REL).read_bytes(), state_at_gate, "the Workflow state after the gate and explain")
+        kit.observe("explain", {"exit": code, "same-gate": first in out})
+
+        code, _out, _err = run("run", "--max-steps", "4", "--review-round-cap", "2")
+        kit.equal((code, tasks), (cli.EXIT_GATE, ["/review-plan", "/apply-plan-review", "/review-plan"]),
+                  "the raised run: exit status and workers")
+        second = gate_text()
+        kit.check("at plan review round 2" in second and "at the round cap of 2" in second,
+                  f"the second stop's gate text: {second!r}")
+        kit.equal((loop.item()["phase"], loop.item()["plan_revision"]), ("REVISING_PLAN", 2), "the item at the cap")
+        kit.observe("raised-run", {"exit": code, "workers": list(tasks), "plan_revision": loop.item()["plan_revision"],
+                                   "records": len(list((loop.runtime / "jobs").glob("*.json")))})

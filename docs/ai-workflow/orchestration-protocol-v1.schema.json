@@ -178,7 +178,17 @@
         "registry_complete": {"type": ["boolean", "null"]},
         "plan_approval": {"type": ["string", "null"]},
         "technical_approval": {"type": ["string", "null"]},
-        "plan_review_publication_status": {"type": ["string", "null"]}
+        "plan_review_publication_status": {"type": ["string", "null"]},
+        "review_round": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plan", "implementation", "current"],
+          "properties": {
+            "plan": {"type": ["integer", "null"]},
+            "implementation": {"type": ["integer", "null"]},
+            "current": {"enum": ["plan_local", "plan_external", "implementation_local", "implementation_external", null]}
+          }
+        }
       }
     },
     "decision": {

@@ -1,11 +1,12 @@
 # Workflow Orchestration Protocol v1
 
-The normative specification of Orchestration Protocol v1, version `1.3`
+The normative specification of Orchestration Protocol v1, version `1.4`
 (`1.0` first shipped in Workflow 2.7.0; `1.1` adds the gate-policy rows and
 actions in Workflow 2.8.0; `1.2` adds the user-only `legacy.retire`
 alternative of row 3 and `implementation.resume` alternative of row 38c in
 Workflow 2.9.0; `1.3` adds row `1b` and the advisory `default_workflow_version`
-check in Workflow 2.10.0). An orchestrator (for example the Workflow
+check in Workflow 2.10.0; `1.4` adds the `review_round` snapshot field in
+Workflow 2.12.0). An orchestrator (for example the Workflow
 Controller) drives a repository's Workflow through this protocol only. It
 copies no Workflow phases, artifact paths, helper names or transition
 rules: the Workflow owns what the lifecycle means, and the orchestrator owns
@@ -39,7 +40,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0** (protocol `1.4`).
 
 ## 2. Invocation and the envelope
 
@@ -58,8 +59,8 @@ stdout is exactly one JSON document, the **envelope**
 
 ```json
 {
-  "protocol": {"name": "workflow-orchestration", "version": "1.3"},
-  "workflow_release": "2.8.0",
+  "protocol": {"name": "workflow-orchestration", "version": "1.4"},
+  "workflow_release": "2.12.0",
   "operation": "next-action",
   "ok": true,
   "result": { "...": "operation-specific" }
@@ -279,7 +280,8 @@ a **decision**:
               "plan_revision": 1, "implementation_revision": null,
               "current_checkpoint_id": null, "next_checkpoint_id": "CP2",
               "registry_complete": false, "plan_approval": "CURRENT",
-              "technical_approval": null, "plan_review_publication_status": null},
+              "technical_approval": null, "plan_review_publication_status": null,
+              "review_round": {"plan": 3, "implementation": null, "current": null}},
  "row": "23",
  "disposition": "automatic",
  "action": {"id": "implementation.checkpoint",
@@ -314,6 +316,36 @@ a **decision**:
 - `snapshot` is the item's state at decision time, plus the values the
   evaluation computed (`next_checkpoint_id`, `registry_complete`,
   `plan_review_publication_status`, each `null` when not computed).
+- `review_round` (protocol `1.4`, an item's decision only) is derived on every
+  call from state already persisted and never stored:
+  - `plan` is the number of plan-review rounds, an exact count or `null`,
+    "not derivable". It is the number of distinct contents taken out of
+    review (`consumed_plan_review_content_ids` and the `plan_review_binding`
+    slot's consumed id) plus one while the binding record is `PUBLISHED` or
+    `BOUND`, approved items included, so it does not drop at approval. It is
+    `null` before the first publication and for every shape whose history the
+    Workflow cannot show complete: the fail-closed legacy marker, a
+    `2.6.0`-shaped item (a consumed slot and no history list), a slot id the
+    list lacks, and a history shorter than the consumed slot's
+    `plan_revision`. A number never becomes a smaller number, but it can
+    return to `null` (a revision advanced without a consumed round); a
+    consumer that sees `null` counts the rounds itself, retroactively.
+  - The value is exact for an item whose plan-review rounds all ran under
+    Workflow 2.7.0 or later. An item begun before 2.7.0, or in a repository
+    ever moved back below 2.7.0, can read a number lower than its true round,
+    undetectably: for cap purposes the value is advisory for such items, and
+    a consumer that must enforce a hard cap counts rounds itself.
+  - `plan` is not the ledgers' per-stage `round`, which counts one stage's
+    recorded verdicts and leaves no entry for a `REVISE`; the two can differ
+    for the same item and must not be compared.
+  - `implementation` is the item's `implementation_revision` (`null` until
+    set). A same-content republication after a fix is a new review under the
+    same number.
+  - `current` is the review stage the phase waits for, from the phase and
+    governing version alone: `plan_local`, `plan_external`,
+    `implementation_local`, `implementation_external`, else `null`. A `2.2`
+    item at `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` (both stages approved,
+    ready for approval) reads `null`.
 
 With no work item named and none active, the result has no `basis`; its
 `snapshot` is `{"work_item_ids": [...]}`, the sorted keys of `work_items`,
@@ -349,7 +381,8 @@ nothing. Its result (`$defs.results.reconcile`):
 ```
 
 `reconcile` accepts an `automatic` decision only. A gate is resolved
-outside the orchestrator's run, by a person or by `record-external-result`,
+outside the orchestrator's run, by a person or by `record-external-result`
+(section 8.2 states when a courier may carry a verdict),
 and the orchestrator then calls `next-action` again. Any other decision,
 and any decision that is not a well-formed `next-action` result (an action
 whose rendering differs from the catalogue's, a row that cannot emit it,
@@ -1043,7 +1076,8 @@ A consumer of protocol `1.x`:
    honours `worker` (role, a fresh session, independence, `user_only`);
 5. runs an `automatic` action (and, from protocol `1.1`, a `validation`
    action) only, never a gate's action or an alternative on its own; a
-   `user_only` action is always a person's;
+   `user_only` action is always a person's (a verdict courier at an
+   external gate is admissible only under the conditions of section 8.2);
 6. checks the identity before launching: `next-action
    --expect-state-identity <basis.state_identity>` immediately before
    the launch, re-deciding on `stale_decision`;
@@ -1052,7 +1086,8 @@ A consumer of protocol `1.x`:
    recorded, never `reconcile`;
 8. records external verdicts through `record-external-result` only, and
    never reads or writes a Workflow artifact path to drive the lifecycle
-   (`resolve-artifact` is for display and hand-off);
+   (`resolve-artifact` is for display and hand-off; section 8.2 states when
+   a courier may carry a verdict);
 9. stops at disposition `complete`;
 10. (protocol `1.1`, a recommendation) bounds its consecutive `no_progress`
     results of the **same** action id at an **unchanged** `state_identity`,
@@ -1064,6 +1099,48 @@ A consumer of protocol `1.x`:
     `gh` path) leaves `state_identity` unchanged and is the case the bound is
     for. Section 8 defined no such limit in `1.0`.
 
+### 8.1 A round cap (protocol `1.4`)
+
+An orchestrator with a round cap compares `review_round[<stage>]` (section
+5.4) with it before dispatching a review or an apply action and, at the cap,
+stops dispatching and hands the item to a person. When the field is `null`
+(not derivable, including a field that was a number earlier) it counts the
+rounds itself, for example by its own review-job count for the item, and
+never treats `null` as 0 or as any number. A number is exact for an item
+whose plan-review rounds all ran under Workflow 2.7.0 or later and advisory
+for cap purposes otherwise: a consumer that must enforce a hard cap on an
+item that predates 2.7.0, or on any item of a repository ever moved back
+below 2.7.0, counts the rounds itself.
+
+The Workflow never accepts at a cap. What the person can do is the existing
+user-only paths, unchanged: `/approve-review` with the confirmation guard
+where the gate is reachable (`USER_OVERRIDE` after a `REVISE`); otherwise
+continue the loop, or withdraw and re-scope the plan (`/milestone-plan
+<id>`).
+
+### 8.2 A distinct-provider verdict courier at an `external_gate`
+
+A clarification of obligations 5 and 8 and of sections 5.5 and 5.6, with no
+behavior change, field, row, action or check. Independence is enforced by the
+Workflow, not by trust in the courier: `record-external-result` runs every
+guard (binding, content id, stage preconditions, `distinct_reviewer_models`
+under automatic gates). A courier is admissible when, and only when:
+
+1. the verdict is produced by a different provider and model family from the
+   local stage's reviewer (stated in its `Reviewer model:` line), in a
+   disposable copy with no write access to the real repository;
+2. the courier passes the verdict text verbatim, never edits, filters or
+   retries it into a different status, and records every verdict it obtains,
+   `REVISE` included; a limit or failure retry re-runs only an attempt that
+   produced no verdict;
+3. entry is through `record-external-result` only; on a refusal the
+   orchestrator re-decides with `next-action` and never works around the
+   guard;
+4. it couriers only the two verdict kinds at rows 14 and 28, never resolves a
+   `user_only` action, and under a human gate policy the approval stays a
+   person's (recording a verdict is not an approval);
+5. it is opt-in; unset, the gate stops as today.
+
 ## 9. Reserved for a later protocol version
 
 - Nothing is reserved in `1.1`: the disposition `validation` and the result
@@ -1072,6 +1149,15 @@ A consumer of protocol `1.x`:
 
 ## 10. Compatibility notes
 
+- **Protocol `1.4`** (Workflow 2.12.0). The snapshot of an item's `next-action`
+  decision gains the additive `review_round` field (section 5.4). No row,
+  action, reason code, check or error code changed. A `1.3` consumer ignores
+  the unknown field (obligation 2), but the `1.3` schema's `snapshot` object
+  has `additionalProperties: false`, so a consumer that validates a `1.4`
+  response against its own copy of the `1.3` schema rejects it: validate
+  against the `1.4` schema, or drop unknown snapshot fields before
+  validating. Section 8.1 (the round cap) and section 8.2 (the verdict
+  courier) are consumer guidance only.
 - **Protocol `1.3`** (Workflow 2.10.0). New work items are no longer created
   while the config's default is `2.1`. Row `1` now matches only a default that
   is not retired (`2.2`); the new row `1b` reports `blocked` for a `2.1`

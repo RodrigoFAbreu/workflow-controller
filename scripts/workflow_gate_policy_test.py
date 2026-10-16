@@ -2148,7 +2148,7 @@ def verdict_text(status: str, *, rcid: str, role: str, bundle: str | None = None
     if base is not None:
         lines.append(f"Reviewed base commit: {base}")
     lines += [f"Work item: {WI}", f"{fingerprint.FEEDBACK_REVIEW_CONTENT_ID_LABEL} {rcid}", "",
-              "## Blocking findings", "", "None."]
+              "## Blocking findings", "", "- a finding that must change" if status == "REVISE" else "None."]
     if body_model is not None:
         lines += ["", f"Reviewer model: {body_model}"]
     return "\n".join(lines) + "\n"

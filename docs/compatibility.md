@@ -1,6 +1,6 @@
 # Compatibility
 
-> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.11.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0 and 2.11.0.
+> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.11.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0 and 2.12.0.
 
 This page is the one place that says which Controller release admits which
 Workflow release. Other pages and other repositories link here instead of
@@ -10,7 +10,7 @@ repeating the table.
 
 | Controller | Workflow releases admitted | How |
 |---|---|---|
-| 1.7.0 and later | 2.5.1 and 2.6.0; 2.7.0 and any later release that ships the protocol (2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0 and 2.11.0 are checked; 1.7.1 is the first release that accepts a `warn` check) | 2.5.1 and 2.6.0 by exact release, in legacy mode; every other release by capability, in protocol mode |
+| 1.7.0 and later | 2.5.1 and 2.6.0; 2.7.0 and any later release that ships the protocol (2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0 and 2.12.0 are checked; 1.7.1 is the first release that accepts a `warn` check) | 2.5.1 and 2.6.0 by exact release, in legacy mode; every other release by capability, in protocol mode |
 | 1.3.0 to 1.6.x | 2.5.1 and 2.6.0 | by exact release |
 | 1.2.1 and earlier | 2.5.1 | by exact release |
 
@@ -22,7 +22,9 @@ at the 2.8 automatic gates (see [run](run.md)). Controllers 1.7.0 and 1.7.1 both
 2.9.0, and 1.7.0 refuses it only when `verify` reports `warn`. Workflow 2.9.1 and 2.9.2
 speak the same protocol (1.2) and are admitted the same way; Controller 1.8.0 was checked
 against 2.9.2. Workflow 2.10.0 and 2.11.0 speak protocol 1.3 and are admitted the same way; Controller 1.9.0
-was checked against 2.10.0, and Controllers 1.10.0 and 1.11.0 against 2.11.0. Controller 1.7.1
+was checked against 2.10.0, and Controllers 1.10.0 and 1.11.0 against 2.11.0. Workflow 2.12.0 speaks
+protocol 1.4, which adds the review round to the next-action snapshot (an additive change), and is
+admitted the same way; Controller 1.11.0 was checked against it. Controller 1.7.1
 accepts the Workflow's `warn` check status as advisory: `explain` shows it and nothing is
 refused. An undefined status is still refused with exit 20. The advisory lists the action ids it cannot launch (`acceptance.satisfy`,
 `implementation.satisfy`, `plan.satisfy` and `pr.apply_review`) and any invented id, and
@@ -35,8 +37,8 @@ line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as
 `unsupported_protocol_major`.
 
-This repository itself runs Workflow 2.11.0, with automatic gates, since a `chore:` update pull
-request (2026-10-15). It ran 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
+This repository itself runs Workflow 2.12.0, with automatic gates, since a `chore:` update pull
+request (2026-10-16). It ran 2.11.0 from 2026-10-15, 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
 that vendored that release's test tree (C9c), and skipped 2.9.1.
 
 ## What admitted means

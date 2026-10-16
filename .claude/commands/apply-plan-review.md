@@ -250,6 +250,9 @@ normative definition.
      with `LegacyPlanReviewBindingUnknownError`,
      `PlanReviewInProgressError`, `PlanReviewPhaseNotPlanStageError` or
      `PlanReviewBindingInconsistentError` as step 0's status would predict.
+   After the publish, print `workflow_state.plan_size_advisory(registry)`
+   when it returns a warning (workflow-2.12.0, `D-Size`) and continue: it
+   never refuses and writes nothing.
 
    This step applies only to a work item with an existing `WORKFLOW_STATE.json`
    entry (`registry_path` non-null); an ordinary `"1"`-governed milestone
@@ -270,7 +273,7 @@ normative definition.
      (`assert_review_request_states_review_content_id`), obtained from the
      single canonical entry point `docs/ai-workflow/REVIEW_PROTOCOL.md`'s
      "Computing `review_content_id`" names for this stage -- never a
-     second, ad hoc computation, and never the previous round's value. If the plan stage's gate is `automatic` and the effective `require` lists
+     second, ad hoc computation, and never the previous round's value. Word the request conditionally on the changes file, because it is written before the generator decides whether `CHANGES_SINCE_REVIEW.md` exists: if it is present next to `current/` and its preamble names this bundle's `review_content_id`, the reviewer may review only the changes and check each previous finding is resolved, declaring `Review scope: changes`; any `APPROVE` is a full review of the whole bundle (workflow-2.12.0, `D-Changes`). If the plan stage's gate is `automatic` and the effective `require` lists
      `distinct_reviewer_models` (`workflow_state.review_stage_gate_context(repo_root,
      state, work_item_id, "plan")["requires_distinct"]`), also ask the reviewer, in
      that file, to state `Reviewer model: <vendor>/<model>` in the verdict's header

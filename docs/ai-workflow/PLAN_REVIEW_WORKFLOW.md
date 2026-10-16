@@ -151,6 +151,18 @@ at the plan-approval gate. A plan-stage `REVISE` therefore lives in the working
 tree until approval. The rule for every review stage is in `REVIEW_PROTOCOL.md`
 ("Which review-stage writes are committed").
 
+## Reviewing only the changes (`workflow-2.12.0`)
+
+From the second round, the generator writes `CHANGES_SINCE_REVIEW.md` next to
+`current/` (and into `review-bundle.tar.gz`): the previous round's findings and
+the diff of the protected plan content from the previous round to this one.
+`/review-plan` and the manual reviewer may then review only the changes and
+check each previous finding is resolved, declaring `Review scope: changes`,
+and return a `REVISE` or `BLOCK`. Any `APPROVE` is a full review of the whole
+bundle, so the round that approves is by rule a full round. The file is
+reviewer convenience, outside `bundle_id` and `review_content_id`; its
+semantics are in `REVIEW_PROTOCOL.md` ("Bundle location").
+
 ## Staleness, in one line
 
 Both ledger stages are valid only while the ledger's stored

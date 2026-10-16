@@ -276,7 +276,8 @@ def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> 
     mode and blob id). A deleted path carries :data:`DELETED_MARKER` for the
     worktree fields. A path the snapshot cannot distinguish -- a symlink, a
     directory or submodule, a path whose ``lstat`` fails, one with an
-    unmerged index stage or several entries -- is ``{"entry": ...,
+    unmerged index stage or several entries, or one whose status says it has
+    an index entry that the lookup did not return -- is ``{"entry": ...,
     "comparable": False}``, so a caller fails closed for it. The worktree
     files are read here directly (no ``git hash-object``)."""
     entries = {entry[3:]: entry for entry in tracked_changes(repo_root, runner=runner)}
@@ -285,7 +286,11 @@ def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> 
     for path, entry in entries.items():
         not_comparable = {"entry": entry, "comparable": False}
         stages = staged.get(path, [])
-        if len(stages) > 1 or any(stage != "0" for _mode, _blob, stage in stages):
+        # An index entry the lookup did not return (a pathspec the
+        # environment, e.g. GIT_LITERAL_PATHSPECS, changed the meaning of) is
+        # a miss, not "no entry": only a path deleted from the index has none.
+        missed = not stages and entry[:1] != "D"
+        if missed or len(stages) > 1 or any(stage != "0" for _mode, _blob, stage in stages):
             snapshot[path] = not_comparable
             continue
         record: dict = {"entry": entry, "comparable": True,

@@ -39,6 +39,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from controller import gitrepo  # noqa: E402
 from controller import (  # noqa: E402
     cli, decision, evidence, identity, job, lock, milestone_branch as mb, routing, target_state, worker,
     workflow_contract,
@@ -2205,7 +2206,20 @@ class UsageLimitLegacyTest(_LifecycleCase):
         self.assertEqual(reconciled["status"], job.STATUS_FAILED)
 
     def test_a_staged_only_change_to_a_colon_prefixed_file_is_failed_live_and_on_resume(self) -> None:
-        name = ":notes.txt"
+        self._staged_only_change_is_failed(":notes.txt")
+
+    def _under_literal_pathspecs(self, name: str) -> None:
+        literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+        with unittest.mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
+            self._staged_only_change_is_failed(name)
+
+    def test_a_staged_only_change_is_failed_under_literal_pathspecs_in_the_environment(self) -> None:
+        self._under_literal_pathspecs("n.txt")
+
+    def test_a_staged_only_colon_prefixed_change_is_failed_under_literal_pathspecs(self) -> None:
+        self._under_literal_pathspecs(":notes.txt")
+
+    def _staged_only_change_is_failed(self, name: str) -> None:
         notes = self.root / name
         notes.write_text("one\n")
         fixtures.commit_all(self.root, "add notes")

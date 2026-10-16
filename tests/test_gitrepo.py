@@ -5,6 +5,7 @@ real disposable repositories -- a bare origin and a clone
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -206,6 +207,35 @@ class TrackedChangeDigestsTest(_Case):
         after = self.snapshot()[":notes.txt"]
         self.assertEqual(after["digest"], before["digest"])
         self.assertNotEqual(after["staged"], before["staged"])
+
+    def test_literal_pathspecs_in_the_environment_make_a_staged_path_not_comparable(self) -> None:
+        # GIT_LITERAL_PATHSPECS=1 turns ":(literal)" into a plain file name,
+        # so the index lookup misses; the path must then fail closed.
+        runner = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+        for name in ("n.txt", ":notes.txt"):
+            self.commit(name, "one\n")
+            (self.clone / name).write_text("two\n")
+            run(["git", "add", "--", f":(literal){name}"], cwd=self.clone)
+            (self.clone / name).write_text("three\n")
+            record = gitrepo.tracked_change_digests(self.clone, runner=runner)[name]
+            self.assertEqual(record["entry"], f"MM {name}")
+            self.assertFalse(record["comparable"], name)
+
+    def test_a_missed_index_lookup_is_not_comparable_but_a_deleted_entry_is(self) -> None:
+        def stub(index_entry):
+            def runner(argv):
+                if "status" in argv:
+                    out = f"{index_entry}a.txt\0"
+                else:
+                    out = ""
+                return subprocess.CompletedProcess(argv, 0, out.encode(), b"")
+            return runner
+
+        missed = gitrepo.tracked_change_digests(self.clone, runner=stub("M  "))
+        self.assertEqual(missed, {"a.txt": {"entry": "M  a.txt", "comparable": False}})
+        removed = gitrepo.tracked_change_digests(self.clone, runner=stub("D  "))
+        self.assertTrue(removed["a.txt"]["comparable"])
+        self.assertIsNone(removed["a.txt"]["staged"])
 
     def test_a_symlink_is_not_comparable(self) -> None:
         self.commit("link.txt", "one\n")

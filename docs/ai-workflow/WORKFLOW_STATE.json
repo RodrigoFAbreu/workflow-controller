@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-review-convergence",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -12671,6 +12671,169 @@
         "evaluated_at": "2026-10-16T13:08:29Z",
         "workflow_release": "2.11.0"
       }
+    },
+    "workflow-controller-review-convergence": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-review-convergence",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-review-convergence-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-review-convergence-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "45e93255b06dabbeff029ac4160d502c4b782c1c",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+        "approved_review_content_id": "e9f8e2f99e2f2c997b17704c22051901986b9a6907ff0e24748c64ccba5ee46c",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4c7424b035d5aff23e105eb0002eb920ba64a401"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-review-convergence-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "015440587b77b979d79c8e0c56aea4ffbd530722"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-review-convergence-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5c46cd5805d51c3fe52554ffa83d0e2f3251b8bd"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-16T19:59:05Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e9f8e2f99e2f2c997b17704c22051901986b9a6907ff0e24748c64ccba5ee46c",
+            "ledger": {
+              "local": {
+                "bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "3338998ad969a2a2be99e21d7d88decad2fdb8c0ca084a7f590fe992bb172258",
+                "ledger_entry_sha256": "d28992789995855b6d256252b0a9c3f07a169d2201b83bfa8768c470f476fd9d",
+                "run_ref": "session:local .ai-review/workflow-controller-review-convergence/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "fd2556dfcd7f99e987513025bec418e3eb7ec3f4b45e47e33455db6bcc18bb65",
+                "ledger_entry_sha256": "098ee600edb862a809bb5a450d37cff8c181e1bdc1be2b2010c564442bd7fee5",
+                "run_ref": "session:local .ai-review/workflow-controller-review-convergence/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-16T19:59:05Z",
+          "workflow_release": "2.12.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "e9f8e2f99e2f2c997b17704c22051901986b9a6907ff0e24748c64ccba5ee46c",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-10-16T19:52:39Z",
+          "verdict_sha256": "3338998ad969a2a2be99e21d7d88decad2fdb8c0ca084a7f590fe992bb172258",
+          "run_ref": "session:local .ai-review/workflow-controller-review-convergence/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-10-16T19:56:59Z",
+          "verdict_sha256": "fd2556dfcd7f99e987513025bec418e3eb7ec3f4b45e47e33455db6bcc18bb65",
+          "run_ref": "session:local .ai-review/workflow-controller-review-convergence/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 23,
+      "last_transition": "2026-10-16T19:59:05Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-16T19:50:46Z",
+        "consumed": {
+          "review_content_id": "80f79bb02706a977f54b250e2bad641037fb6eb0deaaa732b3918937e4207de6",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "e9f8e2f99e2f2c997b17704c22051901986b9a6907ff0e24748c64ccba5ee46c",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "e9f8e2f99e2f2c997b17704c22051901986b9a6907ff0e24748c64ccba5ee46c",
+          "bundle_id": "bbdf7e7850eff3db5cfe0cde306443aa5b8ccd8a6e38edcebeccc0625d36ffa8",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "6b979755c72f3f6b7e6a6757361554348216f1e086bbda2e4316cf5b396dcb6c",
+        "80f79bb02706a977f54b250e2bad641037fb6eb0deaaa732b3918937e4207de6",
+        "836f9a47c8d334ab8e72cda02bac777b3a545fe8913fdf848539facb906b56a7",
+        "a14e89d7549c25c2aef271bfa022930a625841e292055e1fc58e3e75952d0c1b",
+        "dd997c46ebeaea41d02989c55818e3250b2a050d01d61b0c5f3357ee729aa65e"
+      ]
     }
   }
 }

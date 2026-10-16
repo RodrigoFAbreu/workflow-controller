@@ -104,6 +104,9 @@ documents are the reviewed record. They describe the design as it was
 accepted and are **not** updated afterwards, so where they disagree with the
 guides, the guides and the code are current.
 
+The [sweep of minor review findings of 2026-10-16](milestones/optional-findings-sweep-2026-10-16.md)
+records what became of the Optional findings archived before every minor finding had to be triaged.
+
 | Milestone | Plan | Narrative |
 |---|---|---|
 | Generation 1 | [plan](ai-workflow/CONTROLLER_GEN1_PLAN.md) | [narrative](milestones/completed/workflow-controller-generation-1.md) |

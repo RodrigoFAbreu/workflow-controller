@@ -390,6 +390,114 @@ def _write_job(runtime: Path, root: Path, n: int, *, action: str = "implementati
     return job_id
 
 
+class ReviewCapGateTest(unittest.TestCase):
+    """``job._review_cap_gate`` (review-convergence CP2, D2-D4): the gate over
+    the capped actions, from the Workflow's round or the stored records."""
+
+    def _gate(self, target: _Target, action: str, snapshot: dict, cap: int = 4, work_item: str | None = "demo"):
+        repo = target.inspect()
+        item = target_state.NoWorkItemYet if work_item is None else type("W", (), {"work_item_id": work_item})()
+        info = type("P", (), {"action_id": action, "document": {"snapshot": snapshot}})()
+        decision = type("D", (), {"protocol": info})()
+        with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a, **k: a[3:]):
+            return job._review_cap_gate(target.runtime, repo, item, decision, cap)
+
+    def test_the_boundary_for_each_stage_and_action(self) -> None:
+        target = _Target(self)
+        for stage in ("plan", "implementation"):
+            with self.subTest(stage=stage):
+                at = lambda n: {"review_round": {stage: n}}  # noqa: E731
+                self.assertIsNone(self._gate(target, f"{stage}.apply_review", at(3)))
+                code, text = self._gate(target, f"{stage}.apply_review", at(4))
+                self.assertEqual(code, protocol_decision.REVIEW_ROUND_CAP_REACHED)
+                self.assertIsNone(self._gate(target, f"{stage}.review.local", at(4)))
+                self.assertIsNotNone(self._gate(target, f"{stage}.review.local", at(5)))
+                self.assertIn(f"{stage} review round", text)
+
+    def test_the_text_names_the_three_options_in_order_and_that_the_cap_is_per_command(self) -> None:
+        target = _Target(self)
+        _code, text = self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}})
+        self.assertIn("round 4 (given by the Workflow), at the round cap of 4", text)
+        self.assertNotIn("counted from the Controller's job records", text)
+        self.assertIn("cap of 4", text)
+        positions = [text.index(part) for part in ("(1) raise the cap", "(2) accept at the cap with /approve-review",
+                                                   "(3) withdraw and re-scope with /milestone-plan demo")]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("one command", text)
+        self.assertIn("never accepts at the cap itself", text)
+
+    def test_other_actions_a_missing_item_and_a_raised_cap_are_not_stopped(self) -> None:
+        target = _Target(self)
+        snapshot = {"review_round": {"plan": 9, "implementation": 9}}
+        for action in ("plan.review.external", "implementation.checkpoint", "implementation.satisfy"):
+            self.assertIsNone(self._gate(target, action, snapshot))
+        self.assertIsNone(self._gate(target, "plan.apply_review", snapshot, work_item=None))
+        self.assertIsNone(self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}}, cap=6))
+
+    def test_a_legacy_decision_is_not_capped(self) -> None:
+        target = _Target(self)
+        legacy = type("D", (), {"protocol": None})()
+        self.assertIsNone(job._review_cap_gate(target.runtime, target.inspect(),
+                                               type("W", (), {"work_item_id": "demo"})(), legacy, 1))
+
+    def test_an_absent_round_counts_from_the_records_and_says_so(self) -> None:
+        target = _Target(self)
+        for n, revision in enumerate((1, 2, 3), 1):
+            path = target.runtime / "jobs"
+            path.mkdir(exist_ok=True)
+            job_id = f"20260101T00000{n}-impl{n}"
+            (path / f"{job_id}.json").write_text(json.dumps({
+                "job_id": job_id, "target_repo": str(target.root), "work_item_id": "demo",
+                "status": job.STATUS_FINISHED, "created_at": f"2026-01-01T00:00:0{n}Z",
+                "pre_state": {"phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "implementation_revision": revision}}))
+        snapshot = {"phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "implementation_revision": 4}
+        _code, text = self._gate(target, "implementation.apply_review", snapshot)
+        self.assertIn("round 4 (counted from the Controller's job records", text)
+        _code, text = self._gate(target, "implementation.apply_review", snapshot, cap=5) or (None, "")
+        self.assertEqual(text, "")  # round 4 is below cap 5: launches
+
+    def test_a_plan_round_from_the_records_says_the_workflows_count_may_be_higher(self) -> None:
+        target = _Target(self)
+        snapshot = {"phase": "AWAITING_LOCAL_PLAN_REVIEW", "plan_revision": 1}
+        _code, text = self._gate(target, "plan.apply_review", snapshot, cap=1)
+        self.assertIn("the Workflow's own count may be higher", text)
+
+    def test_a_gate_blocked_record_is_not_counted_and_nothing_is_written(self) -> None:
+        target = _Target(self)
+        jobs = target.runtime / "jobs"
+        jobs.mkdir(exist_ok=True)
+        (jobs / "20260101T000001-gate.json").write_text(json.dumps({
+            "job_id": "20260101T000001-gate", "target_repo": str(target.root), "work_item_id": "demo",
+            "status": job.STATUS_GATE_BLOCKED, "created_at": "2026-01-01T00:00:01Z",
+            "pre_state": {"phase": "AWAITING_LOCAL_PLAN_REVIEW", "plan_revision": 7}}))
+        state = target.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json"
+        before = (state.read_bytes(), sorted(p.name for p in jobs.iterdir()))
+        self.assertIsNone(self._gate(target, "plan.apply_review", {"phase": "AWAITING_LOCAL_PLAN_REVIEW",
+                                                                   "plan_revision": 1}))
+        self.assertEqual(before, (state.read_bytes(), sorted(p.name for p in jobs.iterdir())))
+
+    def test_the_loop_guard_takes_precedence_and_the_cap_is_threaded(self) -> None:
+        target = _Target(self)
+        info = type("P", (), {"action_id": "plan.apply_review", "state_identity": "s", "document": {}})()
+        decision = type("D", (), {"protocol": info, "automatic": True})()
+        item = type("W", (), {"work_item_id": "demo"})()
+        loop, cap = object(), object()
+        for guard_result, expected in ((loop, loop), (None, cap)):
+            with mock.patch.object(protocol_decision, "decide_after_preflight", return_value=(decision, ())), \
+                    mock.patch.object(protocol_decision, "check_currency",
+                                      return_value=type("C", (), {"current": True})()), \
+                    mock.patch.object(job, "_no_progress_gate", return_value=guard_result), \
+                    mock.patch.object(job, "_review_cap_gate", return_value=cap) as cap_gate:
+                got, _item, _pre = job._decide_protocol_current(
+                    target.inspect(), runtime=target.runtime, snapshot=None, work_item=item, work_item_id="demo",
+                    pre_state={}, base=None, review_round_cap=6)
+            self.assertIs(got, expected)
+            if guard_result is None:
+                self.assertEqual(cap_gate.call_args.args[4], 6)
+            else:
+                cap_gate.assert_not_called()
+
+
 class LoopGuardTest(unittest.TestCase):
     def _gate(self, target: _Target, action: str = "implementation.checkpoint", work_item: str | None = "demo",
               state_identity: str | None = None):

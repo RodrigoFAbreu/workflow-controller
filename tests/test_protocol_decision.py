@@ -754,6 +754,22 @@ class JobWiringTest(unittest.TestCase):
             self.assertEqual(code, cli.EXIT_OK)
             self.assertIn(protocol_decision.NO_PROGRESS_REPEATED, out.getvalue())
 
+    def test_explain_applies_the_review_round_cap_with_the_settings_cap(self) -> None:
+        from unittest import mock
+
+        from tests.test_cli import _Args
+        with tempfile.TemporaryDirectory() as td:
+            root, stub = self._target(td, with_item=True)
+            runtime = Path(td) / "runtime"
+            runtime.mkdir()
+            out = io.StringIO()
+            with mock.patch.object(job, "_review_cap_gate", return_value=None) as cap_gate, \
+                    contextlib.redirect_stdout(out):
+                code = cli.cmd_explain(_Args(str(root), workflow_manager=str(stub), json_out=True), runtime, IDENTITY)
+            self.assertEqual(code, cli.EXIT_OK)
+            self.assertEqual(cap_gate.call_count, 1)
+            self.assertEqual(cap_gate.call_args.args[4], 4)
+
     def test_a_legacy_explain_has_no_protocol_key(self) -> None:
         from tests.test_cli import _Args
         with tempfile.TemporaryDirectory() as td:

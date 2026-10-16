@@ -136,7 +136,7 @@ class ImportTimeConfinementTest(unittest.TestCase):
     def test_the_source_ids_match_the_registered_shape_without_isolation(self) -> None:
         from tests.scenarios import FLOW_ID_RE
         self.assertEqual(len(FLOW_IDS), len(set(FLOW_IDS)))
-        self.assertEqual(len(FLOW_IDS), 18)
+        self.assertEqual(len(FLOW_IDS), 19)
         for flow_id in FLOW_IDS:
             self.assertRegex(flow_id, FLOW_ID_RE)
 

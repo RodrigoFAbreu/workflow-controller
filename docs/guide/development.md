@@ -272,7 +272,7 @@ update its "Last checked with" line by hand; the check only asserts the line is 
 A scenario is a scripted run of one whole lifecycle path (a full lifecycle to
 merge, a human gate, a worker failure, a killed Controller and its recovery,
 a squash release, notifications, a usage pause, the read-only commands, the
-settings file) against disposable repositories, a scratch origin and the
+settings file, a review loop stopped at the round cap) against disposable repositories, a scratch origin and the
 fake `claude`, `gh`, `workflow-manager` and SignalHub. It launches no model
 and touches no network. Scenarios are test-side code: they live in
 `tests/scenarios/`, the runner is `tools/run_scenarios.py`, and `controller/`

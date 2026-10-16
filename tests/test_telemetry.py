@@ -222,6 +222,241 @@ class GroupingTest(_RuntimeCase):
         self.assertIn("not a UTC date or time", err)
 
 
+#: The text of an ungrouped run and of each pre-C13 grouping over
+#: ``GroupingTest``'s fixture, captured before the round columns existed.
+_PRE_C13_TEXT = {None: 'jobs: 4\n'
+       'all jobs: 4 job(s), telemetry unavailable 1\n'
+       '  turns 12 (mean 4)\n'
+       '  tokens 57 (mean 19)\n'
+       '  cost $9.00 (mean $3.00)\n'
+       '  API time 3 s (mean 1 s)\n'
+       '  job wall time 180 s (mean 60 s)\n'
+       '  worker wall time 150 s (mean 50 s)\n',
+ 'model': 'jobs: 4, grouped by model\n'
+          'model=opus: 3 job(s), telemetry unavailable 1\n'
+          '  turns 8 (mean 4)\n'
+          '  tokens 38 (mean 19)\n'
+          '  cost $6.00 (mean $3.00)\n'
+          '  API time 2 s (mean 1 s)\n'
+          '  job wall time 120 s (mean 60 s)\n'
+          '  worker wall time 100 s (mean 50 s)\n'
+          'model=sonnet: 1 job(s), telemetry unavailable 0\n'
+          '  turns 4 (mean 4)\n'
+          '  tokens 19 (mean 19)\n'
+          '  cost $3.00 (mean $3.00)\n'
+          '  API time 1 s (mean 1 s)\n'
+          '  job wall time 60 s (mean 60 s)\n'
+          '  worker wall time 50 s (mean 50 s)\n',
+ 'role': 'jobs: 4, grouped by role\n'
+         'role=review-implementation: 1 job(s), telemetry unavailable 0\n'
+         '  turns 6 (mean 6)\n'
+         '  tokens 25 (mean 25)\n'
+         '  cost $5.00 (mean $5.00)\n'
+         '  API time 1 s (mean 1 s)\n'
+         '  job wall time 60 s (mean 60 s)\n'
+         '  worker wall time 50 s (mean 50 s)\n'
+         'role=review-plan: 3 job(s), telemetry unavailable 1\n'
+         '  turns 6 (mean 3)\n'
+         '  tokens 32 (mean 16)\n'
+         '  cost $4.00 (mean $2.00)\n'
+         '  API time 2 s (mean 1 s)\n'
+         '  job wall time 120 s (mean 60 s)\n'
+         '  worker wall time 100 s (mean 50 s)\n',
+ 'role,model': 'jobs: 4, grouped by role,model\n'
+               'role=review-implementation, model=opus: 1 job(s), telemetry unavailable 0\n'
+               '  turns 6 (mean 6)\n'
+               '  tokens 25 (mean 25)\n'
+               '  cost $5.00 (mean $5.00)\n'
+               '  API time 1 s (mean 1 s)\n'
+               '  job wall time 60 s (mean 60 s)\n'
+               '  worker wall time 50 s (mean 50 s)\n'
+               'role=review-plan, model=opus: 2 job(s), telemetry unavailable 1\n'
+               '  turns 2 (mean 2)\n'
+               '  tokens 13 (mean 13)\n'
+               '  cost $1.00 (mean $1.00)\n'
+               '  API time 1 s (mean 1 s)\n'
+               '  job wall time 60 s (mean 60 s)\n'
+               '  worker wall time 50 s (mean 50 s)\n'
+               'role=review-plan, model=sonnet: 1 job(s), telemetry unavailable 0\n'
+               '  turns 4 (mean 4)\n'
+               '  tokens 19 (mean 19)\n'
+               '  cost $3.00 (mean $3.00)\n'
+               '  API time 1 s (mean 1 s)\n'
+               '  job wall time 60 s (mean 60 s)\n'
+               '  worker wall time 50 s (mean 50 s)\n'}
+
+
+class RoundsTest(_RuntimeCase):
+    """review-convergence CP3: action, stage, round and round_source per job,
+    and the action / stage / stage,round / work_item,action groupings."""
+
+    def protocol_job(self, job_id: str, action: str, minute: int, *, phase: str, plan_revision: int | None = 1,
+                     implementation_revision: int | None = 1, stored: dict | None = None, **fields) -> dict:
+        snapshot = {"phase": phase, "plan_revision": plan_revision, "implementation_revision": implementation_revision}
+        if stored is not None:
+            snapshot["review_round"] = stored
+        return self.job(
+            job_id, created_at=f"2026-01-01T00:{minute:02d}:00Z", telemetry=_block(turns=1, cost=1.0),
+            pre_state={"phase": phase, "plan_revision": plan_revision,
+                       "implementation_revision": implementation_revision},
+            protocol={"action_id": action, "decision": {"snapshot": snapshot}}, **fields)
+
+    def by_id(self, **kw) -> dict:
+        return {r["job_id"]: r for r in telemetry.rows(observe.list_jobs(self.runtime_root), **kw)}
+
+    def test_text_and_json_of_the_existing_groupings_are_unchanged(self) -> None:
+        self.job("j-1", telemetry=_block(turns=2, cost=1.0), created_at="2026-01-01T00:00:00Z")
+        self.job("j-2", telemetry=_block(turns=4, cost=3.0, model="sonnet"), created_at="2026-01-02T00:00:00Z",
+                 run_id="r-2")
+        self.job("j-3", telemetry=dict(FAILED), created_at="2026-01-03T00:00:00Z", work_item_id="wi-2")
+        self.job("j-4", telemetry=_block(turns=6, cost=5.0, role="review-implementation"),
+                 created_at="2026-01-04T00:00:00Z")
+        for by in (None, "role", "model", "role,model"):
+            argv = ["telemetry"] + (["--by", by] if by else [])
+            self.assertEqual(self.cli(*argv)[1], _PRE_C13_TEXT[by], by)
+        old_keys = {"job_id", "created_at", "status", "target_repo", "work_item_id", "run_id", "role", "model",
+                    "derived", "unavailable", "telemetry"}
+        payload = json.loads(self.cli("--json", "telemetry")[1])
+        for row in payload["rows"]:
+            self.assertEqual(set(row) - old_keys, {"action", "stage", "round", "round_source"})
+            self.assertEqual((row["action"], row["stage"], row["round"], row["round_source"]),
+                             (None, "none", None, None))
+
+    def test_a_stored_round_is_the_workflow_s_and_a_missing_one_is_counted(self) -> None:
+        self.protocol_job("j-a", "implementation.apply_review", 1, phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+                          implementation_revision=1)
+        self.protocol_job("j-b", "implementation.review.external", 2, phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+                          implementation_revision=2)
+        self.protocol_job("j-c", "implementation.apply_review", 3, phase="AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+                          implementation_revision=2, stored={"implementation": 7})
+        rows = self.by_id()
+        self.assertEqual((rows["j-a"]["stage"], rows["j-a"]["round"], rows["j-a"]["round_source"]),
+                         ("implementation", 1, "jobs"))
+        self.assertEqual((rows["j-b"]["action"], rows["j-b"]["round"], rows["j-b"]["round_source"]),
+                         ("implementation.review.external", 2, "jobs"))
+        self.assertEqual((rows["j-c"]["round"], rows["j-c"]["round_source"]), (7, "workflow"))
+
+    def courier_job(self, job_id: str, action: str, minute: int, *, phase: str, plan_revision: int | None = 1,
+                    implementation_revision: int | None = 1) -> dict:
+        """A Controller external-review job as ``job.py`` writes it: ``kind``
+        ``review``, ``review.action_id``, ``pre_state``, and no ``protocol``,
+        ``worker``, ``worker_streams`` or ``telemetry`` block."""
+        return self.job(
+            job_id, created_at=f"2026-01-01T00:{minute:02d}:00Z", kind="review",
+            pre_state={"phase": phase, "plan_revision": plan_revision,
+                       "implementation_revision": implementation_revision},
+            review={"stage": "plan" if action.startswith("plan") else "implementation", "action_id": action,
+                    "launched": True, "outcome": "ingested"})
+
+    def test_a_courier_review_job_reports_its_action_stage_and_round(self) -> None:
+        plan_phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+        impl_phase = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+        self.courier_job("c-1", "plan.review.external", 1, phase=plan_phase, plan_revision=1)
+        self.courier_job("c-2", "plan.review.external", 2, phase=plan_phase, plan_revision=2)
+        self.courier_job("c-3", "implementation.review.external", 3, phase=impl_phase, implementation_revision=1)
+        self.courier_job("c-4", "implementation.review.external", 4, phase=impl_phase, implementation_revision=2)
+        self.protocol_job("p-1", "plan.review.local", 5, phase="AWAITING_LOCAL_PLAN_REVIEW", plan_revision=3)
+        for record in observe.list_jobs(self.runtime_root)[:4]:
+            self.assertFalse(telemetry.is_worker_job(record))
+            self.assertTrue(telemetry.is_courier_job(record))
+        selected = telemetry.rows(observe.list_jobs(self.runtime_root))
+        self.assertEqual([(r["job_id"], r["action"], r["stage"], r["round"], r["round_source"], r["unavailable"])
+                          for r in selected], [
+            ("c-1", "plan.review.external", "plan", 1, "jobs", True),
+            ("c-2", "plan.review.external", "plan", 2, "jobs", True),
+            ("c-3", "implementation.review.external", "implementation", 1, "jobs", True),
+            ("c-4", "implementation.review.external", "implementation", 2, "jobs", True),
+            ("p-1", "plan.review.local", "plan", 3, "jobs", False)])
+        self.assertEqual([(g["key"], g["jobs"]) for g in telemetry.groups(selected, "stage,round")], [
+            ({"stage": "implementation", "round": "1~"}, 1), ({"stage": "implementation", "round": "2~"}, 1),
+            ({"stage": "plan", "round": "1~"}, 1), ({"stage": "plan", "round": "2~"}, 1),
+            ({"stage": "plan", "round": "3~"}, 1)])
+        self.assertEqual([(g["key"], g["jobs"]) for g in telemetry.groups(selected, "action")], [
+            ({"action": "implementation.review.external"}, 2), ({"action": "plan.review.external"}, 2),
+            ({"action": "plan.review.local"}, 1)])
+        # The JSON stays additive: the same row keys as any other job.
+        payload = json.loads(self.cli("--json", "telemetry", "--by", "stage")[1])
+        self.assertEqual({tuple(sorted(row)) for row in payload["rows"]}, {tuple(sorted(selected[0]))})
+
+    def test_same_content_applies_do_not_raise_the_derived_round_and_a_filter_does_not_change_it(self) -> None:
+        phase = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
+        self.protocol_job("j-1", "implementation.apply_review", 1, phase=phase, implementation_revision=3)
+        self.protocol_job("j-2", "implementation.apply_review", 2, phase=phase, implementation_revision=3)
+        self.protocol_job("j-3", "functional.apply_findings", 3, phase=phase, implementation_revision=3)
+        self.protocol_job("j-4", "implementation.review.local", 4, phase=phase, implementation_revision=4)
+        rows = self.by_id()
+        self.assertEqual([rows[j]["round"] for j in ("j-1", "j-2", "j-4")], [1, 1, 2])
+        self.assertEqual((rows["j-3"]["stage"], rows["j-3"]["round"]), ("functional", None))
+        # The cap gate's round for the same lifecycle comes from the same function.
+        from controller import review_rounds
+        records = observe.list_jobs(self.runtime_root)
+        snapshot = {"phase": phase, "plan_revision": 1, "implementation_revision": 4}
+        self.assertEqual(review_rounds.current_round(snapshot, "implementation", records,
+                                                     target_repo=str(self.repo), work_item_id="wi-1"),
+                         (rows["j-4"]["round"], "jobs"))
+        self.assertEqual(self.by_id(since=telemetry.parse_since("2026-01-01T00:04:00Z"))["j-4"]["round"], 2)
+
+    def test_a_derived_plan_round_is_a_lower_bound_kept_apart_from_the_workflow_s(self) -> None:
+        phase = "AWAITING_LOCAL_PLAN_REVIEW"
+        for number, (job_id, revision) in enumerate((("p-1", 1), ("p-2", 2), ("p-3", 3), ("p-4", 4)), 1):
+            self.protocol_job(job_id, "plan.review.external", number, phase=phase, plan_revision=revision)
+        # A round that published new content without advancing plan_revision,
+        # then one the Workflow numbered itself.
+        self.protocol_job("p-5", "plan.apply_review", 5, phase=phase, plan_revision=4)
+        self.protocol_job("p-6", "plan.review.external", 6, phase=phase, plan_revision=4, stored={"plan": 4})
+        selected = telemetry.rows(observe.list_jobs(self.runtime_root))
+        self.assertEqual([(r["job_id"], r["round"], r["round_source"]) for r in selected],
+                         [("p-1", 1, "jobs"), ("p-2", 2, "jobs"), ("p-3", 3, "jobs"), ("p-4", 4, "jobs"),
+                          ("p-5", 4, "jobs"), ("p-6", 4, "workflow")])
+        keys = [g["key"] for g in telemetry.groups(selected, "stage,round")]
+        self.assertEqual(keys, [{"stage": "plan", "round": "1~"}, {"stage": "plan", "round": "2~"},
+                                {"stage": "plan", "round": "3~"}, {"stage": "plan", "round": "4"},
+                                {"stage": "plan", "round": "4~"}])
+        sizes = {g["key"]["round"]: g["jobs"] for g in telemetry.groups(selected, "stage,round")}
+        self.assertEqual((sizes["4"], sizes["4~"]), (1, 2))
+
+    def test_the_groupings_total_a_plan_loop_by_stage_round(self) -> None:
+        phase = "AWAITING_LOCAL_PLAN_REVIEW"
+        minute = 0
+        for revision in range(1, 6):
+            minute += 1
+            self.protocol_job(f"r-{revision}", "plan.review.external", minute, phase=phase, plan_revision=revision)
+            if revision < 5:
+                minute += 1
+                self.protocol_job(f"a-{revision}", "plan.apply_review", minute, phase=phase,
+                                  plan_revision=revision)
+        selected = telemetry.rows(observe.list_jobs(self.runtime_root))
+        self.assertEqual(len(selected), 9)
+        grouped = telemetry.groups(selected, "stage,round")
+        self.assertEqual([(g["key"]["round"], g["jobs"], g["cost_usd"]["total"]) for g in grouped],
+                         [("1~", 2, 2.0), ("2~", 2, 2.0), ("3~", 2, 2.0), ("4~", 2, 2.0), ("5~", 1, 1.0)])
+        by_action = {g["key"]["action"]: g["jobs"] for g in telemetry.groups(selected, "action")}
+        self.assertEqual(by_action, {"plan.apply_review": 4, "plan.review.external": 5})
+        [by_stage] = telemetry.groups(selected, "stage")
+        self.assertEqual((by_stage["key"], by_stage["jobs"]), ({"stage": "plan"}, 9))
+        pairs = telemetry.groups(selected, "work_item,action")
+        self.assertEqual([g["key"] for g in pairs], [
+            {"work_item_id": "wi-1", "action": "plan.apply_review"},
+            {"work_item_id": "wi-1", "action": "plan.review.external"}])
+
+    def test_the_new_groupings_in_text_and_the_usage(self) -> None:
+        self.protocol_job("j-1", "plan.review.external", 1, phase="AWAITING_LOCAL_PLAN_REVIEW")
+        self.job("j-old", telemetry=_block(), created_at="2026-02-01T00:00:00Z")
+        for by, expected in (("stage,round", "stage=plan, round=1~: 1 job(s)"),
+                             ("stage,round", "stage=none, round=none: 1 job(s)"),
+                             ("action", "action=none: 1 job(s)"),
+                             ("work_item,action", "work_item=wi-1, action=plan.review.external: 1 job(s)")):
+            code, out, err = self.cli("telemetry", "--by", by)
+            self.assertEqual(code, cli.EXIT_OK, err)
+            self.assertIn(expected, out)
+        before = sorted(p.relative_to(self.runtime_root) for p in self.runtime_root.rglob("*"))
+        record = (self.runtime_root / "jobs" / "j-1.json").read_bytes()
+        self.cli("telemetry", "--by", "stage")
+        self.assertEqual((self.runtime_root / "jobs" / "j-1.json").read_bytes(), record)
+        self.assertEqual(sorted(p.relative_to(self.runtime_root) for p in self.runtime_root.rglob("*")), before)
+        self.assertNotIn("None", self.cli("telemetry", "--by", "stage,round")[1])
+
+
 class PresentationTest(_RuntimeCase):
     def status(self) -> str:
         pre_existing = cli._capture_pre_existing_state(self.runtime_root)

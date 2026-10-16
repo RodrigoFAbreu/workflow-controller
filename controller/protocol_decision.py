@@ -434,6 +434,7 @@ class _Context:
 #: Reason codes of the gates the stale check and the loop guard produce.
 DECISION_UNSTABLE = "decision_unstable"
 NO_PROGRESS_REPEATED = "no_progress_repeated"
+REVIEW_ROUND_CAP_REACHED = "review_round_cap_reached"
 
 #: How many decisions one step may discard as stale before it stops (plan D.2.1).
 MAX_DECISIONS_PER_STEP = 3

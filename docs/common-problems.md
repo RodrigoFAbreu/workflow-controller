@@ -87,6 +87,14 @@ Only with `reviewer.harness` set. The Controller started the external review its
 
 See [pausing for usage limits](run.md#pausing-for-usage-limits), [`resume`](guide/workers.md#restart-resume-re-attaches) and [ADR 0013](adr/0013-review-only-harness-seam.md).
 
+## A run stopped at the review round cap
+
+`run` or `step` exits `10` at a gate whose reason code is `review_round_cap_reached`. The plan or the implementation stage has reached `review.round_cap` rounds (default 4), so the next `apply_review` (at round `cap`) or local review (above round `cap`) was not launched. Nothing ran and the Workflow state is unchanged; the stop is one `GATE_BLOCKED` job record, which no round count includes. The gate text names the stage, the round, the cap and where the round came from: `given by the Workflow` means the Workflow reported the round, and `counted from the Controller's job records` (source `jobs`) means the Controller counted it from its job records because the Workflow gave no `review_round` (Workflow before 2.12.0), and for the plan stage the Workflow's own count may then be higher. The Controller never accepts at the cap itself. You choose, in this order:
+
+1. **Raise the cap and run again**: `workflow-controller run --review-round-cap N <repo>`, or set `review.round_cap`. The cap applies to that command only, so the next plain `run` stops again at the next capped action of the item. `explain` shows the setting's cap, not a flag's.
+2. **Accept at the cap** with `/approve-review`, where the Workflow's gate is reachable (after a `REVISE`, with the confirmation it asks for).
+3. **Withdraw and re-scope** with `/milestone-plan <work-item-id>`.
+
 ## The usage record cannot be read
 
 `step` or `run` stops with "the usage record ... is not a version 2 object" or "cannot be read". `usage.json` in the runtime root is either damaged or was written by a newer Controller release than this one. It is never overwritten. To keep working, set `usage.enabled: false` (the budget is then off and the record is not touched), or install the release that wrote it. Deleting the file also works but forgets every lane's reservations and spend. A job whose accounting was pending is settled by repairing or restoring the original record in place, but only before the next `step`, `run` or `resume`: one of those that runs on a fresh record finds the job's reservation unknown and marks its accounting done with no charge (an `usage_accounting_orphan` event), and restoring the record afterwards no longer settles it. Restore the record first. (`usage` alone does not do this.) `step`, `run` and `resume` never lose a job's outcome to it: the accounting is skipped with a warning, the job stays unaccounted, and a release that can read the record settles it later. The `usage` view itself reports the error.

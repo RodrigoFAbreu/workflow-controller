@@ -82,6 +82,10 @@ fake's stream has no rejected rate-limit event) and each ``pre_state`` gains
 ``tracked_changes``, the tracked-change baseline of the launch. Nothing else
 moved.
 
+And once by ``workflow-controller-review-convergence`` CP1, whose
+``review.round_cap`` settings row (table generation 7) appears in each launched
+job's ``controller_settings`` ``values`` and ``sources``. Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

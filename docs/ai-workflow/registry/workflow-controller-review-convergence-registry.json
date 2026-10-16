@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-review-convergence",
+  "plan_revision": 6,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The round count and the cap setting: review_rounds module (Workflow integer, else D1's count over the stored pre-states and the current snapshot (implementation: 1 plus the rises of implementation_revision; plan: the distinct plan revisions observed at a ready phase), never 0; a lower bound for the plan stage, reported with source jobs), the review.round_cap setting at generation 7 and --review-round-cap on step and run",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The cap gate: apply stopped at round >= cap and local review at round > cap for plan and implementation, review_round_cap_reached gate in a step, run and explain, with the three options named, nothing launched or written to the Workflow state, and one GATE_BLOCKED record",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Rounds and usage per stage in telemetry: action, stage, round and round_source per job (stored, else derived from the unfiltered records, every derived round of either stage labelled ~ apart) and the action, stage, stage-round and work_item-action groupings, with no job-record change",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Documentation and roadmap: settings, commands, run, problems and exit-code pages, C13 complete, check_docs, golden checks and the full suite green",
+      "depends_on": [
+        "CP2",
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

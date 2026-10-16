@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-review-convergence",
+  "requirements": {
+    "R1": {
+      "description": "A stage's round is the Workflow's integer review_round, else, over the stored job pre-states and the current snapshot, whatever the reconcile class or action: implementation is 1 plus the rises of implementation_revision (a gate_reached publication counts, a same_content republication does not) and plan is the distinct plan_revision values observed at a plan-review ready phase, so unpublished authoring rises never count; for the plan stage this is a documented lower bound, since the Workflow counts published contents, which can exceed plan_revision, and the source is reported as jobs; the cap and telemetry share one function; null is never 0",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "review.round_cap (default 4, 1-100, generation 7) and --review-round-cap on step and run exist; the flag wins; a bad value exits 2",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A protocol step does not launch apply at round >= cap or local review at round > cap; it returns the review_round_cap_reached gate and writes one GATE_BLOCKED record; nothing else is stopped or written",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "explain shows the same gate; raising the cap continues the loop; the legacy path and the loop guard precedence are unchanged",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "telemetry reports and groups action, stage, round and round_source per job (stored, else derived, every derived round, of either stage, labelled ~ and kept apart from the Workflow's) with no job-record change and byte-identical existing text output and additive JSON",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "Pages and roadmap agree with the behaviour; check_docs, golden checks and the full suite are green",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

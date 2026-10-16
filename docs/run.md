@@ -131,6 +131,23 @@ workflow-controller run --max-steps 1 .
 
 A run that stops because it used all its steps with work outstanding exits 16; run again to continue.
 
+## The review round cap
+
+A protocol run does not review a stage for ever. The plan stage and the
+implementation stage each have a round count, and at the cap (the
+`review.round_cap` setting, default 4) the step stops with the
+`review_round_cap_reached` gate and launches nothing: `<stage>.apply_review`
+at round 4, `<stage>.review.local` above round 4. The run exits `10`.
+`workflow-controller explain <repo>` names the stage, the round, the cap and
+the three ways on. To continue the loop, raise the cap for one command:
+
+```bash
+workflow-controller run --review-round-cap 6 .
+```
+
+The cap applies to that command only; the next plain `run` stops again.
+See [a run stopped at the review round cap](common-problems.md#a-run-stopped-at-the-review-round-cap).
+
 ## Letting the Controller run the external review
 
 By default a run stops at an external review gate (`plan.review.external`,

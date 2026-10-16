@@ -105,7 +105,7 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, routing,
+    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_rounds, routing,
     runtime, target_state, telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
@@ -5707,7 +5707,7 @@ def _unstable_gate(managed_repo: Any, work_item: Any, decision: Decision, seen: 
 
 def _decide_protocol_current(
     managed_repo: Any, *, runtime: Path, snapshot: Any, work_item: Any, work_item_id: str | None,
-    pre_state: dict, base: str | None,
+    pre_state: dict, base: str | None, review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
 ) -> tuple[Decision, Any, dict]:
     """The protocol path's decision, current (plan D.2.1): ``(decision,
     work_item, pre_state)``. The Workflow's ``verify`` runs first (plan A.3):
@@ -5717,7 +5717,8 @@ def _decide_protocol_current(
     re-decided from a fresh read -- at most
     :data:`protocol_decision.MAX_DECISIONS_PER_STEP` decisions per step,
     after which the answer is the ``decision_unstable`` gate. The loop guard
-    (:func:`_no_progress_gate`) then applies to the decision that stands.
+    (:func:`_no_progress_gate`) then the review round cap
+    (:func:`_review_cap_gate`) apply to the decision that stands.
     Every other disposition is a gate or a no-action answer that launches
     nothing, so it is returned as the Workflow gave it."""
     # Plan A.3: the Workflow's own `verify` is the step's protocol preflight;
@@ -5737,7 +5738,9 @@ def _decide_protocol_current(
         seen.append(info.state_identity if info.state_identity is not None
                     else tuple((info.document.get("snapshot") or {}).get("work_item_ids") or ()))
         if protocol_decision.check_currency(managed_repo, decision).current:
-            gate = _no_progress_gate(runtime, managed_repo, work_item, decision, advisories=advisories)
+            gate = _no_progress_gate(runtime, managed_repo, work_item, decision, advisories=advisories) \
+                or _review_cap_gate(runtime, managed_repo, work_item, decision, review_round_cap,
+                                    advisories=advisories)
             return (decision if gate is None else gate), work_item, pre_state
         snapshot = target_state.read(managed_repo)
         work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
@@ -5825,6 +5828,65 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
         + ("" if work_item_id is None else f" on {work_item_id}")
         + f" ({jobs}) both ended without progress, so a third is not launched; read their records, then "
         "change the work item (take the action by hand, or fix what stops it) and the count restarts",
+        advisories=advisories)
+
+
+def _stored_job_records(runtime_root: Path) -> list[dict]:
+    """Every readable job record under ``runtime_root``, in file order; an
+    unreadable or non-object file is skipped (the same reads the loop guard
+    makes)."""
+    jobs_dir = Path(runtime_root) / "jobs"
+    try:
+        paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+    except OSError:
+        return []
+    records = []
+    for path in paths:
+        if not _is_regular_job_file(path):
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def _review_cap_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision, cap: int,
+                     advisories: tuple[str, ...] = ()) -> Decision | None:
+    """The review round cap of a protocol target (review-convergence D2, D3,
+    D4): the ``review_round_cap_reached`` gate when the decision is a capped
+    action (``plan``/``implementation`` ``apply_review`` at round >= ``cap``,
+    ``review.local`` at round > ``cap``), else ``None``. The round is the
+    Workflow's own, else the Controller's count over the stored records
+    (:mod:`controller.review_rounds`). Nothing is launched or written."""
+    info = decision.protocol
+    if info is None or info.action_id not in review_rounds.CAPPED_ACTIONS \
+            or work_item is target_state.NoWorkItemYet:
+        return None
+    stage = review_rounds.stage_of(info.action_id)
+    snapshot = info.document.get("snapshot") if isinstance(info.document, dict) else None
+    round_number, source = review_rounds.current_round(
+        snapshot, stage, _stored_job_records(runtime_root),
+        target_repo=str(managed_repo.root), work_item_id=work_item.work_item_id)
+    if not review_rounds.cap_decision(info.action_id, round_number, cap):
+        return None
+    counted = ""
+    if source == review_rounds.SOURCE_WORKFLOW:
+        counted = " (given by the Workflow)"
+    elif source == review_rounds.SOURCE_JOBS:
+        counted = " (counted from the Controller's job records, not given by the Workflow"
+        counted += ("; the Workflow's own count may be higher)" if stage == review_rounds.STAGE_PLAN else ")")
+    return protocol_decision.gate_for(
+        managed_repo, work_item, decision, protocol_decision.REVIEW_ROUND_CAP_REACHED,
+        f"{work_item.work_item_id} is at {stage} review round {round_number}{counted}, at the round cap of "
+        f"{cap} (review.round_cap), so {info.action_id} is not launched. The Controller never accepts at the "
+        f"cap itself; you can (1) raise the cap and re-run (`--review-round-cap N`, or the review.round_cap "
+        f"setting; the cap applies to one command, so the next plain run stops again at the next capped "
+        f"action, and `explain` shows the setting's cap, not a flag's); (2) accept at the cap with "
+        f"/approve-review, where the Workflow's gate is reachable (after a REVISE, with the confirmation it asks for); or "
+        f"(3) withdraw and re-scope with /milestone-plan {work_item.work_item_id}",
         advisories=advisories)
 
 
@@ -6590,6 +6652,7 @@ def execute_step(
     on_wait: Callable[[str, str], None] | None = None,
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
+    review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
 ) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -6658,6 +6721,7 @@ def execute_step(
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
             usage_gate=usage_gate, reviewer=reviewer,
+            review_round_cap=review_round_cap,
         )
 
 
@@ -6736,6 +6800,7 @@ def _execute_step_locked(
     on_wait: Callable[[str, str], None] | None = None,
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
+    review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
 ) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -6843,7 +6908,7 @@ def _execute_step_locked(
     if managed_repo.target_protocol is not None:
         decision, work_item, pre_state = _decide_protocol_current(
             managed_repo, runtime=runtime, snapshot=snapshot, work_item=work_item, work_item_id=work_item_id,
-            pre_state=pre_state, base=preflight.base)
+            pre_state=pre_state, base=preflight.base, review_round_cap=review_round_cap)
         is_bootstrap = work_item is target_state.NoWorkItemYet
         resolved_work_item_id = None if is_bootstrap else work_item.work_item_id
         governing_workflow_version = None if is_bootstrap else work_item.governing_workflow_version

@@ -26,12 +26,16 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from controller import worker_stream
+from controller import review_rounds, worker_stream
 
 HARNESS = "claude-code"
 
 #: The ``--by`` groupings the ``telemetry`` command accepts.
-GROUPINGS = {"role": ("role",), "model": ("model",), "role,model": ("role", "model")}
+GROUPINGS = {
+    "role": ("role",), "model": ("model",), "role,model": ("role", "model"),
+    "action": ("action",), "stage": ("stage",), "stage,round": ("stage", "round"),
+    "work_item,action": ("work_item_id", "action"),
+}
 
 PROBLEM_TELEMETRY_FAILED = "telemetry_failed"
 PROBLEM_NO_STREAM = "no_stream"
@@ -146,6 +150,16 @@ def is_worker_job(record: Mapping) -> bool:
     """Whether ``record`` launched a worker (so has, or could derive, a
     telemetry block). A job that never launched one has nothing to count."""
     return any(isinstance(record.get(key), Mapping) for key in ("telemetry", "worker_streams", "worker"))
+
+
+def is_courier_job(record: Mapping) -> bool:
+    """Whether ``record`` is a Controller external-review (courier) job:
+    ``kind`` ``review`` with a ``review.action_id``. It stores no ``protocol``
+    block and no worker streams, so it has no figures, but it is a review
+    round and ``telemetry`` reports its action, stage and round."""
+    block = record.get("review")
+    return record.get("kind") == "review" and isinstance(block, Mapping) \
+        and isinstance(block.get("action_id"), str)
 
 
 def _stdout_path(record: Mapping) -> str | None:
@@ -302,12 +316,57 @@ def parse_since(value: str) -> datetime.datetime:
     raise ValueError(f"not a UTC date or time (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ): {value!r}")
 
 
+def _action_id(record: Mapping) -> str | None:
+    for key in ("protocol", "review"):
+        block = record.get(key)
+        action = block.get("action_id") if isinstance(block, Mapping) else None
+        if isinstance(action, str):
+            return action
+    return None
+
+
+def _round_columns(records: list[Mapping]) -> dict[int, tuple[str | None, str, int | None, str | None]]:
+    """``id(record) -> (action, stage, round, round_source)`` for every
+    record in ``records`` (all of them, unfiltered, so a filter never
+    changes a job's round). The round is the one stored in the job's own
+    decision snapshot, else ``review_rounds.current_round`` over the
+    records up to and including that job, oldest first: the same function
+    and the same evidence the cap gate used for it. Only the ``plan`` and
+    ``implementation`` stages have a round."""
+    ordered = sorted((r for r in records if isinstance(r, Mapping)), key=review_rounds.record_key)
+    columns = {}
+    for index, record in enumerate(ordered):
+        action = _action_id(record)
+        stage = review_rounds.stage_of(action)
+        round_number = source = None
+        if stage in (review_rounds.STAGE_PLAN, review_rounds.STAGE_IMPLEMENTATION):
+            block = record.get("protocol")
+            document = block.get("decision") if isinstance(block, Mapping) else None
+            snapshot = document.get("snapshot") if isinstance(document, Mapping) else None
+            round_number, source = review_rounds.current_round(
+                snapshot, stage, ordered[:index + 1], target_repo=record.get("target_repo"),
+                work_item_id=record.get("work_item_id"))
+        columns[id(record)] = (action, stage, round_number, source)
+    return columns
+
+
+def round_label(round_number: int | None, source: str | None) -> str | None:
+    """The round as ``stage,round`` groups it: ``3`` for the Workflow's own
+    number, ``3~`` for the Controller's count from job records (a lower
+    bound for the plan stage), never merged."""
+    if round_number is None:
+        return None
+    return f"{round_number}~" if source == review_rounds.SOURCE_JOBS else str(round_number)
+
+
 def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str | None = None,
          since: datetime.datetime | None = None, target_repo: str | None = None) -> list[dict]:
     """One row per worker job matching every given filter, oldest first."""
+    records = list(records)
+    columns = _round_columns(records)
     selected = []
     for record in records:
-        if not is_worker_job(record):
+        if not (is_worker_job(record) or is_courier_job(record)):
             continue
         if work_item is not None and record.get("work_item_id") != work_item:
             continue
@@ -321,6 +380,7 @@ def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str |
                 continue
         block = record_block(record) or {}
         route = dimensions(record)
+        action, stage, round_number, source = columns.get(id(record), (None, review_rounds.STAGE_NONE, None, None))
         selected.append({
             "job_id": record.get("job_id"),
             "created_at": record.get("created_at"),
@@ -330,6 +390,10 @@ def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str |
             "run_id": record.get("run_id"),
             "role": block.get("role", route["role"]),
             "model": block.get("model", route["model"]),
+            "action": action,
+            "stage": stage,
+            "round": round_number,
+            "round_source": source,
             "derived": bool(block.get("derived")),
             "unavailable": unavailable(block),
             "telemetry": block,
@@ -348,6 +412,18 @@ _GROUP_FIGURES = (
 )
 
 
+def _group_value(row: Mapping, key: str) -> Any:
+    if key == "round":
+        return round_label(row.get("round"), row.get("round_source"))
+    return row.get(key)
+
+
+def _round_order(label: str | None) -> tuple:
+    if label is None:
+        return (0, 0, False)
+    return (1, int(label.rstrip("~")), label.endswith("~"))
+
+
 def groups(selected: Iterable[Mapping], by: str | None = None) -> list[dict]:
     """``selected`` grouped by ``by`` (a :data:`GROUPINGS` key; ``None`` is
     one group of every row). Each group has its ``jobs``, the ``telemetry
@@ -356,9 +432,14 @@ def groups(selected: Iterable[Mapping], by: str | None = None) -> list[dict]:
     keys = GROUPINGS[by] if by else ()
     buckets: dict[tuple, list[Mapping]] = {}
     for row in selected:
-        buckets.setdefault(tuple(row.get(key) for key in keys), []).append(row)
+        buckets.setdefault(tuple(_group_value(row, key) for key in keys), []).append(row)
+
+    def order(group_key: tuple) -> tuple:
+        # A round sorts by number, then the Workflow's own before the count.
+        return tuple(_round_order(v) if key == "round" else str(v) for key, v in zip(keys, group_key))
+
     result = []
-    for group_key in sorted(buckets, key=lambda k: tuple(str(v) for v in k)):
+    for group_key in sorted(buckets, key=order):
         members = buckets[group_key]
         group: dict = {"key": dict(zip(keys, group_key)), "jobs": len(members),
                        "telemetry_unavailable": sum(1 for row in members if row["unavailable"])}
@@ -387,7 +468,11 @@ def _figure_text(group: Mapping, name: str, fmt) -> str:
 #: How a group label names a missing value: a route with no model
 #: inherits the harness's model; a job with no route has no role. JSON
 #: output keeps ``null``.
-_GROUP_LABEL_MISSING = {"role": "none", "model": "inherit"}
+_GROUP_LABEL_MISSING = {"role": "none", "model": "inherit", "action": "none", "round": "none",
+                        "work_item_id": "none"}
+
+#: The label a group key prints under, where it differs from the row key.
+_GROUP_LABEL_NAME = {"work_item_id": "work_item"}
 
 
 def render_text(grouped: list[Mapping], by: str | None, *, job_count: int) -> list[str]:
@@ -395,7 +480,7 @@ def render_text(grouped: list[Mapping], by: str | None, *, job_count: int) -> li
     means."""
     lines = [f"jobs: {job_count}" + (f", grouped by {by}" if by else "")]
     for group in grouped:
-        label = ", ".join(f"{k}={_GROUP_LABEL_MISSING[k] if v is None else v}"
+        label = ", ".join(f"{_GROUP_LABEL_NAME.get(k, k)}={_GROUP_LABEL_MISSING[k] if v is None else v}"
                           for k, v in group["key"].items()) or "all jobs"
         lines.append(f"{label}: {group['jobs']} job(s), telemetry unavailable {group['telemetry_unavailable']}")
         lines.append(f"  turns {_figure_text(group, 'turns', lambda v: f'{v:,.0f}')}")

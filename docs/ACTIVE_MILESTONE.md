@@ -2,134 +2,44 @@
 
 ## Status
 
-**In progress.** `workflow-controller-usage-limit-mid-job` (`docs/ROADMAP.md` step C8b): wait out a usage limit
-reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); the plan is
-`docs/ai-workflow/CONTROLLER_USAGE_LIMIT_MID_JOB_PLAN.md`. Checkpoint state is in
-`docs/ai-workflow/WORKFLOW_STATE.json`.
-
-- CP5 complete: `docs/exit-codes.md` (rows 17, 30, 40), `docs/common-problems.md` (the mid-job entry and a pointer
-  from the exit-17 entry; no heading renamed), `docs/run.md`, `docs/guide/runtime.md`, `docs/guide/workers.md` ("How a
-  usage limit is recognised"), `docs/guide/development.md` and `docs/ROADMAP.md` (C8b complete, D9 follow-up
-  fixed, "Next" starts at C13) agree with the behaviour. `tools/check_docs.py` and three of four golden `--check`
-  forms pass; `generate_plan_stage_decisions.py --check` fails with this milestone's changes stashed too.
-- CP1 complete: `controller/worker_stream.py` records the `usage_limit` fact (rejected `rate_limit_event`, 429
-  error `result`, finite `resetsAt`) in the stream diagnosis, with reason `usage_limit` above `exit_status`.
-
-- CP2 complete: `controller/job.py` classifies a limited `FAILURE` worker (`usage_limit_of`): `INTERRUPTED` with
-  `usage_limit` and `UsageLimitReached` when the phase, `HEAD` and the tracked-change baseline
-  (`gitrepo.tracked_change_digests`, the new `tracked_changes` pre-state member) are unchanged, in protocol mode,
-  legacy mode and `resume`; any other limited job is `FAILED` with `usage_limit` in its evidence. A package-order
-  fix (`usage` before `worker_stream`) and the `no_policy_lifecycle` golden were updated with it.
-
-- CP3 complete: `controller/cli.py` waits out a limit reached mid-job. `run` builds a `mid_job` `UsageHold` at the
-  fact's reset, waits through `_usage_wait` (no lock, `usage_paused`, bounded by `usage.max_wait_seconds`, with or
-  without `usage.enabled`), repeats the step without counting it and stops after three limited attempts in a row;
-  both stops print their own line, never "nothing was started". `step` exits 17 with a line naming the reset, an
-  `INTERRUPTED` job without the fact exits 40 (it used to raise `KeyError`), `resume` names the reset, and Ctrl-C
-  in the mid-job wait says the worker ran. `tests/test_usage_limit_mid_job.py` and the lifecycle scenario
-  `scenario-usage-limit-mid-job-waits-and-repeats` cover it.
-
-- CP4 complete: `controller/usage.py` `complete` measures the first job after a five-hour reset (the C8 review
-  follow-up, D9). When the baseline had already expired at reservation creation and the stream's first reading is
-  in a later window, that reading replaces the baseline `start` and `start_resets`, so the delta is `measured`
-  (`p1 - p0`) and yields a forecast sample; it was `after_reset`, charged `max(after, reserved_five)`, no sample
-  (reproduced on the unchanged code). A job admitted before the reset keeps `after_reset`. No schema change; live
-  and replay (job-record block) are pinned in `tests/test_usage.py`.
-
-- Self-review (`SELF_REVIEWING_IMPLEMENTATION`): no correctness defect found in the full diff. Two fixes: the
-  `tracked_changes` member of the two early `_capture_pre_state` returns was mis-indented, and
-  `tests/test_protocol_outcome.py` now covers the two CP2 cases the plan names and that were missing: index-only
-  and mode-only progress also reconciled through `resume` (`FAILED`), and a limited worker whose transition
-  verified (`FAILED` with the limit named, not `FINISHED`, D4).
-- Full verification: `tools/check_docs.py` exit 0; golden `--check` 3 of 4 current (`plan_stage_decisions`
-  differs on the base commit as well); `tools/run_tests.py` ran 4006 tests, coverage exact, with 2 failures, both
-  the Git 2.56 trailer-rule tests (follow-up 12), unrelated to this milestone.
-
-## Functional review checklist
-
-Implementation revision 7, technical approval `df5de7b` (`CURRENT`). Base commit `988e8c3`. Findings go to
-`.ai-review/workflow-controller-usage-limit-mid-job/feedback/FUNCTIONAL_REVIEW.md`.
-
-**Setup.** Work in a clone with a scratch bare `origin` and a fake `gh` on `PATH` (a clone's `origin` is the real
-repository). Run the tool from the checkout: `PYTHONPATH=<checkout> python3 -P -m controller ...`. No feature flag or
-real provider is needed; the worker is a fake `claude` that prints a stream-json stream. Do not run the whole test
-suite backgrounded with `&` (Ctrl-C tests fail spuriously).
-
-**Test data.** Two fake-worker streams, each ending the job with exit 1:
-- *limited*: a `rate_limit_event` with status `rejected` and a finite `resetsAt` a few seconds ahead, then a `result`
-  with `is_error: true` and API status 429. Samples: `tests/golden/claude_stream_usage_limit_rejected.md`.
-- *plain failure*: an error `result` with no rate-limit event.
-A seeded work item at `IMPLEMENTING` (see `tests/test_lifecycle_orchestration.py`, `seed`).
-
-| # | Flow | Expected |
-|---|------|----------|
-| 1 | Run the *limited* worker for one `step` when it changes nothing (no commit, no tracked edit; an untracked file is allowed). | Job `INTERRUPTED` with `usage_limit` and `UsageLimitReached`; exit **17**; stderr says "usage limit reached mid-job" and names the reset; it never says "nothing was started". |
-| 2 | Same worker, but it first commits, edits a tracked file, stages a change, or changes a file mode. | Job `FAILED`, exit **30**; the record's evidence carries the limit; not repeated. A rename or copy of a tracked path also counts as a change. |
-| 3 | `run` with the *limited* worker on the first attempt and a normal worker on the second, `usage.enabled` false. | `run` waits (no lock held, `usage_paused`) until the reset plus `usage.resume_grace_seconds`, repeats the step, and the repeat does not use a `--max-steps` step. Repeat with `usage.enabled` true. |
-| 4 | `run` where every attempt is limited. | Stops after **three** limited attempts in a row, exit 17, line says the worker ran. |
-| 5 | `run` where the reset is farther than `usage.max_wait_seconds`. | Stops at once, exit 17, line names the reset and says the worker ran. Ctrl-C during the mid-job wait says the worker ran. |
-| 6 | `step` or `run` on an `INTERRUPTED` job with no limit fact (for example a protocol job whose worker timed out having changed nothing; on the legacy path an unchanged timed-out worker ends the job `FAILED`/30). | Exit **40** and "job ... was interrupted ... a new `step` repeats it"; no `KeyError`. `resume` on a limited record names the reset. |
-| 7 | Streams that must NOT count as a limit: an earlier `rejected` event then a successful turn; localised text only; a missing or non-finite `resetsAt`. | No `usage_limit` fact; plain `FAILED`. A timeout or signal keeps its own reason. |
-| 7b | A rejected event whose limit type is unmapped (for example `opus_only`), job changed nothing. | It IS a limit: `INTERRUPTED`, exit **17**, `window: null` and the event's own `resetsAt`. |
-| 8 | First job after a five-hour reset (`controller/usage.py` `complete`): baseline expired at reservation, first reading in a later window. | Delta is `measured` (`p1 - p0`) and yields a forecast sample. A job admitted before the reset still gets `after_reset`. |
-| 9 | Read `docs/exit-codes.md` (rows 17, 30, 40), `docs/common-problems.md` (the mid-job entry), `docs/run.md`, `docs/guide/workers.md`, `docs/ROADMAP.md`. | They match flows 1-8; `python3 tools/check_docs.py` exits 0. |
-
-Automated evidence for these flows: `tests/test_worker_stream.py`, `tests/test_job.py`, `tests/test_protocol_outcome.py`,
-`tests/test_gitrepo.py`, `tests/test_usage_limit_mid_job.py`, `tests/test_usage.py` and the lifecycle scenario
-`scenario-usage-limit-mid-job-waits-and-repeats`.
-
-**Known limitations / out of scope.** A limited job that had changed state is not repeated automatically (exit 30). Only
-rejected-event + 429 + finite reset is recognised; text alone never is. Two Git 2.56 trailer tests
-(`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated (follow-up 12); the
-`plan_stage_decisions` golden differs on the base commit too.
-
-**Next steps.** When testing is clean, `/accept-milestone` is the only acceptance command and needs every checkpoint in
-this item's registry `COMPLETE`. If one is outstanding, finish it with `/milestone-implement` and return here.
-Findings go through `/apply-functional-review` (bounded fix, or a `-remediation-<n>` child for wider scope).
-
-The previous milestone's record follows.
-
----
-
-## Status
-
-**Complete.** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7, the smallest slice of section 5)
-reached `MILESTONE_COMPLETE` on 2026-10-15. The Controller can now run the cross-model external review itself. With
-`reviewer.harness` set to `codex`, a run that reaches a manual external review gate starts a review job: a Codex
-reviewer works in a disposable copy behind an enforced launch boundary, passes the usage gate, and its verdict is
-ingested through the Workflow. With `reviewer.harness` unset, the gate stops as before. ADR
-`docs/adr/0013-review-only-harness-seam.md` records the design and the Workflow side's answer on workflow#28 (*yes,
-with five conditions*). The `codex` harness is registered since the operator recorded the D12 pre-step on
-2026-10-15. It merged as pull request #45 (squash `6aa8f66`), which releases the minor release **1.10.0**
-(release notes `docs/releases/1.10.0.md`).
+**Complete.** `workflow-controller-usage-limit-mid-job` (`docs/ROADMAP.md` step C8b, section 11.6.1) reached
+`MILESTONE_COMPLETE` on 2026-10-16. A usage limit reached in the middle of a job is now recognised in the worker
+stream (a rejected `rate_limit_event`, a 429 error `result` and a finite `resetsAt`). A limited job that verifiably
+changed nothing ends `INTERRUPTED` with `UsageLimitReached`; `run` waits for the reset without holding the lock and
+repeats the step, up to three limited attempts in a row; `step` exits 17 and names the reset. A limited job that
+changed state stays `FAILED` (exit 30) with the limit in its evidence. The first job after a five-hour reset is now
+measured (the C8 review follow-up). It is released as the minor release **1.11.0** when its `feat:` pull request
+(#52) merges.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1 (an
-independent Codex tester on `openai/gpt-6.1-sol`, plus one real Codex review by the operator) passed flows 1-9 and
-found two Optional documentation issues in flow 10, fixed by a bounded fix and re-tested in round 2. Round 3 (CI on
-pull request #45) found one Important defect: 53 new tests assumed the git-ignored `build/` directory existed. The
-bounded fix `2a427e1` creates it. Round 4 (implementation revision 9), checked against evidence commit `265e48b`,
-passed every flow (flow-1 to flow-10).
-- Plan revision 15 was approved by policy at `3d304d3`. The base commit is `dea2125`.
-- Technical approval `8f447fc` was recorded by policy and is `CURRENT`: review content id `fa4ee49c`,
-  reviewed implementation head `771496e`.
-- The Workflow's own GitHub query found pull request #45 at head `265e48b` with every check passing and no
+acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).
+- Plan revision 5 was approved by policy at `f401c6f`. The base commit is `988e8c3`.
+- Technical approval `8d560cf` (implementation revision 8) was recorded by policy and is `CURRENT`: review content
+  id `6db1d78b`, reviewed implementation head `16daa27`.
+- Functional review round 1 (an independent Codex tester on `openai/gpt-6.1-sol`) passed eight flows. Flow 7 failed
+  only on the checklist's wording: it listed an unmapped limit type as "not a limit", which the plan counts as one.
+  That and a second Optional documentation finding (the exit-40 timeout example) were fixed by the bounded fix
+  `16daa27`. Round 2 passed every flow (flow-1 to flow-9 and flow-7b), checked against evidence commit `4e2a13b`.
+- The Workflow's own GitHub query found pull request #52 at head `4e2a13b` with every check passing and no
   standing objection.
 
-All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, including its ten `functional_evidence` records and its
-`acceptance_satisfaction` evidence, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C7
-complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-codex-reviewer.md`.
+All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
+of this transition, including its ten functional evidence records and its `acceptance_satisfaction` evidence, and
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C8b complete. The full milestone narrative is
+archived verbatim at `docs/milestones/completed/workflow-controller-usage-limit-mid-job.md`; the functional reports
+are `.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round1.md` and
+`functional-review-round2-PASSED.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **workflow#28 stays open** until its protocol paragraph ships in W8 (Workflow 2.12.0).
-- **Known limitations kept out of scope:** only Codex is registered (other harnesses are refused); a reviewer
-  may spawn a sub-agent, which the job record names with its tokens; the two Git 2.56 trailer tests
-  (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
+- **`explain` omits an ordinary usage limit** (O1 from the Codex implementation reviews; `docs/ROADMAP.md`
+  follow-up 30): `controller/observe.py` filters out a stream diagnosis whose only reason is `usage_limit`, so
+  `explain` does not show the limit for an ordinary limited failure.
+- **Known limitations kept out of scope:** a limited job that changed state is not repeated (exit 30); only a
+  rejected event with a 429 result and a finite reset is recognised, never text alone; the two Git 2.56 trailer
+  tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
   `plan_stage_decisions` golden differs on the base commit as well.
 
 ## Next action
 
-`/milestone-plan` for C8b (a usage limit reached mid-job, `docs/ROADMAP.md` section 11.6.1), the next step in
-`docs/ROADMAP.md`'s order (C8b, then C13 once Workflow 2.12.0 is out, C14, C10, C12, C11, then O1-O7).
+`/milestone-plan` for C13 (review convergence, `docs/ROADMAP.md` section 11.13) once this repository runs Workflow
+2.12.0 (W8), the next step in `docs/ROADMAP.md`'s "Next, in order" (C13, then C14, C10, C12, C11, then O1-O7).

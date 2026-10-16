@@ -8,10 +8,12 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-15).** Controller 1.10.0 is the latest release (PR #45, squash
+**Where things stand (2026-10-16).** Controller 1.10.0 is the latest release (PR #45, squash
 `6aa8f66`): with `reviewer.harness` set, the Controller runs the cross-model review itself (C7). It
 admits Workflow 2.5.1 and 2.6.0, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and
-later). This repository runs Workflow 2.11.0 with automatic gates (since 2026-10-15). What is complete is marked in the
+later). This repository runs Workflow 2.11.0 with automatic gates (since 2026-10-15). C8b, a usage limit reached
+mid-job (accepted 2026-10-16 by gate policy), is complete and is released as 1.11.0 when its `feat:` pull request
+(#52) merges. What is complete is marked in the
 tables below; what each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
@@ -61,7 +63,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C9d | The installed-release test made version-agnostic: drop the requirement that this repository's own installed Workflow has a vendored tree, and admit it through the Controller's capability rule or `inspect`, with no vendored copy and no version literal, so a later Workflow move needs no test change (complete) | C9c | [follow-up 16](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, repository and run (complete) | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
-| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it (complete) | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
+| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it (complete, accepted 2026-10-16 by gate policy, `feat:` 1.11.0, PR #52) | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
 | C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, accepted 2026-10-12 by gate policy, no release) | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -309,6 +311,9 @@ These are not blockers for the baseline, but should remain visible in later mile
    code on the host (O7); ignored inputs, special Git index flags and external committed-symlink
    targets can evade provenance checks (O8); flow id `index` collides with `index.json` (O9);
    configured Git clean filters can execute during dirty checks (O10).
+30. Optional finding O1 from the C8b Codex implementation reviews: `controller/observe.py` filters out
+   a stream diagnosis whose only reason is `usage_limit`, so `explain` omits the limit for an ordinary
+   limited failure. Render the `usage_limit` reason in `explain`.
 
 ---
 

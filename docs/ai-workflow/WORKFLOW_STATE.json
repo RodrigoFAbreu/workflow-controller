@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-usage-limit-mid-job",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -11931,7 +11931,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-usage-limit-mid-job-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-usage-limit-mid-job-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 5,
       "implementation_revision": 8,
       "functional_review_round": null,
@@ -12316,8 +12316,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 55,
-      "last_transition": "2026-10-16T08:28:55Z",
+      "state_revision": 56,
+      "last_transition": "2026-10-16T13:08:29Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -12363,6 +12363,313 @@
           "run_ref": "session:local .ai-review/workflow-controller-usage-limit-mid-job/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "limited worker that changed nothing: INTERRUPTED, UsageLimitReached, exit 17, reset named",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:15Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "limited worker that committed, edited, staged, chmod-ed, renamed or copied: FAILED exit 30 with the limit in evidence, not repeated",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:15Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "run waits through the usage pause without the lock, repeats after reset plus grace, usage on and off",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:15Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "three limited attempts in a row stop the run with exit 17",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:15Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "reset beyond usage.max_wait_seconds stops at once with exit 17; Ctrl-C in the wait says the worker ran",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:15Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "INTERRUPTED job without a limit fact exits 40 with the repeat guidance; resume names the reset",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:15Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "non-limit streams (stale rejection, text only, missing or non-finite reset) give no fact; timeout and signal keep their reasons",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:16Z"
+          },
+          "flow-7b": {
+            "flow_id": "flow-7b",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "unmapped limit type is a limit: INTERRUPTED exit 17, window null, the event's own reset",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:16Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "first job after an expired baseline measured from its first reading; a job admitted before the reset stays after_reset",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:16Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "ran_at": "2026-10-16T08:31:15Z",
+            "summary": {
+              "result": "docs match the behaviour; tools/check_docs.py exit 0",
+              "tester": "round 1: independent Codex tester (openai/gpt-6.1-sol, high) in a scratch clone; round 2: operator re-test of the docs-only fix"
+            },
+            "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:31:16Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 52,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/52"
+          },
+          "state": "open",
+          "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+          "observed_at": "2026-10-16T13:08:29Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "16daa27dfb266cfbccf415bb3325973bf0b006f6",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-16T13:08:29Z",
+            "raw_sha256": "0dc167149f11cd542d8b78b634b6cb496f616e812458234340a46b524d0fe07c",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "42a7856d6b182b717d8e59612a5d1c6b0e3c1bb707fcd7a57aa64029da75aae1"
+          },
+          "fact_id": "62aa93d51241fa08f7ee6ab5b1ef2cfbca94f2c7df2f85077764850ec7319c7b"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-7b', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #52 at 4e2a13b08228178ff4ea54f4aa02b978c883e03a is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "16daa27dfb266cfbccf415bb3325973bf0b006f6",
+          "anchor_identity": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "6db1d78be27e8e7433a9746fd90ef7a6b5359dac9d15381678bfe8abb4901fc5",
+            "recorded_at": "2026-10-16T08:28:55Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "37d373016991562077905423b2af4070b4f7db2c36f05f9e6de1a7fc1dd837d2",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-2": {
+              "evidence_id": "2d8e24bb74dcccbab900731810fe59939c640ea879865d7ac28ea5afab6d7be5",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-3": {
+              "evidence_id": "a637a9659266df12e5b1837816b4918ab36166e20ec754e165a30a513ab06a5a",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-4": {
+              "evidence_id": "2d4a496ed3f937b8f7fbe7b743aa986461f1eaaaae8b9127e098169589cd9569",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-5": {
+              "evidence_id": "9ac02b5d7c5c1f8bf63f9395a50fb72ec5ab42a6f32943a28ca120d77e4559cd",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-6": {
+              "evidence_id": "321ce50a350c3f36ef1099a5938830a63dd1988ae5cefc434429afeb15632a04",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-7": {
+              "evidence_id": "8c3634e6e1c406b44f32a4f24d75744e2cb3748cb3b647e48deef62e4d99018f",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-7b": {
+              "evidence_id": "d02790b45793077d9ee10c7fda4d41139fe2890c7baab16c5d75d540a2520379",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-8": {
+              "evidence_id": "ff5a80f2225eab554712112ee7bdc8851d74f7995d2f4d5c7349429e0ace3b8c",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            },
+            "flow-9": {
+              "evidence_id": "371658b63bec0f1690b95faa55ff5f476c08b5b80205f733c0b0ef8c291dee66",
+              "log_digest": "f592f48b3092fe646c3890a4d05563ea933e8a8dd3d71771097226cda4c169e8",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round2-PASSED.md"
+            }
+          },
+          "pr": {
+            "fact_id": "62aa93d51241fa08f7ee6ab5b1ef2cfbca94f2c7df2f85077764850ec7319c7b",
+            "head": "4e2a13b08228178ff4ea54f4aa02b978c883e03a",
+            "provenance": "workflow_gh",
+            "raw_sha256": "0dc167149f11cd542d8b78b634b6cb496f616e812458234340a46b524d0fe07c"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-16T13:08:29Z",
+        "workflow_release": "2.11.0"
       }
     }
   }

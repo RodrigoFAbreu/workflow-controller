@@ -80,6 +80,14 @@ merge commit", and every text below that names "Squash and merge" names
   ancestor of the branch and how far behind the branch is. Before
   acceptance this is informational (`inspect`, `explain` and `status`
   show it).
+- **Minor review findings at acceptance.** When a milestone is accepted,
+  every Optional review finding of the milestone is recorded in its
+  completed-milestone narrative as fixed, dropped (with a reason) or a
+  follow-up (a GitHub issue labelled `review-follow-up`). Acceptance never
+  waits for a fix: clean-up milestones work through the issues. Until the
+  Workflow asks for this record itself
+  ([workflow#34](https://github.com/RodrigoFAbreu/workflow/issues/34)), the
+  orchestrator writes it by hand.
 - **Readiness.** Once the branch's own committed state records the work
   item `MILESTONE_COMPLETE`, the PR is marked ready only when the local
   and remote tips are exactly the acceptance commit (the

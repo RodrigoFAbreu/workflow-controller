@@ -3,7 +3,7 @@
 ## Status
 
 **In progress.** `workflow-controller-review-convergence` (`docs/ROADMAP.md` step C13, section 11.13), plan revision 6
-(`docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md`), base commit `45e9325`, phase `SELF_REVIEWING_IMPLEMENTATION`.
+(`docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md`), base commit `45e9325`, phase `AWAITING_FUNCTIONAL_REVIEW` (implementation revision 2, technical approval recorded at `c1e1c1a`).
 
 | Checkpoint | State |
 | --- | --- |
@@ -43,6 +43,48 @@ republication takes `implementation_revision` 1 to 2 and the local review that f
 difference), untouched here. `python3 tools/run_tests.py`: 4064 tests, coverage exact, 3 failures: the two Git 2.56
 trailer-rule tests (follow-up 12, unchanged by this milestone) and the scenario-count pin (18 to 19), fixed and
 re-run green.
+
+## Functional review checklist
+
+Implementation revision 2, technical approval `c1e1c1a`. Base commit `45e9325`. Findings go to
+`.ai-review/workflow-controller-review-convergence/feedback/FUNCTIONAL_REVIEW.md`.
+
+**Setup.** Work in a clone with a scratch bare `origin` and a fake `gh` on `PATH` (a clone's `origin` is the real
+repository). Run the tool from the checkout: `PYTHONPATH=<checkout> python3 -P -m controller ...`, with
+`--routing-config .controller/routing.json` before the subcommand. No feature flag or real provider is needed; the
+worker is a fake `claude`. Do not run the whole test suite backgrounded with `&` (Ctrl-C tests fail spuriously).
+
+**Test data.** Seed a managed repository whose Workflow answers `next-action` for a plan or implementation review loop
+(see `tests/test_review_round_lifecycle.py` and `tests/scenarios/lifecycle.py`): one Workflow 2.12.0-shaped answer with
+`review_round` set, and one older answer without it. Two or more earlier protocol job records for the same work item.
+
+| # | Flow | Expected |
+|---|------|----------|
+| 1 | `settings show`, then `settings` file fill on an existing settings file. | A `review.round_cap` row: integer, default **4**, bounds 1 to 100, flag `--review-round-cap`; table generation 7; an existing file gains the row. |
+| 2 | `step --review-round-cap 0`, `101`, `abc`. | argparse usage error, exit **2**, nothing launched. |
+| 3 | Plan loop at cap 1: `step` on `plan.review.local` at round 1, then (after a `REVISE`) `step` on `plan.apply_review`. | The review runs. The apply stops with the `review_round_cap_reached` gate: no worker launched, Workflow state and `HEAD` unchanged, exactly one `GATE_BLOCKED` record, exit **10**. The gate text names the stage, the round, the cap, the source and the three ways on. |
+| 4 | Boundary table at cap 4, both stages: apply at round 3 runs, at 4 stops; review at 4 runs, at 5 stops. | As stated. Authoring, implementing, self-review, manual-record actions and the Controller external-review courier are never stopped. |
+| 5 | After flow 3, `run --review-round-cap 2` (or `6`). | The apply launches, the loop reaches the next review, then stops again at the new cap. A following plain `run` stops again (the flag applies to one command). |
+| 6 | `explain` on the stopped item. | Same gate text as the step; it shows the setting's cap and says a flag is not reflected. |
+| 7 | Answer without `review_round` (a 2.11.0-shaped snapshot). | The round is counted from job records, `source: jobs`; a plan stop says the Workflow's count may be higher. The cap fires later than the Workflow's own number, never earlier. A `PLANNING`-authored child first published at revision 2 is round 1. |
+| 8 | Implementation loop: ordinary apply, a `same_content` apply, a `"2.1"` apply that ends `gate_reached`, and a bounded functional fix from `AWAITING_FUNCTIONAL_REVIEW`. | An ordinary apply or a bounded fix raises `implementation_revision` and opens a round; a `same_content` republication opens none; the `"2.1"` `gate_reached` apply opens one. |
+| 9 | The loop guard and the cap both apply. | The loop guard takes precedence. A legacy-path target is unaffected. |
+| 10 | `telemetry --by stage,round`, `--by action`, `--by stage`, `--by work_item,action`, plus `--format json` if offered. | New groupings work; a Workflow-stated round is `plan/4`, a job-derived one `plan/4~`, in separate rows; JSON rows gain only `action`, `stage`, `round`, `round_source`; existing groupings and their text are unchanged. A job's round is the same with and without `--since`. Controller external-review jobs (`plan.review.external`, `implementation.review.external`) show their action, stage and round. |
+| 11 | Read `docs/guide/runtime.md`, `docs/guide/commands.md`, `docs/run.md`, `docs/common-problems.md`, `docs/exit-codes.md`, `docs/guide/development.md`, `docs/ROADMAP.md`. | They match flows 1-10; ROADMAP marks C13 complete with C14 next; `python3 tools/check_docs.py` exits 0. |
+
+Automated evidence for these flows: `tests/test_review_rounds.py`, `tests/test_settings.py`, `tests/test_cli.py`,
+`ReviewCapGateTest` in `tests/test_protocol_job.py`, `tests/test_protocol_decision.py`, `tests/test_telemetry.py`,
+`tests/test_review_round_lifecycle.py` and the lifecycle scenario `scenario-review-round-cap-stops-and-continues`.
+
+**Known limitations / out of scope.** A plan round counted from job records is a lower bound. `explain` shows the
+setting's cap, not a flag's. There is no "off" value (a long loop is a cap of 100). The cap does not stop the
+Controller's own external-review courier or any non-apply action. Two Git 2.56 trailer tests (`test_release_notes`,
+`test_pull_request_lifecycle`) fail locally and are unrelated (follow-up 12); the `plan_stage_decisions` golden differs on
+the base commit too.
+
+**Next steps.** When testing is clean, `/accept-milestone` is the only acceptance command and needs every checkpoint in
+this item's registry `COMPLETE` (CP1-CP4 are). Findings go through `/apply-functional-review` (bounded fix, or a
+`-remediation-<n>` child for wider scope).
 
 The previous milestone follows.
 

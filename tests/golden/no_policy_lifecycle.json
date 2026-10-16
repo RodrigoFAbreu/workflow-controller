@@ -269,7 +269,8 @@
             "pre_work_item_keys": [],
             "rejected_marker_present": false,
             "state_revision": null,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {}
           },
           "reconciliation_evidence": {
             "code": "TransitionNotObservedError",
@@ -405,6 +406,7 @@
               "turn_open_at_exit": false,
               "turns": 0,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -791,7 +793,8 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 1,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {}
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -934,6 +937,7 @@
               "turn_open_at_exit": false,
               "turns": 1,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -1149,7 +1153,8 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 2,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {}
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -1292,6 +1297,7 @@
               "turn_open_at_exit": false,
               "turns": 1,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -1509,7 +1515,8 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 3,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {}
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -1652,6 +1659,7 @@
               "turn_open_at_exit": false,
               "turns": 1,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -1871,7 +1879,8 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 4,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {}
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -2014,6 +2023,7 @@
               "turn_open_at_exit": false,
               "turns": 1,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -2231,7 +2241,16 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 5,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {
+              "docs/ai-workflow/WORKFLOW_STATE.json": {
+                "comparable": true,
+                "digest": "<SHA>",
+                "entry": " M docs/ai-workflow/WORKFLOW_STATE.json",
+                "executable": false,
+                "staged": "100644 <SHA>"
+              }
+            }
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -2377,6 +2396,7 @@
               "turn_open_at_exit": false,
               "turns": 1,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -2596,7 +2616,8 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 6,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {}
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -2739,6 +2760,7 @@
               "turn_open_at_exit": false,
               "turns": 1,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },
@@ -2855,7 +2877,16 @@
             ],
             "rejected_marker_present": false,
             "state_revision": 7,
-            "target_head": "<SHA>"
+            "target_head": "<SHA>",
+            "tracked_changes": {
+              "docs/ai-workflow/WORKFLOW_STATE.json": {
+                "comparable": true,
+                "digest": "<SHA>",
+                "entry": " M docs/ai-workflow/WORKFLOW_STATE.json",
+                "executable": false,
+                "staged": "100644 <SHA>"
+              }
+            }
           },
           "run_id": "<ID>",
           "schema_version": 1,
@@ -3257,7 +3288,8 @@
             "pre_work_item_keys": [],
             "rejected_marker_present": false,
             "state_revision": null,
-            "target_head": null
+            "target_head": null,
+            "tracked_changes": {}
           },
           "reconciliation_evidence": {
             "code": "TransitionNotObservedError",
@@ -3393,6 +3425,7 @@
               "turn_open_at_exit": false,
               "turns": 0,
               "unknown_events": [],
+              "usage_limit": null,
               "wakeup_stops": [],
               "wakeups_seen": []
             },

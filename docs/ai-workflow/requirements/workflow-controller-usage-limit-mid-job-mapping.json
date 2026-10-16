@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-usage-limit-mid-job",
+  "requirements": {
+    "R1": {
+      "description": "A stream with a rejected rate_limit_event, a 429 is_error result and a finite resetsAt has a usage_limit fact in its diagnosis (reason usage_limit, outcome still FAILURE); a stream with any of the three missing, or only the localised text, has none and classifies as before; timeout and signal reasons keep precedence",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A limited job that moved nothing (protocol: reconcile answers no_progress and HEAD and the tracked-change list are unchanged; legacy: phase, HEAD and the tracked-change list unchanged) is recorded INTERRUPTED with usage_limit and UsageLimitReached, not FAILED, in execute_step and in resume (the tracked-change comparison includes worktree digests, worktree executable bits and staged blob identities, so index-only and mode-only progress is FAILED); every other limited job, including one whose transition verified, stays FAILED and carries usage_limit in its evidence",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The usage accounting charges such a job as a job that ran (measured or at the forecast), never as one that never launched, and no job-status enumeration changes and the only schema additions are the optional usage_limit block and the tracked_changes pre-state member",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "run waits for the reset plus usage.resume_grace_seconds (bounded by usage.max_wait_seconds, with or without usage.enabled), holding no lock, records usage_paused, repeats the step through the whole boundary and counts no step for the attempt; three limited attempts in a row stop with 17, each stop with its own line",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "step exits 17 with a line naming the reset time and the repeat; an INTERRUPTED job without the fact exits 40; resume keeps exit 40 and names the reset; a wait over the bound exits 17 without sleeping; Ctrl-C during the wait is a one-line interruption whose mid-job message does not say \"nothing was started\"",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "The first job after a window reset, admitted after it (today after_reset), has a measured delta and yields a forecast sample, while a job admitted before the reset keeps after_reset and its conservative charge, or the follow-up is deferred with the finding recorded and no schema change made",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "The exit-code, problems, run and guide pages, and the roadmap, agree with the behaviour; check_docs, the golden --check forms and the full suite are green",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

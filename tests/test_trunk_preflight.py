@@ -167,6 +167,29 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 self.assertEqual(reviewer, {key: settings.default_value(settings._table()[key])
                                             if part == "values" else "file" for key in self.REVIEWER_KEYS})
                 self.assertFalse([key for key in block[part] if key.startswith("reviewer.")])
+        # usage-limit-mid-job CP1/CP2 added one member to each launched job's
+        # stream diagnosis (``usage_limit``, null: the fake's stream has no
+        # rejected rate-limit event) and one to its pre-state
+        # (``tracked_changes``, the tracked-change baseline of the launch).
+        additions = {"usage_limit": 0, "tracked_changes": 0}
+
+        def strip(node: object) -> None:
+            if isinstance(node, dict):
+                for key, empty in (("usage_limit", None), ("tracked_changes", {})):
+                    # A job launched over a dirty tracked file records it.
+                    if key in node and (node[key] == empty or key == "tracked_changes"
+                                        and isinstance(node[key], dict)):
+                        del node[key]
+                        additions[key] += 1
+                for value in node.values():
+                    strip(value)
+            elif isinstance(node, list):
+                for value in node:
+                    strip(value)
+
+        strip(data)
+        self.assertGreater(additions["usage_limit"], 0)
+        self.assertGreater(additions["tracked_changes"], 0)
         rendered = golden.render(data)
         self.assertIn(self.NOTE_SENTENCE.strip(), rendered)
         # The note travels JSON-encoded inside the rendered golden.

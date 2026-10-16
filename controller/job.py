@@ -121,6 +121,7 @@ from controller.decision import (
 from controller.errors import (
     BranchInvariantViolatedError,
     ControllerError,
+    GitOperationError,
     HumanGateError,
     JobAbandonRefusedError,
     LifecycleWorkerActiveError,
@@ -188,7 +189,7 @@ REASON_CLOSED_OUT_RELEASED = "closed_out_released"
 #: `PRE_STATE_FIELDS` -- the single declaration both `_capture_pre_state`
 #: and (in CP6B) the record-completeness property read, so the two cannot
 #: drift (the plan's own stated defect history: a field declared in the
-#: schema and never captured, round 8's B3). Five of these eighteen are a
+#: schema and never captured, round 8's B3). Five of these nineteen are a
 #: predicate *input* (`bundle_manifest_bundle_id`, `bundle_generated_digest`,
 #: `pre_work_item_keys`, `checkpoints` and `target_head` -- CP6B's own
 #: concern, widened by `workflow-controller-automatic-lifecycle-
@@ -225,6 +226,7 @@ PRE_STATE_FIELDS: frozenset[str] = frozenset({
     "functional_review_consumed_blob",
     "functional_checklist_evidence",
     "pre_work_item_keys",
+    "tracked_changes",
 })
 
 #: `auto` is the default for lifecycle workers against this (real,
@@ -313,6 +315,18 @@ def _functional_review_consumed_blob(root: Path, work_item_id: str, bound: Bound
     return result.stdout.strip()
 
 
+def _tracked_changes_baseline(root: Path) -> dict | None:
+    """The content-sensitive tracked-change baseline of a launch
+    (:func:`controller.gitrepo.tracked_change_digests`), or ``None`` when Git
+    cannot answer -- a record without a mapping is not comparable, so the
+    usage-limit rule fails closed for it. Report data for the mid-job
+    usage-limit classification, not a predicate input."""
+    try:
+        return gitrepo.tracked_change_digests(root)
+    except GitOperationError:
+        return None
+
+
 def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict:
     """Capture every :data:`PRE_STATE_FIELDS` member -- the record's most
     consequential block (the plan's own "pre_state is revision 7's
@@ -349,6 +363,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
     a decision-time refusal, with no worker launched and no record written."""
     root = managed_repo.root
     target_head = _current_head(root)
+    tracked_changes = _tracked_changes_baseline(root)
     pre_work_item_keys = sorted(snapshot.work_items.keys())
 
     if work_item is target_state.NoWorkItemYet:
@@ -371,6 +386,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
             "functional_review_consumed_blob": None,
             "functional_checklist_evidence": None,
             "pre_work_item_keys": pre_work_item_keys,
+            "tracked_changes": tracked_changes,
         }
 
     work_item_id = work_item.work_item_id
@@ -401,6 +417,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
             "functional_review_consumed_blob": None,
             "functional_checklist_evidence": None,
             "pre_work_item_keys": pre_work_item_keys,
+            "tracked_changes": tracked_changes,
         }
 
     bound = workflow_contract.bind_release(managed_repo.workflow_version)
@@ -434,6 +451,7 @@ def _capture_pre_state(managed_repo: Any, snapshot: Any, work_item: Any) -> dict
             root, work_item_id, work_item.base_commit, target_head, work_item.implementation_revision,
         ),
         "pre_work_item_keys": pre_work_item_keys,
+        "tracked_changes": tracked_changes,
     }
 
 
@@ -2472,6 +2490,14 @@ def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> V
                 evidence={"job_id": record.get("job_id"), "status": status, **breach_evidence},
             )
 
+    # A pending record's usage-limit block, where it is present, has the fact's shape.
+    if status in NON_TERMINAL_STATUSES and "usage_limit" in record and not usage_limit_valid(record["usage_limit"]):
+        return _invalid(
+            record, case=3, code="StaleJobRecordError", reason="usage_limit_malformed",
+            message=f"job {record.get('job_id')!r} is {status!r} and carries a malformed usage_limit block",
+            evidence={"job_id": record.get("job_id"), "status": status, "usage_limit": record["usage_limit"]},
+        )
+
     # The review-kind case (codex-reviewer D15): a review record carries its
     # `review` block and the harness route, and no worker session.
     if record.get("kind") == REVIEW_KIND:
@@ -2819,6 +2845,69 @@ _RECONCILE_CLASSES = frozenset({"progress", "gate_reached", "no_progress", "inva
 _CHECKPOINT_ACTION = "implementation.checkpoint"
 
 
+#: The ``reconciliation_evidence.code`` of a job that stopped at the usage
+#: limit having moved nothing (``INTERRUPTED``, mid-job usage limit D3).
+USAGE_LIMIT_REACHED_CODE = "UsageLimitReached"
+
+
+def _finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value - value == 0
+
+
+def usage_limit_valid(value: Any) -> bool:
+    """Whether ``value`` has the shape of the stream's usage-limit fact:
+    a finite ``resets_at`` and a string-or-null ``rate_limit_type`` and
+    ``window``."""
+    return (isinstance(value, Mapping) and _finite_number(value.get("resets_at"))
+            and all(value.get(key) is None or isinstance(value.get(key), str)
+                    for key in ("rate_limit_type", "window")))
+
+
+def usage_limit_of(record: Mapping) -> dict | None:
+    """The usage-limit fact of a job whose worker ended ``FAILURE`` with the
+    stream's structured fact (``worker.stream_diagnosis.usage_limit``), else
+    ``None``. A malformed fact is none: the job is an ordinary failure."""
+    if record.get("worker_outcome") != "FAILURE":
+        return None
+    worker_block = record.get("worker")
+    diagnosis = worker_block.get("stream_diagnosis") if isinstance(worker_block, Mapping) else None
+    fact = diagnosis.get("usage_limit") if isinstance(diagnosis, Mapping) else None
+    return dict(fact) if usage_limit_valid(fact) else None
+
+
+def _tracked_tree_unchanged(root: Path, pre_state: Mapping) -> bool:
+    """Whether the tracked-change baseline captured at launch still equals the
+    tree's. A record without a mapping baseline, or any changed path that
+    cannot be compared (a symlink, an unmerged stage, an unreadable file) in
+    either snapshot, is not unchanged: the rule fails closed."""
+    baseline = pre_state.get("tracked_changes")
+    if not isinstance(baseline, Mapping):
+        return False
+    try:
+        now = gitrepo.tracked_change_digests(root)
+    except GitOperationError:
+        return False
+    if any(not isinstance(entry, Mapping) or entry.get("comparable") is not True
+           for snapshot in (baseline, now) for entry in snapshot.values()):
+        return False
+    return dict(baseline) == now
+
+
+def _limit_moved_nothing(root: Path, pre_state: Mapping, observed_phase: str) -> bool:
+    """The three-part test of a limited job that changed nothing durable: the
+    phase, ``HEAD`` and the tracked-change baseline are all as at launch."""
+    head = _current_head(root)
+    return (observed_phase == phase_to_wire(pre_state.get("phase")) and head is not None
+            and head == pre_state.get("target_head") and _tracked_tree_unchanged(root, pre_state))
+
+
+def _usage_limit_interrupted(limit: Mapping, observed_phase: str) -> dict:
+    """The record fields of a limited job that moved nothing."""
+    return {"status": STATUS_INTERRUPTED, "observed_phase_after": observed_phase, "usage_limit": dict(limit),
+            "reconciliation_evidence": {"code": USAGE_LIMIT_REACHED_CODE, "usage_limit": dict(limit),
+                                        "observed_phase": observed_phase}}
+
+
 def _protocol_failure_evidence(reason: str, *, observed_phase: str, worker_outcome: str | None, **extra: Any) -> dict:
     """The ``TransitionNotObservedError``-shaped ``reconciliation_evidence``
     of a protocol job: there is no expected phase set, only the ``reason``."""
@@ -2898,7 +2987,11 @@ def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Pa
     work_item_id = record.get("work_item_id")
     pre_phase = str((record.get("pre_state") or {}).get("phase"))
 
+    limit = usage_limit_of(record) if worker_outcome == "FAILURE" else None
+    limit_evidence = {"usage_limit": limit} if limit is not None else {}
+
     def failed(reason: str, observed: str, reconcile: Any = None, **extra: Any) -> dict:
+        extra = {**limit_evidence, **extra}
         return {
             "status": STATUS_FAILED, "transition_verified": False, "observed_phase_after": observed,
             "protocol": {**block, "reconcile": reconcile},
@@ -2910,7 +3003,7 @@ def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Pa
     if change is not None:
         return failed(WORKFLOW_RELEASE_CHANGED_REASON, _protocol_observed_phase(managed_repo, record),
                       workflow_error=change)
-    if worker_outcome is not None and worker_outcome not in _VERIFYING_WORKER_OUTCOMES:
+    if worker_outcome is not None and worker_outcome not in _VERIFYING_WORKER_OUTCOMES and limit is None:
         return failed("worker_outcome", _protocol_observed_phase(managed_repo, record))
 
     decision_rel = f"jobs/{record['job_id']}/decision.json"
@@ -2938,6 +3031,16 @@ def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Pa
             "code": WorkflowProtocolFailedError.code,
             "message": f"reconcile answered the class {answer.outcome!r}, which this Controller does not know",
             "evidence": {"reason": "protocol_unknown_reconcile_class", "class": answer.outcome}})
+    if limit is not None:
+        # A worker that stopped at the usage limit: INTERRUPTED only when it
+        # verifiably moved nothing (reconcile's `no_progress` ignores HEAD and
+        # the tree, so the Controller adds those clauses); anything else is
+        # FAILED as a failed worker is, with the limit named.
+        observed_now = _protocol_observed_phase(managed_repo, record)
+        if answer.outcome == "no_progress" and _limit_moved_nothing(
+                root, record.get("pre_state") or {}, observed_now):
+            return {**_usage_limit_interrupted(limit, observed_now), "protocol": {**block, "reconcile": summary}}
+        return failed("worker_outcome", observed_now)
     if answer.outcome == "invalid":
         return failed(RECONCILE_INVALID_REASON, observed, summary, reconcile_class="invalid",
                       invalid_reasons=summary["invalid_reasons"])
@@ -3161,16 +3264,25 @@ def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: 
         return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
                         details=_reconciled_details(reconciled))
 
+    evidence_block = _transition_not_observed_evidence(
+        outcome=outcome, observed_phase_after=observed_phase_after_wire,
+        worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
+        predicate_detail=predicate_detail, workflow_error=workflow_error,
+    )
+    limit = usage_limit_of(record)
+    if limit is not None and _limit_moved_nothing(root, pre_state, observed_phase_after_wire):
+        reconciled = {**record, **_usage_limit_interrupted(limit, observed_phase_after_wire),
+                      "transition_verified": False, "reconciled_at": now, "updated_at": now}
+        return _persist(runtime_root, record["job_id"], reconciled, event="reconciled",
+                        details=_reconciled_details(reconciled))
+    if limit is not None:
+        evidence_block = {**evidence_block, "usage_limit": limit}
     reconciled = {
         **record,
         "status": STATUS_FAILED,
         "transition_verified": False,
         "observed_phase_after": observed_phase_after_wire,
-        "reconciliation_evidence": _transition_not_observed_evidence(
-            outcome=outcome, observed_phase_after=observed_phase_after_wire,
-            worker_outcome=worker_outcome, reason=reason, postcondition_detail=postcondition_detail,
-            predicate_detail=predicate_detail, workflow_error=workflow_error,
-        ),
+        "reconciliation_evidence": evidence_block,
         "reconciled_at": now,
         "updated_at": now,
     }
@@ -5756,6 +5868,10 @@ class UsageHold:
     resets_at: float | None = None
     outstanding: bool = False
     preflight_events: tuple = ()
+    #: The hold is a usage limit reached *mid-job* (usage-limit-mid-job D6): a
+    #: worker ran and changed nothing, so the messages must not say "nothing
+    #: was started". False for every hold the usage gate produces.
+    mid_job: bool = False
 
 
 def _as_usage_hold(hold: Any, preflight_events: list[str]) -> UsageHold:
@@ -7292,6 +7408,16 @@ def _launch_job(
         final_status = STATUS_INCOMPLETE
     else:
         final_status = STATUS_FAILED
+
+    limit = usage_limit_of(record) if final_status == STATUS_FAILED and branch_violation is None else None
+    if limit is not None:
+        # A worker that stopped at the usage limit: INTERRUPTED only when it
+        # verifiably moved nothing, else FAILED with the limit named.
+        if _limit_moved_nothing(managed_repo.root, pre_state, phase_to_wire(observed_phase_after)):
+            final_status = STATUS_INTERRUPTED
+            record = {**record, **_usage_limit_interrupted(limit, phase_to_wire(observed_phase_after))}
+        else:
+            verification_evidence = {**verification_evidence, "usage_limit": limit}
 
     record = {
         **record,

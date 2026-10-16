@@ -36,7 +36,7 @@ The worktree is held: another Controller, a `run` waiting for checks or a merge,
 
 ## The command exited 17 and nothing was started
 
-The usage budget held the job back before it started, so there is no job to resume. The message says which of two causes it was:
+The usage budget held the job back before it started, so there is no job to resume. (A message that says a worker "reached the usage limit mid-job" is a different case: see [a worker hit a usage limit while it ran](#a-worker-hit-a-usage-limit-while-it-ran).) The message says which of two causes it was:
 
 - **A timed pause**: the Claude or Codex window would pass its threshold (`usage.pause_at_percent`, `usage.weekly_pause_at_percent`). `run` normally waits for it by itself; `step`, or a wait longer than `usage.max_wait_seconds`, stops instead. Run again after the resume time the message names (in local time).
 - **A cap**: the run or the repository has spent `usage.run_cap_percent` or `usage.repository_cap_percent`, counting work still outstanding. No reset time is waited for. Raise the cap or `--usage-cap`, start a new run for a run cap, or for a repository cap run again after the five-hour window resets, when its spending falls.
@@ -93,7 +93,12 @@ See [pausing for usage limits](run.md#pausing-for-usage-limits), [`resume`](guid
 
 ## A worker hit a usage limit while it ran
 
-The budget forecasts, it cannot stop a job that exceeds its forecast. A job that meets the limit mid-way fails (exit 30). Check `workflow-controller usage`, wait for the reset, then run `explain` and run again. Recognising this case and waiting for it automatically is a roadmap item (C8b).
+The budget forecasts, it cannot stop a job that exceeds its forecast. The Controller recognises the provider's limit from structured fields in the worker's stream (a rejected rate-limit event, a 429 result and the reset time), not from text. What happens next depends on what the worker did first:
+
+- **It changed nothing** (no commit, no tracked-file edit; untracked files do not count): the job is recorded `INTERRUPTED` and `run` waits for the reset plus `usage.resume_grace_seconds`, with no lock held, then repeats the step without counting it. This works with `usage.enabled` false too. `step` stops with exit 17 and a line naming the reset time; run it again after that time. A wait longer than `usage.max_wait_seconds`, or three limited attempts in a row, also stops with exit 17, and the line says the worker ran (it never says "nothing was started").
+- **It had changed state**: the job is `FAILED` (exit 30) and its evidence carries the limit. Do not repeat it blindly: run `explain`, check what the worker left, wait for the reset (`workflow-controller usage`), then run again.
+
+See [pausing for usage limits](run.md#pausing-for-usage-limits) and [how the limit is recognised](guide/workers.md#how-a-usage-limit-is-recognised).
 
 ## A worker's shell command waits for a y/n answer
 

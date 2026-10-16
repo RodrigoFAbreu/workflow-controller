@@ -45,6 +45,8 @@ import math
 import re
 from collections.abc import Iterable
 
+from controller import usage
+
 SUCCESS = "SUCCESS"
 FAILURE = "FAILURE"
 AMBIGUOUS = "AMBIGUOUS"
@@ -104,6 +106,7 @@ _HARNESS_STATED_DELAY = re.compile(r"\(in (\d+)s\)")
 # Terminal classification reasons, by row.
 REASON_TIMEOUT = "timeout"
 REASON_SIGNAL = "signal"
+REASON_USAGE_LIMIT = "usage_limit"
 REASON_EXIT_STATUS = "exit_status"
 REASON_MALFORMED_LINE = "malformed_line"
 REASON_NO_RESULT = "no_result"
@@ -180,6 +183,15 @@ def _iso(seconds: float | None) -> str | None:
         return None
     moment = datetime.datetime.fromtimestamp(seconds, tz=datetime.timezone.utc)
     return f"{moment:%Y-%m-%dT%H:%M:%S}.{moment.microsecond // 1000:03d}Z"
+
+
+def _finite_number(value: object) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _is_int(value: object) -> bool:
@@ -281,6 +293,7 @@ class WorkerStream:
         self._uuids_seen: set[str] = set()
         self.anomalies: list[dict] = []
         self.ignored_settlements: list[dict] = []
+        self.rejected_limits: list[dict] = []
 
     # -- input ---------------------------------------------------------
 
@@ -320,6 +333,8 @@ class WorkerStream:
     def _event(self, event: dict, offset: int) -> None:
         kind = event.get("type")
         subtype = event.get("subtype") if kind == "system" else None
+        if kind == "rate_limit_event":
+            self._rate_limit(event, offset)
         if (kind, subtype) in NON_STRUCTURAL_EVENTS:
             return
         if kind == "system" and subtype == "init":
@@ -346,6 +361,48 @@ class WorkerStream:
             entry = self.unknown_events.setdefault(
                 key, {"type": key[0], "subtype": key[1], "count": 0, "first_offset": offset})
             entry["count"] += 1
+
+    def _rate_limit(self, event: dict, offset: int) -> None:
+        """Keep a ``rejected`` rate-limit event with its reset time: the
+        structured half of the usage-limit fact (:meth:`usage_limit`)."""
+        info = event.get("rate_limit_info")
+        if not isinstance(info, dict) or info.get("status") != "rejected":
+            return
+        kind = info.get("rateLimitType")
+        resets = None
+        windows = info.get("unifiedWindows")
+        # Only a mapped type has a window slot; an unmapped one takes the
+        # event's own reset whatever a same-named slot holds.
+        mapped = isinstance(kind, str) and kind in usage._CLAUDE_WINDOW_KEYS
+        entry = windows.get(kind) if isinstance(windows, dict) and mapped else None
+        if isinstance(entry, dict) and _finite_number(entry.get("resetsAt")):
+            resets = entry["resetsAt"]
+        elif not (isinstance(entry, dict) and "resetsAt" in entry) and _finite_number(info.get("resetsAt")):
+            resets = info["resetsAt"]
+        if resets is None:
+            return
+        self.rejected_limits.append({
+            "offset": offset,
+            "resets_at": resets,
+            "rate_limit_type": kind if isinstance(kind, str) else None,
+            "window": usage._CLAUDE_WINDOW_KEYS.get(kind) if isinstance(kind, str) else None,
+        })
+
+    def usage_limit(self) -> dict | None:
+        """The usage-limit fact: the final ``result`` is an error with
+        ``api_error_status`` 429 and a ``rejected`` rate-limit event with a
+        finite reset time came after the previous ``result``. Never read
+        from message text."""
+        if not self.results:
+            return None
+        event = self.results[-1]["event"]
+        if event.get("is_error") is not True or event.get("api_error_status") != 429:
+            return None
+        floor = self.results[-2]["offset"] if len(self.results) > 1 else -1
+        for limit in reversed(self.rejected_limits):
+            if limit["offset"] > floor:
+                return {k: limit[k] for k in ("resets_at", "rate_limit_type", "window")}
+        return None
 
     def _open_turn(self, offset: int) -> None:
         turn = _Turn(index=len(self.turns), open_offset=offset)
@@ -668,6 +725,7 @@ class WorkerStream:
             "unknown_events": list(self.unknown_events.values()),
             "ignored_settlements": list(self.ignored_settlements),
             "owned_work_at_exit": self.owned_work(),
+            "usage_limit": self.usage_limit(),
         }
 
     def _turn_origin(self, bracket: _Bracket) -> object:
@@ -729,6 +787,8 @@ def classify(
         matched.append((INTERRUPTED, REASON_TIMEOUT))
     elif known and returncode < 0:
         matched.append((INTERRUPTED, REASON_SIGNAL))
+    if stream.usage_limit() is not None:
+        matched.append((FAILURE, REASON_USAGE_LIMIT))
     if known and returncode != 0:
         matched.append((FAILURE, REASON_EXIT_STATUS))
     if stream.malformed_lines:

@@ -39,6 +39,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from controller import gitrepo  # noqa: E402
 from controller import (  # noqa: E402
     cli, decision, evidence, identity, job, lock, milestone_branch as mb, routing, target_state, worker,
     workflow_contract,
@@ -743,11 +744,11 @@ class BootstrapRowSevenTest(unittest.TestCase):
         self.assertEqual(record["worker_outcome"], "SUCCESS")
         self.assertEqual(record["selected_action"]["command"], "/milestone-plan")
 
-    def test_pre_work_item_keys_is_a_pre_state_field_of_the_eighteen(self) -> None:
+    def test_pre_work_item_keys_is_a_pre_state_field_of_the_nineteen(self) -> None:
         # Seventeen until `workflow-controller-automatic-lifecycle-
         # orchestration` CP2 added `bundle_manifest_bundle_id`.
         record = self._run_far_enough_and_read_back()
-        self.assertEqual(len(job.PRE_STATE_FIELDS), 18)
+        self.assertEqual(len(job.PRE_STATE_FIELDS), 19)
         self.assertEqual(set(record["pre_state"]), job.PRE_STATE_FIELDS)
         self.assertEqual(record["pre_state"]["pre_work_item_keys"], [])
 
@@ -2125,6 +2126,154 @@ class ProseOverStateTest(_LifecycleCase):
                     if isinstance(node, ast.Attribute) and node.attr in ("result", "raw_json"):
                         readers.append((path.name, func.name, node.attr))
         self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result")])
+
+
+class UsageLimitLegacyTest(_LifecycleCase):
+    """``workflow-controller-usage-limit-mid-job`` CP2, legacy mode: the golden stream replayed through a fake
+    worker that exits 1 as the real one does. ``INTERRUPTED`` only when the phase, ``HEAD`` and the tracked tree
+    are as at launch."""
+
+    GOLDEN = REPO_ROOT / "tests" / "golden" / "claude_stream_usage_limit_rejected.jsonl"
+    FACT = {"resets_at": 1790287800, "rate_limit_type": "five_hour", "window": "five_hour"}
+
+    def _limited(self, during=None):
+        env = {"FAKE_CLAUDE_STDOUT": self.GOLDEN.read_text(), "FAKE_CLAUDE_EXIT": "1"}
+        real = job.worker.launch
+
+        def launch(task, **kwargs):
+            if during is not None:
+                during()
+            return real(task, **kwargs)
+
+        with unittest.mock.patch.dict("os.environ", env), unittest.mock.patch.object(job.worker, "launch", launch):
+            return self._step(timeout=20)
+
+    def test_a_limited_worker_that_moved_nothing_is_interrupted(self) -> None:
+        record = self._limited()
+        self.assertEqual(record["worker_outcome"], "FAILURE")
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
+        self.assertEqual(record["usage_limit"], self.FACT)
+        self.assertEqual(record["reconciliation_evidence"]["code"], job.USAGE_LIMIT_REACHED_CODE)
+        self.assertEqual(record["pre_state"]["tracked_changes"], {})
+        self.assertFalse(job.never_launched(record))
+
+    def test_untracked_files_are_not_progress(self) -> None:
+        self.assertEqual(self._limited(lambda: (self.root / "scratch.txt").write_text("x\n"))["status"],
+                         job.STATUS_INTERRUPTED)
+
+    def _edit(self) -> None:
+        (self.root / "README.md").write_text("edited\n")
+
+    def test_a_tracked_edit_is_failed_with_the_limit_named(self) -> None:
+        record = self._limited(self._edit)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+
+    def test_a_commit_is_failed_with_the_limit_named(self) -> None:
+        def commit() -> None:
+            self._edit()
+            fixtures.commit_all(self.root, "worker commit")
+        record = self._limited(commit)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+
+    def test_an_ordinary_failure_with_no_fact_stays_failed(self) -> None:
+        with unittest.mock.patch.dict("os.environ", {"FAKE_CLAUDE_EXIT": "1"}):
+            record = self._step(timeout=20)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertNotIn("usage_limit", record)
+
+    def test_a_completed_limited_record_reconciles_the_same_way_on_resume(self) -> None:
+        record = self._limited()
+        completed = {k: v for k, v in record.items()
+                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+        completed.update(status=job.STATUS_COMPLETED)
+        reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo, runtime_root=self.runtime_root)
+        self.assertEqual(reconciled["status"], job.STATUS_INTERRUPTED)
+        self.assertEqual(reconciled["usage_limit"], self.FACT)
+        (self.root / "README.md").write_text("edited\n")
+        reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo, runtime_root=self.runtime_root)
+        self.assertEqual(reconciled["status"], job.STATUS_FAILED)
+        self.assertEqual(reconciled["reconciliation_evidence"]["usage_limit"], self.FACT)
+
+    def test_a_record_written_before_the_baseline_existed_fails_closed(self) -> None:
+        record = self._limited()
+        completed = {k: v for k, v in record.items()
+                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+        completed.update(status=job.STATUS_COMPLETED, pre_state={
+            k: v for k, v in record["pre_state"].items() if k != "tracked_changes"})
+        reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo, runtime_root=self.runtime_root)
+        self.assertEqual(reconciled["status"], job.STATUS_FAILED)
+
+    def test_a_staged_only_change_to_a_colon_prefixed_file_is_failed_live_and_on_resume(self) -> None:
+        self._staged_only_change_is_failed(":notes.txt")
+
+    def _under_literal_pathspecs(self, name: str) -> None:
+        literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+        with unittest.mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
+            self._staged_only_change_is_failed(name)
+
+    def test_a_staged_only_change_is_failed_under_literal_pathspecs_in_the_environment(self) -> None:
+        self._under_literal_pathspecs("n.txt")
+
+    def test_a_staged_only_colon_prefixed_change_is_failed_under_literal_pathspecs(self) -> None:
+        self._under_literal_pathspecs(":notes.txt")
+
+    def test_a_changed_unmerged_blob_is_failed_when_the_index_lookup_misses(self) -> None:
+        # DU (stages 1 and 3) and DD (stage 1 only) start with "D" but are
+        # unmerged; under literal pathspecs the staged lookup returns nothing.
+        for case, stages in (("DU", (1, 3)), ("DD", (1,))):
+            with self.subTest(case):
+                blobs = [fixtures.run(["git", "hash-object", "-w", "--stdin"], cwd=self.root,
+                                      input=data).stdout.strip()
+                         for data in ("base\n", "other-1\n", "other-2\n")]
+
+                def stage(changed: bytes) -> None:
+                    lines = f"0 {'0' * 40}\tREADME.md\n"
+                    for number in stages:
+                        blob = blobs[0] if number == 1 else changed
+                        lines += f"100644 {blob} {number}\tREADME.md\n"
+                    fixtures.run(["git", "update-index", "--index-info"], cwd=self.root, input=lines)
+
+                stage(blobs[1])
+                literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+                with unittest.mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
+                    self.assertFalse(
+                        gitrepo.tracked_change_digests(self.root)["README.md"]["comparable"])
+                    record = self._limited(lambda: stage(blobs[2]))
+                self.assertEqual(record["status"], job.STATUS_FAILED)
+                self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+
+    def _staged_only_change_is_failed(self, name: str) -> None:
+        notes = self.root / name
+        notes.write_text("one\n")
+        fixtures.commit_all(self.root, "add notes")
+        notes.write_text("two\n")
+        fixtures.run(["git", "add", "--", f":(literal){name}"], cwd=self.root)
+        notes.write_text("three\n")
+
+        def restage() -> None:
+            notes.write_text("four\n")
+            fixtures.run(["git", "add", "--", f":(literal){name}"], cwd=self.root)
+            notes.write_text("three\n")
+
+        record = self._limited(restage)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+        completed = {k: v for k, v in record.items()
+                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+        completed.update(status=job.STATUS_COMPLETED)
+        reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo, runtime_root=self.runtime_root)
+        self.assertEqual(reconciled["status"], job.STATUS_FAILED)
+
+    def test_a_pending_record_with_a_malformed_block_is_invalid(self) -> None:
+        record = self._limited()
+        pending = {k: v for k, v in record.items() if k not in ("reconciliation_evidence", "observed_phase_after")}
+        pending.update(status=job.STATUS_COMPLETED, usage_limit={"resets_at": "soon"})
+        validity = job.validate_record(pending, managed_repo=self.managed_repo, identity=FAKE_IDENTITY)
+        self.assertFalse(validity.valid)
+        pending["usage_limit"] = self.FACT
+        self.assertTrue(job.validate_record(pending, managed_repo=self.managed_repo, identity=FAKE_IDENTITY).valid)
 
 
 class _StreamingCase(_LifecycleCase):

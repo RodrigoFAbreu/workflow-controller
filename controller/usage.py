@@ -1322,11 +1322,19 @@ def complete(runtime_root: str | os.PathLike, token: str, end_readings: Mapping 
         for window in WINDOWS:
             lower = first.get(window)
             lower_percent = None
-            if lower is not None and baseline[window]["window_resets_at"] is not None \
-                    and same_window(lower["resets_at"], baseline[window]["window_resets_at"]):
-                lower_percent = lower["percent"]
-            kinds[window] = _window_delta(baseline[window]["start"], baseline[window]["window_resets_at"],
-                                          end.get(window), reservation["created_at"], lower_percent)
+            start, start_resets = baseline[window]["start"], baseline[window]["window_resets_at"]
+            if lower is not None and start_resets is not None:
+                if same_window(lower["resets_at"], start_resets):
+                    lower_percent = lower["percent"]
+                elif lower["resets_at"] > start_resets and start_resets <= reservation["created_at"]:
+                    # The baseline had already expired when the job was
+                    # admitted (the stored reading was of the window before
+                    # the reset), so the stream's first reading in the new
+                    # window is the job's true baseline (D9). A job admitted
+                    # before the reset keeps the conservative accounting.
+                    start, start_resets = lower["percent"], lower["resets_at"]
+            kinds[window] = _window_delta(start, start_resets, end.get(window), reservation["created_at"],
+                                          lower_percent)
         reserved_five = reservation[FIVE_HOUR]["amount"]
         kind, measured, after = kinds[FIVE_HOUR]
         if kind == "measured":

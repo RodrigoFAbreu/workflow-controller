@@ -107,6 +107,16 @@ are the `usage.*` settings ([The settings file](guide/runtime.md#what-it-holds))
   is never lifted by a reset (raise it, or start a new run), and a
   repository cap counts only the current five-hour window, so it clears
   when that window resets.
+- A worker can still reach the limit while it runs, because the forecast is
+  only an estimate. If it had changed nothing (no commit, no tracked-file
+  edit), `run` treats the job as interrupted by the limit: it waits as
+  above for the reset the provider reported and repeats the step, which
+  uses no step of `--max-steps`. This also applies with `usage.enabled:
+  false`. Three limited attempts in a row stop the run with exit 17, and so
+  does a wait over `usage.max_wait_seconds`; `step` stops with exit 17 and
+  names the reset time. A worker that had already changed state ends
+  `FAILED` (exit 30) and is not repeated automatically. See
+  [a worker hit a usage limit while it ran](common-problems.md#a-worker-hit-a-usage-limit-while-it-ran).
 - `--usage-cap PERCENT` caps this run's Claude usage; the default is
   `usage.run_cap_percent`.
 

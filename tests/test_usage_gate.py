@@ -167,6 +167,23 @@ class GateAndLiveAccountingTest(_UsageCase):
         events = [e["event"] for e in _lines(self.runtime_root / "jobs" / record["job_id"] / "events.jsonl")]
         self.assertEqual(events[-1], "usage_accounted")
 
+    def test_an_interrupted_limited_job_is_charged_as_a_job_that_ran(self) -> None:
+        self.reading(10)
+        golden = test_job.UsageLimitLegacyTest.GOLDEN.read_text()
+        record = self.ustep({"FAKE_CLAUDE_STDOUT": golden, "FAKE_CLAUDE_EXIT": "1"})
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED)
+        token = record["usage"]["token"]
+        block = record["usage"]
+        self.assertEqual(block["accounting"], "done")
+        self.assertEqual(block["delta"], "unknown")
+        self.assertEqual(block["charged"], 8.0)
+        shared = self.shared()
+        [entry] = shared["ledger"]
+        self.assertEqual((entry["id"], entry["delta"], entry["charged"]), (token, "unknown", 8.0))
+        self.assertEqual(shared["reservations"], {})
+        self.assertIn(token, shared["settled"])
+        self.assertEqual(usage.run_spent(shared, "claude", "run-1"), 8.0)
+
     def test_a_stream_with_no_rate_limit_event_is_an_unknown_delta_charged_at_the_forecast(self) -> None:
         self.reading(10)
         record = self.ustep()

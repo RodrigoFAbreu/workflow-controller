@@ -57,7 +57,10 @@ EXIT_DECLINED = 15
 EXIT_MAX_STEPS = 16
 #: `workflow-controller-usage-budget` CP3 (D10): stopped before starting a
 #: job because of the usage budget -- a timed pause (run again after the
-#: resume time) or an exhausted run or repository cap. Nothing was started.
+#: resume time) or an exhausted run or repository cap -- or (usage-limit-mid-job
+#: D8) a worker that reached the provider's usage limit mid-job having changed
+#: nothing, so the step can be repeated after the reset. Otherwise nothing was
+#: started.
 EXIT_USAGE_PAUSED = 17
 #: `usage --renew`/`--release` named a token the shared record does not know
 #: (or, for `--renew`, one already accounted): nothing was changed.
@@ -1214,9 +1217,18 @@ class _UsagePause:
 
 class UsageWaitInterrupted(milestone_branch.WaitInterrupted):
     """Ctrl-C during a usage pause: a ``KeyboardInterrupt`` like the merge
-    wait's, printed as one line. No job record exists."""
+    wait's, printed as one line. No job record exists, except for a pause
+    after a limit reached mid-job (``mid_job``), whose job ran and changed
+    nothing."""
+
+    def __init__(self, code: str, deadline: str, *, mid_job: bool = False) -> None:
+        super().__init__(code, deadline)
+        self.mid_job = mid_job
 
     def message(self) -> str:
+        if self.mid_job:
+            return (f"interrupted while paused for the usage limit reached mid-job (the pause would have ended at "
+                    f"{self.deadline}); the worker ran and changed nothing, so a new `step` or `run` repeats the step")
         return (f"interrupted while paused for the usage budget (the pause would have ended at {self.deadline}); "
                 "nothing was started")
 
@@ -1359,15 +1371,52 @@ def _usage_wait(args: argparse.Namespace, runtime_root: Path, run: job.RunRecord
                 while (remaining := until - job.usage_now()) > 0:
                     _usage_sleep(min(remaining, USAGE_WAIT_SLICE_SECONDS))
             except KeyboardInterrupt:
-                raise UsageWaitInterrupted("usage_paused", _local_time(until)) from None
+                raise UsageWaitInterrupted("usage_paused", _local_time(until), mid_job=hold.mid_job) from None
             pause.waited += job.usage_now() - now
             return True
         _usage_paused(runtime_root, run, target, hold)
-        print(usage_hold_message(hold, max_wait_seconds=limits.max_wait_seconds), file=sys.stderr)
+        if hold.mid_job:
+            print(f"{USAGE_LIMIT_STOP_PREFIX} -- the reset is at {_local_time(hold.resume_at)} and waiting for it "
+                  f"would exceed usage.max_wait_seconds ({limits.max_wait_seconds} s); run again after it",
+                  file=sys.stderr)
+        else:
+            print(usage_hold_message(hold, max_wait_seconds=limits.max_wait_seconds), file=sys.stderr)
         return False
     _usage_paused(runtime_root, run, target, hold)
     print(usage_hold_message(hold), file=sys.stderr)
     return False
+
+
+#: The start of both stop lines of a usage limit reached mid-job (usage-limit-
+#: mid-job D7a); never "nothing was started", because a worker ran.
+USAGE_LIMIT_STOP_PREFIX = ("workflow-controller: stopped at the usage limit reached mid-job: the worker ran and "
+                           "changed nothing, so the step can be repeated")
+
+#: Consecutive limit-interrupted jobs of one ``run`` that stop it (D7).
+USAGE_LIMIT_MAX_ATTEMPTS = 3
+
+
+def _mid_job_hold(record: dict, fact: dict) -> job.UsageHold:
+    """The D6 hold for a job that reached the usage limit having changed
+    nothing: waitable until the fact's reset, whatever ``usage.enabled`` says."""
+    window = fact.get("window") or "unknown"
+    return job.UsageHold(
+        provider=usage.PROVIDER_CLAUDE, window=window, percent=100.0, forecast=0.0, resume_at=fact["resets_at"],
+        reason=f"job {record.get('job_id')} reached the {window} usage limit mid-job", waitable=True,
+        mid_job=True,
+    )
+
+
+def _interrupted_job_line(record: dict) -> str:
+    """The one stderr line of an ``INTERRUPTED`` job that ``step`` or ``run``
+    stops on (D8): with the usage-limit fact it names the reset, without it
+    the job; both say a new ``step`` repeats it."""
+    fact = record.get("usage_limit")
+    if job.usage_limit_valid(fact):
+        return (f"{USAGE_LIMIT_STOP_PREFIX} -- the reset is at {_local_time(fact['resets_at'])}; "
+                "a new `step` or `run` repeats it")
+    return (f"workflow-controller: job {record.get('job_id')} was interrupted and changed nothing; "
+            "a new `step` repeats it")
 
 
 # ---------------------------------------------------------------------------
@@ -1803,6 +1852,12 @@ def _run_one_step(
     # maps to `EXIT_OK` here too -- the distinction between "finished, keep
     # going" (`run`) and "finished, stop" (`step`) is the caller's own loop
     # structure, never a different exit code for the same status.
+    if result["status"] == job.STATUS_INTERRUPTED:
+        # Usage-limit-mid-job D8: with the structured fact the usage-pause
+        # code, without it (a timed-out or signalled worker `reconcile` calls
+        # `no_progress`) the code `resume` uses for the same status.
+        return (EXIT_USAGE_PAUSED if job.usage_limit_valid(result.get("usage_limit")) else EXIT_INTERRUPTED), result
+
     status_exit_codes = {
         job.STATUS_GATE_BLOCKED: EXIT_GATE,
         job.STATUS_DECLINED: EXIT_DECLINED,
@@ -1829,6 +1884,8 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
             # `step` never waits (D7): the event and the exit-17 line.
             _usage_paused(runtime_root, run, target, result)
             print(usage_hold_message(result), file=sys.stderr)
+        elif isinstance(result, dict) and result["status"] == job.STATUS_INTERRUPTED:
+            print(_interrupted_job_line(result), file=sys.stderr)
     finally:
         # Every finished child the launch recorded is collected before the
         # command returns (the between-launch reaper keeps collecting the
@@ -1922,6 +1979,7 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
     max_steps = _effective(args)["run.max_steps"]
     steps_run = 0
     usage_pause = _UsagePause()
+    limited_attempts = 0
     while steps_run < max_steps:
         # The orchestration boundary: checked once before every job this
         # loop starts, including the first -- never mid-job. Both halves
@@ -1942,11 +2000,31 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
             if _usage_wait(args, runtime_root, run, target, result, usage_pause):
                 continue
             return exit_code
+        if isinstance(result, dict) and result["status"] == job.STATUS_INTERRUPTED:
+            fact = result.get("usage_limit")
+            if job.usage_limit_valid(fact):
+                # Usage-limit-mid-job D6/D7: the worker ran and changed
+                # nothing. Wait for the reset through the same pause and
+                # repeat the step, which consumes no step; the third limited
+                # attempt in a row stops the run.
+                worker.reap_adopted_children()
+                hold = _mid_job_hold(result, fact)
+                limited_attempts += 1
+                if limited_attempts >= USAGE_LIMIT_MAX_ATTEMPTS:
+                    _usage_paused(runtime_root, run, target, hold)
+                    print(f"{USAGE_LIMIT_STOP_PREFIX} -- the last {USAGE_LIMIT_MAX_ATTEMPTS} attempts all reached "
+                          "the limit, so the reset time the provider reports is not trusted; check the clock and "
+                          "the usage reading, then run again", file=sys.stderr)
+                    return EXIT_USAGE_PAUSED
+                if _usage_wait(args, runtime_root, run, target, hold, usage_pause):
+                    continue
+                return EXIT_USAGE_PAUSED
         steps_run += 1
         usage_pause.waited = 0.0
         worker.reap_adopted_children()
 
         if isinstance(result, dict) and result["status"] == job.STATUS_FINISHED:
+            limited_attempts = 0
             # This checkpoint/action is done -- loop back to the
             # orchestration boundary and decide the next one.
             continue
@@ -1959,6 +2037,8 @@ def _run_steps(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         # not itself write, e.g. left over from a prior invocation, since
         # `_run_one_step`'s own handoff check already caught the ordinary
         # case first).
+        if isinstance(result, dict) and result["status"] == job.STATUS_INTERRUPTED:
+            print(_interrupted_job_line(result), file=sys.stderr)
         return exit_code
 
     return EXIT_MAX_STEPS
@@ -2063,6 +2143,14 @@ def cmd_resume(args: argparse.Namespace, runtime_root: Path, ident: identity.Con
         record.get("status") == job.STATUS_INTERRUPTED and record.get("reconciled_this_call")
         for record in records
     )
+    # Usage-limit-mid-job D8: a record reconciled to `INTERRUPTED` with the
+    # limit's fact names the reset; the exit stays 40.
+    for record in records:
+        if (record.get("status") == job.STATUS_INTERRUPTED and record.get("reconciled_this_call")
+                and job.usage_limit_valid(record.get("usage_limit"))):
+            print(f"workflow-controller: job {record.get('job_id')} reached the usage limit and changed nothing; "
+                  f"the reset is at {_local_time(record['usage_limit']['resets_at'])}; a new `step` or `run` "
+                  "repeats it", file=sys.stderr)
     # CP5: a record left `LAUNCHED` because its recorded worker is `active`
     # or `unverifiable` -- nothing about it was reconciled, and a worker may
     # still hold the worktree -- takes precedence over exit 40.

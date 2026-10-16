@@ -1113,3 +1113,151 @@ class SessionTelemetryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UsageLimitFactTest(unittest.TestCase):
+    """The ``usage_limit`` fact (``workflow-controller-usage-limit-mid-job``
+    CP1): read from the structured fields only, above ``exit_status``."""
+
+    GOLDEN = Path(__file__).resolve().parent / "golden" / "claude_stream_usage_limit_rejected.jsonl"
+
+    def events(self):
+        return [json.loads(line) for line in self.GOLDEN.read_text().splitlines() if line.strip()]
+
+    def classify(self, events, returncode=1, **kwargs):
+        data = "".join(json.dumps(e) + "\n" for e in events)
+        return ws.classify(data, mode=ws.PRINT, returncode=returncode, **kwargs)
+
+    def rejected(self, events):
+        return next(e for e in events if e.get("rate_limit_info", {}).get("status") == "rejected")
+
+    def test_golden_gives_the_fact_at_exit_zero_and_one(self):
+        for returncode in (0, 1):
+            outcome, _, diagnosis = self.classify(self.events(), returncode)
+            self.assertEqual(outcome, ws.FAILURE)
+            self.assertEqual(diagnosis["reason"], ws.REASON_USAGE_LIMIT)
+            self.assertEqual(diagnosis["usage_limit"],
+                             {"resets_at": 1790287800, "rate_limit_type": "five_hour", "window": "five_hour"})
+        self.assertIn(ws.REASON_EXIT_STATUS, self.classify(self.events(), 1)[2]["secondary_reasons"])
+
+    def test_seven_day_maps_to_weekly(self):
+        events = self.events()
+        info = self.rejected(events)["rate_limit_info"]
+        info["rateLimitType"] = "seven_day"
+        self.assertEqual(self.classify(events)[2]["usage_limit"],
+                         {"resets_at": 1790823600, "rate_limit_type": "seven_day", "window": "weekly"})
+
+    def test_unmapped_type_has_no_window_and_reads_its_own_reset(self):
+        events = self.events()
+        info = self.rejected(events)["rate_limit_info"]
+        info["rateLimitType"] = "opus_only"
+        self.assertEqual(self.classify(events)[2]["usage_limit"],
+                         {"resets_at": 1790287800, "rate_limit_type": "opus_only", "window": None})
+
+    def test_unmapped_type_ignores_a_same_named_window_slot(self):
+        for slot in ({"resetsAt": "not-a-time"}, {"resetsAt": 123}, {"resetsAt": None}):
+            with self.subTest(slot=slot):
+                events = self.events()
+                info = self.rejected(events)["rate_limit_info"]
+                info["rateLimitType"] = "opus_only"
+                info.setdefault("unifiedWindows", {})["opus_only"] = slot
+                self.assertEqual(self.classify(events)[2]["usage_limit"],
+                                 {"resets_at": 1790287800, "rate_limit_type": "opus_only", "window": None})
+
+    def test_window_reset_wins_over_the_events_own(self):
+        events = self.events()
+        events[events.index(self.rejected(events))]["rate_limit_info"]["resetsAt"] = 1
+        self.assertEqual(self.classify(events)[2]["usage_limit"]["resets_at"], 1790287800)
+
+    def test_negative_cases_have_no_fact(self):
+        def result(e):
+            return e.get("type") == "result"
+
+        def drop(pred):
+            return [e for e in self.events() if not pred(e)]
+
+        def edit(fn):
+            events = self.events()
+            fn(events)
+            return events
+
+        def set_reset(value):
+            def fn(events):
+                info = self.rejected(events)["rate_limit_info"]
+                info["unifiedWindows"]["five_hour"]["resetsAt"] = value
+                info["resetsAt"] = value
+            return fn
+
+        def drop_reset(events):
+            info = self.rejected(events)["rate_limit_info"]
+            del info["unifiedWindows"], info["resetsAt"]
+
+        def success(events):
+            r = next(e for e in events if result(e))
+            r.update(is_error=False, api_error_status=None)
+
+        def only_text(events):
+            events[:] = [e for e in events if e.get("type") != "rate_limit_event"]
+
+        cases = {
+            "429 without a rejected event": drop(lambda e: e.get("rate_limit_info", {}).get("status") == "rejected"),
+            "allowed_warning only": edit(lambda events: self.rejected(events)["rate_limit_info"].update(status="allowed_warning")),
+            "rejected event with a successful result": edit(success),
+            "no resetsAt anywhere": edit(drop_reset),
+            "non-finite resetsAt": edit(set_reset(float("inf"))),
+            "boolean resetsAt": edit(set_reset(True)),
+            "localised text alone": edit(only_text),
+            "429 on a non-error result": edit(lambda events: next(e for e in events if result(e)).update(is_error=False)),
+            "other status": edit(lambda events: next(e for e in events if result(e)).update(api_error_status=500)),
+        }
+        for name, events in cases.items():
+            with self.subTest(name):
+                _, _, diagnosis = self.classify(events, 1)
+                self.assertIsNone(diagnosis["usage_limit"])
+                self.assertNotEqual(diagnosis["reason"], ws.REASON_USAGE_LIMIT)
+
+    def test_a_non_string_type_is_not_a_window_and_the_fact_survives(self):
+        for bad in ([], {}, 7):
+            with self.subTest(bad=bad):
+                events = self.events()
+                self.rejected(events)["rate_limit_info"]["rateLimitType"] = bad
+                _, _, diagnosis = self.classify(events)
+                self.assertEqual(diagnosis["usage_limit"],
+                                 {"resets_at": 1790287800, "rate_limit_type": None, "window": None})
+
+    def test_an_astronomically_large_reset_gives_no_fact(self):
+        events = self.events()
+        info = self.rejected(events)["rate_limit_info"]
+        info["unifiedWindows"]["five_hour"]["resetsAt"] = 10 ** 400
+        info["resetsAt"] = 10 ** 400
+        _, _, diagnosis = self.classify(events)
+        self.assertIsNone(diagnosis["usage_limit"])
+
+    def test_non_json_infinity_literal_gives_no_fact(self):
+        data = self.GOLDEN.read_text().replace("1790287800", "Infinity")
+        _, _, diagnosis = ws.classify(data, mode=ws.PRINT, returncode=1)
+        self.assertIsNone(diagnosis["usage_limit"])
+
+    def test_timeout_and_signal_keep_precedence(self):
+        outcome, _, diagnosis = self.classify(self.events(), 1, facts=ws.SupervisorFacts(timed_out=True))
+        self.assertEqual((outcome, diagnosis["reason"]), (ws.INTERRUPTED, ws.REASON_TIMEOUT))
+        self.assertIsNotNone(diagnosis["usage_limit"])
+        outcome, _, diagnosis = self.classify(self.events(), -9)
+        self.assertEqual((outcome, diagnosis["reason"]), (ws.INTERRUPTED, ws.REASON_SIGNAL))
+
+    def test_earlier_rejection_followed_by_a_normal_turn_gives_no_fact(self):
+        events = self.events()
+        index = next(i for i, e in enumerate(events) if e.get("type") == "result")
+        ok_result = {"type": "result", "is_error": False, "session_id": "s", "subtype": "success"}
+        stream = events[:index] + [ok_result]
+        _, _, diagnosis = self.classify(stream, 0)
+        self.assertIsNone(diagnosis["usage_limit"])
+
+    def test_rejection_before_an_earlier_result_does_not_count_for_the_final_error(self):
+        events = self.events()
+        index = next(i for i, e in enumerate(events) if e.get("type") == "result")
+        error_result = events[index]
+        ok_result = {"type": "result", "is_error": False, "session_id": "s", "subtype": "success"}
+        stream = events[:index] + [ok_result, error_result]
+        _, _, diagnosis = self.classify(stream, 1)
+        self.assertIsNone(diagnosis["usage_limit"])

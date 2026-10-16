@@ -334,10 +334,10 @@ child, or a re-exec.
 **What a `passed` record proves.** That a scripted path ran on that commit
 and produced those observations. It does not prove a real worker behaves:
 the fakes follow the contract suite in `tests/test_fake_claude_contract.py`,
-and the live-worker test stays opt-in. Two paths are not covered: a usage
-limit reached *mid-job* (the usage scenario covers the admission pause
-only; the mid-job case is step C8b), and anything a real forge or SignalHub
-does that the fakes do not. Records carry no signature; the gate policy
+and the live-worker test stays opt-in. One path is not covered: anything a real
+forge or SignalHub does that the fakes do not. (A usage limit reached
+*mid-job* is covered by the `usage-limit-mid-job-waits-and-repeats`
+scenario, with the sanitised real stream replayed by a fake worker.) Records carry no signature; the gate policy
 (step C10) decides what to require and whether the reporter and commit are
 trusted.
 

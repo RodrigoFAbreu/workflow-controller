@@ -21,8 +21,10 @@ reported, never retried.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import os
 import re
+import stat
 import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
@@ -224,21 +226,125 @@ def first_parent_subjects(repo_root: Path, base: str | None, commit: str, *,
     return pairs
 
 
-def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
-    """``git status --porcelain --untracked-files=no`` entries, one per
-    changed tracked path; empty for a clean tracked tree."""
+def _status_records(repo_root: Path, runner: Runner | None) -> list[tuple[str, str | None]]:
+    """``git status --porcelain --untracked-files=no -z`` as ``(entry,
+    source)`` per changed tracked path; ``source`` is the rename/copy source
+    path Git reports as its own field, else ``None``."""
     out = _git(repo_root, ["status", "--porcelain", "--untracked-files=no", "-z"], runner)
-    entries, fields = [], out.split("\0")
+    records, fields = [], out.split("\0")
     i = 0
     while i < len(fields):
         entry = fields[i]
         i += 1
         if not entry:
             continue
-        entries.append(entry)
+        source = None
         if entry[:1] in ("R", "C") or entry[1:2] in ("R", "C"):
+            source = fields[i] if i < len(fields) else ""
             i += 1  # a rename/copy's source path follows as its own field
-    return entries
+        records.append((entry, source))
+    return records
+
+
+def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
+    """``git status --porcelain --untracked-files=no`` entries, one per
+    changed tracked path; empty for a clean tracked tree."""
+    return [entry for entry, _source in _status_records(repo_root, runner)]
+
+
+#: What :func:`tracked_change_digests` records for the worktree fields of a
+#: path deleted from the worktree.
+DELETED_MARKER = "deleted"
+
+
+def _staged_identities(repo_root: Path, paths: Sequence[str],
+                       runner: Runner | None) -> dict[str, list[tuple[str, str, str]]]:
+    """``git ls-files --stage -z`` for ``paths``: path -> ``(mode, blob,
+    stage)`` per index entry. Each path is a ``:(literal)`` pathspec, so a
+    name such as ``:notes.txt`` is not read as pathspec syntax. Read-only: no hook, filter or textconv
+    runs and nothing under ``.git`` is written."""
+    if not paths:
+        return {}
+    out = _git(repo_root, ["ls-files", "--stage", "-z", "--",
+                           *(f":(literal){path}" for path in paths)], runner)
+    found: dict[str, list[tuple[str, str, str]]] = {}
+    for item in out.split("\0"):
+        head, sep, path = item.partition("\t")
+        fields = head.split()
+        if not sep or len(fields) != 3:
+            continue
+        found.setdefault(path, []).append((fields[0], fields[1], fields[2]))
+    return found
+
+
+_UNMERGED_STATUSES = frozenset({"DD", "AU", "UD", "UA", "DU", "AA", "UU"})
+
+
+def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> dict[str, dict]:
+    """A content-sensitive snapshot of every changed tracked path
+    (:func:`tracked_changes`), keyed by path: the status entry, the sha256 of
+    the worktree bytes, the worktree executable bit (``S_IXUSR``, the one
+    mode bit Git tracks for a regular file) and the staged identity (index
+    mode and blob id). A deleted path carries :data:`DELETED_MARKER` for the
+    worktree fields. A path the snapshot cannot distinguish -- a symlink, a
+    directory or submodule, a path whose ``lstat`` fails, one whose name
+    did not decode losslessly (the name, or a rename/copy source), one with an
+    unmerged index stage or several entries, or one whose status says it has
+    an index entry that the lookup did not return -- is ``{"entry": ...,
+    "comparable": False}``, so a caller fails closed for it. The worktree
+    files are read here directly (no ``git hash-object``)."""
+    records = _status_records(repo_root, runner)
+    entries = {entry[3:]: entry for entry, _source in records}
+    sources = {entry[3:]: source for entry, source in records if source is not None}
+    staged = _staged_identities(repo_root, list(entries), runner)
+    snapshot: dict[str, dict] = {}
+    for path, entry in entries.items():
+        not_comparable = {"entry": entry, "comparable": False}
+        stages = staged.get(path, [])
+        source = sources.get(path)
+        if source is not None:
+            # The rename/copy source is part of the change's identity: Git
+            # reports it, the index changes with it, and the destination
+            # alone cannot tell two different sources apart.
+            not_comparable["source"] = source
+        if "\ufffd" in path or (source is not None and "\ufffd" in source):
+            # Decoding replaced bytes of the name, so the lookups below could
+            # describe a different file than the one Git reported.
+            snapshot[path] = not_comparable
+            continue
+        # An index entry the lookup did not return (a pathspec the
+        # environment, e.g. GIT_LITERAL_PATHSPECS, changed the meaning of) is
+        # a miss, not "no entry": only a path deleted from the index has none.
+        # ``DD`` and ``DU`` start with ``D`` but are unmerged: they do have
+        # index entries (stages 1 and 3), so a miss for them is a miss too.
+        missed = not stages and (entry[:1] != "D" or entry[:2] in _UNMERGED_STATUSES)
+        if missed or len(stages) > 1 or any(stage != "0" for _mode, _blob, stage in stages):
+            snapshot[path] = not_comparable
+            continue
+        record: dict = {"entry": entry, "comparable": True,
+                        "staged": f"{stages[0][0]} {stages[0][1]}" if stages else None}
+        if source is not None:
+            record["source"] = source
+        target = Path(repo_root) / path
+        try:
+            info = os.lstat(target)
+        except FileNotFoundError:
+            record.update(digest=DELETED_MARKER, executable=DELETED_MARKER)
+        except OSError:
+            snapshot[path] = not_comparable
+            continue
+        else:
+            if not stat.S_ISREG(info.st_mode):
+                snapshot[path] = not_comparable
+                continue
+            try:
+                digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            except OSError:
+                snapshot[path] = not_comparable
+                continue
+            record.update(digest=digest, executable=bool(info.st_mode & stat.S_IXUSR))
+        snapshot[path] = record
+    return snapshot
 
 
 def commit_parents(repo_root: Path, commit: str, *, runner: Runner | None = None) -> list[str]:

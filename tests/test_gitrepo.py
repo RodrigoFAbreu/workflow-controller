@@ -5,6 +5,7 @@ real disposable repositories -- a bare origin and a clone
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -155,6 +156,147 @@ class ReadTest(_Case):
         self.assertEqual(gitrepo.first_parent_subjects(self.clone, merge, merge), [])
         with self.assertRaises(GitOperationError):
             gitrepo.first_parent_subjects(self.clone, None, "no-such-rev")
+
+
+class TrackedChangeDigestsTest(_Case):
+    """``tracked_change_digests`` (``workflow-controller-usage-limit-mid-job``
+    CP2): a content-sensitive snapshot of the changed tracked paths."""
+
+    def snapshot(self):
+        return gitrepo.tracked_change_digests(self.clone)
+
+    def test_a_clean_tree_is_empty_and_untracked_files_are_ignored(self) -> None:
+        (self.clone / "untracked.txt").write_text("x\n")
+        self.assertEqual(self.snapshot(), {})
+
+    def test_each_kind_of_change_alters_the_snapshot(self) -> None:
+        self.commit("a.txt", "one\n")
+        (self.clone / "a.txt").write_text("two\n")
+        first = self.snapshot()
+        self.assertEqual(first["a.txt"]["entry"], " M a.txt")
+        (self.clone / "a.txt").write_text("three\n")
+        second = self.snapshot()
+        self.assertNotEqual(first, second)
+        (self.clone / "a.txt").chmod(0o755)
+        third = self.snapshot()
+        self.assertNotEqual(second["a.txt"]["executable"], third["a.txt"]["executable"])
+        run(["git", "add", "a.txt"], cwd=self.clone)
+        fourth = self.snapshot()
+        self.assertNotEqual(third["a.txt"]["staged"], fourth["a.txt"]["staged"])
+        (self.clone / "a.txt").unlink()
+        self.assertEqual(self.snapshot()["a.txt"]["digest"], gitrepo.DELETED_MARKER)
+
+    def test_an_intent_to_add_file_differs_once_it_is_really_staged(self) -> None:
+        (self.clone / "new.txt").write_text("a\n")
+        run(["git", "add", "-N", "new.txt"], cwd=self.clone)
+        intent = self.snapshot()["new.txt"]
+        run(["git", "add", "new.txt"], cwd=self.clone)
+        self.assertNotEqual(intent["staged"], self.snapshot()["new.txt"]["staged"])
+
+    def test_a_name_that_does_not_decode_losslessly_is_not_comparable(self) -> None:
+        raw = os.fsencode(self.clone) + b"/raw-\xff.txt"
+        clean = self.clone / "raw-\ufffd.txt"
+        self.commit("raw-\ufffd.txt", "clean\n")
+        with open(raw, "wb") as handle:
+            handle.write(b"one\n")
+        run(["git", "add", "-A"], cwd=self.clone)
+        run(["git", "commit", "-m", "raw"], cwd=self.clone)
+        with open(raw, "wb") as handle:
+            handle.write(b"two\n")
+        run(["git", "add", "-A"], cwd=self.clone)
+        with open(raw, "wb") as handle:
+            handle.write(b"three\n")
+        snapshot = self.snapshot()
+        self.assertTrue(clean.exists())
+        self.assertEqual([r["comparable"] for r in snapshot.values()], [False])
+
+    def test_a_rename_source_is_part_of_the_snapshot(self) -> None:
+        self.commit("source-a.txt", "same\n")
+        self.commit("source-b.txt", "same\n")
+        run(["git", "mv", "source-a.txt", "destination.txt"], cwd=self.clone)
+        first = self.snapshot()
+        self.assertEqual(first["destination.txt"]["source"], "source-a.txt")
+        run(["git", "reset", "-q", "HEAD", "--", "source-a.txt", "destination.txt"], cwd=self.clone)
+        run(["git", "checkout", "--", "source-a.txt"], cwd=self.clone)
+        run(["git", "rm", "-q", "source-b.txt"], cwd=self.clone)
+        run(["git", "add", "destination.txt"], cwd=self.clone)
+        second = self.snapshot()
+        self.assertEqual(second["destination.txt"]["source"], "source-b.txt")
+        self.assertNotEqual(first, second)
+
+    def test_a_rename_source_that_does_not_decode_losslessly_is_not_comparable(self) -> None:
+        root = os.fsencode(self.clone)
+        with open(root + b"/raw-\xff.txt", "wb") as handle:
+            handle.write(b"same\n")
+        run(["git", "add", "-A"], cwd=self.clone)
+        run(["git", "commit", "-m", "raw"], cwd=self.clone)
+        run(["git", "mv", "--", os.fsdecode(b"raw-\xff.txt"), "destination.txt"], cwd=self.clone)
+        record = self.snapshot()["destination.txt"]
+        self.assertFalse(record["comparable"])
+        self.assertIn("source", record)
+
+    def test_a_colon_prefixed_name_is_a_literal_path_with_its_staged_identity(self) -> None:
+        self.commit(":notes.txt", "one\n")
+        (self.clone / ":notes.txt").write_text("two\n")
+        run(["git", "add", "--", ":(literal):notes.txt"], cwd=self.clone)
+        (self.clone / ":notes.txt").write_text("three\n")
+        before = self.snapshot()[":notes.txt"]
+        self.assertEqual(before["entry"], "MM :notes.txt")
+        self.assertIsNotNone(before["staged"])
+        (self.clone / ":notes.txt").write_text("four\n")
+        run(["git", "add", "--", ":(literal):notes.txt"], cwd=self.clone)
+        (self.clone / ":notes.txt").write_text("three\n")
+        after = self.snapshot()[":notes.txt"]
+        self.assertEqual(after["digest"], before["digest"])
+        self.assertNotEqual(after["staged"], before["staged"])
+
+    def test_literal_pathspecs_in_the_environment_make_a_staged_path_not_comparable(self) -> None:
+        # GIT_LITERAL_PATHSPECS=1 turns ":(literal)" into a plain file name,
+        # so the index lookup misses; the path must then fail closed.
+        runner = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+        for name in ("n.txt", ":notes.txt"):
+            self.commit(name, "one\n")
+            (self.clone / name).write_text("two\n")
+            run(["git", "add", "--", f":(literal){name}"], cwd=self.clone)
+            (self.clone / name).write_text("three\n")
+            record = gitrepo.tracked_change_digests(self.clone, runner=runner)[name]
+            self.assertEqual(record["entry"], f"MM {name}")
+            self.assertFalse(record["comparable"], name)
+
+    def test_a_missed_index_lookup_is_not_comparable_but_a_deleted_entry_is(self) -> None:
+        def stub(index_entry):
+            def runner(argv):
+                if "status" in argv:
+                    out = f"{index_entry}a.txt\0"
+                else:
+                    out = ""
+                return subprocess.CompletedProcess(argv, 0, out.encode(), b"")
+            return runner
+
+        missed = gitrepo.tracked_change_digests(self.clone, runner=stub("M  "))
+        self.assertEqual(missed, {"a.txt": {"entry": "M  a.txt", "comparable": False}})
+        removed = gitrepo.tracked_change_digests(self.clone, runner=stub("D  "))
+        self.assertTrue(removed["a.txt"]["comparable"])
+        self.assertIsNone(removed["a.txt"]["staged"])
+        # DD and DU start with "D" but are unmerged: their index entries exist.
+        for unmerged in ("DD ", "DU ", "UD ", "AU ", "UA ", "AA ", "UU "):
+            record = gitrepo.tracked_change_digests(self.clone, runner=stub(unmerged))["a.txt"]
+            self.assertFalse(record["comparable"], unmerged)
+
+    def test_a_symlink_is_not_comparable(self) -> None:
+        self.commit("link.txt", "one\n")
+        (self.clone / "link.txt").unlink()
+        (self.clone / "link.txt").symlink_to("elsewhere")
+        self.assertFalse(self.snapshot()["link.txt"]["comparable"])
+
+    def test_an_unmerged_path_is_not_comparable(self) -> None:
+        self.commit("m.txt", "base\n")
+        run(["git", "checkout", "-q", "-b", "side"], cwd=self.clone)
+        self.commit("m.txt", "side\n")
+        run(["git", "checkout", "-q", "-"], cwd=self.clone)
+        self.commit("m.txt", "main\n")
+        run(["git", "merge", "side"], cwd=self.clone, check=False)
+        self.assertFalse(self.snapshot()["m.txt"]["comparable"])
 
 
 class FetchTest(_Case):

@@ -76,6 +76,12 @@ job's ``controller_settings`` ``values`` and ``sources`` and whose one added
 sentence to ``WORKER_LIFECYCLE_NOTE`` (follow-up 24) appears in each worker
 argv. Nothing else moved (``tests/test_trunk_preflight.py`` pins that).
 
+And once by ``workflow-controller-usage-limit-mid-job`` CP1 and CP2: each
+launched job's ``worker.stream_diagnosis`` gains ``usage_limit`` (``null``: the
+fake's stream has no rejected rate-limit event) and each ``pre_state`` gains
+``tracked_changes``, the tracked-change baseline of the launch. Nothing else
+moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

@@ -2,43 +2,44 @@
 
 ## Status
 
-**Complete.** `workflow-controller-codex-reviewer` (`docs/ROADMAP.md` step C7, the smallest slice of section 5)
-reached `MILESTONE_COMPLETE` on 2026-10-15. The Controller can now run the cross-model external review itself. With
-`reviewer.harness` set to `codex`, a run that reaches a manual external review gate starts a review job: a Codex
-reviewer works in a disposable copy behind an enforced launch boundary, passes the usage gate, and its verdict is
-ingested through the Workflow. With `reviewer.harness` unset, the gate stops as before. ADR
-`docs/adr/0013-review-only-harness-seam.md` records the design and the Workflow side's answer on workflow#28 (*yes,
-with five conditions*). The `codex` harness is registered since the operator recorded the D12 pre-step on
-2026-10-15. It merged as pull request #45 (squash `6aa8f66`), which releases the minor release **1.10.0**
-(release notes `docs/releases/1.10.0.md`).
+**Complete.** `workflow-controller-usage-limit-mid-job` (`docs/ROADMAP.md` step C8b, section 11.6.1) reached
+`MILESTONE_COMPLETE` on 2026-10-16. A usage limit reached in the middle of a job is now recognised in the worker
+stream (a rejected `rate_limit_event`, a 429 error `result` and a finite `resetsAt`). A limited job that verifiably
+changed nothing ends `INTERRUPTED` with `UsageLimitReached`; `run` waits for the reset without holding the lock and
+repeats the step, up to three limited attempts in a row; `step` exits 17 and names the reset. A limited job that
+changed state stays `FAILED` (exit 30) with the limit in its evidence. The first job after a five-hour reset is now
+measured (the C8 review follow-up). It is released as the minor release **1.11.0** when its `feat:` pull request
+(#52) merges.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`). Functional review round 1 (an
-independent Codex tester on `openai/gpt-6.1-sol`, plus one real Codex review by the operator) passed flows 1-9 and
-found two Optional documentation issues in flow 10, fixed by a bounded fix and re-tested in round 2. Round 3 (CI on
-pull request #45) found one Important defect: 53 new tests assumed the git-ignored `build/` directory existed. The
-bounded fix `2a427e1` creates it. Round 4 (implementation revision 9), checked against evidence commit `265e48b`,
-passed every flow (flow-1 to flow-10).
-- Plan revision 15 was approved by policy at `3d304d3`. The base commit is `dea2125`.
-- Technical approval `8f447fc` was recorded by policy and is `CURRENT`: review content id `fa4ee49c`,
-  reviewed implementation head `771496e`.
-- The Workflow's own GitHub query found pull request #45 at head `265e48b` with every check passing and no
+acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).
+- Plan revision 5 was approved by policy at `f401c6f`. The base commit is `988e8c3`.
+- Technical approval `8d560cf` (implementation revision 8) was recorded by policy and is `CURRENT`: review content
+  id `6db1d78b`, reviewed implementation head `16daa27`.
+- Functional review round 1 (an independent Codex tester on `openai/gpt-6.1-sol`) passed eight flows. Flow 7 failed
+  only on the checklist's wording: it listed an unmapped limit type as "not a limit", which the plan counts as one.
+  That and a second Optional documentation finding (the exit-40 timeout example) were fixed by the bounded fix
+  `16daa27`. Round 2 passed every flow (flow-1 to flow-9 and flow-7b), checked against evidence commit `4e2a13b`.
+- The Workflow's own GitHub query found pull request #52 at head `4e2a13b` with every check passing and no
   standing objection.
 
-All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
-ground-truth record of this transition, including its ten `functional_evidence` records and its
-`acceptance_satisfaction` evidence, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C7
-complete. The full milestone narrative is archived verbatim at
-`docs/milestones/completed/workflow-controller-codex-reviewer.md`.
+All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
+of this transition, including its ten functional evidence records and its `acceptance_satisfaction` evidence, and
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C8b complete. The full milestone narrative is
+archived verbatim at `docs/milestones/completed/workflow-controller-usage-limit-mid-job.md`; the functional reports
+are `.ai-review/archive/workflow-controller-usage-limit-mid-job/functional-review-round1.md` and
+`functional-review-round2-PASSED.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **workflow#28 stays open** until its protocol paragraph ships in W8 (Workflow 2.12.0).
-- **Known limitations kept out of scope:** only Codex is registered (other harnesses are refused); a reviewer
-  may spawn a sub-agent, which the job record names with its tokens; the two Git 2.56 trailer tests
-  (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
+- **`explain` omits an ordinary usage limit** (O1 from the Codex implementation reviews; `docs/ROADMAP.md`
+  follow-up 30): `controller/observe.py` filters out a stream diagnosis whose only reason is `usage_limit`, so
+  `explain` does not show the limit for an ordinary limited failure.
+- **Known limitations kept out of scope:** a limited job that changed state is not repeated (exit 30); only a
+  rejected event with a 429 result and a finite reset is recognised, never text alone; the two Git 2.56 trailer
+  tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
   `plan_stage_decisions` golden differs on the base commit as well.
 
 ## Next action
 
-`/milestone-plan` for C8b (a usage limit reached mid-job, `docs/ROADMAP.md` section 11.6.1), the next step in
-`docs/ROADMAP.md`'s order (C8b, then C13 once Workflow 2.12.0 is out, C14, C10, C12, C11, then O1-O7).
+`/milestone-plan` for C13 (review convergence, `docs/ROADMAP.md` section 11.13) once this repository runs Workflow
+2.12.0 (W8), the next step in `docs/ROADMAP.md`'s "Next, in order" (C13, then C14, C10, C12, C11, then O1-O7).

@@ -7,3 +7,9 @@ synthetic `assistant` message with `error: "rate_limit"` and the `result` with `
 `api_error_status: 429`. Session and event ids are replaced, the transcript and usage figures are dropped,
 and the epoch `resetsAt` values are the real ones. `controller.usage.read_claude_stream` reads it as 100%
 for the five-hour window (from the structured `status`, never the text) and 14% for the weekly window.
+
+The second real sample (a sixteen-minute implementation job, 2026-09-24) has the same shape and differs only in
+its rate-limit events: ten `allowed_warning` events precede the single `rejected` one, where this file has one.
+`controller.worker_stream` reads the usage-limit fact (`usage_limit` in the stream diagnosis) from the final
+`result` (`is_error: true`, `api_error_status: 429`) and the `rejected` event's `resetsAt`; the message text is
+never matched.

@@ -21,6 +21,7 @@ MUTATIONS: dict[str, tuple[str, ...]] = {
     "scenario-full-lifecycle-to-merge": ("skip-trailer", "remote-outside"),
     "scenario-human-gates-stop-and-resume": ("gate-launches-worker",),
     "scenario-worker-failure-fails-closed": ("advancing-worker",),
+    "scenario-usage-limit-mid-job-waits-and-repeats": ("plain-failure",),
     "scenario-trunk-drift": ("no-drift",),
     # `resume` reconciles a non-terminal job; where it legitimately does nothing the continuation `run` carries the claim.
     "scenario-kill-and-resume-binding-before": ("run-true",),

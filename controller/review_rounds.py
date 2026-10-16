@@ -82,7 +82,8 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _record_key(record: Mapping) -> tuple:
+def record_key(record: Mapping) -> tuple:
+    """The oldest-first order D1 reads job records in."""
     block = record.get("protocol")
     decided = block.get("decided_ns") if isinstance(block, Mapping) else None
     return (str(record.get("created_at")), decided if _is_int(decided) else 0, str(record.get("job_id")))
@@ -98,7 +99,7 @@ def _observations(snapshot: Mapping | None, records: Iterable[Any], target_repo:
             continue
         pre_state = record.get("pre_state")
         if isinstance(pre_state, Mapping):
-            mine.append((_record_key(record), pre_state))
+            mine.append((record_key(record), pre_state))
     mine.sort(key=lambda pair: pair[0])
     observed = [pre_state for _key, pre_state in mine]
     if isinstance(snapshot, Mapping):

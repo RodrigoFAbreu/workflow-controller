@@ -46,11 +46,11 @@ import workflow_state  # noqa: E402
 #: The Workflow release these bytes are. A build refuses when it differs
 #: from the manifest's `workflow_version` (CP7); it never reads the
 #: installation record.
-WORKFLOW_RELEASE = "2.11.0"
+WORKFLOW_RELEASE = "2.12.0"
 
 PROTOCOL_NAME = "workflow-orchestration"
 PROTOCOL_MAJOR = 1
-PROTOCOL_VERSION = "1.3"
+PROTOCOL_VERSION = "1.4"
 SUPPORTED_PROTOCOL_MAJORS = (PROTOCOL_MAJOR,)
 
 #: The single source of the governing versions the protocol supports
@@ -2225,6 +2225,66 @@ def render_action(action_id: str, work_item_id: str | None, *, arguments: dict |
     }
 
 
+def _plan_review_round(work_item: dict):
+    """`review_round.plan` (D-Round): `C + B` when the consumed-content
+    history is complete, shown by shape, and `C + B >= 1`; else `None`
+    ("not derivable", never an estimate). Reads only persisted fields."""
+    record = work_item.get("plan_review_binding")
+    if not isinstance(record, dict):
+        record = None
+    consumed = record.get("consumed") if record is not None else None
+    key = workflow_state.CONSUMED_PLAN_REVIEW_CONTENT_IDS_KEY
+    listed = work_item.get(key)
+    history = set(listed) if isinstance(listed, list) else set()
+    slot_id = consumed.get("review_content_id") if isinstance(consumed, dict) else None
+    if isinstance(slot_id, str):
+        history.add(slot_id)
+    if consumed is None and not history:
+        complete = True
+    elif isinstance(consumed, dict) and isinstance(listed, list) and isinstance(slot_id, str):
+        revision = consumed.get("plan_revision")
+        complete = (
+            slot_id in listed and isinstance(revision, int)
+            and not isinstance(revision, bool) and len(history) >= revision
+        )
+    else:
+        complete = False
+    if not complete:
+        return None
+    bound = 1 if record is not None and record.get("status") in (
+        workflow_state.PLAN_REVIEW_BINDING_PUBLISHED, workflow_state.PLAN_REVIEW_BINDING_BOUND,
+    ) else 0
+    total = len(history) + bound
+    return total if total >= 1 else None
+
+
+def _current_review_stage(phase: str, gv):
+    """`review_round.current`: the review stage the phase waits for."""
+    if phase == "AWAITING_LOCAL_PLAN_REVIEW":
+        return "plan_local"
+    if phase == "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW" or (
+        phase == "AWAITING_EXTERNAL_PLAN_REVIEW" and gv == "1"
+    ):
+        return "plan_external"
+    if phase == "AWAITING_LOCAL_IMPLEMENTATION_REVIEW":
+        return "implementation_local"
+    if phase == "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW" or (
+        phase == "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW" and gv != "2.2"
+    ):
+        return "implementation_external"
+    return None
+
+
+def _review_round(work_item: dict, phase: str, gv) -> dict:
+    """The snapshot's `review_round` (D-Round): derived on every call, never
+    stored."""
+    return {
+        "plan": _plan_review_round(work_item),
+        "implementation": work_item.get("implementation_revision"),
+        "current": _current_review_stage(phase, gv),
+    }
+
+
 def _snapshot(ctx: _Context) -> dict:
     work_item = ctx.work_item
     registry = ctx.memo_value("registry_completion_status")
@@ -2246,6 +2306,7 @@ def _snapshot(ctx: _Context) -> dict:
         "plan_approval": _status("plan_approval"),
         "technical_approval": _status("technical_approval"),
         "plan_review_publication_status": publication["status"] if publication is not None else None,
+        "review_round": _review_round(work_item, ctx.phase, ctx.gv),
     }
 
 

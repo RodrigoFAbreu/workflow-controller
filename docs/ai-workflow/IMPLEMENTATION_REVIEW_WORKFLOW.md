@@ -106,6 +106,19 @@ does nothing when it is already committed. The full rule, with the helper
 and its refusals, is in `REVIEW_PROTOCOL.md` ("Which review-stage writes are
 committed"); it does not depend on the governing version.
 
+## Reviewing only the changes (`workflow-2.12.0`)
+
+From the second round, the generator writes `CHANGES_SINCE_REVIEW.md` next to
+`current/` (and into `review-bundle.tar.gz`): the previous round's findings and
+the diff of the implementation-stage protected content from the previous
+round's reviewed head to this one. `/review-implementation` and the manual
+reviewer may then review only the changes and check each previous finding is
+resolved, declaring `Review scope: changes`, and return a `REVISE` or `BLOCK`.
+Any `APPROVE` is a full review of the whole bundle. A same-content
+republication leaves the file as it was. The file is reviewer convenience,
+outside `bundle_id` and `review_content_id`; its semantics are in
+`REVIEW_PROTOCOL.md` ("Bundle location").
+
 ## Staleness, in one line
 
 Both ledger stages are valid only while the ledger's stored

@@ -4433,5 +4433,99 @@ class TestFeedbackLayout(unittest.TestCase):
         )
 
 
+class VerdictWellFormedTest(unittest.TestCase):
+    """workflow-2.12.0, CP1 (`D-Severity`): `assert_verdict_well_formed`."""
+
+    @staticmethod
+    def _verdict(status, blocking="None.", important="None.", optional="None.", scope=None):
+        header = ["# Review Decision", "", f"Status: {status}", "Reviewer role: LOCAL_MODEL_PLAN_REVIEW"]
+        if scope is not None:
+            header.append(f"Review scope: {scope}")
+        lines = header + ["", "## Blocking findings", "", blocking, "", "## Important findings", "", important,
+                          "", "## Optional findings", "", optional, "", "## Missing tests", "", "None.", ""]
+        return "\n".join(lines)
+
+    def _refused(self, text):
+        with self.assertRaises(wf.MalformedVerdictError) as ctx:
+            wf.assert_verdict_well_formed(text)
+        return str(ctx.exception)
+
+    def test_a_revise_with_only_optional_findings_is_refused(self):
+        message = self._refused(self._verdict("REVISE", optional="- tidy the wording"))
+        self.assertIn("Optional", message)
+        self.assertIn("Nothing was written", message)
+
+    def test_a_revise_with_a_blocking_important_or_heading_finding_is_accepted(self):
+        wf.assert_verdict_well_formed(self._verdict("REVISE", blocking="- the digest is wrong"))
+        wf.assert_verdict_well_formed(self._verdict("REVISE", important="1. add the missing test"))
+        wf.assert_verdict_well_formed(self._verdict("REVISE", important="### F1\n\nbody"))
+        wf.assert_verdict_well_formed(self._verdict("REVISE", important="* a starred item"))
+
+    def test_placeholders_and_an_empty_section_are_not_findings(self):
+        for placeholder in ("None.", "- None.", "- n/a", "- N/A", "-", "- **None**", "- None identified",
+                            "- No important findings.", "- No blocking findings", "* none", "1. None", "", "### None"):
+            with self.subTest(placeholder=placeholder):
+                self._refused(self._verdict("REVISE", blocking=placeholder, important=placeholder,
+                                            optional="- a suggestion"))
+
+    def test_trailing_punctuation_on_a_placeholder_is_ignored(self):
+        """EIR-R1-002: `D-Severity` ignores trailing punctuation."""
+        for placeholder in ("- None,", "None,", "- None?", "- None;", "- none.,", "- N/A,", "- No findings!",
+                            "- None —", "- None…", "- None)", "- None -", "- No findings—"):
+            with self.subTest(placeholder=placeholder):
+                self._refused(self._verdict("REVISE", blocking=placeholder, important=placeholder,
+                                            optional="- a suggestion"))
+
+    def test_punctuation_only_entry_is_a_placeholder(self):
+        """EIR-R2-001: an entry that is nothing but punctuation or symbols names no finding."""
+        for placeholder in ("- -.", "- --", "- —", "- ...", "- *", "- `-`", "- !?", "1. -"):
+            with self.subTest(placeholder=placeholder):
+                self._refused(self._verdict("REVISE", blocking=placeholder, important="None.",
+                                            optional="- a suggestion"))
+
+    def test_a_conflicting_or_unrecognised_scope_on_an_approve_is_refused(self):
+        """EIR-R1-001: only one `full` (or no) scope line approves; `changes.`,
+        `changes only` and a header stating two scopes never pass as omitted."""
+        for scope in ("changes.", "changes only", "everything", "full."):
+            with self.subTest(scope=scope):
+                self.assertIn("Review scope", self._refused(self._verdict("APPROVE", scope=scope)))
+        both = self._verdict("APPROVE", scope="full").replace(
+            "Review scope: full", "Review scope: full\nReview scope: changes")
+        self._refused(both)
+        wf.assert_verdict_well_formed(self._verdict("APPROVE", scope="full"))
+        wf.assert_verdict_well_formed(self._verdict("APPROVE"))
+        wf.assert_verdict_well_formed(self._verdict("REVISE", blocking="- x", scope="changes"))
+
+    def test_a_placeholder_in_one_section_does_not_hide_a_finding_in_the_other(self):
+        wf.assert_verdict_well_formed(self._verdict("REVISE", blocking="- None.", important="- a real finding"))
+
+    def test_a_revise_with_no_severity_sections_at_all_is_refused(self):
+        self._refused("# Review Decision\n\nStatus: REVISE\n\n## Optional findings\n\n- x\n")
+
+    def test_an_approve_with_a_blocking_finding_is_refused(self):
+        self._refused(self._verdict("APPROVE", blocking="- the digest is wrong"))
+        wf.assert_verdict_well_formed(self._verdict("APPROVE", blocking="None."))
+        wf.assert_verdict_well_formed(self._verdict("APPROVE", blocking="- None.", important="- must fix"))
+
+    def test_an_approve_declaring_a_changes_only_review_is_refused(self):
+        message = self._refused(self._verdict("APPROVE", scope="changes"))
+        self.assertIn("full review", message)
+        wf.assert_verdict_well_formed(self._verdict("APPROVE", scope="full"))
+        wf.assert_verdict_well_formed(self._verdict("APPROVE"))
+        wf.assert_verdict_well_formed(self._verdict("REVISE", blocking="- x", scope="changes"))
+
+    def test_block_and_other_statuses_are_not_checked(self):
+        wf.assert_verdict_well_formed(self._verdict("BLOCK"))
+        wf.assert_verdict_well_formed("# Review Decision\n\nno status here\n")
+
+    def test_the_scope_is_read_from_the_header_only(self):
+        body_scope = self._verdict("APPROVE") + "\nReview scope: changes\n"
+        self.assertIsNone(wf.parse_review_scope(body_scope))
+        wf.assert_verdict_well_formed(body_scope)
+        self.assertEqual(wf.parse_review_scope(self._verdict("REVISE", blocking="- x", scope="Changes")), "changes")
+        self.assertEqual(wf.parse_review_scope(self._verdict("APPROVE", scope="`full`")), "full")
+        self.assertIsNone(wf.parse_review_scope(self._verdict("APPROVE", scope="partial")))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -41,5 +41,5 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-`/milestone-plan` for C13 (review convergence, `docs/ROADMAP.md` section 11.13) once this repository runs Workflow
-2.12.0 (W8), the next step in `docs/ROADMAP.md`'s "Next, in order" (C13, then C14, C10, C12, C11, then O1-O7).
+`/milestone-plan` for C13 (review convergence, `docs/ROADMAP.md` section 11.13). This repository runs Workflow
+2.12.0 (W8) since 2026-10-16. C13 is the next step in `docs/ROADMAP.md`'s "Next, in order" (C13, then C14, C10, C12, C11, then O1-O7).

@@ -14445,6 +14445,38 @@ class TestTwoStagePlanReviewVersionsInheritance(unittest.TestCase):
         wi = _base_work_item(governing_workflow_version="2.2", phase="AWAITING_LOCAL_PLAN_REVIEW")
         ws.validate_local_plan_review_preconditions(wi)  # must not raise
 
+    def test_plan_review_precondition_refusal_names_the_next_step(self):
+        """workflow-2.12.0, CP4: a non-ready plan-stage phase names the command that
+        makes the item reviewable; any other phase keeps its message."""
+        cases = (
+            ("PLANNING", None, "/milestone-plan wi"),
+            ("AMENDING_PLAN", None, "/milestone-plan wi"),
+            ("REVISING_PLAN", None, "/apply-plan-review wi"),
+            ("REVISING_PLAN", {"status": ws.PLAN_REVIEW_BINDING_CONSUMED}, "/apply-plan-review wi"),
+            ("REVISING_PLAN", {"status": ws.PLAN_REVIEW_BINDING_PUBLISHED}, "/milestone-plan wi"),
+        )
+        for phase, record, expected in cases:
+            with self.subTest(phase=phase, record=record):
+                wi = _base_work_item(governing_workflow_version="2.2", phase=phase)
+                if record is not None:
+                    wi["plan_review_binding"] = record
+                with self.assertRaises(ws.WrongPhaseForPlanReviewStageError) as caught:
+                    ws.validate_local_plan_review_preconditions(wi)
+                self.assertIn(f"run {expected} to make the item reviewable", str(caught.exception))
+        wi = _base_work_item(governing_workflow_version="2.2", phase="AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        with self.assertRaises(ws.WrongPhaseForPlanReviewStageError) as caught:
+            ws.validate_local_plan_review_preconditions(wi)
+        self.assertNotIn("to make the item reviewable", str(caught.exception))
+
+    def test_plan_size_advisory_warns_only_above_the_soft_limit(self):
+        def registry(count):
+            return {"checkpoints": [{"id": f"CP{i}"} for i in range(1, count + 1)]}
+        self.assertEqual(ws.PLAN_CHECKPOINT_SOFT_LIMIT, 6)
+        self.assertIsNone(ws.plan_size_advisory(registry(6)))
+        warning = ws.plan_size_advisory(registry(7))
+        self.assertIsNotNone(warning)
+        self.assertIn("7 checkpoints", warning)
+
     def test_record_local_plan_review_rejects_wrong_version_1(self):
         wi = _base_work_item(governing_workflow_version="1", phase="AWAITING_LOCAL_PLAN_REVIEW")
         with self.assertRaises(ws.WrongGoverningVersionForPlanReviewStageError):
@@ -17726,7 +17758,8 @@ def _cp4_verdict(status, *, rcid=None, bundle=None, base=None, work_item=_CP4_WI
         lines.append(f"Work item: {work_item}")
     if rcid:
         lines.append(f"Reviewed review_content_id: {rcid}")
-    return "\n".join(lines + ["", "## Blocking findings", "", "None.", ""])
+    finding = "- a finding that must change" if status == "REVISE" else "None."
+    return "\n".join(lines + ["", "## Blocking findings", "", finding, ""])
 
 
 def _cp4_feedback(repo, text):
@@ -18086,6 +18119,44 @@ class TestManualVerdictIngestRecordsAs260(unittest.TestCase):
                 self.assertNotIn(_harness.read_state(repo)["work_items"][_CP4_WI]["phase"],
                                  ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
                                   "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"))
+
+    def test_a_malformed_verdict_is_refused_and_nothing_is_written(self):
+        """workflow-2.12.0 (`D-Severity`): at a two-stage row a `REVISE` with no
+        Blocking or Important finding, an `APPROVE` listing a Blocking finding
+        and an `APPROVE` declaring `Review scope: changes` are refused with the
+        state and feedback bytes unchanged; the well-formed twin is ingested."""
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            with self.subTest(stage=stage), _harness.ScratchRepo() as repo:
+                content_id, bundle_id = build(repo)
+                ok = dict(rcid=content_id, bundle=bundle_id, base=repo.base, role=role)
+                optional_only = _cp4_verdict("REVISE", **ok).replace(
+                    "- a finding that must change", "None.\n\n## Optional findings\n\n- a suggestion")
+                blocking_approve = _cp4_verdict("APPROVE", **ok).replace("None.", "- a blocking finding")
+                changes_approve = _cp4_verdict("APPROVE", **ok).replace(
+                    "Status: APPROVE\n", "Status: APPROVE\nReview scope: changes\n")
+                comma_placeholder = _cp4_verdict("REVISE", **ok).replace(
+                    "- a finding that must change", "- None,\n\n## Important findings\n\nNone.\n\n"
+                    "## Optional findings\n\n- a suggestion")
+                dash_placeholder = _cp4_verdict("REVISE", **ok).replace(
+                    "- a finding that must change", "- None \u2014\n\n## Important findings\n\nNone)\n\n"
+                    "## Optional findings\n\n- a suggestion")
+                punctuation_only = _cp4_verdict("REVISE", **ok).replace(
+                    "- a finding that must change", "- -.\n\n## Important findings\n\nNone.\n\n"
+                    "## Optional findings\n\n- a suggestion")
+                changes_dot = _cp4_verdict("APPROVE", **ok).replace(
+                    "Status: APPROVE\n", "Status: APPROVE\nReview scope: changes.\n")
+                changes_only = _cp4_verdict("APPROVE", **ok).replace(
+                    "Status: APPROVE\n", "Status: APPROVE\nReview scope: changes only\n")
+                both_scopes = _cp4_verdict("APPROVE", **ok).replace(
+                    "Status: APPROVE\n", "Status: APPROVE\nReview scope: full\nReview scope: changes\n")
+                before = _cp5_files(repo)
+                for text in (optional_only, blocking_approve, changes_approve, comma_placeholder, dash_placeholder,
+                             punctuation_only, changes_dot, changes_only, both_scopes):
+                    with self.assertRaises(fingerprint.MalformedVerdictError):
+                        _cp5_ingest(repo, stage, text)
+                    self.assertEqual(_cp5_files(repo), before)
+                result = _cp5_ingest(repo, stage, _cp4_verdict("REVISE", **ok))
+                self.assertEqual(result["verdict"], "REVISE")
 
     def test_both_review_content_id_labels_are_accepted(self):
         for stage, (build, role, _writer) in _CP5_STAGES.items():

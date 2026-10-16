@@ -130,7 +130,7 @@ end of this file for the `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` case.
    alongside `<bundle_dir>/REVIEW_REQUEST.md`, `IMPLEMENTATION_SUMMARY.md`,
    `TEST_RESULTS.md`, `CHANGED_FILES.txt`, `COMMITS.txt`, `DIFF.patch`,
    `files/`, `MANIFEST.md`, the required-context file list, and any prior
-   `<feedback_dir>/REVIEW_FEEDBACK.md` for continuity across rounds. An
+   `<feedback_dir>/REVIEW_FEEDBACK.md` for continuity across rounds. **Changes since the last reviewed bundle** (workflow-2.12.0, `D-Changes`): when `<bundle_dir>/../CHANGES_SINCE_REVIEW.md` (the file next to `current/`) exists and its preamble's `review_content_id` is the one recomputed in step 4, read it too: it carries the previous round's findings and the diff of the implementation-stage protected content since that round. You may then review only those changes and check that each previous finding is resolved, declaring `Review scope: changes` in the header; that is valid on a `REVISE` or `BLOCK` only. **Any `APPROVE` is a full review of the whole bundle**: when the changes show nothing to fix, go on to the full pass in the same run, and declare `Review scope: full` or omit the line. A file whose preamble names another id is stale: ignore it. An
    implementation-stage bundle generated without the plan stage's mandatory
    work-item-id argument lands in the flat `.ai-review/current/` path while
    the resolver still prefers a scoped `.ai-review/<work_item_id>/current/`
@@ -448,6 +448,18 @@ A5. **Decide the verdict** (`Status: APPROVE | REVISE | BLOCK`) and write
     - the round/sequence number (one more than the highest prior
       `LOCAL_MODEL_IMPLEMENTATION_REVIEW` round on record, or `1` if none);
     - a completion timestamp.
+    - **Verdict shape** (workflow-2.12.0, `D-Severity`): a `REVISE` names at
+      least one Blocking or Important finding, and an `APPROVE` lists no
+      Blocking finding and declares no `Review scope: changes` (every
+      `APPROVE` is a full review of the whole bundle). Write the literal
+      `None.` in a severity section with no finding. A round whose only
+      findings are Optional is an `APPROVE`, with them under `## Optional
+      findings`. Before writing, call
+      `workflow_fingerprint.assert_verdict_well_formed(<the text about to be
+      written>)`; on a `MalformedVerdictError`, rewrite your own verdict to
+      conform in this same run and call it again -- never write a verdict it
+      refuses, and never change `Status:` to dodge it without changing the
+      findings.
     Malformed prior feedback is reported and stops rather than guessed at.
 A6. **Write set, exact.** **`REJECTED`-bundle refusal, second of two, under
     this step's own mutation guard** (`WFR-67`): immediately before the

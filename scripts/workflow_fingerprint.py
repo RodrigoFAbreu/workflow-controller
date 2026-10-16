@@ -213,6 +213,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import unicodedata
 import uuid
 from pathlib import Path
 from types import MappingProxyType
@@ -1718,7 +1719,7 @@ DEFAULT_ARTIFACTS_PATH = Path("docs/ai-workflow/registry/workflow-v2-1-core-arti
 
 
 def load_implementation_stage_classification(
-    repo_root: Path, artifacts_path: Path,
+    repo_root: Path, artifacts_path: Path, *, at_commit: str | None = None,
 ) -> tuple[Mapping[str, str], Mapping[str, str], Mapping[str, str], Mapping[str, str]]:
     """Load the implementation-stage protected/excluded path and prefix
     sets from a tracked, machine-readable artifact-declarations file,
@@ -1757,6 +1758,10 @@ def load_implementation_stage_classification(
     to reviewed content -- see `docs/ai-workflow/REVIEW_PROTOCOL.md`'s
     "Repairing an artifact declaration after an approval".
 
+    `at_commit` (workflow-2.12.0, `D-Changes`) reads the declaration as it
+    was at that commit instead of the working tree, like
+    `load_plan_stage_classification`'s own.
+
     Returns `(protected_paths, protected_prefixes, excluded_paths,
     excluded_prefixes)`, each a path/prefix -> category-or-justification
     mapping, in the same shape `classify_path_implementation_stage`
@@ -1792,9 +1797,9 @@ def load_implementation_stage_classification(
     names the work item whose classification it means, via
     `artifacts_path_for_work_item(work_item_id)`."""
     full = repo_root / artifacts_path
-    if not full.is_file():
+    if not _path_exists_at_source(repo_root, artifacts_path, at_commit):
         raise MissingWorkItemArtifactsDeclarationError(_to_posix(artifacts_path))
-    data = json.loads(full.read_text())
+    data = json.loads(_read_bytes_at_source(repo_root, artifacts_path, at_commit))
     implementation_stage = data.get("implementation_stage")
     if implementation_stage is None:
         raise MissingWorkItemArtifactsDeclarationError(
@@ -2937,7 +2942,8 @@ def plan_stage_staging_paths(repo_root: Path, work_item_id: str, token: str) -> 
     `root` (the staging area, `.ai-review/<id>/current.staging-<token>/`),
     `bundle_dir` (its `current/` child, so the archive's member root stays
     the bare literal `current`), `archive` (the temporary archive),
-    `amendment_diff` and `pin_dir` (`.ai-review/<id>/.pin.staging-<token>/`)."""
+    `amendment_diff`, `changes_since_review` and `pin_dir`
+    (`.ai-review/<id>/.pin.staging-<token>/`)."""
     validate_work_item_id(work_item_id)
     if not isinstance(token, str) or not _STAGING_TOKEN_RE.match(token):
         raise InvalidStagingTokenError(f"invalid plan-stage staging token {token!r}")
@@ -2948,6 +2954,7 @@ def plan_stage_staging_paths(repo_root: Path, work_item_id: str, token: str) -> 
         "bundle_dir": staging_root / "current",
         "archive": staging_root / "review-bundle.tar.gz",
         "amendment_diff": staging_root / "AMENDMENT_DIFF.patch",
+        "changes_since_review": staging_root / "CHANGES_SINCE_REVIEW.md",
         "pin_dir": item_root / f".pin.staging-{token}",
     }
 
@@ -3013,8 +3020,9 @@ def seed_plan_review_inputs(repo_root: Path, work_item_id: str, bundle_dir: Path
 
 def _promote_plan_stage_staging(repo_root: Path, work_item_id: str, token: str) -> None:
     """Renames a verified staging generation into place: the pin, then
-    `current/`, then the archive, then `AMENDMENT_DIFF.patch` (removed
-    when this generation wrote none), then removes the superseded copies
+    `current/`, then the archive, then `AMENDMENT_DIFF.patch` and
+    `CHANGES_SINCE_REVIEW.md` (each removed when this generation wrote
+    none), then removes the superseded copies
     and the staging area. The renames are not atomic as a set; INV-2 rests
     on the bind verifier, which refuses the `current/`/manifest/archive
     disagreement a crash between them leaves."""
@@ -3042,6 +3050,11 @@ def _promote_plan_stage_staging(repo_root: Path, work_item_id: str, token: str) 
             os.replace(paths["amendment_diff"], item_root / "AMENDMENT_DIFF.patch")
         else:
             (item_root / "AMENDMENT_DIFF.patch").unlink(missing_ok=True)
+        step = "rename CHANGES_SINCE_REVIEW.md"
+        if paths["changes_since_review"].is_file():
+            os.replace(paths["changes_since_review"], item_root / CHANGES_SINCE_REVIEW_FILE)
+        else:
+            (item_root / CHANGES_SINCE_REVIEW_FILE).unlink(missing_ok=True)
         step = "remove superseded copies"
         for leftover in (old_current, old_pin, paths["root"]):
             if leftover.is_dir():
@@ -3082,6 +3095,256 @@ def finalize_staged_plan_bundle_generation(repo_root: Path, work_item_id: str, t
     _promote_plan_stage_staging(repo_root, work_item_id, token)
     clear_rejected_marker_if_present(repo_root, work_item_id)
     return {"status": "ok", "bundle_id": recorded_bundle_id}
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.12.0 (`D-Changes`): CHANGES_SINCE_REVIEW.md -- what changed since
+# the last reviewed bundle, and what that round found. A sibling of
+# `current/` like AMENDMENT_DIFF.patch: outside `bundle_id` and
+# `review_content_id`, regenerated on every ordinary generation, deleted when
+# there is nothing to compare with. Reviewer convenience only, so a failure to
+# build it never fails a generation (AMENDMENT_DIFF.patch fails closed
+# because an open amendment's reviewer needs it; a missing changes file only
+# means a full review).
+# ---------------------------------------------------------------------------
+
+CHANGES_SINCE_REVIEW_FILE = "CHANGES_SINCE_REVIEW.md"
+_CHANGES_NOT_AVAILABLE = "not available"
+_CHANGES_PREAMBLE_ID_RE = re.compile(r"^review_content_id: ([0-9a-f]{64})$", re.MULTILINE)
+_MANIFEST_REVIEWED_HEAD_LINE_RE = re.compile(r"^reviewed_implementation_head: ([0-9a-f]{40})$", re.MULTILINE)
+_PINNED_DIFF_OPTIONS: tuple[str, ...] = (
+    "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--binary", "-U3",
+)
+
+
+def _pinned_git_diff(args: list[str], cwd: Path, *, prefixes: tuple[str, str] = ("a/", "b/")) -> bytes:
+    """`git diff` with the options `AMENDMENT_DIFF.patch` pins (no external
+    diff driver, no textconv, no colour, explicit prefixes, no renames,
+    `-U3`, `GIT_DIFF_OPTS` removed from the environment), as bytes. A
+    `--no-index` diff exits 1 when the sides differ; that is not a failure."""
+    result = subprocess.run(
+        ["git", "--literal-pathspecs", "diff", *_PINNED_DIFF_OPTIONS,
+         f"--src-prefix={prefixes[0]}", f"--dst-prefix={prefixes[1]}", *args],
+        cwd=cwd, capture_output=True,
+        env={key: value for key, value in os.environ.items() if key != "GIT_DIFF_OPTS"},
+    )
+    if result.returncode not in (0, 1) or (result.returncode == 1 and not result.stdout):
+        raise RuntimeError(f"git diff failed ({result.returncode}): {result.stderr.decode(errors='replace').strip()}")
+    return result.stdout
+
+
+def _consumed_plan_review_content_ids_of(repo_root: Path, work_item_id: str) -> set[str]:
+    """The `review_content_id`s of this item's plan-stage content already taken
+    out of review: the durable `consumed_plan_review_content_ids` list and
+    the `plan_review_binding` slot's consumed id -- the same union
+    `workflow_state._consumed_plan_review_content_ids` reads, without the
+    import cycle."""
+    work_items, _active = _load_workflow_state_work_items(repo_root, None)
+    work_item = work_items.get(work_item_id) or {}
+    ids = {value for value in (work_item.get("consumed_plan_review_content_ids") or []) if isinstance(value, str)}
+    binding = work_item.get("plan_review_binding")
+    consumed = binding.get("consumed") if isinstance(binding, dict) else None
+    if isinstance(consumed, dict) and isinstance(consumed.get("review_content_id"), str):
+        ids.add(consumed["review_content_id"])
+    return ids
+
+
+def _previous_findings_text(repo_root: Path, work_item_id: str, previous_id: str | None) -> str:
+    """The text of `<feedback_dir>/REVIEW_FEEDBACK.md` when its header's
+    `review_content_id` is the previous round's id, else "not available"."""
+    if previous_id is None:
+        return _CHANGES_NOT_AVAILABLE
+    path = Path(repo_root) / resolve_feedback_dir(repo_root, work_item_id) / "REVIEW_FEEDBACK.md"
+    if path.is_symlink() or not path.is_file():
+        return _CHANGES_NOT_AVAILABLE
+    content = path.read_text(errors="replace")
+    if parse_feedback_review_content_id(content) != previous_id:
+        return _CHANGES_NOT_AVAILABLE
+    return content.rstrip("\n")
+
+
+def _render_changes_since_review(
+    *, work_item_id: str, stage: str, previous_id: str | None, previous_revision: object,
+    current_id: str, current_revision: object, extra_lines: list[str], findings: str, diff: bytes,
+) -> bytes:
+    lines = [
+        "# CHANGES_SINCE_REVIEW.md -- reviewer convenience only: outside bundle_id and",
+        "# review_content_id. The stage's protected content, previous round -> this round,",
+        "# and the previous round's findings. A round may review only these changes",
+        "# (`Review scope: changes`); any APPROVE is a full review of the whole bundle.",
+        f"work_item_id: {work_item_id}",
+        f"stage: {stage}",
+        f"previous_review_content_id: {previous_id or _CHANGES_NOT_AVAILABLE}",
+        f"previous_revision: {previous_revision if previous_revision is not None else _CHANGES_NOT_AVAILABLE}",
+        f"review_content_id: {current_id}",
+        f"revision: {current_revision if current_revision is not None else _CHANGES_NOT_AVAILABLE}",
+        *extra_lines,
+        "",
+        "## Previous findings",
+        "",
+        findings,
+        "",
+        "## Changes",
+        "",
+        "```diff",
+    ]
+    body = ("\n".join(lines) + "\n").encode("utf-8") + diff
+    if diff and not diff.endswith(b"\n"):
+        body += b"\n"
+    if not diff:
+        body += b"(no change to the protected content)\n"
+    return body + b"```\n"
+
+
+def _pin_files(pin_dir: Path) -> dict[str, Path]:
+    """Every file of a plan-stage pin, keyed by its repo-relative path. A
+    missing directory, a symlink or a non-regular entry refuses."""
+    if pin_dir.is_symlink() or not pin_dir.is_dir():
+        raise ValueError(f"{pin_dir} is not a pin directory")
+    files: dict[str, Path] = {}
+    for dirpath, dirnames, filenames in os.walk(pin_dir, followlinks=False):
+        for name in dirnames:
+            if (Path(dirpath) / name).is_symlink():
+                raise ValueError(f"{Path(dirpath) / name} is a symlink inside a pin")
+        for name in filenames:
+            entry = Path(dirpath) / name
+            if entry.is_symlink() or not entry.is_file():
+                raise ValueError(f"{entry} is not a regular file inside a pin")
+            files[entry.relative_to(pin_dir).as_posix()] = entry
+    return files
+
+
+def _plan_stage_changes(
+    repo_root: Path, work_item_id: str, out_path: Path, outgoing_bundle_dir: Path,
+    outgoing_pin_dir: Path, staging_pin_dir: Path,
+) -> bytes | None:
+    new_fields = read_plan_stage_manifest_fields(out_path.parent / "current" / "MANIFEST.md")
+    current_id = new_fields["review_content_id"]
+    if new_fields["stage"] != "plan" or new_fields["work_item_id"] != work_item_id or not current_id:
+        return None
+    old_fields = read_plan_stage_manifest_fields(Path(outgoing_bundle_dir) / "MANIFEST.md")
+    previous_id = old_fields["review_content_id"]
+    if old_fields["stage"] != "plan" or old_fields["work_item_id"] != work_item_id or not previous_id:
+        return None
+    if previous_id == current_id:
+        # A wrapper-only regeneration of unchanged, bound content: the outgoing pin is
+        # already this round's pin, so the previous round's pin is gone. Carry the live
+        # file forward when it names this content, else there is nothing to say.
+        live = Path(outgoing_bundle_dir).parent / CHANGES_SINCE_REVIEW_FILE
+        if live.is_symlink() or not live.is_file():
+            return None
+        data = live.read_bytes()
+        match = _CHANGES_PREAMBLE_ID_RE.search(data.decode("utf-8", errors="replace"))
+        return data if match and match.group(1) == current_id else None
+    if previous_id not in _consumed_plan_review_content_ids_of(repo_root, work_item_id):
+        return None
+    old_files = _pin_files(Path(outgoing_pin_dir))
+    new_files = _pin_files(Path(staging_pin_dir))
+    diff = b""
+    with tempfile.TemporaryDirectory() as tmp:
+        os.symlink(Path(outgoing_pin_dir).resolve(), Path(tmp) / "a")
+        os.symlink(Path(staging_pin_dir).resolve(), Path(tmp) / "b")
+        for rel in sorted(set(old_files) | set(new_files)):
+            left = f"a/{rel}" if rel in old_files else "/dev/null"
+            right = f"b/{rel}" if rel in new_files else "/dev/null"
+            diff += _pinned_git_diff(["--no-index", "--", left, right], Path(tmp), prefixes=("", ""))
+    return _render_changes_since_review(
+        work_item_id=work_item_id, stage="plan", previous_id=previous_id,
+        previous_revision=old_fields["plan_revision"], current_id=current_id,
+        current_revision=new_fields["plan_revision"], extra_lines=[],
+        findings=_previous_findings_text(repo_root, work_item_id, previous_id), diff=diff,
+    )
+
+
+def _implementation_stage_changes(
+    repo_root: Path, work_item_id: str, out_path: Path, outgoing_bundle_dir: Path,
+) -> bytes | None:
+    import workflow_state  # deferred: workflow_state imports this module
+
+    work_items, _active = _load_workflow_state_work_items(repo_root, None)
+    work_item = work_items.get(work_item_id) or {}
+    revision = work_item.get("implementation_revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 2:
+        return None
+    records = workflow_state.discover_bundle_generation_record_commits(
+        repo_root, work_item_id, work_item["base_commit"], "HEAD",
+    )
+    record_commit = records.get(f"{work_item_id}/{revision - 1}")
+    if record_commit is None:
+        return None
+    old_state = json.loads(_read_bytes_at_source(repo_root, "docs/ai-workflow/WORKFLOW_STATE.json", record_commit))
+    old_head = old_state["work_items"][work_item_id]["reviewed_implementation_head"]
+    if not isinstance(old_head, str) or not re.fullmatch(r"[0-9a-f]{40}", old_head):
+        return None
+    artifacts_path = artifacts_path_for_work_item(work_item_id)
+    old_sets = load_implementation_stage_classification(repo_root, artifacts_path, at_commit=old_head)
+    new_sets = load_implementation_stage_classification(repo_root, artifacts_path)
+    changed = _run(["git", "-c", "core.quotepath=off", "diff", "--no-renames", "--name-only", "-z", old_head], cwd=repo_root)
+    protected: set[str] = set()
+    for path in filter(None, changed.split("\0")):
+        for sets in (old_sets, new_sets):
+            try:
+                if classify_path_implementation_stage(path, *sets) == "protected":
+                    protected.add(path)
+            except UnclassifiedPathError:
+                continue
+    diff = _pinned_git_diff([old_head, "--", *sorted(protected)], repo_root) if protected else b""
+    new_fields = read_manifest_identifiers(out_path.parent / "current" / "MANIFEST.md")
+    current_id = new_fields.get("review_content_id")
+    if not current_id:
+        return None
+    previous_id = None
+    old_manifest = Path(outgoing_bundle_dir) / "MANIFEST.md"
+    if old_manifest.is_file():
+        text = old_manifest.read_text(errors="replace")
+        stage_match = _MANIFEST_STAGE_LINE_RE.search(text)
+        head_match = _MANIFEST_REVIEWED_HEAD_LINE_RE.search(text)
+        if (
+            stage_match and stage_match.group(1) == "implementation"
+            and _read_manifest_binding_fields(old_manifest)["work_item_id"] == work_item_id
+            and head_match and head_match.group(1) == old_head
+        ):
+            previous_id = read_manifest_identifiers(old_manifest).get("review_content_id")
+    return _render_changes_since_review(
+        work_item_id=work_item_id, stage="implementation", previous_id=previous_id,
+        previous_revision=revision - 1, current_id=current_id, current_revision=revision,
+        extra_lines=[f"previous_reviewed_implementation_head: {old_head}"],
+        findings=_previous_findings_text(repo_root, work_item_id, previous_id), diff=diff,
+    )
+
+
+def write_changes_since_review(
+    repo_root: Path, work_item_id: str, stage: str, out_path: Path, *,
+    outgoing_bundle_dir: Path, outgoing_pin_dir: Path | None = None, staging_pin_dir: Path | None = None,
+) -> bool:
+    """Builds `CHANGES_SINCE_REVIEW.md` at `out_path` (`D-Changes`) and returns
+    whether it wrote one. `stage` is `"plan"` (the outgoing `current/` and pin
+    against the new staging pin; `out_path`'s sibling `current/` holds the new
+    manifest) or `"implementation"` (the previous round's generation-record
+    commit against the working tree; `outgoing_bundle_dir` holds the outgoing
+    `MANIFEST.md`). It catches its own errors: any failure deletes `out_path`,
+    prints one warning line and returns `False`."""
+    out_path = Path(out_path)
+    repo_root = Path(repo_root)
+    try:
+        if stage == "plan":
+            content = _plan_stage_changes(
+                repo_root, work_item_id, out_path, Path(outgoing_bundle_dir),
+                Path(outgoing_pin_dir), Path(staging_pin_dir),
+            )
+        elif stage == "implementation":
+            content = _implementation_stage_changes(repo_root, work_item_id, out_path, Path(outgoing_bundle_dir))
+        else:
+            raise ValueError(f"unknown stage {stage!r}")
+    except Exception as exc:  # noqa: BLE001 -- reviewer convenience; never fails a generation
+        out_path.unlink(missing_ok=True)
+        print(f"warning: {CHANGES_SINCE_REVIEW_FILE} not written ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return False
+    if content is None:
+        out_path.unlink(missing_ok=True)
+        return False
+    out_path.write_bytes(content)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -3447,6 +3710,103 @@ def parse_review_feedback_header(content: str) -> dict[str, str | None]:
     fields["review_content_id"] = parse_feedback_review_content_id(content)
     fields["reviewer_model"] = parse_feedback_reviewer_model(content)
     return fields
+
+
+class MalformedVerdictError(Exception):
+    """Raised by `assert_verdict_well_formed` (workflow-2.12.0,
+    `D-Severity`) when a two-stage verdict contradicts its own severity
+    sections or its declared review scope. Nothing is written; the verdict is
+    reissued, never converted."""
+
+
+_FEEDBACK_REVIEW_SCOPE_RE = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?`?Review scope:`?[ \t]*`?(\S.*?)`?[ \t]*$", re.MULTILINE | re.IGNORECASE)
+
+
+def _declared_review_scopes(content: str) -> set[str]:
+    """Every distinct `Review scope:` value the header states, lowercased."""
+    header = feedback_header_block(content)
+    return {match.group(1).lower() for match in _FEEDBACK_REVIEW_SCOPE_RE.finditer(header)}
+
+
+def parse_review_scope(content: str) -> str | None:
+    """The `Review scope: full|changes` a verdict declares (`D-Changes`),
+    header-only exactly like `parse_feedback_reviewer_model`. `None` when
+    absent, when it states another value, or when the header states more than
+    one distinct value."""
+    values = _declared_review_scopes(content)
+    if len(values) != 1:
+        return None
+    value = values.pop()
+    return value if value in ("full", "changes") else None
+
+
+_FINDING_ITEM_RE = re.compile(r"^(?: {0,3})(?:(?:[-*][ \t]+)|(?:\d+[.)][ \t]+)|(?:###[ \t]+))(.*\S)\s*$")
+_NO_FINDINGS_RE = re.compile(r"^no(?: \w+)? findings$")
+_PLACEHOLDERS = frozenset({"none", "n/a", "-", "none identified"})
+
+
+def _is_placeholder(text: str) -> bool:
+    plain = re.sub(r"[*_`]", "", text).strip()
+    plain = re.sub(r"\s+", " ", plain).lower()
+    if plain in _PLACEHOLDERS:
+        return True
+    while plain and (unicodedata.category(plain[-1])[0] in "PSZ"):
+        plain = plain[:-1]
+    return not plain or plain in _PLACEHOLDERS or bool(_NO_FINDINGS_RE.match(plain))
+
+
+def _section_has_finding(content: str, heading: str) -> bool:
+    """Whether the `## <heading>` section of `content` holds a finding: a list
+    item or a `### ` heading whose text is neither empty nor a "none"
+    placeholder (`D-Severity`)."""
+    in_section = False
+    for line in content.splitlines():
+        if line.startswith("## "):
+            in_section = line[3:].strip().lower() == heading.lower()
+            continue
+        if not in_section:
+            continue
+        match = _FINDING_ITEM_RE.match(line)
+        if match is not None and not _is_placeholder(match.group(1)):
+            return True
+    return False
+
+
+def assert_verdict_well_formed(content: str) -> None:
+    """`D-Severity`, workflow-2.12.0: refuses (`MalformedVerdictError`) a
+    `REVISE` that names no Blocking or Important finding, an `APPROVE` that
+    lists a Blocking finding, an `APPROVE` that declares `Review scope:
+    changes`, and an `APPROVE` whose header states a conflicting or
+    unrecognised `Review scope` (exactly one `Review scope: full` line, or
+    none, is accepted). Trailing punctuation or symbols on a "none"
+    placeholder are ignored, and an entry made only of punctuation or
+    symbols is also a placeholder. An `APPROVE` whose Important section
+    holds an entry is not refused: the reviewer should reissue it as a
+    `REVISE` (or move the entry to Optional), and the entry stays recorded as
+    written. `BLOCK` and every other status pass unchecked.
+    Reads the text only."""
+    status = parse_review_feedback_binding_fields(content)["status"]
+    blocking = _section_has_finding(content, "Blocking findings")
+    if status == "REVISE" and not blocking and not _section_has_finding(content, "Important findings"):
+        raise MalformedVerdictError(
+            "the verdict is Status: REVISE but names no Blocking or Important finding -- a round with only "
+            "Optional findings is an APPROVE. Reissue it as APPROVE with the findings under 'Optional "
+            "findings', or as REVISE with the finding that requires a change moved to Blocking or Important. "
+            "Nothing was written")
+    if status == "APPROVE" and blocking:
+        raise MalformedVerdictError(
+            "the verdict is Status: APPROVE but lists a Blocking finding -- an approval cannot contradict "
+            "itself. Reissue it as REVISE, or remove the finding. Nothing was written")
+    if status == "APPROVE" and _declared_review_scopes(content) not in (set(), {"full"}, {"changes"}):
+        raise MalformedVerdictError(
+            "the verdict is Status: APPROVE but its header declares a conflicting or unrecognised Review scope "
+            "-- state exactly one 'Review scope: full' line (or none) and reissue it. Nothing was written")
+    if status == "APPROVE" and parse_review_scope(content) == "changes":
+        raise MalformedVerdictError(
+            "the verdict is Status: APPROVE with 'Review scope: changes' -- every APPROVE is a full review of "
+            "the whole bundle. Review the whole bundle and reissue it with 'Review scope: full' (or no "
+            "Review scope line), or reissue it as REVISE. Nothing was written")
 
 
 def assert_manual_feedback_names_work_item(content: str, *, work_item_id: str) -> None:

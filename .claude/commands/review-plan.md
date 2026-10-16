@@ -61,6 +61,7 @@ normative definition.
    prior `<feedback_dir>/REVIEW_FEEDBACK.md` (for continuity across
    rounds), and `docs/ai-workflow/REVIEW_PROTOCOL.md`'s feedback-structure
    contract.
+   **Changes since the last reviewed bundle** (workflow-2.12.0, `D-Changes`): when `<bundle_dir>/../CHANGES_SINCE_REVIEW.md` (the file next to `current/`) exists and its preamble's `review_content_id` is the one recomputed in step 5, read it too: it carries the previous round's findings and the diff of the plan content since that round. You may then review only those changes and check that each previous finding is resolved, declaring `Review scope: changes` in the header; that is valid on a `REVISE` or `BLOCK` only. **Any `APPROVE` is a full review of the whole bundle**: when the changes show nothing to fix, go on to the full pass in the same run, and declare `Review scope: full` or omit the line. A file whose preamble names another id is stale: ignore it. 
 5. **Recompute fresh, before writing anything**: the current `bundle_id`
    and the plan-stage `review_content_id`, the latter through the single
    canonical entry point `docs/ai-workflow/REVIEW_PROTOCOL.md`'s
@@ -128,6 +129,18 @@ normative definition.
      `LOCAL_MODEL_PLAN_REVIEW` round on record, counting a round entry under
      either casing of the stage key, or `1` if none);
    - a completion timestamp.
+   - **Verdict shape** (workflow-2.12.0, `D-Severity`): a `REVISE` names at
+     least one Blocking or Important finding, and an `APPROVE` lists no
+     Blocking finding and declares no `Review scope: changes` (every
+     `APPROVE` is a full review of the whole bundle). Write the literal
+     `None.` in a severity section with no finding. A round whose only
+     findings are Optional is an `APPROVE`, with them under `## Optional
+     findings`. Before writing, call
+     `workflow_fingerprint.assert_verdict_well_formed(<the text about to be
+     written>)`; on a `MalformedVerdictError`, rewrite your own verdict to
+     conform in this same run and call it again -- never write a verdict it
+     refuses, and never change `Status:` to dodge it without changing the
+     findings.
    Malformed prior feedback is reported and stops rather than guessed at.
 8. **Write set, exact.** **`REJECTED`-bundle refusal, second of two,
    under this step's own mutation guard** (`WFR-67`): immediately before

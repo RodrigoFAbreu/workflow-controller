@@ -11,13 +11,13 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 **Where things stand (2026-10-16).** Controller 1.11.0 is the latest release (PR #52, squash
 `1033872`): a worker that reaches the usage limit mid-job having changed nothing is waited out and its
 step repeated (C8b, accepted 2026-10-16 by gate policy). It admits Workflow 2.5.1 and 2.6.0, and any
-Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow 2.11.0
-with automatic gates (since 2026-10-15). What is complete is marked in the tables below; what each
+Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow 2.12.0
+with automatic gates (since 2026-10-16). What is complete is marked in the tables below; what each
 release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
-1. C13, review convergence ([11.13](#1113-review-convergence)), once this repository runs Workflow 2.12.0
-   (W8);
+1. C13, review convergence ([11.13](#1113-review-convergence)); its Workflow half shipped in 2.12.0
+   (W8), which this repository runs;
 2. C14, review modes ([11.14](#1114-review-modes));
 3. C10, C12 and C11, then the orchestrator series O1-O7.
 
@@ -83,7 +83,7 @@ because C9, C10 and C13 depend on them.
 | M2 | Distribution rework: Workflow moves to its own repository and releases as downloadable packages (every earlier release published too); the Manager downloads, verifies, caches and installs them; its tests cover only the release in development and the upgrade path | Workflow Manager, `workflow` |
 | W1 | Workflow 2.7, the first packaged release: Orchestration Protocol v1 and the `v2.6.0-001` follow-up | `workflow` |
 | W2 | Workflow 2.8: gate policy, and a red or changes-requested pull request reopening the same work item | `workflow` |
-| W8 | Workflow 2.12: review convergence rules (see [11.13](#1113-review-convergence)) | `workflow` |
+| W8 | Workflow 2.12: review convergence rules (see [11.13](#1113-review-convergence)) (released as 2.12.0, 2026-10-16) | `workflow` |
 | M3 | Workflow Manager and `workflow` driven by the Controller's loop | both |
 
 **After C11: the orchestrator series, in order** ([11.11](#1111-the-orchestrator-a-person-only-for-escalation);
@@ -1834,15 +1834,18 @@ milestones.
   cap through the existing user-only `/approve-review` override, or continue.
 - Rounds and usage recorded per round and per stage, and a before/after table from the job records.
 
-**What, on the Workflow side** (W8, expected in Workflow 2.12.0).
-- Rounds 2 and later review the changes since the last bundle plus the previous findings; the final
-  round is a full review.
-- A `REVISE` must name at least one Blocking or Important finding, or it is refused as malformed. The
-  gate policy is unchanged.
-- Protocol 1.4 adds the review round per stage (an additive change).
-- Plan-size guidance, with a soft warning above a number of checkpoints.
+**What, on the Workflow side** (W8, released in Workflow 2.12.0 on 2026-10-16).
+- From round 2, the reviewer also gets `.ai-review/<id>/CHANGES_SINCE_REVIEW.md`: the changes since the
+  last reviewed bundle plus the previous findings. It is gitignored and outside every bundle and
+  content ID. A `REVISE` may cover only those changes (`Review scope: changes`); an `APPROVE` is
+  always a full review of the whole bundle.
+- A verdict's shape is checked before it becomes state: a `REVISE` must name at least one Blocking or
+  Important finding, an `APPROVE` may not list a Blocking finding or declare `Review scope: changes`,
+  and a malformed verdict is refused, never converted. The gate policy is unchanged.
+- Protocol 1.4 adds `review_round` to the next-action snapshot (an additive change).
+- Plan-size guidance: a soft warning above 6 checkpoints.
 
-**Needs:** C7 and W8.
+**Needs:** C7 and W8 (both done).
 
 **Out of scope:** changing who approves.
 

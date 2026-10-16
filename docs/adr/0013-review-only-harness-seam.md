@@ -77,10 +77,10 @@ otherwise unattended stops waiting for it.
    >    stays a person's: recording a verdict is not an approval.
    > 5. It is opt-in. When unset, the gate stops as today.
 
-   The issue stays open: the owner approved a short paragraph in
-   `ORCHESTRATION_PROTOCOL.md` naming this courier as admissible with these
-   conditions, shipping in W8 (`review-convergence`, Workflow 2.12.0) as
-   documentation only. That paragraph is the pending follow-up.
+   The owner approved a short paragraph in `ORCHESTRATION_PROTOCOL.md`
+   naming this courier as admissible with these conditions, as documentation
+   only. It shipped in W8 (Workflow 2.12.0, 2026-10-16) as that document's
+   section 8.2.
 
    Each condition and the code that meets it:
 

@@ -156,9 +156,13 @@ STAGING_TOKEN=""
 STAGING_ROOT=""
 STAGING_PIN_DIR=""
 STAGING_DONE=0
+OUTGOING_DIR=""
 cleanup() {
   if [[ -n "$STAGING_ROOT" ]] && (( ! STAGING_DONE )); then
     rm -rf -- "$STAGING_ROOT" "$STAGING_PIN_DIR"
+  fi
+  if [[ -n "$OUTGOING_DIR" ]]; then
+    rm -rf -- "$OUTGOING_DIR"
   fi
   if ((${#UNTRACKED_FILES[@]} > 0)); then
     git --literal-pathspecs reset -- "${UNTRACKED_FILES[@]}" > /dev/null 2>&1 || true
@@ -206,6 +210,19 @@ if [[ "$STAGE" == "plan" ]]; then
   ARCHIVE_ROOT="$STAGING_ROOT"
 fi
 FILES_DIR="$BUNDLE_DIR/files"
+
+# --- workflow-2.12.0 (D-Changes): the implementation stages keep the outgoing
+# current/MANIFEST.md in a temporary copy, before current/ is rewritten, so
+# CHANGES_SINCE_REVIEW.md can name the previous round's review_content_id. The
+# plan stage reads the live current/ and .pin directly (they are untouched until
+# promotion).
+OUTGOING_DIR=""
+if [[ ( "$STAGE" == "implementation" || "$STAGE" == "post-fix" ) && -n "$WORK_ITEM_ID" ]]; then
+  OUTGOING_DIR=$(mktemp -d)
+  if [[ -f "$BUNDLE_DIR/MANIFEST.md" && ! -L "$BUNDLE_DIR/MANIFEST.md" ]]; then
+    cp -- "$BUNDLE_DIR/MANIFEST.md" "$OUTGOING_DIR/MANIFEST.md"
+  fi
+fi
 mkdir -p "$FILES_DIR"
 
 # --- generator-side stage-document binding (WFR-67, WF8c item (h) part 2):
@@ -733,6 +750,59 @@ else:
 PYEOF
 fi
 
+# --- generated: CHANGES_SINCE_REVIEW.md (workflow-2.12.0, D-Changes) ---
+# What changed since the last reviewed bundle and what that round found, for a
+# reviewer who reviews only the changes. A sibling of current/ like
+# AMENDMENT_DIFF.patch, outside bundle_id and review_content_id; written after
+# --write-manifest so it can name this bundle's own review_content_id. Plan
+# stage: the outgoing current/ and .pin against the staging pin, into the
+# staging area (--finalize-bundle renames it next to current/ or removes the
+# live copy). Implementation stages: the previous round's reviewed head against
+# the working tree, next to current/. A same-content republication (the
+# implementation_revision the outgoing manifest recorded is unchanged) leaves
+# the file alone. The writer never fails a generation: on any error it deletes
+# the file, prints one warning and returns.
+if [[ "$STAGE" == "plan" ]]; then
+  PYTHONPATH="$REPO_ROOT/scripts:${PYTHONPATH:-}" python3 -B - \
+      "$REPO_ROOT" "$WORK_ITEM_ID" "$ARCHIVE_ROOT/CHANGES_SINCE_REVIEW.md" "$ROOT_DIR/current" \
+      "$ROOT_DIR/.pin" "$STAGING_PIN_DIR" <<'PYEOF'
+import sys
+from pathlib import Path
+
+import workflow_fingerprint as fingerprint
+
+repo_root, work_item_id = Path(sys.argv[1]), sys.argv[2]
+fingerprint.write_changes_since_review(
+    repo_root, work_item_id, "plan", Path(sys.argv[3]),
+    outgoing_bundle_dir=Path(sys.argv[4]), outgoing_pin_dir=Path(sys.argv[5]),
+    staging_pin_dir=Path(sys.argv[6]),
+)
+PYEOF
+elif [[ ( "$STAGE" == "implementation" || "$STAGE" == "post-fix" ) && -n "$WORK_ITEM_ID" && "$MANIFEST_WRITTEN" == 1 ]]; then
+  PYTHONPATH="$REPO_ROOT/scripts:${PYTHONPATH:-}" python3 -B - \
+      "$REPO_ROOT" "$WORK_ITEM_ID" "$ROOT_DIR/CHANGES_SINCE_REVIEW.md" "$OUTGOING_DIR" "$BUNDLE_DIR/MANIFEST.md" <<'PYEOF'
+import re
+import sys
+from pathlib import Path
+
+import workflow_fingerprint as fingerprint
+
+repo_root, work_item_id = Path(sys.argv[1]), sys.argv[2]
+out_path, outgoing_dir, new_manifest = Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5])
+revision_re = re.compile(r"^implementation_revision: ([0-9]+)$", re.MULTILINE)
+stage_re = re.compile(r"^stage: implementation$", re.MULTILINE)
+old_manifest = outgoing_dir / "MANIFEST.md"
+old_text = old_manifest.read_text(errors="replace") if old_manifest.is_file() else ""
+new_text = new_manifest.read_text(errors="replace") if new_manifest.is_file() else ""
+old_rev, new_rev = revision_re.search(old_text), revision_re.search(new_text)
+if stage_re.search(old_text) and old_rev and new_rev and old_rev.group(1) == new_rev.group(1):
+    sys.exit(0)  # same-content republication or idempotent regeneration: leave the file alone
+fingerprint.write_changes_since_review(
+    repo_root, work_item_id, "implementation", out_path, outgoing_bundle_dir=outgoing_dir,
+)
+PYEOF
+fi
+
 # --- archive ---
 # Item 318 (WF8c scope clause (j), OPUS-R102-011): write to a temp file
 # first, then rename onto the real archive path -- an interrupted or
@@ -763,7 +833,7 @@ fi
 # plan-stage amendment only; an implementation or post-fix archive built
 # after the amendment resolved must never carry the stale plan-stage copy
 # still sitting next to current/.
-tar -czf "$ARCHIVE_TMP" -C "$ARCHIVE_ROOT" $([[ "$STAGE" == "plan" ]] && cd "$ARCHIVE_ROOT" && [ -f AMENDMENT_DIFF.patch ] && echo AMENDMENT_DIFF.patch) current
+tar -czf "$ARCHIVE_TMP" -C "$ARCHIVE_ROOT" $([[ "$STAGE" == "plan" ]] && cd "$ARCHIVE_ROOT" && [ -f AMENDMENT_DIFF.patch ] && echo AMENDMENT_DIFF.patch) $([[ -f "$ARCHIVE_ROOT/CHANGES_SINCE_REVIEW.md" && ( "$STAGE" == "plan" || -n "$WORK_ITEM_ID" ) ]] && grep -q "^stage: $([[ "$STAGE" == "plan" ]] && echo plan || echo implementation)$" "$ARCHIVE_ROOT/CHANGES_SINCE_REVIEW.md" && echo CHANGES_SINCE_REVIEW.md) current
 mv -f "$ARCHIVE_TMP" "$ARCHIVE"
 
 # --- closing check (D-Fingerprint-Generalization, GPT-R30-001/003; WFR-67

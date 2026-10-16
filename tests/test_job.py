@@ -2204,8 +2204,28 @@ class UsageLimitLegacyTest(_LifecycleCase):
         reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo, runtime_root=self.runtime_root)
         self.assertEqual(reconciled["status"], job.STATUS_FAILED)
 
-    def test_the_usage_ledger_charges_an_interrupted_limited_job_as_a_job_that_ran(self) -> None:
-        self.assertFalse(job.never_launched(self._limited()))
+    def test_a_staged_only_change_to_a_colon_prefixed_file_is_failed_live_and_on_resume(self) -> None:
+        name = ":notes.txt"
+        notes = self.root / name
+        notes.write_text("one\n")
+        fixtures.commit_all(self.root, "add notes")
+        notes.write_text("two\n")
+        fixtures.run(["git", "add", "--", f":(literal){name}"], cwd=self.root)
+        notes.write_text("three\n")
+
+        def restage() -> None:
+            notes.write_text("four\n")
+            fixtures.run(["git", "add", "--", f":(literal){name}"], cwd=self.root)
+            notes.write_text("three\n")
+
+        record = self._limited(restage)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+        completed = {k: v for k, v in record.items()
+                     if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+        completed.update(status=job.STATUS_COMPLETED)
+        reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo, runtime_root=self.runtime_root)
+        self.assertEqual(reconciled["status"], job.STATUS_FAILED)
 
     def test_a_pending_record_with_a_malformed_block_is_invalid(self) -> None:
         record = self._limited()

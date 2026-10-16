@@ -251,11 +251,13 @@ DELETED_MARKER = "deleted"
 def _staged_identities(repo_root: Path, paths: Sequence[str],
                        runner: Runner | None) -> dict[str, list[tuple[str, str, str]]]:
     """``git ls-files --stage -z`` for ``paths``: path -> ``(mode, blob,
-    stage)`` per index entry. Read-only: no hook, filter or textconv runs and
-    nothing under ``.git`` is written."""
+    stage)`` per index entry. Each path is a ``:(literal)`` pathspec, so a
+    name such as ``:notes.txt`` is not read as pathspec syntax. Read-only: no hook, filter or textconv
+    runs and nothing under ``.git`` is written."""
     if not paths:
         return {}
-    out = _git(repo_root, ["ls-files", "--stage", "-z", "--", *paths], runner)
+    out = _git(repo_root, ["ls-files", "--stage", "-z", "--",
+                           *(f":(literal){path}" for path in paths)], runner)
     found: dict[str, list[tuple[str, str, str]]] = {}
     for item in out.split("\0"):
         head, sep, path = item.partition("\t")

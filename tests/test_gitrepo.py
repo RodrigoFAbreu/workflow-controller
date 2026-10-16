@@ -192,6 +192,21 @@ class TrackedChangeDigestsTest(_Case):
         run(["git", "add", "new.txt"], cwd=self.clone)
         self.assertNotEqual(intent["staged"], self.snapshot()["new.txt"]["staged"])
 
+    def test_a_colon_prefixed_name_is_a_literal_path_with_its_staged_identity(self) -> None:
+        self.commit(":notes.txt", "one\n")
+        (self.clone / ":notes.txt").write_text("two\n")
+        run(["git", "add", "--", ":(literal):notes.txt"], cwd=self.clone)
+        (self.clone / ":notes.txt").write_text("three\n")
+        before = self.snapshot()[":notes.txt"]
+        self.assertEqual(before["entry"], "MM :notes.txt")
+        self.assertIsNotNone(before["staged"])
+        (self.clone / ":notes.txt").write_text("four\n")
+        run(["git", "add", "--", ":(literal):notes.txt"], cwd=self.clone)
+        (self.clone / ":notes.txt").write_text("three\n")
+        after = self.snapshot()[":notes.txt"]
+        self.assertEqual(after["digest"], before["digest"])
+        self.assertNotEqual(after["staged"], before["staged"])
+
     def test_a_symlink_is_not_comparable(self) -> None:
         self.commit("link.txt", "one\n")
         (self.clone / "link.txt").unlink()

@@ -1206,6 +1206,23 @@ class UsageLimitFactTest(unittest.TestCase):
                 self.assertIsNone(diagnosis["usage_limit"])
                 self.assertNotEqual(diagnosis["reason"], ws.REASON_USAGE_LIMIT)
 
+    def test_a_non_string_type_is_not_a_window_and_the_fact_survives(self):
+        for bad in ([], {}, 7):
+            with self.subTest(bad=bad):
+                events = self.events()
+                self.rejected(events)["rate_limit_info"]["rateLimitType"] = bad
+                _, _, diagnosis = self.classify(events)
+                self.assertEqual(diagnosis["usage_limit"],
+                                 {"resets_at": 1790287800, "rate_limit_type": None, "window": None})
+
+    def test_an_astronomically_large_reset_gives_no_fact(self):
+        events = self.events()
+        info = self.rejected(events)["rate_limit_info"]
+        info["unifiedWindows"]["five_hour"]["resetsAt"] = 10 ** 400
+        info["resetsAt"] = 10 ** 400
+        _, _, diagnosis = self.classify(events)
+        self.assertIsNone(diagnosis["usage_limit"])
+
     def test_non_json_infinity_literal_gives_no_fact(self):
         data = self.GOLDEN.read_text().replace("1790287800", "Infinity")
         _, _, diagnosis = ws.classify(data, mode=ws.PRINT, returncode=1)

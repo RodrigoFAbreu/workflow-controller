@@ -186,7 +186,12 @@ def _iso(seconds: float | None) -> str | None:
 
 
 def _finite_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _is_int(value: object) -> bool:
@@ -377,7 +382,7 @@ class WorkerStream:
             "offset": offset,
             "resets_at": resets,
             "rate_limit_type": kind if isinstance(kind, str) else None,
-            "window": usage._CLAUDE_WINDOW_KEYS.get(kind),
+            "window": usage._CLAUDE_WINDOW_KEYS.get(kind) if isinstance(kind, str) else None,
         })
 
     def usage_limit(self) -> dict | None:

@@ -55,8 +55,9 @@ exactly once.
 
 A job record can carry a `usage_limit` block (the reset time and the window
 name) when its worker reached the provider's usage limit. An `INTERRUPTED`
-job with that block changed nothing, and a new `step` or `run` repeats the
-step; a `FAILED` job with it had changed state. The pre-state of every job
+job with that block at the top level changed nothing, and a new `step` or
+`run` repeats the step; a `FAILED` job had changed state and carries the same
+block under `reconciliation_evidence.usage_limit`. The pre-state of every job
 also records `tracked_changes`, the digest of each dirty tracked path, which
 is how "changed nothing" is decided
 ([how the limit is recognised](workers.md#how-a-usage-limit-is-recognised)).

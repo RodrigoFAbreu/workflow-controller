@@ -45,6 +45,47 @@ reached mid-job and repeat the step. Plan revision 5 is approved (`f401c6f`); th
   differs on the base commit as well); `tools/run_tests.py` ran 4006 tests, coverage exact, with 2 failures, both
   the Git 2.56 trailer-rule tests (follow-up 12), unrelated to this milestone.
 
+## Functional review checklist
+
+Implementation revision 7, technical approval `df5de7b` (`CURRENT`). Base commit `988e8c3`. Findings go to
+`.ai-review/workflow-controller-usage-limit-mid-job/feedback/FUNCTIONAL_REVIEW.md`.
+
+**Setup.** Work in a clone with a scratch bare `origin` and a fake `gh` on `PATH` (a clone's `origin` is the real
+repository). Run the tool from the checkout: `PYTHONPATH=<checkout> python3 -P -m controller ...`. No feature flag or
+real provider is needed; the worker is a fake `claude` that prints a stream-json stream. Do not run the whole test
+suite backgrounded with `&` (Ctrl-C tests fail spuriously).
+
+**Test data.** Two fake-worker streams, each ending the job with exit 1:
+- *limited*: a `rate_limit_event` with status `rejected` and a finite `resetsAt` a few seconds ahead, then a `result`
+  with `is_error: true` and API status 429. Samples: `tests/golden/claude_stream_usage_limit_rejected.md`.
+- *plain failure*: an error `result` with no rate-limit event.
+A seeded work item at `IMPLEMENTING` (see `tests/test_lifecycle_orchestration.py`, `seed`).
+
+| # | Flow | Expected |
+|---|------|----------|
+| 1 | Run the *limited* worker for one `step` when it changes nothing (no commit, no tracked edit; an untracked file is allowed). | Job `INTERRUPTED` with `usage_limit` and `UsageLimitReached`; exit **17**; stderr says "usage limit reached mid-job" and names the reset; it never says "nothing was started". |
+| 2 | Same worker, but it first commits, edits a tracked file, stages a change, or changes a file mode. | Job `FAILED`, exit **30**; the record's evidence carries the limit; not repeated. A rename or copy of a tracked path also counts as a change. |
+| 3 | `run` with the *limited* worker on the first attempt and a normal worker on the second, `usage.enabled` false. | `run` waits (no lock held, `usage_paused`) until the reset plus `usage.resume_grace_seconds`, repeats the step, and the repeat does not use a `--max-steps` step. Repeat with `usage.enabled` true. |
+| 4 | `run` where every attempt is limited. | Stops after **three** limited attempts in a row, exit 17, line says the worker ran. |
+| 5 | `run` where the reset is farther than `usage.max_wait_seconds`. | Stops at once, exit 17, line names the reset and says the worker ran. Ctrl-C during the mid-job wait says the worker ran. |
+| 6 | `step` or `run` on an `INTERRUPTED` job with no limit fact (for example a timed-out worker). | Exit **40** and "job ... was interrupted ... a new `step` repeats it"; no `KeyError`. `resume` on a limited record names the reset. |
+| 7 | Streams that must NOT count as a limit: an earlier `rejected` event then a successful turn; localised text only; a missing or non-finite `resetsAt`; an unmapped limit type. | No `usage_limit` fact (the unmapped type keeps the event's own reset); plain `FAILED`. A timeout or signal keeps its own reason. |
+| 8 | First job after a five-hour reset (`controller/usage.py` `complete`): baseline expired at reservation, first reading in a later window. | Delta is `measured` (`p1 - p0`) and yields a forecast sample. A job admitted before the reset still gets `after_reset`. |
+| 9 | Read `docs/exit-codes.md` (rows 17, 30, 40), `docs/common-problems.md` (the mid-job entry), `docs/run.md`, `docs/guide/workers.md`, `docs/ROADMAP.md`. | They match flows 1-8; `python3 tools/check_docs.py` exits 0. |
+
+Automated evidence for these flows: `tests/test_worker_stream.py`, `tests/test_job.py`, `tests/test_protocol_outcome.py`,
+`tests/test_gitrepo.py`, `tests/test_usage_limit_mid_job.py`, `tests/test_usage.py` and the lifecycle scenario
+`scenario-usage-limit-mid-job-waits-and-repeats`.
+
+**Known limitations / out of scope.** A limited job that had changed state is not repeated automatically (exit 30). Only
+rejected-event + 429 + finite reset is recognised; text alone never is. Two Git 2.56 trailer tests
+(`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated (follow-up 12); the
+`plan_stage_decisions` golden differs on the base commit too.
+
+**Next steps.** When testing is clean, `/accept-milestone` is the only acceptance command and needs every checkpoint in
+this item's registry `COMPLETE`. If one is outstanding, finish it with `/milestone-implement` and return here.
+Findings go through `/apply-functional-review` (bounded fix, or a `-remediation-<n>` child for wider scope).
+
 The previous milestone's record follows.
 
 ---

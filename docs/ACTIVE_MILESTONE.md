@@ -76,6 +76,12 @@ Automated evidence for these flows: `tests/test_review_rounds.py`, `tests/test_s
 `ReviewCapGateTest` in `tests/test_protocol_job.py`, `tests/test_protocol_decision.py`, `tests/test_telemetry.py`,
 `tests/test_review_round_lifecycle.py` and the lifecycle scenario `scenario-review-round-cap-stops-and-continues`.
 
+**Functional review round 1.** An independent Codex tester passed flows 1, 2 and 4-10 and failed flows 3 and 11 on one
+Optional finding: the cap gate named the round's source only for a round counted from job records. Fixed by a bounded
+fix: the gate now says "(given by the Workflow)" for a Workflow-given round, with an assertion in
+`ReviewCapGateTest` and the matching wording in `docs/common-problems.md`. Nothing was deferred to a remediation
+child. Re-test flows 3 and 11 after the fresh implementation review.
+
 **Known limitations / out of scope.** A plan round counted from job records is a lower bound. `explain` shows the
 setting's cap, not a flag's. There is no "off" value (a long loop is a cap of 100). The cap does not stop the
 Controller's own external-review courier or any non-apply action. Two Git 2.56 trailer tests (`test_release_notes`,

@@ -1154,6 +1154,16 @@ class UsageLimitFactTest(unittest.TestCase):
         self.assertEqual(self.classify(events)[2]["usage_limit"],
                          {"resets_at": 1790287800, "rate_limit_type": "opus_only", "window": None})
 
+    def test_unmapped_type_ignores_a_same_named_window_slot(self):
+        for slot in ({"resetsAt": "not-a-time"}, {"resetsAt": 123}, {"resetsAt": None}):
+            with self.subTest(slot=slot):
+                events = self.events()
+                info = self.rejected(events)["rate_limit_info"]
+                info["rateLimitType"] = "opus_only"
+                info.setdefault("unifiedWindows", {})["opus_only"] = slot
+                self.assertEqual(self.classify(events)[2]["usage_limit"],
+                                 {"resets_at": 1790287800, "rate_limit_type": "opus_only", "window": None})
+
     def test_window_reset_wins_over_the_events_own(self):
         events = self.events()
         events[events.index(self.rejected(events))]["rate_limit_info"]["resetsAt"] = 1

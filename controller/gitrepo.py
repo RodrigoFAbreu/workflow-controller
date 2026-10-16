@@ -275,7 +275,8 @@ def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> 
     mode bit Git tracks for a regular file) and the staged identity (index
     mode and blob id). A deleted path carries :data:`DELETED_MARKER` for the
     worktree fields. A path the snapshot cannot distinguish -- a symlink, a
-    directory or submodule, a path whose ``lstat`` fails, one with an
+    directory or submodule, a path whose ``lstat`` fails, one whose name
+    did not decode losslessly, one with an
     unmerged index stage or several entries, or one whose status says it has
     an index entry that the lookup did not return -- is ``{"entry": ...,
     "comparable": False}``, so a caller fails closed for it. The worktree
@@ -286,6 +287,11 @@ def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> 
     for path, entry in entries.items():
         not_comparable = {"entry": entry, "comparable": False}
         stages = staged.get(path, [])
+        if "\ufffd" in path:
+            # Decoding replaced bytes of the name, so the lookups below could
+            # describe a different file than the one Git reported.
+            snapshot[path] = not_comparable
+            continue
         # An index entry the lookup did not return (a pathspec the
         # environment, e.g. GIT_LITERAL_PATHSPECS, changed the meaning of) is
         # a miss, not "no entry": only a path deleted from the index has none.

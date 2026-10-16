@@ -371,7 +371,10 @@ class WorkerStream:
         kind = info.get("rateLimitType")
         resets = None
         windows = info.get("unifiedWindows")
-        entry = windows.get(kind) if isinstance(windows, dict) and isinstance(kind, str) else None
+        # Only a mapped type has a window slot; an unmapped one takes the
+        # event's own reset whatever a same-named slot holds.
+        mapped = isinstance(kind, str) and kind in usage._CLAUDE_WINDOW_KEYS
+        entry = windows.get(kind) if isinstance(windows, dict) and mapped else None
         if isinstance(entry, dict) and _finite_number(entry.get("resetsAt")):
             resets = entry["resetsAt"]
         elif not (isinstance(entry, dict) and "resetsAt" in entry) and _finite_number(info.get("resetsAt")):

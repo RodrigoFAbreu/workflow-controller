@@ -193,6 +193,23 @@ class TrackedChangeDigestsTest(_Case):
         run(["git", "add", "new.txt"], cwd=self.clone)
         self.assertNotEqual(intent["staged"], self.snapshot()["new.txt"]["staged"])
 
+    def test_a_name_that_does_not_decode_losslessly_is_not_comparable(self) -> None:
+        raw = os.fsencode(self.clone) + b"/raw-\xff.txt"
+        clean = self.clone / "raw-\ufffd.txt"
+        self.commit("raw-\ufffd.txt", "clean\n")
+        with open(raw, "wb") as handle:
+            handle.write(b"one\n")
+        run(["git", "add", "-A"], cwd=self.clone)
+        run(["git", "commit", "-m", "raw"], cwd=self.clone)
+        with open(raw, "wb") as handle:
+            handle.write(b"two\n")
+        run(["git", "add", "-A"], cwd=self.clone)
+        with open(raw, "wb") as handle:
+            handle.write(b"three\n")
+        snapshot = self.snapshot()
+        self.assertTrue(clean.exists())
+        self.assertEqual([r["comparable"] for r in snapshot.values()], [False])
+
     def test_a_colon_prefixed_name_is_a_literal_path_with_its_staged_identity(self) -> None:
         self.commit(":notes.txt", "one\n")
         (self.clone / ":notes.txt").write_text("two\n")

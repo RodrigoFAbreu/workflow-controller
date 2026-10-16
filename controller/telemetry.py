@@ -152,6 +152,16 @@ def is_worker_job(record: Mapping) -> bool:
     return any(isinstance(record.get(key), Mapping) for key in ("telemetry", "worker_streams", "worker"))
 
 
+def is_courier_job(record: Mapping) -> bool:
+    """Whether ``record`` is a Controller external-review (courier) job:
+    ``kind`` ``review`` with a ``review.action_id``. It stores no ``protocol``
+    block and no worker streams, so it has no figures, but it is a review
+    round and ``telemetry`` reports its action, stage and round."""
+    block = record.get("review")
+    return record.get("kind") == "review" and isinstance(block, Mapping) \
+        and isinstance(block.get("action_id"), str)
+
+
 def _stdout_path(record: Mapping) -> str | None:
     for key in ("worker_streams", "worker"):
         block = record.get(key)
@@ -307,9 +317,12 @@ def parse_since(value: str) -> datetime.datetime:
 
 
 def _action_id(record: Mapping) -> str | None:
-    block = record.get("protocol")
-    action = block.get("action_id") if isinstance(block, Mapping) else None
-    return action if isinstance(action, str) else None
+    for key in ("protocol", "review"):
+        block = record.get(key)
+        action = block.get("action_id") if isinstance(block, Mapping) else None
+        if isinstance(action, str):
+            return action
+    return None
 
 
 def _round_columns(records: list[Mapping]) -> dict[int, tuple[str | None, str, int | None, str | None]]:
@@ -327,7 +340,8 @@ def _round_columns(records: list[Mapping]) -> dict[int, tuple[str | None, str, i
         stage = review_rounds.stage_of(action)
         round_number = source = None
         if stage in (review_rounds.STAGE_PLAN, review_rounds.STAGE_IMPLEMENTATION):
-            document = record["protocol"].get("decision")
+            block = record.get("protocol")
+            document = block.get("decision") if isinstance(block, Mapping) else None
             snapshot = document.get("snapshot") if isinstance(document, Mapping) else None
             round_number, source = review_rounds.current_round(
                 snapshot, stage, ordered[:index + 1], target_repo=record.get("target_repo"),
@@ -352,7 +366,7 @@ def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str |
     columns = _round_columns(records)
     selected = []
     for record in records:
-        if not is_worker_job(record):
+        if not (is_worker_job(record) or is_courier_job(record)):
             continue
         if work_item is not None and record.get("work_item_id") != work_item:
             continue

@@ -336,6 +336,48 @@ class RoundsTest(_RuntimeCase):
                          ("implementation.review.external", 2, "jobs"))
         self.assertEqual((rows["j-c"]["round"], rows["j-c"]["round_source"]), (7, "workflow"))
 
+    def courier_job(self, job_id: str, action: str, minute: int, *, phase: str, plan_revision: int | None = 1,
+                    implementation_revision: int | None = 1) -> dict:
+        """A Controller external-review job as ``job.py`` writes it: ``kind``
+        ``review``, ``review.action_id``, ``pre_state``, and no ``protocol``,
+        ``worker``, ``worker_streams`` or ``telemetry`` block."""
+        return self.job(
+            job_id, created_at=f"2026-01-01T00:{minute:02d}:00Z", kind="review",
+            pre_state={"phase": phase, "plan_revision": plan_revision,
+                       "implementation_revision": implementation_revision},
+            review={"stage": "plan" if action.startswith("plan") else "implementation", "action_id": action,
+                    "launched": True, "outcome": "ingested"})
+
+    def test_a_courier_review_job_reports_its_action_stage_and_round(self) -> None:
+        plan_phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+        impl_phase = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+        self.courier_job("c-1", "plan.review.external", 1, phase=plan_phase, plan_revision=1)
+        self.courier_job("c-2", "plan.review.external", 2, phase=plan_phase, plan_revision=2)
+        self.courier_job("c-3", "implementation.review.external", 3, phase=impl_phase, implementation_revision=1)
+        self.courier_job("c-4", "implementation.review.external", 4, phase=impl_phase, implementation_revision=2)
+        self.protocol_job("p-1", "plan.review.local", 5, phase="AWAITING_LOCAL_PLAN_REVIEW", plan_revision=3)
+        for record in observe.list_jobs(self.runtime_root)[:4]:
+            self.assertFalse(telemetry.is_worker_job(record))
+            self.assertTrue(telemetry.is_courier_job(record))
+        selected = telemetry.rows(observe.list_jobs(self.runtime_root))
+        self.assertEqual([(r["job_id"], r["action"], r["stage"], r["round"], r["round_source"], r["unavailable"])
+                          for r in selected], [
+            ("c-1", "plan.review.external", "plan", 1, "jobs", True),
+            ("c-2", "plan.review.external", "plan", 2, "jobs", True),
+            ("c-3", "implementation.review.external", "implementation", 1, "jobs", True),
+            ("c-4", "implementation.review.external", "implementation", 2, "jobs", True),
+            ("p-1", "plan.review.local", "plan", 3, "jobs", False)])
+        self.assertEqual([(g["key"], g["jobs"]) for g in telemetry.groups(selected, "stage,round")], [
+            ({"stage": "implementation", "round": "1~"}, 1), ({"stage": "implementation", "round": "2~"}, 1),
+            ({"stage": "plan", "round": "1~"}, 1), ({"stage": "plan", "round": "2~"}, 1),
+            ({"stage": "plan", "round": "3~"}, 1)])
+        self.assertEqual([(g["key"], g["jobs"]) for g in telemetry.groups(selected, "action")], [
+            ({"action": "implementation.review.external"}, 2), ({"action": "plan.review.external"}, 2),
+            ({"action": "plan.review.local"}, 1)])
+        # The JSON stays additive: the same row keys as any other job.
+        payload = json.loads(self.cli("--json", "telemetry", "--by", "stage")[1])
+        self.assertEqual({tuple(sorted(row)) for row in payload["rows"]}, {tuple(sorted(selected[0]))})
+
     def test_same_content_applies_do_not_raise_the_derived_round_and_a_filter_does_not_change_it(self) -> None:
         phase = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
         self.protocol_job("j-1", "implementation.apply_review", 1, phase=phase, implementation_revision=3)

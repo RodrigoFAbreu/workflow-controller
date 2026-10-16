@@ -310,7 +310,10 @@ of each kind of step. A round the Workflow stated is shown as
 `stage=plan, round=4~`, in a separate group (the JSON rows carry
 `round_source`: `workflow` or `jobs`). A `~` plan round is a lower bound and
 not the same measure as the Workflow's content count, so compare `~` groups
-with `~` groups.
+with `~` groups. A review the Controller ran itself (`plan.review.external`,
+`implementation.review.external`) appears in these groups with its action,
+stage and round, and as "telemetry unavailable" because it keeps no worker
+stream.
 
 The five `reviewer` rows (1.10.0) let the Controller run the cross-model
 review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):

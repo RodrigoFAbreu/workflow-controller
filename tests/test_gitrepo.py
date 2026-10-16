@@ -210,6 +210,31 @@ class TrackedChangeDigestsTest(_Case):
         self.assertTrue(clean.exists())
         self.assertEqual([r["comparable"] for r in snapshot.values()], [False])
 
+    def test_a_rename_source_is_part_of_the_snapshot(self) -> None:
+        self.commit("source-a.txt", "same\n")
+        self.commit("source-b.txt", "same\n")
+        run(["git", "mv", "source-a.txt", "destination.txt"], cwd=self.clone)
+        first = self.snapshot()
+        self.assertEqual(first["destination.txt"]["source"], "source-a.txt")
+        run(["git", "reset", "-q", "HEAD", "--", "source-a.txt", "destination.txt"], cwd=self.clone)
+        run(["git", "checkout", "--", "source-a.txt"], cwd=self.clone)
+        run(["git", "rm", "-q", "source-b.txt"], cwd=self.clone)
+        run(["git", "add", "destination.txt"], cwd=self.clone)
+        second = self.snapshot()
+        self.assertEqual(second["destination.txt"]["source"], "source-b.txt")
+        self.assertNotEqual(first, second)
+
+    def test_a_rename_source_that_does_not_decode_losslessly_is_not_comparable(self) -> None:
+        root = os.fsencode(self.clone)
+        with open(root + b"/raw-\xff.txt", "wb") as handle:
+            handle.write(b"same\n")
+        run(["git", "add", "-A"], cwd=self.clone)
+        run(["git", "commit", "-m", "raw"], cwd=self.clone)
+        run(["git", "mv", "--", os.fsdecode(b"raw-\xff.txt"), "destination.txt"], cwd=self.clone)
+        record = self.snapshot()["destination.txt"]
+        self.assertFalse(record["comparable"])
+        self.assertIn("source", record)
+
     def test_a_colon_prefixed_name_is_a_literal_path_with_its_staged_identity(self) -> None:
         self.commit(":notes.txt", "one\n")
         (self.clone / ":notes.txt").write_text("two\n")

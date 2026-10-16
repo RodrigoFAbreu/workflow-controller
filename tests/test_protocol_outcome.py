@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -20,7 +21,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, managed_repo, protocol, worker  # noqa: E402
+from controller import gitrepo, job, managed_repo, protocol, worker  # noqa: E402
 from controller.errors import DriftedInstallationError, WorkflowProtocolFailedError  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
@@ -632,6 +633,26 @@ class UsageLimitTest(unittest.TestCase):
         notes.write_text(notes.read_text() + "\n")
         notes.chmod(0o755)
         self._assert_failed_live_and_on_resume(env, self._step(env, lambda e: notes.chmod(0o644)))
+
+    def test_a_changed_rename_source_is_not_an_unchanged_tree(self) -> None:
+        # The live check and ``resume`` both decide through ``_tracked_tree_unchanged``; the Workflow
+        # protocol itself cannot run over these extra dirty paths or raw filenames, so it is called directly.
+        for first, second, comparable in ((b"source-a.txt", b"source-b.txt", True), (b"raw-\xff.txt", b"raw-\xfe.txt", False)):
+            with self.subTest(source=first):
+                env = _Env(self)
+                for name in (first, second):
+                    with open(os.fsencode(env.root) + b"/" + name, "wb") as handle:
+                        handle.write(b"same\n")
+                fixtures.run(["git", "add", "-A"], cwd=env.root)
+                fixtures.run(["git", "commit", "-m", "sources"], cwd=env.root)
+                fixtures.run(["git", "mv", "--", os.fsdecode(first), "destination.txt"], cwd=env.root)
+                pre_state = {"tracked_changes": gitrepo.tracked_change_digests(env.root)}
+                self.assertEqual(job._tracked_tree_unchanged(env.root, pre_state), comparable)
+                fixtures.run(["git", "reset", "-q", "HEAD", "--", os.fsdecode(first), "destination.txt"], cwd=env.root)
+                fixtures.run(["git", "checkout", "--", os.fsdecode(first)], cwd=env.root)
+                fixtures.run(["git", "rm", "-q", "--", os.fsdecode(second)], cwd=env.root)
+                fixtures.run(["git", "add", "destination.txt"], cwd=env.root)
+                self.assertFalse(job._tracked_tree_unchanged(env.root, pre_state))
 
     def test_a_limited_worker_whose_transition_verified_is_failed_not_finished(self) -> None:
         env = _Env(self, "ready")

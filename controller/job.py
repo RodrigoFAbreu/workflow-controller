@@ -5873,7 +5873,9 @@ def _review_cap_gate(runtime_root: Path, managed_repo: Any, work_item: Any, deci
     if not review_rounds.cap_decision(info.action_id, round_number, cap):
         return None
     counted = ""
-    if source == review_rounds.SOURCE_JOBS:
+    if source == review_rounds.SOURCE_WORKFLOW:
+        counted = " (given by the Workflow)"
+    elif source == review_rounds.SOURCE_JOBS:
         counted = " (counted from the Controller's job records, not given by the Workflow"
         counted += ("; the Workflow's own count may be higher)" if stage == review_rounds.STAGE_PLAN else ")")
     return protocol_decision.gate_for(

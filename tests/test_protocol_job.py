@@ -417,7 +417,8 @@ class ReviewCapGateTest(unittest.TestCase):
     def test_the_text_names_the_three_options_in_order_and_that_the_cap_is_per_command(self) -> None:
         target = _Target(self)
         _code, text = self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}})
-        self.assertIn("round 4", text)
+        self.assertIn("round 4 (given by the Workflow), at the round cap of 4", text)
+        self.assertNotIn("counted from the Controller's job records", text)
         self.assertIn("cap of 4", text)
         positions = [text.index(part) for part in ("(1) raise the cap", "(2) accept at the cap with /approve-review",
                                                    "(3) withdraw and re-scope with /milestone-plan demo")]

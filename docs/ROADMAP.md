@@ -12,15 +12,17 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 `1033872`): a worker that reaches the usage limit mid-job having changed nothing is waited out and its
 step repeated (C8b, accepted 2026-10-16 by gate policy). It admits Workflow 2.5.1 and 2.6.0, and any
 Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow 2.12.0
-with automatic gates (since 2026-10-16). What is complete is marked in the tables below; what each
+with automatic gates (since 2026-10-16). C13, review convergence ([11.13](#1113-review-convergence)), a
+round cap per review stage, is complete (accepted 2026-10-16 by gate policy) and is released as 1.12.0
+when its `feat:` pull request (#61) merges. C10 waited for it on purpose: it is the largest step left,
+and C13 makes its review rounds cheaper. What is complete is marked in the tables below; what each
 release changed is in the [release history](release-history.md).
 
-**Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
+**Next, in order** (owner decisions, 2026-10-14, 2026-10-15 and 2026-10-16):
 1. C14, review modes ([11.14](#1114-review-modes));
-2. C10, C12 and C11, then the orchestrator series O1-O7.
-
-C13, review convergence ([11.13](#1113-review-convergence)), is complete. C10 waited for it on purpose: it is
-the largest step left, and C13 makes its review rounds cheaper.
+2. a clean-up milestone that works through the GitHub issues labelled `review-follow-up` (the minor
+   review findings recorded at each acceptance; C13's are #63-#67);
+3. C10, C12 and C11, then the orchestrator series O1-O7.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -66,7 +68,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, accepted 2026-10-12 by gate policy, no release) | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) (complete, released as 1.10.0, PR #45, squash `6aa8f66`; accepted 2026-10-15 by gate policy; ADR 0013; C10 reuses the seam, the supervision precedent and `record_external_result`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
-| C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage (complete) | C7, W8 | [11.13](#1113-review-convergence) |
+| C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage (complete, accepted 2026-10-16 by gate policy, `feat:` releases 1.12.0 when PR #61 merges) | C7, W8 | [11.13](#1113-review-convergence) |
 | C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review | C13, the Workflow's answers | [11.14](#1114-review-modes) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |

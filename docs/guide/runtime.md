@@ -217,6 +217,7 @@ file is never an error: every setting then takes its built-in default.
 | `usage.repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
 | `usage.codex_run_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | `usage --usage-codex-cap` |
 | `usage.codex_repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
+| `review.round_cap` | integer | `4` | 1 to 100 | `--review-round-cap` |
 | `notifications.enabled` | boolean | `true` | -- | none |
 | `notifications.url` | string or `null` | `null` | an `http` or `https` URL, 1 to 2048 characters | none |
 | `notifications.api_key_file` | string or `null` | `null` | a path, 1 to 1024 characters; never the key | none |
@@ -286,6 +287,28 @@ the shared record holds is in
 [ADR 0011](../adr/0011-usage-budget.md); the stop it produces is exit
 `17` ([exit codes](../exit-codes.md)), and the operator's view is
 [`usage`](commands.md#usage).
+
+The `review.round_cap` row is the review round cap. A protocol run counts
+the review rounds of the plan stage and of the implementation stage
+separately: the Workflow's own `review_round` when its answer carries one
+(Workflow 2.12.0 and later), else the Controller's count over its job
+records of this repository and work item (a plan round counted that way is
+a lower bound: the Workflow counts published contents, which can exceed
+`plan_revision`). `<stage>.apply_review` is not launched at round `cap` or
+above, and `<stage>.review.local` is not launched above round `cap`; the
+step returns the `review_round_cap_reached` gate instead (see
+[a run stopped at the review round cap](../common-problems.md#a-run-stopped-at-the-review-round-cap)).
+No other action is stopped, and a legacy-path target is unaffected.
+`--review-round-cap N` on `step` and `run` replaces the setting for that
+command; there is no "off" value, a long loop is a cap of 100.
+
+To compare review rounds before and after a change, group the jobs by stage
+and round: `workflow-controller telemetry --by stage,round --since
+2026-10-01` (and again with the later date), or `--by action` for the cost
+of each kind of step. A round the Workflow stated is shown as `plan/4`; one
+counted from job records is shown as `plan/4~`, in a separate row. A `~`
+plan round is a lower bound and not the same measure as the Workflow's
+content count, so compare `~` rows with `~` rows.
 
 The five `reviewer` rows (1.10.0) let the Controller run the cross-model
 review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
@@ -416,6 +439,11 @@ ignores it, and its `settings clean` refuses.
 filled by 1.9.x, and moves nothing else. A 1.9.x Controller sharing the
 file afterwards warns about the unknown `reviewer` section, ignores it, and
 its `settings clean` refuses. 1.11.0 adds no row and stays at generation 6.
+
+The next release is table generation 7: it adds the `review.round_cap` row to
+a file filled by 1.10.x or 1.11.x, and moves nothing else. An older
+Controller sharing the file afterwards warns about the unknown `review`
+section, ignores it, and its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

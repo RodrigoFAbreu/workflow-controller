@@ -140,7 +140,11 @@ This is the first Controller version that can drive the implementation lifecycle
 
 ### Known follow-ups carried forward
 
-These are not blockers for the baseline, but should remain visible in later milestones:
+These are not blockers for the baseline, but should remain visible in later milestones. Since
+2026-10-16 every minor (Optional) review finding is fixed, dropped with a reason, or kept as a GitHub
+issue labelled [`review-follow-up`](https://github.com/RodrigoFAbreu/workflow-controller/labels/review-follow-up),
+listed here with a link; the one-time sweep of the findings archived before then is
+[recorded on its own page](milestones/optional-findings-sweep-2026-10-16.md).
 
 1. Manual external implementation-review gate can advertise a stale/missing ledger `review_content_id` after a failed local-review postcondition.
 2. Some generated resume hints use the invalid form:
@@ -319,6 +323,12 @@ These are not blockers for the baseline, but should remain visible in later mile
    `tests.test_worker.SupervisionTest.test_without_the_stop_the_worker_waits_for_the_wakeup` ended
    `INTERRUPTED` instead of `SUCCESS` (its settle window is 0.3 s). Wait on a readiness signal rather
    than a sampled field, or widen the window.
+32. [#55](https://github.com/RodrigoFAbreu/workflow-controller/issues/55): stale wording about the installed-release test (C9d review).
+33. [#56](https://github.com/RodrigoFAbreu/workflow-controller/issues/56): the test-leftover guard misses some process starts, and some cleanups are group kills
+   (C12a review; could ride with C12).
+34. [#57](https://github.com/RodrigoFAbreu/workflow-controller/issues/57): the unmerged-index usage-limit test checks less than its name says (C8b review).
+35. [#58](https://github.com/RodrigoFAbreu/workflow-controller/issues/58): no test for a lost merge reply after a squash onto a moved trunk (C4 review).
+36. [#59](https://github.com/RodrigoFAbreu/workflow-controller/issues/59): a roadmap step id is back on a user page, and `check_docs` does not catch step ids.
 
 ---
 

@@ -2219,6 +2219,31 @@ class UsageLimitLegacyTest(_LifecycleCase):
     def test_a_staged_only_colon_prefixed_change_is_failed_under_literal_pathspecs(self) -> None:
         self._under_literal_pathspecs(":notes.txt")
 
+    def test_a_changed_unmerged_blob_is_failed_when_the_index_lookup_misses(self) -> None:
+        # DU (stages 1 and 3) and DD (stage 1 only) start with "D" but are
+        # unmerged; under literal pathspecs the staged lookup returns nothing.
+        for case, stages in (("DU", (1, 3)), ("DD", (1,))):
+            with self.subTest(case):
+                blobs = [fixtures.run(["git", "hash-object", "-w", "--stdin"], cwd=self.root,
+                                      input=data).stdout.strip()
+                         for data in ("base\n", "other-1\n", "other-2\n")]
+
+                def stage(changed: bytes) -> None:
+                    lines = f"0 {'0' * 40}\tREADME.md\n"
+                    for number in stages:
+                        blob = blobs[0] if number == 1 else changed
+                        lines += f"100644 {blob} {number}\tREADME.md\n"
+                    fixtures.run(["git", "update-index", "--index-info"], cwd=self.root, input=lines)
+
+                stage(blobs[1])
+                literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+                with unittest.mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
+                    self.assertFalse(
+                        gitrepo.tracked_change_digests(self.root)["README.md"]["comparable"])
+                    record = self._limited(lambda: stage(blobs[2]))
+                self.assertEqual(record["status"], job.STATUS_FAILED)
+                self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+
     def _staged_only_change_is_failed(self, name: str) -> None:
         notes = self.root / name
         notes.write_text("one\n")

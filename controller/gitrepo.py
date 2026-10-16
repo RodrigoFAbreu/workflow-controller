@@ -277,6 +277,9 @@ def _staged_identities(repo_root: Path, paths: Sequence[str],
     return found
 
 
+_UNMERGED_STATUSES = frozenset({"DD", "AU", "UD", "UA", "DU", "AA", "UU"})
+
+
 def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> dict[str, dict]:
     """A content-sensitive snapshot of every changed tracked path
     (:func:`tracked_changes`), keyed by path: the status entry, the sha256 of
@@ -312,7 +315,9 @@ def tracked_change_digests(repo_root: Path, *, runner: Runner | None = None) -> 
         # An index entry the lookup did not return (a pathspec the
         # environment, e.g. GIT_LITERAL_PATHSPECS, changed the meaning of) is
         # a miss, not "no entry": only a path deleted from the index has none.
-        missed = not stages and entry[:1] != "D"
+        # ``DD`` and ``DU`` start with ``D`` but are unmerged: they do have
+        # index entries (stages 1 and 3), so a miss for them is a miss too.
+        missed = not stages and (entry[:1] != "D" or entry[:2] in _UNMERGED_STATUSES)
         if missed or len(stages) > 1 or any(stage != "0" for _mode, _blob, stage in stages):
             snapshot[path] = not_comparable
             continue

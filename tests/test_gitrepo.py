@@ -278,6 +278,10 @@ class TrackedChangeDigestsTest(_Case):
         removed = gitrepo.tracked_change_digests(self.clone, runner=stub("D  "))
         self.assertTrue(removed["a.txt"]["comparable"])
         self.assertIsNone(removed["a.txt"]["staged"])
+        # DD and DU start with "D" but are unmerged: their index entries exist.
+        for unmerged in ("DD ", "DU ", "UD ", "AU ", "UA ", "AA ", "UU "):
+            record = gitrepo.tracked_change_digests(self.clone, runner=stub(unmerged))["a.txt"]
+            self.assertFalse(record["comparable"], unmerged)
 
     def test_a_symlink_is_not_comparable(self) -> None:
         self.commit("link.txt", "one\n")

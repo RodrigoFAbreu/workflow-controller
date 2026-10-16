@@ -8,8 +8,8 @@ stream (a rejected `rate_limit_event`, a 429 error `result` and a finite `resets
 changed nothing ends `INTERRUPTED` with `UsageLimitReached`; `run` waits for the reset without holding the lock and
 repeats the step, up to three limited attempts in a row; `step` exits 17 and names the reset. A limited job that
 changed state stays `FAILED` (exit 30) with the limit in its evidence. The first job after a five-hour reset is now
-measured (the C8 review follow-up). It is released as the minor release **1.11.0** when its `feat:` pull request
-(#52) merges.
+measured (the C8 review follow-up). It merged as pull request #52 (squash `1033872`), which released the minor
+release **1.11.0** (release notes `docs/releases/1.11.0.md`).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).

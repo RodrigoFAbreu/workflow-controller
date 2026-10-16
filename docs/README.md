@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.11.0](releases/1.11.0.md) | a usage limit reached mid-job: recognised from the worker's stream, a job that changed nothing is `INTERRUPTED` and `run` waits for the reset and repeats it (exit 17 for `step`, exit 40 for an `INTERRUPTED` job without a limit), and the first job after a reset is measured |
 | [1.10.0](releases/1.10.0.md) | opt-in: the Controller runs the cross-model review itself with a Codex reviewer in a disposable copy, behind an enforced boundary, and hands the verdict to the Workflow (`reviewer` settings, settings generation 6) |
 | [1.9.0](releases/1.9.0.md) | SignalHub notifications: the Controller pushes 14 configurable event types, idempotently and off the lifecycle's thread (`notifications` command, settings generation 5, `notifications --test`) |
 | [1.8.0](releases/1.8.0.md) | a usage budget: the Claude and Codex windows are read, each job is forecast and reserved across lanes, and a run pauses before a limit (`usage` command, settings generation 4, `--usage-cap`, exit code 17) |

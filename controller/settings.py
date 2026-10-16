@@ -171,6 +171,9 @@ TABLE: tuple[Setting, ...] = (
     Setting("reviewer.effort", TYPE_OPTIONAL_STRING, None, 1, 32, None, 6),
     Setting("reviewer.timeout_seconds", TYPE_INT, 3600, 60, 86400, None, 6),
     Setting("reviewer.binary", TYPE_OPTIONAL_STRING, None, 1, 1024, None, 6),
+    # The review round cap (workflow-controller-review-convergence D4): a
+    # protocol target's review loop stops at this round per stage.
+    Setting("review.round_cap", TYPE_INT, 4, 1, 100, "run/step --review-round-cap", 7),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -181,8 +184,9 @@ TABLE: tuple[Setting, ...] = (
 #: (orchestration-protocol-v1 C.3). 4: the ``usage.*`` rows
 #: (workflow-controller-usage-budget D4). 5: the ``notifications.*`` rows
 #: (workflow-controller-signalhub-notifications D3). 6: the ``reviewer.*``
-#: rows (workflow-controller-codex-reviewer D10).
-TABLE_GENERATION = 6
+#: rows (workflow-controller-codex-reviewer D10). 7: ``review.round_cap``
+#: (workflow-controller-review-convergence D4).
+TABLE_GENERATION = 7
 
 
 def _table() -> dict[str, Setting]:

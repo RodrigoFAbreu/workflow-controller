@@ -241,6 +241,19 @@ def _usage_percent(text: str) -> int:
     return value
 
 
+def _review_round_cap(text: str) -> int:
+    """``--review-round-cap``'s ``type=``: an integer from 1 to 100, the
+    bounds of the ``review.round_cap`` row; anything else is a usage error
+    (exit 2)."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid round cap: {text!r}") from None
+    if not 1 <= value <= 100:
+        raise argparse.ArgumentTypeError(f"must be from 1 to 100, not {value}")
+    return value
+
+
 def _role_assignment(text: str) -> tuple[str, str]:
     """``--role-model``/``--role-effort``'s ``type=``: ``ROLE=VALUE`` with
     ``ROLE`` one of ``routing.ROLES``. A missing ``=``, an unknown role or
@@ -351,6 +364,9 @@ def build_parser() -> argparse.ArgumentParser:
     step_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
                         help="cap this run's Claude usage at PERCENT of the account window "
                              "(default: the usage.run_cap_percent setting, none)")
+    step_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
+                        help="stop a protocol review loop at round N of a stage for this command "
+                             "(default: the review.round_cap setting, 4)")
 
     run_p = subparsers.add_parser("run")
     run_p.add_argument("repo")
@@ -361,6 +377,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
                        help="cap this run's Claude usage at PERCENT of the account window "
                             "(default: the usage.run_cap_percent setting, none)")
+    run_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
+                       help="stop a protocol review loop at round N of a stage for this command "
+                            "(default: the review.round_cap setting, 4)")
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
@@ -1831,6 +1850,7 @@ def _run_one_step(
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
         usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
         reviewer=_reviewer_options(effective),
+        review_round_cap=effective["review.round_cap"],
     )
 
     if isinstance(result, job.UsageHold):
@@ -2222,6 +2242,7 @@ def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.Rou
         "run.max_steps": getattr(args, "max_steps", None),
         "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
         "usage.run_cap_percent": getattr(args, "usage_cap", None),
+        "review.round_cap": getattr(args, "review_round_cap", None),
         "usage.codex_run_cap_percent": getattr(args, "usage_codex_cap", None),
     }, cli_routing
 

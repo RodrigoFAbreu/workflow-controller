@@ -105,7 +105,7 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, routing,
+    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_rounds, routing,
     runtime, target_state, telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
@@ -6590,6 +6590,7 @@ def execute_step(
     on_wait: Callable[[str, str], None] | None = None,
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
+    review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
 ) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -6658,6 +6659,7 @@ def execute_step(
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
             usage_gate=usage_gate, reviewer=reviewer,
+            review_round_cap=review_round_cap,
         )
 
 
@@ -6736,6 +6738,7 @@ def _execute_step_locked(
     on_wait: Callable[[str, str], None] | None = None,
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
+    review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
 ) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 

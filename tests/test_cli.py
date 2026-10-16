@@ -3055,6 +3055,30 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 self.assertEqual(len(calls), expected)
                 self.assertEqual(cli._open_run.record["max_steps"], expected)
 
+    def test_review_round_cap_from_the_file_and_the_flag_beats_it(self) -> None:
+        """workflow-controller-review-convergence D4: ``review.round_cap``
+        reaches every ``step`` and ``run`` step; ``--review-round-cap`` wins."""
+        calls = self._spy()
+        for flag, file, expected in ((None, None, 4), (None, {"review": {"round_cap": 7}}, 7),
+                                     (9, {"review": {"round_cap": 7}}, 9)):
+            with self.subTest(flag=flag, file=file):
+                args = self._args(file, review_round_cap=flag, max_steps=1)
+                cli.cmd_step(args, self.runtime_root, self.ident)
+                self.assertEqual(calls[-1]["review_round_cap"], expected)
+                cli.cmd_run(args, self.runtime_root, self.ident)
+                self.assertEqual(calls[-1]["review_round_cap"], expected)
+
+    def test_a_bad_review_round_cap_is_a_usage_error(self) -> None:
+        parser = cli.build_parser()
+        for argv in (["step", "--review-round-cap", "0", "/r"], ["run", "--review-round-cap", "101", "/r"],
+                     ["run", "--review-round-cap", "x", "/r"], ["step", "--review-round-cap", "-1", "/r"]):
+            with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as caught:
+                    parser.parse_args(argv)
+                self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(parser.parse_args(["run", "--review-round-cap", "6", "/r"]).review_round_cap, 6)
+        self.assertEqual(parser.parse_args(["step", "--review-round-cap", "100", "/r"]).review_round_cap, 100)
+
     def test_the_merge_rows_reach_execute_step_and_only_run_waits(self) -> None:
         """auto-merge-release-wait A.2/I6: ``merge.auto`` and
         ``merge.poll_seconds`` reach every step; ``merge.wait_seconds`` only

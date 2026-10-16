@@ -2,6 +2,22 @@
 
 ## Status
 
+**In progress.** `workflow-controller-review-convergence` (`docs/ROADMAP.md` step C13, section 11.13), plan revision 6
+(`docs/ai-workflow/CONTROLLER_REVIEW_CONVERGENCE_PLAN.md`), base commit `45e9325`, phase `IMPLEMENTING`.
+
+| Checkpoint | State |
+| --- | --- |
+| CP1 round count and cap setting | COMPLETE: `controller/review_rounds.py` (`current_round`, `cap_decision`), the `review.round_cap` setting (table generation 7), `--review-round-cap` on `step` and `run` forwarded to `job.execute_step`. Tests: `tests/test_review_rounds.py`, `tests/test_settings.py`, `tests/test_cli.py`. The real-reconciliation fixtures the plan lists for CP1 need the cap gate and are written with CP2's lifecycle scenario. |
+| CP2 cap gate | pending |
+| CP3 telemetry rounds | pending |
+| CP4 documentation | pending |
+
+The previous milestone follows.
+
+---
+
+## Status
+
 **Complete.** `workflow-controller-usage-limit-mid-job` (`docs/ROADMAP.md` step C8b, section 11.6.1) reached
 `MILESTONE_COMPLETE` on 2026-10-16. A usage limit reached in the middle of a job is now recognised in the worker
 stream (a rejected `rate_limit_event`, a 429 error `result` and a finite `resetsAt`). A limited job that verifiably

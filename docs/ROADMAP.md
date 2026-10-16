@@ -8,17 +8,16 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-16).** Controller 1.10.0 is the latest release (PR #45, squash
-`6aa8f66`): with `reviewer.harness` set, the Controller runs the cross-model review itself (C7). It
-admits Workflow 2.5.1 and 2.6.0, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and
-later). This repository runs Workflow 2.11.0 with automatic gates (since 2026-10-15). C8b, a usage limit reached
-mid-job (accepted 2026-10-16 by gate policy), is complete and is released as 1.11.0 when its `feat:` pull request
-(#52) merges. What is complete is marked in the
-tables below; what each release changed is in the [release history](release-history.md).
+**Where things stand (2026-10-16).** Controller 1.11.0 is the latest release (PR #52, squash
+`1033872`): a worker that reaches the usage limit mid-job having changed nothing is waited out and its
+step repeated (C8b, accepted 2026-10-16 by gate policy). It admits Workflow 2.5.1 and 2.6.0, and any
+Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow 2.11.0
+with automatic gates (since 2026-10-15). What is complete is marked in the tables below; what each
+release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14 and 2026-10-15):
 1. C13, review convergence ([11.13](#1113-review-convergence)), once this repository runs Workflow 2.12.0
-   (C8b, a usage limit reached mid-job, is complete);
+   (W8);
 2. C14, review modes ([11.14](#1114-review-modes));
 3. C10, C12 and C11, then the orchestrator series O1-O7.
 
@@ -63,7 +62,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C9d | The installed-release test made version-agnostic: drop the requirement that this repository's own installed Workflow has a vendored tree, and admit it through the Controller's capability rule or `inspect`, with no vendored copy and no version literal, so a later Workflow move needs no test change (complete) | C9c | [follow-up 16](#known-follow-ups-carried-forward) |
 | D1 | Documentation: reorganise and simplify the guides (install, run, update) and add a short Controller-Workflow compatibility history (complete) | — | [11.8](#118-documentation-reorganisation) |
 | C8 | Usage budget: track Claude and Codex limits, forecast a job's cost, pause before a limit and resume after the reset, with a budget per account, repository and run (complete) | C3 (reads Codex limits without C7) | [11.6](#116-usage-budget) |
-| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it (complete, accepted 2026-10-16 by gate policy, `feat:` 1.11.0, PR #52) | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
+| C8b | A usage limit reached mid-job: recognise the limit `result` in a worker stream, classify the job distinctly, wait for the stream's reset and have `resume` accept it (complete, released as 1.11.0, PR #52, squash `1033872`; accepted 2026-10-16 by gate policy) | C8 | [11.6.1](#1161-step-c8b-a-limit-reached-mid-job) |
 | C8c | Per-repository caps and per-lane budget files: a cap map with its own validator, like `routing`'s | C8 | [11.6.2](#1162-step-c8c-per-repository-caps-and-per-lane-budgets) |
 | C5 | SignalHub notifications: progress, blockers, merges, releases and usage pauses pushed to your devices (including the usage events of ADR 0011: paused, resumed, released, reservation expired) (complete, released as 1.9.0; accepted 2026-10-12 by gate policy) | C3, C8 | [11.4](#114-signalhub-notifications) |
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, accepted 2026-10-12 by gate policy, no release) | — | [11.5](#115-automated-lifecycle-scenarios) |
@@ -314,6 +313,12 @@ These are not blockers for the baseline, but should remain visible in later mile
 30. Optional finding O1 from the C8b Codex implementation reviews: `controller/observe.py` filters out
    a stream diagnosis whose only reason is `usage_limit`, so `explain` omits the limit for an ordinary
    limited failure. Render the `usage_limit` reason in `explain`.
+31. Flaky tests: two timing-sensitive worker tests failed on CI for PR #52 (2026-10-16) and each passed
+   on a full re-run. `tests.test_worker.ReapingLaunchTest.test_the_published_sequence_is_the_same_with_and_without_the_sweep`
+   saw `RUNNING` published with `[]` instead of `['group']`, and
+   `tests.test_worker.SupervisionTest.test_without_the_stop_the_worker_waits_for_the_wakeup` ended
+   `INTERRUPTED` instead of `SUCCESS` (its settle window is 0.3 s). Wait on a readiness signal rather
+   than a sampled field, or widen the window.
 
 ---
 
@@ -1485,7 +1490,8 @@ scenarios (fifteen flows, the kill-and-resume path having six variants) run in a
 `functional_evidence` records through `tools/run_scenarios.py`; the guide is
 `docs/guide/development.md` ("Lifecycle scenarios"). C10 consumes the runner's output (`<flow_id>.json` and
 `index.json`, bound to a `HEAD`) and names required flows in `gates.acceptance.required_flows`. A mid-job usage
-limit is not covered (C8b). The description below is the original problem statement.
+limit is covered since C8b (`scenario-usage-limit-mid-job-waits-and-repeats`). The description below is the
+original problem statement.
 
 **Step C6.**
 
@@ -1534,6 +1540,11 @@ The lane watchdog scripts that do this outside the Controller today are the star
   number.
 
 ### 11.6.1 Step C8b: a limit reached mid-job
+
+**Status:** Complete, accepted 2026-10-16 by gate policy (`workflow-controller-usage-limit-mid-job`, plan
+`docs/ai-workflow/CONTROLLER_USAGE_LIMIT_MID_JOB_PLAN.md`). Released as 1.11.0 (PR #52, squash `1033872`;
+[release notes](releases/1.11.0.md)). The description below is the original problem statement, with the
+as-built notes at its end.
 
 The usage budget forecasts, so it cannot stop a job that exceeds its forecast. Today such a job
 ends `FAILED` with a `TransitionNotObservedError` and the run stops with exit 30. Two real
@@ -1891,6 +1902,7 @@ fu 8   C12a: test leftovers end with their test              COMPLETE (test, no 
 11.4   C5: SignalHub notifications                           COMPLETE (released as 1.9.0)
 11.5   C6: automated lifecycle scenarios                     COMPLETE (test, no release)
 5      C7: review-only harness seam, Codex reviewer          COMPLETE (released as 1.10.0)
+11.6.1 C8b: a usage limit reached mid-job                    COMPLETE (released as 1.11.0)
 ```
 
 ---

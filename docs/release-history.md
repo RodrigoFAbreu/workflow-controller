@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.10.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0 and 2.10.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.11.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0 and 2.11.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.11.0 | A worker that reaches the usage limit mid-job having changed nothing is recorded `INTERRUPTED`; `run` waits for the reset and repeats the step (exit 17 for `step`; no new setting) | [1.11.0](releases/1.11.0.md) |
 | 1.10.0 | Opt-in: the Controller runs the cross-model review itself with a Codex reviewer in a disposable copy and hands the verdict to the Workflow (new `reviewer` settings, settings generation 6) | [1.10.0](releases/1.10.0.md) |
 | 1.9.0 | The Controller pushes its events to SignalHub as configurable, idempotent notifications (new `notifications` command, settings generation 5) | [1.9.0](releases/1.9.0.md) |
 | 1.8.0 | A usage budget: the Controller reads the Claude and Codex windows, forecasts each job, shares reservations between lanes and pauses a run before a limit (new `usage` command, settings generation 4, exit code 17) | [1.8.0](releases/1.8.0.md) |

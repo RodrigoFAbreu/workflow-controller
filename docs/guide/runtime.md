@@ -415,7 +415,7 @@ ignores it, and its `settings clean` refuses.
 1.10.0 is table generation 6: it adds the five `reviewer` rows to a file
 filled by 1.9.x, and moves nothing else. A 1.9.x Controller sharing the
 file afterwards warns about the unknown `reviewer` section, ignores it, and
-its `settings clean` refuses.
+its `settings clean` refuses. 1.11.0 adds no row and stays at generation 6.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

@@ -1052,7 +1052,10 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         if decision.protocol is not None and decision.automatic:
             # The loop guard `step` applies to the decision that stands.
             decision = job._no_progress_gate(runtime_root, target, work_item, decision,
-                                             advisories=advisories) or decision
+                                             advisories=advisories) \
+                or job._review_cap_gate(runtime_root, target, work_item, decision,
+                                        _effective(args)["review.round_cap"], advisories=advisories) \
+                or decision
     elif work_item is target_state.NoWorkItemYet:
         decision = decide_no_work_item(target, base=base)
     else:

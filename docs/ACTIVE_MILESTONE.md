@@ -8,7 +8,7 @@
 | Checkpoint | State |
 | --- | --- |
 | CP1 round count and cap setting | COMPLETE: `controller/review_rounds.py` (`current_round`, `cap_decision`), the `review.round_cap` setting (table generation 7), `--review-round-cap` on `step` and `run` forwarded to `job.execute_step`. Tests: `tests/test_review_rounds.py`, `tests/test_settings.py`, `tests/test_cli.py`. The real-reconciliation fixtures the plan lists for CP1 need the cap gate and are written with CP2's lifecycle scenario. |
-| CP2 cap gate | pending |
+| CP2 cap gate | COMPLETE: `job._review_cap_gate` (after the loop guard in `_decide_protocol_current`, and in `explain` beside it with the setting's cap), `protocol_decision.REVIEW_ROUND_CAP_REACHED`, `execute_step` forwards `review_round_cap`. Tests: `ReviewCapGateTest` in `tests/test_protocol_job.py`, the explain wiring in `tests/test_protocol_decision.py`. The real-reconciliation and lifecycle-scenario fixtures the plan lists are not yet written (they need the fake Workflow answers of `tests/scenarios/lifecycle.py`); they are carried to the full-suite step. |
 | CP3 telemetry rounds | pending |
 | CP4 documentation | pending |
 

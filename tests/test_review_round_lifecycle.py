@@ -26,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import job, managed_repo, protocol_decision, review_rounds, telemetry, worker  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
-from tests.test_protocol_lifecycle import _CHECKPOINT, _result  # noqa: E402
+from tests.test_protocol_lifecycle import (  # noqa: E402
+    _CHECKPOINT, _FUNCTIONAL_CHECKLIST, _PLAN_REVIEW, _TECHNICAL_APPROVAL, _result)
 
 WID = "demo"
 STATE_REL = "docs/ai-workflow/WORKFLOW_STATE.json"
@@ -119,7 +120,9 @@ subprocess.run(["git", "add", "-A"], cwd=root, check=True)
 subprocess.run(["git", "commit", "-q", "-m", "Begin authoring"], cwd=root, check=True)
 """
 
-#: An implementation bundle generation (``/milestone-implement`` step 4,
+#: An implementation bundle generation (``/milestone-implement`` step 4, a
+#: bounded functional fix of ``/apply-functional-review`` from
+#: ``AWAITING_FUNCTIONAL_REVIEW`` after its stale-before-edit write,
 #: ``stage`` ``implementation``; ``/apply-implementation-review``'s post-fix
 #: regeneration, ``stage`` ``post-fix``): for a post-fix round the entry into
 #: ``APPLYING_REVIEW_FEEDBACK`` where the item is not there yet, the pending
@@ -140,7 +143,9 @@ def item():
     return json.loads((root / state_rel).read_text())["work_items"][wid]
 outcome, superseded = "ordinary", None
 if stage == "post-fix":
-    if item()["phase"] != "APPLYING_REVIEW_FEEDBACK":
+    if item()["phase"] == "AWAITING_FUNCTIONAL_REVIEW":
+        ws.state_transaction(root, lambda s: ws.mark_technical_approval_stale(s, wid, now()))
+    elif item()["phase"] != "APPLYING_REVIEW_FEEDBACK":
         ws.state_transaction(root, lambda s: ws.enter_applying_review_feedback(s, wid, now()))
     if git("status", "--porcelain", "--", state_rel):
         git("add", "--", state_rel)
@@ -452,6 +457,77 @@ class ImplementationLoopTest(_CapCase):
         self.assertEqual(loop.counted("implementation"), (2, review_rounds.SOURCE_JOBS))
         loop.review_implementation("external")
         self.assert_capped(loop, 2, "implementation", 2)
+
+
+#: ``/review-functional``'s output on file: findings the bounded branch applies.
+FUNCTIONAL_FINDINGS = """
+root = Path.cwd()
+wid, text = sys.argv[1], sys.argv[2]
+feedback_dir = root / fingerprint.resolve_feedback_dir(root, wid)
+feedback_dir.mkdir(parents=True, exist_ok=True)
+(feedback_dir / "FUNCTIONAL_REVIEW.md").write_text(f"# Functional review\\n\\n1. {text}\\n")
+"""
+
+#: The functional checklist, naming the revision it is for (so each
+#: republication commits a new one).
+FUNCTIONAL_CHECKLIST = _FUNCTIONAL_CHECKLIST.replace(
+    '1. Exercise the feature.\\n")', '1. Exercise revision " + str(revision) + ".\\n")')
+assert FUNCTIONAL_CHECKLIST != _FUNCTIONAL_CHECKLIST
+
+
+class FunctionalFixLoopTest(_CapCase):
+    """A bounded functional fix (``functional.apply_findings``) republishes
+    the implementation bundle from ``AWAITING_FUNCTIONAL_REVIEW``: an ordinary
+    republication is a new implementation round, a ``same_content`` one is
+    not, and the cap gate and ``telemetry`` agree on both (D2, D7)."""
+
+    def approve_to_functional_review(self, loop: CapLoop) -> None:
+        """The manual external review, the technical approval and the
+        functional checklist, recorded as the Workflow's own writers record
+        them, from a bundle whose local review is an ``APPROVE``."""
+        loop.workflow(_PLAN_REVIEW, "implementation", "APPROVE", "manual")
+        loop.workflow(_TECHNICAL_APPROVAL)
+        self.assertEqual(loop.item()["phase"], "AWAITING_FUNCTIONAL_REVIEW")
+        loop.workflow(FUNCTIONAL_CHECKLIST)
+
+    def approve_locally(self, loop: CapLoop, cap: int) -> None:
+        self.assert_launched(loop.step(lambda: loop.workflow(_PLAN_REVIEW, "implementation", "APPROVE", "local"),
+                                       cap=cap), "/review-implementation", "implementation.review.local",
+                             reconcile="gate_reached")
+
+    def functional_fix(self, loop: CapLoop, text: str, fix: str, *, cap: int = 9):
+        loop.workflow(FUNCTIONAL_FINDINGS, text)
+        return loop.step(lambda: loop.generate("post-fix", fix), cap=cap)
+
+    def test_an_ordinary_functional_fix_opens_a_round_and_a_same_content_one_does_not(self) -> None:
+        loop = CapLoop(self, "publish", implementing=True)
+        self.assert_launched(loop.step(loop.checkpoint, cap=9), "/milestone-implement", "implementation.checkpoint")
+        self.assert_launched(loop.step(loop.generate, cap=9), "/milestone-implement", "implementation.self_review")
+        self.approve_locally(loop, 2)
+        self.approve_to_functional_review(loop)
+        self.assertEqual(loop.item()["implementation_revision"], 1)
+        # An ordinary bounded fix: revision 1 -> 2, both review stages run again.
+        record = self.assert_launched(self.functional_fix(loop, "Fix it.", "functional fix"),
+                                      "/apply-functional-review", "functional.apply_findings")
+        self.assertEqual((record["pre_state"]["phase"], loop.item()["phase"], loop.item()["implementation_revision"]),
+                         ("AWAITING_FUNCTIONAL_REVIEW", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", 2))
+        self.assertEqual(loop.counted("implementation"), (2, review_rounds.SOURCE_JOBS))
+        # The review boundary after it: the local review of round 2 runs under cap 2.
+        self.approve_locally(loop, 2)
+        self.approve_to_functional_review(loop)
+        # A same_content bounded fix (it nets out identical): `progress`, revision unchanged, no new round.
+        self.assert_launched(self.functional_fix(loop, "Fix it again.", "none", cap=2),
+                             "/apply-functional-review", "functional.apply_findings")
+        self.assertEqual((loop.item()["phase"], loop.item()["implementation_revision"]),
+                         ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", 2))
+        self.assertEqual(loop.counted("implementation"), (2, review_rounds.SOURCE_JOBS))
+        self.approve_locally(loop, 2)
+        # The cap gate and telemetry read the same rounds over the same records.
+        self.assertEqual(self.telemetry_rounds(loop), [
+            ("implementation.checkpoint", 1, "jobs"), ("implementation.self_review", 1, "jobs"),
+            ("implementation.review.local", 1, "jobs"), ("functional.apply_findings", None, None),
+            ("implementation.review.local", 2, "jobs"), ("functional.apply_findings", None, None),
+            ("implementation.review.local", 2, "jobs")])
 
 
 if __name__ == "__main__":

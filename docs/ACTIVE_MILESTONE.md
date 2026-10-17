@@ -1,5 +1,16 @@
 # Active Milestone
 
+## In progress: CU1 (`workflow-controller-cleanup-1`)
+
+Plan revision 3 is approved (`4d29850`); implementation is under way, one checkpoint per invocation.
+- **CP1 complete** (#55, #59, #64): the release-tree docstring and the development guide state which tests read the
+  installed `scripts/`; `tools/check_docs.py` rejects a roadmap step id on the task pages (`STEP_ID_RE`,
+  `STEP_ID_PAGES`; the guides are exempt) and the ids it found were reworded; `docs/guide/runtime.md` explains the
+  before-and-after telemetry figures. Checked with `tests.test_docs`, `tests.test_workflow_releases` and
+  `tools/check_docs.py`.
+
+The previous milestone's record follows.
+
 ## Status
 
 **Complete.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14) reached

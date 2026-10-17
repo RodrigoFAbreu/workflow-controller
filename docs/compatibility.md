@@ -41,7 +41,7 @@ line as outside the supported lines, a newer release with no protocol script as
 
 This repository itself runs Workflow 2.12.0, with automatic gates, since a `chore:` update pull
 request (2026-10-16). It ran 2.11.0 from 2026-10-15, 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
-that vendored that release's test tree (C9c), and skipped 2.9.1.
+that vendored that release's test tree, and skipped 2.9.1.
 
 ## What admitted means
 

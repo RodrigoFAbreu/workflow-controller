@@ -368,8 +368,12 @@ purpose. `tests/test_fixtures_git_hygiene.py` fails on any other
 
 ## Workflow release trees
 
-The Controller's tests never read this repository's own installed
-Workflow. Every Workflow release the Controller admits
+Every Workflow-derived check in the Controller's tests reads a vendored tree,
+with one named exception: the review-round tests (`tests/test_review_rounds.py`
+and `tests/test_review_round_lifecycle.py`) read this repository's installed
+`scripts/`, because they compare the Controller's copy to the Workflow's
+current behaviour and call `workflow_protocol._plan_review_round`, which no
+vendored tree before 2.12.0 has. Every Workflow release the Controller admits
 (`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`, and each protocol-mode
 release that is checked: 2.7.0 and 2.9.0) is vendored under
 `tests/workflow_releases/<release>/`: the `.claude/commands/*.md` files (seventeen
@@ -387,7 +391,7 @@ Workflow-derived inventories (the phase set, the command partition, the
 user-only set, property 5), the decision goldens, the query tests and the
 migration tests all run against these trees, once per admitted release.
 This repository's own installed Workflow needs no vendored tree.
-`InstalledReleaseTest` admits it through the Controller's own capability rule
+`InstalledReleaseTest` reads the installation record and admits it through the Controller's own capability rule
 (the release manifest, the release contract and the profile check that
 `managed_repo` applies), with no version literal, and checks the installed
 files against the digests and modes in `installation.json`; a modified, missing

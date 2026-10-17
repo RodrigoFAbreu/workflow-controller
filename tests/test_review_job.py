@@ -90,13 +90,16 @@ class LaunchDouble:
         if "raise" in scenario:
             kw["out"].update(readings=scenario.get("readings", []), first_readings=scenario.get("first_readings", []),
                              credentials="unchanged",
-                             verdicts=scenario.get("verdicts", []), subagents=scenario.get("subagents", []))
+                             verdicts=scenario.get("verdicts", []), subagents=scenario.get("subagents", []),
+                             **({"telemetry": scenario["telemetry"]} if "telemetry" in scenario else {}))
             raise scenario["raise"]
         outcome = scenario.get("outcome", "verdict")
         result = {"status": None, "verdict": None, "check": None, "outcome": outcome, "credentials": "unchanged",
                   "detail": scenario.get("detail"), "readings": scenario.get("readings", []),
                   "first_readings": scenario.get("first_readings", []),
                   "verdicts": scenario.get("verdicts", []), "subagents": scenario.get("subagents", [])}
+        if "telemetry" in scenario:
+            result["telemetry"] = scenario["telemetry"]
         if outcome == "verdict":
             result.update(status=scenario.get("status", "APPROVE"), verdict=verdict_text(
                 kw, scenario.get("status", "APPROVE"), wrong=scenario.get("wrong")))
@@ -244,6 +247,7 @@ class HappyPathTest(_ReviewCase):
         self.assertEqual(record["worker_route"]["harness"], "codex")
         self.assertEqual((record["worker_route"]["model"], record["worker_route"]["effort"]), ("gpt-6.1-sol", "high"))
         self.assertEqual(record["review"]["ingested"], "recorded")
+        self.assertNotIn("telemetry", record["review"], "a Codex review keeps no figures")
         [(args, kwargs)] = seen
         self.assertEqual(args[2], "plan_review_verdict")
         self.assertEqual(kwargs["run_ref"], f"codex:{record['job_id']}")
@@ -301,6 +305,15 @@ class VerdictEvidenceTest(_ReviewCase):
                          [(1, "a" * 64, "APPROVE", "not-ingested: header mismatch, retried once"),
                           (2, "b" * 64, "REVISE", "ingested")])
         self.assertEqual(record["review"]["subagents"], SUBAGENTS)
+
+    def test_a_claude_reviews_cost_and_tokens_are_in_the_record_and_a_codex_review_has_none(self) -> None:
+        figures = {"version": 1, "results": 2, "cost_usd": 0.02,
+                   "tokens": {"input": 24, "output": 600, "cache_creation": 100, "cache_read": 2000}}
+        with self.assertRaises(RuntimeError):
+            self.step(**{"raise": RuntimeError("late"), "telemetry": figures})
+        self.assertEqual(self.records()[-1]["review"]["telemetry"], figures)
+        record = self.step(telemetry=figures)
+        self.assertEqual(record["review"]["telemetry"], figures)
 
     def test_a_verdict_the_workflow_refuses_is_recorded_as_refused(self) -> None:
         refusal = protocol.Refusal("refused", "DistinctReviewerModelsRequiredError: nope", False, None)

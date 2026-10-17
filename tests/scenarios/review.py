@@ -659,6 +659,7 @@ def review_mode_single_provider(kit) -> None:
         kit.equal((claude_runs(), world.log_records("exec"), life.tasks[claude_tasks:]), (1, [], []),
                   "one Claude review run, no Codex, no worker")
         telemetry_out = world.run("telemetry", "--by", "review_mode")
-        kit.check("review_mode=single-provider, lowered=True: 1 job(s)" in telemetry_out.stdout,
-                  f"telemetry --by review_mode: {telemetry_out.stdout!r}")
+        kit.check("review_mode=single-provider, lowered=True: 1 job(s), telemetry unavailable 0" in telemetry_out.stdout
+                  and "cost $0.01" in telemetry_out.stdout and "tokens 1,362" in telemetry_out.stdout,
+                  f"telemetry --by review_mode (the Claude review's cost and tokens): {telemetry_out.stdout!r}")
         kit.observe("single-provider", {"exit": done.code, "phase": world.phase(), "claude_runs": claude_runs()})

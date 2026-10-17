@@ -6475,8 +6475,11 @@ def _obtained(result: Mapping) -> dict:
     with its digest, ``Status:`` and disposition (workflow#28 condition 2: the
     courier records every verdict it obtains, REVISE included), and the
     sub-agent sessions the job's rollouts show with their token usage."""
-    return {"verdicts": [dict(entry) for entry in result.get("verdicts") or []],
-            "subagents": [dict(entry) for entry in result.get("subagents") or []]}
+    obtained = {"verdicts": [dict(entry) for entry in result.get("verdicts") or []],
+                "subagents": [dict(entry) for entry in result.get("subagents") or []]}
+    if isinstance(result.get("telemetry"), Mapping):  # a Claude review's cost and tokens, summed over its attempts
+        obtained["telemetry"] = dict(result["telemetry"])
+    return obtained
 
 
 def _with_disposition(common: Mapping, disposition: str) -> dict:

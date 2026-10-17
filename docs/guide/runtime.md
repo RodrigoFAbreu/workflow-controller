@@ -317,8 +317,13 @@ of each kind of step. A round the Workflow stated is shown as
 not the same measure as the Workflow's content count, so compare `~` groups
 with `~` groups. A review the Controller ran itself (`plan.review.external`,
 `implementation.review.external`) appears in these groups with its action,
-stage and round, and as "telemetry unavailable" because it keeps no worker
-stream. A review the Controller runs itself always shows `round=N~`, because it has no Workflow round to quote.
+stage and round. A Claude review keeps the cost and token totals its `result`
+events reported (`review.telemetry`, summed over its at most two invocations,
+since each is a separate session), so it is counted in those groups; a Codex
+review keeps none until its rollout gives them, and shows as "telemetry
+unavailable". The rounds of all jobs are worked out in one oldest-first pass
+per repository and work item, with the same results as counting each job's own
+history. A review the Controller runs itself always shows `round=N~`, because it has no Workflow round to quote.
 
 The five `reviewer` rows (1.10.0) let the Controller run the cross-model
 review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
@@ -374,8 +379,9 @@ back and the Controller compares it exactly). A name of that shape that
 resolves to another id, such as a `-latest` name, still starts and is
 refused at the session's `init` event.
 Its approvals are recorded with `review.mode`, `review.mode_source` and
-`review.lowered`, and `telemetry --by review_mode` counts them (a review job
-keeps no cost or token figures, so none is shown).
+`review.lowered`, and `telemetry --by review_mode` counts them, with the cost
+and tokens of a Claude review (a Codex review keeps no figures, so none is
+shown for it).
 
 The seven `notifications` rows (1.9.0) make the Controller a SignalHub
 producer (see [ADR 0012](../adr/0012-signalhub-notifications.md) and

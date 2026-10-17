@@ -159,8 +159,9 @@ What each figure means is in [Telemetry](workers.md#telemetry).
   without them reads `cross-model`, a job that is not a review `none`);
   without it there is one group. Each job row also carries `action`,
   `stage`, `round` and `round_source`, derived from the job records and
-  never written back. Each group shows its job count and how many have no figures
-  (`telemetry unavailable`). Totals and means count only the jobs that
+  never written back. A Claude review job also carries the `telemetry` block of its
+  cost and tokens; a Codex review has none. Each group shows its job count and how many
+  have no figures (`telemetry unavailable`). Totals and means count only the jobs that
   carry each figure.
 - With the global `--json` it prints `by`, `rows` (one per job, with its
   telemetry block) and `groups`.

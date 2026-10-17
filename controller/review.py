@@ -45,7 +45,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
-from . import gitrepo, runtime, usage
+from . import gitrepo, runtime, usage, worker_stream
 from .anchor import OWNERSHIP_VAR
 from .errors import ReviewLaunchRefusedError
 
@@ -1314,6 +1314,7 @@ class Attempt:
     readings: list | None = None
     failure: str | None = None
     first_readings: list | None = None
+    figures: dict | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1624,7 +1625,35 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
         runtime.write_bytes(layout.runtime_root, layout.rel("verdict.md"), verdict.encode("utf-8"))
     first, last = usage.read_claude_stream_span(run.stdout)
     return Attempt(run, verdict, limited, detail, [], [last[w] for w in usage.WINDOWS if w in last],
-                   text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first])
+                   text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first],
+                   result_figures(stream.result))
+
+
+def result_figures(result: Mapping | None) -> dict | None:
+    """The cost and token totals of one Claude ``result`` event, in the form
+    ``telemetry`` reads a block in (``worker_stream.session_telemetry`` of that
+    one event), or ``None`` when the run printed no result."""
+    if not isinstance(result, Mapping):
+        return None
+    block = worker_stream.session_telemetry([dict(result)])
+    return {"version": block["version"], "results": 1, "cost_usd": block["cost_usd"], "tokens": block["tokens"]}
+
+
+def add_figures(total: dict | None, figures: dict | None) -> dict | None:
+    """``figures`` added to ``total``: a review's attempts are separate
+    sessions, so their cost and tokens are summed (not the maximum a single
+    session's cumulative figures take). A figure either side lacks is ``None``."""
+    if figures is None:
+        return total
+    if total is None:
+        return {**figures, "tokens": dict(figures["tokens"])}
+
+    def plus(a, b):
+        return a + b if isinstance(a, (int, float)) and isinstance(b, (int, float)) else None
+
+    return {"version": figures["version"], "results": total["results"] + figures["results"],
+            "cost_usd": plus(total["cost_usd"], figures["cost_usd"]),
+            "tokens": {key: plus(total["tokens"].get(key), value) for key, value in figures["tokens"].items()}}
 
 
 def _claude_end_readings(_home: Path) -> list[dict]:
@@ -1751,6 +1780,8 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
             made = selected.attempt(ctx, prompt, on_spawn if attempt == 1 else None)
             run, scan = made.run, made
             result["subagents"] = made.subagents
+            if made.figures is not None:
+                result["telemetry"] = add_figures(result.get("telemetry"), made.figures)
             if made.readings is not None:
                 # the latest reading of each window wins; a retry that read none keeps the first run's
                 merged = {r["window"]: r for r in result.get("stream_readings") or []}

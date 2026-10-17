@@ -380,6 +380,24 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(sorted(r["window"] for r in result["readings"]), ["five_hour", "weekly"])
         self.assertNotIn("stream_first", result)
 
+    def test_the_cost_and_tokens_of_each_attempt_are_summed(self):
+        one = self.launch(job="j-one")["telemetry"]
+        self.assertEqual((one["results"], one["cost_usd"]), (1, 0.01))
+        self.assertEqual(one["tokens"], {"input": 12, "output": 300, "cache_creation": 50, "cache_read": 1000})
+        two = self.launch({"verdict": "wrong_id_first"}, job="j-two")["telemetry"]
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual((two["results"], two["cost_usd"]), (2, 0.02))
+        self.assertEqual(two["tokens"], {"input": 24, "output": 600, "cache_creation": 100, "cache_read": 2000})
+
+    def test_a_run_with_no_result_adds_nothing_and_an_unreadable_figure_stays_unknown(self):
+        self.assertIsNone(review.add_figures(None, None))
+        self.assertIsNone(review.result_figures(None))
+        first = review.result_figures({"total_cost_usd": 0.5, "usage": {"input_tokens": 1}})
+        self.assertIsNone(first["tokens"]["output"])
+        both = review.add_figures(first, review.result_figures({"total_cost_usd": 0.25, "usage": {
+            "input_tokens": 2, "output_tokens": 3, "cache_creation_input_tokens": 4, "cache_read_input_tokens": 5}}))
+        self.assertEqual((both["cost_usd"], both["tokens"]["input"], both["tokens"]["output"]), (0.75, 3, None))
+
     def test_a_revise_and_a_block_verdict_are_returned_as_they_are(self):
         for kind, status in (("revise", "REVISE"), ("block", "BLOCK")):
             with self.subTest(kind):

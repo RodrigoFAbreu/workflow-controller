@@ -399,6 +399,88 @@ class RoundsTest(_RuntimeCase):
         payload = json.loads(self.cli("--json", "telemetry", "--by", "stage")[1])
         self.assertEqual({tuple(sorted(row)) for row in payload["rows"]}, {tuple(sorted(selected[0]))})
 
+    def test_a_review_job_that_kept_figures_is_counted_and_one_that_did_not_is_unavailable(self) -> None:
+        phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+        kept = {"version": worker_stream.TELEMETRY_VERSION, "results": 2, "cost_usd": 0.5,
+                "tokens": {"input": 10, "output": 20, "cache_creation": 30, "cache_read": 40}}
+        self.courier_job("c-claude", "plan.review.external", 1, phase=phase, mode="single-provider", telemetry=kept)
+        self.courier_job("c-codex", "plan.review.external", 2, phase=phase, mode="cross-model")
+        rows = self.by_id()
+        self.assertEqual((rows["c-claude"]["unavailable"], rows["c-codex"]["unavailable"]), (False, True))
+        self.assertEqual(rows["c-claude"]["telemetry"], kept)
+        grouped = {g["key"]["review_mode"]: g for g in telemetry.groups(list(rows.values()), "review_mode")}
+        self.assertEqual((grouped["single-provider"]["cost_usd"]["total"], grouped["single-provider"]["tokens"]["total"],
+                          grouped["single-provider"]["telemetry_unavailable"]), (0.5, 100, 0))
+        self.assertEqual((grouped["cross-model"]["cost_usd"]["total"], grouped["cross-model"]["telemetry_unavailable"]),
+                         (None, 1))
+        text = self.cli("telemetry", "--by", "review_mode")[1]
+        self.assertIn("cost $0.50", text)
+
+    def synthetic_records(self, count: int) -> list[dict]:
+        """``count`` job records over two repositories and three work items: plan and implementation
+        actions, revisions that repeat and rise, a stored round now and then, a blocked gate."""
+        import random
+        rng = random.Random(7)
+        phases = ["AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_PLAN_APPROVAL", "AWAITING_EXTERNAL_PLAN_REVIEW",
+                  "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "IMPLEMENTING"]
+        actions = ["plan.review.local", "plan.apply_review", "implementation.review.local",
+                   "implementation.apply_review", "functional.apply_findings", None]
+        records = []
+        for index in range(count):
+            phase = rng.choice(phases)
+            pre = {"phase": phase, "plan_revision": rng.choice([None, 1, 2, 3, 4]),
+                   "implementation_revision": rng.choice([None, 1, 1, 2, 3]),
+                   "governing_workflow_version": rng.choice(["1", "2.2", None])}
+            snapshot = dict(pre, **({"review_round": {"plan": rng.randint(1, 5), "implementation": 2}}
+                                    if rng.random() < 0.1 else {}))
+            record = {"job_id": f"s-{index:05d}", "created_at": f"2026-01-01T00:00:{index % 60:02d}.{index // 60:04d}Z",
+                      "target_repo": rng.choice(["/r/a", "/r/b"]), "work_item_id": rng.choice(["w1", "w2", None]),
+                      "pre_state": pre, "status": rng.choice(["finished", "GATE_BLOCKED", "failed"])}
+            action = rng.choice(actions)
+            if action is not None:
+                record["protocol"] = {"action_id": action, "decision": {"snapshot": snapshot}}
+            records.append(record)
+        return records
+
+    def test_the_one_pass_rounds_equal_the_count_over_each_record_s_own_prefix(self) -> None:
+        from controller import review_rounds
+        records = self.synthetic_records(400)
+        ordered = sorted(records, key=review_rounds.record_key)
+        columns = telemetry._round_columns(records)
+        checked = 0
+        for index, record in enumerate(ordered):
+            action = record.get("protocol", {}).get("action_id")
+            stage = review_rounds.stage_of(action)
+            if stage not in (review_rounds.STAGE_PLAN, review_rounds.STAGE_IMPLEMENTATION):
+                self.assertEqual(columns[id(record)][2:], (None, None))
+                continue
+            snapshot = record["protocol"]["decision"]["snapshot"]
+            expected = review_rounds.current_round(snapshot, stage, ordered[:index + 1],
+                                                   target_repo=record["target_repo"], work_item_id=record["work_item_id"])
+            self.assertEqual(columns[id(record)][2:], expected, record["job_id"])
+            checked += 1
+        self.assertGreater(checked, 100)
+
+    def test_the_rounds_are_computed_in_one_pass_not_one_prefix_per_record(self) -> None:
+        import time
+        from controller import review_rounds
+
+        def best(count: int) -> float:
+            records = self.synthetic_records(count)
+            for record in records:  # one repository and one work item: the worst case for a prefix rescan
+                record["target_repo"], record["work_item_id"] = "/r/a", "w1"
+            times = []
+            for _ in range(3):
+                start = time.perf_counter()
+                telemetry._round_columns(records)
+                times.append(time.perf_counter() - start)
+            return min(times)
+
+        small, large = best(500), best(2000)
+        # a linear pass grows about 4x for 4x the records, a prefix rescan about 16x; 10x is the line between them
+        self.assertLess(large / max(small, 1e-6), 10, (small, large))
+        self.assertTrue(hasattr(review_rounds, "RoundCounter"))
+
     def test_same_content_applies_do_not_raise_the_derived_round_and_a_filter_does_not_change_it(self) -> None:
         phase = "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"
         self.protocol_job("j-1", "implementation.apply_review", 1, phase=phase, implementation_revision=3)

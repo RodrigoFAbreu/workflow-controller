@@ -28,6 +28,16 @@ Plan revision 3 is approved (`4d29850`); implementation is under way, one checkp
   state the rules. Each new test was shown failing with the controller change reverted (D7). Checked with
   `tests.test_review_rounds`, `test_review_claude`, `test_review_job`, `test_review_same_provider`, `test_telemetry`,
   `test_docs`, `test_write_containment` and `tools/check_docs.py`.
+- **CP4 complete** (#63, #75; telemetry): `review_rounds.RoundCounter` is the one count of the Controller's review rounds
+  (`current_round` builds one over a list) and `telemetry._round_columns` keeps a running counter per repository and work
+  item, so the rounds come from one oldest-first pass with the same results as counting each job's own history. A Claude
+  review's `result` event cost and tokens are kept in `review.telemetry` (`review.result_figures`, summed over the
+  review's at most two invocations by `review.add_figures`), the review row counts them, and `telemetry --by review_mode`
+  shows a same-provider review's cost; a Codex review keeps none. The JSON gains no new row key. `docs/guide/runtime.md`
+  and `commands.md` state both. The two new telemetry tests (rounds equal the per-prefix count; time ratio for 4x the
+  records) and the figures test were shown failing on the old `telemetry.py` (D7). Checked with `test_telemetry`,
+  `test_review_rounds`, `test_review_claude`, `test_review_job` (the touched classes and the whole file), `test_docs`,
+  `test_write_containment`, `tools/check_docs.py` and the `review-mode-single-provider` scenario on a committed copy.
 
 The previous milestone's record follows.
 

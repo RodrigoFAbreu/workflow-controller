@@ -6348,6 +6348,39 @@ def _choose_review(managed_repo: Any, decision: Decision, reviewer: Mapping | No
     return target, review_mode.choose(mode, reviewer, target[0], signal)
 
 
+def _sticky_stop_message(mode: str, stage: str) -> str:
+    """The text of the D6 stop, shared by ``step`` and ``explain``."""
+    return ("The last same-provider review of this stage was refused by the Workflow for the distinct-model rule "
+            "and neither the state nor the policy signal has changed, so no review is paid for twice. "
+            + review_mode.remedies(mode, stage))
+
+
+def review_mode_report(runtime_root: Path, managed_repo: Any, work_item_id: str | None, decision: Decision,
+                       reviewer: Mapping | None, mode_options: Mapping | None) -> dict | None:
+    """What the next ``step`` would do at the external review gate ``decision``
+    (review-modes D1-D7), for ``explain``: ``None`` when the decision is not an
+    external review gate, else ``mode``, ``source``, ``stage``, ``choice``
+    (``gate``, ``review`` or ``refused``), the ``harness`` a review would run,
+    ``lowered`` and, for a stop, its ``reason`` (the step's own text, with the
+    ways out that apply). Read-only: it asks ``verify`` and reads the job files
+    exactly as the step does and writes nothing."""
+    chosen = _choose_review(managed_repo, decision, reviewer, mode_options)
+    if chosen is None:
+        return None
+    (stage, _kind), choice = chosen
+    options = mode_options or {}
+    mode = options.get("mode", review_mode.MODE_AUTO)
+    report: dict = {"mode": mode, "source": options.get("source", "default"), "stage": stage,
+                    "choice": choice.kind, "harness": choice.harness, "lowered": choice.lowered}
+    if choice.kind == "refused":
+        report["reason"] = choice.reason
+    elif choice.lowered and _sticky_review_stop(
+            runtime_root, managed_repo.root, work_item_id, stage, decision.protocol.state_identity,
+            choice.signal.key(stage)):
+        report.update(choice="refused", harness=None, lowered=False, reason=_sticky_stop_message(mode, stage))
+    return report
+
+
 def _sticky_review_stop(runtime_root: Path, target_root: Path, work_item_id: str | None, stage: str,
                         state_identity: str | None, signal_key: tuple) -> bool:
     """Whether the most recent review job for ``work_item_id`` (by
@@ -7057,9 +7090,7 @@ def _execute_step_locked(
                 mode = (review_mode_options or {}).get("mode", review_mode.MODE_AUTO)
                 refusal = protocol_decision.gate_for(
                     managed_repo, work_item, decision, review_mode.REVIEW_MODE_UNAVAILABLE,
-                    "The last same-provider review of this stage was refused by the Workflow for the "
-                    "distinct-model rule and neither the state nor the policy signal has changed, so no review "
-                    "is paid for twice. " + review_mode.remedies(mode, review_target[0]))
+                    _sticky_stop_message(mode, review_target[0]))
                 return _no_launch_record(
                     runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase,
                     pre_state, refusal, status=STATUS_GATE_BLOCKED, run_id=run_id,

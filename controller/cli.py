@@ -356,6 +356,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     explain_p = subparsers.add_parser("explain")
     explain_p.add_argument("repo")
+    explain_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
+                           help="show what a step would do at the external review gate under this mode "
+                                "(default: the review.mode setting, auto)")
 
     step_p = subparsers.add_parser("step")
     step_p.add_argument("repo")
@@ -450,7 +453,8 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_p.add_argument("--by", choices=sorted(telemetry.GROUPINGS), default=None, metavar="GROUPING",
                              help="group the jobs: role, model, or role,model for both; action, stage, "
                                   "stage,round (a round counted from job records is marked ~) or "
-                                  "work_item,action (default: one group)")
+                                  "work_item,action; review_mode groups review jobs by the mode they ran "
+                                  "under and whether it was a lowered-policy review (default: one group)")
     telemetry_p.add_argument("repo", nargs="?", default=None,
                              help="only this target repository's jobs (default: every target)")
 
@@ -1074,6 +1078,16 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             last_apply_job=job.last_launched_apply_job_view(runtime_root, target.root, work_item.work_item_id),
         )
 
+    # review-modes D7: at an external review gate, the mode, its source and what the step
+    # would do (the review, the ordinary gate, or the `review_mode_unavailable` stop).
+    mode_report = None
+    if decision.gate is not None and decision.protocol is not None:
+        effective_settings = _effective(args)
+        mode_report = job.review_mode_report(
+            runtime_root, target, None if work_item is target_state.NoWorkItemYet else work_item.work_item_id,
+            decision, _reviewer_options(effective_settings), _review_mode_options(effective_settings))
+    mode_block = {} if mode_report is None else {"review_mode": mode_report}
+
     if args.json:
         gate = decision.gate
         print(json.dumps({
@@ -1098,6 +1112,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             "controller": identity.runtime_record(ident),
             **preflight_block,
             **({} if decision.protocol is None else {"protocol": _protocol_block(decision.protocol)}),
+            **mode_block,
         }))
         return EXIT_OK
 
@@ -1110,6 +1125,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     for line in decision.evidence:
         print(f"  evidence: {line}")
     print(f"reason: {decision.reason}")
+    if mode_report is not None:
+        _print_review_mode(mode_report)
     if decision.gate is not None:
         gate = decision.gate
         print(f"human gate -- what is required: {gate.what_is_required}")
@@ -1126,6 +1143,19 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     else:
         print("no action at this phase (e.g. LEGACY_READY or MILESTONE_COMPLETE)")
     return EXIT_OK
+
+
+def _print_review_mode(report: dict) -> None:
+    """``explain``'s review-mode lines (review-modes D7): the mode and where it came from, then
+    what the next step does. The wording of a stop is the step's own."""
+    print(f"review mode: {report['mode']} (from {report['source']}), {report['stage']} stage")
+    if report["choice"] == "review":
+        label = ", lowered policy: labelled review.lowered" if report["lowered"] else ""
+        print(f"  the next step runs the {report['harness']} review{label}")
+    elif report["choice"] == "gate":
+        print("  the next step stops at the ordinary gate for an external verdict")
+    else:
+        print(f"  the next step stops at review_mode_unavailable: {report['reason']}")
 
 
 def _protocol_block(info: Any) -> dict:

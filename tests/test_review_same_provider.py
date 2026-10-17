@@ -135,6 +135,53 @@ class RunTest(SameProviderCase):
         self.assertEqual(record["review"]["harness"], "codex")
 
 
+class ReportTest(SameProviderCase):
+    """``job.review_mode_report``: what ``explain`` says the next step does, read-only (review-modes D7)."""
+
+    def report(self, mode="auto", capture="lowering_only", *, reviewer_options=None):
+        from controller import protocol_decision, target_state
+        target = self.life.inspect()
+        item = target_state.select_work_item(target_state.read(target), work_item_id=rj.WID)
+        decision, _ = protocol_decision.decide_after_preflight(target, item)
+        read = None if capture is None else signal(capture)
+        options = {"mode": mode, "source": "cli", "same_provider": self.same}
+        with mock.patch.object(job, "_review_mode_signal", return_value=read):
+            return job.review_mode_report(self.runtime_root, target, rj.WID, decision, reviewer_options, options)
+
+    def test_each_choice_is_reported_with_the_mode_and_its_source(self) -> None:
+        self.assertEqual(self.report("manual"), {
+            "mode": "manual", "source": "cli", "stage": "plan", "choice": "gate", "harness": None, "lowered": False})
+        self.assertEqual(self.report("auto", None)["choice"], "gate")
+        run = self.report("single-provider")
+        self.assertEqual((run["choice"], run["harness"], run["lowered"]), ("review", "claude", True))
+        refused = self.report("cross-model", None)
+        self.assertEqual(refused["choice"], "refused")
+        self.assertIn("reviewer.harness is unset", refused["reason"])
+        codex = self.report("auto", None, reviewer_options=self.reviewer)
+        self.assertEqual((codex["choice"], codex["harness"], codex["lowered"]), ("review", "codex", False))
+
+    def test_the_sticky_stop_is_reported_and_nothing_is_written(self) -> None:
+        self.refuse_distinct()
+        before = sorted(p.name for p in (self.runtime_root / "jobs").glob("*"))
+        launched = len(self.double.calls)
+        stopped = self.report("auto")
+        self.assertEqual((stopped["choice"], stopped["lowered"]), ("refused", False))
+        self.assertIn("no review is paid for twice", stopped["reason"])
+        self.assertNotIn("(2)", self.report("single-provider")["reason"])
+        self.assertEqual(self.report("manual")["choice"], "gate")
+        self.assertEqual(sorted(p.name for p in (self.runtime_root / "jobs").glob("*")), before)
+        self.assertEqual(len(self.double.calls), launched)
+
+    def test_a_decision_that_is_not_an_external_review_gate_has_no_report(self) -> None:
+        from controller import protocol_decision, target_state
+        target = self.life.inspect()
+        item = target_state.select_work_item(target_state.read(target), work_item_id=rj.WID)
+        decision, _ = protocol_decision.decide_after_preflight(target, item)
+        other = mock.Mock(protocol=mock.Mock(disposition="human_gate", action_id="plan.approve"))
+        self.assertIsNone(job.review_mode_report(self.runtime_root, target, rj.WID, other, None, None))
+        self.assertIsNotNone(job.review_mode_report(self.runtime_root, target, rj.WID, decision, None, None))
+
+
 class DistinctRefusalTest(SameProviderCase):
     def test_the_workflows_refusal_ends_the_job_incomplete_and_names_the_ways_out(self) -> None:
         record = self.refuse_distinct()

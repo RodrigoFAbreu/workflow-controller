@@ -156,6 +156,12 @@ class World:
                                                             key=lambda p: p.stat().st_mtime_ns)]
         return [r for r in records if r.get("kind") == "review"]
 
+    def latest_gate(self) -> tuple[str, str]:
+        """``(status, what a human must do)`` of the newest job record of any kind."""
+        paths = sorted((self.life.runtime / "jobs").glob("*.json"), key=lambda p: p.stat().st_mtime_ns)
+        record = json.loads(paths[-1].read_text())
+        return record["status"], (record.get("human_gate_pending") or {}).get("what_is_required", "")
+
     def log_records(self, kind: str | None = None) -> list[dict]:
         from tests import fake_codex
         return [r for r in fake_codex.read_log(self.log) if kind is None or r["kind"] == kind]
@@ -278,6 +284,8 @@ class World:
                     record = {**record, "review": {**body, "launched": False}}
                 return real_persist(runtime_root, job_id, record, **kw)
             patch(job, "_persist", persist_without_intent)
+        elif name == "mode-ignored":  # applied by `scenario-review-mode-single-provider`, which owns the patch
+            pass
         elif name:
             raise ScenarioFailure(f"no such mutation: {name}")
 
@@ -547,3 +555,110 @@ def codex_review_implementation_stage_limit(kit) -> None:
             kit.observe("readmitted", {"exit": done.code, "phase": world.phase(), "events": event_types(hub)})
     finally:
         hub.stop()
+
+
+# ---------------------------------------------------------------------------
+# Scenario 13
+# ---------------------------------------------------------------------------
+
+@scenario("scenario-review-mode-single-provider", covers=("C14",))
+def review_mode_single_provider(kit) -> None:
+    """``review.mode`` through ``cli.main`` over a real vendored Workflow at the plan review gate, against the fake
+    ``codex`` and the fake ``claude`` review: ``auto`` with nothing set stops at the ordinary gate and ``explain`` says
+    so; ``cross-model`` without a distinct provider stops at ``review_mode_unavailable`` and starts nothing;
+    ``manual`` with ``reviewer.harness`` configured stops at the ordinary gate and starts no Codex; ``single-provider``
+    under a lowered policy (the captured ``gate_policy`` check of a lowering adoption) runs the Claude review, which the
+    Workflow records, and the job record, ``explain`` and ``telemetry --by review_mode`` carry the mode and the label.
+    The lowered-policy signal is the one captured from the vendored Workflow's own ``verify`` (the stub manager the
+    scenario drives has no adoption to report)."""
+    import dataclasses
+
+    from controller import cli, job, review, review_mode
+    from tests import fake_claude_review
+    from tests.test_review_mode import signal
+
+    with World(kit) as world:
+        life = world.life
+        life.run_until(PLAN_GATE)
+        claude_tasks = len(life.tasks)
+        home = kit.home / "claude-operator"
+        home.mkdir(parents=True, exist_ok=True)
+        (home / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {"accessToken": "orig"}}))
+        system = kit.scratch / "etc-claude-code"
+        system.mkdir(exist_ok=True)
+        claude_log = kit.scratch / "fake-claude-review.log"
+        binary = fake_claude_review.write_binary(kit.bin_dir, {"log": str(claude_log), "orphan_seconds": 30},
+                                                 name="claude-review")
+        patched = dataclasses.replace(review.CLAUDE, default_binary=str(binary))
+        world.stack.enter_context(unittest.mock.patch.object(review, "CLAUDE", patched))
+        world.stack.enter_context(unittest.mock.patch.dict(review.HARNESSES, {"claude": patched}))
+        world.stack.enter_context(unittest.mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(home)}))
+        codex_launch = world.launch
+
+        def launch(**kw):
+            if kw["harness_name"] != "claude":
+                return codex_launch(**kw)
+            return world.real_launch(**{**kw, "system_dir": system, "inherited_env": dict(RESERVED_ENV)})
+        world.stack.enter_context(unittest.mock.patch.object(review, "launch_review", launch))
+        lowered = signal("lowering_only")
+        read = [None]  # the gate_policy signal `verify` reports: none until the scenario adopts a lowering policy
+        world.stack.enter_context(unittest.mock.patch.object(job, "_review_mode_signal", lambda managed_repo: read[0]))
+        if mutation(kit) == "mode-ignored":
+            world.stack.enter_context(unittest.mock.patch.object(job, "_choose_review", lambda *a, **k: None))
+
+        def claude_runs() -> int:
+            return len(fake_claude_review.read_log(claude_log)) if claude_log.exists() else 0
+
+        def nothing_started(what: str) -> None:
+            kit.equal((world.reviews(), world.log_records("exec"), claude_runs(), life.tasks[claude_tasks:]),
+                      ([], [], 0, []), f"{what}: review records, Codex runs, Claude review runs, workers")
+
+        # 1. `auto` with nothing set is the ordinary gate: no review, and `explain` names the mode and the gate
+        said = world.run("explain")
+        kit.equal(said.code, cli.EXIT_OK, "explain under auto: exit status")
+        kit.check("review mode: auto (from default), plan stage" in said.stdout
+                  and "stops at the ordinary gate" in said.stdout, f"explain under auto: {said.stdout!r}")
+        stopped = world.run("step")
+        kit.equal((stopped.code, world.phase()), (cli.EXIT_GATE, PLAN_GATE), "auto with nothing set: exit, phase")
+        nothing_started("auto with nothing set")
+        kit.observe("auto", {"exit": stopped.code})
+
+        # 2. `cross-model` without a distinct provider is refused with its reason; nothing starts
+        said = world.run("explain", "--review-mode", "cross-model")
+        kit.check("review mode: cross-model (from cli)" in said.stdout and "review_mode_unavailable" in said.stdout,
+                  f"explain under cross-model: {said.stdout!r}")
+        refused = world.run("step", "--review-mode", "cross-model")
+        status, gate = world.latest_gate()
+        kit.equal((refused.code, status), (cli.EXIT_GATE, job.STATUS_GATE_BLOCKED), "cross-model: exit, record")
+        kit.check(gate.startswith("review_mode_unavailable") and "reviewer.harness is unset" in gate,
+                  f"the cross-model refusal: {gate!r}")
+        nothing_started("cross-model without a distinct provider")
+        kit.observe("cross-model", {"exit": refused.code})
+
+        # 3. `manual` with a Codex configured is still the ordinary gate: the owner reviews
+        world.configure(world.binary())
+        manual = world.run("step", "--review-mode", "manual")
+        kit.equal((manual.code, world.phase()), (cli.EXIT_GATE, PLAN_GATE), "manual with a reviewer: exit, phase")
+        nothing_started("manual with reviewer.harness configured")
+        kit.observe("manual", {"exit": manual.code})
+
+        # 4. `single-provider` under a lowered policy runs the Claude review, which the Workflow records
+        read[0] = lowered
+        said = world.run("explain", "--review-mode", "single-provider")
+        kit.check("review mode: single-provider (from cli)" in said.stdout
+                  and "the next step runs the claude review, lowered policy" in said.stdout,
+                  f"explain under single-provider: {said.stdout!r}")
+        done = world.run("step", "--review-mode", "single-provider")
+        kit.equal((done.code, world.phase()), (cli.EXIT_OK, "AWAITING_PLAN_APPROVAL"),
+                  "single-provider under a lowered policy: exit, phase")
+        [record] = world.reviews()
+        block = record["review"]
+        kit.equal((record["status"], block["harness"], block["mode"], block["mode_source"], block["lowered"],
+                   block["ingested"]), (job.STATUS_FINISHED, "claude", "single-provider", "cli", True, "recorded"),
+                  "the Claude review record")
+        kit.equal((claude_runs(), world.log_records("exec"), life.tasks[claude_tasks:]), (1, [], []),
+                  "one Claude review run, no Codex, no worker")
+        telemetry_out = world.run("telemetry", "--by", "review_mode")
+        kit.check("review_mode=single-provider, lowered=True: 1 job(s)" in telemetry_out.stdout,
+                  f"telemetry --by review_mode: {telemetry_out.stdout!r}")
+        kit.observe("single-provider", {"exit": done.code, "phase": world.phase(), "claude_runs": claude_runs()})

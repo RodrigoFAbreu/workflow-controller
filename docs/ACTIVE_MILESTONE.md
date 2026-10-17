@@ -16,7 +16,7 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
 | CP1 -- the mode setting and the choice | complete (see below) |
 | CP2 -- the Claude review harness | complete (see below) |
 | CP3 -- the same-provider review job | complete (see below) |
-| CP4 -- `explain`, telemetry and the lifecycle scenario | pending |
+| CP4 -- `explain`, telemetry and the lifecycle scenario | complete (see below) |
 | CP5 -- documentation and roadmap | pending |
 
 ### CP1 -- what was built
@@ -72,6 +72,22 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
   `REVISE`, `single-provider` with and without the signal, a limit, the real Workflow refusal with its sticky stop and
   every release path. `tests/test_review_job.py`'s double takes the harness's family.
 
+### CP4 -- what was built
+
+- `controller/job.py`: `review_mode_report` (read-only; the same `_choose_review` and `_sticky_review_stop` the step
+  uses) gives `explain` the mode, its source, the stage, the choice (`gate`, `review` or `refused`), the harness, the
+  `lowered` label and, for a stop, the step's own text. `_sticky_stop_message` is shared by the step and `explain`.
+- `controller/cli.py`: `explain` takes `--review-mode`; at an external review gate it prints `review mode: ...` and
+  what the next step does, and `--json` gains a `review_mode` block (absent elsewhere; no existing key changes).
+  `settings show` already lists the three rows (CP1).
+- `controller/telemetry.py`: rows gain `review_mode` and `lowered`; `--by review_mode` groups by both; a review record
+  without the keys reads `cross-model`, a job that is not a review has `null` (printed `none`).
+- `tests/scenarios/review.py`: `scenario-review-mode-single-provider` (mutation `mode-ignored`; in `review.py` rather
+  than `lifecycle.py` because it reuses that module's `World`) drives `auto`, `cross-model`, `manual` and
+  `single-provider` through `cli.main` on a real vendored 2.9.0 Workflow against the fake `codex` and the fake review
+  `claude`. The lowered-policy signal is the captured one, patched in (the stub manager reports no adoption).
+- Tests: `ReportTest` in `tests/test_review_same_provider.py`, a telemetry test, a parser test and the new mutation row.
+
 ## Next action
 
-`/milestone-implement workflow-controller-review-modes` for CP4.
+`/milestone-implement workflow-controller-review-modes` for CP5.

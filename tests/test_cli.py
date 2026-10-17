@@ -3079,6 +3079,16 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         self.assertEqual(parser.parse_args(["run", "--review-round-cap", "6", "/r"]).review_round_cap, 6)
         self.assertEqual(parser.parse_args(["step", "--review-round-cap", "100", "/r"]).review_round_cap, 100)
 
+    def test_review_mode_is_a_flag_of_explain_step_and_run(self) -> None:
+        """review-modes D7: ``explain`` takes the flag the step takes, so it can say what that step would do."""
+        parser = cli.build_parser()
+        for command in ("explain", "step", "run"):
+            self.assertEqual(parser.parse_args([command, "--review-mode", "manual", "/r"]).review_mode, "manual")
+            self.assertIsNone(parser.parse_args([command, "/r"]).review_mode)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            parser.parse_args(["explain", "--review-mode", "sometimes", "/r"])
+        self.assertEqual(caught.exception.code, 2)
+
     def test_the_merge_rows_reach_execute_step_and_only_run_waits(self) -> None:
         """auto-merge-release-wait A.2/I6: ``merge.auto`` and
         ``merge.poll_seconds`` reach every step; ``merge.wait_seconds`` only

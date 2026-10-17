@@ -1958,7 +1958,10 @@ class SupervisionTest(_SupervisedCase):
         self.assertLess(self.returned - self.started, 10)
 
     def test_without_the_stop_the_worker_waits_for_the_wakeup(self) -> None:
-        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 0.3)
+        # The window only has to be shorter than nothing here: it starts when the wakeup fires (at 2 s) and the
+        # worker is idle, so a window shorter than a CPU stall in the fake's fire turn ends the session under it
+        # (INTERRUPTED on a loaded CI runner). 2 s is longer than any stall measured with the suite pinned to two CPUs.
+        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 2.0)
         result = self.launch([[{"step": "wakeup", "delay": 2}, {"step": "bash_bg", "seconds": 0.3}],
                               [{"step": "text", "text": "task done"}]])
         self.assertEqual(result.outcome, worker.SUCCESS)
@@ -3740,8 +3743,11 @@ class ReapingLaunchTest(_SupervisedCase):
         turns = [[{"step": "bash_bg", "seconds": 0.5}], [{"step": "text"}]]
 
         def published() -> list:
-            return [(state, sorted(e["source"] for e in details["owned_processes"]), details["scan"])
-                    for _at, state, details in self.log]
+            # A RUNNING flush lists whatever the periodic ownership scan had found when it was written, which
+            # depends on scheduling (the worker's group may or may not be seen yet); a WAITING or later flush
+            # follows a scan that has seen the background task, so those list their sources exactly.
+            return [(state, None if state == worker.RUNNING else sorted(e["source"] for e in details["owned_processes"]),
+                     details["scan"]) for _at, state, details in self.log]
 
         self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
         with_sweep = published()

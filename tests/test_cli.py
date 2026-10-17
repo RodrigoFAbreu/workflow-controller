@@ -2150,7 +2150,7 @@ class RunParentGuardTest(_RunRecordFixture, unittest.TestCase):
         self.addCleanup(lambda: os.kill(controller, signal.SIGKILL) if not self._gone(controller) else None)
         self.assertTrue(process_fixtures.wait_until(ready.exists, timeout=60), "the fake never announced readiness")
         fake = int(ready.read_text())
-        self.addCleanup(process_fixtures.kill_group, fake)
+        self.addCleanup(process_fixtures.end_pid, fake)
         # Both exist before the parent dies, so the absences below mean the guard and the watchdog ran.
         self.assertFalse(self._gone(controller))
         self.assertFalse(self._gone(fake))

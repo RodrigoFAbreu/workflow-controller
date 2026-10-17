@@ -1570,6 +1570,51 @@ class OrphanWatchdogTest(unittest.TestCase):
         bad = ("a.py", "start:Popen:controller", 1, "exception", "named")
         self.assertTrue(any("Controller child" in p for p in process_fixtures.check_inventory({"a.py": console}, (bad,))))
 
+    def test_the_scan_counts_imported_starts_built_argv_and_fifo_reads(self):
+        """#56: three process starts the scan used to miss, one case each, and the negative of each."""
+        from tests import process_fixtures
+
+        def kinds(source):
+            return sorted(kind for _, kind in process_fixtures.scan_leftover_constructs({"x.py": source}))
+
+        # A start imported by name (from subprocess import check_call / check_output / run).
+        for name in ("check_call", "check_output", "run"):
+            imported = f"from subprocess import {name}\n{name}(['true'])\n"
+            self.assertEqual(kinds(imported), ["start:run"], name)
+        aliased = "from subprocess import run as go\ngo(['true'])\n"
+        self.assertEqual(kinds(aliased), ["start:run"])
+        # The same name that is not imported from subprocess is not a start.
+        local = "def run(argv):\n    return argv\nrun(['true'])\n"
+        self.assertEqual(kinds(local), [])
+        # A timeout= run whose argv is built elsewhere is classified; a literal argv with one is not.
+        built = "import subprocess\nargv = build()\nsubprocess.run(argv, timeout=5)\n"
+        self.assertEqual(kinds(built), ["start:run"])
+        literal = "import subprocess\nsubprocess.run(['true'], timeout=5)\n"
+        self.assertEqual(kinds(literal), [])
+        controller = "import subprocess\nsubprocess.run(['controller', 'run'], timeout=5)\n"
+        self.assertEqual(kinds(controller), ["start:run:controller"])
+        # A shell FIFO read is a wait with no deadline of its own; one under a deadline, or prose, is not.
+        # Built from pieces so the scan of this very file does not read them as constructs.
+        fifo = "cmd = '" + "re" + "ad _ < gate'\n"
+        self.assertEqual(kinds(fifo), ["wait"])
+        flagged = "cmd = '" + "re" + "ad -r line < gate'\n"
+        self.assertEqual(kinds(flagged), ["wait"])
+        bounded = "cmd = 'timeout 3 bash -c " + "re" + "ad _ < gate; deadline'\n"
+        self.assertEqual(kinds(bounded), [])
+        prose = "text = 'the " + "re" + "ad side is < 5 lines'\n"
+        self.assertEqual(kinds(prose), [])
+
+    def test_end_pid_ends_a_stopped_process_by_its_exact_pid(self):
+        """#56: exact-pid cleanup continues a stopped process before the kill, and ignores a gone or absent pid."""
+        from tests import process_fixtures
+
+        sleeper = process_fixtures.spawn_sleeper(self)
+        os.kill(sleeper.pid, signal.SIGSTOP)
+        process_fixtures.end_pid(sleeper.pid)
+        self.assertEqual(sleeper.wait(timeout=10), -signal.SIGKILL)
+        process_fixtures.end_pid(sleeper.pid)    # already gone and reaped: no error
+        process_fixtures.end_pid(None)
+
     def test_the_handoff_console_script_goes_through_the_deadline_wrapper(self):
         from tests import process_fixtures
 

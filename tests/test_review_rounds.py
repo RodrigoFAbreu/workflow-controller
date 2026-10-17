@@ -3,6 +3,7 @@ D1/D2): the round of a stage and the cap's boundary table."""
 
 from __future__ import annotations
 
+import ast
 import sys
 import unittest
 from pathlib import Path
@@ -149,6 +150,39 @@ class PlanCountTest(unittest.TestCase):
         self.assertEqual(source, "jobs")
         self.assertLessEqual(count, workflow)
         self.assertLess(count, workflow)
+
+
+def _ready_phases_in(path: Path) -> frozenset[str] | None:
+    """The ``PLAN_REVIEW_READY_PHASES`` a Workflow ``workflow_state.py`` assigns, read from its source, or ``None``
+    when that release does not define it."""
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLAN_REVIEW_READY_PHASES"
+                                                for t in node.targets):
+            return frozenset(ast.literal_eval(node.value.args[0]))
+    return None
+
+
+class ReadyPhasesPinTest(unittest.TestCase):
+    """#66: ``review_rounds`` keeps its own copy of the plan-review ready phases (it imports no other Controller
+    module), so a change to one copy must not go unnoticed. Each copy is compared with the Workflow's own, not
+    with each other: the installed ``scripts/`` (the exception ``docs/guide/development.md`` states) and every
+    vendored release that defines the constant."""
+
+    def test_the_copies_equal_the_workflows_own(self) -> None:
+        from controller import evidence
+
+        self.assertEqual(rr.PLAN_REVIEW_READY_PHASES, evidence.PLAN_REVIEW_READY_PHASES)
+        self.assertEqual(_ready_phases_in(SCRIPTS / "workflow_state.py"), rr.PLAN_REVIEW_READY_PHASES)
+        vendored = sorted((SCRIPTS.parent / "tests" / "workflow_releases").glob("*/scripts/workflow_state.py"))
+        checked = []
+        for path in vendored:
+            phases = _ready_phases_in(path)
+            if phases is None:
+                continue
+            checked.append(path.parent.parent.name)
+            self.assertEqual(phases, rr.PLAN_REVIEW_READY_PHASES, path.parent.parent.name)
+        self.assertIn("2.9.0", checked)
+        self.assertGreaterEqual(len(checked), 3)
 
 
 class CapDecisionTest(unittest.TestCase):

@@ -627,6 +627,36 @@ class UsageLimitTest(unittest.TestCase):
                          cwd=e.root)
         self._assert_failed_live_and_on_resume(env, self._step(env, restage))
 
+    UNMERGED_STAGES = {"DD": (1,), "AU": (2,), "UD": (1, 2), "UA": (3,), "DU": (1, 3), "AA": (2, 3), "UU": (1, 2, 3)}
+
+    def test_a_changed_unmerged_blob_is_not_an_unchanged_tree_in_all_seven_statuses(self) -> None:
+        # The live check and ``resume`` both decide through ``_tracked_tree_unchanged``. The Workflow protocol
+        # itself blocks the step (``GATE_BLOCKED``) over any dirty path besides its own state file, so a whole
+        # protocol step cannot run over an unmerged one; the decision is called directly (the legacy mode's
+        # ``UsageLimitLegacyTest`` runs all seven statuses through a whole step and ``resume``).
+        literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+
+        def stage(env: _Env, case: str, version: int) -> None:
+            lines = f"0 {'0' * 40}\tconflict.txt\n"
+            for number in self.UNMERGED_STAGES[case]:
+                blob = fixtures.run(["git", "hash-object", "-w", "--stdin"], cwd=env.root,
+                                    input=f"stage {number} version {version}\n").stdout.strip()
+                lines += f"100644 {blob} {number}\tconflict.txt\n"
+            fixtures.run(["git", "update-index", "--index-info"], cwd=env.root, input=lines)
+
+        for case in self.UNMERGED_STAGES:
+            with self.subTest(case), mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
+                env = _Env(self)
+                (env.root / "conflict.txt").write_text("base\n")
+                fixtures.commit_all(env.root, "add conflict.txt")
+                stage(env, case, 0)
+                self.assertIn(f"{case} conflict.txt",
+                              fixtures.run(["git", "status", "--porcelain"], cwd=env.root).stdout)
+                pre_state = {"tracked_changes": gitrepo.tracked_change_digests(env.root)}
+                self.assertFalse(pre_state["tracked_changes"]["conflict.txt"]["comparable"])
+                stage(env, case, 1)
+                self.assertFalse(job._tracked_tree_unchanged(env.root, pre_state))
+
     def test_mode_only_progress_is_failed(self) -> None:
         env = _Env(self)
         notes = self._notes(env)

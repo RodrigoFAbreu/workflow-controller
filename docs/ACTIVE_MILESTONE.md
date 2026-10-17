@@ -8,6 +8,16 @@ Plan revision 3 is approved (`4d29850`); implementation is under way, one checkp
   `STEP_ID_PAGES`; the guides are exempt) and the ids it found were reworded; `docs/guide/runtime.md` explains the
   before-and-after telemetry figures. Checked with `tests.test_docs`, `tests.test_workflow_releases` and
   `tools/check_docs.py`.
+- **CP2 complete** (#56, #57, #58, #62, #66; tests only): the leftover guard counts a bare `check_call`/`check_output`/`run`
+  imported from `subprocess`, a `timeout=` run whose argv is not written out as a list, and a shell FIFO read
+  (`read x < fifo`), with an inventory row per new match; `process_fixtures.end_pid` (SIGCONT, then SIGKILL by pid) replaces
+  `kill_group` in the four named cleanups. The unmerged-index usage-limit test gives every stage of each of the seven
+  statuses a blob that really changes and runs each live and through `resume` (legacy mode); protocol mode checks the
+  shared decision `_tracked_tree_unchanged` directly, because the Workflow blocks a step over a dirty extra path. A lost
+  merge reply after a squash onto a moved trunk is tested. The two worker flakes were reproduced under `taskset` to
+  2 CPUs with parallel copies (about 1 in 40 and 1 in 20) and no longer fail in 60 pinned runs each. `tests.test_review_rounds`
+  pins the ready-phase copy against `evidence`, the installed `scripts/` and the vendored trees. Each changed guard
+  was shown failing on its defect by restoring the defect in place (D7).
 
 The previous milestone's record follows.
 

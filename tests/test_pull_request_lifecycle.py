@@ -2453,6 +2453,27 @@ class AutoMergeTest(_AutoMerge):
         self.assertEqual(gitrepo.first_parent_log(self.clone, before, m), [m])
         self.assert_closed(a, m)
 
+    def test_a_lost_reply_with_a_lagging_read_after_the_trunk_moved_is_adopted_from_the_trunk(self) -> None:
+        # #58: the trunk moved before the send, so the squash commit's tree differs from the accepted head's; the
+        # reply is lost and the reads lag OPEN. The Controller recognises its own merge from the trunk alone: one
+        # send, `squash_commit` is the trunk tip, and the close-out succeeds.
+        number, a = self.to_held_ready()
+        moved = self.trunk_commit()
+        self.gh_edit(number, mergeStateStatus="CLEAN", merge_reply_lost=True, merge_read_lag=2)
+        self.assertEqual(self.origin_ref("refs/heads/main"), moved)
+        gate = self.assertGate(self.preflight(), mb.GATE_MERGE_PENDING)
+        self.assertTrue(gate.waitable)
+        self.assertIn("is not visible yet", gate.message)
+        m = self.origin_ref("refs/heads/main")
+        self.assertNotEqual(m, moved)
+        self.assertEqual(gitrepo.first_parent_log(self.clone, moved, m), [m])
+        merge = self.record()["merge"]
+        self.assertEqual((merge["state"], merge["attempts"], merge["squash_commit"]), ("accepted", 1, m))
+        self.assertEqual(self.events_named("merge_refused"), [])
+        self.assertEqual(self.until_closed_out()[0].code, mb.GATE_MERGE_PENDING)
+        self.assertEqual([argv[argv.index("--match-head-commit") + 1] for argv in self.merges()], [a])
+        self.assert_closed(a, m)
+
     def test_a_lost_reply_with_reads_lagging_past_the_budget_waits_for_the_merge(self) -> None:
         # The first send merged but its reply was lost, and the reads stay
         # OPEN for longer than the attempt budget. The trunk decides, not

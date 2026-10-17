@@ -272,7 +272,7 @@ class FakeCodexContractTest(unittest.TestCase):
         pid = int(ready.read_text())
         os.kill(intermediate.pid, signal.SIGKILL)
         intermediate.wait()
-        self.addCleanup(process_fixtures.kill_group, pid)
+        self.addCleanup(process_fixtures.end_pid, pid)
         self.assertTrue(process_fixtures.wait_until(
             lambda: (process_fixtures.read_stat(pid) or ("Z",))[0] == "Z" or process_fixtures.read_stat(pid) is None,
             timeout=20))

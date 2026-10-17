@@ -2222,30 +2222,45 @@ class UsageLimitLegacyTest(_LifecycleCase):
     def test_a_staged_only_colon_prefixed_change_is_failed_under_literal_pathspecs(self) -> None:
         self._under_literal_pathspecs(":notes.txt")
 
-    def test_a_changed_unmerged_blob_is_failed_when_the_index_lookup_misses(self) -> None:
-        # DU (stages 1 and 3) and DD (stage 1 only) start with "D" but are
-        # unmerged; under literal pathspecs the staged lookup returns nothing.
-        for case, stages in (("DU", (1, 3)), ("DD", (1,))):
-            with self.subTest(case):
-                blobs = [fixtures.run(["git", "hash-object", "-w", "--stdin"], cwd=self.root,
-                                      input=data).stdout.strip()
-                         for data in ("base\n", "other-1\n", "other-2\n")]
+    #: The index stages each of the seven unmerged statuses has (Git's own table: ``DD`` keeps only the base
+    #: stage, ``AU`` only ours, ``UA`` only theirs, and so on).
+    UNMERGED_STAGES = {"DD": (1,), "AU": (2,), "UD": (1, 2), "UA": (3,), "DU": (1, 3), "AA": (2, 3), "UU": (1, 2, 3)}
 
-                def stage(changed: bytes) -> None:
-                    lines = f"0 {'0' * 40}\tREADME.md\n"
-                    for number in stages:
-                        blob = blobs[0] if number == 1 else changed
-                        lines += f"100644 {blob} {number}\tREADME.md\n"
-                    fixtures.run(["git", "update-index", "--index-info"], cwd=self.root, input=lines)
+    def _stage_unmerged(self, case: str, version: int) -> None:
+        """Stage ``README.md`` as ``case`` with a blob that differs between ``version`` 0 and 1 in *every* stage the
+        status has (a stage that always used one blob would make the "changed" index identical, as ``DD`` once did)."""
+        lines = f"0 {'0' * 40}\tREADME.md\n"
+        for number in self.UNMERGED_STAGES[case]:
+            blob = fixtures.run(["git", "hash-object", "-w", "--stdin"], cwd=self.root,
+                                input=f"stage {number} version {version}\n").stdout.strip()
+            lines += f"100644 {blob} {number}\tREADME.md\n"
+        fixtures.run(["git", "update-index", "--index-info"], cwd=self.root, input=lines)
 
-                stage(blobs[1])
-                literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
-                with unittest.mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
-                    self.assertFalse(
-                        gitrepo.tracked_change_digests(self.root)["README.md"]["comparable"])
-                    record = self._limited(lambda: stage(blobs[2]))
+    def _unmerged_index(self) -> str:
+        return fixtures.run(["git", "ls-files", "--stage", "--", ":(literal)README.md"], cwd=self.root).stdout
+
+    def test_a_changed_unmerged_blob_is_failed_when_the_index_lookup_misses_live_and_on_resume(self) -> None:
+        # Every unmerged status except DD and DU starts with "A" or "U"; DD and DU start with "D" but are
+        # unmerged. Under literal pathspecs the staged lookup returns nothing for all seven.
+        literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
+        for case in self.UNMERGED_STAGES:
+            with self.subTest(case), unittest.mock.patch.object(gitrepo, "_DEFAULT_RUNNER", literal):
+                self._stage_unmerged(case, 0)
+                first = self._unmerged_index()
+                status = fixtures.run(["git", "status", "--porcelain"], cwd=self.root).stdout
+                self.assertIn(f"{case} README.md", status)
+                self.assertFalse(gitrepo.tracked_change_digests(self.root)["README.md"]["comparable"])
+                record = self._limited(lambda: self._stage_unmerged(case, 1))
+                self.assertNotEqual(self._unmerged_index(), first)
                 self.assertEqual(record["status"], job.STATUS_FAILED)
                 self.assertEqual(record["reconciliation_evidence"]["usage_limit"], self.FACT)
+                completed = {k: v for k, v in record.items()
+                             if k not in ("reconciliation_evidence", "usage_limit", "observed_phase_after")}
+                completed.update(status=job.STATUS_COMPLETED)
+                reconciled = job._reconcile_completed(completed, managed_repo=self.managed_repo,
+                                                      runtime_root=self.runtime_root)
+                self.assertEqual(reconciled["status"], job.STATUS_FAILED)
+                self.assertEqual(reconciled["reconciliation_evidence"]["usage_limit"], self.FACT)
 
     def _staged_only_change_is_failed(self, name: str) -> None:
         notes = self.root / name

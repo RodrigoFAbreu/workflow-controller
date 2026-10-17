@@ -17,6 +17,8 @@ acceptance) are performed by the test, as the user's own commands would.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import shutil
 import subprocess
@@ -28,7 +30,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, managed_repo, protocol, worker  # noqa: E402
+from controller import cli, job, managed_repo, protocol, worker  # noqa: E402
 from controller.errors import WorkflowReleaseChangedError  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
@@ -87,6 +89,43 @@ record = ws.build_approval_record(
 ws.state_transaction(root, lambda s: ws.apply_plan_approval(s, wid, record, now))
 git("add", "-A")
 git("commit", "-q", "-m", f"approve the plan\\n\\nWorkflow-Plan-Approval: {digest}\\nWorkflow-Work-Item: {wid}\\n")
+"""
+
+_POLICY_APPROVE_PLAN = """
+import datetime, subprocess
+root = Path.cwd()
+wid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*a):
+    return subprocess.run(["git", *a], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+box = {}
+def mutate(state):
+    box["record"] = ws.build_policy_approval_record(root, state, wid, "plan", now=now)
+    return ws.apply_plan_approval(state, wid, box["record"], now)
+ws.state_transaction(root, mutate)
+record = box["record"]
+git("add", "-A")
+git("commit", "-q", "-m", "approve the plan by policy\\n\\nWorkflow-Plan-Approval: " + record["approved_review_content_id"]
+    + "\\nWorkflow-Work-Item: " + wid + "\\nWorkflow-Gate-Satisfied-By: " + ws.gate_satisfied_by_trailer(record) + "\\n")
+"""
+
+_POLICY_TECHNICAL_APPROVAL = """
+import datetime, subprocess
+root = Path.cwd()
+wid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*a):
+    return subprocess.run(["git", *a], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+box = {}
+def mutate(state):
+    box["record"] = ws.build_policy_approval_record(root, state, wid, "implementation", now=now)
+    return ws.apply_technical_approval(state, wid, box["record"], now)
+ws.state_transaction(root, mutate)
+record = box["record"]
+git("add", "-A")
+git("commit", "-q", "-m", "approve the implementation by policy\\n\\nWorkflow-Technical-Approval: "
+    + record["approved_review_content_id"] + "\\nWorkflow-Work-Item: " + wid
+    + "\\nWorkflow-Gate-Satisfied-By: " + ws.gate_satisfied_by_trailer(record) + "\\n")
 """
 
 _CHECKPOINT = """
@@ -203,16 +242,19 @@ _EFFECTS = {
 }
 
 
-def _result() -> worker.WorkerResult:
+def _result(report: str = "ok") -> worker.WorkerResult:
     return worker.WorkerResult(
         outcome="SUCCESS", returncode=0, session_id="s", is_error=False, subtype="success",
-        terminal_reason=None, stop_reason=None, result="ok", num_turns=1, permission_denials=[],
+        terminal_reason=None, stop_reason=None, result=report, num_turns=1, permission_denials=[],
         total_cost_usd=0.0, duration_ms=1, stdout="", stderr="", raw_json={})
 
 
 class Lifecycle:
     """A disposable ``release`` target seeded at a bound plan bundle, and the
     fake worker that performs the effect of each launched command."""
+
+    #: What the fake worker says at the end of a step.
+    report = "ok"
 
     def __init__(self, test: unittest.TestCase, release: str) -> None:
         self.test = test
@@ -256,7 +298,7 @@ class Lifecycle:
     def step(self) -> dict:
         def launch(task, *, cwd, **kwargs):
             self.effect(task)
-            return _result()
+            return _result(self.report)
 
         with mock.patch.object(worker, "launch", launch):
             return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime)
@@ -406,6 +448,308 @@ class ReleaseMovedBetweenStepsTest(_LifecycleCase):
         self.assertTrue(all("protocol" in r and r["target_workflow_version"] == "2.7.0" for r in later))
         life.step()
         self.assertEqual(life.tasks, EXPECTED_LAUNCHES)
+
+
+# -- gate-policy CP2: the three validations under automatic gates (workflow-controller-gate-policy D5, D8) ---------------
+
+
+def _audited_review() -> str:
+    """``_PLAN_REVIEW`` with the audit a stage records while its gate is automatic: a ``verdict_sha256`` and a declared
+    ``Reviewer model`` of a different family per stage (``distinct_reviewer_models``), and the plan stage's feedback
+    file written as the implementation stage's is."""
+    script = _PLAN_REVIEW
+    replacements = (
+        ('if stage == "implementation":\n    role = "LOCAL_MODEL_IMPLEMENTATION_REVIEW" if sys.argv[4] == "local" '
+         'else "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"',
+         'if True:\n    role = ("LOCAL_MODEL_" if sys.argv[4] == "local" else "MANUAL_EXTERNAL_") + stage.upper() + "_REVIEW"'),
+        ('review_content_id=rcid, round=1, now=now))',
+         'review_content_id=rcid, round=1, now=now,\n        audit={"verdict_sha256": "a" * 64, "run_ref": None, "reviewer_model": "anthropic/claude-opus-5-5"}))'),
+        ('feedback_review_content_id=rcid))',
+         'feedback_review_content_id=rcid,\n        audit={"verdict_sha256": "b" * 64, "run_ref": None, "reviewer_model": "openai/gpt-6.1-sol"}))'),
+    )
+    for old, new in replacements:
+        assert old in script, old
+        script = script.replace(old, new)
+    return script
+
+
+_AUDITED_REVIEW = _audited_review()
+
+#: The effect of ``/satisfy-gate acceptance``: the Workflow's own ``satisfy_acceptance_gate``, with its ``gh`` query
+#: answered by a scripted pull request (``argv[1]`` is the checks file: ``green`` or anything else for pending). It
+#: reaches no forge; the fixture's ``origin`` is only a github.com URL for the repository name.
+_SATISFY_ACCEPTANCE = """
+import datetime, json
+root = Path.cwd()
+wid, checks_file = sys.argv[1], sys.argv[2]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def run(argv, timeout):
+    commit = argv[argv.index("--search") + 1]
+    green = Path(checks_file).read_text().strip() == "green"
+    rollup = [{"name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS"}] if green \\
+        else [{"name": "ci", "status": "IN_PROGRESS", "conclusion": ""}]
+    return json.dumps([{"number": 7, "url": "https://github.com/owner/repo/pull/7", "state": "OPEN",
+                        "headRefOid": commit, "reviewDecision": "", "reviews": [], "statusCheckRollup": rollup}])
+
+try:
+    ws.satisfy_acceptance_gate(root, wid, now=now, run=run, resolve=lambda r: {"path": "gh", "sha256": "0" * 64})
+    print("satisfied")
+except ws.GateNotSatisfiableError as exc:
+    print("refused:", exc)
+"""
+
+#: An orchestrator's ``functional_evidence`` result (what C10c's automated functional review will report): one passing flow
+#: at the current head. Row 38e asks for it under an automatic acceptance gate.
+_FUNCTIONAL_EVIDENCE = """
+import datetime, subprocess
+root = Path.cwd()
+wid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+ws.record_functional_evidence(root, wid, {
+    "flow_id": "flow-1", "status": "passed", "head": head, "ran_at": now, "summary": {"message": "passed"},
+    "log_digest": "c" * 64, "run_ref": None, "reporter": "lifecycle-test/1"}, now=now)
+"""
+
+_REPORT_PR = """
+import datetime, hashlib, json, subprocess, tempfile
+root = Path.cwd()
+wid, checks_file = sys.argv[1], sys.argv[2]
+state = json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())
+commit = ws.gate_policy.anchor_of(root, wid, state["work_items"][wid])["commit"]
+green = Path(checks_file).read_text().strip() == "green"
+rollup = [{"name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS"}] if green \\
+    else [{"name": "ci", "status": "IN_PROGRESS", "conclusion": ""}]
+raw = json.dumps([{"number": 7, "url": "https://github.com/owner/repo/pull/7", "state": "OPEN", "headRefOid": commit,
+                   "reviewDecision": "", "reviews": [], "statusCheckRollup": rollup}])
+payload = {"forge": {"source": "github", "query": "pr-list-v1", "raw": raw, "raw_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+                     "repository": "owner/repo", "queried_commit": commit,
+                     "fetched_by": {"name": "orchestrator", "version": "1"}, "fetched_at": "2026-10-17T00:00:00Z"}}
+with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+    json.dump(payload, handle)
+done = subprocess.run([sys.executable, "scripts/workflow_protocol.py", "--repo-root", str(root), "record-external-result",
+                       "--work-item", wid, "--kind", "pr_review_result", "--input", handle.name],
+                      capture_output=True, text=True)
+print(done.stdout, done.stderr)
+assert json.loads(done.stdout)["ok"], done.stdout
+"""
+
+
+class GateLifecycle(Lifecycle):
+    """A ``Lifecycle`` on Workflow 2.12.0 whose default gate policy is automatic: the fake worker also performs the
+    effect of ``/satisfy-gate``, and the reviews are recorded with the audit the automatic gate requires."""
+
+    def __init__(self, test: unittest.TestCase) -> None:
+        super().__init__(test, "2.12.0")
+        fixtures.run(["git", "remote", "add", "origin", "https://github.com/owner/repo.git"], cwd=self.root)
+        self.checks = self.td / "checks"
+        self.checks.write_text("green")
+        #: Stages whose ``/satisfy-gate`` the fake validator refuses (it writes nothing).
+        self.refused: set[str] = set()
+        self.satisfied: list[str] = []
+        #: The protocol row the Workflow answered before each step.
+        self.rows: list[str] = []
+
+    def step(self) -> dict:
+        self.rows.append(protocol.next_action(self.root, WID).raw["row"])
+        return super().step()
+
+    def explain(self) -> dict:
+        """``explain --json`` for the repository, as an operator would read it."""
+        out = io.StringIO()
+        argv = ["--json", "--runtime-dir", str(self.runtime), "--workflow-manager", str(self.stub), "explain",
+                str(self.root)]
+        with contextlib.redirect_stdout(out):
+            self.test.assertEqual(cli.main(argv), cli.EXIT_OK)
+        return json.loads(out.getvalue())
+
+    def explain_text(self) -> str:
+        """``explain`` (text) for the repository, as an operator would read it."""
+        out = io.StringIO()
+        argv = ["--runtime-dir", str(self.runtime), "--workflow-manager", str(self.stub), "explain", str(self.root)]
+        with contextlib.redirect_stdout(out):
+            self.test.assertEqual(cli.main(argv), cli.EXIT_OK)
+        return out.getvalue()
+
+    def effect(self, task: str) -> None:
+        words = task.lstrip("/").split()
+        if words[0] == "satisfy-gate":
+            self.tasks.append("satisfy-gate " + words[1])
+            if words[1] in self.refused:
+                return
+            self.satisfied.append(words[1])
+            if words[1] == "plan":
+                self.workflow(_POLICY_APPROVE_PLAN, WID)
+            elif words[1] == "implementation":
+                self.workflow(_POLICY_TECHNICAL_APPROVAL, WID)
+            else:
+                self.workflow(_SATISFY_ACCEPTANCE, WID, str(self.checks))
+            return
+        if words[0] in _EFFECTS:
+            self.tasks.append(words[0])
+            stage, verdict, how = _EFFECTS[words[0]]
+            self.workflow(_AUDITED_REVIEW, WID, stage, verdict, how)
+            return
+        super().effect(task)
+
+    def manual_gate(self, phase: str, stage: str) -> None:
+        self.run_until(phase)
+        launched = len(self.tasks)
+        record = self.step()
+        self.test.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.test.assertEqual(len(self.tasks), launched)
+        self.user_step(_AUDITED_REVIEW, stage, "APPROVE", "manual")
+
+    def to_acceptance(self) -> None:
+        """Plan to the functional checklist, every gate passed by the validator."""
+        self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
+        self.run_until("IMPLEMENTING")
+        self.manual_gate("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation")
+        self.run_until("AWAITING_FUNCTIONAL_REVIEW")
+        self.test.assertEqual(self.step()["status"], job.STATUS_FINISHED)  # functional.prepare
+        self.user_step(_FUNCTIONAL_EVIDENCE)
+
+
+class SatisfyGateLifecycleTest(unittest.TestCase):
+    """gate-policy CP2 (D5, D8): the vendored 2.12.0's own ``next-action`` answers rows 14a, 28a and 38h and the
+    Controller launches ``/satisfy-gate`` for each; a refused validation stops the run."""
+
+    def notifications(self, records: list[dict]) -> list[str]:
+        return [event.event_type for record in records for event in job.derive_job_event(record)]
+
+    def test_a_run_passes_plan_technical_approval_and_acceptance_by_policy_without_a_stop(self) -> None:
+        life = GateLifecycle(self)
+        life.to_acceptance()
+        self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38h")
+        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)  # acceptance.satisfy
+        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
+        self.assertEqual(life.tasks, [
+            "review-plan", "satisfy-gate plan", "milestone-implement", "milestone-implement", "review-implementation",
+            "satisfy-gate implementation", "prepare-functional-review", "satisfy-gate acceptance"])
+        records = [r for r in self.records(life) if r["status"] == job.STATUS_FINISHED]
+        self.assertEqual([r["protocol"]["action_id"] for r in records if "satisfy" in r["protocol"]["action_id"]],
+                         ["plan.satisfy", "implementation.satisfy", "acceptance.satisfy"])
+        self.assertTrue(all(r["transition_verified"] for r in records))
+        events = self.notifications(records)
+        self.assertEqual(events.count("approval_recorded"), 3)
+        self.assertEqual(events.count("milestone_accepted"), 1)
+        item = fixtures.state_entry(life.root, WID)
+        self.assertIn("acceptance_satisfaction", item)
+        # The approvals are the vendored ``build_policy_approval_record``'s, not a human's: basis and evidence.
+        for field in ("plan_approval", "technical_approval"):
+            approval = item[field]
+            self.assertEqual(approval["basis"], "POLICY_SATISFIED", field)
+            evidence = approval["policy_evidence"]
+            self.assertEqual(approval["user_confirmation"], "policy:" + evidence["policy_digest"], field)
+            self.assertTrue(evidence["requirements"] and all(r["met"] for r in evidence["requirements"]), field)
+        self.assertTrue({"14a", "28a", "38h"} <= set(life.rows), life.rows)
+        self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
+
+    UNMET = "distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol"
+
+    def test_a_refused_validation_stops_the_run_after_two_launches_and_sends_no_approval(self) -> None:
+        self.refused_validation_run(("Refused: plan_approval is not satisfiable by policy. " + "The policy was evaluated. " * 30
+                                     + f"unmet: ['{self.UNMET}']. Nothing was written"))
+
+    def test_a_refusal_requirement_survives_a_preamble_that_already_says_unmet(self) -> None:
+        self.refused_validation_run("I checked the unmet requirements against the current review records. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"Refused; unmet: ['{self.UNMET}']. Nothing was written")
+
+    def test_a_refusal_requirement_survives_a_report_with_no_unmet_marker(self) -> None:
+        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
+
+    def refused_validation_run(self, report: str) -> None:
+        life = GateLifecycle(self)
+        life.refused = {"plan"}
+        unmet = self.UNMET
+        life.report = report
+        self.assertGreater(life.report.index(unmet), 400)
+        life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
+        first = life.step()
+        # After the first refusal the gate is still automatic, and explain already names the unmet requirement.
+        self.assertTrue(life.explain()["automatic"])
+        self.assertIn(unmet, life.explain()["last_worker_report"])
+        self.assertIn(unmet, life.explain_text())
+        second = life.step()
+        # After the second refusal the loop guard applies: explain still names the requirement, in text and JSON.
+        after_second = life.explain()
+        self.assertFalse(after_second["automatic"])
+        self.assertIn(unmet, after_second["gate"]["what_is_required"])
+        self.assertIn(unmet, life.explain_text())
+        for record in (first, second):
+            self.assertEqual(record["status"], job.STATUS_FINISHED)
+            self.assertEqual(record["protocol"]["progress"], "none")
+            self.assertEqual(record["protocol"]["reconcile"]["class"], "no_progress")
+            self.assertEqual(self.notifications([record]), ["step_done"])
+        self.assertEqual(life.phase(), "AWAITING_PLAN_APPROVAL")
+        self.assertEqual(life.rows[-2:], ["14a", "14a"])
+        launched = len(life.tasks)
+        third = life.step()
+        self.assertEqual(third["status"], job.STATUS_GATE_BLOCKED)
+        self.assertIn("no_progress_repeated", json.dumps(third["human_gate_pending"]))
+        self.assertEqual(len(life.tasks), launched)
+        self.assertEqual(life.tasks, ["review-plan", "satisfy-gate plan", "satisfy-gate plan"])
+        explained = life.explain()
+        self.assertFalse(explained["automatic"])
+        self.assertIn("no_progress_repeated", explained["gate"]["what_is_required"])
+        self.assertIn(unmet, explained["gate"]["what_is_required"])
+        self.assertIn(unmet, life.explain_text())
+
+    def pending_acceptance(self) -> GateLifecycle:
+        """The acceptance stage reached with the pull request's checks still running: the validator is launched,
+        is refused (the Workflow's query stores a pending fact) and the next answer is row 38f."""
+        life = GateLifecycle(self)
+        life.checks.write_text("pending")
+        life.to_acceptance()
+        refused = life.step()
+        self.assertEqual(refused["status"], job.STATUS_FINISHED)
+        # The refusal stored the pending fact, so the Workflow classes the step as reaching the next gate (row 38f).
+        self.assertEqual(refused["protocol"]["reconcile"]["class"], "gate_reached")
+        self.assertEqual(life.phase(), "AWAITING_FUNCTIONAL_REVIEW")
+        self.assertEqual(self.notifications([refused]), ["step_done"])
+        return life
+
+    def test_pending_checks_end_at_row_38f_and_stay_there_until_a_person_accepts(self) -> None:
+        life = self.pending_acceptance()
+        launched = len(life.tasks)
+        stopped = life.step()
+        self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual(life.rows[-1], "38f")
+        self.assertEqual(len(life.tasks), launched)
+        self.assertEqual([e.event_type for e in job.derive_job_event(stopped)], ["user_gate"])
+        # The checks turn green, but next-action never queries GitHub, so the answer does not change (D7).
+        life.checks.write_text("green")
+        self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38f")
+        self.assertEqual(life.step()["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual(len(life.tasks), launched)
+        # The outside act: the person runs the Workflow's own acceptance once, outside ``run`` (no Controller worker;
+        # the real command's roadmap, narrative and completion-commit writes are not reproduced here).
+        life.user_step(_SATISFY_ACCEPTANCE, str(life.checks))
+        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
+        self.assertIn("acceptance_satisfaction", fixtures.state_entry(life.root, WID))
+        self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
+        self.assertEqual(len(life.tasks), launched)
+
+    def test_a_reported_pr_review_result_leads_to_the_unlaunchable_apply_review(self) -> None:
+        life = self.pending_acceptance()
+        self.assertEqual(life.step()["status"], job.STATUS_GATE_BLOCKED)
+        life.checks.write_text("green")
+        life.user_step(_REPORT_PR, str(life.checks))
+        self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38d")
+        launched = len(life.tasks)
+        blocked = life.step()
+        self.assertEqual(blocked["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual(life.rows[-1], "38d")
+        self.assertEqual(len(life.tasks), launched)
+        self.assertIn("workflow_unknown_action", json.dumps(blocked["human_gate_pending"]))
+        self.assertEqual([e.event_type for e in job.derive_job_event(blocked)], ["user_gate"])
+
+    def records(self, life: Lifecycle) -> list[dict]:
+        return [json.loads(path.read_text()) for path in sorted((life.runtime / "jobs").glob("*.json"))]
 
 
 class InspectRepositoryBlockTest(unittest.TestCase):

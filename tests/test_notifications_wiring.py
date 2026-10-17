@@ -69,6 +69,25 @@ class DeriveJobEventTest(unittest.TestCase):
                                                 after="IMPLEMENTING"))
         self.assertEqual(types(plain), ["step_done"])
 
+    def test_an_approval_is_sent_only_when_the_phase_moved(self) -> None:
+        """gate-policy D5: a refused ``/satisfy-gate`` leaves the phase unchanged, and the reconcile class
+        (``gate_reached`` for a real approval whose next answer is a human or external gate) does not decide it."""
+        for stage_before, stage_after in (("AWAITING_PLAN_APPROVAL", "IMPLEMENTING"),
+                                          ("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "AWAITING_FUNCTIONAL_REVIEW"),
+                                          ("AWAITING_FUNCTIONAL_REVIEW", "MILESTONE_COMPLETE")):
+            with self.subTest(before=stage_before, after=stage_after):
+                moved = job.derive_job_event(job_record(job.STATUS_FINISHED, command="/satisfy-gate",
+                                                        before=stage_before, after=stage_after,
+                                                        protocol={"reconcile": {"class": "gate_reached"}}))
+                self.assertIn("approval_recorded", types(moved))
+                refused = job.derive_job_event(job_record(job.STATUS_FINISHED, command="/satisfy-gate",
+                                                          before=stage_before, after=stage_before,
+                                                          protocol={"reconcile": {"class": "none"}}))
+                self.assertEqual(types(refused), ["step_done"])
+        accepted = job.derive_job_event(job_record(job.STATUS_FINISHED, command="/satisfy-gate",
+                                                   before="AWAITING_FUNCTIONAL_REVIEW", after="MILESTONE_COMPLETE"))
+        self.assertEqual(types(accepted), ["step_done", "approval_recorded", "milestone_accepted"])
+
     def test_milestone_started_needs_the_bootstrap_and_names_the_new_item(self) -> None:
         record = job_record(job.STATUS_FINISHED, command="/milestone-plan", work_item=None,
                             before=job.NO_PHASE_WIRE, after="PLANNING")
@@ -95,6 +114,26 @@ class DeriveJobEventTest(unittest.TestCase):
         self.assertEqual((again.ident, again.title, again.message), (event.ident, event.title, event.message))
         changed = job.derive_job_event({**record, "pre_state": {"state_revision": 5}})[0]
         self.assertNotEqual(changed.ident, event.ident)
+
+    def test_a_gate_the_workflow_calls_blocked_is_a_blocker_and_the_others_ask_a_person(self) -> None:
+        gate = {"phase": "AWAITING_PLAN_APPROVAL", "what_is_required": "approve", "safe_resume_command": "/approve-review plan wi-1"}
+        legacy = job_record(job.STATUS_GATE_BLOCKED, human_gate_pending=gate)
+        [asked] = job.derive_job_event(legacy)
+
+        def protocol(disposition: object) -> dict:
+            return {"protocol": {"decision": {"disposition": disposition, "row": "38f"}}}
+
+        [blocked] = job.derive_job_event({**legacy, **protocol("blocked")})
+        self.assertEqual((blocked.event_type, blocked.title, blocked.work_item), ("lane_blocked", "Blocked: wi-1", "wi-1"))
+        self.assertEqual((blocked.ident, blocked.message), (asked.ident, asked.message))
+        again = job.derive_job_event({**copy.deepcopy(legacy), **protocol("blocked"), "job_id": "20261012T999999Z-bbbb"})[0]
+        self.assertEqual((again.ident, again.title, again.message), (blocked.ident, blocked.title, blocked.message))
+        for disposition in ("human_gate", "external_gate", "validation", None, 7):
+            [event] = job.derive_job_event({**legacy, **protocol(disposition)})
+            self.assertEqual((event.event_type, event.title), ("user_gate", asked.title), disposition)
+        for block in ("not a mapping", {"decision": "x"}):
+            [event] = job.derive_job_event({**legacy, "protocol": block})
+            self.assertEqual(event.event_type, "user_gate")
 
     def test_a_branch_gate_record_and_the_non_events_derive_nothing(self) -> None:
         gate = {"phase": "MILESTONE_BRANCH", "what_is_required": "x", "safe_resume_command": "y"}

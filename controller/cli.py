@@ -1088,6 +1088,10 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             decision, _reviewer_options(effective_settings), _review_mode_options(effective_settings))
     mode_block = {} if mode_report is None else {"review_mode": mode_report}
 
+    refusal = ""
+    if target.target_protocol is not None and decision.automatic and decision.protocol is not None:
+        refusal = job.last_refusal_report(runtime_root, target, work_item, decision)
+
     if args.json:
         gate = decision.gate
         print(json.dumps({
@@ -1113,6 +1117,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             **preflight_block,
             **({} if decision.protocol is None else {"protocol": _protocol_block(decision.protocol)}),
             **mode_block,
+            **({"last_worker_report": refusal} if refusal else {}),
         }))
         return EXIT_OK
 
@@ -1137,6 +1142,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         print(f"next automatic action: {decision.action.command}")
         if decision.action.task_addendum is not None:
             print(f"  task addendum: {decision.action.task_addendum}")
+        if refusal:
+            print(f"  the last job ended without progress; its worker reported: {refusal}")
     elif decision.declined:
         print(f"declined by this generation (automation-safe, but not automated here): "
               f"{decision.action.command}")

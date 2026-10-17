@@ -271,6 +271,14 @@ class Check:
     detail: str
 
 
+#: The check statuses the vendored schema lists.
+KNOWN_CHECK_STATUSES = frozenset({"pass", "warn", "fail", "skip"})
+
+#: The reason code of a step that ends on a value of a ``blocked`` enum the
+#: vendored schema does not list.
+UNKNOWN_VALUE = "workflow_unknown_value"
+
+
 @dataclasses.dataclass(frozen=True)
 class Verify:
     healthy: bool
@@ -282,6 +290,14 @@ class Verify:
         recorded, never a reason to stop. ``healthy`` stays the Workflow's own
         boolean; it is not recomputed from the statuses."""
         return tuple(check for check in self.checks if check.status == "warn")
+
+    @property
+    def advisories(self) -> tuple[Check, ...]:
+        """:attr:`warnings` plus the checks whose status the vendored schema
+        does not list (a later minor release adds one): shown the same way,
+        never a reason to stop (``ENUM_RULES``, ``advisory``)."""
+        return tuple(check for check in self.checks
+                     if check.status == "warn" or check.status not in KNOWN_CHECK_STATUSES)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -635,7 +651,8 @@ def record_external_result(root: Path, work_item: str, kind: str, input_file: Pa
     result = envelope.result
     if result["stage"] not in ("plan", "implementation") or "verdict" not in result:
         raise _failed(f"protocol record-external-result answered a {kind} with a result outside it: "
-                      f"stage {result['stage']!r}", reason="protocol_envelope_invalid",
+                      f"stage {result['stage']!r}", reason=UNKNOWN_VALUE, field="record-external-result.stage",
+                      value=result["stage"],
                       problem="not a verdict result", operation="record-external-result")
     return ExternalResult(
         "recorded", result["stage"], result["verdict"], result.get("review_content_id"), result.get("round"),

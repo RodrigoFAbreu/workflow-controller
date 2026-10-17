@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-gate-policy",
+  "plan_revision": 5,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Launch the three validations: the satisfy-gate role, the action table and the strict pairing",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "A satisfied gate passes in a run and a refused one stops, shown on real 2.12.0 answers and a lifecycle scenario",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "A protocol minor release never refuses the answer: a rule per closed enum and a test over the schema",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "A stop that needs no person sends a blocker, not a request",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documents, roadmap and the whole suite",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

@@ -153,7 +153,11 @@ and the events are the closed table in
 [`notifications`](commands.md#notifications). The ones that need you are
 the `user_gate` (a human gate, or a merge left to a person) and
 `lane_blocked` (a failed job, a refusal, a gate that needs a fix); by default
-they are the highest severities. A finished step, a usage pause and a run
+they are the highest severities. A stop the Workflow itself answers with
+the disposition `blocked` is a `lane_blocked` ("Blocked: <work item>"), not a
+`user_gate`, because no person's decision is asked for; a human or external
+gate (for example a pull request whose checks are still running) stays a
+`user_gate`. A finished step, a usage pause and a run
 that closed are `INFO`/`LOW`.
 
 To set it up:
@@ -322,10 +326,11 @@ decision:
 | Disposition | Decision |
 |---|---|
 | `automatic` | a launch, when the action id is one the Controller knows (twelve, from `plan.start` to `functional.apply_findings`), its worker is not `user_only` and its worker role is known; otherwise a blocked gate (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
+| `validation` | a launch of `/satisfy-gate <stage> <work item>` on the `satisfy-gate` role, when the action id is `plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`, its worker is not `user_only` and its role is `validator`; any other id, worker or pairing of id and disposition is blocked as above (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
 | `human_gate`, `external_gate` | a gate carrying the Workflow's reason, remedy and alternatives |
 | `blocked` | a gate carrying the Workflow's reason code, text and remedy |
 | `complete` | nothing to do |
-| `validation`, or any other | a blocked gate (`workflow_unknown_disposition`) |
+| any other | a blocked gate (`workflow_unknown_disposition`) |
 
 The worker's command is rendered by the Controller from the action id and
 the work item (`/<command> <work_item_id>`; `plan.start` adds the trunk
@@ -338,12 +343,37 @@ committed-state gate of legacy mode still applies before a launch.
 `--json` a `protocol` block; a legacy target's output is unchanged.
 `inspect` lists, as an advisory, any action id the Workflow's `describe`
 reports that this Controller release cannot launch (`unknown_action_ids`
-with `--json`): an invented id, or one of the four catalogue ids it has no
-command for (`plan.satisfy`, `implementation.satisfy`, `acceptance.satisfy`,
-`pr.apply_review`). Such an id is never a refusal; it is blocked only if it
-becomes the next action: an invented or `pr.apply_review` id as
-`workflow_unknown_action`, a `*.satisfy` action (whose disposition is
-`validation`) as `workflow_unknown_disposition`.
+with `--json`): an invented id, or the catalogue id it has no
+command for (`pr.apply_review`, which waits for a later step). Such an id is never a refusal; it is blocked only if it
+becomes the next action, as `workflow_unknown_action`.
+
+**Automatic gates.** A `validation` answer runs the Workflow's own
+`/satisfy-gate`; the Controller reads no `GATE_POLICY.json` and checks no
+requirement itself. When every requirement is met the phase moves, and the
+job sends `approval_recorded` (and `milestone_accepted` at acceptance)
+only because the phase moved. When a requirement is unmet nothing is written
+and the phase is unchanged: the step ends with no progress and sends only
+`step_done`, `explain` shows the unmet requirement from the worker's report,
+and the loop guard (`no_progress_repeated`) lets two such steps run and blocks
+the third. A gate that still needs evidence the Controller cannot yet produce
+stays a stop: the functional evidence of row 38e (the automated functional review),
+and the pull request rows 38f and 38g (`pr_evidence_needed`, `pr_approval_needed`).
+Once a refused `/satisfy-gate acceptance` has stored a pull request whose checks
+are pending, the answer stays `pr_evidence_needed` after the checks turn green
+until you run `/satisfy-gate acceptance <id>` by hand; reporting a fresh
+`pr_review_result` does not clear it, because the Workflow then answers
+`pr.apply_review` (row 38d), which this release does not launch.
+
+**A protocol minor release.** A value a 1.x minor release adds to a closed enum
+of the answer is never refused as outside the protocol. `protocol_schema.ENUM_RULES`
+gives each of the twenty enum locations a rule: `identity` (the protocol name:
+only a major change refuses), `advisory` (shown, changes nothing), `blocked` (a
+decision depends on it, so the step stops naming the value and launches nothing) or
+`ignored` (the Controller reads no decision from it). An unlisted action id, worker
+role or disposition is a blocked gate before any launch; an unlisted reconcile class
+or record stage, which arrives after the worker ran, ends the job `FAILED`
+(`workflow_protocol_failed`) with the evidence reason `workflow_unknown_value`,
+naming the field and the value.
 
 **Before a launch.** A decision is checked again against the Workflow
 before the job is recorded and once more immediately before the worker
@@ -355,7 +385,9 @@ spawn leaves a `FAILED` job with `reconciliation_evidence.code`
 `decision_stale_at_launch`: no worker started, nothing is pending, and the
 next step decides again. When the last two jobs for the same work item and
 action both ended with no progress, a third is not launched: the step
-stops at the `no_progress_repeated` gate.
+stops at the `no_progress_repeated` gate. After even one such job, `explain`
+shows what that worker reported (JSON: `last_worker_report`), so a refused
+`/satisfy-gate` names the requirement it found unmet before the gate applies.
 
 **Outcomes.** A protocol job is judged by the Workflow's `reconcile` on the
 decision it was launched for (kept as `jobs/<job_id>/decision.json`), both
@@ -368,7 +400,7 @@ class and any invalid reasons on the job's line. In order:
 |---|---|
 | the release, or a managed script's digest, differs from the one the job was decided under | `FAILED`, `workflow_release_changed`; `reconcile` is not run |
 | the worker failed or timed out | `FAILED`, `worker_outcome`; `reconcile` is not run |
-| `reconcile` fails, or answers a class the Controller does not know | `FAILED`, `workflow_protocol_failed` |
+| `reconcile` fails, or answers a class the Controller does not know | `FAILED`, `workflow_protocol_failed` (for an unknown class, the evidence reason `workflow_unknown_value` names it) |
 | `invalid` | `FAILED`, `reconcile_invalid`, with the Workflow's reasons verbatim |
 | `progress` for `implementation.checkpoint`, with a completion the working tree records but `HEAD` does not | `FAILED`, `completion_not_committed_at_head` |
 | `progress`, `gate_reached` | `FINISHED` |

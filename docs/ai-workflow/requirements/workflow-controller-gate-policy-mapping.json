@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-gate-policy",
+  "requirements": {
+    "R1": {
+      "description": "A validation answer for a satisfy action launches /satisfy-gate <stage> <id> on a new satisfy-gate role, and every other pairing, role, worker kind or rendering is blocked as before",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A run passes plan approval, technical approval and acceptance through the validator under automatic gates, a refused validation stops without a retry and sends no approval_recorded",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "A closed enum in a protocol 1.x answer never refuses the answer: every enum location has a stated rule, the seven already-open ones keep their exemptions, a test over the schema holds the list, and a protocol major change still refuses",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "A gate the Workflow calls blocked sends lane_blocked; a gate that needs a person, including an external_gate under an automatic gate until C10b and C10c, keeps user_gate",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "The roadmap, the guides and an ADR agree with the behaviour, and the checks and the suite are green",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

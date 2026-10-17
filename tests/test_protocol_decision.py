@@ -49,11 +49,20 @@ def _action(action_id: str, work_item: str | None = "wi-1", *, role: str = "plan
     args = arguments if arguments is not None else ({} if work_item is None else {"work_item_id": work_item})
     command = protocol_decision.PROTOCOL_ACTIONS.get(action_id)
     if invocation == "":
-        invocation = (f"/{command.command}" + ("" if work_item is None or action_id == "plan.start"
-                                              else f" {work_item}")) if command else None
+        invocation = (" ".join((f"/{command.command}", *command.leading))
+                      + ("" if work_item is None or action_id == "plan.start" else f" {work_item}")) if command else None
     return {"id": action_id, "arguments": args, "invocation": invocation,
             "worker": {"role": role, "fresh_session": False, "independent_of": [], "user_only": user_only},
             "allowed_results": ["progress", "gate_reached", "no_progress"]}
+
+
+def _entry_answer(action_id: str, item: str | None = "wi-1", **overrides) -> dict:
+    """The answer the Workflow gives for ``action_id``: the table's own
+    disposition, and the worker role the entry requires."""
+    entry = protocol_decision.PROTOCOL_ACTIONS[action_id]
+    role = overrides.pop("role", "validator" if entry.disposition == "validation" else "planner")
+    return _result(disposition=entry.disposition, action=_action(action_id, item, role=role),
+                   phase=overrides.pop("phase", None if item is None else "PLANNING"), **overrides)
 
 
 def _result(*, row: str = "7", disposition: str = "automatic", action: dict | None = None,
@@ -164,14 +173,19 @@ class DispositionTest(_Case):
         self.assertEqual((got.action, got.automatic, got.gate, got.declined), (None, False, None, False))
         self.assertEqual(got.observed_phase, "MILESTONE_COMPLETE")
 
-    def test_validation_and_any_unknown_disposition_are_blocked(self) -> None:
-        for disposition in ("validation", "a_future_disposition"):
-            with self.subTest(disposition=disposition):
-                got = self.decide(_result(disposition=disposition, action=_action("plan.author")))
-                self.assertFalse(got.automatic)
-                self.assertIsNone(got.action)
-                self.assertIn(protocol_decision.UNKNOWN_DISPOSITION, got.gate.what_is_required)
-                self.assertIn(disposition, got.gate.what_is_required)
+    def test_an_unknown_disposition_is_blocked(self) -> None:
+        got = self.decide(_result(disposition="a_future_disposition", action=_action("plan.author")))
+        self.assertFalse(got.automatic)
+        self.assertIsNone(got.action)
+        self.assertIn(protocol_decision.UNKNOWN_DISPOSITION, got.gate.what_is_required)
+        self.assertIn("a_future_disposition", got.gate.what_is_required)
+
+    def test_a_validation_answer_for_an_automatic_id_is_blocked(self) -> None:
+        got = self.decide(_result(disposition="validation", action=_action("plan.author", role="validator")))
+        self.assertFalse(got.automatic)
+        self.assertIsNone(got.action)
+        self.assertIn(protocol_decision.UNKNOWN_ACTION, got.gate.what_is_required)
+        self.assertIn("'validation'", got.gate.what_is_required)
 
     def test_an_answer_for_another_work_item_is_a_protocol_failure(self) -> None:
         with self.assertRaises(WorkflowProtocolFailedError) as raised:
@@ -186,27 +200,34 @@ class DispositionTest(_Case):
 
 
 class ActionTableTest(_Case):
-    def test_the_table_has_the_twelve_automatic_ids(self) -> None:
-        self.assertEqual(set(protocol_decision.PROTOCOL_ACTIONS), {
+    def test_the_table_has_the_twelve_automatic_ids_and_the_three_validations(self) -> None:
+        self.assertEqual({a for a, e in protocol_decision.PROTOCOL_ACTIONS.items() if e.disposition == "validation"},
+                         {"plan.satisfy", "implementation.satisfy", "acceptance.satisfy"})
+        self.assertEqual({a for a, e in protocol_decision.PROTOCOL_ACTIONS.items() if e.disposition == "automatic"}, {
             "plan.start", "plan.author", "plan.apply_review", "plan.review.local", "plan.record_external",
             "implementation.checkpoint", "implementation.self_review", "implementation.review.local",
             "implementation.record_external", "implementation.apply_review", "functional.prepare",
             "functional.apply_findings"})
+        self.assertEqual(len(protocol_decision.PROTOCOL_ACTIONS), 15)
 
     def test_every_id_launches_its_command_with_its_route(self) -> None:
         roles = {"plan.start": "planner", "plan.apply_review": "applier", "plan.review.local": "independent_reviewer",
                  "implementation.self_review": "self_reviewer", "implementation.review.local": "independent_reviewer",
                  "implementation.apply_review": "applier", "plan.record_external": "applier",
                  "implementation.record_external": "applier", "functional.apply_findings": "applier",
-                 "implementation.checkpoint": "implementer", "functional.prepare": "implementer"}
+                 "implementation.checkpoint": "implementer", "functional.prepare": "implementer",
+                 "plan.satisfy": "validator", "implementation.satisfy": "validator",
+                 "acceptance.satisfy": "validator"}
         for action_id, entry in protocol_decision.PROTOCOL_ACTIONS.items():
             with self.subTest(action=action_id):
                 item = None if action_id == "plan.start" else "wi-1"
-                answer = _result(action=_action(action_id, item, role=roles.get(action_id, "planner")),
+                answer = _result(disposition=entry.disposition,
+                                 action=_action(action_id, item, role=roles.get(action_id, "planner")),
                                  phase=None if item is None else "IMPLEMENTING")
                 got = self.decide(answer, item=target_state.NoWorkItemYet if item is None else _item(phase="PLANNING"))
                 self.assertTrue(got.automatic, got.gate)
-                self.assertEqual(got.action.command, f"/{entry.command}" + ("" if item is None else " wi-1"))
+                self.assertEqual(got.action.command, " ".join((f"/{entry.command}", *entry.leading))
+                                 + ("" if item is None else " wi-1"))
                 self.assertEqual(got.protocol.route, entry.route)
 
     def test_the_table_agrees_with_what_describe_lists_and_names_no_user_only_command(self) -> None:
@@ -214,19 +235,37 @@ class ActionTableTest(_Case):
             root = Path(td) / "target"
             fixtures.seed_workflow_item(root, "2.7.0", "route", work_item_id="demo")
             listed = set(protocol.describe(root).capabilities["action_ids"])
-        self.assertLessEqual(set(protocol_decision.PROTOCOL_ACTIONS), listed)
+        # 2.7.0 predates the validations; the 2.12.0 test below covers them.
+        automatic = {a for a, e in protocol_decision.PROTOCOL_ACTIONS.items() if e.disposition == "automatic"}
+        self.assertLessEqual(automatic, listed)
         scripts = fixtures.workflow_release_tree("2.7.0") / "scripts" / "workflow_protocol.py"
         catalogue = _catalogue_actions(scripts)
         user_only = {action_id for action_id, spec in catalogue.items() if spec["user_only"]}
         self.assertTrue(user_only)
         self.assertFalse(user_only & set(protocol_decision.PROTOCOL_ACTIONS))
-        for action_id in protocol_decision.PROTOCOL_ACTIONS:
+        for action_id in automatic:
             self.assertEqual(catalogue[action_id]["command"], protocol_decision.PROTOCOL_ACTIONS[action_id].command)
             self.assertIn(catalogue[action_id]["role"], protocol_decision.AUTOMATIC_WORKER_ROLES)
         # What the table leaves out is exactly the automatic ids that stay blocked.
         left_out = {action_id for action_id, spec in catalogue.items()
-                    if spec["command"] is not None and not spec["user_only"]} - set(protocol_decision.PROTOCOL_ACTIONS)
+                    if spec["command"] is not None and not spec["user_only"]} - automatic
         self.assertEqual(left_out, {"plan.withdraw", "implementation.recover_provenance", "functional.review.advisory"})
+
+    def test_the_validations_agree_with_the_2_12_0_catalogue(self) -> None:
+        scripts = fixtures.workflow_release_tree("2.12.0") / "scripts" / "workflow_protocol.py"
+        catalogue = _catalogue_actions(scripts)
+        for action_id, entry in protocol_decision.PROTOCOL_ACTIONS.items():
+            if entry.disposition != "validation":
+                continue
+            with self.subTest(action=action_id):
+                self.assertEqual(catalogue[action_id]["command"], entry.command)
+                self.assertEqual(catalogue[action_id]["role"], protocol_decision.VALIDATOR_WORKER_ROLE)
+                self.assertFalse(catalogue[action_id]["user_only"])
+                self.assertEqual(entry.leading, (action_id.partition(".")[0],))
+                # The release's own invocation text for the action is what the Controller renders.
+                self.assertEqual(catalogue[action_id]["template"].format(id="wi-1"),
+                                 protocol_decision.bare_invocation(action_id, "wi-1"))
+        self.assertNotIn("pr.apply_review", protocol_decision.PROTOCOL_ACTIONS)
 
     def test_inspect_advises_of_listed_ids_this_release_does_not_know_and_never_refuses(self) -> None:
         # Plan C.3: a gate id of the vendored catalogue is known (never launched
@@ -243,13 +282,17 @@ class ActionTableTest(_Case):
         self.assertIn("advisory: the Workflow lists action ids this Controller release cannot launch: "
                       "forge.open_pr, gate.policy", out.getvalue())
 
-    def test_a_2_9_0_listing_advises_of_exactly_the_four_unlaunched_automatic_ids(self) -> None:
+    def test_a_listing_advises_of_exactly_the_one_unlaunched_automatic_id(self) -> None:
         listed = sorted(protocol.KNOWN_ACTION_IDS)
-        self.assertEqual(protocol_decision.unknown_action_ids(listed),
-                         ["acceptance.satisfy", "implementation.satisfy", "plan.satisfy", "pr.apply_review"])
+        self.assertEqual(protocol_decision.unknown_action_ids(listed), ["pr.apply_review"])
         self.assertEqual(protocol_decision.unknown_action_ids([*listed, "future.action"]),
-                         ["acceptance.satisfy", "future.action", "implementation.satisfy", "plan.satisfy",
-                          "pr.apply_review"])
+                         ["future.action", "pr.apply_review"])
+        self.assertEqual(protocol_decision.UNLAUNCHED_AUTOMATIC_ACTION_IDS, {"pr.apply_review"})
+
+    def test_pr_apply_review_is_still_blocked(self) -> None:
+        got = self.decide(_result(row="38d", action=_action("pr.apply_review", role="applier", invocation=None)))
+        self.assertFalse(got.automatic)
+        self.assertIn(protocol_decision.UNKNOWN_ACTION, got.gate.what_is_required)
 
     def test_an_automatic_id_the_table_lacks_is_blocked(self) -> None:
         got = self.decide(_result(action=_action("plan.withdraw", invocation="/milestone-plan wi-1")))
@@ -316,9 +359,65 @@ def _catalogue_actions(script: Path) -> dict:
             for key, call in zip(node.value.keys, node.value.values):
                 values = [a.value if isinstance(a, ast.Constant) else None for a in call.args]
                 user_only = any(k.arg == "user_only" and k.value.value for k in call.keywords)
-                actions[key.value] = {"command": values[0], "role": values[2], "user_only": user_only}
+                actions[key.value] = {"command": values[0], "template": values[1], "role": values[2],
+                                  "user_only": user_only}
             return actions
     raise AssertionError("ACTIONS not found")
+
+
+class ValidationTest(_Case):
+    """The three ``.satisfy`` ids (gate-policy D2, D3): launched as
+    ``/satisfy-gate <stage> <id>`` on the validator role, blocked on any
+    other pairing."""
+
+    STAGES = (("plan.satisfy", "plan", "AWAITING_PLAN_APPROVAL"),
+              ("implementation.satisfy", "implementation", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"),
+              ("acceptance.satisfy", "acceptance", "AWAITING_FUNCTIONAL_REVIEW"))
+
+    def test_each_stage_launches_the_satisfy_gate_command_on_its_route(self) -> None:
+        for action_id, stage, phase in self.STAGES:
+            with self.subTest(action=action_id):
+                got = self.decide(_entry_answer(action_id, phase=phase), item=_item(phase=phase))
+                self.assertTrue(got.automatic, got.gate)
+                self.assertEqual(got.action.command, f"/satisfy-gate {stage} wi-1")
+                self.assertEqual(got.protocol.route, "satisfy-gate")
+                self.assertEqual((got.protocol.disposition, got.protocol.action_id), ("validation", action_id))
+
+    def test_a_user_only_validator_a_foreign_role_a_changed_invocation_and_an_unknown_id_are_blocked(self) -> None:
+        cases = {
+            protocol_decision.USER_ONLY_ACTION: _result(
+                disposition="validation", action=_action("plan.satisfy", role="validator", user_only=True)),
+            protocol_decision.UNKNOWN_WORKER_ROLE: _result(
+                disposition="validation", action=_action("plan.satisfy", role="applier")),
+            protocol_decision.INVOCATION_MISMATCH: _result(
+                disposition="validation",
+                action=_action("plan.satisfy", role="validator", invocation="/satisfy-gate acceptance wi-1")),
+            protocol_decision.UNKNOWN_ACTION: _result(
+                disposition="validation",
+                action=_action("future.satisfy", role="validator", invocation="/satisfy-gate future wi-1")),
+        }
+        for code, answer in cases.items():
+            with self.subTest(code=code):
+                got = self.decide(answer)
+                self.assertFalse(got.automatic)
+                self.assertIsNone(got.action)
+                self.assertIn(code, got.gate.what_is_required)
+
+    def test_the_validator_role_is_not_an_automatic_role(self) -> None:
+        got = self.decide(_result(action=_action("plan.author", role="validator")))
+        self.assertFalse(got.automatic)
+        self.assertIn(protocol_decision.UNKNOWN_WORKER_ROLE, got.gate.what_is_required)
+        self.assertNotIn("validator", protocol_decision.AUTOMATIC_WORKER_ROLES)
+
+    def test_the_route_is_opus_xhigh_single_agent_with_the_subagent_tools_disallowed(self) -> None:
+        resolved = routing.resolve_route("satisfy-gate")
+        self.assertEqual((resolved.model, resolved.effort), ("claude-opus-5-5", "xhigh"))
+        self.assertTrue(resolved.single_agent)
+        self.assertEqual(resolved.disallowed_tools, routing.SUBAGENT_TOOLS)
+        # Under a milestone-branch binding the validator may still commit, but not push or call gh (plan Risks).
+        bound = routing.worker_disallowed_tools(resolved, branch_bound=True)
+        self.assertEqual(bound, routing.SUBAGENT_TOOLS + routing.BRANCH_GUARD_TOOLS + routing.ASYNC_UNOWNABLE_TOOLS)
+        self.assertFalse([tool for tool in bound if "commit" in tool])
 
 
 class InvocationRenderingTest(_Case):
@@ -479,6 +578,12 @@ class WarnAdvisoryTest(_Case):
         gate, advisories = self._preflight(_verify(True, ("state_valid", "pass", "ok"), self.WARN))
         self.assertIsNone(gate)
         self.assertEqual(advisories, ("verify gate_policy: warn: policy not adopted",))
+
+    def test_an_unknown_status_is_an_advisory_not_a_gate(self) -> None:
+        # ENUM_RULES: a verify status a minor release adds is advisory.
+        gate, advisories = self._preflight(_verify(True, ("state_valid", "pass", "ok"), ("new_check", "notice", "x")))
+        self.assertIsNone(gate)
+        self.assertEqual(advisories, ("verify new_check: notice: x",))
 
     def test_decide_after_preflight_carries_the_advisory_in_the_decision_evidence(self) -> None:
         answer = protocol.parse_decision(_result(action=_action("plan.author")))
@@ -709,7 +814,7 @@ class JobWiringTest(unittest.TestCase):
         for action_id, entry in protocol_decision.PROTOCOL_ACTIONS.items():
             with self.subTest(action=action_id):
                 item = None if action_id == "plan.start" else "wi-1"
-                answer = _result(action=_action(action_id, item), phase=None if item is None else "PLANNING")
+                answer = _entry_answer(action_id, item)
                 got = protocol_decision.from_answer(
                     _stub(Path("/nonexistent")), target_state.NoWorkItemYet if item is None else _item(),
                     protocol.parse_decision(answer))

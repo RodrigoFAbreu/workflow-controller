@@ -17,8 +17,8 @@ repeating the table.
 Under 1.7.0 and later, a release is admitted by capability when its installation
 record lists `scripts/workflow_protocol.py` and that script's `describe` answers
 protocol major 1. Workflow 2.7.0 is the first release that does. Controller 1.7.0
-admits 2.8.0 this way, with an advisory about action ids it does not know, and stops
-at the 2.8 automatic gates (see [run](run.md)). Controllers 1.7.0 and 1.7.1 both admit
+admits 2.8.0 this way, with an advisory about action ids it does not know. Controllers 1.7.0 to 1.13.1 stop
+at the 2.8 automatic gates; later releases launch `/satisfy-gate` there (see [run](run.md)). Controllers 1.7.0 and 1.7.1 both admit
 2.9.0, and 1.7.0 refuses it only when `verify` reports `warn`. Workflow 2.9.1 and 2.9.2
 speak the same protocol (1.2) and are admitted the same way; Controller 1.8.0 was checked
 against 2.9.2. Workflow 2.10.0 and 2.11.0 speak protocol 1.3 and are admitted the same way; Controller 1.9.0
@@ -26,7 +26,10 @@ was checked against 2.10.0, and Controllers 1.10.0 and 1.11.0 against 2.11.0. Wo
 protocol 1.4, which adds the review round to the next-action snapshot (an additive change), and is
 admitted the same way; Controllers 1.11.0, 1.12.0, 1.13.0 and 1.13.1 were checked against it. Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
-job records instead. Controller 1.7.1
+job records instead. A later release no longer refuses a value a protocol 1.x minor release adds to a closed enum of an answer: it is
+advisory, ignored or a stop, by a rule per enum location (a blocked gate before any launch for an action id, worker role or disposition; a `FAILED` job with the evidence reason `workflow_unknown_value` for a reconcile class or record stage) (see
+[automation](guide/automation.md#protocol-mode-workflow-27-and-later)); only a protocol major change is refused.
+Controller 1.7.1
 accepts the Workflow's `warn` check status as advisory: `explain` shows it and nothing is
 refused. An undefined status is still refused with exit 20. The advisory lists the action ids it cannot launch (`acceptance.satisfy`,
 `implementation.satisfy`, `plan.satisfy` and `pr.apply_review`) and any invented id, and

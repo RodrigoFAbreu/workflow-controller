@@ -423,7 +423,10 @@ disposition and action beside it.
   finish, then run again.
 - `no_progress_repeated`: the last two jobs for the same work item and
   action both ended with no progress, so a third is not launched. Read
-  their records (`workflow-controller status`, `follow`), then change the
+  their records (`workflow-controller status`, `follow`; `explain` repeats
+  what the last worker reported, cut so the requirement it names survives the
+  400-character limit, so a refused `/satisfy-gate` shows the requirement it
+  could not meet), then change the
   work item: take the action by hand, or fix what stops the worker. The count
   restarts once the work item's state identity differs from the one a
   counted job left: the next `no_progress` job then starts a new count of

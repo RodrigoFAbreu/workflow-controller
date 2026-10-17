@@ -3031,7 +3031,7 @@ def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Pa
         return failed(WORKFLOW_PROTOCOL_FAILED_REASON, observed, summary, workflow_error={
             "code": WorkflowProtocolFailedError.code,
             "message": f"reconcile answered the class {answer.outcome!r}, which this Controller does not know",
-            "evidence": {"reason": "protocol_unknown_reconcile_class", "class": answer.outcome}})
+            "evidence": {"reason": protocol.UNKNOWN_VALUE, "field": "reconcile.class", "value": answer.outcome}})
     if limit is not None:
         # A worker that stopped at the usage limit: INTERRUPTED only when it
         # verifiably moved nothing (reconcile's `no_progress` ignores HEAD and
@@ -5030,7 +5030,8 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
     action and the validated post-state phase, ``milestone_started``,
     ``milestone_planned``, ``approval_recorded`` or ``milestone_accepted``;
     ``FAILED`` and ``INCOMPLETE`` give ``lane_blocked``; a ``GATE_BLOCKED``
-    lifecycle gate gives ``user_gate``. A branch-gate record gives nothing
+    lifecycle gate gives ``user_gate``, or ``lane_blocked`` when the Workflow's own
+    disposition was ``blocked`` (gate-policy D7). A branch-gate record gives nothing
     (it cannot be re-derived to its key; the live path sends branch gates
     through :func:`derive_branch_gate_event`), and neither do ``DECLINED``,
     ``HANDOFF_PENDING`` or a non-terminal record. Reads the record only,
@@ -5054,7 +5055,10 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
         if after == "AWAITING_LOCAL_PLAN_REVIEW" and work_item:
             out.append(DerivedEvent("milestone_planned", str(job_id), f"Plan ready for review: {work_item}",
                                     work_item, f"{command} produced a plan awaiting review."))
-        if command == "/satisfy-gate" and work_item:
+        if command == "/satisfy-gate" and work_item and record.get("observed_phase_before") != after:
+            # A refused validation leaves the phase unchanged and writes nothing, so it is a
+            # step_done only (gate-policy D5); the reconcile class cannot tell, as it reads
+            # ``gate_reached`` for a real approval whose next answer is a human or external gate.
             out.append(DerivedEvent("approval_recorded", str(job_id), f"Approval recorded: {work_item}",
                                     work_item, f"{command} recorded the approval; the work item is now at {after}."))
         if after == "MILESTONE_COMPLETE" and work_item:
@@ -5077,9 +5081,23 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
             code = notify.identity(gate.get("what_is_required"), gate.get("safe_resume_command"))[:16]
             ident = notify.lifecycle_gate_identity(str(work_item), str(gate.get("phase")),
                                                    pre_state.get("state_revision"), code)
-            out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item,
-                                    f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"))
+            body = f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"
+            if _protocol_disposition(record) == "blocked":
+                # The Workflow itself calls the stop a blocker, so no person's decision is asked for
+                # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
+                out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
+            else:
+                out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item, body))
     return out
+
+
+def _protocol_disposition(record: Mapping) -> str | None:
+    """The disposition the Workflow gave the job's decision, or ``None`` for a record without a
+    protocol block (a legacy target, a Controller gate) or without a readable disposition."""
+    block = record.get("protocol")
+    decision = block.get("decision") if isinstance(block, Mapping) else None
+    disposition = decision.get("disposition") if isinstance(decision, Mapping) else None
+    return disposition if isinstance(disposition, str) else None
 
 
 def _bootstrap_work_item(record: Mapping) -> str | None:
@@ -5777,8 +5795,74 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
     reconcile_to = reconcile.get("to") if isinstance(reconcile, dict) else None
     end_identity = reconcile_to.get("state_identity") if isinstance(reconcile_to, dict) else None
     if record.get("status") == STATUS_FINISHED and isinstance(reconcile_class, str):
-        return key, reconcile_class, end_identity, block.get("state_identity")
-    return key, None, None, None
+        return key, reconcile_class, end_identity, block.get("state_identity"), _worker_report(record)
+    return key, None, None, None, ""
+
+
+_REPORT_LIMIT = 400
+
+#: The requirements a gate policy can name in a refusal (``REQUIRE_VALUES`` of the Workflow's gate policy;
+#: keep in step with it -- a requirement missing here falls back to the ``unmet`` rule).
+_POLICY_REQUIREMENTS = ("distinct_reviewer_models",)
+
+
+def _worker_report(record: dict) -> str:
+    """What the worker said it did, one line of at most 400 characters: a refused
+    ``/satisfy-gate`` names the requirement that is unmet there, and ``explain``
+    and the loop guard repeat it. A report over the limit is cut
+    from its last ``unmet:``, else from the first named requirement, else from the
+    word ``unmet``, so the requirement survives the length limit."""
+    worker_block = record.get("worker")
+    excerpt = worker_block.get("result_excerpt") if isinstance(worker_block, dict) else None
+    if not isinstance(excerpt, str):
+        return ""
+    line = " ".join(excerpt.split())
+    if len(line) <= _REPORT_LIMIT:
+        return line
+    lowered = line.lower()
+    # The refusal names its requirement after the last ``unmet:``; failing that, at the first
+    # requirement the policy knows by name; failing that, from the first word ``unmet``.
+    marker = lowered.rfind("unmet:")
+    if marker < 0:
+        named = [at for at in (lowered.find(name) for name in _POLICY_REQUIREMENTS) if at >= 0]
+        marker = min(named) if named else lowered.find("unmet")
+    if marker > 0:
+        line = line[marker:]
+    return line if len(line) <= _REPORT_LIMIT else line[:_REPORT_LIMIT - 1] + "\u2026"
+
+
+def _protocol_job_classes(runtime_root: Path, managed_repo: Any, work_item_id: str | None,
+                          action_id: str) -> list[tuple]:
+    """The reconciled protocol jobs for ``(work item, action id)``, unordered, each as
+    ``_protocol_job_class`` returns it; a job not yet reconciled is left out."""
+    found = []
+    for record in _stored_job_records(runtime_root):
+        classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, action_id)
+        if classified is not None and classified[1] is not None:
+            found.append(classified)
+    return found
+
+
+def last_refusal_report(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> str:
+    """What the most recent worker for the decided action reported, when that job ended
+    without progress and the work item has not moved since (else ``""``): ``explain``
+    shows it so a refused ``/satisfy-gate``'s unmet requirement is visible after the
+    first refusal, before the loop guard applies."""
+    info = decision.protocol
+    if info is None or info.action_id is None:
+        return ""
+    work_item_id = None if work_item is target_state.NoWorkItemYet else work_item.work_item_id
+    if info.action_id == protocol_decision.PLAN_START:
+        work_item_id = None
+    found = _protocol_job_classes(runtime_root, managed_repo, work_item_id, info.action_id)
+    if not found:
+        return ""
+    last = max(found, key=lambda entry: entry[0])
+    if last[1] != "no_progress":
+        return ""
+    if info.state_identity is not None and last[2] is not None and last[2] != info.state_identity:
+        return ""
+    return last[4]
 
 
 def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,
@@ -5800,24 +5884,9 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
     work_item_id = None if work_item is target_state.NoWorkItemYet else work_item.work_item_id
     if info.action_id == protocol_decision.PLAN_START:
         work_item_id = None
-    jobs_dir = Path(runtime_root) / "jobs"
-    try:
-        paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
-    except OSError:
-        return None
-    found = []
-    for path in paths:
-        if not _is_regular_job_file(path):
-            continue
-        try:
-            record = json.loads(path.read_text())
-        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
-            continue
-        classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, info.action_id)
-        if classified is not None and classified[1] is not None:
-            found.append((classified[0], classified[1], classified[2], classified[3]))
-    recent = sorted(found, reverse=True)[:2]
-    if len(recent) < 2 or any(reconcile_class != "no_progress" for _key, reconcile_class, _end, _start in recent):
+    found = _protocol_job_classes(runtime_root, managed_repo, work_item_id, info.action_id)
+    recent = sorted(found, key=lambda entry: entry[0], reverse=True)[:2]
+    if len(recent) < 2 or any(entry[1] != "no_progress" for entry in recent):
         return None
     last_end = recent[0][2]
     if info.state_identity is not None and last_end is not None and last_end != info.state_identity:
@@ -5826,13 +5895,15 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
     older_end, newer_start = recent[1][2], recent[0][3]
     if older_end is not None and newer_start is not None and older_end != newer_start:
         return None
-    jobs = " and ".join(key[2] for key, _class, _end, _start in recent)
+    jobs = " and ".join(entry[0][2] for entry in recent)
+    report = recent[0][4]
     return protocol_decision.gate_for(
         managed_repo, work_item, decision, protocol_decision.NO_PROGRESS_REPEATED,
         f"the last two jobs for {info.action_id}"
         + ("" if work_item_id is None else f" on {work_item_id}")
         + f" ({jobs}) both ended without progress, so a third is not launched; read their records, then "
-        "change the work item (take the action by hand, or fix what stops it) and the count restarts",
+        "change the work item (take the action by hand, or fix what stops it) and the count restarts"
+        + (f"; the last worker reported: {report}" if report else ""),
         advisories=advisories)
 
 

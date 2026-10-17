@@ -28,15 +28,15 @@ from controller.errors import ControllerError, RoutingConfigError  # noqa: E402
 #: plus the final self-review pass of ``/milestone-implement``.
 NAMED_ROLES = (
     "milestone-implement", "apply-plan-review", "apply-implementation-review", "review-plan",
-    "review-implementation", "apply-functional-review",
+    "review-implementation", "apply-functional-review", "satisfy-gate",
 )
 SELF_REVIEW_ROLE = "milestone-implement-self-review"
-SINGLE_AGENT_ROLES = frozenset({SELF_REVIEW_ROLE, "review-plan", "review-implementation"})
+SINGLE_AGENT_ROLES = frozenset({SELF_REVIEW_ROLE, "review-plan", "review-implementation", "satisfy-gate"})
 INHERIT_ROLES = ("milestone-plan", "record-manual-plan-review", "record-manual-implementation-review",
                  "prepare-functional-review")
-#: The two roles a protocol target adds (orchestration-protocol-v1 C.3): the
-#: legacy command map never names either.
-PROTOCOL_ONLY_ROLES = ("prepare-functional-review", "apply-functional-review")
+#: The roles a protocol target adds (orchestration-protocol-v1 C.3, and the
+#: validator of gate-policy D4): the legacy command map names none of them.
+PROTOCOL_ONLY_ROLES = ("prepare-functional-review", "apply-functional-review", "satisfy-gate")
 
 
 def _config(**data) -> routing.RoutingConfig:

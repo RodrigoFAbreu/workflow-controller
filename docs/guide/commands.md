@@ -289,6 +289,7 @@ each role has a built-in model and effort:
 | `apply-implementation-review` | `/apply-implementation-review` | `claude-opus-5-5` | `xhigh` | no |
 | `review-plan` | `/review-plan` | `claude-opus-5-5` | `xhigh` | yes |
 | `review-implementation` | `/review-implementation` | `claude-opus-5-5` | `xhigh` | yes |
+| `satisfy-gate` | `/satisfy-gate plan\|implementation\|acceptance` (protocol mode only: the Workflow's `plan.satisfy`, `implementation.satisfy` and `acceptance.satisfy` actions) | `claude-opus-5-5` | `xhigh` | yes |
 | `milestone-plan`, `record-manual-plan-review`, `record-manual-implementation-review` | those commands | inherit | inherit | no |
 | `apply-functional-review` | `/apply-functional-review` (protocol mode only, 1.7.0 and later) | `claude-opus-5-5` | `xhigh` | no |
 | `prepare-functional-review` | `/prepare-functional-review` (protocol mode only, 1.7.0 and later) | inherit | inherit | no |
@@ -296,14 +297,14 @@ each role has a built-in model and effort:
 In protocol mode the role comes from the Workflow's action id rather than
 from the command: `implementation.self_review` is
 `milestone-implement-self-review`, and each other action takes its
-command's role. The two functional-review roles exist only there, since
-legacy mode never launches either command
-([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). Both
-are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
+command's role. The two functional-review roles and `satisfy-gate` exist only there, since
+legacy mode never launches those commands
+([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). All
+three are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
 and the settings file's `routing` section, and `telemetry --by role`
 groups their jobs under these names. A Controller before 1.7.0 rejects
-them in a `--routing-config` file and ignores them, with a warning, in the
-settings file.
+the functional-review roles in a `--routing-config` file and ignores them, with a warning, in the
+settings file; a Controller before the one that adds `satisfy-gate` does the same with that role.
 
 "Inherit" means no flag is passed, so the `claude` CLI's own
 configuration applies. Model and effort are resolved separately, and the

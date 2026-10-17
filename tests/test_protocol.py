@@ -275,11 +275,12 @@ class EnvelopeHandlingTest(_TargetCase):
         self.assertTrue(verified.healthy)
         self.assertEqual([(c.id, c.detail) for c in verified.warnings], [("gate_policy", "w1"), ("other", "w2")])
 
-    def test_an_unknown_check_status_still_fails_closed(self) -> None:
+    def test_an_unknown_check_status_is_an_advisory(self) -> None:
         checks = [{"id": "gate_policy", "status": "error", "detail": "x"}]
         with self.fake(completed(envelope("verify", {"healthy": True, "checks": checks}))):
-            with self.assertRaises(WorkflowProtocolFailedError):
-                protocol.verify(self.root)
+            got = protocol.verify(self.root)
+        self.assertEqual([c.status for c in got.advisories], ["error"])
+        self.assertEqual(got.warnings, ())
 
     def test_the_operation_must_be_the_one_asked(self) -> None:
         with self.assertRaisesRegex(WorkflowProtocolFailedError, "answers 'verify'"):
@@ -436,7 +437,6 @@ class RecordExternalResultTest(_TargetCase):
     def test_a_malformed_result_is_a_protocol_failure(self) -> None:
         bad_results = (
             {k: v for k, v in self.RECORDED.items() if k != "basis"},
-            dict(self.RECORDED, verdict="MAYBE"),
             dict(self.RECORDED, round="3"),
         )
         for result in bad_results:
@@ -444,6 +444,14 @@ class RecordExternalResultTest(_TargetCase):
                 with self.assertRaises(WorkflowProtocolFailedError) as raised:
                     self.answer(envelope("record-external-result", result))
                 self.assertEqual(raised.exception.evidence["reason"], "protocol_envelope_invalid")
+
+    def test_an_unlisted_verdict_is_shown_and_an_unlisted_stage_ends_naming_it(self) -> None:
+        got = self.answer(envelope("record-external-result", dict(self.RECORDED, verdict="DEFER")))
+        self.assertEqual((got.outcome, got.verdict), ("recorded", "DEFER"))
+        with self.assertRaises(WorkflowProtocolFailedError) as raised:
+            self.answer(envelope("record-external-result", dict(self.RECORDED, stage="deployment")))
+        self.assertEqual(raised.exception.evidence["reason"], protocol.UNKNOWN_VALUE)
+        self.assertEqual(raised.exception.evidence["value"], "deployment")
 
     def test_a_result_of_another_kind_is_refused_as_malformed(self) -> None:
         functional = {"stage": "functional", "flow_id": "f", "identity": "i", "basis": BASIS_FOR_RECORD}

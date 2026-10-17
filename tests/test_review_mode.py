@@ -218,9 +218,14 @@ class FlagTest(unittest.TestCase):
         self.assertEqual(cli_values["review.mode"], "manual")
         loaded = settings.load(Path("/nonexistent/none.json"))
         effective = settings.resolve(loaded, cli=cli_values)
-        self.assertEqual(cli._review_mode_options(effective), {"mode": "manual", "source": "cli"})
+        options = cli._review_mode_options(effective)
+        self.assertEqual((options["mode"], options["source"]), ("manual", "cli"))
         effective = settings.resolve(loaded, cli={"review.mode": None})
-        self.assertEqual(cli._review_mode_options(effective), {"mode": "auto", "source": "default"})
+        options = cli._review_mode_options(effective)
+        self.assertEqual((options["mode"], options["source"]), ("auto", "default"))
+        # the same-provider reviewer reads only the same_provider rows and the shared deadline (D1)
+        self.assertEqual(options["same_provider"]["harness"], "claude")
+        self.assertEqual(options["same_provider"]["binary"], "claude")
 
 
 class JobChoiceTest(rj._ReviewCase):

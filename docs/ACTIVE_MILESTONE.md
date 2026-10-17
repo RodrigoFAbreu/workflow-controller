@@ -15,7 +15,7 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
 |---|---|
 | CP1 -- the mode setting and the choice | complete (see below) |
 | CP2 -- the Claude review harness | complete (see below) |
-| CP3 -- the same-provider review job | pending |
+| CP3 -- the same-provider review job | complete (see below) |
 | CP4 -- `explain`, telemetry and the lifecycle scenario | pending |
 | CP5 -- documentation and roadmap | pending |
 
@@ -55,6 +55,23 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
   refusals by name, the fake held to the captures, a launch end to end (family header, retry, limit, deadline,
   credential copy-back, stripped project hooks and MCP, repository guard).
 
+### CP3 -- what was built
+
+- `controller/job.py`: `_run_review_job` runs the chosen harness. A same-provider choice (`Choice.lowered`) runs `claude`
+  on the `reviewer.same_provider_*` options that `cli._review_mode_options` now carries as `same_provider`; Codex's path
+  is unchanged. The usage gate is asked for the provider of the harness's family (Claude for `claude`, D8), the header
+  check uses the harness's family, and the job record's `review` block gains `mode`, `mode_source` and, for a
+  same-provider review, `lowered: true` and `signal_key`. The ledger `run_ref` is `<harness.name>:<job id>`.
+- A `DistinctReviewerModelsRequiredError` from `record-external-result` ends a same-provider review `INCOMPLETE`
+  (`DistinctReviewerModelsRequired`) with D6's message. `_sticky_review_stop` reads the latest review job: while it
+  ended that way at the same stage, state identity and signal key and `choose` again selects a same-family reviewer, the
+  step stops at `review_mode_unavailable` without launching.
+- `controller/review_mode.py`: `remedies` (D6's three ways out, filtered by mode) is part of the single-provider refusal
+  too. `_review_message` and the notification name the harness that ran.
+- `tests/test_review_same_provider.py` (14 tests) on the real vendored Workflow: a lowered `auto` review end to end, a
+  `REVISE`, `single-provider` with and without the signal, a limit, the real Workflow refusal with its sticky stop and
+  every release path. `tests/test_review_job.py`'s double takes the harness's family.
+
 ## Next action
 
-`/milestone-implement workflow-controller-review-modes` for CP3.
+`/milestone-implement workflow-controller-review-modes` for CP4.

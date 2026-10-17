@@ -30,7 +30,7 @@ from typing import Any
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
-    review, routing, runtime, settings, target_state, telemetry, usage, worker,
+    review, review_mode, routing, runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -1336,8 +1336,26 @@ def _reviewer_options(effective: settings.EffectiveSettings) -> dict | None:
 
 def _review_mode_options(effective: settings.EffectiveSettings) -> dict:
     """``review.mode`` and where it came from, as ``execute_step``'s
-    ``review_mode_options`` argument (review-modes D1)."""
-    return {"mode": effective["review.mode"], "source": effective.sources["review.mode"]}
+    ``review_mode_options`` argument (review-modes D1), with the options of
+    the same-provider (Claude) reviewer, which reads only the
+    ``reviewer.same_provider_*`` rows and the shared deadline (D1)."""
+    return {
+        "mode": effective["review.mode"], "source": effective.sources["review.mode"],
+        "same_provider": {
+            "harness": review_mode.SAME_PROVIDER_HARNESS,
+            "model": effective["reviewer.same_provider_model"] or review.CLAUDE_DEFAULT_MODEL,
+            "effort": effective["reviewer.same_provider_effort"] or review.CLAUDE_DEFAULT_EFFORT,
+            "timeout_seconds": effective["reviewer.timeout_seconds"],
+            "binary": review.CLAUDE.default_binary,
+            "operator_home": str(_claude_home()),
+        },
+    }
+
+
+def _claude_home() -> Path:
+    """The Claude configuration home the review's credential is copied from:
+    ``$CLAUDE_CONFIG_DIR``, else ``~/.claude``."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
 
 def _local_time(epoch: float) -> str:

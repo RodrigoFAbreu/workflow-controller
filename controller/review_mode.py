@@ -176,4 +176,39 @@ def choose(mode: str, reviewer: Mapping | None, stage: str, signal: Signal | Non
     return _refuse(
         f"review.mode is single-provider, but the Workflow does not report the {stage} stage's "
         f"{STAGE_FIELD[stage]} lowered (a same-provider approval is refused at APPROVE unless the "
-        "policy lowered distinct_reviewer_models)", signal)
+        f"policy lowered distinct_reviewer_models). {remedies(mode, stage)}", signal)
+
+
+#: The ``GATE_POLICY.json`` gate each stage's approval is held by.
+STAGE_GATE = {"plan": "plan_approval", "implementation": "technical_approval"}
+
+
+def remedies(mode: str, stage: str) -> str:
+    """The ways out of a same-provider refusal (D6), each with what the
+    Controller does after it, naming only those that act for ``mode``. Path 2
+    (a human gate) releases ``auto`` only: an explicit ``single-provider``
+    finds the signal cancelled and is refused again, so it names
+    ``--review-mode manual`` there."""
+    field, gate = STAGE_FIELD[stage], STAGE_GATE[stage]
+    paths = [
+        f"(1) lower the {stage} stage's {field} by adopting a policy (docs/ai-workflow/GATE_POLICY.md): the signal "
+        "changes and the next step runs the review; an open review bundle is not changed by it, so withdraw the "
+        "bundle and generate it again first"]
+    if mode == MODE_AUTO:
+        paths.append(
+            f"(2) turn the {gate} gate human with an uncommitted edit of docs/ai-workflow/GATE_POLICY.json: it "
+            "takes effect at once and the next step stops at the ordinary gate for a person")
+    third = ("record a verdict from a distinct model by hand (record-external-result), or run with "
+             "--review-mode manual (or set review.mode)" if mode == MODE_SINGLE_PROVIDER else
+             "record a verdict from a distinct model by hand (record-external-result)")
+    paths.append(f"(3) {third}, or turn on a distinct provider (reviewer.harness, or "
+                 "--review-mode cross-model), which runs that review")
+    return "Ways out: " + "; ".join(paths) + "."
+
+
+def distinct_refusal_message(mode: str, stage: str, detail: str) -> str:
+    """The text of a ``DistinctReviewerModelsRequiredError`` ending a
+    same-provider review (D6): the Workflow's own sentence, then
+    :func:`remedies`. ``detail`` is the Workflow's message."""
+    return f"{detail} The next step stops without launching while the state and the policy signal are unchanged. " \
+           + remedies(mode, stage)

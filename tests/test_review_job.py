@@ -53,7 +53,8 @@ def reviewer(tmp: Path, **extra) -> dict:
 
 
 def verdict_text(kw: dict, status: str = "APPROVE", *, wrong: str | None = None) -> str:
-    expected = review.expected_headers(kw["manifest"], kw["stage"], kw["model"])
+    expected = review.expected_headers(kw["manifest"], kw["stage"], kw["model"],
+                                       review.HARNESSES[kw.get("harness_name", "codex")].verdict_family)
     if wrong is not None:
         expected[wrong] = expected[wrong][:-1] + "0"
     lines = ["# Review Decision", "", f"Status: {status}", ""] + [f"{k} {v}" for k, v in expected.items()]
@@ -99,7 +100,8 @@ class LaunchDouble:
                 kw, scenario.get("status", "APPROVE"), wrong=scenario.get("wrong")))
         if outcome == "mismatch":
             result["check"] = review.verify_verdict(verdict_text(kw, wrong="Reviewed bundle ID:"),
-                                                    review.expected_headers(kw["manifest"], kw["stage"], kw["model"]))
+                                                    review.expected_headers(kw["manifest"], kw["stage"], kw["model"],
+                                                                        review.HARNESSES[kw["harness_name"]].verdict_family))
         if "while_running" in scenario:
             scenario["while_running"]()
         return result

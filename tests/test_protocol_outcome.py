@@ -252,6 +252,10 @@ class InvalidAndFailingTest(unittest.TestCase):
         env = _Env(self)
         record = env.step(None, reconcile=lambda *a, **k: _reconciliation("surprise"))
         self.assertEqual(record["reconciliation_evidence"]["reason"], "workflow_protocol_failed")
+        # The value is named (ENUM_RULES: a reconcile class is `blocked`).
+        evidence = record["reconciliation_evidence"]["workflow_error"]["evidence"]
+        self.assertEqual((evidence["reason"], evidence["field"], evidence["value"]),
+                         (protocol.UNKNOWN_VALUE, "reconcile.class", "surprise"))
 
 
 class ReleaseIdentityTest(unittest.TestCase):

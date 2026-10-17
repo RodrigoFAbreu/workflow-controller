@@ -575,6 +575,12 @@ class WarnAdvisoryTest(_Case):
         self.assertIsNone(gate)
         self.assertEqual(advisories, ("verify gate_policy: warn: policy not adopted",))
 
+    def test_an_unknown_status_is_an_advisory_not_a_gate(self) -> None:
+        # ENUM_RULES: a verify status a minor release adds is advisory.
+        gate, advisories = self._preflight(_verify(True, ("state_valid", "pass", "ok"), ("new_check", "notice", "x")))
+        self.assertIsNone(gate)
+        self.assertEqual(advisories, ("verify new_check: notice: x",))
+
     def test_decide_after_preflight_carries_the_advisory_in_the_decision_evidence(self) -> None:
         answer = protocol.parse_decision(_result(action=_action("plan.author")))
         with mock.patch.object(protocol, "verify", return_value=_verify(True, self.WARN)), \

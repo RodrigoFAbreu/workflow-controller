@@ -7,7 +7,11 @@ is being implemented on branch `milestone/workflow-controller-gate-policy`. Chec
 `satisfy-gate` role, the three `.satisfy` action ids and the strict pairing, `e70715f`) and **CP2** (a satisfied gate
 passes in a run and a refused one stops: `approval_recorded` only when the phase moved, and four lifecycle scenarios on
 the vendored Workflow 2.12.0 -- rows 14a, 28a, 38h, the no-progress stop, the 38f stop and the 38d non-recovery).
-Remaining: CP3 (a rule per closed enum), CP4 (`lane_blocked` for a blocked gate), CP5 (documents, roadmap, the whole
+**CP3** (a rule per enum: `protocol_schema.ENUM_RULES` names all twenty locations, `OPEN_ENUMS` is derived from it,
+a verify status a minor release adds is an advisory line, and an unlisted reconcile class or record stage ends naming
+the value as `workflow_unknown_value`; measured differences from plan D6: the error code is `blocked`, `satisfied_by`
+is `advisory`, and the functional-evidence status, verdict and slot are `ignored`, since the Controller reads no
+decision from them). Remaining: CP4 (`lane_blocked` for a blocked gate), CP5 (documents, roadmap, the whole
 suite). The record of the previous milestone follows unchanged.
 
 ## Status

@@ -12,10 +12,11 @@ Controller release:
 - ``type``, ``required``, ``items`` and ``$ref`` are checked strictly;
 - ``additionalProperties`` is **open**: an unknown key is ignored, never
   rejected, and a schema given as its value validates the extra values;
-- an ``enum`` is checked strictly except at :data:`OPEN_ENUMS`, the sets a
-  minor version may extend. Those are open strings (the ``type`` is still
-  checked); the Controller fails closed on an unknown value in its own
-  semantic layer, never here;
+- an ``enum`` is checked strictly only at the protocol name; every other enum
+  is in :data:`OPEN_ENUMS`, derived from :data:`ENUM_RULES`, which states per
+  location what the Controller does with a value a minor version adds. Those
+  are open strings (the ``type`` is still checked); the Controller applies the
+  rule in its own semantic layer, never here;
 - annotation keywords are accepted and ignored.
 
 A *schema* that uses any keyword outside :data:`VALIDATION_KEYWORDS` and
@@ -29,15 +30,59 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 VALIDATION_KEYWORDS = frozenset({
     "type", "required", "properties", "items", "$ref", "$defs", "enum", "additionalProperties",
 })
 ANNOTATION_KEYWORDS = frozenset({"$schema", "$id", "title", "description"})
 
-#: Schema locations whose ``enum`` a minor protocol version may extend.
-OPEN_ENUMS = frozenset({
+IDENTITY = "identity"
+ADVISORY = "advisory"
+BLOCKED = "blocked"
+IGNORED = "ignored"
+
+#: Every enum location of the vendored schema and the rule for a value the
+#: schema does not list (a protocol 1.x minor release may add one):
+#:
+#: - ``identity``: the protocol name; only a major change refuses the answer;
+#: - ``advisory``: shown, never gates and never changes what the Workflow said;
+#: - ``blocked``: a decision depends on it, so the step ends naming the value
+#:   and launches nothing (the semantic layer, never a protocol refusal);
+#: - ``ignored``: the Controller reads no decision from it.
+#:
+#: The seven locations that were already open keep the behaviour they had.
+ENUM_RULES: Mapping[str, str] = MappingProxyType({
+    "#/$defs/envelope/properties/protocol/properties/name": IDENTITY,
+    "#/$defs/error/properties/code": BLOCKED,
+    "#/$defs/worker/properties/role": BLOCKED,
+    "#/$defs/action/properties/id": BLOCKED,
+    "#/$defs/action/properties/allowed_results/items": IGNORED,
+    "#/$defs/nullable_action/properties/id": BLOCKED,
+    "#/$defs/nullable_action/properties/allowed_results/items": IGNORED,
+    "#/$defs/policy/properties/gate": IGNORED,
+    "#/$defs/policy/properties/mode": IGNORED,
+    "#/$defs/forge/properties/source": IGNORED,
+    "#/$defs/decision/properties/disposition": BLOCKED,
+    "#/$defs/decision/properties/satisfied_by": ADVISORY,
+    "#/$defs/inputs/properties/functional_evidence/properties/status": IGNORED,
+    "#/$defs/results/properties/verify/properties/checks/items/properties/id": ADVISORY,
+    "#/$defs/results/properties/verify/properties/checks/items/properties/status": ADVISORY,
+    "#/$defs/results/properties/resolve-artifact/properties/kind": IGNORED,
+    "#/$defs/results/properties/reconcile/properties/class": BLOCKED,
+    "#/$defs/results/properties/record-external-result/properties/stage": BLOCKED,
+    "#/$defs/results/properties/record-external-result/properties/verdict": IGNORED,
+    "#/$defs/results/properties/record-external-result/properties/slot": IGNORED,
+})
+
+#: Schema locations whose ``enum`` a minor protocol version may extend: every
+#: location but the protocol name.
+OPEN_ENUMS = frozenset(pointer for pointer, rule in ENUM_RULES.items() if rule != IDENTITY)
+
+#: The seven locations that were open before ``ENUM_RULES`` existed; a test
+#: pins them by name so the derivation can never close one.
+PREVIOUSLY_OPEN_ENUMS = frozenset({
     "#/$defs/error/properties/code",
     "#/$defs/action/properties/id",
     "#/$defs/nullable_action/properties/id",

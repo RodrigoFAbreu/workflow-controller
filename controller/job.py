@@ -3031,7 +3031,7 @@ def _protocol_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Pa
         return failed(WORKFLOW_PROTOCOL_FAILED_REASON, observed, summary, workflow_error={
             "code": WorkflowProtocolFailedError.code,
             "message": f"reconcile answered the class {answer.outcome!r}, which this Controller does not know",
-            "evidence": {"reason": "protocol_unknown_reconcile_class", "class": answer.outcome}})
+            "evidence": {"reason": protocol.UNKNOWN_VALUE, "field": "reconcile.class", "value": answer.outcome}})
     if limit is not None:
         # A worker that stopped at the usage limit: INTERRUPTED only when it
         # verifiably moved nothing (reconcile's `no_progress` ignores HEAD and

@@ -55,10 +55,11 @@ class VendoredSchemaTest(unittest.TestCase):
     def test_the_eight_protocol_1_2_action_ids_are_catalogue_members(self) -> None:
         self.assertLessEqual(NEW_ACTION_IDS, protocol.KNOWN_ACTION_IDS)
 
-    def test_status_accepts_warn_and_stays_strict(self) -> None:
+    def test_status_accepts_warn_and_an_unlisted_value_is_advisory(self) -> None:
         pointer = "#/$defs/results/properties/verify/properties/checks/items/properties/status"
         self.assertEqual(set(protocol_schema.SCHEMA.enum_at(pointer)), {"pass", "warn", "fail", "skip"})
-        self.assertNotIn(pointer, protocol_schema.OPEN_ENUMS)
+        self.assertIn(pointer, protocol_schema.OPEN_ENUMS)
+        self.assertEqual(protocol_schema.ENUM_RULES[pointer], protocol_schema.ADVISORY)
 
     def test_only_the_protocol_client_names_record_external_result(self) -> None:
         # Until workflow-controller-codex-reviewer CP1 no module did; now the
@@ -66,6 +67,8 @@ class VendoredSchemaTest(unittest.TestCase):
         # other module goes through it).
         for path in (REPO_ROOT / "controller").glob("*.py"):
             with self.subTest(path.name):
+                if path.name == "protocol_schema.py":
+                    continue  # names the schema pointer of that operation's enums
                 if path.name == "protocol.py":
                     self.assertIn("record-external-result", path.read_text())
                 else:
@@ -142,11 +145,11 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaises(SchemaViolation):
             self.validate(envelope(result=bad))
 
-    def test_a_strict_enum_still_fails(self) -> None:
-        bad = copy.deepcopy(DECISION)
-        bad["action"]["allowed_results"] = ["progress", "rubbish"]
-        with self.assertRaisesRegex(SchemaViolation, "rubbish"):
-            self.validate(envelope(result=bad))
+    def test_the_protocol_name_enum_still_fails(self) -> None:
+        # Every other enum is open (`ENUM_RULES`); only a different protocol is refused.
+        extended = copy.deepcopy(DECISION)
+        extended["action"]["allowed_results"] = ["progress", "a_result_a_minor_adds"]
+        self.validate(envelope(result=extended))
         with self.assertRaises(SchemaViolation):
             self.validate(envelope(protocol={"name": "other", "version": "1.0"}))
 
@@ -181,8 +184,7 @@ class ValidationTest(unittest.TestCase):
         result = {"healthy": True, "checks": [{"id": "future_check", "status": "pass", "detail": "ok"}]}
         self.validate(envelope("verify", result))
         result["checks"][0]["status"] = "maybe"
-        with self.assertRaises(SchemaViolation):
-            self.validate(envelope("verify", result))
+        self.validate(envelope("verify", result))
 
     def test_a_result_for_an_unlisted_operation_is_a_violation(self) -> None:
         with self.assertRaisesRegex(SchemaViolation, "no result"):
@@ -200,6 +202,64 @@ class ValidationTest(unittest.TestCase):
         extended["added"] = {"x": [1, 2]}
         decision = protocol.parse_decision(extended)
         self.assertEqual(json.dumps(decision.raw, sort_keys=True), json.dumps(extended, sort_keys=True))
+
+
+class EnumRulesTest(unittest.TestCase):
+    """A closed enum in a protocol 1.x answer never refuses it
+    (gate-policy plan D6, follow-up 17): every enum location has a stated rule."""
+
+    @staticmethod
+    def locations() -> dict:
+        found: dict = {}
+
+        def walk(node: dict, pointer: str) -> None:
+            if "enum" in node:
+                found[pointer] = tuple(node["enum"])
+            for key in ("$defs", "properties"):
+                for name, child in node.get(key, {}).items():
+                    walk(child, f"{pointer}/{key}/{name}")
+            if "items" in node:
+                walk(node["items"], f"{pointer}/items")
+            if isinstance(node.get("additionalProperties"), dict):
+                walk(node["additionalProperties"], f"{pointer}/additionalProperties")
+
+        walk(json.loads(protocol_schema.SCHEMA_PATH.read_text(encoding="utf-8")), "#")
+        return found
+
+    def test_every_enum_location_of_the_schema_has_a_rule_and_no_rule_is_stray(self) -> None:
+        self.assertEqual(set(self.locations()), set(protocol_schema.ENUM_RULES))
+        self.assertEqual(len(protocol_schema.ENUM_RULES), 20)
+
+    def test_every_rule_is_one_of_the_four(self) -> None:
+        self.assertLessEqual(set(protocol_schema.ENUM_RULES.values()), {
+            protocol_schema.IDENTITY, protocol_schema.ADVISORY, protocol_schema.BLOCKED, protocol_schema.IGNORED})
+
+    def test_the_seven_previously_open_enums_stay_open_by_name(self) -> None:
+        self.assertEqual(len(protocol_schema.PREVIOUSLY_OPEN_ENUMS), 7)
+        self.assertLessEqual(protocol_schema.PREVIOUSLY_OPEN_ENUMS, protocol_schema.OPEN_ENUMS)
+
+    def test_only_the_protocol_name_is_closed(self) -> None:
+        closed = set(protocol_schema.ENUM_RULES) - protocol_schema.OPEN_ENUMS
+        self.assertEqual(closed, {"#/$defs/envelope/properties/protocol/properties/name"})
+
+    def test_a_value_the_schema_does_not_list_is_accepted_at_every_open_enum(self) -> None:
+        schema = protocol_schema.SCHEMA
+        for pointer in sorted(protocol_schema.OPEN_ENUMS):
+            with self.subTest(pointer):
+                node = schema._resolve(pointer, "#")
+                schema._validate("a_value_a_minor_release_adds", node, pointer, "$")
+
+    def test_the_protocol_name_still_refuses_a_different_value(self) -> None:
+        document = envelope()
+        document["protocol"]["name"] = "another-protocol"
+        with self.assertRaises(SchemaViolation):
+            protocol_schema.SCHEMA.validate_envelope(document)
+
+    def test_an_unknown_value_in_a_whole_answer_validates(self) -> None:
+        document = envelope("verify", {"healthy": True, "checks": [
+            {"id": "a_new_check", "status": "a_new_status", "detail": "d"}]})
+        protocol_schema.SCHEMA.validate_envelope(document)
+        protocol_schema.SCHEMA.validate_result("verify", document["result"])
 
 
 if __name__ == "__main__":

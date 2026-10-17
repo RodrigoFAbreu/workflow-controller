@@ -194,7 +194,7 @@ def preflight(managed_repo: Any, work_item: Any, *,
     planning worker interrupted after routing the item and before writing its
     registry)."""
     health = protocol.verify(managed_repo.root, timeout=timeout, expected_digests=_admitted_digests(managed_repo))
-    warned = health.warnings
+    warned = health.advisories
     advisories = _advisory_lines(warned)
     if health.healthy:
         return None, advisories

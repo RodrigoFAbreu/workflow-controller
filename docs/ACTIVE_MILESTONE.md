@@ -38,6 +38,16 @@ Plan revision 3 is approved (`4d29850`); implementation is under way, one checkp
   records) and the figures test were shown failing on the old `telemetry.py` (D7). Checked with `test_telemetry`,
   `test_review_rounds`, `test_review_claude`, `test_review_job` (the touched classes and the whole file), `test_docs`,
   `test_write_containment`, `tools/check_docs.py` and the `review-mode-single-provider` scenario on a committed copy.
+- **CP5 complete** (#65): Workflow 2.12.0 is vendored under `tests/workflow_releases/2.12.0/` from the published archive
+  (`archive-sha256:0ac3baf76deb...`, as in `.workflow-manager/installation.json`); `tools/workflow_releases.py check` passes
+  and every release-iterating test runs against it (the two skips are the Manager-manifest test with no local
+  distribution and the old-Git live check). `CapLoop` takes a `release`, and the fixture plans carry a `<!-- CPn -->`
+  anchor pair per checkpoint, which 2.12.0 requires and older releases ignore (the only break, and a mechanical one).
+  `WorkflowGivenRoundTest` runs the plan round cap on 2.12.0: after a consumed `REVISE` the Workflow's own
+  `snapshot.review_round.plan` is what the `review_round_cap_reached` gate names ("given by the Workflow") and what
+  `telemetry` reports with source `workflow`. It was shown failing with `stored_round` ignoring the snapshot (D7).
+  `docs/guide/development.md` lists 2.12.0 beside 2.7.0 and 2.9.0. Checked with the release, contract, migration,
+  lifecycle, round, protocol, `test_docs`, `test_write_containment` and disposable-repository suites and `tools/check_docs.py`.
 
 The previous milestone's record follows.
 

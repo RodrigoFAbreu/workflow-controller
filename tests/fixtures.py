@@ -771,7 +771,9 @@ declarations = ws.generate_artifacts_declarations(wid, plan_path, registry_path,
                                                   work_item_type="product")
 declarations["plan_stage"]["protected_paths"] += args["extra_protected_paths"]
 (root / artifacts_path).write_text(json.dumps(declarations, indent=2) + "\n")
-(root / plan_path).write_text(f"# {wid} plan (Revision 1)\n\nA disposable fixture plan.\n"
+# Workflow 2.12.0 refuses a plan whose checkpoints have no anchor pair; older releases read them as comments.
+anchors = "".join(f"<!-- {c['id']} -->\n### {c['id']}\n<!-- /{c['id']} -->\n" for c in registry["checkpoints"])
+(root / plan_path).write_text(f"# {wid} plan (Revision 1)\n\nA disposable fixture plan.\n\n{anchors}"
                               + ws.render_registry_markdown(registry) + "\n")
 git("add", "-N", "--", plan_path, registry_path, mapping_path, artifacts_path)
 review_content_id, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(root, wid)

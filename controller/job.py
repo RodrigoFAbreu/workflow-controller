@@ -5080,9 +5080,23 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
             code = notify.identity(gate.get("what_is_required"), gate.get("safe_resume_command"))[:16]
             ident = notify.lifecycle_gate_identity(str(work_item), str(gate.get("phase")),
                                                    pre_state.get("state_revision"), code)
-            out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item,
-                                    f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"))
+            body = f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"
+            if _protocol_disposition(record) == "blocked":
+                # The Workflow itself calls the stop a blocker, so no person's decision is asked for
+                # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
+                out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
+            else:
+                out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item, body))
     return out
+
+
+def _protocol_disposition(record: Mapping) -> str | None:
+    """The disposition the Workflow gave the job's decision, or ``None`` for a record without a
+    protocol block (a legacy target, a Controller gate) or without a readable disposition."""
+    block = record.get("protocol")
+    decision = block.get("decision") if isinstance(block, Mapping) else None
+    disposition = decision.get("disposition") if isinstance(decision, Mapping) else None
+    return disposition if isinstance(disposition, str) else None
 
 
 def _bootstrap_work_item(record: Mapping) -> str | None:

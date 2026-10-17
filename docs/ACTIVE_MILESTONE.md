@@ -11,8 +11,8 @@ the vendored Workflow 2.12.0 -- rows 14a, 28a, 38h, the no-progress stop, the 38
 a verify status a minor release adds is an advisory line, and an unlisted reconcile class or record stage ends naming
 the value as `workflow_unknown_value`; measured differences from plan D6: the error code is `blocked`, `satisfied_by`
 is `advisory`, and the functional-evidence status, verdict and slot are `ignored`, since the Controller reads no
-decision from them). Remaining: CP4 (`lane_blocked` for a blocked gate), CP5 (documents, roadmap, the whole
-suite). The record of the previous milestone follows unchanged.
+decision from them). **CP4** (a gate the Workflow answers with the disposition `blocked` sends `lane_blocked`; human and external
+gates keep `user_gate`). Remaining: CP5 (documents, roadmap, the whole suite). The record of the previous milestone follows unchanged.
 
 ## Status
 

@@ -153,7 +153,11 @@ and the events are the closed table in
 [`notifications`](commands.md#notifications). The ones that need you are
 the `user_gate` (a human gate, or a merge left to a person) and
 `lane_blocked` (a failed job, a refusal, a gate that needs a fix); by default
-they are the highest severities. A finished step, a usage pause and a run
+they are the highest severities. A stop the Workflow itself answers with
+the disposition `blocked` is a `lane_blocked` ("Blocked: <work item>"), not a
+`user_gate`, because no person's decision is asked for; a human or external
+gate (for example a pull request whose checks are still running) stays a
+`user_gate`. A finished step, a usage pause and a run
 that closed are `INFO`/`LOW`.
 
 To set it up:

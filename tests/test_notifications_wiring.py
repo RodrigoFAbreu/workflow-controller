@@ -115,6 +115,26 @@ class DeriveJobEventTest(unittest.TestCase):
         changed = job.derive_job_event({**record, "pre_state": {"state_revision": 5}})[0]
         self.assertNotEqual(changed.ident, event.ident)
 
+    def test_a_gate_the_workflow_calls_blocked_is_a_blocker_and_the_others_ask_a_person(self) -> None:
+        gate = {"phase": "AWAITING_PLAN_APPROVAL", "what_is_required": "approve", "safe_resume_command": "/approve-review plan wi-1"}
+        legacy = job_record(job.STATUS_GATE_BLOCKED, human_gate_pending=gate)
+        [asked] = job.derive_job_event(legacy)
+
+        def protocol(disposition: object) -> dict:
+            return {"protocol": {"decision": {"disposition": disposition, "row": "38f"}}}
+
+        [blocked] = job.derive_job_event({**legacy, **protocol("blocked")})
+        self.assertEqual((blocked.event_type, blocked.title, blocked.work_item), ("lane_blocked", "Blocked: wi-1", "wi-1"))
+        self.assertEqual((blocked.ident, blocked.message), (asked.ident, asked.message))
+        again = job.derive_job_event({**copy.deepcopy(legacy), **protocol("blocked"), "job_id": "20261012T999999Z-bbbb"})[0]
+        self.assertEqual((again.ident, again.title, again.message), (blocked.ident, blocked.title, blocked.message))
+        for disposition in ("human_gate", "external_gate", "validation", None, 7):
+            [event] = job.derive_job_event({**legacy, **protocol(disposition)})
+            self.assertEqual((event.event_type, event.title), ("user_gate", asked.title), disposition)
+        for block in ("not a mapping", {"decision": "x"}):
+            [event] = job.derive_job_event({**legacy, "protocol": block})
+            self.assertEqual(event.event_type, "user_gate")
+
     def test_a_branch_gate_record_and_the_non_events_derive_nothing(self) -> None:
         gate = {"phase": "MILESTONE_BRANCH", "what_is_required": "x", "safe_resume_command": "y"}
         self.assertEqual(job.derive_job_event(job_record(job.STATUS_GATE_BLOCKED, human_gate_pending=gate)), [])

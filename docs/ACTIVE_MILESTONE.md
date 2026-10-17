@@ -143,7 +143,7 @@ repository, never this one.
 
 ### Flows and expected results
 
-1. **Default is unchanged.** `workflow-controller settings show <repo>`: `review.mode` is `auto`,
+1. **Default is unchanged.** `workflow-controller settings show`: `review.mode` is `auto`,
    `reviewer.same_provider_model` and `reviewer.same_provider_effort` are listed. With a non-lowered policy and
    nothing set, `step` stops at the ordinary external review gate (as before).
 2. **`--review-mode manual`.** `step --review-mode manual <repo>` at an external gate stops at the ordinary gate and
@@ -180,8 +180,20 @@ Automated coverage of the same flows: `python3 tools/run_tests.py` (scenario `sc
 - Real Claude reviews need a live login and consume account usage; use the fake `claude` unless you want that.
 - No release is cut by this milestone (`docs/releases/1.13.0.md` is the note for the next one).
 
+### Functional review round 1 (applied)
+
+An independent tester ran flows 1-11: 9 passed, 2 raised Optional documentation findings, both fixed here (bounded,
+documentation only; no remediation child):
+
+- Flow 1: the checklist command took a repository argument that `settings show` does not accept; corrected above.
+- Flow 11: `docs/common-problems.md` ("A review the Controller ran did not finish") now describes the limit window and
+  the limit recognition for both the Codex and the Claude reviewer.
+
+Re-test: flow 1's command and the two sentences in that section; then a fresh implementation review of the post-fix
+bundle.
+
 ## Next action
 
-Test against the checklist above and put findings in
+After the post-fix implementation review and technical approval, re-test as above and put findings in
 `.ai-review/workflow-controller-review-modes/feedback/FUNCTIONAL_REVIEW.md`. Clean testing: `/accept-milestone`.
 Findings: `/apply-functional-review workflow-controller-review-modes`.

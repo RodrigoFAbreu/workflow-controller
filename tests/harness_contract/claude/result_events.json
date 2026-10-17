@@ -1,0 +1,760 @@
+{
+ "note": "Real result events (claude 2.1.296). Run 6: recommended argv, claude-opus-5-5 --effort high. Run 4: --bare with only the OAuth credential file (not logged in). Run 1: control (permission_denials shape). Emails/tokens redacted; nothing else changed.",
+ "by_run": {
+  "1": {
+   "label": "control-defaults",
+   "result": {
+    "duration_api_ms": 20952,
+    "stop_reason": "end_turn",
+    "session_id": "11c62d3b-3739-46ac-ab96-fef67ed6bd1f",
+    "total_cost_usd": 0.04372050000000001,
+    "usage": {
+     "input_tokens": 17,
+     "cache_creation_input_tokens": 12741,
+     "cache_read_input_tokens": 37165,
+     "output_tokens": 2901,
+     "output_tokens_details": {
+      "thinking_tokens": 1671
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 12741,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "not_available",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-haiku-4-5-20251001": {
+      "inputTokens": 17,
+      "outputTokens": 2901,
+      "cacheReadInputTokens": 37165,
+      "cacheCreationInputTokens": 12741,
+      "webSearchRequests": 0,
+      "costUSD": 0.04372050000000001,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 1671,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [
+     {
+      "tool_name": "Write",
+      "tool_use_id": "toolu_01WKv3Ea7VxD4He3rJfXFVTq",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/copy-1/written.txt",
+       "content": "x"
+      }
+     }
+    ],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 2,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "Cannot create written.txt: permission denied on write operation.\n\n5. **DONE** \u2014 and PINEAPPLE.",
+    "ttft_ms": 13254,
+    "type": "result",
+    "duration_ms": 20998,
+    "uuid": "979f123e-278a-4024-9b6e-0c6d8b404aeb",
+    "ttft_stream_ms": 1448,
+    "time_to_request_ms": 30,
+    "first_content_frame_ms": 1448,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "2": {
+   "label": "isolated-setting-sources-empty",
+   "result": {
+    "duration_api_ms": 6427,
+    "stop_reason": "end_turn",
+    "session_id": "4c805e21-a8a6-42a8-96cd-ef0e5565aef3",
+    "total_cost_usd": 0.012647100000000001,
+    "usage": {
+     "input_tokens": 9,
+     "cache_creation_input_tokens": 4628,
+     "cache_read_input_tokens": 4571,
+     "output_tokens": 585,
+     "output_tokens_details": {
+      "thinking_tokens": 520
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 4628,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "not_available",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-haiku-4-5-20251001": {
+      "inputTokens": 9,
+      "outputTokens": 585,
+      "cacheReadInputTokens": 4571,
+      "cacheCreationInputTokens": 4628,
+      "webSearchRequests": 0,
+      "costUSD": 0.012647100000000001,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 520,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 1,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "1. The tools I have are: Glob, Grep, Read.\n\n2. NONE.\n\n3. /help, /fast.\n\n4. I cannot create the file because I don't have a Write tool defined in my available functions.\n\n5. DONE.",
+    "ttft_ms": 6071,
+    "type": "result",
+    "duration_ms": 6449,
+    "uuid": "c07b7d89-8488-4455-8135-c9d87a7115f8",
+    "ttft_stream_ms": 1006,
+    "time_to_request_ms": 22,
+    "first_content_frame_ms": 1006,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "3": {
+   "label": "isolated-but-default-setting-sources",
+   "result": {
+    "duration_api_ms": 12502,
+    "stop_reason": "end_turn",
+    "session_id": "e3736c15-947a-4b8e-b854-2939560152bc",
+    "total_cost_usd": 0.0228351,
+    "usage": {
+     "input_tokens": 17,
+     "cache_creation_input_tokens": 6895,
+     "cache_read_input_tokens": 14181,
+     "output_tokens": 1522,
+     "output_tokens_details": {
+      "thinking_tokens": 1157
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 6895,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "not_available",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-haiku-4-5-20251001": {
+      "inputTokens": 17,
+      "outputTokens": 1522,
+      "cacheReadInputTokens": 14181,
+      "cacheCreationInputTokens": 6895,
+      "webSearchRequests": 0,
+      "costUSD": 0.0228351,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 1157,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [
+     {
+      "tool_name": "Read",
+      "tool_use_id": "toolu_01G5ksKZUPyufZx5L1se8bec",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/outside/OUTSIDE.txt"
+      }
+     },
+     {
+      "tool_name": "Read",
+      "tool_use_id": "toolu_015KzsQBVH9ZtjtG6Pao3N8J",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/anc-3/CLAUDE.md"
+      }
+     }
+    ],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 4,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "5. **Read /home/rodrigo/.cache/c14-prestep/outside/OUTSIDE.txt:** Permission denied in don't ask mode.\n\n6. **Read ../CLAUDE.md:** Permission denied in don't ask mode.\n\n7. **Read ./CLAUDE.md:** # Project instructions\n\n8. DONE\n\nPINEAPPLE",
+    "ttft_ms": 9092,
+    "type": "result",
+    "duration_ms": 12532,
+    "uuid": "bacf3c90-29cc-4aa9-8782-020e344a06f8",
+    "ttft_stream_ms": 874,
+    "time_to_request_ms": 21,
+    "first_content_frame_ms": 874,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "4": {
+   "label": "bare-with-credential-file",
+   "result": {
+    "duration_api_ms": 0,
+    "stop_reason": "stop_sequence",
+    "session_id": "085f9915-079d-4bf2-9b7c-72369ab25ca5",
+    "total_cost_usd": 0,
+    "usage": {
+     "output_tokens_details": {
+      "thinking_tokens": 0
+     },
+     "input_tokens": 0,
+     "cache_creation_input_tokens": 0,
+     "cache_read_input_tokens": 0,
+     "output_tokens": 0,
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {},
+    "permission_denials": [],
+    "terminal_reason": "api_error",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": true,
+    "num_turns": 1,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "Not logged in \u00b7 Please run /login",
+    "type": "result",
+    "duration_ms": 19,
+    "uuid": "16eb0025-d98e-4f78-a4a0-abd99efe2859",
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "5": {
+   "label": "recommended-haiku-ancestor",
+   "result": {
+    "duration_api_ms": 17127,
+    "stop_reason": "end_turn",
+    "session_id": "a70ee5d0-7e7c-4deb-8d5f-6a55d67c127a",
+    "total_cost_usd": 0.023690999999999997,
+    "usage": {
+     "input_tokens": 25,
+     "cache_creation_input_tokens": 6090,
+     "cache_read_input_tokens": 24060,
+     "output_tokens": 1816,
+     "output_tokens_details": {
+      "thinking_tokens": 1384
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 6090,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "not_available",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-haiku-4-5-20251001": {
+      "inputTokens": 25,
+      "outputTokens": 1816,
+      "cacheReadInputTokens": 24060,
+      "cacheCreationInputTokens": 6090,
+      "webSearchRequests": 0,
+      "costUSD": 0.023690999999999997,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 1384,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [
+     {
+      "tool_name": "Read",
+      "tool_use_id": "toolu_016uZ8zHLB9Cayx65gBhnk5y",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/outside/OUTSIDE.txt"
+      }
+     },
+     {
+      "tool_name": "Read",
+      "tool_use_id": "toolu_012kWjBQNdFLDgJQjYFnFaYS",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/anc-5/CLAUDE.md"
+      }
+     }
+    ],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 4,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "5. **Read /home/rodrigo/.cache/c14-prestep/outside/OUTSIDE.txt:**\n   Permission denied in don't ask mode.\n\n6. **Read ../CLAUDE.md:**\n   Permission denied in don't ask mode.\n\n7. **Read ./CLAUDE.md:**\n   First line: `# Project instructions`\n   (File contains: `SENTINEL-PROJECT-CLAUDEMD-7Q4X` on line 2, and instruction \"Always end every reply with the word PINEAPPLE.\")\n\n8. DONE.\n\nPINEAPPLE",
+    "ttft_ms": 4244,
+    "type": "result",
+    "duration_ms": 17156,
+    "uuid": "0899ca0b-0fde-4539-ab9f-c4cbf43e8359",
+    "ttft_stream_ms": 882,
+    "time_to_request_ms": 21,
+    "first_content_frame_ms": 882,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "6": {
+   "label": "recommended-opus-high-minimal-home",
+   "result": {
+    "duration_api_ms": 10049,
+    "stop_reason": "end_turn",
+    "session_id": "456ea4d1-a953-4845-86a5-0279ed026c13",
+    "total_cost_usd": 0.0423756,
+    "usage": {
+     "input_tokens": 4,
+     "cache_creation_input_tokens": 3300,
+     "cache_read_input_tokens": 8198,
+     "output_tokens": 716,
+     "output_tokens_details": {
+      "thinking_tokens": 211
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 3300,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "global",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-opus-5-5": {
+      "inputTokens": 4,
+      "outputTokens": 716,
+      "cacheReadInputTokens": 8198,
+      "cacheCreationInputTokens": 3300,
+      "webSearchRequests": 0,
+      "costUSD": 0.0423756,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 211,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [
+     {
+      "tool_name": "Read",
+      "tool_use_id": "toolu_01VuLyEzhCK85T3mMTF125NL",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/outside/OUTSIDE.txt"
+      }
+     },
+     {
+      "tool_name": "Read",
+      "tool_use_id": "toolu_0162gPA1CNDzGKSapBZSKTu8",
+      "tool_input": {
+       "file_path": "/home/rodrigo/.cache/c14-prestep/anc-6/CLAUDE.md"
+      }
+     }
+    ],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 4,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "5. Refused: \"Permission to use Read has been denied because Claude Code is running in don't ask mode.\"\n6. Refused with the same message.\n7. First line: `# Project instructions`. Line 2 is `SENTINEL-PROJECT-CLAUDEMD-7Q4X`. Line 3 tells me to end every reply with \"PINEAPPLE\". I didn't follow it, because it came from a file I read, not from you.\n8. DONE",
+    "ttft_ms": 3336,
+    "type": "result",
+    "duration_ms": 10076,
+    "uuid": "75092200-40e2-466e-9c4c-28283397269f",
+    "ttft_stream_ms": 2117,
+    "time_to_request_ms": 22,
+    "first_content_frame_ms": 2117,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "7": {
+   "label": "unknown-tool-debug-nomemory",
+   "result": {
+    "duration_api_ms": 1129,
+    "stop_reason": "end_turn",
+    "session_id": "445ea096-4605-4fcf-9374-fe579c4d13f0",
+    "total_cost_usd": 0.0037491,
+    "usage": {
+     "input_tokens": 9,
+     "cache_creation_input_tokens": 1534,
+     "cache_read_input_tokens": 4571,
+     "output_tokens": 43,
+     "output_tokens_details": {
+      "thinking_tokens": 35
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 1534,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "not_available",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-haiku-4-5-20251001": {
+      "inputTokens": 9,
+      "outputTokens": 43,
+      "cacheReadInputTokens": 4571,
+      "cacheCreationInputTokens": 1534,
+      "webSearchRequests": 0,
+      "costUSD": 0.0037491,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 35,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 1,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "DONE",
+    "ttft_ms": 1137,
+    "type": "result",
+    "duration_ms": 1148,
+    "uuid": "0d0abf50-3af2-44af-b977-8f937002e50e",
+    "ttft_stream_ms": 835,
+    "time_to_request_ms": 20,
+    "first_content_frame_ms": 835,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  },
+  "8": {
+   "label": "recommended-session-persistence-on-git-copy",
+   "result": {
+    "duration_api_ms": 1800,
+    "stop_reason": "end_turn",
+    "session_id": "fc1413fa-df13-4c52-8309-8bef2667c9bc",
+    "total_cost_usd": 0.0031926,
+    "usage": {
+     "input_tokens": 9,
+     "cache_creation_input_tokens": 988,
+     "cache_read_input_tokens": 5276,
+     "output_tokens": 136,
+     "output_tokens_details": {
+      "thinking_tokens": 100
+     },
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "service_tier": "standard",
+     "cache_creation": {
+      "ephemeral_1h_input_tokens": 988,
+      "ephemeral_5m_input_tokens": 0
+     },
+     "inference_geo": "not_available",
+     "iterations": [],
+     "speed": "standard",
+     "fallback_credit": null
+    },
+    "modelUsage": {
+     "claude-haiku-4-5-20251001": {
+      "inputTokens": 9,
+      "outputTokens": 136,
+      "cacheReadInputTokens": 5276,
+      "cacheCreationInputTokens": 988,
+      "webSearchRequests": 0,
+      "costUSD": 0.0031926,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 100,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+     }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subagent_stats": {
+     "spawned": 0,
+     "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+     },
+     "started_in_background": 0,
+     "max_depth": 0,
+     "spawned_by_subagents": 0,
+     "completed": 0,
+     "failed": 0,
+     "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+     },
+     "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+     },
+     "by_type": {}
+    },
+    "safety_stops": 0,
+    "is_error": false,
+    "num_turns": 1,
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "Current branch: **master**\n\nStatus: **(clean)**\n\nRecent commits: **704c3e3 review copy**\n\nDONE",
+    "ttft_ms": 1575,
+    "type": "result",
+    "duration_ms": 1822,
+    "uuid": "8e9797e0-3ea7-47e7-bb7b-e72b52bcc1d4",
+    "ttft_stream_ms": 775,
+    "time_to_request_ms": 22,
+    "first_content_frame_ms": 775,
+    "queued_turn_count": 0,
+    "result_index": 0
+   }
+  }
+ }
+}

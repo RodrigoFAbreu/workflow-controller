@@ -112,7 +112,7 @@ class VerifyVerdictTest(unittest.TestCase):
 class RegistryAndContractTest(unittest.TestCase):
     def test_the_harness_is_registered_since_the_pre_step_was_recorded(self):
         self.assertTrue(review.PRE_STEP_CAPTURED)
-        self.assertEqual(sorted(review.HARNESSES), ["codex"])
+        self.assertEqual(sorted(review.HARNESSES), ["claude", "codex"])
         self.assertIs(review.harness("codex"), review.CODEX)
         with self.assertRaises(ReviewLaunchRefusedError):
             review.harness("other")

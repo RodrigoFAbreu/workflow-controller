@@ -3740,14 +3740,18 @@ class ReapingLaunchTest(_SupervisedCase):
     # -- publications are unchanged (I3) --------------------------------------
 
     def test_the_published_sequence_is_the_same_with_and_without_the_sweep(self) -> None:
-        turns = [[{"step": "bash_bg", "seconds": 0.5}], [{"step": "text"}]]
+        # The task outlives two periodic ownership scans, so a scan delayed by scheduling still sees it while the
+        # worker is WAITING.
+        turns = [[{"step": "bash_bg", "seconds": 2.5}], [{"step": "text"}]]
 
-        def published() -> list:
-            # A RUNNING flush lists whatever the periodic ownership scan had found when it was written, which
-            # depends on scheduling (the worker's group may or may not be seen yet); a WAITING or later flush
-            # follows a scan that has seen the background task, so those list their sources exactly.
-            return [(state, None if state == worker.RUNNING else sorted(e["source"] for e in details["owned_processes"]),
-                     details["scan"]) for _at, state, details in self.log]
+        def published() -> tuple:
+            # Which flush first lists the worker's group depends on when the periodic scan runs, so the
+            # comparison is over what the run published, not over each flush: the deduplicated state sequence,
+            # the scan verdicts, and the sources listed by any flush after RUNNING (the group, seen by then).
+            sources = {e["source"] for _at, state, details in self.log if state != worker.RUNNING
+                       for e in details["owned_processes"]}
+            self.assertEqual(sources, {"group"})
+            return (self.states(), {details["scan"] for _at, _state, details in self.log})
 
         self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
         with_sweep = published()

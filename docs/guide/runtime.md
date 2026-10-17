@@ -366,7 +366,8 @@ disposable copy (see [the reviewers](workers.md#the-same-provider-reviewer)).
 `reviewer.same_provider_model` and `reviewer.same_provider_effort` fall back
 to `claude-opus-5-5` and `high`; they are not the worker `routing` section.
 Its approvals are recorded with `review.mode`, `review.mode_source` and
-`review.lowered`, and `telemetry --by review_mode` shows their cost.
+`review.lowered`, and `telemetry --by review_mode` counts them (a review job
+keeps no cost or token figures, so none is shown).
 
 The seven `notifications` rows (1.9.0) make the Controller a SignalHub
 producer (see [ADR 0012](../adr/0012-signalhub-notifications.md) and

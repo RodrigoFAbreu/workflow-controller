@@ -435,8 +435,12 @@ configuration built in a fresh home; project `.claude/` and `.mcp.json` are
 stripped from the copy. The boundary was measured against `claude 2.1.296`
 (`tests/harness_contract/claude/`); a different Claude Code that changes an
 argument, event or state entry stops the launch with the name of the check
-(`ReviewLaunchRefused`, `not_started: true`). The repository, the Workflow
-state and the job record are compared before and after, as for Codex.
+(`ReviewLaunchRefused`, `not_started: true`). The repository, the feedback
+directory and the Workflow state are compared before and after, as for Codex
+(the job record and the operator's Claude home are not snapshotted). The
+empty `--setting-sources` stops Claude Code loading the repository's
+`CLAUDE.md` on its own, but a reviewer that reads the file may still follow it;
+the read-only tools and the disposable copy bound what that can do.
 
 The verdict's header must match the bundle exactly with the family
 `anthropic`, and is handed to `record-external-result` verbatim; the Workflow

@@ -5801,7 +5801,8 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
 
 _REPORT_LIMIT = 400
 
-#: The requirements a gate policy can name in a refusal (``REQUIRE_VALUES`` of the Workflow's gate policy).
+#: The requirements a gate policy can name in a refusal (``REQUIRE_VALUES`` of the Workflow's gate policy;
+#: keep in step with it -- a requirement missing here falls back to the ``unmet`` rule).
 _POLICY_REQUIREMENTS = ("distinct_reviewer_models",)
 
 

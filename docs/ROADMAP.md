@@ -1883,7 +1883,7 @@ milestones.
 
 ## 11.14 Review modes
 
-**Status:** Planned. Step C14 (owner decision, 2026-10-15): a small step of its own, not part of C10.
+**Status:** Planned, next. Step C14 (owner decision, 2026-10-15): a small step of its own, not part of C10.
 
 **Why.** A user with only one provider (Claude only today; later Codex only) must never be blocked by
 the cross-model review.
@@ -1892,7 +1892,7 @@ the cross-model review.
 
 | Mode | The external review |
 |---|---|
-| `auto` (default) | a distinct provider when it is installed and logged in, else `single-provider` |
+| `auto` (default) | the cross-model reviewer when the owner turned it on (an owner setting, or a Controller default the owner accepted at setup), never just because a distinct provider is installed and logged in; else `single-provider` where the owner adopted the lowered `distinct_reviewer_models` gate policy; else the gate stops as in `manual` |
 | `cross-model` | a distinct provider; refused without one |
 | `single-provider` | a fresh, independent session of the same provider, ideally a stronger model, through a second harness on C7's seam. It needs the owner to adopt a lowered `distinct_reviewer_models` gate policy, and such approvals are labelled lowered |
 | `manual` | today's behaviour: the gate waits for a person |
@@ -1900,13 +1900,16 @@ the cross-model review.
 Two independent review stages stay mandatory in every mode. The automatic run stays the default, with
 the cross-model review enabled.
 
-**Open Workflow questions** (asked 2026-10-15):
-- whether workflow#28's condition 5 (opt-in) is amended for `auto`;
-- whether a same-provider courier is admissible when distinct models are not required;
-- falling back to `single-provider` only where the owner already adopted the lowered policy;
-- how it combines with W8.
+**Decisions** (owner, 2026-10-16, with the Workflow Manager lane's answers):
+- `auto` is opt-in: it couriers to a distinct provider only when the owner turned that on, never because
+  one happens to be logged in (workflow#28's condition 5 stays "opt-in").
+- A same-provider courier is admissible only where the owner adopted a lowered `distinct_reviewer_models`
+  gate policy; the Workflow needs no extra marker. `auto` falls back to `single-provider` only there;
+  otherwise it uses the cross-model reviewer or stops at the gate.
+- No new severity or round rule; it combines with W8 and C13 unchanged.
+- The Workflow's wording for condition 5 under review modes comes in a later Workflow release, not W8.
 
-**Needs:** C13 and the Workflow's answers.
+**Needs:** C13 (done).
 
 **Out of scope:** the automated functional review (C10), and lowering a gate policy on the owner's
 behalf.

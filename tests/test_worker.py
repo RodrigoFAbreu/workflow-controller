@@ -3740,9 +3740,19 @@ class ReapingLaunchTest(_SupervisedCase):
     # -- publications are unchanged (I3) --------------------------------------
 
     def test_the_published_sequence_is_the_same_with_and_without_the_sweep(self) -> None:
-        # The task outlives two periodic ownership scans, so a scan delayed by scheduling still sees it while the
-        # worker is WAITING.
-        turns = [[{"step": "bash_bg", "seconds": 2.5}], [{"step": "text"}]]
+        # The task lives until a WAITING flush has listed the worker's group (it releases the gate), so no
+        # scan delay, however long, can outlast it.
+        def gated_turns(name: str) -> list:
+            gate = self.dir / name
+            command = f"for _ in $(seq 1200); do [ -e {gate} ] && exit 0; sleep 0.05; done"
+            return [[{"step": "bash_bg", "id": name, "command": command, "description": "waits for the gate"}],
+                    [{"step": "text"}]], gate
+
+        def release_on_group(gate: Path):
+            def on_state(state: str, details: dict) -> None:
+                if state == worker.WAITING and any(e["source"] == "group" for e in details["owned_processes"]):
+                    gate.touch()
+            return on_state
 
         def published() -> tuple:
             # Which flush first lists the worker's group depends on when the periodic scan runs, so the
@@ -3753,11 +3763,13 @@ class ReapingLaunchTest(_SupervisedCase):
             self.assertEqual(sources, {"group"})
             return (self.states(), {details["scan"] for _at, _state, details in self.log})
 
-        self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
+        turns, gate = gated_turns("with-sweep")
+        self.assertEqual(self.launch(turns, on_state=release_on_group(gate)).outcome, worker.SUCCESS)
         with_sweep = published()
         self.log.clear()
+        turns, gate = gated_turns("without-sweep")
         with unittest.mock.patch.object(worker._LaunchExclusions, "collect", lambda self, **kw: None):
-            self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
+            self.assertEqual(self.launch(turns, on_state=release_on_group(gate)).outcome, worker.SUCCESS)
         self.assertEqual(published(), with_sweep)
 
 

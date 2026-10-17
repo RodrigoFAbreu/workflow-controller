@@ -48,6 +48,11 @@ Plan revision 3 is approved (`4d29850`); implementation is under way, one checkp
   `telemetry` reports with source `workflow`. It was shown failing with `stored_round` ignoring the snapshot (D7).
   `docs/guide/development.md` lists 2.12.0 beside 2.7.0 and 2.9.0. Checked with the release, contract, migration,
   lifecycle, round, protocol, `test_docs`, `test_write_containment` and disposable-repository suites and `tools/check_docs.py`.
+- **CP6 complete** (documentation and the whole suite): `docs/ROADMAP.md` marks CU1 complete, drops it from "Next, in
+  order" and marks follow-ups 31-46 fixed in CU1; the runtime, common-problems and development guides already carry
+  the CP1-CP5 behaviour. `tools/check_docs.py`, the golden `--check` forms (2.6.0 plan-stage and implementation-review,
+  no-policy lifecycle, protocol-vs-legacy; the bare 2.5.1 plan-stage `--check` keeps its documented known difference)
+  and the full serial suite were run; results are in `TEST_RESULTS.md` of the review bundle.
 
 The previous milestone's record follows.
 

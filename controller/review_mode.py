@@ -142,8 +142,8 @@ def _refuse(reason: str, signal: Signal | None) -> Choice:
 def needs_signal(mode: str, reviewer: Mapping | None) -> bool:
     """Whether :func:`choose` reads the lowered-policy signal: only where a
     same-provider review could run (``auto`` with no distinct harness, and
-    an explicit ``single-provider``). A repository that sets nothing never
-    asks ``verify`` for it."""
+    an explicit ``single-provider``). ``manual``, ``cross-model`` and ``auto``
+    with a distinct harness never ask ``verify`` for it."""
     if mode == MODE_SINGLE_PROVIDER:
         return True
     return mode == MODE_AUTO and distinct_harness(reviewer) is None

@@ -6854,10 +6854,12 @@ def execute_step(
     other gate is unchanged, and an unknown harness refuses.
 
     ``review_mode_options`` (workflow-controller-review-modes D1) is
-    ``{"mode", "source"}`` as :func:`cli._review_mode_options` builds it; ``None``
-    is ``auto``, the mode that changes nothing for a repository that sets
-    nothing. It picks, at an external gate, the reviewer, the ordinary gate
-    or the ``review_mode_unavailable`` stop (:mod:`controller.review_mode`)."""
+    ``{"mode", "source", "same_provider"}`` as :func:`cli._review_mode_options`
+    builds it; ``None`` is ``auto``, the mode that changes nothing for a
+    repository that sets nothing. It picks, at an external gate, the reviewer,
+    the ordinary gate or the ``review_mode_unavailable`` stop
+    (:mod:`controller.review_mode`); without ``same_provider`` a same-provider
+    choice is the ordinary gate."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
@@ -7079,8 +7081,9 @@ def _execute_step_locked(
                     runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase,
                     pre_state, refusal, status=STATUS_GATE_BLOCKED, run_id=run_id,
                 )
-            if choice.kind != "review":
-                # The ordinary gate: `manual`, or `auto` with nothing to ask.
+            if choice.kind != "review" or (choice.lowered and "same_provider" not in (review_mode_options or {})):
+                # The ordinary gate: `manual`, `auto` with nothing to ask, or a caller
+                # that passed no same-provider reviewer options.
                 review_target = None
             elif choice.lowered and _sticky_review_stop(
                     runtime, managed_repo.root, resolved_work_item_id, review_target[0],

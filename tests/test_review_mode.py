@@ -292,6 +292,14 @@ class JobChoiceTest(rj._ReviewCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(self.double.calls, [])
 
+    def test_a_lowered_choice_without_same_provider_options_is_the_gate(self) -> None:
+        lowered = review_mode.Signal("warn", ("plan_approval.require",), False, False)
+        with mock.patch.object(job, "_review_mode_signal", return_value=lowered):
+            record = self.mode_step(None, reviewer_options=None)
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertNotIn(review_mode.REVIEW_MODE_UNAVAILABLE, json.dumps(record))
+        self.assertEqual(self.double.calls, [])
+
     def test_an_unreadable_verify_is_no_signal(self) -> None:
         from controller.errors import ControllerError
         with mock.patch.object(job.protocol, "verify", side_effect=ControllerError("down")):

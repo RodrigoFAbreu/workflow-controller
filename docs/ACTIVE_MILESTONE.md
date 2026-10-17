@@ -106,6 +106,25 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
   `plan_stage_decisions` differs (it differs on the base commit too); `python3 tools/run_tests.py` (4149 tests, 8
   shards): green apart from the two Git 2.56 trailer failures (follow-up 12).
 
+### Self-review (SELF_REVIEWING_IMPLEMENTATION)
+
+The full milestone diff from `40f9cef` was reviewed against the plan (D1-D10, R1-R6). Findings fixed:
+
+- `controller/job.py`: `execute_step` documents `review_mode_options=None` as `auto`, but a lowered signal then
+  chose a same-provider review and raised `KeyError: 'same_provider'`. A same-provider choice without the
+  same-provider reviewer options is now the ordinary gate, and the docstring names the `same_provider` key (the CLI
+  always passes it, so a command's behaviour is unchanged). Test:
+  `tests/test_review_mode.py` `test_a_lowered_choice_without_same_provider_options_is_the_gate` (fails without the fix).
+- `controller/review_mode.py`: `needs_signal`'s docstring said a repository that sets nothing never asks `verify`;
+  `auto` with nothing set does ask (`JobChoiceTest` pins it). The docstring now names the modes that never ask.
+- Missing CP3 test: after the distinct-model refusal, an explicit `single-provider` with the gate turned human (the
+  `lowering_plus_file_tightened` capture) is refused again before launch, the message naming `--review-mode manual`
+  and no path 2 (`tests/test_review_same_provider.py`).
+
+Checked and left as they are: a Claude stream with no `init` event and a non-zero exit is never ingested
+(`launch_review` ingests no verdict from a non-zero exit); stream readings are account-wide window figures, so the
+last attempt's are the freshest.
+
 ## Next action
 
 All checkpoints are complete. Re-invoke `/milestone-implement workflow-controller-review-modes` for the self-review,

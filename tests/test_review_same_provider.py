@@ -212,6 +212,15 @@ class DistinctRefusalTest(SameProviderCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(self.double.calls, [])
         self.assertNotIn("(2)", json.dumps(record))
+        # turning the gate human (a file_tightened clause) cancels the signal: refused again before launch,
+        # pointing to --review-mode manual instead of path 2
+        human = self.mode_step("single-provider", "lowering_plus_file_tightened")
+        self.assertEqual(human["status"], job.STATUS_GATE_BLOCKED)
+        text = json.dumps(human)
+        self.assertIn(review_mode.REVIEW_MODE_UNAVAILABLE, text)
+        self.assertIn("--review-mode manual", text)
+        self.assertNotIn("(2)", text)
+        self.assertEqual(self.double.calls, [])
 
     def test_a_mode_or_harness_that_selects_the_gate_or_a_distinct_provider_goes_ahead(self) -> None:
         self.refuse_distinct()

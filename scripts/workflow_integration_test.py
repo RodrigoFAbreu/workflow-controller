@@ -767,6 +767,12 @@ class TestVersion21OnlyCommandsRefuseCleanlyForV1(unittest.TestCase):
 # below, for the two files where a real pre-v2.1 copy is actually
 # available to diff against.
 _GOLDEN_COMMAND_FILE_SHA256 = {
+    # workflow-2.13.0 (review-loop-fixes, CP3): `review-plan.md`, `review-implementation.md`,
+    # `record-manual-plan-review.md`, `milestone-plan.md`, `apply-plan-review.md` and
+    # `apply-implementation-review.md` name the changes-file section for the reviewer's role
+    # (D-Keyed); `record-manual-implementation-review.md` changes too but carries no golden hash.
+    # workflow-2.13.0 (review-loop-fixes, CP1): `milestone-plan.md` and `apply-plan-review.md`
+    # gain the early governing-version sweep call after the anchor call (D-Sweep).
     # workflow-2.12.0 (review-convergence, CP4): `milestone-plan.md` gains the plan-size
     # guidance, the advisory at the publication point and a rewrapped line;
     # `apply-plan-review.md` gains the advisory at its publication point (D-Size).
@@ -890,7 +896,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # workflow-2.10.0 (retire-21-for-new-work, CP3): step 0 stops a fresh milestone
     # under a "2.1" default with DefaultWorkflowVersionRetiredError -- intentional
     # content change.
-    "milestone-plan.md": "3c5a97edbfa51c19ddcf2f8a8390424f224efc51cc70fe3f04549da32982e8da",
+    "milestone-plan.md": "8162c64a60f7433a11872de348f974f3e85a2b2d6b35ca9eea4669b1aee522c7",
     # milestone-implement.md further updated, OPUS-R129-001: step 1f's
     # checkpoint-completion commit instruction now states explicitly that
     # the Workflow-Checkpoint/Workflow-Work-Item trailer must be the
@@ -1135,7 +1141,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # assert_apply_review_feedback_binding (D-Apply-Binding): a two-stage
     # REVISE stating a review_content_id is bound by content --
     # intentional content change.
-    "apply-plan-review.md": "b610f688bd19dda3d439dd04a5bc27c44d41d261731c03a31db9f164cf7e1eb4",
+    "apply-plan-review.md": "1b542cffb5a941f1cc657dfc12959944a872bcb610ec92a392149497aeffb757",
     # apply-implementation-review.md (WF8c item (c)): step 7's
     # record_bundle_generation call site widened to first resolve the
     # outcome (resolve_bundle_generation_outcome) and write the matching
@@ -1173,7 +1179,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # functional-fix-commit-order implementation review: step 8 is
     # version-aware (a "2.2" post-fix round re-enters local review) --
     # intentional content change.
-    "apply-implementation-review.md": "e6674c3ffabf6d4ee337d75a00610a8852440b326bcc6f98e1c67be2c22fd57e",
+    "apply-implementation-review.md": "ad935a29c220eb789db8eb162197b43894223fc869c6713ec4ab656bd3785bbe",
     # review-plan.md/record-manual-plan-review.md further updated,
     # workflow-v2-3-followups CP3 (REQ-8/-9): the `Reviewer role:` template
     # literal, the round-computation prose, the exact-match-expectation
@@ -1211,7 +1217,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # review-plan.md further updated, D-Consumed-History (workflow-2.7.0,
     # CP2, v2.6.0-001): REVISE also adds the id to the durable
     # consumed_plan_review_content_ids history -- intentional content change.
-    "review-plan.md": "1ad6be69bafbecee79bce153d80752698bcd67ce48eaf9a3bce0abc3a3571336",
+    "review-plan.md": "af64845616d3b3d29a2eb461701846b9341a2be52cf11896427ba387d6defa45",
     # record-manual-plan-review.md further updated, D-Feedback-Layout
     # (workflow-2.6.0, CP3): preamble states feedback_layout-keyed
     # resolution; step 4 prints the exact resolved paste path and adds the
@@ -1230,7 +1236,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # ingest_manual_review_verdict (two_stage_only=True), which holds
     # state_lock through the publication; the required header fields,
     # Round: and the absent-bundle-id advisory -- intentional content change.
-    "record-manual-plan-review.md": "606ac74f1d7d6f3d6abbfbd4376f799b07f8bca7316f0336eb01b8d37aa40341",
+    "record-manual-plan-review.md": "56a8bd58e3445865b9f95d9c38c6fe61e738178bd75fa98b089b42ad3e74c1c9",
     # bootstrap-workflow-v2.md (WF8c scope clauses (l)/(p)/(q), GPT-R108-002/
     # OPUS-R109-004): the driver-range text made checkpoint-agnostic
     # (OPUS-R102-009), a NO_CHECKPOINT terminal-wrap-up branch added to step
@@ -1324,7 +1330,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # review-implementation.md further updated, workflow-2.7.0
     # (ORCHESTRATION_PROTOCOL_V1_PLAN.md, CP4): step 4's bundle check is
     # verify_implementation_review_bundle -- intentional content change.
-    "review-implementation.md": "199974d6f3f44f1a85b4f2009c303b4ec098b707f9d34dd6e6cee12fe437b42d",
+    "review-implementation.md": "56f3ab5e83dd63701af653923467e84998f8abc17c6362322adab2763cd1385f",
     # review-functional.md: new, workflow-v2-3 CP2 -- the first recorded
     # hash, not a change.
     #
@@ -2777,6 +2783,56 @@ class TestCheckpointAnchorsEarlyCommandConformance(unittest.TestCase):
             for cls in ("AmendmentAnchorCoverageError", "AmendmentAnchorMalformedError",
                         "AmendmentCheckpointIdShapeError", "AmendmentPostRegistryMalformedError"):
                 self.assertIn(cls, text, (name, cls))
+
+
+class TestGoverningVersionSweepEarlyCommandConformance(unittest.TestCase):
+    """workflow-2.13.0 (review-loop-fixes, CP1): the plan-stage commands call
+    `assert_plan_governing_version_sweep` right after the anchor call, before
+    the publish and before the bind."""
+
+    ANCHORS = "assert_plan_checkpoint_anchors"
+    SWEEP = "assert_plan_governing_version_sweep"
+
+    def _assert_after_anchors_before(self, text, later):
+        anchors = text.index(self.ANCHORS)
+        sweep = text.index(self.SWEEP)
+        self.assertLess(anchors, sweep)
+        self.assertLess(sweep, text.index(later))
+        for needle in ("PlanGoverningVersionSweepError", "PLAN_SWEEP_NEXT_STEP"):
+            self.assertIn(needle, text)
+
+    def test_milestone_plan_sweeps_after_the_anchors_and_before_the_publish(self):
+        steps = _extract_numbered_steps(_command_text("milestone-plan.md"))
+        self._assert_after_anchors_before(steps["5"], "publish_plan_revision")
+
+    def test_milestone_plan_sweeps_before_the_bind(self):
+        steps = _extract_numbered_steps(_command_text("milestone-plan.md"))
+        self._assert_after_anchors_before(steps["6"], "verify_plan_review_bundle")
+
+    def test_milestone_plan_tells_the_author_not_to_list_governing_versions(self):
+        text = _command_text("milestone-plan.md")
+        self.assertIn("Do not write a list of governing versions in the plan", text)
+        self.assertIn("feedback-only item or a two-stage item", text)
+
+    def test_apply_plan_review_sweeps_after_the_anchors_and_before_the_publish(self):
+        step5 = _extract_numbered_steps(_command_text("apply-plan-review.md"))["5"]
+        self._assert_after_anchors_before(step5, "publish_plan_revision")
+
+    def test_apply_plan_review_sweeps_before_the_bind(self):
+        text = _command_text("apply-plan-review.md")
+        step7 = text[text.index("7'. **`governing_workflow_version"):]
+        self._assert_after_anchors_before(step7, "verify_plan_review_bundle")
+
+    def test_the_generator_runs_both_checks_in_one_block(self):
+        script = (_repo_root() / "scripts" / "prepare-ai-review.sh").read_text()
+        block = script[script.index("BEGIN early checkpoint-anchor"):script.index("END early checkpoint-anchor")]
+        self.assertLess(block.index(self.ANCHORS), block.index(self.SWEEP))
+        self.assertIn("_PLAN_EARLY_CHECK_ERRORS", block)
+        self.assertNotIn("_PLAN_ANCHOR_ERRORS", block)
+
+    def test_the_plan_review_workflow_document_describes_it(self):
+        text = _doc_text("PLAN_REVIEW_WORKFLOW.md")
+        self.assertIn("assert_plan_governing_version_sweep", text)
 
 
 class TestRetiredDefaultCommandConformance(unittest.TestCase):

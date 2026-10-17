@@ -239,6 +239,8 @@ if [[ "$STAGE" == "plan" ]]; then
 fi
 
 # --- BEGIN early checkpoint-anchor check (workflow-2.11.0, D-Check/D-Where 2)
+# Since workflow-2.13.0 (D-Sweep) the governing-version sweep runs in this same
+# block, second, so a plan without anchors is refused for that cause first.
 # Checks the PINNED plan and registry bytes just captured -- exactly the bytes
 # PLAN.md and review_content_id describe -- so an edit between a worktree
 # check and the pin cannot slip a plan without checkpoint anchors into review.
@@ -259,7 +261,11 @@ try:
         repo_root, work_item_id, pin_dir=repo_root / sys.argv[3],
         allow_bound_regeneration=True,
     )
-except state._PLAN_ANCHOR_ERRORS as exc:
+    state.assert_plan_governing_version_sweep(
+        repo_root, work_item_id, pin_dir=repo_root / sys.argv[3],
+        allow_bound_regeneration=True,
+    )
+except state._PLAN_EARLY_CHECK_ERRORS as exc:
     print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
     sys.exit(1)
 PYEOF

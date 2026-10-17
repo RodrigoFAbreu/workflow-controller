@@ -108,7 +108,7 @@ and refuses before writing anything.
    and ask the user to have the reviewer reissue the verdict -- as `APPROVE`
    with the findings under `## Optional findings`, or as `REVISE` with the
    finding that requires a change moved to Blocking or Important. Never
-   edit the verdict or change its `Status:` yourself. The manual reviewer works from `review-bundle.tar.gz`, which carries `CHANGES_SINCE_REVIEW.md` when the generator wrote one; a `REVISE` or `BLOCK` declaring `Review scope: changes` is accepted as written (workflow-2.12.0, `D-Changes`).
+   edit the verdict or change its `Status:` yourself. The manual reviewer works from `review-bundle.tar.gz`, which carries `CHANGES_SINCE_REVIEW.md` when the generator wrote one (the manual reviewer's changes are its own section, compared against the content that stage last reviewed and quoting that stage's own last verdict; workflow-2.13.0, `D-Keyed`); a `REVISE` or `BLOCK` declaring `Review scope: changes` is accepted as written (workflow-2.12.0, `D-Changes`).
    **Foreign-`Work item:` refusal, before any write**:
    `workflow_fingerprint.assert_manual_feedback_names_work_item` -- a pasted
    file whose `Work item:` field is present and names a different work

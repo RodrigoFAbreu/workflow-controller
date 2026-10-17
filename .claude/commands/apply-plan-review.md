@@ -216,7 +216,12 @@ normative definition.
    `AmendmentCheckpointIdShapeError` or `AmendmentPostRegistryMalformedError`,
    together `workflow_state._PLAN_ANCHOR_ERRORS`) ends with
    `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop, with nothing
-   published.
+   published. **Then, [2.13.0] sweep check**: call
+   `workflow_state.assert_plan_governing_version_sweep(repo_root,
+   work_item_id)`; a refusal (`workflow_state.PlanGoverningVersionSweepError`)
+   lists each finding and ends with `workflow_state.PLAN_SWEEP_NEXT_STEP`:
+   report it as `error: PlanGoverningVersionSweepError: ...` and stop, with
+   nothing published.
    Then publish, in the same operation and before the bundle below is
    regenerated (`D-Plan-Revision-Publication`, `WFR-65`), by calling
    `workflow_state.state_transaction(repo_root, lambda state:
@@ -273,7 +278,7 @@ normative definition.
      (`assert_review_request_states_review_content_id`), obtained from the
      single canonical entry point `docs/ai-workflow/REVIEW_PROTOCOL.md`'s
      "Computing `review_content_id`" names for this stage -- never a
-     second, ad hoc computation, and never the previous round's value. Word the request conditionally on the changes file, because it is written before the generator decides whether `CHANGES_SINCE_REVIEW.md` exists: if it is present next to `current/` and its preamble names this bundle's `review_content_id`, the reviewer may review only the changes and check each previous finding is resolved, declaring `Review scope: changes`; any `APPROVE` is a full review of the whole bundle (workflow-2.12.0, `D-Changes`). If the plan stage's gate is `automatic` and the effective `require` lists
+     second, ad hoc computation, and never the previous round's value. Word the request conditionally on the changes file, because it is written before the generator decides whether `CHANGES_SINCE_REVIEW.md` exists: if it is present next to `current/` and its preamble names this bundle's `review_content_id`, the reviewer may review only the changes in the section named for its role and check each previous finding is resolved, declaring `Review scope: changes`; a role whose section is not available reviews the whole bundle, and any `APPROVE` is a full review of the whole bundle (workflow-2.12.0, `D-Changes`; one section per review stage, workflow-2.13.0, `D-Keyed`). If the plan stage's gate is `automatic` and the effective `require` lists
      `distinct_reviewer_models` (`workflow_state.review_stage_gate_context(repo_root,
      state, work_item_id, "plan")["requires_distinct"]`), also ask the reviewer, in
      that file, to state `Reviewer model: <vendor>/<model>` in the verdict's header
@@ -331,7 +336,10 @@ normative definition.
        generation and nothing between the publish and this bind can exit
        unreported): first call `workflow_state.assert_plan_checkpoint_anchors(
        repo_root, work_item_id)` (a refusal ends with
-       `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop), then call
+       `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop), then
+       `workflow_state.assert_plan_governing_version_sweep(repo_root,
+       work_item_id)` (a refusal, `PlanGoverningVersionSweepError`, ends with
+       `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it and stop), then call
        `binding = workflow_state.verify_plan_review_bundle(repo_root,
        work_item_id)`, then `workflow_state.state_transaction(repo_root, lambda state:
        workflow_state.bind_plan_review_bundle(state, work_item_id,

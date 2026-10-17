@@ -401,7 +401,16 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
         `workflow_state.AmendmentPostRegistryMalformedError`, together
         `workflow_state._PLAN_ANCHOR_ERRORS`) ends with
         `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop, with
-        nothing written;
+        nothing written. **Then, [2.13.0] sweep check**: call
+        `workflow_state.assert_plan_governing_version_sweep(repo_root,
+        work_item_id)`, which runs the installed governing-version sweep on
+        the plan document. A refusal
+        (`workflow_state.PlanGoverningVersionSweepError`, one of
+        `workflow_state._PLAN_EARLY_CHECK_ERRORS`) lists each finding and ends
+        with `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it as
+        `error: PlanGoverningVersionSweepError: ...` and stop, with nothing
+        written. Do not write a list of governing versions in the plan: say a
+        feedback-only item or a two-stage item;
      5. call `workflow_state.state_transaction(repo_root, lambda state:
         workflow_state.publish_plan_revision(state, work_item_id,
         plan_revision, now, review_content_id=F))`, where `F` is the fresh
@@ -457,7 +466,7 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      from the single canonical entry point
      `docs/ai-workflow/REVIEW_PROTOCOL.md`'s "Computing
      `review_content_id`" names for this stage -- never a second, ad hoc
-     computation, and never a value carried over from a previous round. Word the request conditionally on the changes file, because it is written before the generator decides whether `CHANGES_SINCE_REVIEW.md` exists: if it is present next to `current/` and its preamble names this bundle's `review_content_id`, the reviewer may review only the changes and check each previous finding is resolved, declaring `Review scope: changes`; any `APPROVE` is a full review of the whole bundle (workflow-2.12.0, `D-Changes`). If the plan stage's gate is `automatic` and the effective `require` lists
+     computation, and never a value carried over from a previous round. Word the request conditionally on the changes file, because it is written before the generator decides whether `CHANGES_SINCE_REVIEW.md` exists: if it is present next to `current/` and its preamble names this bundle's `review_content_id`, the reviewer may review only the changes in the section named for its role and check each previous finding is resolved, declaring `Review scope: changes`; a role whose section is not available reviews the whole bundle, and any `APPROVE` is a full review of the whole bundle (workflow-2.12.0, `D-Changes`; one section per review stage, workflow-2.13.0, `D-Keyed`). If the plan stage's gate is `automatic` and the effective `require` lists
      `distinct_reviewer_models` (`workflow_state.review_stage_gate_context(repo_root,
      state, work_item_id, "plan")["requires_distinct"]`), also ask the reviewer, in
      that file, to state `Reviewer model: <vendor>/<model>` in the verdict's header
@@ -484,13 +493,18 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      of a plan without checkpoint anchors (`error: AmendmentAnchorCoverageError:`
      or any other `workflow_state._PLAN_ANCHOR_ERRORS` class) is the same
      case: nothing was promoted, and the message ends with `workflow_state.PLAN_ANCHOR_NEXT_STEP` -- add the
-     pairs, then run that re-run.
+     pairs, then run that re-run. So is a generator refusal by the governing-version
+     sweep (`error: PlanGoverningVersionSweepError:`): the message ends with
+     `workflow_state.PLAN_SWEEP_NEXT_STEP` -- reword the flagged passages, then run that re-run.
    - **[2.1] Bind, straight after the generator succeeds**
      (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0, section 5.3 item 3):
      first call `workflow_state.assert_plan_checkpoint_anchors(repo_root,
      work_item_id)` (a bundle an older generator left behind for a published,
      unbound item is not otherwise re-checked; a refusal ends with
      `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop), then
+     `workflow_state.assert_plan_governing_version_sweep(repo_root,
+     work_item_id)` (a refusal, `PlanGoverningVersionSweepError`, ends with
+     `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it and stop), then
      call `binding = workflow_state.verify_plan_review_bundle(repo_root,
      work_item_id)`, then `workflow_state.state_transaction(repo_root,
      lambda state: workflow_state.bind_plan_review_bundle(state,

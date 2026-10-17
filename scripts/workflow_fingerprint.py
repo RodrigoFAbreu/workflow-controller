@@ -217,7 +217,7 @@ import unicodedata
 import uuid
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping, NamedTuple
+from typing import Callable, Mapping, NamedTuple
 
 # A bundle-verification run must never write bytecode into a bundle
 # directory it is hashing -- that would change bundle_id as a side effect
@@ -3149,6 +3149,248 @@ def _consumed_plan_review_content_ids_of(repo_root: Path, work_item_id: str) -> 
     return ids
 
 
+# ---------------------------------------------------------------------------
+# Stage baselines (workflow-2.13.0, D-Baseline): what the manual review stage
+# last reviewed. A gitignored record under `.ai-review/<id>/review-baselines/
+# <ROLE>/`, written by the manual ingest under the state lock and replaced
+# wholesale by the next accepted verdict. A reviewer aid for the changes file
+# (never a gate, never an input of bundle_id or review_content_id): a record
+# the reader cannot prove consistent is `None`, the full-review fallback.
+# ---------------------------------------------------------------------------
+
+STAGE_BASELINE_DIR = "review-baselines"
+_STAGE_BASELINE_ROLES = {
+    "plan": "MANUAL_EXTERNAL_PLAN_REVIEW",
+    "implementation": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+}
+_STAGE_BASELINE_KEYS = frozenset({
+    "schema_version", "state_revision", "work_item_id", "role", "verdict", "review_content_id", "bundle_id",
+    "revision", "reviewed_implementation_head", "classification", "recorded_at",
+})
+_STAGE_BASELINE_CLASSIFICATION_KEYS = {
+    "plan": frozenset({"protected_paths", "excluded_paths", "excluded_prefixes"}),
+    "implementation": frozenset({
+        "protected_paths", "protected_prefixes", "excluded_paths", "excluded_prefixes"}),
+}
+_STAGE_BASELINE_VERDICTS = ("REVISE", "APPROVE")
+_FULL_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+_FULL_SHA1_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def _stage_baseline_root(repo_root: Path, work_item_id: str) -> Path:
+    return Path(repo_root) / ".ai-review" / work_item_id / STAGE_BASELINE_DIR
+
+
+def _stage_baseline_role_dir(repo_root: Path, work_item_id: str, role: str) -> Path:
+    if role not in _STAGE_BASELINE_ROLES.values():
+        raise ValueError(f"unknown stage baseline role {role!r}")
+    return _stage_baseline_root(repo_root, work_item_id) / role
+
+
+def remove_stage_baseline(
+    repo_root: Path, work_item_id: str, role: str, *, only_state_revision: int | None = None,
+) -> None:
+    """Removes `role`'s baseline record. With `only_state_revision`, only a
+    record carrying exactly that `state_revision` (the handler undoing its own
+    write when the transaction fails). Never raises."""
+    try:
+        role_dir = _stage_baseline_role_dir(repo_root, work_item_id, role)
+        if not (role_dir.is_symlink() or role_dir.exists()):
+            return
+        if only_state_revision is not None:
+            existing = _read_stage_baseline_state_revision(role_dir)
+            if existing != only_state_revision:
+                return
+        if role_dir.is_symlink():
+            role_dir.unlink()
+        else:
+            shutil.rmtree(role_dir)
+    except Exception:  # noqa: BLE001 -- a reviewer aid; removal is best effort
+        pass
+
+
+def _read_stage_baseline_state_revision(role_dir: Path) -> int | None:
+    try:
+        record = json.loads((role_dir / "BASELINE.json").read_text())
+    except (OSError, ValueError):
+        return None
+    value = record.get("state_revision") if isinstance(record, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def record_stage_baseline(
+    repo_root: Path, work_item_id: str, *, stage: str, role: str, verdict: str, review_content_id: str,
+    bundle_id: str | None, revision: int, reviewed_implementation_head: str | None, classification: dict,
+    verdict_text: str, now: str, state_revision: int,
+) -> bool:
+    """Records the manual stage's baseline (D-Baseline) and returns whether it
+    did. The role's existing record is removed first, then a sibling directory
+    is staged and renamed into place, so a reader sees the old record, the new
+    one, or none. A record with a higher `state_revision` than `state_revision`
+    is left alone (`False`). It catches its own errors: one warning, `False`,
+    and the role then has no record (the next manual round is a full review)."""
+    staging: Path | None = None
+    try:
+        validate_work_item_id(work_item_id)
+        if _STAGE_BASELINE_ROLES.get(stage) != role:
+            raise ValueError(f"stage {stage!r} has no baseline role {role!r}")
+        if verdict not in _STAGE_BASELINE_VERDICTS:
+            raise ValueError(f"a {verdict!r} verdict records no baseline")
+        role_dir = _stage_baseline_role_dir(repo_root, work_item_id, role)
+        existing = _read_stage_baseline_state_revision(role_dir) if role_dir.is_dir() else None
+        if existing is not None and existing > state_revision:
+            return False
+        remove_stage_baseline(repo_root, work_item_id, role)
+        if role_dir.is_symlink() or role_dir.exists():
+            raise OSError(f"{role_dir} could not be removed")
+        root = _stage_baseline_root(repo_root, work_item_id)
+        root.mkdir(parents=True, exist_ok=True)
+        staging = root / f".{role}.staging-{uuid.uuid4().hex}"
+        staging.mkdir()
+        record = {
+            "schema_version": 1, "state_revision": state_revision, "work_item_id": work_item_id, "role": role,
+            "verdict": verdict, "review_content_id": review_content_id, "bundle_id": bundle_id,
+            "revision": revision, "reviewed_implementation_head": reviewed_implementation_head,
+            "classification": classification, "recorded_at": now,
+        }
+        (staging / "BASELINE.json").write_bytes(_canonical_json(record) + b"\n")
+        (staging / "VERDICT.md").write_text(verdict_text)
+        if stage == "plan":
+            pin = _pin_dir_for_work_item(Path(repo_root), work_item_id)
+            for rel, source in _pin_files(pin).items():
+                dest = staging / "pin" / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, dest)
+            if not (staging / "pin").is_dir():
+                raise ValueError("the item's .pin holds no files")
+        os.replace(staging, role_dir)
+        staging = None
+        return True
+    except Exception as exc:  # noqa: BLE001 -- reviewer convenience; never fails the ingest
+        print(f"warning: stage baseline not recorded ({type(exc).__name__}: {exc})", file=sys.stderr)
+        remove_stage_baseline(repo_root, work_item_id, role)
+        return False
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+
+
+def _stage_baseline_known_to_state(work_item: dict, stage: str, record: dict) -> bool:
+    """Whether the item's state knows the record's round: a plan id the item
+    consumed (or approved), an `APPROVE` whose bundle is the manual ledger
+    entry's, or an implementation round not newer than the item's."""
+    review_content_id = record["review_content_id"]
+    if stage == "plan":
+        consumed = {value for value in (work_item.get("consumed_plan_review_content_ids") or [])
+                    if isinstance(value, str)}
+        binding = work_item.get("plan_review_binding")
+        slot = binding.get("consumed") if isinstance(binding, dict) else None
+        if isinstance(slot, dict) and isinstance(slot.get("review_content_id"), str):
+            consumed.add(slot["review_content_id"])
+        approval = work_item.get("plan_approval")
+        if isinstance(approval, dict) and isinstance(approval.get("approved_review_content_id"), str):
+            consumed.add(approval["approved_review_content_id"])
+        if review_content_id in consumed:
+            return True
+    else:
+        current = work_item.get("implementation_revision")
+        if (isinstance(current, int) and not isinstance(current, bool)
+                and isinstance(record["revision"], int) and record["revision"] <= current
+                and record["verdict"] == "REVISE"):
+            return True
+    ledger = work_item.get("plan_review_stages" if stage == "plan" else "implementation_review_stages")
+    entry = ledger.get(record["role"]) if isinstance(ledger, dict) else None
+    return (record["verdict"] == "APPROVE" and isinstance(entry, dict)
+            and entry.get("bundle_id") == record["bundle_id"])
+
+
+def _read_stage_baseline_checked(repo_root: Path, work_item_id: str, role: str) -> dict:
+    """`read_stage_baseline`'s body: raises on any inconsistency."""
+    stage = next(key for key, value in _STAGE_BASELINE_ROLES.items() if value == role)
+    role_dir = _stage_baseline_role_dir(repo_root, work_item_id, role)
+    root = _stage_baseline_root(repo_root, work_item_id)
+    for directory in (root.parent, root, role_dir):
+        if directory.is_symlink() or not directory.is_dir():
+            raise ValueError(f"{directory} is not a directory")
+    record_path, verdict_path = role_dir / "BASELINE.json", role_dir / "VERDICT.md"
+    for path in (record_path, verdict_path):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"{path} is not a regular file")
+    record = json.loads(record_path.read_text())
+    if not isinstance(record, dict) or set(record) != _STAGE_BASELINE_KEYS:
+        raise ValueError("the record's key set is wrong")
+    if record["schema_version"] != 1 or record["work_item_id"] != work_item_id or record["role"] != role:
+        raise ValueError("the record names another item, role or schema")
+    if record["verdict"] not in _STAGE_BASELINE_VERDICTS:
+        raise ValueError("the record's verdict is neither REVISE nor APPROVE")
+    for key in ("state_revision", "revision"):
+        if not isinstance(record[key], int) or isinstance(record[key], bool) or record[key] < 1:
+            raise ValueError(f"the record's {key} is not a positive integer")
+    review_content_id = record["review_content_id"]
+    if not isinstance(review_content_id, str) or not _FULL_SHA256_RE.fullmatch(review_content_id):
+        raise ValueError("the record's review_content_id is not 64 hex")
+    if record["bundle_id"] is not None and not isinstance(record["bundle_id"], str):
+        raise ValueError("the record's bundle_id is neither a string nor null")
+    if not isinstance(record["recorded_at"], str):
+        raise ValueError("the record's recorded_at is not a string")
+    classification = record["classification"]
+    if not isinstance(classification, dict) or set(classification) != _STAGE_BASELINE_CLASSIFICATION_KEYS[stage]:
+        raise ValueError("the record's classification key set is wrong")
+    head = record["reviewed_implementation_head"]
+    if stage == "plan":
+        if head is not None:
+            raise ValueError("a plan baseline names no implementation head")
+    elif not isinstance(head, str) or not _FULL_SHA1_RE.fullmatch(head):
+        raise ValueError("the record's reviewed_implementation_head is not 40 hex")
+
+    verdict_text = verdict_path.read_text()
+    header = parse_review_feedback_header(verdict_text)
+    if (header["work_item"] is not None and header["work_item"] != work_item_id) or (
+            header["reviewer_role"] != role or header["status"] != record["verdict"]
+            or header["review_content_id"] != review_content_id):
+        raise ValueError("VERDICT.md disagrees with the record")
+
+    work_items, _active = _load_workflow_state_work_items(Path(repo_root), None)
+    work_item = work_items.get(work_item_id)
+    if not isinstance(work_item, dict):
+        raise ValueError("the work item is unknown")
+    base, work_item_type = work_item["base_commit"], work_item["work_item_type"]
+    pin_dir = None
+    if stage == "plan":
+        pin_dir = role_dir / "pin"
+        _pin_files(pin_dir)
+        recomputed, _ = compute_review_content_id_plan_stage_from_pin(
+            Path(repo_root), pin_dir, base, work_item_type, work_item_id, record["revision"],
+            frozenset(classification["protected_paths"]),
+            MappingProxyType(dict(classification["excluded_paths"])),
+            MappingProxyType(dict(classification["excluded_prefixes"])),
+        )
+    else:
+        _run(["git", "merge-base", "--is-ancestor", head, "HEAD"], cwd=Path(repo_root))
+        recomputed, _ = compute_review_content_id_implementation_stage_at_commit(
+            Path(repo_root), base, head, work_item_type, work_item_id,
+            *(MappingProxyType(dict(classification[key])) for key in (
+                "protected_paths", "protected_prefixes", "excluded_paths", "excluded_prefixes")),
+        )
+    if recomputed != review_content_id:
+        raise ValueError("the recorded content no longer recomputes to the recorded review_content_id")
+    if not _stage_baseline_known_to_state(work_item, stage, record):
+        raise ValueError("the item's state does not know the recorded round")
+    return dict(record, verdict_text=verdict_text, pin_dir=pin_dir)
+
+
+def read_stage_baseline(repo_root: Path, work_item_id: str, role: str) -> dict | None:
+    """The role's baseline record (D-Baseline), plus `verdict_text` and
+    `pin_dir` (the copied pin at the plan stage, else `None`), or `None` for
+    anything missing, malformed, inconsistent with itself or with the
+    repository: the explicit full-review fallback of the manual section."""
+    try:
+        validate_work_item_id(work_item_id)
+        return _read_stage_baseline_checked(Path(repo_root), work_item_id, role)
+    except Exception:  # noqa: BLE001 -- every inconsistency is the same fallback
+        return None
+
+
 def _previous_findings_text(repo_root: Path, work_item_id: str, previous_id: str | None) -> str:
     """The text of `<feedback_dir>/REVIEW_FEEDBACK.md` when its header's
     `review_content_id` is the previous round's id, else "not available"."""
@@ -3163,37 +3405,82 @@ def _previous_findings_text(repo_root: Path, work_item_id: str, previous_id: str
     return content.rstrip("\n")
 
 
-def _render_changes_since_review(
-    *, work_item_id: str, stage: str, previous_id: str | None, previous_revision: object,
-    current_id: str, current_revision: object, extra_lines: list[str], findings: str, diff: bytes,
-) -> bytes:
-    lines = [
-        "# CHANGES_SINCE_REVIEW.md -- reviewer convenience only: outside bundle_id and",
-        "# review_content_id. The stage's protected content, previous round -> this round,",
-        "# and the previous round's findings. A round may review only these changes",
-        "# (`Review scope: changes`); any APPROVE is a full review of the whole bundle.",
-        f"work_item_id: {work_item_id}",
-        f"stage: {stage}",
-        f"previous_review_content_id: {previous_id or _CHANGES_NOT_AVAILABLE}",
-        f"previous_revision: {previous_revision if previous_revision is not None else _CHANGES_NOT_AVAILABLE}",
-        f"review_content_id: {current_id}",
-        f"revision: {current_revision if current_revision is not None else _CHANGES_NOT_AVAILABLE}",
-        *extra_lines,
-        "",
-        "## Previous findings",
-        "",
-        findings,
-        "",
-        "## Changes",
-        "",
-        "```diff",
+_CHANGES_ROLES = {
+    "plan": ("LOCAL_MODEL_PLAN_REVIEW", "MANUAL_EXTERNAL_PLAN_REVIEW"),
+    "implementation": ("LOCAL_MODEL_IMPLEMENTATION_REVIEW", "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"),
+}
+_SECTION_NO_RECORD = "no previous review of this stage is recorded"
+_SECTION_UNIDENTIFIABLE = "the previous round cannot be identified"
+
+
+class _NoSectionBasis(Exception):
+    """A section builder's way to say "this stage has no basis" with one of the
+    two closed reasons (`D-Keyed`)."""
+
+
+def _render_section(role: str, section: dict | str) -> list[bytes]:
+    """One `## <ROLE>` section: the unavailable line when `section` is a reason
+    string, else the basis lines, the previous findings and the fenced diff."""
+    if isinstance(section, str):
+        return [f"## {role}\n\nnot available ({section}): review the whole bundle.\n".encode("utf-8")]
+    head = [
+        f"## {role}", "",
+        f"previous_review_content_id: {section['previous_id'] or _CHANGES_NOT_AVAILABLE}",
+        "previous_revision: "
+        f"{section['previous_revision'] if section['previous_revision'] is not None else _CHANGES_NOT_AVAILABLE}",
+        *section["extra_lines"], "",
+        "### Previous findings", "", section["findings"], "",
+        "### Changes", "", "```diff",
     ]
-    body = ("\n".join(lines) + "\n").encode("utf-8") + diff
+    diff = section["diff"]
+    body = ("\n".join(head) + "\n").encode("utf-8") + diff
     if diff and not diff.endswith(b"\n"):
         body += b"\n"
     if not diff:
         body += b"(no change to the protected content)\n"
-    return body + b"```\n"
+    return [body + b"```\n"]
+
+
+def _render_changes_since_review(
+    *, work_item_id: str, stage: str, current_id: str, current_revision: object, sections: list[tuple[str, dict | str]],
+) -> bytes:
+    lines = [
+        "# CHANGES_SINCE_REVIEW.md -- reviewer convenience only: outside bundle_id and",
+        "# review_content_id. One section per review stage: read the one named for your role.",
+        "# Its stage's protected content, previous round -> this round, and that round's",
+        "# findings. A round may review only these changes (`Review scope: changes`); any",
+        "# APPROVE is a full review of the whole bundle; a role whose section is not",
+        "# available reviews the whole bundle.",
+        f"work_item_id: {work_item_id}",
+        f"stage: {stage}",
+        f"review_content_id: {current_id}",
+        f"revision: {current_revision if current_revision is not None else _CHANGES_NOT_AVAILABLE}",
+        "",
+    ]
+    out = ("\n".join(lines)).encode("utf-8")
+    for index, (role, section) in enumerate(sections):
+        if index:
+            out += b"\n"
+        out += b"".join(_render_section(role, section))
+    return out
+
+
+def _collect_sections(stage: str, builders: dict[str, Callable[[], dict]]) -> list[tuple[str, dict | str]]:
+    """Runs each role's builder separately: a `_NoSectionBasis` is that
+    section's reason, any other error is "the previous round cannot be
+    identified" plus one warning line. One section failing never touches the
+    other."""
+    sections: list[tuple[str, dict | str]] = []
+    for role in _CHANGES_ROLES[stage]:
+        try:
+            sections.append((role, builders[role]()))
+        except _NoSectionBasis as exc:
+            sections.append((role, str(exc)))
+        except Exception as exc:  # noqa: BLE001 -- reviewer convenience; never fails a generation
+            print(f"warning: {CHANGES_SINCE_REVIEW_FILE} {role} section not written "
+                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
+            sections.append((role, _SECTION_UNIDENTIFIABLE))
+    return sections
 
 
 def _pin_files(pin_dir: Path) -> dict[str, Path]:
@@ -3214,6 +3501,21 @@ def _pin_files(pin_dir: Path) -> dict[str, Path]:
     return files
 
 
+def _plan_pin_diff(old_pin_dir: Path, new_pin_dir: Path) -> bytes:
+    """The shared plan-stage diff loop: one pin tree against another."""
+    old_files = _pin_files(Path(old_pin_dir))
+    new_files = _pin_files(Path(new_pin_dir))
+    diff = b""
+    with tempfile.TemporaryDirectory() as tmp:
+        os.symlink(Path(old_pin_dir).resolve(), Path(tmp) / "a")
+        os.symlink(Path(new_pin_dir).resolve(), Path(tmp) / "b")
+        for rel in sorted(set(old_files) | set(new_files)):
+            left = f"a/{rel}" if rel in old_files else "/dev/null"
+            right = f"b/{rel}" if rel in new_files else "/dev/null"
+            diff += _pinned_git_diff(["--no-index", "--", left, right], Path(tmp), prefixes=("", ""))
+    return diff
+
+
 def _plan_stage_changes(
     repo_root: Path, work_item_id: str, out_path: Path, outgoing_bundle_dir: Path,
     outgoing_pin_dir: Path, staging_pin_dir: Path,
@@ -3222,38 +3524,70 @@ def _plan_stage_changes(
     current_id = new_fields["review_content_id"]
     if new_fields["stage"] != "plan" or new_fields["work_item_id"] != work_item_id or not current_id:
         return None
-    old_fields = read_plan_stage_manifest_fields(Path(outgoing_bundle_dir) / "MANIFEST.md")
+    old_manifest = Path(outgoing_bundle_dir) / "MANIFEST.md"
+    old_fields = read_plan_stage_manifest_fields(old_manifest)
     previous_id = old_fields["review_content_id"]
-    if old_fields["stage"] != "plan" or old_fields["work_item_id"] != work_item_id or not previous_id:
-        return None
-    if previous_id == current_id:
+    if previous_id == current_id and old_fields["stage"] == "plan" and old_fields["work_item_id"] == work_item_id:
         # A wrapper-only regeneration of unchanged, bound content: the outgoing pin is
         # already this round's pin, so the previous round's pin is gone. Carry the live
-        # file forward when it names this content, else there is nothing to say.
+        # file (both sections) forward when it names this content, else there is nothing to say.
         live = Path(outgoing_bundle_dir).parent / CHANGES_SINCE_REVIEW_FILE
         if live.is_symlink() or not live.is_file():
             return None
         data = live.read_bytes()
         match = _CHANGES_PREAMBLE_ID_RE.search(data.decode("utf-8", errors="replace"))
         return data if match and match.group(1) == current_id else None
-    if previous_id not in _consumed_plan_review_content_ids_of(repo_root, work_item_id):
+
+    def local_section() -> dict:
+        if not old_manifest.is_file():
+            raise _NoSectionBasis(_SECTION_NO_RECORD)
+        if old_fields["stage"] != "plan" or old_fields["work_item_id"] != work_item_id or not previous_id:
+            raise _NoSectionBasis(_SECTION_UNIDENTIFIABLE)
+        if previous_id not in _consumed_plan_review_content_ids_of(repo_root, work_item_id):
+            raise _NoSectionBasis(_SECTION_NO_RECORD)
+        return {
+            "previous_id": previous_id, "previous_revision": old_fields["plan_revision"], "extra_lines": [],
+            "findings": _previous_findings_text(repo_root, work_item_id, previous_id),
+            "diff": _plan_pin_diff(Path(outgoing_pin_dir), Path(staging_pin_dir)),
+        }
+
+    def manual_section() -> dict:
+        baseline = read_stage_baseline(repo_root, work_item_id, _CHANGES_ROLES["plan"][1])
+        if baseline is None:
+            raise _NoSectionBasis(_SECTION_NO_RECORD)
+        if baseline["review_content_id"] == current_id:
+            raise _NoSectionBasis(_SECTION_UNIDENTIFIABLE)
+        return {
+            "previous_id": baseline["review_content_id"], "previous_revision": baseline["revision"],
+            "extra_lines": [], "findings": baseline["verdict_text"].rstrip("\n"),
+            "diff": _plan_pin_diff(Path(baseline["pin_dir"]), Path(staging_pin_dir)),
+        }
+
+    local_role, manual_role = _CHANGES_ROLES["plan"]
+    sections = _collect_sections("plan", {local_role: local_section, manual_role: manual_section})
+    if all(isinstance(section, str) for _role, section in sections):
         return None
-    old_files = _pin_files(Path(outgoing_pin_dir))
-    new_files = _pin_files(Path(staging_pin_dir))
-    diff = b""
-    with tempfile.TemporaryDirectory() as tmp:
-        os.symlink(Path(outgoing_pin_dir).resolve(), Path(tmp) / "a")
-        os.symlink(Path(staging_pin_dir).resolve(), Path(tmp) / "b")
-        for rel in sorted(set(old_files) | set(new_files)):
-            left = f"a/{rel}" if rel in old_files else "/dev/null"
-            right = f"b/{rel}" if rel in new_files else "/dev/null"
-            diff += _pinned_git_diff(["--no-index", "--", left, right], Path(tmp), prefixes=("", ""))
     return _render_changes_since_review(
-        work_item_id=work_item_id, stage="plan", previous_id=previous_id,
-        previous_revision=old_fields["plan_revision"], current_id=current_id,
-        current_revision=new_fields["plan_revision"], extra_lines=[],
-        findings=_previous_findings_text(repo_root, work_item_id, previous_id), diff=diff,
+        work_item_id=work_item_id, stage="plan", current_id=current_id,
+        current_revision=new_fields["plan_revision"], sections=sections,
     )
+
+
+def _implementation_diff(
+    repo_root: Path, old_head: str, old_sets: tuple[Mapping[str, str], ...], new_sets: tuple[Mapping[str, str], ...],
+) -> bytes:
+    """The protected-set diff from `old_head` to the working tree; its paths
+    are selected from the union of the old and the new classification."""
+    changed = _run(["git", "-c", "core.quotepath=off", "diff", "--no-renames", "--name-only", "-z", old_head], cwd=repo_root)
+    protected: set[str] = set()
+    for path in filter(None, changed.split("\0")):
+        for sets in (old_sets, new_sets):
+            try:
+                if classify_path_implementation_stage(path, *sets) == "protected":
+                    protected.add(path)
+            except UnclassifiedPathError:
+                continue
+    return _pinned_git_diff([old_head, "--", *sorted(protected)], repo_root) if protected else b""
 
 
 def _implementation_stage_changes(
@@ -3264,52 +3598,69 @@ def _implementation_stage_changes(
     work_items, _active = _load_workflow_state_work_items(repo_root, None)
     work_item = work_items.get(work_item_id) or {}
     revision = work_item.get("implementation_revision")
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 2:
-        return None
-    records = workflow_state.discover_bundle_generation_record_commits(
-        repo_root, work_item_id, work_item["base_commit"], "HEAD",
-    )
-    record_commit = records.get(f"{work_item_id}/{revision - 1}")
-    if record_commit is None:
-        return None
-    old_state = json.loads(_read_bytes_at_source(repo_root, "docs/ai-workflow/WORKFLOW_STATE.json", record_commit))
-    old_head = old_state["work_items"][work_item_id]["reviewed_implementation_head"]
-    if not isinstance(old_head, str) or not re.fullmatch(r"[0-9a-f]{40}", old_head):
-        return None
-    artifacts_path = artifacts_path_for_work_item(work_item_id)
-    old_sets = load_implementation_stage_classification(repo_root, artifacts_path, at_commit=old_head)
-    new_sets = load_implementation_stage_classification(repo_root, artifacts_path)
-    changed = _run(["git", "-c", "core.quotepath=off", "diff", "--no-renames", "--name-only", "-z", old_head], cwd=repo_root)
-    protected: set[str] = set()
-    for path in filter(None, changed.split("\0")):
-        for sets in (old_sets, new_sets):
-            try:
-                if classify_path_implementation_stage(path, *sets) == "protected":
-                    protected.add(path)
-            except UnclassifiedPathError:
-                continue
-    diff = _pinned_git_diff([old_head, "--", *sorted(protected)], repo_root) if protected else b""
     new_fields = read_manifest_identifiers(out_path.parent / "current" / "MANIFEST.md")
     current_id = new_fields.get("review_content_id")
     if not current_id:
         return None
-    previous_id = None
-    old_manifest = Path(outgoing_bundle_dir) / "MANIFEST.md"
-    if old_manifest.is_file():
-        text = old_manifest.read_text(errors="replace")
-        stage_match = _MANIFEST_STAGE_LINE_RE.search(text)
-        head_match = _MANIFEST_REVIEWED_HEAD_LINE_RE.search(text)
-        if (
-            stage_match and stage_match.group(1) == "implementation"
-            and _read_manifest_binding_fields(old_manifest)["work_item_id"] == work_item_id
-            and head_match and head_match.group(1) == old_head
-        ):
-            previous_id = read_manifest_identifiers(old_manifest).get("review_content_id")
+    artifacts_path = artifacts_path_for_work_item(work_item_id)
+    new_sets = load_implementation_stage_classification(repo_root, artifacts_path)
+
+    def local_section() -> dict:
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 2:
+            raise _NoSectionBasis(_SECTION_NO_RECORD)
+        records = workflow_state.discover_bundle_generation_record_commits(
+            repo_root, work_item_id, work_item["base_commit"], "HEAD",
+        )
+        record_commit = records.get(f"{work_item_id}/{revision - 1}")
+        if record_commit is None:
+            raise _NoSectionBasis(_SECTION_UNIDENTIFIABLE)
+        old_state = json.loads(_read_bytes_at_source(repo_root, "docs/ai-workflow/WORKFLOW_STATE.json", record_commit))
+        old_head = old_state["work_items"][work_item_id]["reviewed_implementation_head"]
+        if not isinstance(old_head, str) or not re.fullmatch(r"[0-9a-f]{40}", old_head):
+            raise _NoSectionBasis(_SECTION_UNIDENTIFIABLE)
+        old_sets = load_implementation_stage_classification(repo_root, artifacts_path, at_commit=old_head)
+        diff = _implementation_diff(repo_root, old_head, old_sets, new_sets)
+        previous_id = None
+        old_manifest = Path(outgoing_bundle_dir) / "MANIFEST.md"
+        if old_manifest.is_file():
+            text = old_manifest.read_text(errors="replace")
+            stage_match = _MANIFEST_STAGE_LINE_RE.search(text)
+            head_match = _MANIFEST_REVIEWED_HEAD_LINE_RE.search(text)
+            if (
+                stage_match and stage_match.group(1) == "implementation"
+                and _read_manifest_binding_fields(old_manifest)["work_item_id"] == work_item_id
+                and head_match and head_match.group(1) == old_head
+            ):
+                previous_id = read_manifest_identifiers(old_manifest).get("review_content_id")
+        return {
+            "previous_id": previous_id, "previous_revision": revision - 1,
+            "extra_lines": [f"previous_reviewed_implementation_head: {old_head}"],
+            "findings": _previous_findings_text(repo_root, work_item_id, previous_id), "diff": diff,
+        }
+
+    def manual_section() -> dict:
+        baseline = read_stage_baseline(repo_root, work_item_id, _CHANGES_ROLES["implementation"][1])
+        if baseline is None:
+            raise _NoSectionBasis(_SECTION_NO_RECORD)
+        if baseline["review_content_id"] == current_id:
+            raise _NoSectionBasis(_SECTION_UNIDENTIFIABLE)
+        old_head = baseline["reviewed_implementation_head"]
+        old_sets = tuple(MappingProxyType(dict(baseline["classification"][key])) for key in (
+            "protected_paths", "protected_prefixes", "excluded_paths", "excluded_prefixes"))
+        return {
+            "previous_id": baseline["review_content_id"], "previous_revision": baseline["revision"],
+            "extra_lines": [f"previous_reviewed_implementation_head: {old_head}"],
+            "findings": baseline["verdict_text"].rstrip("\n"),
+            "diff": _implementation_diff(repo_root, old_head, old_sets, new_sets),
+        }
+
+    local_role, manual_role = _CHANGES_ROLES["implementation"]
+    sections = _collect_sections("implementation", {local_role: local_section, manual_role: manual_section})
+    if all(isinstance(section, str) for _role, section in sections):
+        return None
     return _render_changes_since_review(
-        work_item_id=work_item_id, stage="implementation", previous_id=previous_id,
-        previous_revision=revision - 1, current_id=current_id, current_revision=revision,
-        extra_lines=[f"previous_reviewed_implementation_head: {old_head}"],
-        findings=_previous_findings_text(repo_root, work_item_id, previous_id), diff=diff,
+        work_item_id=work_item_id, stage="implementation", current_id=current_id,
+        current_revision=revision, sections=sections,
     )
 
 
@@ -3317,13 +3668,16 @@ def write_changes_since_review(
     repo_root: Path, work_item_id: str, stage: str, out_path: Path, *,
     outgoing_bundle_dir: Path, outgoing_pin_dir: Path | None = None, staging_pin_dir: Path | None = None,
 ) -> bool:
-    """Builds `CHANGES_SINCE_REVIEW.md` at `out_path` (`D-Changes`) and returns
-    whether it wrote one. `stage` is `"plan"` (the outgoing `current/` and pin
-    against the new staging pin; `out_path`'s sibling `current/` holds the new
-    manifest) or `"implementation"` (the previous round's generation-record
-    commit against the working tree; `outgoing_bundle_dir` holds the outgoing
-    `MANIFEST.md`). It catches its own errors: any failure deletes `out_path`,
-    prints one warning line and returns `False`."""
+    """Builds `CHANGES_SINCE_REVIEW.md` at `out_path` (`D-Keyed`) and returns
+    whether it wrote one. `stage` is `"plan"` (the outgoing `current/` and pin,
+    and the manual baseline's pin, against the new staging pin; `out_path`'s
+    sibling `current/` holds the new manifest) or `"implementation"` (the
+    previous round's generation-record commit, and the manual baseline's head,
+    against the working tree; `outgoing_bundle_dir` holds the outgoing
+    `MANIFEST.md`). The file holds one section per review stage and is written
+    when at least one has a basis. Each section's errors are caught on their
+    own; any other failure deletes `out_path`, prints one warning line and
+    returns `False`."""
     out_path = Path(out_path)
     repo_root = Path(repo_root)
     try:

@@ -127,7 +127,8 @@ last attempt's are the freshest.
 
 ## Functional review checklist
 
-Scope: implementation revision 2 (technical approval recorded at `3cd336b`). Run every flow against a scratch
+Scope: implementation revision 3 (technical approval recorded at `18a1036`; revision 2's flows 1-11 are unchanged, round 1's two
+documentation fixes are the difference). Run every flow against a scratch
 repository, never this one.
 
 ### Setup
@@ -189,11 +190,11 @@ documentation only; no remediation child):
 - Flow 11: `docs/common-problems.md` ("A review the Controller ran did not finish") now describes the limit window and
   the limit recognition for both the Codex and the Claude reviewer.
 
-Re-test: flow 1's command and the two sentences in that section; then a fresh implementation review of the post-fix
-bundle.
+Re-test: flow 1's command and the two sentences in that section (the post-fix implementation review is done and the
+technical approval is recorded).
 
 ## Next action
 
-After the post-fix implementation review and technical approval, re-test as above and put findings in
+Re-test as above and put findings in
 `.ai-review/workflow-controller-review-modes/feedback/FUNCTIONAL_REVIEW.md`. Clean testing: `/accept-milestone`.
 Findings: `/apply-functional-review workflow-controller-review-modes`.

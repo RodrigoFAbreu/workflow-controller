@@ -7,9 +7,9 @@
 #62-#67 and #71-#75): documentation and `check_docs` rules, gaps in the test-leftover guard and the usage-limit
 tests, two flaky worker tests, the `"1"` plan round count, a full model id for the Claude reviewer, the review's own
 harness named in recovery messages, one-pass `telemetry` rounds with a Claude review's cost and tokens kept, and
-Workflow 2.12.0 vendored for the tests. It is released as the patch release **1.13.1** when its `fix:` pull request
-(#77) merges, which also closes the sixteen issues. No `docs/releases/1.13.1.md` was written by the milestone; the
-release notes come in the docs pull request after the release.
+Workflow 2.12.0 vendored for the tests. Its `fix:` pull request (#77) merged on 2026-10-17 (squash `f46999d`) and
+closed the sixteen issues, and it is released as the patch release **1.13.1**. The release notes are
+`docs/releases/1.13.1.md`.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).

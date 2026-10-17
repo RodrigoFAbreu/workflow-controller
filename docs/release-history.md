@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.13.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0 and 2.12.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.13.1; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0 and 2.12.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.13.1 | A patch release that fixes sixteen review follow-ups and known defects: a model alias for the Claude reviewer is refused before launch, a Claude review's cost and tokens are kept for `telemetry`, recovery messages name the review's harness, and the plan round cap works on `"1"`-governed work items (no new setting) | [1.13.1](releases/1.13.1.md) |
 | 1.13.0 | The owner chooses how the external review runs (`review.mode`, `--review-mode`; settings generation 8): a fresh Claude reviewer under a lowered gate policy, so a one-provider user is not blocked, with the `review_mode_unavailable` gate | [1.13.0](releases/1.13.0.md) |
 | 1.12.0 | A protocol review loop stops at a round cap per stage (`review.round_cap`, default 4, `--review-round-cap`; settings generation 7) with the `review_round_cap_reached` gate, and `telemetry` groups jobs by action, stage and round | [1.12.0](releases/1.12.0.md) |
 | 1.11.0 | A worker that reaches the usage limit mid-job having changed nothing is recorded `INTERRUPTED`; `run` waits for the reset and repeats the step (exit 17 for `step`; no new setting) | [1.11.0](releases/1.11.0.md) |

@@ -2,199 +2,48 @@
 
 ## Status
 
-**Awaiting functional review.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14), plan revision 5
-(`docs/ai-workflow/CONTROLLER_REVIEW_MODES_PLAN.md`), approved by policy at `4def744`. Base commit `40f9cef`. The
-previous milestone, `workflow-controller-review-convergence`, is archived at
-`docs/milestones/completed/workflow-controller-review-convergence.md`.
+**Complete.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14) reached
+`MILESTONE_COMPLETE` on 2026-10-17. The owner now chooses how the external review runs: the setting `review.mode`
+(`auto`, `cross-model`, `single-provider`, `manual`) or `--review-mode` on `step`, `run` and `explain` for one
+command. Under a gate policy that lowers the external review, `auto` runs a fresh same-provider (Claude) reviewer
+(`reviewer.same_provider_model`, `reviewer.same_provider_effort`) inside a checked boundary, so a user with one
+provider is never blocked at an external gate. A mode that cannot run stops at the new `review_mode_unavailable` gate
+(exit 10) with the ways out. `explain` shows the mode and the choice; `telemetry --by review_mode` groups by mode. It
+is released as the minor release **1.13.0** when its `feat:` pull request (#70) merges (release notes
+`docs/releases/1.13.0.md`).
 
-The goal: the owner chooses how the external review runs (`review.mode`: `auto`, `cross-model`, `single-provider`,
-`manual`; `--review-mode` for one command), so a user with one provider is never blocked at an external gate.
-`docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of progress.
+The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
+acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).
+- Plan revision 5 was approved by policy at `4def744` after one Codex plan round (`APPROVE`, the first round). The
+  base commit is `40f9cef`.
+- Technical approval `18a1036` (implementation revision 3) was recorded by policy and is `CURRENT`: review content
+  id `09d09207`, reviewed implementation head `68f7dc3`. Revision 2 was approved at `3cd336b` after two Codex
+  implementation rounds (`REVISE` with I1-I4, then `APPROVE`); Codex round 3 approved revision 3 after the bounded
+  documentation fix.
+- Functional review round 1 (an independent Codex tester with fake reviewers only) passed nine of eleven flows and
+  raised two Optional documentation findings (flow 1's command, flow 11's limit description), fixed by
+  `d98c388`/`68f7dc3`. Round 2 passed every flow (flow-1 to flow-11), checked against evidence commit `9ba2f70`.
+- The Workflow's own GitHub query found pull request #70 at head `9ba2f70` with every check passing and no
+  standing objection.
 
-| Checkpoint | State |
-|---|---|
-| CP1 -- the mode setting and the choice | complete (see below) |
-| CP2 -- the Claude review harness | complete (see below) |
-| CP3 -- the same-provider review job | complete (see below) |
-| CP4 -- `explain`, telemetry and the lifecycle scenario | complete (see below) |
-| CP5 -- documentation and roadmap | complete (see below) |
+All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
+of this transition, including its eleven functional evidence records and its `acceptance_satisfaction` evidence, and
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C14 complete. The full milestone narrative is
+archived at `docs/milestones/completed/workflow-controller-review-modes.md`, with the review history (including the
+D9 operator pre-step and two later probes) and every minor review finding's disposition; the functional reports are
+`.ai-review/archive/workflow-controller-review-modes/functional-tester-round1-RESULTS.md` and
+`functional-review-round2-PASSED.md`.
 
-### CP1 -- what was built
-
-- `controller/settings.py`: the closed-choice setting type (`TYPE_CHOICE`), the rows `review.mode` (default `auto`),
-  `reviewer.same_provider_model` and `reviewer.same_provider_effort`, and table generation 8.
-- `controller/review_mode.py` (pure): `read_signal` reads the Workflow's `gate_policy` check through D3's allow-list
-  (the lowering clause, its label-disagreement clause and the `unreferenced_runs` clause; any other clause, or a
-  `fail`, cancels the signal for both stages); `choose` implements D1-D4; `Signal.key` is D6's key.
-- `controller/cli.py`: `--review-mode` on `step` and `run` (a bad value exits 2), `review.mode` and its source passed
-  to `job.execute_step` as `review_mode_options`.
-- `controller/job.py`: at an external gate of row 14 or 28 the step consults `choose`. `manual` and the default
-  (`auto` with nothing set) stop at the gate as before; `cross-model` without a distinct provider and an unsignalled
-  `single-provider` stop at the new `review_mode_unavailable` gate with one `GATE_BLOCKED` record. The
-  same-provider review itself is CP3's: until then a lowered-policy choice stops at the ordinary gate.
-- `tests/verify_captures/`: real `gate_policy` check answers from scratch repositories (a lowering adoption alone,
-  plus an unadopted tightening file, plus a floor with the file reverted, plus an invalid file, plus an
-  `unreferenced_runs` warning, and no policy), regenerated by `generate.py` and pinned by `tests/test_review_mode.py`.
-
-### CP2 -- what was built
-
-- `tests/harness_contract/claude/`: the D9 operator pre-step (run 2026-10-17 on `claude 2.1.296`): the recommended
-  argv and environment, the init/result/rate-limit events, the credential, state entries and layer matrix, each
-  pinned by a digest in its README.
-- `controller/review.py`: the runner is generalised -- `ReviewHarness` now carries its home, credential file and
-  lock, strip list, default binary, managed-layer directory, `build_home`, `environment` and `attempt` (an
-  `AttemptContext` in, an `Attempt` out), so Codex's steps moved into `_codex_attempt` unchanged and `CLAUDE` is data
-  plus `_claude_attempt`. `expected_headers` takes the harness's family; `build_copy` takes the strip list
-  (`.claude/`, `.mcp.json` for Claude); `copy_back_credentials` and `_settle` take the harness; `HARNESSES` holds
-  `claude` beside `codex`.
-- The Claude boundary: `claude_argv`/`check_claude_argv` (exact captured command line, effort validated),
-  `claude_environment`, `build_claude_home`/`check_claude_home`, `check_claude_outside_layers` (managed policy),
-  `check_claude_init` (tools, no MCP, `dontAsk`, no skills, the model, no memory path) and the stream parser
-  (verdict from the `result` event, limit from a 429 result with a `rejected` event, readings from the stream).
-- `tests/fake_claude_review.py` and `tests/test_review_claude.py` (32 tests): captures pinned, argv/boundary
-  refusals by name, the fake held to the captures, a launch end to end (family header, retry, limit, deadline,
-  credential copy-back, stripped project hooks and MCP, repository guard).
-
-### CP3 -- what was built
-
-- `controller/job.py`: `_run_review_job` runs the chosen harness. A same-provider choice (`Choice.lowered`) runs `claude`
-  on the `reviewer.same_provider_*` options that `cli._review_mode_options` now carries as `same_provider`; Codex's path
-  is unchanged. The usage gate is asked for the provider of the harness's family (Claude for `claude`, D8), the header
-  check uses the harness's family, and the job record's `review` block gains `mode`, `mode_source` and, for a
-  same-provider review, `lowered: true` and `signal_key`. The ledger `run_ref` is `<harness.name>:<job id>`.
-- A `DistinctReviewerModelsRequiredError` from `record-external-result` ends a same-provider review `INCOMPLETE`
-  (`DistinctReviewerModelsRequired`) with D6's message. `_sticky_review_stop` reads the latest review job: while it
-  ended that way at the same stage, state identity and signal key and `choose` again selects a same-family reviewer, the
-  step stops at `review_mode_unavailable` without launching.
-- `controller/review_mode.py`: `remedies` (D6's three ways out, filtered by mode) is part of the single-provider refusal
-  too. `_review_message` and the notification name the harness that ran.
-- `tests/test_review_same_provider.py` (14 tests) on the real vendored Workflow: a lowered `auto` review end to end, a
-  `REVISE`, `single-provider` with and without the signal, a limit, the real Workflow refusal with its sticky stop and
-  every release path. `tests/test_review_job.py`'s double takes the harness's family.
-
-### CP4 -- what was built
-
-- `controller/job.py`: `review_mode_report` (read-only; the same `_choose_review` and `_sticky_review_stop` the step
-  uses) gives `explain` the mode, its source, the stage, the choice (`gate`, `review` or `refused`), the harness, the
-  `lowered` label and, for a stop, the step's own text. `_sticky_stop_message` is shared by the step and `explain`.
-- `controller/cli.py`: `explain` takes `--review-mode`; at an external review gate it prints `review mode: ...` and
-  what the next step does, and `--json` gains a `review_mode` block (absent elsewhere; no existing key changes).
-  `settings show` already lists the three rows (CP1).
-- `controller/telemetry.py`: rows gain `review_mode` and `lowered`; `--by review_mode` groups by both; a review record
-  without the keys reads `cross-model`, a job that is not a review has `null` (printed `none`).
-- `tests/scenarios/review.py`: `scenario-review-mode-single-provider` (mutation `mode-ignored`; in `review.py` rather
-  than `lifecycle.py` because it reuses that module's `World`) drives `auto`, `cross-model`, `manual` and
-  `single-provider` through `cli.main` on a real vendored 2.9.0 Workflow against the fake `codex` and the fake review
-  `claude`. The lowered-policy signal is the captured one, patched in (the stub manager reports no adoption).
-- Tests: `ReportTest` in `tests/test_review_same_provider.py`, a telemetry test, a parser test and the new mutation row.
-
-### CP5 -- what was built
-
-- Documentation: `docs/guide/runtime.md` (the three rows, the mode table, generation 8), `docs/guide/commands.md`
-  (`--review-mode` on `step`, `run`, `explain`; `telemetry --by review_mode`), `docs/guide/workers.md` (the
-  same-provider reviewer and its boundary), `docs/run.md`, `docs/common-problems.md` (a run stopped at
-  `review_mode_unavailable`, D6's three paths), `docs/guide/development.md` (the new scenario),
-  `docs/releases/1.13.0.md` (names the `auto` change for a lowered policy), `docs/release-history.md`,
-  `docs/README.md`, and `docs/ROADMAP.md` (C14 complete, next CU1).
-- Fallout of CP1-CP4 fixed by the full suite: the `no_policy_lifecycle` golden regenerated (three settings rows
-  only) with its generator note and `test_trunk_preflight` taught the rows; the Codex harness looks its
-  environment and home builders up when called (the scenario mutations reach them again) and the two copy-back
-  mutations take the new `selected` argument; `review_mode.py` no longer names `record-external-result`
-  (only `protocol.py` may); the leftover inventory, the `execute_step` signature pin and the scenario count.
-- Verification: `python3 tools/check_docs.py` clean; golden `--check`: `external_implementation_review_decisions` and
-  `protocol_vs_legacy_differences` current, `no_policy_lifecycle` current after regeneration,
-  `plan_stage_decisions` differs (it differs on the base commit too); `python3 tools/run_tests.py` (4149 tests, 8
-  shards): green apart from the two Git 2.56 trailer failures (follow-up 12).
-
-### Self-review (SELF_REVIEWING_IMPLEMENTATION)
-
-The full milestone diff from `40f9cef` was reviewed against the plan (D1-D10, R1-R6). Findings fixed:
-
-- `controller/job.py`: `execute_step` documents `review_mode_options=None` as `auto`, but a lowered signal then
-  chose a same-provider review and raised `KeyError: 'same_provider'`. A same-provider choice without the
-  same-provider reviewer options is now the ordinary gate, and the docstring names the `same_provider` key (the CLI
-  always passes it, so a command's behaviour is unchanged). Test:
-  `tests/test_review_mode.py` `test_a_lowered_choice_without_same_provider_options_is_the_gate` (fails without the fix).
-- `controller/review_mode.py`: `needs_signal`'s docstring said a repository that sets nothing never asks `verify`;
-  `auto` with nothing set does ask (`JobChoiceTest` pins it). The docstring now names the modes that never ask.
-- Missing CP3 test: after the distinct-model refusal, an explicit `single-provider` with the gate turned human (the
-  `lowering_plus_file_tightened` capture) is refused again before launch, the message naming `--review-mode manual`
-  and no path 2 (`tests/test_review_same_provider.py`).
-
-Checked and left as they are: a Claude stream with no `init` event and a non-zero exit is never ingested
-(`launch_review` ingests no verdict from a non-zero exit); stream readings are account-wide window figures, so the
-last attempt's are the freshest.
-
-## Functional review checklist
-
-Scope: implementation revision 3 (technical approval recorded at `18a1036`; revision 2's flows 1-11 are unchanged, round 1's two
-documentation fixes are the difference). Run every flow against a scratch
-repository, never this one.
-
-### Setup
-
-- Install the milestone head into a throwaway environment (`pipx install --force .` in a scratch venv, or run with
-  `PYTHONPATH=<this checkout>`; see `docs/guide/development.md`).
-- A scratch repository managed by the vendored Workflow, in `AWAITING_LOCAL_*`/external-review phase for a plan or
-  implementation round, with a scratch bare `origin` and a fake `gh` on `PATH` (a clone's own `origin` is the real
-  repository). Use `tests/scenarios/review.py` as the model for this world.
-- For the same-provider flows: a Workflow gate policy that lowers the external review to human-free (the captured
-  lowering adoption in `tests/verify_captures/`), and `claude` logged in on the machine. For the cross-model flows:
-  `codex` logged in and `reviewer.harness` set.
-
-### Flows and expected results
-
-1. **Default is unchanged.** `workflow-controller settings show`: `review.mode` is `auto`,
-   `reviewer.same_provider_model` and `reviewer.same_provider_effort` are listed. With a non-lowered policy and
-   nothing set, `step` stops at the ordinary external review gate (as before).
-2. **`--review-mode manual`.** `step --review-mode manual <repo>` at an external gate stops at the ordinary gate and
-   launches nothing; `explain --review-mode manual` says so.
-3. **`--review-mode cross-model`, no distinct provider.** With `reviewer.harness` unset, `step` exits `10` at
-   `review_mode_unavailable`, launches nothing, writes one `GATE_BLOCKED` record; the text names the ways out.
-4. **`auto` with a lowered policy.** `step` runs a same-provider (Claude) review job; the job record's `review` block
-   has `mode`, `mode_source`, `lowered: true` and `signal_key`; the ledger `run_ref` is `claude:<job id>`; the verdict
-   is recorded through the Workflow and the gate advances (or `REVISE` loops as for Codex).
-5. **`--review-mode single-provider`.** With the lowered signal: as flow 4. Without it (unadopted or tightened
-   policy): stops at `review_mode_unavailable` before launch.
-6. **Distinct-model refusal.** If the Workflow refuses the verdict because the models are not distinct, the job ends
-   `INCOMPLETE` (`DistinctReviewerModelsRequired`) with the three remedies; a repeated `step` stops at
-   `review_mode_unavailable` without launching (sticky) until the signal, stage or mode changes.
-7. **Usage limit.** A rate-limit result from the Claude reviewer ends the job as a limit (Claude windows), not a
-   failure.
-8. **`explain`.** At an external gate it prints `review mode: ...`, the source, the choice (`gate`, `review` or
-   `refused`), the harness and what the next step does; `--json` has a `review_mode` block, absent elsewhere; no
-   other key changed.
-9. **`telemetry --by review_mode`** groups by mode and `lowered`; older review records read `cross-model`; jobs that
-   are not reviews print `none`.
-10. **Bad value.** `--review-mode bogus` exits `2`.
-11. **Docs.** `python3 tools/check_docs.py` is clean; `docs/run.md`, `docs/common-problems.md#a-run-stopped-at-review_mode_unavailable`
-    and `docs/guide/runtime.md` match what flows 1-10 showed.
-
-Automated coverage of the same flows: `python3 tools/run_tests.py` (scenario `scenario-review-mode-single-provider`).
-
-### Known limitations / out of scope
-
-- Two tests fail locally under Git 2.56 (bare-URL trailer rule, follow-up 12); `plan_stage_decisions` golden differs on
-  the base commit too.
-- The lowered-policy signal in the scenario is patched in (the stub manager reports no adoption); a real lowering
-  adoption needs a real Workflow policy repository.
-- Real Claude reviews need a live login and consume account usage; use the fake `claude` unless you want that.
-- No release is cut by this milestone (`docs/releases/1.13.0.md` is the note for the next one).
-
-### Functional review round 1 (applied)
-
-An independent tester ran flows 1-11: 9 passed, 2 raised Optional documentation findings, both fixed here (bounded,
-documentation only; no remediation child):
-
-- Flow 1: the checklist command took a repository argument that `settings show` does not accept; corrected above.
-- Flow 11: `docs/common-problems.md` ("A review the Controller ran did not finish") now describes the limit window and
-  the limit recognition for both the Codex and the Claude reviewer.
-
-Re-test: flow 1's command and the two sentences in that section (the post-fix implementation review is done and the
-technical approval is recorded).
+Deferred follow-ups, not conditions of acceptance:
+- **Minor review findings:** of fifteen Optional review items, ten were fixed, two dropped and three kept as follow-ups; two
+  of the fixed ones also keep a follow-up, so there are five, GitHub issues #71-#75 (label `review-follow-up`; #72 also `bug`), worked off in CU1.
+- **Known limitations kept out of scope:** the lowered-policy signal in the scenario is patched in (a real lowering
+  adoption needs a real Workflow policy repository); a real Claude review consumes account usage. The two Git 2.56
+  trailer tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
+  `plan_stage_decisions` golden differs on the base commit as well.
 
 ## Next action
 
-Re-test as above and put findings in
-`.ai-review/workflow-controller-review-modes/feedback/FUNCTIONAL_REVIEW.md`. Clean testing: `/accept-milestone`.
-Findings: `/apply-functional-review workflow-controller-review-modes`.
+`/milestone-plan` for CU1, the clean-up milestone (`docs/ROADMAP.md`, "Next, in order"): it works through the GitHub
+issues labelled `review-follow-up` and small known defects labelled `bug`, now #55-#59, #62-#67 and #71-#75. After it
+come C10, C12, C11 and the orchestrator series O1-O7.

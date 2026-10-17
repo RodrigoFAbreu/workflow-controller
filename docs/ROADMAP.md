@@ -13,14 +13,17 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 rounds and usage per stage (C13, review convergence, [11.13](#1113-review-convergence); accepted
 2026-10-16 by gate policy). It admits Workflow 2.5.1 and 2.6.0, and any Workflow that speaks
 Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow 2.12.0 with automatic gates
-(since 2026-10-16). C10 waited for C13 on purpose: it is the largest step left, and C13 makes its review
+(since 2026-10-16). C14, review modes ([11.14](#1114-review-modes)), is complete (accepted 2026-10-17
+by gate policy): the owner chooses how the external review runs (`review.mode`), so a user with one
+provider is never blocked at an external gate. It is released as 1.13.0 when its `feat:` pull request
+(#70) merges. C10 waited for C13 on purpose: it is the largest step left, and C13 makes its review
 rounds cheaper. What is complete is marked in the tables below; what each release changed is in the
 [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15 and 2026-10-16):
 1. CU1, the first clean-up milestone: it works through the GitHub issues labelled `review-follow-up`
-   (the minor review findings recorded at each acceptance; C13's are #63-#67) and small known defects
-   such as #62;
+   (the minor review findings recorded at each acceptance) and small known defects labelled `bug`:
+   now #55-#59, #62-#67 and #71-#75 (C13's are #63-#67, C14's #71-#75);
 2. C10, C12 and C11, then the orchestrator series O1-O7.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
@@ -68,7 +71,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C6 | Automated lifecycle scenarios: disposable repositories, fake workers, no model usage (complete, accepted 2026-10-12 by gate policy, no release) | — | [11.5](#115-automated-lifecycle-scenarios) |
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) (complete, released as 1.10.0, PR #45, squash `6aa8f66`; accepted 2026-10-15 by gate policy; ADR 0013; C10 reuses the seam, the supervision precedent and `record_external_result`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
 | C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage (complete, released as 1.12.0, PR #61, squash `e989b55`; accepted 2026-10-16 by gate policy) | C7, W8 | [11.13](#1113-review-convergence) |
-| C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review (complete in milestone `workflow-controller-review-modes`, to be released as 1.13.0) | C13, the Workflow's answers | [11.14](#1114-review-modes) |
+| C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review (complete, accepted 2026-10-17 by gate policy, `feat:` releases 1.13.0 when PR #70 merges) | C13, the Workflow's answers | [11.14](#1114-review-modes) |
 | CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up. The first comes after C14; later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
@@ -344,9 +347,14 @@ hurts now, else in a later step or the next clean-up milestone.
 36. [#59](https://github.com/RodrigoFAbreu/workflow-controller/issues/59): a roadmap step id is back on a user page, and `check_docs` does not catch step ids.
 37. [#63](https://github.com/RodrigoFAbreu/workflow-controller/issues/63): `telemetry` works out review rounds in time that grows with the square of the job records; make it one pass (C13 review; before C11 at the latest).
 38. [#64](https://github.com/RodrigoFAbreu/workflow-controller/issues/64): the runtime guide's before-and-after `telemetry` steps are loose, and it does not say that a review the Controller ran itself always shows a `~` round (C13 review; docs only).
-39. [#65](https://github.com/RodrigoFAbreu/workflow-controller/issues/65): no test runs the review round cap on a real Workflow 2.12.0 answer (C13 review; with C14 if it vendors a newer Workflow).
+39. [#65](https://github.com/RodrigoFAbreu/workflow-controller/issues/65): no test runs the review round cap on a real Workflow 2.12.0 answer (C13 review; C14 vendored no newer Workflow, so it is CU1's).
 40. [#66](https://github.com/RodrigoFAbreu/workflow-controller/issues/66): no test pins `controller/review_rounds.py`'s copy of the plan-review ready phases (C13 review).
 41. [#67](https://github.com/RodrigoFAbreu/workflow-controller/issues/67) (also `bug`): the plan round cap has no effect on a `"1"`-governed work item unless the cap is 1 (C13 review).
+42. [#71](https://github.com/RodrigoFAbreu/workflow-controller/issues/71): the unused `_review_gate` wrapper in `controller/job.py` is called only by tests (C14 review).
+43. [#72](https://github.com/RodrigoFAbreu/workflow-controller/issues/72) (also `bug`): a model alias in `reviewer.same_provider_model` is refused only after the review has run and been paid for (C14 review; measured 2026-10-17).
+44. [#73](https://github.com/RodrigoFAbreu/workflow-controller/issues/73): commit the Claude reviewer's symlink and outside-path containment probe as a capture (C14 review; the probe found every outside read denied).
+45. [#74](https://github.com/RodrigoFAbreu/workflow-controller/issues/74): recovery messages and the launch-refusal help still say "Codex" for a Claude review (C14 review).
+46. [#75](https://github.com/RodrigoFAbreu/workflow-controller/issues/75): keep the cost and token totals of a Claude review job for `telemetry` (C14 review).
 
 ---
 
@@ -1882,7 +1890,7 @@ milestones.
 
 ## 11.14 Review modes
 
-**Status:** Complete (implemented 2026-10-17 in milestone `workflow-controller-review-modes`; release 1.13.0 follows its pull request). Step C14 (owner decision, 2026-10-15): a small step of its own, not part of C10.
+**Status:** Complete (milestone `workflow-controller-review-modes`, accepted 2026-10-17 by gate policy; releases 1.13.0 when PR #70 merges). Step C14 (owner decision, 2026-10-15): a small step of its own, not part of C10.
 
 **Why.** A user with only one provider (Claude only today; later Codex only) must never be blocked by
 the cross-model review.

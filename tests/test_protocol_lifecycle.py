@@ -91,6 +91,43 @@ git("add", "-A")
 git("commit", "-q", "-m", f"approve the plan\\n\\nWorkflow-Plan-Approval: {digest}\\nWorkflow-Work-Item: {wid}\\n")
 """
 
+_POLICY_APPROVE_PLAN = """
+import datetime, subprocess
+root = Path.cwd()
+wid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*a):
+    return subprocess.run(["git", *a], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+box = {}
+def mutate(state):
+    box["record"] = ws.build_policy_approval_record(root, state, wid, "plan", now=now)
+    return ws.apply_plan_approval(state, wid, box["record"], now)
+ws.state_transaction(root, mutate)
+record = box["record"]
+git("add", "-A")
+git("commit", "-q", "-m", "approve the plan by policy\\n\\nWorkflow-Plan-Approval: " + record["approved_review_content_id"]
+    + "\\nWorkflow-Work-Item: " + wid + "\\nWorkflow-Gate-Satisfied-By: " + ws.gate_satisfied_by_trailer(record) + "\\n")
+"""
+
+_POLICY_TECHNICAL_APPROVAL = """
+import datetime, subprocess
+root = Path.cwd()
+wid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*a):
+    return subprocess.run(["git", *a], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+box = {}
+def mutate(state):
+    box["record"] = ws.build_policy_approval_record(root, state, wid, "implementation", now=now)
+    return ws.apply_technical_approval(state, wid, box["record"], now)
+ws.state_transaction(root, mutate)
+record = box["record"]
+git("add", "-A")
+git("commit", "-q", "-m", "approve the implementation by policy\\n\\nWorkflow-Technical-Approval: "
+    + record["approved_review_content_id"] + "\\nWorkflow-Work-Item: " + wid
+    + "\\nWorkflow-Gate-Satisfied-By: " + ws.gate_satisfied_by_trailer(record) + "\\n")
+"""
+
 _CHECKPOINT = """
 import datetime, subprocess
 root = Path.cwd()
@@ -205,16 +242,19 @@ _EFFECTS = {
 }
 
 
-def _result() -> worker.WorkerResult:
+def _result(report: str = "ok") -> worker.WorkerResult:
     return worker.WorkerResult(
         outcome="SUCCESS", returncode=0, session_id="s", is_error=False, subtype="success",
-        terminal_reason=None, stop_reason=None, result="ok", num_turns=1, permission_denials=[],
+        terminal_reason=None, stop_reason=None, result=report, num_turns=1, permission_denials=[],
         total_cost_usd=0.0, duration_ms=1, stdout="", stderr="", raw_json={})
 
 
 class Lifecycle:
     """A disposable ``release`` target seeded at a bound plan bundle, and the
     fake worker that performs the effect of each launched command."""
+
+    #: What the fake worker says at the end of a step.
+    report = "ok"
 
     def __init__(self, test: unittest.TestCase, release: str) -> None:
         self.test = test
@@ -258,7 +298,7 @@ class Lifecycle:
     def step(self) -> dict:
         def launch(task, *, cwd, **kwargs):
             self.effect(task)
-            return _result()
+            return _result(self.report)
 
         with mock.patch.object(worker, "launch", launch):
             return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime)
@@ -532,9 +572,9 @@ class GateLifecycle(Lifecycle):
                 return
             self.satisfied.append(words[1])
             if words[1] == "plan":
-                self.workflow(_APPROVE_PLAN, WID)
+                self.workflow(_POLICY_APPROVE_PLAN, WID)
             elif words[1] == "implementation":
-                self.workflow(_TECHNICAL_APPROVAL, WID)
+                self.workflow(_POLICY_TECHNICAL_APPROVAL, WID)
             else:
                 self.workflow(_SATISFY_ACCEPTANCE, WID, str(self.checks))
             return
@@ -588,12 +628,21 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertEqual(events.count("milestone_accepted"), 1)
         item = fixtures.state_entry(life.root, WID)
         self.assertIn("acceptance_satisfaction", item)
+        # The approvals are the vendored ``build_policy_approval_record``'s, not a human's: basis and evidence.
+        for field in ("plan_approval", "technical_approval"):
+            approval = item[field]
+            self.assertEqual(approval["basis"], "POLICY_SATISFIED", field)
+            evidence = approval["policy_evidence"]
+            self.assertEqual(approval["user_confirmation"], "policy:" + evidence["policy_digest"], field)
+            self.assertTrue(evidence["requirements"] and all(r["met"] for r in evidence["requirements"]), field)
         self.assertTrue({"14a", "28a", "38h"} <= set(life.rows), life.rows)
         self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
 
     def test_a_refused_validation_stops_the_run_after_two_launches_and_sends_no_approval(self) -> None:
         life = GateLifecycle(self)
         life.refused = {"plan"}
+        life.report = ("Refused: plan_approval is not satisfiable by policy; unmet: "
+                       "['distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol']. Nothing was written")
         life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
         first, second = life.step(), life.step()
         for record in (first, second):
@@ -612,6 +661,8 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         explained = life.explain()
         self.assertFalse(explained["automatic"])
         self.assertIn("no_progress_repeated", explained["gate"]["what_is_required"])
+        self.assertIn("distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol",
+                      explained["gate"]["what_is_required"])
 
     def pending_acceptance(self) -> GateLifecycle:
         """The acceptance stage reached with the pull request's checks still running: the validator is launched,

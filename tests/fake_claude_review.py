@@ -132,7 +132,8 @@ def _result_event(text: str, scenario: dict, model: str, *, error: bool, status:
         "type": "result", "subtype": "success", "is_error": error, "api_error_status": status,
         "terminal_reason": "api_error" if error else "completed", "num_turns": 3, "result": text,
         "session_id": str(uuid.uuid4()), "total_cost_usd": 0.01,
-        "usage": {"input_tokens": 12, "output_tokens": 300, "cache_read_input_tokens": 1000},
+        "usage": {"input_tokens": 12, "output_tokens": 300, "cache_creation_input_tokens": 50,
+                  "cache_read_input_tokens": 1000},
         "modelUsage": {model: {"inputTokens": 12, "outputTokens": 300, "costUSD": 0.01}},
         "permission_denials": [],
     }

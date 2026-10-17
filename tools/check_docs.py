@@ -71,6 +71,9 @@ USER_PAGES: tuple[tuple[str, int], ...] = (
     ("docs/README.md", 5),
 )
 
+#: The user pages outside ``docs/guide/``: the only pages the step-id rule covers.
+STEP_ID_PAGES = frozenset(rel for rel, _ in USER_PAGES if not rel.startswith("docs/guide/"))
+
 #: The pages whose fenced code blocks are command-checked.
 COMMAND_PAGES: tuple[tuple[str, int], ...] = (
     ("docs/install.md", 3),
@@ -103,6 +106,8 @@ GITHUB_REPOS = frozenset({"workflow-controller", "workflow-manager", "workflow"}
 
 HEADER_RE = re.compile(r"^> For: .+\. Last checked with: .+\.$")
 INTERNAL_ID_RES = (re.compile(r"\bCP\d+\b"), re.compile(r"\b[A-Z]{2,5}-R\d+-\d+\b"))
+#: A roadmap step id ("C9c", "C10"). Developers know the ids; task-page readers do not.
+STEP_ID_RE = re.compile(r"\bC\d+[a-z]?\b")
 SIGINT_EXIT_STATUS_FALLBACK = 130
 
 
@@ -731,6 +736,9 @@ def check_pages(root: Path, through: int) -> list[str]:
             problems.append(f"{rel}: {problem}")
         for found in internal_id_problems(text, ids):
             problems.append(f"{rel}: internal id {found!r} on a user page")
+        if rel in STEP_ID_PAGES:
+            for found in sorted({m.group(0) for m in STEP_ID_RE.finditer(blank_link_targets(text))}):
+                problems.append(f"{rel}: roadmap step id {found!r} on a task page")
     return problems
 
 

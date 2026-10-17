@@ -45,7 +45,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
-from . import gitrepo, runtime, usage
+from . import gitrepo, runtime, usage, worker_stream
 from .anchor import OWNERSHIP_VAR
 from .errors import ReviewLaunchRefusedError
 
@@ -1314,6 +1314,7 @@ class Attempt:
     readings: list | None = None
     failure: str | None = None
     first_readings: list | None = None
+    figures: dict | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1434,6 +1435,12 @@ CLAUDE_SYSTEM_LAYER_ENTRIES = ("managed-settings.json", "managed-settings.d", "m
 CLAUDE_FORBIDDEN_HOME_ENTRIES = (".claude", ".claude.json", "CLAUDE.md")
 
 
+#: The shape of a full model id as ``init`` reports it (#72). ``check_claude_init``
+#: compares the reported model to the requested one exactly, so a name that
+#: cannot be reported back (an alias) is refused before launch.
+CLAUDE_MODEL_ID_RE = re.compile(r"claude-[A-Za-z0-9._-]+")
+
+
 def claude_argv(*, binary: Path, model: str, effort: str) -> list[str]:
     """The only constructor of the Claude command line: the captured
     ``recommended_run`` (``argv.json``), the prompt on stdin. The effort is
@@ -1441,8 +1448,11 @@ def claude_argv(*, binary: Path, model: str, effort: str) -> list[str]:
     if effort not in CLAUDE_EFFORTS:
         raise _refuse(f"reviewer.same_provider_effort {effort!r} is not one of {', '.join(CLAUDE_EFFORTS)}",
                       check="effort", entry=effort)
-    if not model or model.startswith("-") or any(ch.isspace() for ch in model):
-        raise _refuse(f"reviewer.same_provider_model {model!r} is not a model name", check="model", entry=model)
+    if not CLAUDE_MODEL_ID_RE.fullmatch(model):
+        raise _refuse(f"reviewer.same_provider_model {model!r} is not a full Claude model id: it must begin "
+                      "'claude-' and hold only letters, digits, '.', '_' and '-' (an alias such as 'opus' is "
+                      "reported by Claude under another name, so the review would be refused at start)",
+                      check="model", entry=model)
     return [str(binary), "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
             "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--tools", ",".join(CLAUDE_TOOLS), "--permission-mode", "dontAsk", "--permission-prompts", "none",
@@ -1596,10 +1606,16 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
     run = run_bounded(command, cwd=layout.tree, env=ctx.env, timeout=ctx.timeout, stdin_text=prompt, on_spawn=on_spawn)
     stream = parse_claude_stream(run.stdout)
     if stream.init is not None:
-        check_claude_init(stream.init, model=ctx.model)
+        try:
+            check_claude_init(stream.init, model=ctx.model)
+        except ReviewLaunchRefusedError as exc:
+            exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
+            raise
     elif run.exit_code == 0 and not run.timed_out:
-        raise _refuse("Claude's stream carries no init event, so its boundary cannot be checked", check="init",
+        exc = _refuse("Claude's stream carries no init event, so its boundary cannot be checked", check="init",
                       entry="init")
+        exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
+        raise exc
     result = stream.result or {}
     failed = bool(result.get("is_error")) or result.get("subtype") != "success"
     text = result.get("result") if isinstance(result.get("result"), str) else ""
@@ -1615,7 +1631,35 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
         runtime.write_bytes(layout.runtime_root, layout.rel("verdict.md"), verdict.encode("utf-8"))
     first, last = usage.read_claude_stream_span(run.stdout)
     return Attempt(run, verdict, limited, detail, [], [last[w] for w in usage.WINDOWS if w in last],
-                   text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first])
+                   text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first],
+                   result_figures(stream.result))
+
+
+def result_figures(result: Mapping | None) -> dict | None:
+    """The cost and token totals of one Claude ``result`` event, in the form
+    ``telemetry`` reads a block in (``worker_stream.session_telemetry`` of that
+    one event), or ``None`` when the run printed no result."""
+    if not isinstance(result, Mapping):
+        return None
+    block = worker_stream.session_telemetry([dict(result)])
+    return {"version": block["version"], "results": 1, "cost_usd": block["cost_usd"], "tokens": block["tokens"]}
+
+
+def add_figures(total: dict | None, figures: dict | None) -> dict | None:
+    """``figures`` added to ``total``: a review's attempts are separate
+    sessions, so their cost and tokens are summed (not the maximum a single
+    session's cumulative figures take). A figure either side lacks is ``None``."""
+    if figures is None:
+        return total
+    if total is None:
+        return {**figures, "tokens": dict(figures["tokens"])}
+
+    def plus(a, b):
+        return a + b if isinstance(a, (int, float)) and isinstance(b, (int, float)) else None
+
+    return {"version": figures["version"], "results": total["results"] + figures["results"],
+            "cost_usd": plus(total["cost_usd"], figures["cost_usd"]),
+            "tokens": {key: plus(total["tokens"].get(key), value) for key, value in figures["tokens"].items()}}
 
 
 def _claude_end_readings(_home: Path) -> list[dict]:
@@ -1739,9 +1783,17 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
         for attempt in (1, 2):
             # the boundary is re-checked before every launch, the retry's included
             prompt = build_prompt(stage, expected, bundle_dir=bundle_dir, note=note)
-            made = selected.attempt(ctx, prompt, on_spawn if attempt == 1 else None)
+            try:
+                made = selected.attempt(ctx, prompt, on_spawn if attempt == 1 else None)
+            except ReviewLaunchRefusedError as exc:
+                paid = getattr(exc, "figures", None)  # a refused run's reported cost and tokens are kept
+                if paid is not None:
+                    result["telemetry"] = add_figures(result.get("telemetry"), paid)
+                raise
             run, scan = made.run, made
             result["subagents"] = made.subagents
+            if made.figures is not None:
+                result["telemetry"] = add_figures(result.get("telemetry"), made.figures)
             if made.readings is not None:
                 # the latest reading of each window wins; a retry that read none keeps the first run's
                 merged = {r["window"]: r for r in result.get("stream_readings") or []}

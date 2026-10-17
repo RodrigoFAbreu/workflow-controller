@@ -1958,7 +1958,10 @@ class SupervisionTest(_SupervisedCase):
         self.assertLess(self.returned - self.started, 10)
 
     def test_without_the_stop_the_worker_waits_for_the_wakeup(self) -> None:
-        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 0.3)
+        # The window only has to be shorter than nothing here: it starts when the wakeup fires (at 2 s) and the
+        # worker is idle, so a window shorter than a CPU stall in the fake's fire turn ends the session under it
+        # (INTERRUPTED on a loaded CI runner). 2 s is longer than any stall measured with the suite pinned to two CPUs.
+        self.patch(worker, "WAKEUP_SETTLE_SECONDS", 2.0)
         result = self.launch([[{"step": "wakeup", "delay": 2}, {"step": "bash_bg", "seconds": 0.3}],
                               [{"step": "text", "text": "task done"}]])
         self.assertEqual(result.outcome, worker.SUCCESS)
@@ -3737,17 +3740,36 @@ class ReapingLaunchTest(_SupervisedCase):
     # -- publications are unchanged (I3) --------------------------------------
 
     def test_the_published_sequence_is_the_same_with_and_without_the_sweep(self) -> None:
-        turns = [[{"step": "bash_bg", "seconds": 0.5}], [{"step": "text"}]]
+        # The task lives until a WAITING flush has listed the worker's group (it releases the gate), so no
+        # scan delay, however long, can outlast it.
+        def gated_turns(name: str) -> list:
+            gate = self.dir / name
+            command = f"for _ in $(seq 1200); do [ -e {gate} ] && exit 0; sleep 0.05; done"
+            return [[{"step": "bash_bg", "id": name, "command": command, "description": "waits for the gate"}],
+                    [{"step": "text"}]], gate
 
-        def published() -> list:
-            return [(state, sorted(e["source"] for e in details["owned_processes"]), details["scan"])
-                    for _at, state, details in self.log]
+        def release_on_group(gate: Path):
+            def on_state(state: str, details: dict) -> None:
+                if state == worker.WAITING and any(e["source"] == "group" for e in details["owned_processes"]):
+                    gate.touch()
+            return on_state
 
-        self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
+        def published() -> tuple:
+            # Which flush first lists the worker's group depends on when the periodic scan runs, so the
+            # comparison is over what the run published, not over each flush: the deduplicated state sequence,
+            # the scan verdicts, and the sources listed by any flush after RUNNING (the group, seen by then).
+            sources = {e["source"] for _at, state, details in self.log if state != worker.RUNNING
+                       for e in details["owned_processes"]}
+            self.assertEqual(sources, {"group"})
+            return (self.states(), {details["scan"] for _at, _state, details in self.log})
+
+        turns, gate = gated_turns("with-sweep")
+        self.assertEqual(self.launch(turns, on_state=release_on_group(gate)).outcome, worker.SUCCESS)
         with_sweep = published()
         self.log.clear()
+        turns, gate = gated_turns("without-sweep")
         with unittest.mock.patch.object(worker._LaunchExclusions, "collect", lambda self, **kw: None):
-            self.assertEqual(self.launch(turns).outcome, worker.SUCCESS)
+            self.assertEqual(self.launch(turns, on_state=release_on_group(gate)).outcome, worker.SUCCESS)
         self.assertEqual(published(), with_sweep)
 
 

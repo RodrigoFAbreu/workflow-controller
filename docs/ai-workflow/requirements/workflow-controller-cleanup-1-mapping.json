@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-1",
+  "requirements": {
+    "R1": {
+      "description": "Stale installed-release wording corrected, user-page step id removed, check_docs rejects a step id on a user page outside docs/guide/ but not in a guide with the existing guide checks still active, and the runtime guide's telemetry steps and the ~ round are exact (#55, #59, #64)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The test-leftover guard counts imported check_call/check_output/run, non-literal timeout runs and FIFO reads with exact-pid cleanup; the unmerged-index test covers all seven statuses live and through resume; a lost merge reply onto a moved trunk is tested; the worker flakes are gone under CPU pinning; the ready-phase copies are pinned (#56, #57, #58, #62, #66)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "A \"1\"-governed plan is counted at AWAITING_EXTERNAL_PLAN_REVIEW; _review_gate is gone; a non-full Claude model id is refused before launch and documented; recovery messages name the review's own harness; the containment probe is a committed capture (#67, #71, #72, #73, #74)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Telemetry works out review rounds in one pass with the same results, and a Claude review's cost and tokens are kept, summed across attempts and counted (#63, #75)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "Workflow 2.12.0 is vendored and one test runs the round cap against its real protocol answer (#65)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R6": {
+      "description": "The roadmap and guides agree with the behaviour; check_docs, the golden --check forms and the full suite are green, and the pull request body closes all sixteen issues",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    }
+  }
+}

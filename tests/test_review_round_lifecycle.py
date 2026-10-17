@@ -82,8 +82,9 @@ if not (root / artifacts_path).is_file():
     (root / artifacts_path).write_text(json.dumps(declarations, indent=2) + "\\n")
 plan = root / plan_path
 edits = (plan.read_text().count("Applied.") if plan.is_file() else 0) + 1
+anchors = "".join(f"<!-- {c['id']} -->\\n### {c['id']}\\n<!-- /{c['id']} -->\\n" for c in registry["checkpoints"])
 plan.write_text(f"# {wid} plan (Revision {revision})\\n\\nA disposable fixture plan.\\n" + "Applied.\\n" * edits
-                + ws.render_registry_markdown(registry) + "\\n")
+                + anchors + ws.render_registry_markdown(registry) + "\\n")
 git("add", "-N", "--", plan_path, registry_path, mapping_path, artifacts_path)
 rcid, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(root, wid)
 ws.state_transaction(root, lambda s: ws.publish_plan_revision(s, wid, revision, now(), review_content_id=rcid))
@@ -114,8 +115,9 @@ ws.write_registry_and_mapping(root, Path(item["registry_path"]), Path(item["mapp
 declarations = ws.generate_artifacts_declarations(wid, item["plan_path"], item["registry_path"], item["mapping_path"],
                                                   work_item_type="product")
 (root / fingerprint.artifacts_path_for_work_item(wid)).write_text(json.dumps(declarations, indent=2) + "\\n")
+anchors = "".join(f"<!-- {c['id']} -->\\n### {c['id']}\\n<!-- /{c['id']} -->\\n" for c in registry["checkpoints"])
 (root / item["plan_path"]).write_text(f"# {wid} plan (Revision {item['plan_revision']})\\n\\nA first draft.\\n"
-                                      + ws.render_registry_markdown(registry) + "\\n")
+                                      + anchors + ws.render_registry_markdown(registry) + "\\n")
 subprocess.run(["git", "add", "-A"], cwd=root, check=True)
 subprocess.run(["git", "commit", "-q", "-m", "Begin authoring"], cwd=root, check=True)
 """
@@ -207,23 +209,23 @@ if reviewer == "local":
 
 
 class CapLoop:
-    """A disposable 2.7.0 target with the ``demo`` work item seeded to
-    ``stage`` (``fixtures.seed_workflow_item``), optionally moved to
+    """A disposable target (the vendored 2.7.0 Workflow unless ``release`` says
+    otherwise) with the ``demo`` work item seeded to ``stage`` (``fixtures.seed_workflow_item``), optionally moved to
     ``IMPLEMENTING`` under a current plan approval, and one-step drivers."""
 
     def __init__(self, test: unittest.TestCase, stage: str, *, governing: str = "2.2", implementing: bool = False,
-                 root: Path | None = None, stub_dir: Path | None = None) -> None:
+                 root: Path | None = None, stub_dir: Path | None = None, release: str = "2.7.0") -> None:
         self.test = test
         if root is None:
             self.td = Path(tempfile.mkdtemp())
             test.addCleanup(lambda: shutil.rmtree(self.td, ignore_errors=True))
             root = self.td / "repo"
         self.root = root
-        fixtures.seed_workflow_item(self.root, "2.7.0", stage, work_item_id=WID, governing_workflow_version=governing)
+        fixtures.seed_workflow_item(self.root, release, stage, work_item_id=WID, governing_workflow_version=governing)
         if implementing:
             self._approve_plan()
-        self.stub = fixtures.write_stub_workflow_manager((stub_dir or self.root.parent) / "workflow-manager-2.7.0",
-                                                         release="2.7.0")
+        self.stub = fixtures.write_stub_workflow_manager((stub_dir or self.root.parent) / f"workflow-manager-{release}",
+                                                         release=release)
         self.runtime = self.root.parent / "runtime"
         self.runtime.mkdir(exist_ok=True)
         self.tasks: list[str] = []
@@ -528,6 +530,48 @@ class FunctionalFixLoopTest(_CapCase):
             ("implementation.review.local", 1, "jobs"), ("functional.apply_findings", None, None),
             ("implementation.review.local", 2, "jobs"), ("functional.apply_findings", None, None),
             ("implementation.review.local", 2, "jobs")])
+
+
+class WorkflowGivenRoundTest(_CapCase):
+    """#65: against the vendored 2.12.0 Workflow (protocol 1.4) the plan round is the Workflow's own
+    ``snapshot.review_round.plan``, not the Controller's count. The other tests in this file run on 2.7.0, where
+    the snapshot has no ``review_round`` and the count is the only source; the hand-made snapshot tests of
+    ``review_rounds`` cannot tell a real answer's shape from the one they were written for."""
+
+    RELEASE = "2.12.0"
+
+    def given(self, loop: CapLoop) -> int:
+        """The plan round the Workflow's own ``next-action`` answers now, read from the vendored protocol script."""
+        answer = fixtures.run_workflow_python(
+            loop.root, "import json, subprocess\nout = subprocess.run([sys.executable, '-B', 'scripts/workflow_protocol.py',"
+            " 'next-action', '--work-item', sys.argv[1]], capture_output=True, text=True, check=True).stdout\n"
+            "print(json.dumps(json.loads(out)['result']['snapshot']['review_round']))", WID)
+        rounds = json.loads(answer.stdout)
+        self.assertIsInstance(rounds["plan"], int, rounds)
+        return rounds["plan"]
+
+    def test_the_cap_gate_and_telemetry_report_the_round_the_workflow_gives(self) -> None:
+        loop = CapLoop(self, "ready", release=self.RELEASE)
+        self.assert_launched(loop.step(loop.review_plan, cap=2), "/review-plan", "plan.review.local")
+        # After the consumed REVISE: the apply is next, and the Workflow counts the round the REVISE closed.
+        given = self.given(loop)
+        self.assertEqual(given, 1)
+        self.assert_launched(loop.step(loop.publish_plan, cap=2), "/apply-plan-review", "plan.apply_review")
+        self.assert_launched(loop.step(loop.review_plan, cap=2), "/review-plan", "plan.review.local")
+        given = self.given(loop)
+        self.assertEqual(given, 2)
+        record, launched = loop.step(cap=2)
+        self.assertEqual(launched, [], record)
+        text = record["human_gate_pending"]["what_is_required"]
+        self.assertTrue(text.startswith(f"{protocol_decision.REVIEW_ROUND_CAP_REACHED}: "), text)
+        self.assertIn(f"at plan review round {given} (given by the Workflow), at the round cap of 2", text)
+        self.assertNotIn("counted from the Controller's job records", text)
+        # The blocked record is not a job's round; the last review's row shows the same number, from the same field.
+        rows = telemetry.rows(loop.records())
+        self.assertEqual([(row["action"], row["round"], row["round_source"]) for row in rows],
+                         [("plan.review.local", 1, "workflow"), ("plan.apply_review", 1, "workflow"),
+                          ("plan.review.local", given, "workflow")])
+
 
 
 if __name__ == "__main__":

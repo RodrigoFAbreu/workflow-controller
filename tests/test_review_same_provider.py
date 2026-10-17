@@ -251,6 +251,31 @@ class ClaudeRecoveryTest(SameProviderCase):
         self.assertEqual(json.loads((operator / ".credentials.json").read_text()),
                          {"claudeAiOauth": {"accessToken": "orig"}})
 
+    def test_the_recovery_messages_name_claude_not_codex(self) -> None:
+        record, operator = self.killed()
+        with mock.patch.object(worker, "assess_worker_liveness",
+                               return_value=mock.Mock(verdict=worker.UNVERIFIABLE, to_dict=lambda: {})), \
+                mock.patch.object(job, "_unverifiable_guidance", return_value="x"):
+            with self.assertRaises(job.LifecycleWorkerUnverifiableError) as raised:
+                job._end_review_group(record, Path(record["target_repo"]))
+        self.assertIn("Claude review process", str(raised.exception))
+        self.assertNotIn("Codex", str(raised.exception))
+        owned = [{"pid": 4242}]
+        with mock.patch.object(job, "_scan_record_owned", return_value=(owned, True)), \
+                mock.patch.object(job.os, "kill"), mock.patch.object(job, "_REVIEW_KILL_SETTLE_SECONDS", 0.0):
+            with self.assertRaises(job.LifecycleWorkerActiveError) as raised:
+                job._end_review_group({**record, "worker_process": None}, Path(record["target_repo"]))
+        self.assertIn("Claude review process group", str(raised.exception))
+        with mock.patch.object(job, "_scan_record_owned", return_value=([], False)), \
+                mock.patch.object(job, "_REVIEW_KILL_SETTLE_SECONDS", 0.0):
+            with self.assertRaises(job.LifecycleWorkerUnverifiableError) as raised:
+                job._end_review_group({**record, "worker_process": None}, Path(record["target_repo"]))
+        self.assertIn("Claude review processes", str(raised.exception))
+        resumed = self.resume()
+        message = resumed["reconciliation_evidence"]["message"]
+        self.assertIn("Claude group", message)
+        self.assertNotIn("Codex", message)
+
 
 _ADOPT_LOWERING = """
 import json

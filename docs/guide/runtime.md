@@ -297,7 +297,9 @@ separately: the Workflow's own `review_round` when its answer carries one
 (Workflow 2.12.0 and later), else the Controller's count over its job
 records of this repository and work item (a plan round counted that way is
 a lower bound: the Workflow counts published contents, which can exceed
-`plan_revision`). `<stage>.apply_review` is not launched at round `cap` or
+`plan_revision`; a plan of a work item the Workflow governs as `"1"` is
+counted at its own review phase, `AWAITING_EXTERNAL_PLAN_REVIEW`).
+`<stage>.apply_review` is not launched at round `cap` or
 above, and `<stage>.review.local` is not launched above round `cap`; the
 step returns the `review_round_cap_reached` gate instead (see
 [a run stopped at the review round cap](../common-problems.md#a-run-stopped-at-the-review-round-cap)).
@@ -307,7 +309,7 @@ command; there is no "off" value, a long loop is a cap of 100.
 
 To compare review rounds before and after a change, group the jobs by stage
 and round: `workflow-controller telemetry --by stage,round --since
-2026-10-01` (and again with the later date), or `--by action` for the cost
+2026-10-01` (and again with the later date; the "before" figures are the first query minus the second, because `--since` has no upper bound), or `--by action` for the cost
 of each kind of step. A round the Workflow stated is shown as
 `stage=plan, round=4`; one counted from job records is shown as
 `stage=plan, round=4~`, in a separate group (the JSON rows carry
@@ -315,8 +317,13 @@ of each kind of step. A round the Workflow stated is shown as
 not the same measure as the Workflow's content count, so compare `~` groups
 with `~` groups. A review the Controller ran itself (`plan.review.external`,
 `implementation.review.external`) appears in these groups with its action,
-stage and round, and as "telemetry unavailable" because it keeps no worker
-stream.
+stage and round. A Claude review keeps the cost and token totals its `result`
+events reported (`review.telemetry`, summed over its at most two invocations,
+since each is a separate session), so it is counted in those groups; a Codex
+review keeps none until its rollout gives them, and shows as "telemetry
+unavailable". The rounds of all jobs are worked out in one oldest-first pass
+per repository and work item, with the same results as counting each job's own
+history. A review the Controller runs itself always shows `round=N~`, because it has no Workflow round to quote.
 
 The five `reviewer` rows (1.10.0) let the Controller run the cross-model
 review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
@@ -365,9 +372,16 @@ The same-provider reviewer is a fresh, read-only Claude session in a
 disposable copy (see [the reviewers](workers.md#the-same-provider-reviewer)).
 `reviewer.same_provider_model` and `reviewer.same_provider_effort` fall back
 to `claude-opus-5-5` and `high`; they are not the worker `routing` section.
+The model row takes a full model id: a name that begins `claude-` and holds
+only letters, digits, `.`, `_` and `-` (an alias such as `opus` is refused
+before launch with `ReviewLaunchRefused`, because Claude reports the full id
+back and the Controller compares it exactly). A name of that shape that
+resolves to another id, such as a `-latest` name, still starts and is
+refused at the session's `init` event.
 Its approvals are recorded with `review.mode`, `review.mode_source` and
-`review.lowered`, and `telemetry --by review_mode` counts them (a review job
-keeps no cost or token figures, so none is shown).
+`review.lowered`, and `telemetry --by review_mode` counts them, with the cost
+and tokens of a Claude review (a Codex review keeps no figures, so none is
+shown for it).
 
 The seven `notifications` rows (1.9.0) make the Controller a SignalHub
 producer (see [ADR 0012](../adr/0012-signalhub-notifications.md) and

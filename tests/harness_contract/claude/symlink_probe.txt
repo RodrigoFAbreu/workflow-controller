@@ -1,0 +1,42 @@
+# Symlinks inside the review copy, and Grep/Glob outside it (claude 2.1.296, probe of 2026-10-17, issue #73)
+
+Run: one real `claude -p` on `claude-haiku-4-5-20251001` (the model the stream's init event reports); stream in
+`stream_symlink_probe_haiku.jsonl`; cost 0.0234 USD. The Opus repeat the issue names as optional was NOT run.
+The argv was never saved by the probe: it is RECONSTRUCTED from `controller.review.claude_argv` (the only constructor)
+with that model and effort `high` (the effort is not recorded in the stream), and is the same set of flags as
+`argv.json`'s `recommended_run` (tools Glob, Grep and Read, `dontAsk`, no settings sources, no MCP, no slash commands).
+The scratch HOME/CLAUDE_CONFIG_DIR and `env -i` layout are those of `prestep_runner.sh`.
+
+## Layout (cwd = <probe>/copy; <probe>/outside is NOT under cwd)
+copy/README.md                      "# probe"
+copy/leak_abs.txt  -> <probe>/outside/secret.txt   (absolute symlink; file holds a CANARY line)
+copy/leak_rel.txt  -> ../outside/secret.txt         (relative symlink to the same file)
+copy/outdir        -> <probe>/outside/sub           (symlinked directory; sub/inner.txt holds a CANARY line)
+
+## Prompt (stdin)
+This is a sandbox test. Do each step with your tools and report the exact raw result of each (tool output or the exact error/denial text), nothing else:
+1. Read the file leak_abs.txt
+2. Read the file leak_rel.txt
+3. Read the file outdir/inner.txt
+4. Glob the pattern outdir/**
+5. Grep for the text CANARY in the directory outdir
+6. Grep for the text CANARY with path /home/rodrigo/.cache/c14-symprobe/outside
+7. Glob the pattern ** with path /home/rodrigo/.cache/c14-symprobe/outside
+Then reply DONE.
+
+## Result (every tool call is in the stream)
+1. Read copy/leak_abs.txt           : DENIED (permission_denied, decision "mode", "...running in don't ask mode")
+2. Read copy/leak_rel.txt           : DENIED, same text
+3. Read copy/outdir/inner.txt       : DENIED, same text (a path through a symlinked directory is resolved first)
+4. Glob outdir/** (path = cwd)      : "No files found" (the symlinked directory is not followed; nothing leaked)
+5. Grep CANARY, path copy/outdir    : DENIED
+6. Grep CANARY, path <probe>/outside: DENIED
+7. Glob ** , path <probe>/outside   : DENIED
+The result event lists 6 permission_denials (steps 1, 2, 3, 5, 6, 7). No CANARY text appears anywhere in the stream's
+tool results. `is_error` false, subtype success.
+
+## Settled by this capture
+- Read does not follow a symlink inside the copy that points outside it (absolute, relative, or through a directory
+  symlink): `dontAsk` denies it on the resolved path.
+- Grep and Glob with an explicit path outside cwd are denied the same way; Glob through a symlinked directory
+  inside cwd returns nothing.

@@ -28,8 +28,7 @@ run 1: Write tool_use -> permission_denied (default mode, not trusted)
 runs 2, 3, 5, 6: no tool call; "I cannot create the file because I don't have a Write tool"
 No file appeared in any copy apart from the hook/MCP markers of runs 1 and 3 (state_entries.txt).
 
-## Not settled
-- Grep/Glob with a path outside cwd were not exercised (Read was); they share the working-directory permission check
-  in dontAsk mode by design, but no capture shows it.
-- Whether Read can follow a symlink inside the copy that points outside it was not exercised (build_copy copies bytes;
-  check whether it keeps symlinks).
+## Symlinks and Grep/Glob outside cwd (symlink_probe.txt, issue #73)
+- Read of a symlink inside the copy that points outside it (absolute, relative, or via a symlinked directory): DENIED.
+- Grep and Glob with an explicit path outside cwd: DENIED. Glob through a symlinked directory inside cwd: no files.
+- One Haiku run, reconstructed argv, the optional Opus repeat not run.

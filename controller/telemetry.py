@@ -171,8 +171,9 @@ def is_worker_job(record: Mapping) -> bool:
 def is_courier_job(record: Mapping) -> bool:
     """Whether ``record`` is a Controller external-review (courier) job:
     ``kind`` ``review`` with a ``review.action_id``. It stores no ``protocol``
-    block and no worker streams, so it has no figures, but it is a review
-    round and ``telemetry`` reports its action, stage and round."""
+    block and no worker streams, so it has no stream figures (a Claude review
+    keeps its own ``review.telemetry``, which ``record_block`` reads), but it
+    is a review round and ``telemetry`` reports its action, stage and round."""
     block = record.get("review")
     return record.get("kind") == "review" and isinstance(block, Mapping) \
         and isinstance(block.get("action_id"), str)
@@ -227,11 +228,14 @@ def derive_block(record: Mapping) -> dict:
 
 
 def record_block(record: Mapping) -> dict | None:
-    """``record``'s telemetry: its own block, else a derived one for a
-    worker job, else ``None``."""
+    """``record``'s telemetry: its own block, else the figures a review job
+    kept, else a derived one for a worker job, else ``None``."""
     block = record.get("telemetry")
     if isinstance(block, Mapping):
         return dict(block)
+    if is_courier_job(record):
+        kept = record["review"].get("telemetry")  # a Claude review's cost and tokens (#75)
+        return dict(kept) if isinstance(kept, Mapping) else None
     return derive_block(record) if is_worker_job(record) else None
 
 
@@ -345,13 +349,20 @@ def _round_columns(records: list[Mapping]) -> dict[int, tuple[str | None, str, i
     """``id(record) -> (action, stage, round, round_source)`` for every
     record in ``records`` (all of them, unfiltered, so a filter never
     changes a job's round). The round is the one stored in the job's own
-    decision snapshot, else ``review_rounds.current_round`` over the
-    records up to and including that job, oldest first: the same function
-    and the same evidence the cap gate used for it. Only the ``plan`` and
-    ``implementation`` stages have a round."""
+    decision snapshot, else ``review_rounds.RoundCounter``'s count over the
+    records up to and including that job, oldest first, kept as a running
+    count per (repository, work item) so the records are read once: the
+    same count and the same evidence the cap gate used for it. Only the
+    ``plan`` and ``implementation`` stages have a round."""
     ordered = sorted((r for r in records if isinstance(r, Mapping)), key=review_rounds.record_key)
+    counters: dict[tuple, review_rounds.RoundCounter] = {}
     columns = {}
-    for index, record in enumerate(ordered):
+    for record in ordered:
+        key = (record.get("target_repo"), record.get("work_item_id"))
+        counter = counters.setdefault(key, review_rounds.RoundCounter())
+        pre_state = review_rounds.counted_pre_state(record, *key)
+        if pre_state is not None:
+            counter.observe(pre_state)
         action = _action_id(record)
         stage = review_rounds.stage_of(action)
         round_number = source = None
@@ -359,9 +370,11 @@ def _round_columns(records: list[Mapping]) -> dict[int, tuple[str | None, str, i
             block = record.get("protocol")
             document = block.get("decision") if isinstance(block, Mapping) else None
             snapshot = document.get("snapshot") if isinstance(document, Mapping) else None
-            round_number, source = review_rounds.current_round(
-                snapshot, stage, ordered[:index + 1], target_repo=record.get("target_repo"),
-                work_item_id=record.get("work_item_id"))
+            round_number = review_rounds.stored_round(snapshot, stage)
+            if round_number is not None:
+                source = review_rounds.SOURCE_WORKFLOW
+            else:
+                round_number, source = counter.count(stage, snapshot), review_rounds.SOURCE_JOBS
         columns[id(record)] = (action, stage, round_number, source)
     return columns
 

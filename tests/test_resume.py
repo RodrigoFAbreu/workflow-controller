@@ -1261,7 +1261,7 @@ class ParentGuardChildStepTest(_OrphanWorkerCase):
         self.assertTrue(process_fixtures.wait_until(lambda: self._record_with_worker_process() is not None, timeout=60),
                         "the LAUNCHED record never carried worker_process with its worker_spawned line")
         worker_pid = self._record_with_worker_process()["worker_process"]["pid"]
-        self.addCleanup(process_fixtures.kill_group, worker_pid)
+        self.addCleanup(process_fixtures.end_pid, worker_pid)
         process_fixtures.wait_fake_ready(self.fake_ready, worker_pid)
         # Every process exists before anything is killed, so an absence below means something.
         self.assertFalse(_pid_gone(child_pid))
@@ -3639,7 +3639,7 @@ class ParentGuardLostControllerTest(_LostControllerCase):
         controller_pid, worker_pid = int(marker.read_text()), int(spawn_file.read_text())
         self.assertEqual(controller_pid, int(pid_file.read_text()))
         self.addCleanup(_end_pid, controller_pid)
-        self.addCleanup(process_fixtures.kill_group, worker_pid)
+        self.addCleanup(process_fixtures.end_pid, worker_pid)
         process_fixtures.wait_fake_ready(ready, worker_pid)
         # Alive immediately before the starter dies: the guard, not the test, ends the child.
         self.assertFalse(_pid_gone(controller_pid))

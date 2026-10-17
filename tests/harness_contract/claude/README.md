@@ -19,7 +19,9 @@ for the Claude harness's constants; a Claude Code upgrade that changes one is me
 | `help.2.1.296.txt` | `claude --help` (`--bare` OAuth limit, `--setting-sources`, `--restricted`, `--safe-mode`, `--permission-prompts`) | `550db4f88ae1d97bf7244ca96dc89554aabd3978241ceb69f79001e816c35f09` |
 | `init_events.jsonl` | the `system`/`init` event of each run: `tools`, `mcp_servers`, `model`, `permissionMode`, `slash_commands`, `skills`, `agents`, `plugins`, `memory_paths`, `apiKeySource`, `cwd`, `session_id` | `645bc68c8be80fc54213de57552c2a6c826ceb46691f2c3f6414b0aa5ce6670c` |
 | `layers.txt` | the layer matrix: hooks, `.mcp.json`, claude.ai connectors, `CLAUDE.md` (cwd, ancestors, user, the real `~/.claude`), commands/skills/agents, with and without `--setting-sources ""` and `--bare`; managed settings paths | `10b3aa06204d17fa22a54db1cb9e123ebaee3878ddb3a248e71da8bf1b1f2e86` |
-| `tools_permissions.txt` | the tools offered per argv, `dontAsk` denials (outside-cwd Read refused, inside-cwd Read allowed), the write refusal | `b4649280fd6ee47662350ad9019083b8ed790290705dfd93d97f167a0c00c906` |
+| `tools_permissions.txt` | the tools offered per argv, `dontAsk` denials (outside-cwd Read refused, inside-cwd Read allowed), the write refusal | `bbbbbc4438e20eb2d433ae3f80dd3315718ae2aaf3cff4ef51faa376fd31ea58` |
+| `symlink_probe.txt` | the symlink and outside-path probe (issue #73): Read through absolute, relative and directory symlinks and Grep/Glob outside cwd are denied; layout, prompt, reconstructed argv | `d55bb94b53be2ff738b031c513a3fdb6dcc061e51a4023b3517142f088454d7e` |
+| `stream_symlink_probe_haiku.jsonl` | the whole stream of that probe (haiku, `dontAsk`, 6 permission denials) | `4b340350c75f219d2ced16a886fe43c822dd6c76d8ae7ccfeb8ce5786e006afb` |
 | `credentials.txt` | the credential file and shape (key names only), digest/mode/mtime before and after every run, `--bare` not logged in | `abdaf6ff943998a2980dd25a6b51816e43b6fdc3bb53d5683d92bd5ff9611508` |
 | `state_entries.txt` | the entries each run created in the scratch home, with and without `--no-session-persistence` and auto-memory | `c67bf43a55f50c651de707ba9c16b9c346d37591db540d51d00e69b141e6247d` |
 | `env.txt` | the exact environment the installed Claude Code needs (single ELF, embedded ripgrep, git from PATH) and the disable variables | `0b19e507ec7e24a128f60e7f194af152d8abbb44dd935f1ea43d8c3b82fcd7c8` |
@@ -61,7 +63,7 @@ are `[]`, `model` is the requested id, `memory_paths` is null; and the effort va
 
 Proven by the runs: a fresh session (new `session_id` every run, no transcript written under `--no-session-persistence`);
 read-only tools only (no write, shell, web, agent, skill or MCP tool offered; writes refused; Read outside cwd denied
-by `dontAsk`); no hooks (user, project or ancestor), no MCP (project `.mcp.json` or claude.ai connectors), no
+by `dontAsk`, also through a symlink inside the copy, and Grep/Glob outside cwd denied); no hooks (user, project or ancestor), no MCP (project `.mcp.json` or claude.ai connectors), no
 user or project settings, no auto-loaded `CLAUDE.md` from cwd, ancestors, the user home or the real `~/.claude`;
 the credential file read from `CLAUDE_CONFIG_DIR` and never rewritten; the copy unchanged; usage per run in the
 `result` event (`usage`, `modelUsage.<model>`, `total_cost_usd`) and the subscription window in `rate_limit_event`.
@@ -76,7 +78,6 @@ declined): D5's "kept as ordinary content" holds only as far as the model resist
   `.credentials.json` and rotates the refresh token is not observed; the copy-back path is untested on Claude.
 - No real usage-limit (429 / `rejected`) result was captured here (C8's two real job streams in
   `~/.local/state/workflow-controller/jobs` remain the source); the `rate_limit_event` seen is `status: allowed`.
-- Grep/Glob outside cwd, and symlinks inside the copy pointing outside it, were not exercised.
 - Managed settings (`/etc/claude-code/managed-settings.json`, `managed-settings.d/`, `managed-mcp.json`) do not exist
   on this host; they apply regardless of `--setting-sources`, so on a host that has them they would load.
 - The `[uds-messaging]` socket under `$TMPDIR/cc-socks/` accepts injected messages during a run; its mode and

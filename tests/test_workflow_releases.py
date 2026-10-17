@@ -1,9 +1,11 @@
 """Tests for the vendored Workflow release trees (``tools/workflow_releases.py``,
 ``docs/ai-workflow/CONTROLLER_WORKFLOW_2_6_INTEGRATION_PLAN.md`` Design A).
 
-Every Workflow-derived check reads ``tests/workflow_releases/<release>/``,
-never this repository's own installed Workflow (plan invariant I7). This
-module pins that the trees are what their ``RELEASE.json`` records, that
+Every Workflow-derived check reads ``tests/workflow_releases/<release>/``;
+``InstalledReleaseTest`` reads this repository's installation record; the
+review-round tests (``tests/test_review_rounds.py`` and
+``tests/test_review_round_lifecycle.py``) are the named exception and read
+the installed ``scripts/``. This module pins that the trees are what their ``RELEASE.json`` records, that
 every admitted release has one, and that this repository's own installation
 is an admitted release whose installed files equal its vendored tree. When a
 Workflow Manager distribution is available locally, the recorded hashes are

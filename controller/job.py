@@ -3129,7 +3129,7 @@ _REVIEW_KILL_SETTLE_SECONDS = 5.0
 
 
 def _end_review_group(record: Mapping, root: Path) -> None:
-    """Kill the review's Codex process group, or verify it dead (D9). The
+    """Kill the review's process group, or verify it dead (D9). The
     group is found by the recorded process identity **and** by the ownership
     tag in its environment, so a Controller killed between the spawn and the
     `worker_process` flush still has its group found. A process that cannot
@@ -3141,7 +3141,7 @@ def _end_review_group(record: Mapping, root: Path) -> None:
         assessment = worker.assess_worker_liveness(worker_process)
         if assessment.verdict == worker.UNVERIFIABLE:
             raise LifecycleWorkerUnverifiableError(
-                f"job {job_id}'s Codex review process cannot be judged from here: "
+                f"job {job_id}'s {_review_display(record)} review process cannot be judged from here: "
                 f"{_unverifiable_guidance(job_id, assessment, root)}",
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()})
         pgid = worker_process.get("pgid")
@@ -3160,18 +3160,19 @@ def _end_review_group(record: Mapping, root: Path) -> None:
         time.sleep(0.05)
     if entries:
         raise LifecycleWorkerActiveError(
-            f"job {job_id}'s Codex review process group could not be ended (pids "
+            f"job {job_id}'s {_review_display(record)} review process group could not be ended (pids "
             f"{', '.join(str(e['pid']) for e in entries)}); nothing was reconciled",
             evidence={"job_id": job_id, "owned_processes": entries})
     raise LifecycleWorkerUnverifiableError(
-        f"job {job_id}'s Codex review processes cannot be verified from here: /proc could not be listed, or a "
+        f"job {job_id}'s {_review_display(record)} review processes cannot be verified from here: /proc could not "
+        f"be listed, or a "
         f"same-uid process's stat could not be read, so none is assumed gone",
         evidence={"job_id": job_id})
 
 
 def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | None = None) -> JobRecord:
     """The `resume` review-job branch (D9), run in phase 2 under the lifecycle
-    lock the dead Controller no longer holds (the Codex group never held it):
+    lock the dead Controller no longer holds (the review's group never held it):
     end the group or verify it dead, copy the credentials back (D4), remove the
     disposable copy, and write the record terminal -- `INTERRUPTED`, or
     `INCOMPLETE` when the deadline had passed -- **without calling `reconcile`**.
@@ -3210,7 +3211,8 @@ def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | Non
         "review": {**block, "outcome": "interrupted", "credentials": credentials, "verdicts": held["verdicts"]},
         "reconciliation_evidence": {"code": code, "abandoned_status": record.get("status"),
                                     "message": "the Controller that ran this review ended before it finished; its "
-                                               "Codex group was ended and the next step re-runs the review"},
+                                               f"{_review_display(record)} group was ended and the next step "
+                                               "re-runs the review"},
         "reconciled_at": now, "updated_at": now,
     }
     return _persist(runtime_root, job_id, reconciled, event="reconciled", details=_reconciled_details(reconciled))
@@ -6319,12 +6321,6 @@ def _external_review_stage(decision: Decision) -> tuple[str, str] | None:
     return stage, kind
 
 
-def _review_gate(decision: Decision, reviewer: Mapping | None) -> tuple[str, str] | None:
-    """:func:`_external_review_stage` while a reviewer harness is configured
-    (D2), else ``None``."""
-    return None if reviewer is None else _external_review_stage(decision)
-
-
 def _review_mode_signal(managed_repo: Any) -> review_mode.Signal | None:
     """The lowered-policy signal of the Workflow's ``verify`` (review-modes D3),
     or ``None`` when ``verify`` cannot be read or has no ``gate_policy``
@@ -6479,8 +6475,11 @@ def _obtained(result: Mapping) -> dict:
     with its digest, ``Status:`` and disposition (workflow#28 condition 2: the
     courier records every verdict it obtains, REVISE included), and the
     sub-agent sessions the job's rollouts show with their token usage."""
-    return {"verdicts": [dict(entry) for entry in result.get("verdicts") or []],
-            "subagents": [dict(entry) for entry in result.get("subagents") or []]}
+    obtained = {"verdicts": [dict(entry) for entry in result.get("verdicts") or []],
+                "subagents": [dict(entry) for entry in result.get("subagents") or []]}
+    if isinstance(result.get("telemetry"), Mapping):  # a Claude review's cost and tokens, summed over its attempts
+        obtained["telemetry"] = dict(result["telemetry"])
+    return obtained
 
 
 def _with_disposition(common: Mapping, disposition: str) -> dict:

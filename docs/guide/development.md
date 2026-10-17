@@ -1,6 +1,6 @@
 # Development and the test runner
 
-> For: contributors and maintainers working from a checkout. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0 and 2.9.0.
+> For: contributors and maintainers working from a checkout. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.9.0 and 2.12.0.
 
 [Back to the documentation map](../README.md)
 
@@ -368,26 +368,35 @@ purpose. `tests/test_fixtures_git_hygiene.py` fails on any other
 
 ## Workflow release trees
 
-The Controller's tests never read this repository's own installed
-Workflow. Every Workflow release the Controller admits
+Every Workflow-derived check in the Controller's tests reads a vendored tree,
+with one named exception: the review-round tests (`tests/test_review_rounds.py`
+and `tests/test_review_round_lifecycle.py`) read this repository's installed
+`scripts/`, because they compare the Controller's copy to the Workflow's
+current behaviour and call `workflow_protocol._plan_review_round`, which no
+vendored tree before 2.12.0 has. Every Workflow release the Controller admits
 (`controller.managed_repo.VALIDATED_WORKFLOW_RELEASES`, and each protocol-mode
-release that is checked: 2.7.0 and 2.9.0) is vendored under
+release that is checked: 2.7.0, 2.9.0 and 2.12.0) is vendored under
 `tests/workflow_releases/<release>/`: the `.claude/commands/*.md` files (seventeen
-up to 2.7.0, twenty-two for 2.9.0),
+up to 2.7.0, twenty-two for 2.9.0 and 2.12.0),
 `scripts/workflow_state.py`, `scripts/workflow_fingerprint.py` and
 `scripts/prepare-ai-review.sh`, at their target paths and modes, and, for a
 release that ships the protocol, `scripts/workflow_protocol.py`, its sibling
 `scripts/workflow_test_harness.py` and
 `docs/ai-workflow/orchestration-protocol-v1.schema.json`. A release that ships
-gate policy (2.9.0) adds `scripts/workflow_forge.py` and
+gate policy (2.9.0 and 2.12.0) adds `scripts/workflow_forge.py` and
 `scripts/workflow_gate_policy.py`; without them the tree could not import. Each tree's
 `RELEASE.json` records the Workflow Manager commit it was taken from and each
 file's sha256 and executable flag, equal to the Manager's manifest. The
 Workflow-derived inventories (the phase set, the command partition, the
 user-only set, property 5), the decision goldens, the query tests and the
 migration tests all run against these trees, once per admitted release.
+`WorkflowGivenRoundTest` in `tests/test_review_round_lifecycle.py` runs the review round cap on the vendored
+2.12.0 tree, where the Workflow's own answer carries `snapshot.review_round`, and checks that the cap gate and
+`telemetry` report that number; the other lifecycle tests run on 2.7.0, where the Controller's count is the only
+source. A plan in a disposable repository carries a `<!-- CPn -->` anchor pair for each checkpoint, which 2.12.0
+requires and older releases ignore.
 This repository's own installed Workflow needs no vendored tree.
-`InstalledReleaseTest` admits it through the Controller's own capability rule
+`InstalledReleaseTest` reads the installation record and admits it through the Controller's own capability rule
 (the release manifest, the release contract and the profile check that
 `managed_repo` applies), with no version literal, and checks the installed
 files against the digests and modes in `installation.json`; a modified, missing

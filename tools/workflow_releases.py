@@ -5,7 +5,7 @@ Stdlib only.
 ``tests/workflow_releases/<release>/`` holds, at their target-relative paths,
 exactly the part of a released Workflow payload the Controller's checks and
 disposable-repository tests read: the release's ``.claude/commands/*.md``
-files (seventeen up to 2.7.0, twenty-two for 2.9.0),
+files (seventeen up to 2.7.0, twenty-two for 2.9.0 and 2.12.0),
 ``scripts/workflow_state.py``, ``scripts/workflow_fingerprint.py`` and
 ``scripts/prepare-ai-review.sh``, plus the optional protocol and gate-policy
 scripts a release ships. A ``RELEASE.json`` beside them records the

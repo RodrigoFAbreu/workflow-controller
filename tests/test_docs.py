@@ -422,6 +422,24 @@ class PageRuleTest(TreeTestCase):
         problems = [p for p in check_docs.check_pages(self.tree.root, 2) if "glossary" in p]
         self.assertEqual(len(problems), 3)
 
+    def test_step_id_fails_on_a_task_page_and_passes_on_a_guide(self) -> None:
+        self.page("docs/compatibility.md", "It shipped in step C9c.")
+        self.page("docs/guide/development.md", "It shipped in step C10.")
+        problems = check_docs.check_pages(self.tree.root, 4)
+        self.assertTrue([p for p in problems if "compatibility" in p and "'C9c'" in p])
+        self.assertFalse([p for p in problems if "development" in p])
+
+    def test_internal_ids_still_fail_on_a_guide(self) -> None:
+        self.page("docs/guide/development.md", "See CP3 and LPR-R1-002 and the-real-item.")
+        self.tree.write("docs/milestones/completed/the-real-item.md", "# x\n")
+        problems = [p for p in check_docs.check_pages(self.tree.root, 4) if "development" in p]
+        self.assertEqual(len(problems), 3)
+
+    def test_a_guide_missing_its_header_still_fails(self) -> None:
+        self.page("docs/guide/development.md", "Words.", header=None)
+        self.assertTrue([p for p in check_docs.check_pages(self.tree.root, 4)
+                         if "development" in p and "first line after the title" in p])
+
     def test_work_item_ids_from_state_are_flagged_as_whole_tokens(self) -> None:
         self.tree.write("docs/ai-workflow/WORKFLOW_STATE.json", json.dumps({"work_items": {"item-one": {}}}))
         self.page("docs/glossary.md", "item-one and item-one-more and `workflow-controller-tests/timings-local.json`.")

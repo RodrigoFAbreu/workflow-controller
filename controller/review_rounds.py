@@ -13,7 +13,8 @@ repository's and work item's job records read oldest first (a
 ``GATE_BLOCKED`` record excluded), then the snapshot as the last
 observation. ``implementation`` is 1 plus the number of times
 ``implementation_revision`` rose. ``plan`` is the number of distinct integer
-``plan_revision`` values observed at a plan-review ready phase, at least 1;
+``plan_revision`` values observed at a plan-review ready phase (an item
+governed as ``"1"`` is ready at ``AWAITING_EXTERNAL_PLAN_REVIEW``), at least 1;
 the Workflow counts published contents, which can exceed ``plan_revision``,
 so that count is a lower bound. ``None`` is never read as 0.
 """
@@ -70,6 +71,11 @@ PLAN_REVIEW_READY_PHASES = frozenset({
     "AWAITING_PLAN_APPROVAL",
 })
 
+#: The plan-review ready phase of an item the Workflow governs as ``"1"``
+#: (single-stage review): it never reaches the phases above.
+_LEGACY_PLAN_REVIEW_READY_PHASE = "AWAITING_EXTERNAL_PLAN_REVIEW"
+_LEGACY_VERSION = "1"
+
 _GATE_BLOCKED = "GATE_BLOCKED"
 
 
@@ -89,22 +95,14 @@ def record_key(record: Mapping) -> tuple:
     return (str(record.get("created_at")), decided if _is_int(decided) else 0, str(record.get("job_id")))
 
 
-def _observations(snapshot: Mapping | None, records: Iterable[Any], target_repo: str,
-                  work_item_id: str | None) -> list[Mapping]:
-    """The ``pre_state`` of each counted record, oldest first, then ``snapshot``."""
-    mine = []
-    for record in records:
-        if not isinstance(record, Mapping) or record.get("target_repo") != target_repo \
-                or record.get("work_item_id") != work_item_id or record.get("status") == _GATE_BLOCKED:
-            continue
-        pre_state = record.get("pre_state")
-        if isinstance(pre_state, Mapping):
-            mine.append((record_key(record), pre_state))
-    mine.sort(key=lambda pair: pair[0])
-    observed = [pre_state for _key, pre_state in mine]
-    if isinstance(snapshot, Mapping):
-        observed.append(snapshot)
-    return observed
+def counted_pre_state(record: Any, target_repo: str, work_item_id: str | None) -> Mapping | None:
+    """The ``pre_state`` of ``record`` when it is counted for ``(target_repo,
+    work_item_id)``, else ``None``."""
+    if not isinstance(record, Mapping) or record.get("target_repo") != target_repo \
+            or record.get("work_item_id") != work_item_id or record.get("status") == _GATE_BLOCKED:
+        return None
+    pre_state = record.get("pre_state")
+    return pre_state if isinstance(pre_state, Mapping) else None
 
 
 def stored_round(snapshot: Mapping | None, stage: str) -> int | None:
@@ -112,6 +110,51 @@ def stored_round(snapshot: Mapping | None, stage: str) -> int | None:
     rounds = snapshot.get("review_round") if isinstance(snapshot, Mapping) else None
     value = rounds.get(stage) if isinstance(rounds, Mapping) else None
     return value if _is_int(value) and value >= 1 else None
+
+
+def _at_plan_review_ready_phase(observation: Mapping) -> bool:
+    """Whether ``observation`` is at its own plan-review ready phase: a
+    ``"1"``-governed item's is ``AWAITING_EXTERNAL_PLAN_REVIEW`` (#67), any
+    other item's is in :data:`PLAN_REVIEW_READY_PHASES`."""
+    phase = observation.get("phase")
+    if observation.get("governing_workflow_version") == _LEGACY_VERSION:
+        return phase == _LEGACY_PLAN_REVIEW_READY_PHASE
+    return phase in PLAN_REVIEW_READY_PHASES
+
+
+class RoundCounter:
+    """The Controller's count (D1) as a running one: :meth:`observe` takes the
+    ``pre_state`` of each counted record, oldest first; :meth:`count` is the
+    round of a stage given the decision snapshot as the last observation,
+    without keeping it. One pass over a work item's records gives every
+    record's round (#63); :func:`current_round` is the same count over a list."""
+
+    def __init__(self) -> None:
+        self._revisions: set = set()
+        self._rises = 0
+        self._previous: int | None = None
+
+    def observe(self, observation: Mapping) -> None:
+        if _at_plan_review_ready_phase(observation) and _is_int(observation.get("plan_revision")):
+            self._revisions.add(observation["plan_revision"])
+        revision = observation.get("implementation_revision")
+        if _is_int(revision):
+            if self._previous is not None and revision > self._previous:
+                self._rises += 1
+            self._previous = revision
+
+    def count(self, stage: str, snapshot: Mapping | None = None) -> int:
+        if stage == STAGE_PLAN:
+            seen = len(self._revisions)
+            if isinstance(snapshot, Mapping) and _at_plan_review_ready_phase(snapshot) \
+                    and _is_int(snapshot.get("plan_revision")) and snapshot["plan_revision"] not in self._revisions:
+                seen += 1
+            return max(1, seen)
+        rises = self._rises
+        revision = snapshot.get("implementation_revision") if isinstance(snapshot, Mapping) else None
+        if _is_int(revision) and self._previous is not None and revision > self._previous:
+            rises += 1
+        return 1 + rises
 
 
 def current_round(snapshot: Mapping | None, stage: str, records: Iterable[Any], *,
@@ -122,21 +165,12 @@ def current_round(snapshot: Mapping | None, stage: str, records: Iterable[Any], 
     given = stored_round(snapshot, stage)
     if given is not None:
         return given, SOURCE_WORKFLOW
-    observed = _observations(snapshot, records, target_repo, work_item_id)
-    if stage == STAGE_PLAN:
-        seen = {obs.get("plan_revision") for obs in observed
-                if obs.get("phase") in PLAN_REVIEW_READY_PHASES and _is_int(obs.get("plan_revision"))}
-        return max(1, len(seen)), SOURCE_JOBS
-    rises = 0
-    previous = None
-    for obs in observed:
-        revision = obs.get("implementation_revision")
-        if not _is_int(revision):
-            continue
-        if previous is not None and revision > previous:
-            rises += 1
-        previous = revision
-    return 1 + rises, SOURCE_JOBS
+    counter = RoundCounter()
+    ordered = sorted(((record_key(r), p) for r in records
+                      if (p := counted_pre_state(r, target_repo, work_item_id)) is not None), key=lambda pair: pair[0])
+    for _key, pre_state in ordered:
+        counter.observe(pre_state)
+    return counter.count(stage, snapshot), SOURCE_JOBS
 
 
 def cap_decision(action_id: str | None, round_number: int, cap: int) -> bool:

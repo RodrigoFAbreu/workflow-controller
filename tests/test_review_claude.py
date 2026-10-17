@@ -21,7 +21,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import review, runtime, review_mode  # noqa: E402
+from controller import job, review, runtime, review_mode  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import fake_claude_review, fixtures, process_fixtures  # noqa: E402
 
@@ -139,10 +139,16 @@ class ArgvAndBoundaryTest(unittest.TestCase):
             with self.subTest(effort=effort), self.assertRaises(ReviewLaunchRefusedError) as raised:
                 self.command(effort=effort)
             self.assertEqual(raised.exception.evidence["check"], "effort")
-        for model in ("", "--model", "a b"):
+        for model in ("", "--model", "a b", "opus", "haiku", "sonnet", "claude-", "claude-opus 5", "-claude-opus-5-5",
+                      "Claude-opus-5-5", "claude-opus-5-5\n"):
             with self.subTest(model=model), self.assertRaises(ReviewLaunchRefusedError) as raised:
                 self.command(model=model)
             self.assertEqual(raised.exception.evidence["check"], "model")
+
+    def test_a_full_model_id_is_accepted(self):
+        for model in ("claude-opus-5-5", "claude-haiku-4-5-20251001", "claude-fable-5-1", "claude-sonnet-4.5_x"):
+            with self.subTest(model=model):
+                self.assertEqual(self.command(model=model)[-3], model)
 
     def test_the_verdict_family_is_anthropic_and_not_openai(self):
         expected = review.expected_headers(MANIFEST, "plan", MODEL, review.CLAUDE.verdict_family)
@@ -360,6 +366,28 @@ class FakeLaunchTest(unittest.TestCase):
             self.launch({"no_init": True}, job="j-noinit")
         self.assertEqual(raised.exception.evidence["entry"], "init")
 
+    def test_the_reported_cost_and_tokens_survive_an_init_refusal(self):
+        # A completed run whose init event is refused (a model name resolving to another id) was still paid for.
+        out: dict = {}
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.launch({"init": {"model": "other"}}, job="j-paid", out=out)
+        figures = out["telemetry"]
+        self.assertEqual((figures["results"], figures["cost_usd"]), (1, 0.01))
+        self.assertEqual(figures["tokens"], {"input": 12, "output": 300, "cache_creation": 50, "cache_read": 1000})
+        # the Controller's refusal path reads the same dict into the review block
+        self.assertEqual(job._obtained(out)["telemetry"], figures)
+
+    def test_the_reported_cost_and_tokens_survive_a_missing_init_refusal(self):
+        # A run that completed but printed no init event was paid for as well (I2 of CU1 review round 3).
+        out: dict = {}
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            self.launch({"no_init": True}, job="j-noinit-paid", out=out)
+        self.assertEqual(raised.exception.evidence["entry"], "init")
+        figures = out["telemetry"]
+        self.assertEqual((figures["results"], figures["cost_usd"]), (1, 0.01))
+        self.assertEqual(figures["tokens"], {"input": 12, "output": 300, "cache_creation": 50, "cache_read": 1000})
+        self.assertEqual(job._obtained(out)["telemetry"], figures)
+
     def test_a_wrong_family_verdict_is_a_mismatch_then_retried_once(self):
         result = self.launch({"verdict": "wrong_id_first"})
         self.assertEqual(result["outcome"], "verdict", result)
@@ -373,6 +401,24 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(sorted(r["window"] for r in result["first_readings"]), ["five_hour", "weekly"])
         self.assertEqual(sorted(r["window"] for r in result["readings"]), ["five_hour", "weekly"])
         self.assertNotIn("stream_first", result)
+
+    def test_the_cost_and_tokens_of_each_attempt_are_summed(self):
+        one = self.launch(job="j-one")["telemetry"]
+        self.assertEqual((one["results"], one["cost_usd"]), (1, 0.01))
+        self.assertEqual(one["tokens"], {"input": 12, "output": 300, "cache_creation": 50, "cache_read": 1000})
+        two = self.launch({"verdict": "wrong_id_first"}, job="j-two")["telemetry"]
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual((two["results"], two["cost_usd"]), (2, 0.02))
+        self.assertEqual(two["tokens"], {"input": 24, "output": 600, "cache_creation": 100, "cache_read": 2000})
+
+    def test_a_run_with_no_result_adds_nothing_and_an_unreadable_figure_stays_unknown(self):
+        self.assertIsNone(review.add_figures(None, None))
+        self.assertIsNone(review.result_figures(None))
+        first = review.result_figures({"total_cost_usd": 0.5, "usage": {"input_tokens": 1}})
+        self.assertIsNone(first["tokens"]["output"])
+        both = review.add_figures(first, review.result_figures({"total_cost_usd": 0.25, "usage": {
+            "input_tokens": 2, "output_tokens": 3, "cache_creation_input_tokens": 4, "cache_read_input_tokens": 5}}))
+        self.assertEqual((both["cost_usd"], both["tokens"]["input"], both["tokens"]["output"]), (0.75, 3, None))
 
     def test_a_revise_and_a_block_verdict_are_returned_as_they_are(self):
         for kind, status in (("revise", "REVISE"), ("block", "BLOCK")):

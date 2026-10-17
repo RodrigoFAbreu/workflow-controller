@@ -24,10 +24,10 @@ speak the same protocol (1.2) and are admitted the same way; Controller 1.8.0 wa
 against 2.9.2. Workflow 2.10.0 and 2.11.0 speak protocol 1.3 and are admitted the same way; Controller 1.9.0
 was checked against 2.10.0, and Controllers 1.10.0 and 1.11.0 against 2.11.0. Workflow 2.12.0 speaks
 protocol 1.4, which adds the review round to the next-action snapshot (an additive change), and is
-admitted the same way; Controllers 1.11.0, 1.12.0, 1.13.0 and 1.13.1 were checked against it. Workflow 2.13.0 speaks the same
+admitted the same way; Controllers 1.11.0, 1.12.0, 1.13.0, 1.13.1 and 1.14.0 were checked against it. Workflow 2.13.0 speaks the same
 protocol (1.4) and is admitted the same way; Controllers 1.13.1 and 1.14.0 were checked against it. Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
-job records instead. A later release no longer refuses a value a protocol 1.x minor release adds to a closed enum of an answer: it is
+job records instead. Controller 1.14.0 and later no longer refuse a value a protocol 1.x minor release adds to a closed enum of an answer: it is
 advisory, ignored or a stop, by a rule per enum location (a blocked gate before any launch for an action id, worker role or disposition; a `FAILED` job with the evidence reason `workflow_unknown_value` for a reconcile class or record stage) (see
 [automation](guide/automation.md#protocol-mode-workflow-27-and-later)); only a protocol major change is refused.
 Controller 1.7.1

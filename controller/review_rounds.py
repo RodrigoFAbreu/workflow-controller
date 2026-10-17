@@ -13,7 +13,8 @@ repository's and work item's job records read oldest first (a
 ``GATE_BLOCKED`` record excluded), then the snapshot as the last
 observation. ``implementation`` is 1 plus the number of times
 ``implementation_revision`` rose. ``plan`` is the number of distinct integer
-``plan_revision`` values observed at a plan-review ready phase, at least 1;
+``plan_revision`` values observed at a plan-review ready phase (an item
+governed as ``"1"`` is ready at ``AWAITING_EXTERNAL_PLAN_REVIEW``), at least 1;
 the Workflow counts published contents, which can exceed ``plan_revision``,
 so that count is a lower bound. ``None`` is never read as 0.
 """
@@ -70,6 +71,11 @@ PLAN_REVIEW_READY_PHASES = frozenset({
     "AWAITING_PLAN_APPROVAL",
 })
 
+#: The plan-review ready phase of an item the Workflow governs as ``"1"``
+#: (single-stage review): it never reaches the phases above.
+_LEGACY_PLAN_REVIEW_READY_PHASE = "AWAITING_EXTERNAL_PLAN_REVIEW"
+_LEGACY_VERSION = "1"
+
 _GATE_BLOCKED = "GATE_BLOCKED"
 
 
@@ -114,6 +120,16 @@ def stored_round(snapshot: Mapping | None, stage: str) -> int | None:
     return value if _is_int(value) and value >= 1 else None
 
 
+def _at_plan_review_ready_phase(observation: Mapping) -> bool:
+    """Whether ``observation`` is at its own plan-review ready phase: a
+    ``"1"``-governed item's is ``AWAITING_EXTERNAL_PLAN_REVIEW`` (#67), any
+    other item's is in :data:`PLAN_REVIEW_READY_PHASES`."""
+    phase = observation.get("phase")
+    if observation.get("governing_workflow_version") == _LEGACY_VERSION:
+        return phase == _LEGACY_PLAN_REVIEW_READY_PHASE
+    return phase in PLAN_REVIEW_READY_PHASES
+
+
 def current_round(snapshot: Mapping | None, stage: str, records: Iterable[Any], *,
                   target_repo: str, work_item_id: str | None) -> tuple[int, str]:
     """``(round, source)`` of ``stage`` (D1). ``source`` is ``workflow`` for
@@ -125,7 +141,7 @@ def current_round(snapshot: Mapping | None, stage: str, records: Iterable[Any], 
     observed = _observations(snapshot, records, target_repo, work_item_id)
     if stage == STAGE_PLAN:
         seen = {obs.get("plan_revision") for obs in observed
-                if obs.get("phase") in PLAN_REVIEW_READY_PHASES and _is_int(obs.get("plan_revision"))}
+                if _at_plan_review_ready_phase(obs) and _is_int(obs.get("plan_revision"))}
         return max(1, len(seen)), SOURCE_JOBS
     rises = 0
     previous = None

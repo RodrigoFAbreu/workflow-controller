@@ -127,6 +127,37 @@ class PlanCountTest(unittest.TestCase):
         # A REVISE and an apply published revision 3.
         self.assertEqual(get(snap(self.READY, plan=3), "plan", records), (2, "jobs"))
 
+    def test_a_version_1_item_is_counted_at_its_own_ready_phase(self) -> None:
+        """#67: a ``"1"``-governed item is ready at ``AWAITING_EXTERNAL_PLAN_REVIEW``, a phase none of the
+        two-stage items reaches; the other phases do not count for it."""
+        legacy = "AWAITING_EXTERNAL_PLAN_REVIEW"
+
+        def seen(n: int, phase: str, plan: int, version: str | None) -> dict:
+            made = record(n, phase, plan=plan)
+            made["pre_state"]["governing_workflow_version"] = version
+            return made
+
+        def at(phase: str, plan: int, version: str | None) -> dict:
+            return {**snap(phase, plan=plan), "governing_workflow_version": version}
+
+        self.assertEqual(get(at(legacy, 1, "1"), "plan", []), (1, "jobs"))
+        records = [seen(1, legacy, 1, "1")]
+        self.assertEqual(get(at(legacy, 2, "1"), "plan", records), (2, "jobs"))
+        records.append(seen(2, legacy, 2, "1"))
+        self.assertEqual(get(at(legacy, 3, "1"), "plan", records), (3, "jobs"))
+        # The two-stage phases are not a "1" item's ready phases; the legacy one is not a two-stage item's.
+        self.assertEqual(get(at(legacy, 3, "1"), "plan", [seen(1, self.READY, 1, "1"), seen(2, self.READY, 2, "1")]),
+                         (1, "jobs"))  # only the snapshot, at the legacy phase, counts
+        for version in ("2.2", "2.1", None):
+            with self.subTest(version=version):
+                records = [seen(1, legacy, 1, version), seen(2, legacy, 2, version), seen(3, self.READY, 3, version)]
+                self.assertEqual(get(at(self.READY, 3, version), "plan", records), (1, "jobs"))
+        two = [seen(1, self.READY, 1, "2.2"), seen(2, self.READY, 2, "2.2")]
+        self.assertEqual(get(at(self.READY, 3, "2.2"), "plan", two), (3, "jobs"))
+
+    def test_the_ready_phase_pin_is_not_changed_by_the_version_1_rule(self) -> None:
+        self.assertNotIn("AWAITING_EXTERNAL_PLAN_REVIEW", rr.PLAN_REVIEW_READY_PHASES)
+
     def test_the_count_is_a_lower_bound_of_the_workflows_plan_round(self) -> None:
         """An apply round that published new plan content without advancing
         ``plan_revision``: the Workflow's number is higher, never lower."""

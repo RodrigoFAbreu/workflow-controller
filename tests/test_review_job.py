@@ -174,9 +174,9 @@ class GateSelectionTest(unittest.TestCase):
         return SimpleNamespace(protocol=SimpleNamespace(disposition=disposition, action_id=action_id, document=document))
 
     def test_rows_14_and_28_are_couriered(self) -> None:
-        self.assertEqual(job._review_gate(self.decision(), {"harness": "codex"}), ("plan", "plan_review_verdict"))
-        got = job._review_gate(self.decision(action_id="implementation.review.external",
-                                             phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"), {"x": 1})
+        self.assertEqual(job._external_review_stage(self.decision()), ("plan", "plan_review_verdict"))
+        got = job._external_review_stage(self.decision(action_id="implementation.review.external",
+                                                       phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"))
         self.assertEqual(got, ("implementation", "implementation_review_verdict"))
 
     def test_the_other_rows_with_the_same_action_ids_stay_gates(self) -> None:
@@ -191,14 +191,17 @@ class GateSelectionTest(unittest.TestCase):
             ("implementation.review.external", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"),
         ):
             with self.subTest(action_id=action_id, phase=phase):
-                self.assertIsNone(job._review_gate(self.decision(action_id=action_id, phase=phase), {"h": 1}))
+                self.assertIsNone(job._external_review_stage(self.decision(action_id=action_id, phase=phase)))
 
     def test_unset_harness_no_snapshot_other_dispositions_and_other_actions_stay_gates(self) -> None:
-        self.assertIsNone(job._review_gate(self.decision(), None))
-        self.assertIsNone(job._review_gate(self.decision(snapshot=False), {"h": 1}))
-        self.assertIsNone(job._review_gate(self.decision(disposition="human_gate"), {"h": 1}))
-        self.assertIsNone(job._review_gate(self.decision(action_id="plan.approve"), {"h": 1}))
-        self.assertIsNone(job._review_gate(SimpleNamespace(protocol=None), {"h": 1}))
+        # No reviewer configured: the gate is recognised, but no review is chosen.
+        target, choice = job._choose_review(None, self.decision(), None, {"mode": "manual"})
+        self.assertEqual((target, choice.kind), (("plan", "plan_review_verdict"), "gate"))
+        self.assertIsNone(job._choose_review(None, self.decision(snapshot=False), None, {"mode": "manual"}))
+        self.assertIsNone(job._external_review_stage(self.decision(snapshot=False)))
+        self.assertIsNone(job._external_review_stage(self.decision(disposition="human_gate")))
+        self.assertIsNone(job._external_review_stage(self.decision(action_id="plan.approve")))
+        self.assertIsNone(job._external_review_stage(SimpleNamespace(protocol=None)))
 
 
 class UnconfiguredAndRefusalTest(_ReviewCase):

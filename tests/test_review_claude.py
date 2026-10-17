@@ -139,10 +139,16 @@ class ArgvAndBoundaryTest(unittest.TestCase):
             with self.subTest(effort=effort), self.assertRaises(ReviewLaunchRefusedError) as raised:
                 self.command(effort=effort)
             self.assertEqual(raised.exception.evidence["check"], "effort")
-        for model in ("", "--model", "a b"):
+        for model in ("", "--model", "a b", "opus", "haiku", "sonnet", "claude-", "claude-opus 5", "-claude-opus-5-5",
+                      "Claude-opus-5-5", "claude-opus-5-5\n"):
             with self.subTest(model=model), self.assertRaises(ReviewLaunchRefusedError) as raised:
                 self.command(model=model)
             self.assertEqual(raised.exception.evidence["check"], "model")
+
+    def test_a_full_model_id_is_accepted(self):
+        for model in ("claude-opus-5-5", "claude-haiku-4-5-20251001", "claude-fable-5-1", "claude-sonnet-4.5_x"):
+            with self.subTest(model=model):
+                self.assertEqual(self.command(model=model)[-3], model)
 
     def test_the_verdict_family_is_anthropic_and_not_openai(self):
         expected = review.expected_headers(MANIFEST, "plan", MODEL, review.CLAUDE.verdict_family)

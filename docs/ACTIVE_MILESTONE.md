@@ -18,6 +18,16 @@ Plan revision 3 is approved (`4d29850`); implementation is under way, one checkp
   2 CPUs with parallel copies (about 1 in 40 and 1 in 20) and no longer fail in 60 pinned runs each. `tests.test_review_rounds`
   pins the ready-phase copy against `evidence`, the installed `scripts/` and the vendored trees. Each changed guard
   was shown failing on its defect by restoring the defect in place (D7).
+- **CP3 complete** (#67, #71, #72, #73, #74; review-code fixes): the plan round of a `"1"`-governed item is counted at
+  `AWAITING_EXTERNAL_PLAN_REVIEW` (`review_rounds.PLAN_REVIEW_READY_PHASES` unchanged); `job._review_gate` is gone and
+  its tests call `_external_review_stage` and `_choose_review`; `claude_argv` refuses a model that is not a full id
+  (`CLAUDE_MODEL_ID_RE`, `check="model"`) before any launch; the three `_end_review_group` refusals and the reconciled
+  record's message name the review's own harness; the 2026-10-17 symlink and outside-path probe is committed under
+  `tests/harness_contract/claude/` (`symlink_probe.txt`, `stream_symlink_probe_haiku.jsonl`, argv reconstructed, no Opus
+  repeat) and the two "not settled" lines became settled facts. `docs/guide/runtime.md` and `docs/common-problems.md`
+  state the rules. Each new test was shown failing with the controller change reverted (D7). Checked with
+  `tests.test_review_rounds`, `test_review_claude`, `test_review_job`, `test_review_same_provider`, `test_telemetry`,
+  `test_docs`, `test_write_containment` and `tools/check_docs.py`.
 
 The previous milestone's record follows.
 

@@ -1434,6 +1434,12 @@ CLAUDE_SYSTEM_LAYER_ENTRIES = ("managed-settings.json", "managed-settings.d", "m
 CLAUDE_FORBIDDEN_HOME_ENTRIES = (".claude", ".claude.json", "CLAUDE.md")
 
 
+#: The shape of a full model id as ``init`` reports it (#72). ``check_claude_init``
+#: compares the reported model to the requested one exactly, so a name that
+#: cannot be reported back (an alias) is refused before launch.
+CLAUDE_MODEL_ID_RE = re.compile(r"claude-[A-Za-z0-9._-]+")
+
+
 def claude_argv(*, binary: Path, model: str, effort: str) -> list[str]:
     """The only constructor of the Claude command line: the captured
     ``recommended_run`` (``argv.json``), the prompt on stdin. The effort is
@@ -1441,8 +1447,11 @@ def claude_argv(*, binary: Path, model: str, effort: str) -> list[str]:
     if effort not in CLAUDE_EFFORTS:
         raise _refuse(f"reviewer.same_provider_effort {effort!r} is not one of {', '.join(CLAUDE_EFFORTS)}",
                       check="effort", entry=effort)
-    if not model or model.startswith("-") or any(ch.isspace() for ch in model):
-        raise _refuse(f"reviewer.same_provider_model {model!r} is not a model name", check="model", entry=model)
+    if not CLAUDE_MODEL_ID_RE.fullmatch(model):
+        raise _refuse(f"reviewer.same_provider_model {model!r} is not a full Claude model id: it must begin "
+                      "'claude-' and hold only letters, digits, '.', '_' and '-' (an alias such as 'opus' is "
+                      "reported by Claude under another name, so the review would be refused at start)",
+                      check="model", entry=model)
     return [str(binary), "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
             "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--tools", ",".join(CLAUDE_TOOLS), "--permission-mode", "dontAsk", "--permission-prompts", "none",

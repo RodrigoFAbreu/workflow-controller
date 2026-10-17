@@ -297,7 +297,9 @@ separately: the Workflow's own `review_round` when its answer carries one
 (Workflow 2.12.0 and later), else the Controller's count over its job
 records of this repository and work item (a plan round counted that way is
 a lower bound: the Workflow counts published contents, which can exceed
-`plan_revision`). `<stage>.apply_review` is not launched at round `cap` or
+`plan_revision`; a plan of a work item the Workflow governs as `"1"` is
+counted at its own review phase, `AWAITING_EXTERNAL_PLAN_REVIEW`).
+`<stage>.apply_review` is not launched at round `cap` or
 above, and `<stage>.review.local` is not launched above round `cap`; the
 step returns the `review_round_cap_reached` gate instead (see
 [a run stopped at the review round cap](../common-problems.md#a-run-stopped-at-the-review-round-cap)).
@@ -365,6 +367,12 @@ The same-provider reviewer is a fresh, read-only Claude session in a
 disposable copy (see [the reviewers](workers.md#the-same-provider-reviewer)).
 `reviewer.same_provider_model` and `reviewer.same_provider_effort` fall back
 to `claude-opus-5-5` and `high`; they are not the worker `routing` section.
+The model row takes a full model id: a name that begins `claude-` and holds
+only letters, digits, `.`, `_` and `-` (an alias such as `opus` is refused
+before launch with `ReviewLaunchRefused`, because Claude reports the full id
+back and the Controller compares it exactly). A name of that shape that
+resolves to another id, such as a `-latest` name, still starts and is
+refused at the session's `init` event.
 Its approvals are recorded with `review.mode`, `review.mode_source` and
 `review.lowered`, and `telemetry --by review_mode` counts them (a review job
 keeps no cost or token figures, so none is shown).

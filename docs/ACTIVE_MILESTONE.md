@@ -58,3 +58,58 @@ Deferred follow-ups, not conditions of acceptance:
 `/milestone-plan` for C10, gate policy (`docs/ROADMAP.md`, "Next, in order"). After it come C12, C11 and the
 orchestrator series O1-O7; CU2, the next clean-up milestone (#78 and #79 so far), slots in every few milestones or
 sooner when the issue count grows.
+
+## Functional review checklist
+
+Scope: implementation revision 6 (technical approval recorded at `cfc8b55`; the fixes of revisions 1-5 are included).
+Run every flow in a scratch checkout or scratch repository, never in this one, and never against the real `origin` or
+`gh` (use a scratch bare `origin` and a fake `gh` on `PATH`). A real `/satisfy-gate` worker consumes account usage, so
+the flows use fake workers only.
+
+### Setup
+
+- Run from this checkout with `PYTHONPATH=<this checkout>` (`python3 -m controller ...`, see `docs/guide/development.md`).
+  Leave `FORCE_COLOR` unset. Pass `--routing-config` before the subcommand if a routing file is used.
+- Test data: the lifecycle fixtures of `tests/test_protocol_lifecycle.py` (`SatisfyGateLifecycleTest`) build a scratch
+  repository on the vendored Workflow 2.12.0 (`tests/workflow_releases/2.12.0`) with fake workers, a fake `gh` and a
+  scratch bare origin.
+- Known unrelated local failures: the two Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`)
+  and the bare 2.5.1 `plan_stage_decisions.json --check` difference.
+
+### Flows and expected results
+
+1. **Satisfy-gate launches (CP1).** Under automatic gates, real 2.12.0 answers for rows 14a, 28a and 38h launch
+   `/satisfy-gate plan|implementation|acceptance <id>` on the new `satisfy-gate` role (Opus, `xhigh`; the `Skill`,
+   `Agent` and `Workflow` tools disallowed). A `validation` answer for another action id, a `user_only` worker, a role
+   other than `validator`, a changed invocation or an unknown id is blocked with its code and launches nothing;
+   `pr.apply_review` is still blocked as unlaunchable. `--role-model satisfy-gate=...` and the settings file accept the role.
+2. **A satisfied gate passes (CP2).** `python3 -m unittest tests.test_protocol_lifecycle` (the `SatisfyGateLifecycleTest`
+   scenarios): a run goes from plan review to `IMPLEMENTING` and from functional evidence to `MILESTONE_COMPLETE` with no
+   stop; `approval_recorded` is sent only when the phase moved (also for a step `reconcile` classes `gate_reached`), and
+   `milestone_accepted` for acceptance.
+3. **A refused gate stops (CP2).** A fake validator that refuses leaves the phase unchanged, sends `step_done` only, and
+   the run stops after two refusals with `no_progress_repeated`; `explain` names the unmet requirement (including after
+   the first refusal and past a long preamble).
+4. **Row 38f / 38d stops (CP2, D7).** With the fake `gh` reporting pending checks, acceptance stops at row 38f with
+   `user_gate`; turning the checks green changes nothing until `satisfy_acceptance_gate` is run by hand; a reported green
+   `pr_review_result` leads to row 38d, blocked as unlaunchable, `user_gate`. `docs/guide/runtime.md` says so.
+5. **Open enums (CP3).** `protocol_schema.ENUM_RULES` names all twenty locations; a document with a value a minor release
+   adds is accepted (advisory line for a verify status; step ends in a gate naming `workflow_unknown_value` for a reconcile
+   class or record stage), a protocol major change is still refused (exit 20), and the seven earlier exemptions stay open.
+6. **Blocker vs request (CP4).** A gate whose Workflow disposition is `blocked` sends `lane_blocked` ("Blocked: ...");
+   `human_gate`, `external_gate`, a legacy target and the Controller's own gates keep `user_gate`; re-deriving from the
+   job record gives the same identity.
+7. **Documents (CP5).** `python3 tools/check_docs.py` exits 0; `docs/ROADMAP.md` shows C10a/C10b/C10c, follow-up 17 done,
+   follow-up 26 partly done; guides (`commands`, `runtime`, `automation`, `how-it-works`, `troubleshooting`), `compatibility`,
+   `common-problems`, `run` and ADR 0015 agree with the behaviour and keep no "until C10" sentence.
+8. **Settings and golden.** The settings table generation is 9 and lists `satisfy-gate`; the golden generators pass with
+   `--check` (never run one without it).
+9. **Whole suite.** `python3 tools/run_tests.py` finishes with exact coverage and only the known failures above.
+
+### Known limitations and out of scope
+
+- Rows 38e-38g and 38d under an automatic gate still stop with `user_gate`; C10b (`pr.apply_review`, 38d/38f/38g) and
+  C10c (automated functional review, 38e) own them.
+- The Controller's own vendored schema is not re-vendored to 2.12.0 here; the fourteenth enum (`review_round.current`)
+  is classified by the step that moves it.
+- A real `/satisfy-gate` worker and a real GitHub query are not exercised.

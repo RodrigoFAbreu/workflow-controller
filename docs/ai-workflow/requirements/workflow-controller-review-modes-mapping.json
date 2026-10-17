@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-review-modes",
+  "requirements": {
+    "R1": {
+      "description": "review.mode and --review-mode exist at settings generation 8 with the two same-provider rows; the flag wins; a bad value exits 2; a repository that sets nothing and whose newest adoption lowered no require behaves as at 1.12.0",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "R2": {
+      "description": "At an external_gate of row 14 or 28 the mode chooses the reviewer by D1-D4 (auto: cross-model only when reviewer.harness is set, else same-provider only where verify reports the stage's require lowered and nothing else (the D3 allow-list), else the gate; cross-model: the distinct provider or the review_mode_unavailable stop; single-provider: the Claude reviewer only while verify reports the stage's require lowered and nothing else (the D3 allow-list), else refused before launch; manual: the gate); no other action changes",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R3": {
+      "description": "The claude review harness reviews in a fresh read-only session in a disposable copy, its boundary pinned by real captures, its verdict header checked exactly with family anthropic, and it never changes the repository, the Workflow state or a job record",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "A same-provider review is admitted against the Claude usage budget, recorded with review.mode, review.mode_source and review.lowered, and handed to record-external-result verbatim; a DistinctReviewerModelsRequiredError ends the job INCOMPLETE, names the three GATE_POLICY.md paths and stops the next step while the state identity and gate-policy signal are unchanged and choose again selects a same-family reviewer (a mode or harness that selects the gate or a distinct provider goes ahead; turning the gate human releases auto and manual only; the message names only the paths that act for the mode, signal and phase); an unsignalled single-provider (any clause outside the allow-list -- file_tightened, floor, loosening-ignored, invalid file, an unknown clause -- or a fail status cancels the signal) is refused before launch; the ledger reference follows the harness",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "explain, settings show and telemetry show the mode, its source and the lowered label with the existing text and JSON keys unchanged; the lifecycle scenario drives all four modes through cli.main",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R6": {
+      "description": "The settings, command, worker, run, problems and development pages and the roadmap agree with the behaviour; check_docs, the golden --check forms and the full suite are green",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

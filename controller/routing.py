@@ -67,6 +67,9 @@ RECORD_MANUAL_IMPLEMENTATION_REVIEW = "record-manual-implementation-review"
 #: is in :data:`ROLE_BY_COMMAND_STEM`.
 PREPARE_FUNCTIONAL_REVIEW = "prepare-functional-review"
 APPLY_FUNCTIONAL_REVIEW = "apply-functional-review"
+#: The validator role (gate-policy D4): ``/satisfy-gate`` records a decision in
+#: a transaction that commits, so it is single-agent like the reviews.
+SATISFY_GATE = "satisfy-gate"
 
 #: The built-in model and effort of the named lifecycle roles.
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -105,6 +108,7 @@ ROLE_ROUTES: Mapping[str, Route] = MappingProxyType({
     PREPARE_FUNCTIONAL_REVIEW: _INHERIT,
     # It classifies and fixes findings, as `apply-plan-review` does.
     APPLY_FUNCTIONAL_REVIEW: _OPUS,
+    SATISFY_GATE: _OPUS_SINGLE_AGENT,
 })
 
 #: The closed set of role names ``--role-model``/``--role-effort`` and the

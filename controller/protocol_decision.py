@@ -51,15 +51,20 @@ from controller.decision import (
 )
 from controller.errors import WorkflowProtocolFailedError, WorkflowProtocolRefusedError
 
-#: The decision's dispositions this release knows. ``validation`` is one the
-#: schema lists but that never names an action to run: it is blocked like an
-#: unknown value (plan C.2).
-DISPOSITIONS = frozenset({"automatic", "human_gate", "external_gate", "blocked", "complete"})
+#: The decision's dispositions this release knows. ``validation`` names a
+#: ``/satisfy-gate`` action, launched only for the three ``.satisfy`` ids of
+#: :data:`PROTOCOL_ACTIONS` (D2); any other pairing is blocked like an unknown
+#: value.
+DISPOSITIONS = frozenset({"automatic", "human_gate", "external_gate", "blocked", "complete", "validation"})
 
 #: The worker roles an ``automatic`` action may carry. ``user`` and
 #: ``external`` are gates' roles; a role outside this set (a later minor adds
-#: one) is blocked, never launched.
+#: one) is blocked, never launched. ``validator`` is deliberately not here: it
+#: is accepted only for a ``validation`` entry (:data:`VALIDATOR_WORKER_ROLE`).
 AUTOMATIC_WORKER_ROLES = frozenset({"planner", "implementer", "self_reviewer", "independent_reviewer", "applier"})
+
+#: The one worker role a ``validation`` action may carry.
+VALIDATOR_WORKER_ROLE = "validator"
 
 #: The phases at which the committed-state gate applies (plan C.5): 1.6.0's
 #: scope, ``evidence.MILESTONE_IMPLEMENT_PHASES``.
@@ -77,14 +82,18 @@ WORKFLOW_UNHEALTHY = "workflow_unhealthy"
 
 @dataclasses.dataclass(frozen=True)
 class ProtocolAction:
-    """One automatic action id: the command it runs (``/<command>``) and the
-    :data:`~controller.routing.ROLES` member that routes its worker."""
+    """One launchable action id: the command it runs (``/<command>`` plus the
+    fixed ``leading`` arguments), the :data:`~controller.routing.ROLES` member
+    that routes its worker, and the disposition the Workflow gives it."""
 
     command: str
     route: str
+    leading: tuple[str, ...] = ()
+    disposition: str = "automatic"
 
 
-#: The twelve automatic action ids (plan C.3). The route key is assigned
+#: The fifteen launchable action ids (plan C.3): twelve automatic and the
+#: three ``.satisfy`` validations (D3). The route key is assigned
 #: here, not derived from ``routing.role_for``'s ``registry_complete`` rule:
 #: the protocol tells the two implementation actions apart by id.
 PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
@@ -101,28 +110,29 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
     "implementation.apply_review": ProtocolAction("apply-implementation-review", "apply-implementation-review"),
     "functional.prepare": ProtocolAction("prepare-functional-review", "prepare-functional-review"),
     "functional.apply_findings": ProtocolAction("apply-functional-review", "apply-functional-review"),
+    "plan.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("plan",), "validation"),
+    "implementation.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("implementation",), "validation"),
+    "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("acceptance",), "validation"),
 })
 
 #: The one action that has no work item (plan C.4).
 PLAN_START = "plan.start"
 
 
-#: The catalogue ids of Workflow 2.9.0 that are automatic or validation
-#: actions this Controller has no :data:`PROTOCOL_ACTIONS` entry for. They are
-#: catalogue members (so the schema accepts them) but ``inspect`` still
-#: advises about them: unlike the gates and user-only ids, they could become
-#: the next action and would then be blocked.
-UNLAUNCHED_AUTOMATIC_ACTION_IDS = frozenset({
-    "plan.satisfy", "implementation.satisfy", "acceptance.satisfy", "pr.apply_review",
-})
+#: The catalogue ids that are automatic actions this Controller has no
+#: :data:`PROTOCOL_ACTIONS` entry for (``pr.apply_review``, left to C10b).
+#: They are catalogue members (so the schema accepts them) but ``inspect``
+#: still advises about them: unlike the gates and user-only ids, they could
+#: become the next action and would then be blocked.
+UNLAUNCHED_AUTOMATIC_ACTION_IDS = frozenset({"pr.apply_review"})
 
 
 def unknown_action_ids(listed: Any) -> list[str]:
     """The action ids ``describe`` lists that this Controller release cannot
     launch and does not treat as a gate (plan C.3): neither in
     :data:`PROTOCOL_ACTIONS` nor a catalogue id of the vendored schema,
-    except the four of :data:`UNLAUNCHED_AUTOMATIC_ACTION_IDS` (automatic or
-    validation actions with no command here). The other catalogue ids are
+    except :data:`UNLAUNCHED_AUTOMATIC_ACTION_IDS` (an automatic action with
+    no command here). The other catalogue ids are
     gates or user-only actions the Controller never launches by design. An
     advisory for ``inspect``, never a refusal: a minor protocol bump adds
     ids, and one is blocked only if it actually becomes the next action."""
@@ -134,7 +144,8 @@ def bare_invocation(action_id: str, work_item_id: str | None) -> str:
     """The rendering the Controller compares the answer's ``invocation``
     with: ``/<command>`` and the work item, without the Controller's own
     appended base commit."""
-    command = f"/{PROTOCOL_ACTIONS[action_id].command}"
+    entry = PROTOCOL_ACTIONS[action_id]
+    command = " ".join((f"/{entry.command}", *entry.leading))
     return command if work_item_id is None else f"{command} {work_item_id}"
 
 
@@ -250,7 +261,7 @@ def from_answer(managed_repo: Any, work_item: Any, answer: protocol.Decision, *,
     context = _Context(managed_repo, work_item, work_item_id, phase, answer, advisories)
 
     disposition = answer.disposition
-    if disposition == "automatic":
+    if disposition in ("automatic", "validation"):
         return _automatic(context, base)
     if disposition in ("human_gate", "external_gate"):
         return context.gate(_gate_text(answer), evidence_label=disposition,
@@ -290,7 +301,14 @@ def _automatic(context: "_Context", base: str | None) -> Decision:
             UNKNOWN_ACTION,
             f"the Workflow's next action is {action.id!r}, which this Controller release has no command for "
             f"(row {answer.row}); a later Workflow minor may add actions, and one that becomes next stops here")
-    if action.worker.role not in AUTOMATIC_WORKER_ROLES:
+    if entry.disposition != answer.disposition:
+        return context.blocked(
+            UNKNOWN_ACTION,
+            f"the Workflow answered {action.id!r} under the disposition {answer.disposition!r}, but this Controller "
+            f"release launches it only under {entry.disposition!r} (row {answer.row}); nothing is launched")
+    allowed_roles = (frozenset({VALIDATOR_WORKER_ROLE}) if entry.disposition == "validation"
+                     else AUTOMATIC_WORKER_ROLES)
+    if action.worker.role not in allowed_roles:
         return context.blocked(
             UNKNOWN_WORKER_ROLE,
             f"the action {action.id!r} names the worker role {action.worker.role!r}, which this Controller "

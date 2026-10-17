@@ -56,6 +56,8 @@ Global options go before the subcommand and the repository goes last, as in `wor
        `/satisfy-gate acceptance <id>`, which asks GitHub itself. Automatic acceptance needs an
        open, pushed pull request. A repository without milestone branches has no pull request at
        acceptance, so it must make acceptance a person's (next item).
+       Once the checks turn green the run still stops here: run `/satisfy-gate acceptance <id>` by hand
+       (see "Automatic gates" in the [automation guide](guide/automation.md)).
      - Or make acceptance a person's: set `gates.acceptance.human: true`, commit the file and run
        `/adopt-gate-policy` (see Human gates below), then accept with `/accept-milestone`. The external reviews and, unless functional evidence is recorded,
        the functional review stay yours.

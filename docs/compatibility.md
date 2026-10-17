@@ -27,7 +27,7 @@ protocol 1.4, which adds the review round to the next-action snapshot (an additi
 admitted the same way; Controllers 1.11.0, 1.12.0, 1.13.0 and 1.13.1 were checked against it. Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
 job records instead. A later release no longer refuses a value a protocol 1.x minor release adds to a closed enum of an answer: it is
-advisory, ignored or a gate naming the value, by a rule per enum location (see
+advisory, ignored or a stop, by a rule per enum location (a blocked gate before any launch for an action id, worker role or disposition; a `FAILED` job with the evidence reason `workflow_unknown_value` for a reconcile class or record stage) (see
 [automation](guide/automation.md#protocol-mode-workflow-27-and-later)); only a protocol major change is refused.
 Controller 1.7.1
 accepts the Workflow's `warn` check status as advisory: `explain` shows it and nothing is

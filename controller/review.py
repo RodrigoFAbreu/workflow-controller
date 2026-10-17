@@ -220,8 +220,10 @@ STRIPPED_COPY_PATHS = (".codex", ".agents/skills", ".agents/plugins", "AGENTS.ov
 
 #: The Claude harness's project-local discovery removed from the copy (review-modes D5): hooks and permissions
 #: (``.claude/settings*.json``), commands, agents and skills all live under ``.claude/``; ``.mcp.json`` is the
-#: project MCP file. ``CLAUDE.md`` is deliberately kept: it is repository content the reviewer may read, and the
-#: empty ``--setting-sources`` stops it acting as instructions (``tests/harness_contract/claude/layers.txt``).
+#: project MCP file. ``CLAUDE.md`` is deliberately kept: it is repository content the reviewer may read. The
+#: empty ``--setting-sources`` only stops Claude Code loading it automatically (``tests/harness_contract/claude/layers.txt``);
+#: a reviewer that reads the file may still follow what it says, so the review's prompt injection exposure is the
+#: file's own content, bounded by the read-only tools and the disposable copy.
 CLAUDE_STRIPPED_COPY_PATHS = (".claude", ".mcp.json")
 
 #: The Claude harness's private configuration directory inside a job (``CLAUDE_CONFIG_DIR``).
@@ -1311,6 +1313,7 @@ class Attempt:
     subagents: list = dataclasses.field(default_factory=list)
     readings: list | None = None
     failure: str | None = None
+    first_readings: list | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1610,8 +1613,9 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
                   else "api_error_status 429")
     if verdict.strip():
         runtime.write_bytes(layout.runtime_root, layout.rel("verdict.md"), verdict.encode("utf-8"))
-    return Attempt(run, verdict, limited, detail, [], usage.read_claude_stream(run.stdout),
-                   text if failed and text else None)
+    first, last = usage.read_claude_stream_span(run.stdout)
+    return Attempt(run, verdict, limited, detail, [], [last[w] for w in usage.WINDOWS if w in last],
+                   text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first])
 
 
 def _claude_end_readings(_home: Path) -> list[dict]:
@@ -1725,7 +1729,7 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     captured = None
     result: dict = out if out is not None else {}
     result.update({"status": None, "verdict": None, "check": None, "outcome": "failed", "credentials": None,
-                   "detail": None, "readings": [], "verdicts": [], "subagents": []})
+                   "detail": None, "readings": [], "first_readings": [], "verdicts": [], "subagents": []})
     try:
         build_copy(worktree, runtime_root, job_id, selected.strip_paths)
         captured = selected.build_home(layout, operator_home)
@@ -1739,7 +1743,13 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
             run, scan = made.run, made
             result["subagents"] = made.subagents
             if made.readings is not None:
-                result["stream_readings"] = made.readings
+                # the latest reading of each window wins; a retry that read none keeps the first run's
+                merged = {r["window"]: r for r in result.get("stream_readings") or []}
+                merged.update({r["window"]: r for r in made.readings})
+                result["stream_readings"] = list(merged.values())
+            for reading in made.first_readings or []:
+                # the stream's first reading of each window, across the retry too: the baseline correction
+                result.setdefault("stream_first", {}).setdefault(reading["window"], reading)
             verdict = made.verdict
             # kept the moment it is read: nothing below, an interruption included, can lose it
             kept = (_retain_verdict(runtime_root, job_id, attempt, verdict, None, "pending")
@@ -1854,6 +1864,8 @@ def _settle(result: dict, runtime_root: Path, layout: JobLayout, operator_home: 
                                             or result.get("stream_readings") or []))
     if selected.keeps_sessions:
         steps.append(lambda: result.__setitem__("subagents", scan_rollouts(home).subagents))
+    steps.append(lambda: result.__setitem__("first_readings", list((result.get("stream_first") or {}).values())))
+    steps.append(lambda: result.pop("stream_first", None))
     steps.append(lambda: result.pop("stream_readings", None))
     steps.append(lambda: settle_job_dir(runtime_root, layout.job_id, keep_sessions=selected.keeps_sessions))
     for step in steps:

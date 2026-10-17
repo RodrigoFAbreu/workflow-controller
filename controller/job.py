@@ -89,6 +89,7 @@ import contextlib
 import dataclasses
 import datetime
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -3185,9 +3186,11 @@ def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | Non
     credentials = None
     digest = block.get("captured_digest")
     operator_home = block.get("operator_home")
-    if isinstance(digest, str) and isinstance(operator_home, str) and (layout.codex_home / "auth.json").is_file():
+    selected = review.HARNESSES.get(block.get("harness")) or review.CODEX  # a record from before Claude ran is Codex's
+    if (isinstance(digest, str) and isinstance(operator_home, str)
+            and (layout.base / selected.home_name / selected.credential_file).is_file()):
         with contextlib.suppress(Exception):
-            credentials = review.copy_back_credentials(layout, Path(operator_home), digest)
+            credentials = review.copy_back_credentials(layout, Path(operator_home), digest, selected)
     held = {"verdicts": [dict(entry) for entry in block.get("verdicts") or [] if isinstance(entry, Mapping)]}
     with contextlib.suppress(Exception):
         review.retain_pending_verdict(held, runtime_root, layout)  # a verdict the dead run left is kept first
@@ -6426,10 +6429,12 @@ def _admitted_digests(managed_repo: Any) -> dict | None:
     return None if digests is None else dict(digests)
 
 
-def _codex_end_block(block: Mapping, readings: list) -> dict:
-    """The `usage` block's end figures from the job's own minimal Codex home."""
+def _codex_end_block(block: Mapping, readings: list, first: list = ()) -> dict:
+    """The `usage` block's end figures from the job's own minimal Codex home,
+    or a Claude review's stream (``first`` its first readings, which a replay
+    lowers the baseline with)."""
     last = {reading["window"]: reading for reading in readings}
-    return _usage_end_fields(block, {}, last)
+    return _usage_end_fields(block, {reading["window"]: reading for reading in first}, last)
 
 
 def _review_message(record: Mapping) -> str:
@@ -6578,7 +6583,7 @@ def _run_review_job(
         raise
 
     def finish(status: str, *, evidence_block: dict | None = None, review_fields: Mapping | None = None,
-               readings: list | None = None, after: str | None = None, verified: bool = False,
+               readings: list | None = None, first: list | None = None, after: str | None = None, verified: bool = False,
                event: str | None = None) -> JobRecord:
         """The one terminal write: status, evidence, the review block's outcome
         fields and (for a started job) the `usage` end figures; then the usage
@@ -6591,13 +6596,13 @@ def _run_review_job(
         started = fields["review"].get("launched") is True and fields["review"].get("not_started") is not True
         block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
         if block is not None and started:
-            fields["usage"] = _codex_end_block(block, readings or [])
+            fields["usage"] = _codex_end_block(block, readings or [], first or [])
         record = _persist(runtime_root, job_id, {**record, **fields}, event=event or _final_event(status), details={
             "review": {key: fields["review"].get(key) for key in ("outcome", "detail", "subagents")}})
         if block is not None:
             last = {r["window"]: r for r in (readings or [])}
             record = _usage_account(runtime_root, record, end_readings=list(last.values()) if started else None,
-                                    stream_start={} if started else None)
+                                    stream_start=({r["window"]: r for r in first or []}) if started else None)
         _run_job_ended(run_id, job_id, status, record)
         return record
 
@@ -6652,7 +6657,7 @@ def _run_review_job(
         # The boundary refused. Before the exec was spawned nothing was started (released, no charge);
         # after it (the retry's re-check), the first run spent allowance and is charged.
         not_started = "pid" not in spawned
-        return finish(STATUS_FAILED, readings=out.get("readings"), review_fields={
+        return finish(STATUS_FAILED, readings=out.get("readings"), first=out.get("first_readings"), review_fields={
             "not_started": not_started, "outcome": "refused", "detail": exc.message,
             "credentials": out.get("credentials"), **_obtained(out)}, evidence_block={
                 "code": REVIEW_REFUSED_CODE, "message": exc.message, "evidence": exc.evidence})
@@ -6660,7 +6665,7 @@ def _run_review_job(
         # Ctrl-C: the group is already killed. The record ends INCOMPLETE, the reservation is completed
         # as `ok` by the measured delta, and the interrupt propagates (run exits 130).
         # an interrupt before the exec was spawned started nothing: released, not charged at the forecast
-        finish(STATUS_INCOMPLETE, readings=out.get("readings"), review_fields={
+        finish(STATUS_INCOMPLETE, readings=out.get("readings"), first=out.get("first_readings"), review_fields={
             "outcome": "interrupted", "credentials": out.get("credentials"), **_obtained(out),
             **({"not_started": True} if "pid" not in spawned else {})}, evidence_block={
                 "code": REVIEW_INTERRUPTED_CODE, "message": f"the review was interrupted (Ctrl-C); the "
@@ -6668,7 +6673,7 @@ def _run_review_job(
         raise
     except Exception as exc:  # noqa: BLE001 -- any other fault ends the record; the first run's spend is kept
         # A fault before the exec was spawned (the state-identity read, the copy) started nothing: released.
-        finish(STATUS_FAILED, readings=out.get("readings"), review_fields={
+        finish(STATUS_FAILED, readings=out.get("readings"), first=out.get("first_readings"), review_fields={
             "not_started": "pid" not in spawned, "outcome": "error", "detail": str(exc),
             "credentials": out.get("credentials"), **_obtained(out)}, evidence_block={
                 "code": type(exc).__name__, "message": str(exc)})
@@ -6679,11 +6684,13 @@ def _run_review_job(
 
     outcome = result["outcome"]
     readings = result.get("readings")
+    first = result.get("first_readings")
     common = {"outcome": outcome, "credentials": result.get("credentials"), "detail": result.get("detail"),
               "verdict_status": result.get("status"), **_obtained(result)}
     if outcome == "verdict":
         return _ingest_review(managed_repo, runtime_root=runtime_root, job_id=job_id, work_item_id=work_item_id, kind=kind,
-                              verdict=result["verdict"], digests=digests, finish=finish, common=common,
+                              verdict=result["verdict"], digests=digests, common=common,
+                              finish=functools.partial(finish, first=first),
                               readings=readings, state_identity=info.state_identity, run_ref_prefix=harness.name,
                               distinct_message=(lambda detail: review_mode.distinct_refusal_message(mode, stage, detail))
                               if lowered else None)
@@ -6691,19 +6698,19 @@ def _run_review_job(
         check = result.get("check")
         mismatches = [{"label": m.label, "expected": m.expected, "found": list(m.found)}
                       for m in (check.mismatches if check is not None else ())]
-        return finish(STATUS_FAILED, readings=readings, review_fields={**common, "mismatches": mismatches},
+        return finish(STATUS_FAILED, readings=readings, first=first, review_fields={**common, "mismatches": mismatches},
                       evidence_block={"code": REVIEW_HEADER_MISMATCH_CODE, "message": "the verdict's header lines "
                                       "did not equal the bundle's values after the one bounded retry",
                                       "mismatches": mismatches})
     if outcome == "status_changed":
-        return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
+        return finish(STATUS_FAILED, readings=readings, first=first, review_fields=common, evidence_block={
             "code": REVIEW_STATUS_CHANGED_CODE, "message": result.get("detail") or "the retry changed the status"})
     codes = {"changed": REVIEW_CHANGED_CODE, "limit": REVIEW_LIMIT_CODE, "timeout": REVIEW_TIMEOUT_CODE,
              "empty": REVIEW_EMPTY_CODE}
     if outcome in codes:
-        return finish(STATUS_INCOMPLETE, readings=readings, review_fields=common, evidence_block={
+        return finish(STATUS_INCOMPLETE, readings=readings, first=first, review_fields=common, evidence_block={
             "code": codes[outcome], "message": result.get("detail") or outcome})
-    return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
+    return finish(STATUS_FAILED, readings=readings, first=first, review_fields=common, evidence_block={
         "code": REVIEW_FAILED_CODE, "message": result.get("detail") or "the review failed"})
 
 

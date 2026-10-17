@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -285,16 +286,27 @@ class FakeLaunchTest(unittest.TestCase):
     def test_the_disposable_copy_holds_no_dot_git_of_the_real_repository(self):
         seen = {}
 
+        def git(root, *args):
+            done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+            return done.returncode, done.stdout.strip()
+
         def probe(pid, pgid):
             tree = self.runtime / "reviews" / "job1" / "tree"
-            seen["real"] = sha(self.repo / ".git" / "HEAD")
-            seen["copy_git"] = (tree / ".git" / "HEAD").is_file() and sha(tree / ".git" / "HEAD")
+            seen["real_head"] = git(self.repo, "rev-parse", "HEAD")[1]
+            seen["copy_head"] = git(tree, "rev-parse", "HEAD")[1]
+            seen["copy_commits"] = git(tree, "rev-list", "--all", "--count")[1]
+            seen["has_real_commit"] = git(tree, "cat-file", "-e", seen["real_head"] + "^{commit}")[0] == 0
+            seen["remotes"] = git(tree, "remote")[1]
             seen["claude_md"] = (tree / "CLAUDE.md").is_file()
 
-        (self.repo / ".git" / "refs" / "heads").mkdir(parents=True, exist_ok=True)
         self.launch(on_spawn=probe)
         self.assertTrue(seen["claude_md"], "CLAUDE.md stays as repository content")
-        self.assertIn("copy_git", seen)
+        self.assertTrue(seen["copy_head"], "the copy holds its own private repository")
+        # the private repository is one new commit: neither the real HEAD, nor any of the real history or remotes
+        self.assertNotEqual(seen["copy_head"], seen["real_head"])
+        self.assertEqual(seen["copy_commits"], "1")
+        self.assertFalse(seen["has_real_commit"], "the real repository's objects are not in the copy")
+        self.assertEqual(seen["remotes"], "")
 
     def test_project_hooks_and_mcp_files_are_stripped_and_never_loaded(self):
         hook = self.tmp / "hook.sh"
@@ -354,6 +366,13 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(len(self.records()), 2)
         self.assertEqual([v["disposition"] for v in result["verdicts"]],
                          ["not-ingested: header mismatch, retried once", "returned"])
+
+    def test_the_first_reading_of_each_window_survives_the_header_retry(self):
+        result = self.launch({"verdict": "wrong_id_first"})
+        self.assertEqual(len(self.records()), 2)
+        self.assertEqual(sorted(r["window"] for r in result["first_readings"]), ["five_hour", "weekly"])
+        self.assertEqual(sorted(r["window"] for r in result["readings"]), ["five_hour", "weekly"])
+        self.assertNotIn("stream_first", result)
 
     def test_a_revise_and_a_block_verdict_are_returned_as_they_are(self):
         for kind, status in (("revise", "REVISE"), ("block", "BLOCK")):

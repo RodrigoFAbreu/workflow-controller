@@ -5795,8 +5795,20 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
     reconcile_to = reconcile.get("to") if isinstance(reconcile, dict) else None
     end_identity = reconcile_to.get("state_identity") if isinstance(reconcile_to, dict) else None
     if record.get("status") == STATUS_FINISHED and isinstance(reconcile_class, str):
-        return key, reconcile_class, end_identity, block.get("state_identity")
-    return key, None, None, None
+        return key, reconcile_class, end_identity, block.get("state_identity"), _worker_report(record)
+    return key, None, None, None, ""
+
+
+def _worker_report(record: dict) -> str:
+    """What the worker said it did, one line of at most 400 characters: a refused
+    ``/satisfy-gate`` names the requirement that is unmet there, and the loop
+    guard repeats it so ``explain`` can show it."""
+    worker_block = record.get("worker")
+    excerpt = worker_block.get("result_excerpt") if isinstance(worker_block, dict) else None
+    if not isinstance(excerpt, str):
+        return ""
+    line = " ".join(excerpt.split())
+    return line if len(line) <= 400 else line[:399] + "\u2026"
 
 
 def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,
@@ -5833,9 +5845,9 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
             continue
         classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, info.action_id)
         if classified is not None and classified[1] is not None:
-            found.append((classified[0], classified[1], classified[2], classified[3]))
-    recent = sorted(found, reverse=True)[:2]
-    if len(recent) < 2 or any(reconcile_class != "no_progress" for _key, reconcile_class, _end, _start in recent):
+            found.append(classified)
+    recent = sorted(found, key=lambda entry: entry[0], reverse=True)[:2]
+    if len(recent) < 2 or any(entry[1] != "no_progress" for entry in recent):
         return None
     last_end = recent[0][2]
     if info.state_identity is not None and last_end is not None and last_end != info.state_identity:
@@ -5844,13 +5856,15 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
     older_end, newer_start = recent[1][2], recent[0][3]
     if older_end is not None and newer_start is not None and older_end != newer_start:
         return None
-    jobs = " and ".join(key[2] for key, _class, _end, _start in recent)
+    jobs = " and ".join(entry[0][2] for entry in recent)
+    report = recent[0][4]
     return protocol_decision.gate_for(
         managed_repo, work_item, decision, protocol_decision.NO_PROGRESS_REPEATED,
         f"the last two jobs for {info.action_id}"
         + ("" if work_item_id is None else f" on {work_item_id}")
         + f" ({jobs}) both ended without progress, so a third is not launched; read their records, then "
-        "change the work item (take the action by hand, or fix what stops it) and the count restarts",
+        "change the work item (take the action by hand, or fix what stops it) and the count restarts"
+        + (f"; the last worker reported: {report}" if report else ""),
         advisories=advisories)
 
 

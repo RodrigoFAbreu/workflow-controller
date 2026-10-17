@@ -8,8 +8,9 @@
 Controller launches no worker and stops with the `review_round_cap_reached` gate (exit 10), which names the stage,
 the round, the cap, where the round came from and the three ways on. The round is the one Workflow 2.12.0 gives, or
 is counted from the job records for an older Workflow (a lower bound). `telemetry` reports action, stage and round
-per job (`--by stage,round` and others), so review usage can be compared before and after. It is released as the
-minor release **1.12.0** when its `feat:` pull request (#61) merges.
+per job (`--by stage,round` and others), so review usage can be compared before and after. It merged as pull
+request #61 (squash `e989b55`), which released the minor release **1.12.0** (release notes
+`docs/releases/1.12.0.md`).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).

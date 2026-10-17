@@ -12,7 +12,7 @@ a verify status a minor release adds is an advisory line, and an unlisted reconc
 the value as `workflow_unknown_value`; measured differences from plan D6: the error code is `blocked`, `satisfied_by`
 is `advisory`, and the functional-evidence status, verdict and slot are `ignored`, since the Controller reads no
 decision from them). **CP4** (a gate the Workflow answers with the disposition `blocked` sends `lane_blocked`; human and external
-gates keep `user_gate`). Remaining: CP5 (documents, roadmap, the whole suite). The record of the previous milestone follows unchanged.
+gates keep `user_gate`). **CP5** (the roadmap rows C10a-C10c and follow-ups 17 and 26, the guides, the compatibility and problem pages, and ADR 0015; `check_docs` passes and the whole suite ran 4,205 tests with exact coverage, only the two known Git 2.56 trailer tests failing; `plan_stage_decisions.json --check` differs at the pre-milestone base too). All checkpoints are complete. The record of the previous milestone follows unchanged.
 
 ## Status
 

@@ -70,7 +70,7 @@ repository's gate policy and by default the Workflow satisfies them itself from
 complete evidence (see the [glossary](../glossary.md#approval-gate)).
 The Controller never crosses a gate that needs a person: the commands a
 human must run are user-only, and the Controller refuses to launch them even
-if asked. Controller 1.7.0 also stops at Workflow 2.8 automatic gates, until a
-later release: the Workflow answers them with a disposition
-(`validation`) the Controller does not know, so `explain` reports
-`workflow_unknown_disposition` and nothing is launched.
+if asked. At a Workflow 2.8 automatic gate the Workflow answers with the
+disposition `validation`, and the Controller launches its `/satisfy-gate` as a
+worker (Controller 1.7.0 to 1.13.1 did not know the disposition: `explain` reported
+`workflow_unknown_disposition` and nothing was launched).

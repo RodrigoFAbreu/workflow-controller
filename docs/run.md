@@ -36,17 +36,19 @@ Global options go before the subcommand and the repository goes last, as in `wor
      complete evidence: all three for a version 2.2 item; a version 2.1 item (the default of a
      repository bootstrapped before Workflow 2.9) keeps implementation approval with a person; a version 1
      item keeps plan and implementation approval with a person.
-   - **What Controller 1.7.0 does there:** it still stops at an automatic gate until a later
-     release, because the Workflow answers with a disposition it does not know (`explain`
-     reports `workflow_unknown_disposition`; nothing is launched). `explain` shows the action
-     (`plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`) but no command. Run it
-     yourself in a Claude session: `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>`
+   - **What the Controller does there:** it launches the Workflow's `/satisfy-gate` itself, as a
+     worker, and a run goes on when the gate is satisfied. When a requirement is unmet nothing is
+     recorded, the run stops after two such steps and `explain` shows the unmet requirement.
+     Controller 1.7.0 to 1.13.1 stop at an automatic gate instead, because the Workflow answers
+     with a disposition they do not know (`explain` reports `workflow_unknown_disposition`;
+     nothing is launched). Run the command yourself in a Claude session then:
+     `/satisfy-gate plan <id>`, `/satisfy-gate implementation <id>`
      or `/satisfy-gate acceptance <id>` (the Workflow's
      [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) describes
      them), then run again.
    - **Acceptance may ask for evidence first:** `explain` can instead report
-     `functional_evidence_needed` or `pr_evidence_needed`. Controller 1.7.0 does not collect
-     either for you.
+     `functional_evidence_needed` or `pr_evidence_needed`. The Controller does not collect
+     either for you yet (the automated functional review and the pull request defect loop are later steps).
      - `functional_evidence_needed`: have one functional result recorded per required flow, for
        example `python3 scripts/workflow_protocol.py record-external-result --work-item <id> --kind functional_evidence --input result.json`.
        The input fields are in "Evidence kinds" in the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md).

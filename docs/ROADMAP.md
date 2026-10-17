@@ -21,7 +21,7 @@ on purpose: it is the largest step left, and C13 makes its review rounds cheaper
 [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15 and 2026-10-16):
-1. C10;
+1. C10b, then C10c (C10a is implemented; C10 is three steps released on their own);
 2. C12, then C11;
 3. the orchestrator series O1-O7.
 
@@ -75,7 +75,9 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage (complete, released as 1.12.0, PR #61, squash `e989b55`; accepted 2026-10-16 by gate policy) | C7, W8 | [11.13](#1113-review-convergence) |
 | C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review (complete, accepted 2026-10-17 by gate policy, released as 1.13.0, PR #70, squash `2804656`) | C13, the Workflow's answers | [11.14](#1114-review-modes) |
 | CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up (complete, accepted 2026-10-17 by gate policy, released as 1.13.1 from PR #77, squash `f46999d`; sixteen issues, #55-#59, #62-#67 and #71-#75). Later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
-| C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
+| C10a | Gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, a refused validation stops, a value a protocol 1.x minor adds is advisory or blocked (never refused), and a stop the Workflow calls blocked sends a blocker, not a request (follow-ups 17 and 26 in part) (implemented; complete when accepted) | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [follow-up 17](#known-follow-ups-carried-forward) |
+| C10b | The pull request defect loop: `pr.apply_review` and the `pr_review_result` reporter in the merge flow of C4 (rows 38d, 38f, 38g) | C10a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
+| C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
@@ -286,6 +288,8 @@ hurts now, else in a later step or the next clean-up milestone.
    (user decision, 2026-10-09), a value unknown to the vendored schema's closed enums in a 1.x
    answer is treated like an unknown action id: advisory where it is informational, blocked
    where a decision depends on it. Only a protocol major change refuses.
+   **Done in C10a** (`workflow-controller-gate-policy`): `protocol_schema.ENUM_RULES` gives each of
+   the twenty enum locations a rule, and a test over the vendored schema holds it.
 18. Optional note from the C8 Codex review: the usage record's accumulated totals (run and repository
    spend) can pass the record's numeric ceiling, but only with crafted, unrealistic totals. Clamp
    or refuse such a total with a clear error; not urgent.
@@ -315,6 +319,11 @@ hurts now, else in a later step or the next clean-up milestone.
    `GATE_BLOCKED` stop, including stops an orchestrator handles itself. Send it only for gates that
    need a person, and send nothing at all for a stop whose gate is in automatic mode (satisfied by
    gate policy). A small patch, or C10. Until then the lanes run the Controller without a SignalHub key.
+   **Partly done in C10a:** a stop the Workflow answers with the disposition `blocked` sends
+   `lane_blocked`, not `user_gate`. A stop under an automatic gate that the Controller cannot yet
+   satisfy still sends `user_gate`: rows 38f and 38g (pull request evidence and approval, C10b),
+   the unlaunchable row 38d after a reported `pr_review_result` (C10b) and row 38e (functional
+   evidence, C10c). C10b and C10c own the rest.
 27. Flaky test: `tests.test_cli.ResumeWorkerHoldExitTest.test_an_unverifiable_worker_exits_45_naming_no_group_and_abandon_clears_it`
    asserts `str(pid) not in out`; on CI the pid matched inside another number. Match on word
    boundaries.

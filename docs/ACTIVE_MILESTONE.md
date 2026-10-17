@@ -2,47 +2,48 @@
 
 ## Status
 
-**Complete.** `workflow-controller-review-convergence` (`docs/ROADMAP.md` step C13, section 11.13) reached
-`MILESTONE_COMPLETE` on 2026-10-16. A review loop now stops at a round cap per review stage: the setting
-`review.round_cap` (default 4, 1 to 100) or `--review-round-cap` on `step` and `run` for one command. At the cap the
-Controller launches no worker and stops with the `review_round_cap_reached` gate (exit 10), which names the stage,
-the round, the cap, where the round came from and the three ways on. The round is the one Workflow 2.12.0 gives, or
-is counted from the job records for an older Workflow (a lower bound). `telemetry` reports action, stage and round
-per job (`--by stage,round` and others), so review usage can be compared before and after. It merged as pull
-request #61 (squash `e989b55`), which released the minor release **1.12.0** (release notes
-`docs/releases/1.12.0.md`).
+**Complete.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14) reached
+`MILESTONE_COMPLETE` on 2026-10-17. The owner now chooses how the external review runs: the setting `review.mode`
+(`auto`, `cross-model`, `single-provider`, `manual`) or `--review-mode` on `step`, `run` and `explain` for one
+command. Under a gate policy that lowers the external review, `auto` runs a fresh same-provider (Claude) reviewer
+(`reviewer.same_provider_model`, `reviewer.same_provider_effort`) inside a checked boundary, so a user with one
+provider is never blocked at an external gate. A mode that cannot run stops at the new `review_mode_unavailable` gate
+(exit 10) with the ways out. `explain` shows the mode and the choice; `telemetry --by review_mode` groups by mode. It
+is released as the minor release **1.13.0** when its `feat:` pull request (#70) merges (release notes
+`docs/releases/1.13.0.md`).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).
-- Plan revision 6 was approved by policy at `10cab7d` after three Codex plan rounds. The base commit is `45e9325`.
-- Technical approval `b70be14` (implementation revision 3) was recorded by policy and is `CURRENT`: review content
-  id `0b92d55a`, reviewed implementation head `b3ac08c`.
-- Functional review round 1 (an independent Codex tester) passed nine of eleven flows. Flows 3 and 11 failed on one
-  Optional finding: the cap gate did not name a round given by the Workflow. The bounded fix `24e66a3` fixed it, and
-  Codex implementation round 3 approved revision 3. Round 2 passed every flow (flow-1 to flow-11), checked against
-  evidence commit `3a21c44`.
-- The Workflow's own GitHub query found pull request #61 at head `3a21c44` with every check passing and no
+- Plan revision 5 was approved by policy at `4def744` after one Codex plan round (`APPROVE`, the first round). The
+  base commit is `40f9cef`.
+- Technical approval `18a1036` (implementation revision 3) was recorded by policy and is `CURRENT`: review content
+  id `09d09207`, reviewed implementation head `68f7dc3`. Revision 2 was approved at `3cd336b` after two Codex
+  implementation rounds (`REVISE` with I1-I4, then `APPROVE`); Codex round 3 approved revision 3 after the bounded
+  documentation fix.
+- Functional review round 1 (an independent Codex tester with fake reviewers only) passed nine of eleven flows and
+  raised two Optional documentation findings (flow 1's command, flow 11's limit description), fixed by
+  `d98c388`/`68f7dc3`. Round 2 passed every flow (flow-1 to flow-11), checked against evidence commit `9ba2f70`.
+- The Workflow's own GitHub query found pull request #70 at head `9ba2f70` with every check passing and no
   standing objection.
 
-All registry checkpoints (CP1-CP4) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
+All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
 of this transition, including its eleven functional evidence records and its `acceptance_satisfaction` evidence, and
-`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C13 complete. The full milestone narrative is
-archived at `docs/milestones/completed/workflow-controller-review-convergence.md`, with the review history and every
-minor review finding's disposition; the functional reports are
-`.ai-review/archive/workflow-controller-review-convergence/functional-tester-round1-RESULTS.md` and
+`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C14 complete. The full milestone narrative is
+archived at `docs/milestones/completed/workflow-controller-review-modes.md`, with the review history (including the
+D9 operator pre-step and two later probes) and every minor review finding's disposition; the functional reports are
+`.ai-review/archive/workflow-controller-review-modes/functional-tester-round1-RESULTS.md` and
 `functional-review-round2-PASSED.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Minor review findings:** of eleven Optional review items, four were fixed, one dropped and six are follow-ups
-  in GitHub issues #63-#67 (label `review-follow-up`), worked off in the clean-up milestone after C14.
-- **Known limitations kept out of scope:** a plan round counted from job records is a lower bound; `explain` shows
-  the setting's cap, not a flag's; there is no "off" value (a long loop is a cap of 100); the cap does not stop the
-  Controller's own external-review courier or any non-apply action. The two Git 2.56 trailer tests
-  (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the `plan_stage_decisions`
-  golden differs on the base commit as well.
+- **Minor review findings:** of fifteen Optional review items, ten were fixed, two dropped and three kept as follow-ups; two
+  of the fixed ones also keep a follow-up, so there are five, GitHub issues #71-#75 (label `review-follow-up`; #72 also `bug`), worked off in CU1.
+- **Known limitations kept out of scope:** the lowered-policy signal in the scenario is patched in (a real lowering
+  adoption needs a real Workflow policy repository); a real Claude review consumes account usage. The two Git 2.56
+  trailer tests (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the
+  `plan_stage_decisions` golden differs on the base commit as well.
 
 ## Next action
 
-`/milestone-plan` for C14 (review modes, `docs/ROADMAP.md` section 11.14), the next step in `docs/ROADMAP.md`'s
-"Next, in order" (C14, then a clean-up milestone for the GitHub issues labelled `review-follow-up`, then C10, C12,
-C11 and the orchestrator series O1-O7).
+`/milestone-plan` for CU1, the clean-up milestone (`docs/ROADMAP.md`, "Next, in order"): it works through the GitHub
+issues labelled `review-follow-up` and small known defects labelled `bug`, now #55-#59, #62-#67 and #71-#75. After it
+come C10, C12, C11 and the orchestrator series O1-O7.

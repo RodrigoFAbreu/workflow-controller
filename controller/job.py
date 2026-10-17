@@ -89,6 +89,7 @@ import contextlib
 import dataclasses
 import datetime
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -105,8 +106,8 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_rounds, routing,
-    runtime, target_state, telemetry, usage, worker, workflow_contract,
+    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_mode, review_rounds,
+    routing, runtime, target_state, telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
     BRANCH_GATE_PHASE,
@@ -3185,9 +3186,11 @@ def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | Non
     credentials = None
     digest = block.get("captured_digest")
     operator_home = block.get("operator_home")
-    if isinstance(digest, str) and isinstance(operator_home, str) and (layout.codex_home / "auth.json").is_file():
+    selected = review.HARNESSES.get(block.get("harness")) or review.CODEX  # a record from before Claude ran is Codex's
+    if (isinstance(digest, str) and isinstance(operator_home, str)
+            and (layout.base / selected.home_name / selected.credential_file).is_file()):
         with contextlib.suppress(Exception):
-            credentials = review.copy_back_credentials(layout, Path(operator_home), digest)
+            credentials = review.copy_back_credentials(layout, Path(operator_home), digest, selected)
     held = {"verdicts": [dict(entry) for entry in block.get("verdicts") or [] if isinstance(entry, Mapping)]}
     with contextlib.suppress(Exception):
         review.retain_pending_verdict(held, runtime_root, layout)  # a verdict the dead run left is kept first
@@ -5057,7 +5060,7 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
                                     work_item, "The milestone is complete."))
     elif record.get("kind") == REVIEW_KIND and status in (STATUS_FAILED, STATUS_INCOMPLETE) and job_id:
         out.append(DerivedEvent("lane_blocked", str(job_id),
-                                f"Blocked: the Codex review {'failed' if status == STATUS_FAILED else 'stopped'}"
+                                f"Blocked: the {_review_display(record)} review {'failed' if status == STATUS_FAILED else 'stopped'}"
                                 + (f" ({work_item})" if work_item else ""), work_item, _review_message(record)))
     elif status in (STATUS_FAILED, STATUS_INCOMPLETE) and job_id:
         evidence_block = record.get("reconciliation_evidence")
@@ -6290,21 +6293,24 @@ REVIEW_FAILED_CODE = "ReviewFailed"
 REVIEW_INTERRUPTED_CODE = "ReviewInterrupted"
 REVIEW_REFUSED_CODE = "ReviewLaunchRefused"
 REVIEW_STATE_CHANGED_CODE = "ReviewStateIdentityChanged"
+#: A same-provider approval the Workflow refused for the distinct-model rule (review-modes D6).
+REVIEW_DISTINCT_MODEL_CODE = "DistinctReviewerModelsRequired"
+DISTINCT_MODEL_EXCEPTION = "DistinctReviewerModelsRequiredError"
 
 _REVIEW_MANUAL_COMMANDS = {"plan": "/record-manual-plan-review",
                            "implementation": "/record-manual-implementation-review"}
 
 
-def _review_gate(decision: Decision, reviewer: Mapping | None) -> tuple[str, str] | None:
-    """``(stage, verdict kind)`` when ``decision`` is an external gate the
-    review job couriers, else ``None`` (D2): a reviewer harness is configured,
-    the Workflow's answer is an ``external_gate`` whose action id is row 14's
-    or row 28's **and** whose snapshot phase is that row's manual external
-    phase. The phase is read from the answer's snapshot, never from ``row``
-    (section 5.5 lets an answer omit it); an answer with no snapshot stays a
-    gate, as does everything else."""
+def _external_review_stage(decision: Decision) -> tuple[str, str] | None:
+    """``(stage, verdict kind)`` when ``decision`` is an external gate a
+    review job could courier, else ``None``: the Workflow's answer is an
+    ``external_gate`` whose action id is row 14's or row 28's **and** whose
+    snapshot phase is that row's manual external phase. The phase is read
+    from the answer's snapshot, never from ``row`` (section 5.5 lets an
+    answer omit it); an answer with no snapshot stays a gate, as does
+    everything else."""
     info = decision.protocol
-    if reviewer is None or info is None or info.disposition != "external_gate" or info.action_id not in REVIEW_ACTIONS:
+    if info is None or info.disposition != "external_gate" or info.action_id not in REVIEW_ACTIONS:
         return None
     stage, kind = REVIEW_ACTIONS[info.action_id]
     snapshot = info.document.get("snapshot")
@@ -6313,15 +6319,122 @@ def _review_gate(decision: Decision, reviewer: Mapping | None) -> tuple[str, str
     return stage, kind
 
 
+def _review_gate(decision: Decision, reviewer: Mapping | None) -> tuple[str, str] | None:
+    """:func:`_external_review_stage` while a reviewer harness is configured
+    (D2), else ``None``."""
+    return None if reviewer is None else _external_review_stage(decision)
+
+
+def _review_mode_signal(managed_repo: Any) -> review_mode.Signal | None:
+    """The lowered-policy signal of the Workflow's ``verify`` (review-modes D3),
+    or ``None`` when ``verify`` cannot be read or has no ``gate_policy``
+    check: no signal, so neither ``auto`` nor ``single-provider`` runs a
+    same-provider review on it."""
+    try:
+        health = protocol.verify(managed_repo.root, expected_digests=_admitted_digests(managed_repo))
+    except ControllerError:
+        return None
+    return review_mode.signal_of_checks(health.checks)
+
+
+def _choose_review(managed_repo: Any, decision: Decision, reviewer: Mapping | None,
+                   mode_options: Mapping | None) -> tuple[tuple[str, str], review_mode.Choice] | None:
+    """The review the step runs at this decision (review-modes D1-D4), or
+    ``None`` when the decision is not an external review gate. The signal is
+    read from ``verify`` only where :func:`review_mode.needs_signal` says a
+    same-provider review could run."""
+    target = _external_review_stage(decision)
+    if target is None:
+        return None
+    mode = review_mode.MODE_AUTO if mode_options is None else mode_options["mode"]
+    signal = _review_mode_signal(managed_repo) if review_mode.needs_signal(mode, reviewer) else None
+    return target, review_mode.choose(mode, reviewer, target[0], signal)
+
+
+def _sticky_stop_message(mode: str, stage: str) -> str:
+    """The text of the D6 stop, shared by ``step`` and ``explain``."""
+    return ("The last same-provider review of this stage was refused by the Workflow for the distinct-model rule "
+            "and neither the state nor the policy signal has changed, so no review is paid for twice. "
+            + review_mode.remedies(mode, stage))
+
+
+def review_mode_report(runtime_root: Path, managed_repo: Any, work_item_id: str | None, decision: Decision,
+                       reviewer: Mapping | None, mode_options: Mapping | None) -> dict | None:
+    """What the next ``step`` would do at the external review gate ``decision``
+    (review-modes D1-D7), for ``explain``: ``None`` when the decision is not an
+    external review gate, else ``mode``, ``source``, ``stage``, ``choice``
+    (``gate``, ``review`` or ``refused``), the ``harness`` a review would run,
+    ``lowered`` and, for a stop, its ``reason`` (the step's own text, with the
+    ways out that apply). Read-only: it asks ``verify`` and reads the job files
+    exactly as the step does and writes nothing."""
+    chosen = _choose_review(managed_repo, decision, reviewer, mode_options)
+    if chosen is None:
+        return None
+    (stage, _kind), choice = chosen
+    options = mode_options or {}
+    mode = options.get("mode", review_mode.MODE_AUTO)
+    report: dict = {"mode": mode, "source": options.get("source", "default"), "stage": stage,
+                    "choice": choice.kind, "harness": choice.harness, "lowered": choice.lowered}
+    if choice.kind == "refused":
+        report["reason"] = choice.reason
+    elif choice.lowered and _sticky_review_stop(
+            runtime_root, managed_repo.root, work_item_id, stage, decision.protocol.state_identity,
+            choice.signal.key(stage)):
+        report.update(choice="refused", harness=None, lowered=False, reason=_sticky_stop_message(mode, stage))
+    return report
+
+
+def _sticky_review_stop(runtime_root: Path, target_root: Path, work_item_id: str | None, stage: str,
+                        state_identity: str | None, signal_key: tuple) -> bool:
+    """Whether the most recent review job for ``work_item_id`` (by
+    ``created_at``, then ``job_id``) ended on the Workflow's distinct-model
+    refusal of a same-provider approval at this ``stage``, this state identity
+    and this signal key (review-modes D6). Reads tolerantly, as
+    :func:`last_launched_apply_job_view` does, and never raises."""
+    if work_item_id is None or state_identity is None:
+        return False
+    jobs_dir = Path(runtime_root) / "jobs"
+    try:
+        paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
+    except OSError:
+        return False
+    best: tuple[tuple[str, str], dict] | None = None
+    for path in paths:
+        if not _is_regular_job_file(path):
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            continue
+        if (not isinstance(record, dict) or record.get("kind") != REVIEW_KIND
+                or record.get("target_repo") != str(target_root) or record.get("work_item_id") != work_item_id
+                or not isinstance(record.get("job_id"), str) or not isinstance(record.get("created_at"), str)):
+            continue
+        key = (record["created_at"], record["job_id"])
+        if best is None or key > best[0]:
+            best = (key, record)
+    if best is None:
+        return False
+    record = best[1]
+    block = record.get("review")
+    evidence_block = record.get("reconciliation_evidence")
+    return (isinstance(block, dict) and isinstance(evidence_block, dict)
+            and evidence_block.get("code") == REVIEW_DISTINCT_MODEL_CODE
+            and block.get("stage") == stage and block.get("state_identity") == state_identity
+            and block.get("signal_key") == list(signal_key))
+
+
 def _admitted_digests(managed_repo: Any) -> dict | None:
     digests = getattr(managed_repo, "script_digests", None)
     return None if digests is None else dict(digests)
 
 
-def _codex_end_block(block: Mapping, readings: list) -> dict:
-    """The `usage` block's end figures from the job's own minimal Codex home."""
+def _codex_end_block(block: Mapping, readings: list, first: list = ()) -> dict:
+    """The `usage` block's end figures from the job's own minimal Codex home,
+    or a Claude review's stream (``first`` its first readings, which a replay
+    lowers the baseline with)."""
     last = {reading["window"]: reading for reading in readings}
-    return _usage_end_fields(block, {}, last)
+    return _usage_end_fields(block, {reading["window"]: reading for reading in first}, last)
 
 
 def _review_message(record: Mapping) -> str:
@@ -6333,10 +6446,21 @@ def _review_message(record: Mapping) -> str:
     evidence_block = record.get("reconciliation_evidence")
     code = evidence_block.get("code") if isinstance(evidence_block, Mapping) else None
     word = "failed" if record.get("status") == STATUS_FAILED else "stopped without completing"
-    return (f"The Codex {stage} review {word}" + (f" ({code})" if code else "")
+    if code == REVIEW_DISTINCT_MODEL_CODE:
+        detail = evidence_block.get("message") if isinstance(evidence_block, Mapping) else None
+        return f"The {_review_display(record)} {stage} review {word} ({code}): {detail}"
+    return (f"The {_review_display(record)} {stage} review {word}" + (f" ({code})" if code else "")
             + f"; the {stage} review gate of {work_item} stays open." + review_subagent_note(block)
             + f" Run again to re-run the review, or record a verdict by hand with "
             f"{_REVIEW_MANUAL_COMMANDS[stage]} {work_item}.")
+
+
+def _review_display(record: Mapping) -> str:
+    """The name of the harness that ran a review record (``Codex`` for a record
+    written before the Claude harness existed)."""
+    block = record.get("review") if isinstance(record.get("review"), Mapping) else {}
+    registered = review.HARNESSES.get(block.get("harness"))
+    return registered.display if registered is not None else "Codex"
 
 
 def review_subagent_note(block: Mapping) -> str:
@@ -6372,6 +6496,7 @@ def _run_review_job(
     decision: Decision, pre_state: dict, reviewer: Mapping, stage: str, kind: str,
     usage_gate: Callable[..., Any] | None, preflight_events: list[str], controller_settings: Mapping | None,
     lifecycle_lock: lock.LifecycleLock, config_source: str,
+    mode: str = review_mode.MODE_AUTO, mode_source: str = "default", choice: review_mode.Choice | None = None,
 ) -> "JobRecord | UsageHold":
     """Run the review for the external gate ``decision`` (D2-D9) instead of
     recording it ``GATE_BLOCKED``: admit a Codex job against the usage budget,
@@ -6381,6 +6506,7 @@ def _run_review_job(
     refuses before anything is recorded. The Codex group holds no descriptor
     of the lifecycle lock: the Controller process alone holds it."""
     harness = review.harness(reviewer["harness"])
+    lowered = choice is not None and choice.lowered
     info = decision.protocol
     root = managed_repo.root
     digests = _admitted_digests(managed_repo)
@@ -6396,14 +6522,17 @@ def _run_review_job(
             f"the review bundle of {work_item_id} has no MANIFEST.md at {bundle.path!r}; nothing was started",
             evidence={"check": "manifest", "entry": bundle.path})
     manifest = review.parse_manifest(manifest_path.read_text("utf-8"))
-    review.expected_headers(manifest, stage, reviewer["model"])  # refuses a bundle value that is missing
+    review.expected_headers(manifest, stage, reviewer["model"], harness.verdict_family)  # a missing bundle value refuses
     feedback_dir = (root / feedback.path).parent if feedback.path else None
 
+    prefix = "reviewer.same_provider_" if harness.name == review_mode.SAME_PROVIDER_HARNESS else "reviewer."
     route = routing.ResolvedRoute(role=review.REVIEW_ROLE, model=reviewer["model"], effort=reviewer["effort"],
-                                  single_agent=True, model_source="reviewer.model", effort_source="reviewer.effort")
+                                  single_agent=True, model_source=prefix + "model", effort_source=prefix + "effort")
+    provider = usage.PROVIDER_CLAUDE if harness.verdict_family == review_mode.WORKER_FAMILY else usage.PROVIDER_CODEX
     token: str | None = None
     if usage_gate is not None:
-        admitted = usage_gate(route, provider=usage.PROVIDER_CODEX)
+        # D8: the budget of the provider that runs the review
+        admitted = usage_gate(route, provider=provider)
         if isinstance(admitted, (UsageHold, usage.Hold)):
             return _as_usage_hold(admitted, preflight_events)
         token = admitted
@@ -6430,7 +6559,9 @@ def _run_review_job(
             "stage": stage, "kind": kind, "action_id": info.action_id, "row": info.row,
             "state_identity": info.state_identity, "harness": harness.name, "launched": False,
             "timeout_seconds": reviewer["timeout_seconds"], "operator_home": str(operator_home),
-            "captured_digest": review._sha256_file(operator_home / "auth.json"), "bundle": bundle.path,
+            "captured_digest": review._sha256_file(operator_home / harness.credential_file), "bundle": bundle.path,
+            "mode": mode, "mode_source": mode_source,
+            **({"lowered": True, "signal_key": list(choice.signal.key(stage))} if lowered else {}),
         },
         "created_at": now,
         "updated_at": now,
@@ -6452,7 +6583,7 @@ def _run_review_job(
         raise
 
     def finish(status: str, *, evidence_block: dict | None = None, review_fields: Mapping | None = None,
-               readings: list | None = None, after: str | None = None, verified: bool = False,
+               readings: list | None = None, first: list | None = None, after: str | None = None, verified: bool = False,
                event: str | None = None) -> JobRecord:
         """The one terminal write: status, evidence, the review block's outcome
         fields and (for a started job) the `usage` end figures; then the usage
@@ -6465,13 +6596,13 @@ def _run_review_job(
         started = fields["review"].get("launched") is True and fields["review"].get("not_started") is not True
         block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
         if block is not None and started:
-            fields["usage"] = _codex_end_block(block, readings or [])
+            fields["usage"] = _codex_end_block(block, readings or [], first or [])
         record = _persist(runtime_root, job_id, {**record, **fields}, event=event or _final_event(status), details={
             "review": {key: fields["review"].get(key) for key in ("outcome", "detail", "subagents")}})
         if block is not None:
             last = {r["window"]: r for r in (readings or [])}
             record = _usage_account(runtime_root, record, end_readings=list(last.values()) if started else None,
-                                    stream_start={} if started else None)
+                                    stream_start=({r["window"]: r for r in first or []}) if started else None)
         _run_job_ended(run_id, job_id, status, record)
         return record
 
@@ -6526,7 +6657,7 @@ def _run_review_job(
         # The boundary refused. Before the exec was spawned nothing was started (released, no charge);
         # after it (the retry's re-check), the first run spent allowance and is charged.
         not_started = "pid" not in spawned
-        return finish(STATUS_FAILED, readings=out.get("readings"), review_fields={
+        return finish(STATUS_FAILED, readings=out.get("readings"), first=out.get("first_readings"), review_fields={
             "not_started": not_started, "outcome": "refused", "detail": exc.message,
             "credentials": out.get("credentials"), **_obtained(out)}, evidence_block={
                 "code": REVIEW_REFUSED_CODE, "message": exc.message, "evidence": exc.evidence})
@@ -6534,15 +6665,15 @@ def _run_review_job(
         # Ctrl-C: the group is already killed. The record ends INCOMPLETE, the reservation is completed
         # as `ok` by the measured delta, and the interrupt propagates (run exits 130).
         # an interrupt before the exec was spawned started nothing: released, not charged at the forecast
-        finish(STATUS_INCOMPLETE, readings=out.get("readings"), review_fields={
+        finish(STATUS_INCOMPLETE, readings=out.get("readings"), first=out.get("first_readings"), review_fields={
             "outcome": "interrupted", "credentials": out.get("credentials"), **_obtained(out),
             **({"not_started": True} if "pid" not in spawned else {})}, evidence_block={
-                "code": REVIEW_INTERRUPTED_CODE, "message": "the review was interrupted (Ctrl-C); the Codex "
-                "process group was killed"})
+                "code": REVIEW_INTERRUPTED_CODE, "message": f"the review was interrupted (Ctrl-C); the "
+                f"{harness.display} process group was killed"})
         raise
     except Exception as exc:  # noqa: BLE001 -- any other fault ends the record; the first run's spend is kept
         # A fault before the exec was spawned (the state-identity read, the copy) started nothing: released.
-        finish(STATUS_FAILED, readings=out.get("readings"), review_fields={
+        finish(STATUS_FAILED, readings=out.get("readings"), first=out.get("first_readings"), review_fields={
             "not_started": "pid" not in spawned, "outcome": "error", "detail": str(exc),
             "credentials": out.get("credentials"), **_obtained(out)}, evidence_block={
                 "code": type(exc).__name__, "message": str(exc)})
@@ -6553,38 +6684,43 @@ def _run_review_job(
 
     outcome = result["outcome"]
     readings = result.get("readings")
+    first = result.get("first_readings")
     common = {"outcome": outcome, "credentials": result.get("credentials"), "detail": result.get("detail"),
               "verdict_status": result.get("status"), **_obtained(result)}
     if outcome == "verdict":
         return _ingest_review(managed_repo, runtime_root=runtime_root, job_id=job_id, work_item_id=work_item_id, kind=kind,
-                              verdict=result["verdict"], digests=digests, finish=finish, common=common,
-                              readings=readings, state_identity=info.state_identity)
+                              verdict=result["verdict"], digests=digests, common=common,
+                              finish=functools.partial(finish, first=first),
+                              readings=readings, state_identity=info.state_identity, run_ref_prefix=harness.name,
+                              distinct_message=(lambda detail: review_mode.distinct_refusal_message(mode, stage, detail))
+                              if lowered else None)
     if outcome == "mismatch":
         check = result.get("check")
         mismatches = [{"label": m.label, "expected": m.expected, "found": list(m.found)}
                       for m in (check.mismatches if check is not None else ())]
-        return finish(STATUS_FAILED, readings=readings, review_fields={**common, "mismatches": mismatches},
+        return finish(STATUS_FAILED, readings=readings, first=first, review_fields={**common, "mismatches": mismatches},
                       evidence_block={"code": REVIEW_HEADER_MISMATCH_CODE, "message": "the verdict's header lines "
                                       "did not equal the bundle's values after the one bounded retry",
                                       "mismatches": mismatches})
     if outcome == "status_changed":
-        return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
+        return finish(STATUS_FAILED, readings=readings, first=first, review_fields=common, evidence_block={
             "code": REVIEW_STATUS_CHANGED_CODE, "message": result.get("detail") or "the retry changed the status"})
     codes = {"changed": REVIEW_CHANGED_CODE, "limit": REVIEW_LIMIT_CODE, "timeout": REVIEW_TIMEOUT_CODE,
              "empty": REVIEW_EMPTY_CODE}
     if outcome in codes:
-        return finish(STATUS_INCOMPLETE, readings=readings, review_fields=common, evidence_block={
+        return finish(STATUS_INCOMPLETE, readings=readings, first=first, review_fields=common, evidence_block={
             "code": codes[outcome], "message": result.get("detail") or outcome})
-    return finish(STATUS_FAILED, readings=readings, review_fields=common, evidence_block={
+    return finish(STATUS_FAILED, readings=readings, first=first, review_fields=common, evidence_block={
         "code": REVIEW_FAILED_CODE, "message": result.get("detail") or "the review failed"})
 
 
 def _ingest_review(managed_repo: Any, *, runtime_root: Path, job_id: str, work_item_id: str | None, kind: str,
                    verdict: str, digests: Mapping | None, finish: Callable[..., JobRecord], common: dict,
-                   readings: list | None, state_identity: str | None) -> JobRecord:
+                   readings: list | None, state_identity: str | None, run_ref_prefix: str = "codex",
+                   distinct_message: Callable[[str], str] | None = None) -> JobRecord:
     """Hand an exact verdict to the Workflow (D6): the state identity must
     still be the one the review started for, then `record_external_result`
-    with `--run-ref codex:<job id>`. The Workflow's refusals are the job's
+    with `--run-ref <harness>:<job id>`. The Workflow's refusals are the job's
     `FAILED` evidence and leave the gate open; the Controller writes no
     feedback file itself."""
     root = managed_repo.root
@@ -6607,7 +6743,7 @@ def _ingest_review(managed_repo: Any, *, runtime_root: Path, job_id: str, work_i
     try:
         path = runtime.write_bytes(runtime_root, rel, verdict.encode("utf-8"))
         try:
-            ingested = protocol.record_external_result(root, work_item_id, kind, path, run_ref=f"codex:{job_id}",
+            ingested = protocol.record_external_result(root, work_item_id, kind, path, run_ref=f"{run_ref_prefix}:{job_id}",
                                                        expected_digests=digests)
         finally:
             with contextlib.suppress(Exception):
@@ -6618,6 +6754,16 @@ def _ingest_review(managed_repo: Any, *, runtime_root: Path, job_id: str, work_i
                       evidence_block={"code": type(exc).__name__, "message": exc.message, "evidence": exc.evidence})
     if ingested.outcome != "recorded":
         refusal = ingested.refusal
+        native = refusal.native if isinstance(refusal.native, Mapping) else {}
+        if distinct_message is not None and native.get("exception") == DISTINCT_MODEL_EXCEPTION:
+            # D6: a stale signal. The job ends INCOMPLETE and the next step at the same state identity and
+            # signal stops without launching (`_sticky_review_stop`).
+            return finish(STATUS_INCOMPLETE, readings=readings,
+                          review_fields={**_with_disposition(common, f"refused by the Workflow: {DISTINCT_MODEL_EXCEPTION}"),
+                                         "ingested": ingested.outcome},
+                          evidence_block={"code": REVIEW_DISTINCT_MODEL_CODE,
+                                          "message": distinct_message(str(native.get("message") or refusal.message)),
+                                          "outcome": ingested.outcome})
         return finish(STATUS_FAILED, readings=readings,
                       review_fields={**_with_disposition(common, f"refused by the Workflow: {refusal.code}"),
                                      "ingested": ingested.outcome},
@@ -6653,6 +6799,7 @@ def execute_step(
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
     review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    review_mode_options: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -6711,7 +6858,15 @@ def execute_step(
     ``None`` while ``reviewer.harness`` is unset -- today's behaviour, byte for
     byte. Set, an ``external_gate`` of row 14 or 28 is not recorded
     ``GATE_BLOCKED`` but run as a review job (:func:`_run_review_job`); every
-    other gate is unchanged, and an unknown harness refuses."""
+    other gate is unchanged, and an unknown harness refuses.
+
+    ``review_mode_options`` (workflow-controller-review-modes D1) is
+    ``{"mode", "source", "same_provider"}`` as :func:`cli._review_mode_options`
+    builds it; ``None`` is ``auto``, the mode that changes nothing for a
+    repository that sets nothing. It picks, at an external gate, the reviewer,
+    the ordinary gate or the ``review_mode_unavailable`` stop
+    (:mod:`controller.review_mode`); without ``same_provider`` a same-provider
+    choice is the ordinary gate."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
@@ -6721,7 +6876,7 @@ def execute_step(
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
             usage_gate=usage_gate, reviewer=reviewer,
-            review_round_cap=review_round_cap,
+            review_round_cap=review_round_cap, review_mode_options=review_mode_options,
         )
 
 
@@ -6801,6 +6956,7 @@ def _execute_step_locked(
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
     review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    review_mode_options: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -6921,16 +7077,49 @@ def _execute_step_locked(
         )
 
     if decision.gate is not None:
-        review_target = _review_gate(decision, reviewer)
+        chosen = _choose_review(managed_repo, decision, reviewer, review_mode_options)
+        review_target = None
+        if chosen is not None:
+            review_target, choice = chosen
+            if choice.kind == "refused":
+                refusal = protocol_decision.gate_for(
+                    managed_repo, work_item, decision, review_mode.REVIEW_MODE_UNAVAILABLE, choice.reason)
+                return _no_launch_record(
+                    runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase,
+                    pre_state, refusal, status=STATUS_GATE_BLOCKED, run_id=run_id,
+                )
+            if choice.kind != "review" or (choice.lowered and "same_provider" not in (review_mode_options or {})):
+                # The ordinary gate: `manual`, `auto` with nothing to ask, or a caller
+                # that passed no same-provider reviewer options.
+                review_target = None
+            elif choice.lowered and _sticky_review_stop(
+                    runtime, managed_repo.root, resolved_work_item_id, review_target[0],
+                    decision.protocol.state_identity, choice.signal.key(review_target[0])):
+                # D6: the Workflow refused the last same-provider approval and neither the
+                # state nor the signal moved; `choose` still selects a same-family reviewer.
+                mode = (review_mode_options or {}).get("mode", review_mode.MODE_AUTO)
+                refusal = protocol_decision.gate_for(
+                    managed_repo, work_item, decision, review_mode.REVIEW_MODE_UNAVAILABLE,
+                    _sticky_stop_message(mode, review_target[0]))
+                return _no_launch_record(
+                    runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase,
+                    pre_state, refusal, status=STATUS_GATE_BLOCKED, run_id=run_id,
+                )
         if review_target is not None:
             # Codex-reviewer D2: a configured harness couriers the external
-            # review of rows 14 and 28 instead of stopping at the gate.
+            # review of rows 14 and 28 instead of stopping at the gate; a
+            # same-provider choice (review-modes D3) runs the Claude harness
+            # on the `reviewer.same_provider_*` options.
+            options = review_mode_options or {}
             return _run_review_job(
                 managed_repo, runtime_root=runtime, identity=identity, run_id=run_id,
-                work_item_id=resolved_work_item_id, decision=decision, pre_state=pre_state, reviewer=reviewer,
+                work_item_id=resolved_work_item_id, decision=decision, pre_state=pre_state,
+                reviewer=options["same_provider"] if choice.lowered else reviewer,
                 stage=review_target[0], kind=review_target[1], usage_gate=usage_gate,
                 preflight_events=preflight_events, controller_settings=controller_settings,
                 lifecycle_lock=lifecycle_lock, config_source=routing.config_source,
+                mode=options.get("mode", review_mode.MODE_AUTO), mode_source=options.get("source", "default"),
+                choice=choice,
             )
         return _no_launch_record(
             runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,

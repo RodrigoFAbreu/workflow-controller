@@ -290,6 +290,8 @@ LEFTOVER_INVENTORY = (
      "venv, pip and install runs the test waits for; each exits by itself"),
     ("fixtures.py", "start:run:controller", 1, "short",
      "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
+    ("test_review_mode.py", "start:run", 1, "short",
+     "the captures generator's --check run: a read-only comparison that exits by itself"),
     ("process_fixtures.py", "start:Popen", 2, "bounded",
      "spawn_sleeper (LEFTOVER_LIFETIME_SECONDS) and the ZombieGroup helper (its release wait has a total deadline)"),
     ("process_fixtures.py", "wait", 1, "exception",
@@ -327,6 +329,9 @@ LEFTOVER_INVENTORY = (
     ("test_review_job.py", "start:Popen", 1, "bounded",
      "ReplayTest's Codex stand-in: a 120 s sleep in its own session carrying the ownership tag; `resume` ends its group, "
      "and the test's cleanup kills it by exact pid"),
+    ("test_review_same_provider.py", "start:Popen", 1, "bounded",
+     "ClaudeRecoveryTest's Claude stand-in: a 120 s sleep in its own session carrying the ownership tag; `resume` ends "
+     "its group, and the test's cleanup kills it by exact pid"),
     ("test_fake_codex_contract.py", "start:Popen", 1, "bounded",
      "the intermediate launcher of the orphan test: it waits on a fake with hang_seconds 120 and orphan_seconds 1; the test kills it and ends the fake's group by exact pid"),
     ("test_fake_claude_contract.py", "start:Popen", 9, "bounded",

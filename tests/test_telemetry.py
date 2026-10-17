@@ -318,7 +318,7 @@ class RoundsTest(_RuntimeCase):
                     "derived", "unavailable", "telemetry"}
         payload = json.loads(self.cli("--json", "telemetry")[1])
         for row in payload["rows"]:
-            self.assertEqual(set(row) - old_keys, {"action", "stage", "round", "round_source"})
+            self.assertEqual(set(row) - old_keys, {"action", "stage", "round", "round_source", "review_mode", "lowered"})
             self.assertEqual((row["action"], row["stage"], row["round"], row["round_source"]),
                              (None, "none", None, None))
 
@@ -337,7 +337,7 @@ class RoundsTest(_RuntimeCase):
         self.assertEqual((rows["j-c"]["round"], rows["j-c"]["round_source"]), (7, "workflow"))
 
     def courier_job(self, job_id: str, action: str, minute: int, *, phase: str, plan_revision: int | None = 1,
-                    implementation_revision: int | None = 1) -> dict:
+                    implementation_revision: int | None = 1, **review_fields) -> dict:
         """A Controller external-review job as ``job.py`` writes it: ``kind``
         ``review``, ``review.action_id``, ``pre_state``, and no ``protocol``,
         ``worker``, ``worker_streams`` or ``telemetry`` block."""
@@ -346,7 +346,28 @@ class RoundsTest(_RuntimeCase):
             pre_state={"phase": phase, "plan_revision": plan_revision,
                        "implementation_revision": implementation_revision},
             review={"stage": "plan" if action.startswith("plan") else "implementation", "action_id": action,
-                    "launched": True, "outcome": "ingested"})
+                    "launched": True, "outcome": "ingested", **review_fields})
+
+    def test_review_mode_groups_review_jobs_and_reads_a_legacy_record_as_cross_model(self) -> None:
+        phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+        self.courier_job("c-old", "plan.review.external", 1, phase=phase)
+        self.courier_job("c-auto", "plan.review.external", 2, phase=phase, mode="auto")
+        self.courier_job("c-low", "plan.review.external", 3, phase=phase, mode="single-provider", lowered=True)
+        self.courier_job("c-low2", "plan.review.external", 4, phase=phase, mode="auto", lowered=True)
+        self.protocol_job("p-1", "plan.review.local", 5, phase="AWAITING_LOCAL_PLAN_REVIEW")
+        selected = telemetry.rows(observe.list_jobs(self.runtime_root))
+        self.assertEqual({r["job_id"]: (r["review_mode"], r["lowered"]) for r in selected}, {
+            "c-old": ("cross-model", False), "c-auto": ("auto", False), "c-low": ("single-provider", True),
+            "c-low2": ("auto", True), "p-1": (None, False)})
+        self.assertEqual([(g["key"], g["jobs"]) for g in telemetry.groups(selected, "review_mode")], [
+            ({"review_mode": None, "lowered": False}, 1),
+            ({"review_mode": "auto", "lowered": False}, 1), ({"review_mode": "auto", "lowered": True}, 1),
+            ({"review_mode": "cross-model", "lowered": False}, 1),
+            ({"review_mode": "single-provider", "lowered": True}, 1)])
+        code, out, err = self.cli("telemetry", "--by", "review_mode")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertIn("review_mode=cross-model, lowered=False: 1 job(s)", out)
+        self.assertIn("review_mode=none, lowered=False: 1 job(s)", out)
 
     def test_a_courier_review_job_reports_its_action_stage_and_round(self) -> None:
         plan_phase = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"

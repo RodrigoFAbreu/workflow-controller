@@ -1,0 +1,113 @@
+# Flag acceptance on claude 2.1.296 (no model call; scratch home without a credential; stdin /dev/null)
+# A flag that parses reaches "Error: Input must be provided ..." (exit 1). Raw output below, then readings.
+
+### claude -p  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --output-format stream-json  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --output-format stream-json --verbose  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --setting-sources   (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --setting-sources bogus  (stdin /dev/null, no credential in home)
+Error processing --setting-sources: Invalid setting source: bogus. Valid options are: user, project, local
+exit=1
+### claude -p --setting-sources user,project,local  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --permission-mode bogus  (stdin /dev/null, no credential in home)
+error: option '--permission-mode <mode>' argument 'bogus' is invalid. Allowed choices are acceptEdits, auto, bypassPermissions, manual, dontAsk, plan.
+exit=1
+### claude -p --permission-mode dontAsk --permission-prompts none  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --permission-prompts bogus  (stdin /dev/null, no credential in home)
+error: option '--permission-prompts <target>' argument 'bogus' is invalid. Allowed choices are host, none.
+exit=1
+### claude -p --tools Read,Grep,Glob  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --tools NotATool  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --effort bogus  (stdin /dev/null, no credential in home)
+Warning: Unknown --effort value 'bogus' — ignoring it and using the default effort. Valid values: low, medium, high, xhigh, max.
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --effort high  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --max-budget-usd 0.5  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --max-budget-usd abc  (stdin /dev/null, no credential in home)
+error: option '--max-budget-usd <amount>' argument 'abc' is invalid. --max-budget-usd must be a positive number greater than 0
+exit=1
+### claude -p --strict-mcp-config --mcp-config {"mcpServers":{}}  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --strict-mcp-config --mcp-config {bad json  (stdin /dev/null, no credential in home)
+Error: Invalid MCP configuration:
+MCP config file not found: /home/rodrigo/.cache/c14-prestep/copy-flags/{bad json
+exit=1
+### claude -p --no-session-persistence  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --bare  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --restricted  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --restricted --permission-mode bypassPermissions  (stdin /dev/null, no credential in home)
+Error: bypassPermissions not supported in restricted mode
+exit=1
+### claude -p --safe-mode  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --disable-slash-commands  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --model claude-haiku-4-5-20251001  (stdin /dev/null, no credential in home)
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+exit=1
+### claude -p --bogus-flag  (stdin /dev/null, no credential in home)
+error: unknown option '--bogus-flag'
+exit=1
+### files in the scratch home after all probes
+d 20 .
+d 54 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199105552
+f 719 ./.claude/.claude.json
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## Readings
+- Fail closed at parse (exit 1, named): --setting-sources <unknown> ("Invalid setting source"), --permission-mode <unknown>,
+  --permission-prompts <unknown>, --max-budget-usd <non-number>, unknown options ("unknown option"),
+  --restricted with --permission-mode bypassPermissions.
+- Do NOT fail closed:
+  * --effort <unknown> prints a Warning and silently uses the default effort.  The Controller must validate the
+    effort value itself (allowed: low, medium, high, xhigh, max).
+  * --tools with an unknown name: parses, and a real run (run 7, --tools Read,Grep,Glob,NotATool) offered exactly
+    Glob, Grep, Read: the unknown name is dropped silently.  The Controller must compare the init event's `tools`
+    with the expected set, never trust --tools alone.
+  * --mcp-config with a value that is not JSON is taken as a FILE PATH (error only because the file is missing).
+- --setting-sources "" (empty string) is accepted and means "no user, project or local settings" (runs 2, 5-8).
+- In real runs, accepted together and exit 0: -p --output-format stream-json --verbose --no-session-persistence
+  --setting-sources "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --tools Read,Grep,Glob
+  --permission-mode dontAsk --permission-prompts none --disable-slash-commands --model <id> --effort high
+  --max-budget-usd 0.50 --debug-file <path>.
+- --model claude-haiku-4-5-20251001 and --model claude-opus-5-5 both accepted (init `model` echoes the id).
+- --effort high: the init event shows per_turn_effort_active=true (false without --effort); the effort value itself
+  is not echoed anywhere in the stream.
+- --bare: parses, but with only the OAuth credential file the run is "Not logged in" (run 4); see credentials.txt.
+- `claude --help` writes nothing into the scratch home; the flag probes above wrote only
+  .claude/.claude.json, .claude/backups/, .claude/sessions/ (empty) and tmp/cc-socks/, tmp/claude-1000/ (empty).

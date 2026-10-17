@@ -35,7 +35,12 @@ GROUPINGS = {
     "role": ("role",), "model": ("model",), "role,model": ("role", "model"),
     "action": ("action",), "stage": ("stage",), "stage,round": ("stage", "round"),
     "work_item,action": ("work_item_id", "action"),
+    "review_mode": ("review_mode", "lowered"),
 }
+
+#: The mode a review job written before ``review.mode`` existed ran under:
+#: the only reviewer then was the distinct-provider one (review-modes D7).
+LEGACY_REVIEW_MODE = "cross-model"
 
 PROBLEM_TELEMETRY_FAILED = "telemetry_failed"
 PROBLEM_NO_STREAM = "no_stream"
@@ -58,6 +63,17 @@ def session_block(data: bytes) -> dict:
     """The session figures of one complete stream (``worker.stdout``)."""
     stream = worker_stream.read_stream(data)
     return worker_stream.session_telemetry([entry["event"] for entry in stream.results])
+
+
+def review_columns(record: Mapping) -> tuple[str | None, bool]:
+    """``(review_mode, lowered)`` of a review job (review-modes D7): the recorded
+    ``review.mode`` and ``review.lowered``; a review record without the keys reads as
+    ``cross-model``, never ``None``. A job that is not a review has no mode."""
+    block = record.get("review")
+    if not (record.get("kind") == "review" and isinstance(block, Mapping)):
+        return None, False
+    mode = block.get("mode")
+    return (mode if isinstance(mode, str) else LEGACY_REVIEW_MODE), block.get("lowered") is True
 
 
 def dimensions(record: Mapping) -> dict:
@@ -381,6 +397,7 @@ def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str |
         block = record_block(record) or {}
         route = dimensions(record)
         action, stage, round_number, source = columns.get(id(record), (None, review_rounds.STAGE_NONE, None, None))
+        review_mode, lowered = review_columns(record)
         selected.append({
             "job_id": record.get("job_id"),
             "created_at": record.get("created_at"),
@@ -394,6 +411,8 @@ def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str |
             "stage": stage,
             "round": round_number,
             "round_source": source,
+            "review_mode": review_mode,
+            "lowered": lowered,
             "derived": bool(block.get("derived")),
             "unavailable": unavailable(block),
             "telemetry": block,
@@ -469,7 +488,7 @@ def _figure_text(group: Mapping, name: str, fmt) -> str:
 #: inherits the harness's model; a job with no route has no role. JSON
 #: output keeps ``null``.
 _GROUP_LABEL_MISSING = {"role": "none", "model": "inherit", "action": "none", "round": "none",
-                        "work_item_id": "none"}
+                        "work_item_id": "none", "review_mode": "none"}
 
 #: The label a group key prints under, where it differs from the row key.
 _GROUP_LABEL_NAME = {"work_item_id": "work_item"}

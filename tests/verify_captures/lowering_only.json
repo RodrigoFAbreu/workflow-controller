@@ -1,0 +1,5 @@
+{
+  "detail": "gate-lowering event: the adoption 3fa86993e05f (commit 2f9b33400c42) lowers plan_approval.require, technical_approval.require",
+  "id": "gate_policy",
+  "status": "warn"
+}

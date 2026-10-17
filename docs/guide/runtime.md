@@ -230,6 +230,9 @@ file is never an error: every setting then takes its built-in default.
 | `reviewer.effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
 | `reviewer.timeout_seconds` | integer | `3600` | 60 to 86400 | none |
 | `reviewer.binary` | string or `null` | `null` (built-in `codex`) | a name or path, 1 to 1024 characters | none |
+| `review.mode` | string | `auto` | `auto`, `cross-model`, `single-provider`, `manual` | `--review-mode` |
+| `reviewer.same_provider_model` | string or `null` | `null` (built-in `claude-opus-5-5`) | 1 to 128 characters | none |
+| `reviewer.same_provider_effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
 
 Each default is the value the Controller used before the file existed,
@@ -335,6 +338,36 @@ review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
   review that passes it ends `INCOMPLETE` (exit `35`);
 - `reviewer.binary` is the reviewer program (a name looked up on `PATH`,
   or a path), the test seam like `--claude-binary`.
+
+The `review.mode` row (1.13.0) chooses how the external review of a protocol
+target runs at the two external review gates (rows 14 and 28). `--review-mode`
+on `step`, `run` and `explain` replaces it for that command; a value outside
+the four is a usage error (exit `2`). `settings show` gives its source.
+
+| Mode | At an external review gate |
+|---|---|
+| `auto` (default) | the cross-model reviewer when `reviewer.harness` is set; else the same-provider reviewer, only where `verify` reports the stage's `require` lowered (a lowering adoption of the gate policy) and nothing else; else the ordinary gate |
+| `cross-model` | the reviewer of `reviewer.harness`, which must be a provider distinct from the workers'; without one the step stops at `review_mode_unavailable` |
+| `single-provider` | the same-provider reviewer (below), only while the lowered-policy signal stands; else refused before launch with `review_mode_unavailable` |
+| `manual` | the ordinary gate: a person reviews and pastes the verdict |
+
+`auto` never starts a review because a second provider happens to be logged
+in: a repository that sets nothing, and whose newest gate-policy adoption
+lowered no `require`, behaves as at 1.12.0. Under a **human** gate `auto` goes
+to the gate, although the Workflow would admit a same-provider approval
+there; the Controller runs a same-provider review only for a lowered
+`distinct_reviewer_models` requirement. The signal is read from the
+Workflow's `gate_policy` check and stands only while the lowering adoption is
+the newest: a later tightening, a floor, an invalid policy file or any
+clause the Controller does not know cancels it for both stages.
+
+The same-provider reviewer is a fresh, read-only Claude session in a
+disposable copy (see [the reviewers](workers.md#the-same-provider-reviewer)).
+`reviewer.same_provider_model` and `reviewer.same_provider_effort` fall back
+to `claude-opus-5-5` and `high`; they are not the worker `routing` section.
+Its approvals are recorded with `review.mode`, `review.mode_source` and
+`review.lowered`, and `telemetry --by review_mode` counts them (a review job
+keeps no cost or token figures, so none is shown).
 
 The seven `notifications` rows (1.9.0) make the Controller a SignalHub
 producer (see [ADR 0012](../adr/0012-signalhub-notifications.md) and
@@ -449,6 +482,12 @@ its `settings clean` refuses. 1.11.0 adds no row and stays at generation 6.
 a file filled by 1.10.x or 1.11.x, and moves nothing else. An older
 Controller sharing the file afterwards warns about the unknown `review`
 section, ignores it, and its `settings clean` refuses.
+
+1.13.0 is table generation 8: it adds `review.mode`,
+`reviewer.same_provider_model` and `reviewer.same_provider_effort` to a file
+filled by 1.12.0, and moves nothing else. An older Controller sharing the
+file afterwards warns about the unknown keys, ignores them, and its
+`settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

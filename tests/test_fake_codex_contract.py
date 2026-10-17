@@ -64,7 +64,7 @@ class FakeCodexContractTest(unittest.TestCase):
         from controller import review
         self.assertNotIn("pre-step is still open", re.sub(r"\s+", " ", (CODEX_FIXTURES / "README.md").read_text()))
         self.assertTrue(review.PRE_STEP_CAPTURED)
-        self.assertEqual(sorted(review.HARNESSES), ["codex"])
+        self.assertEqual(sorted(review.HARNESSES), ["claude", "codex"])
 
     def test_review_argv_is_the_captured_recommended_invocation(self):
         """`review.argv("exec", ...)` equals the real command line the pre-step ran with the recommended

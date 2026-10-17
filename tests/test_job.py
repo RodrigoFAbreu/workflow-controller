@@ -2098,7 +2098,9 @@ class UnboundedDefaultTimeoutTest(_LifecycleCase):
 class ProseOverStateTest(_LifecycleCase):
     """Durable state over prose: a ``SUCCESS`` worker whose ``result``
     claims the transition over an unchanged state is ``FAILED``, and no
-    code reads ``WorkerResult.result``/``raw_json`` except ``_worker_dict``."""
+    code reads ``WorkerResult.result``/``raw_json`` except ``_worker_dict`` -- and the Claude
+    review harness, whose ``result`` event *is* the reviewer's verdict (review-modes D5), read only to hand it to
+    the Workflow."""
 
     def test_a_success_claim_over_an_unchanged_state_fails(self) -> None:
         body = fake_claude.stream_text([fake_claude.result_event(
@@ -2125,7 +2127,8 @@ class ProseOverStateTest(_LifecycleCase):
                 for node in ast.walk(func):
                     if isinstance(node, ast.Attribute) and node.attr in ("result", "raw_json"):
                         readers.append((path.name, func.name, node.attr))
-        self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result")])
+        self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result"),
+                                                ("review.py", "_claude_attempt", "result")])
 
 
 class UsageLimitLegacyTest(_LifecycleCase):

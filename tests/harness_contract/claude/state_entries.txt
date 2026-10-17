@@ -1,0 +1,150 @@
+# Entries claude 2.1.296 creates in a scratch home (find -printf '%y %s %p', added entries only; '<connector>' redacts
+# the account's claude.ai connector names).  HOME=<home>, CLAUDE_CONFIG_DIR=<home>/.claude, TMPDIR=<home>/tmp,
+# XDG_CONFIG_HOME=<home>/.config, XDG_STATE_HOME=<home>/.local/state, XDG_CACHE_HOME=<home>/.cache (see env.txt).
+# Before every run the home held only .claude/.credentials.json (runs 1-5 also .claude/settings.json + .claude/CLAUDE.md,
+# the user-layer probe) and the empty dirs .cache .config .local/state tmp.
+
+## run 1 (control-defaults)
+d 34 ./.cache
+d 78 ./.cache/claude-cli-nodejs
+d 330 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1
+d 60 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>
+f 2335 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>/2026-10-17T01-05-13-925Z.jsonl
+d 60 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>
+f 2497 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>/2026-10-17T01-05-13-925Z.jsonl
+d 60 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>
+f 2402 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>/2026-10-17T01-05-13-925Z.jsonl
+d 60 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>
+f 2402 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>/2026-10-17T01-05-13-925Z.jsonl
+d 60 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>
+f 2401 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-claude-ai-<connector>/2026-10-17T01-05-13-925Z.jsonl
+d 60 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-fakeprobe
+f 880 ./.cache/claude-cli-nodejs/-home-rodrigo--cache-c14-prestep-copy-1/mcp-logs-fakeprobe/2026-10-17T01-05-13-925Z.jsonl
+d 246 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199113864
+f 1543 ./.claude/.claude.json
+f 24 ./.claude/.last-cleanup
+f 90 ./.claude/mcp-needs-auth-cache.json
+d 78 ./.claude/projects
+d 96 ./.claude/projects/-home-rodrigo--cache-c14-prestep-copy-1
+f 202263 ./.claude/projects/-home-rodrigo--cache-c14-prestep-copy-1/11c62d3b-3739-46ac-ab96-fef67ed6bd1f.jsonl
+d 0 ./.claude/projects/-home-rodrigo--cache-c14-prestep-copy-1/memory
+d 72 ./.claude/session-env
+d 0 ./.claude/session-env/11c62d3b-3739-46ac-ab96-fef67ed6bd1f
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## run 2 (isolated-setting-sources-empty)
+d 174 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199173047
+f 1392 ./.claude/.claude.json
+f 24 ./.claude/.last-cleanup
+d 78 ./.claude/projects
+d 12 ./.claude/projects/-home-rodrigo--cache-c14-prestep-copy-2
+d 0 ./.claude/projects/-home-rodrigo--cache-c14-prestep-copy-2/memory
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## run 3 (isolated-but-default-setting-sources)
+d 196 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199239880
+f 1392 ./.claude/.claude.json
+f 24 ./.claude/.last-cleanup
+d 86 ./.claude/projects
+d 12 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-3-tree
+d 0 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-3-tree/memory
+d 72 ./.claude/session-env
+d 0 ./.claude/session-env/e3736c15-947a-4b8e-b854-2939560152bc
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## run 4 (bare-with-credential-file)
+d 132 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199270957
+f 719 ./.claude/.claude.json
+d 0 ./.claude/sessions
+d 22 ./tmp
+d 0 ./tmp/claude-1000
+
+## run 5 (recommended-haiku-ancestor)
+d 174 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199285479
+f 1392 ./.claude/.claude.json
+f 24 ./.claude/.last-cleanup
+d 86 ./.claude/projects
+d 12 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-5-tree
+d 0 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-5-tree/memory
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## run 6 (recommended-opus-high-minimal-home)
+d 130 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199317019
+f 1392 ./.claude/.claude.json
+f 24 ./.claude/.last-cleanup
+d 86 ./.claude/projects
+d 12 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-6-tree
+d 0 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-6-tree/memory
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## run 7 (unknown-tool-debug-nomemory)
+d 88 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199353046
+f 1392 ./.claude/.claude.json
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## run 8 (recommended-session-persistence-on-git-copy)
+d 104 ./.claude
+d 66 ./.claude/backups
+f 84 ./.claude/backups/.claude.json.backup.1792199401880
+f 1392 ./.claude/.claude.json
+d 86 ./.claude/projects
+d 84 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-8-tree
+f 50176 ./.claude/projects/-home-rodrigo--cache-c14-prestep-anc-8-tree/fc1413fa-df13-4c52-8309-8bef2667c9bc.jsonl
+d 0 ./.claude/sessions
+d 38 ./tmp
+d 0 ./tmp/cc-socks
+d 0 ./tmp/claude-1000
+
+## Readings
+- CLAUDE_CONFIG_DIR is honoured: every config/state file lands in <home>/.claude/, including the global config
+  .claude.json (which without CLAUDE_CONFIG_DIR lives at $HOME/.claude.json) and its backups/.claude.json.backup.<ms>.
+  .claude.json is rewritten several times per run (atomic temp+rename, mode 0600; run 7 debug) and holds machineID,
+  userID, firstStartTime, pluginUsage and the account profile (oauthAccount: accountUuid, emailAddress, organizationUuid,
+  displayName, ...).  It is NOT a credential but carries account identity: treat as private, never copy back.
+- --no-session-persistence (runs 2-7): no transcript is written.  Without it (runs 1, 8): projects/<cwd slug>/<session
+  id>.jsonl (the full transcript; 50 KB for a one-line answer in run 8, 202 KB in run 1).  Run 1 (Bash offered) also
+  wrote session-env/<session id>/.
+- Auto-memory creates an empty projects/<slug>/memory/ even with --no-session-persistence (runs 2, 3, 5, 6);
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 suppresses it (runs 7, 8).
+- .last-cleanup appears in some runs (1, 2, 3, 5, 6) and not others (4, 7, 8): a periodic cleanup marker, not tied to a flag
+  observed here.
+- sessions/ (empty) and tmp/cc-socks/ (the uds-messaging socket <pid>.sock lives there while the run is up; removed at
+  exit) and tmp/claude-1000/ are created by every run, the not-logged-in run 4 included (no cc-socks there).
+- XDG_CACHE_HOME is used only for MCP server logs (claude-cli-nodejs/<slug>/mcp-logs-*/); with MCP isolated (runs 2-8)
+  nothing is written there.  XDG_CONFIG_HOME and XDG_STATE_HOME stayed empty in all runs.
+- mcp-needs-auth-cache.json appears only when claude.ai connectors were loaded (run 1).
+- The credential file .claude/.credentials.json is never rewritten (see credentials.txt).
+- The copy (cwd) was byte-for-byte unchanged in every isolated run (find listing identical before/after); in runs 1 and 3
+  only the hook and MCP marker files appeared.  No written.txt in any run.

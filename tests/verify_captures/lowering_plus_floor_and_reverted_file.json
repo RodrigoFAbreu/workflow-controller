@@ -1,0 +1,5 @@
+{
+  "detail": "docs/ai-workflow/GATE_POLICY.json loosens plan_approval.human; the loosening is ignored (only /adopt-gate-policy loosens); gate-lowering event: the adoption 3fa86993e05f (commit 4c3eab92fb02) lowers plan_approval.require, technical_approval.require",
+  "id": "gate_policy",
+  "status": "warn"
+}

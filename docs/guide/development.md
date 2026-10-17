@@ -272,7 +272,7 @@ update its "Last checked with" line by hand; the check only asserts the line is 
 A scenario is a scripted run of one whole lifecycle path (a full lifecycle to
 merge, a human gate, a worker failure, a killed Controller and its recovery,
 a squash release, notifications, a usage pause, the read-only commands, the
-settings file, a review loop stopped at the round cap) against disposable repositories, a scratch origin and the
+settings file, a review loop stopped at the round cap, the four review modes) against disposable repositories, a scratch origin and the
 fake `claude`, `gh`, `workflow-manager` and SignalHub. It launches no model
 and touches no network. Scenarios are test-side code: they live in
 `tests/scenarios/`, the runner is `tools/run_scenarios.py`, and `controller/`
@@ -335,7 +335,7 @@ child, or a re-exec.
 and produced those observations. It does not prove a real worker behaves:
 the fakes follow the contract suite in `tests/test_fake_claude_contract.py`,
 and the live-worker test stays opt-in. One path is not covered: anything a real
-forge or SignalHub does that the fakes do not. (A usage limit reached
+forge or SignalHub does that the fakes do not. (`scenario-review-mode-single-provider`, in `tests/scenarios/review.py`, drives `auto`, `cross-model`, `single-provider` and `manual` through `cli.main` against the fake `codex` and the fake review `claude`; the lowered-policy signal is the captured one, patched in, because the stub manager reports no adoption. A usage limit reached
 *mid-job* is covered by the `usage-limit-mid-job-waits-and-repeats`
 scenario, with the sanitised real stream replayed by a fake worker.) Records carry no signature; the gate policy
 (step C10) decides what to require and whether the reporter and commit are

@@ -48,6 +48,7 @@ MUTATIONS_REVIEW: dict[str, tuple[str, ...]] = {  # scenarios 11-12 (codex-revie
         "effective-unchecked", "outside-layers-unchecked", "home-unchecked", "no-copy-back", "no-launch-intent", "retry-status-unchecked"),
     "scenario-codex-review-implementation-stage-limit": (
         "copy-back-over-changes", "admission-without-readings", "admission-operator-only"),
+    "scenario-review-mode-single-provider": ("mode-ignored",),  # review-modes CP4
 }
 
 

@@ -86,6 +86,11 @@ And once by ``workflow-controller-review-convergence`` CP1, whose
 ``review.round_cap`` settings row (table generation 7) appears in each launched
 job's ``controller_settings`` ``values`` and ``sources``. Nothing else moved.
 
+And once by ``workflow-controller-review-modes`` CP1, whose three settings rows
+(``review.mode``, ``reviewer.same_provider_model``, ``reviewer.same_provider_effort``;
+table generation 8) appear in each launched job's ``controller_settings``
+``values`` and ``sources``. Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

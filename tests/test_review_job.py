@@ -53,9 +53,10 @@ def reviewer(tmp: Path, **extra) -> dict:
 
 
 def verdict_text(kw: dict, status: str = "APPROVE", *, wrong: str | None = None) -> str:
-    expected = review.expected_headers(kw["manifest"], kw["stage"], kw["model"])
+    expected = review.expected_headers(kw["manifest"], kw["stage"], kw["model"],
+                                       review.HARNESSES[kw.get("harness_name", "codex")].verdict_family)
     if wrong is not None:
-        expected[wrong] = expected[wrong][:-1] + "0"
+        expected[wrong] = expected[wrong][:-1] + ("1" if expected[wrong][-1] == "0" else "0")
     lines = ["# Review Decision", "", f"Status: {status}", ""] + [f"{k} {v}" for k, v in expected.items()]
     return "\n".join([*lines, "", "## Blocking findings", "", "None.", ""])
 
@@ -87,19 +88,22 @@ class LaunchDouble:
             kw["on_spawn"](os.getpid(), os.getpid())
             self.at_spawn = self.record_on_disk(kw["job_id"])
         if "raise" in scenario:
-            kw["out"].update(readings=scenario.get("readings", []), credentials="unchanged",
+            kw["out"].update(readings=scenario.get("readings", []), first_readings=scenario.get("first_readings", []),
+                             credentials="unchanged",
                              verdicts=scenario.get("verdicts", []), subagents=scenario.get("subagents", []))
             raise scenario["raise"]
         outcome = scenario.get("outcome", "verdict")
         result = {"status": None, "verdict": None, "check": None, "outcome": outcome, "credentials": "unchanged",
                   "detail": scenario.get("detail"), "readings": scenario.get("readings", []),
+                  "first_readings": scenario.get("first_readings", []),
                   "verdicts": scenario.get("verdicts", []), "subagents": scenario.get("subagents", [])}
         if outcome == "verdict":
             result.update(status=scenario.get("status", "APPROVE"), verdict=verdict_text(
                 kw, scenario.get("status", "APPROVE"), wrong=scenario.get("wrong")))
         if outcome == "mismatch":
             result["check"] = review.verify_verdict(verdict_text(kw, wrong="Reviewed bundle ID:"),
-                                                    review.expected_headers(kw["manifest"], kw["stage"], kw["model"]))
+                                                    review.expected_headers(kw["manifest"], kw["stage"], kw["model"],
+                                                                        review.HARNESSES[kw["harness_name"]].verdict_family))
         if "while_running" in scenario:
             scenario["while_running"]()
         return result

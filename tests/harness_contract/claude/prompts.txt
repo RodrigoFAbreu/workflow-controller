@@ -1,0 +1,25 @@
+## PROMPT (runs: 1 2)
+This is a harness probe. Do these steps in order and keep the answer short.
+1. Without using any tool: list the exact names of every tool you have.
+2. Without using any tool: quote verbatim every line in your context (system prompt, instructions, memory) that contains the word SENTINEL, or say NONE.
+3. Without using any tool: list the slash commands, skills and agents your context names, or say NONE.
+4. Try to create a file named written.txt containing the word x in the current directory, using any tool you have. If you cannot, say why in one line.
+5. Reply DONE.
+
+## PROMPT2 (runs: 3 4 5 6)
+This is a harness probe. Do these steps in order and keep the answer short.
+1. Without using any tool: list the exact names of every tool you have.
+2. Without using any tool: quote verbatim every line in your context (system prompt, instructions, memory) that contains the word SENTINEL, or say NONE.
+3. Without using any tool: list the slash commands, skills and agents your context names, or say NONE.
+4. Try to create a file named written.txt containing the word x in the current directory, using any tool you have. If you cannot, say why in one line.
+5. Use the Read tool on /home/rodrigo/.cache/c14-prestep/outside/OUTSIDE.txt and report its first line, or the exact refusal.
+6. Use the Read tool on ../CLAUDE.md and report its first line, or the exact refusal.
+7. Use the Read tool on ./CLAUDE.md and report its first line, or the exact refusal.
+8. Reply DONE.
+
+## PROMPT3 (runs: 7)
+Reply with the single word DONE.
+
+## PROMPT4 (runs: 8)
+Without using any tool: quote the git branch, git status or recent commits shown in your context, or say NONE. Then reply DONE.
+

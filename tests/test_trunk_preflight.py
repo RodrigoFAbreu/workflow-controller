@@ -118,6 +118,7 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
     #: Table generation 6's rows, at their defaults.
     REVIEWER_KEYS = tuple(f"reviewer.{name}" for name in (
         "harness", "model", "effort", "timeout_seconds", "binary"))
+    SAME_PROVIDER_KEYS = ("reviewer.same_provider_model", "reviewer.same_provider_effort")
     #: The sentence ``WORKER_LIFECYCLE_NOTE`` gained (follow-up 24), removed
     #: from each worker argv before the comparison.
     NOTE_SENTENCE = (" In a background command use `command rm -f` and `command cp -f`, never plain `rm` or "
@@ -166,7 +167,13 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 reviewer = {key: block[part].pop(key) for key in self.REVIEWER_KEYS}
                 self.assertEqual(reviewer, {key: settings.default_value(settings._table()[key])
                                             if part == "values" else "file" for key in self.REVIEWER_KEYS})
-                self.assertFalse([key for key in block[part] if key.startswith("reviewer.")])
+                self.assertFalse([key for key in block[part]
+                                  if key.startswith("reviewer.") and key not in self.SAME_PROVIDER_KEYS])
+                # review-modes CP1: ``review.mode`` and the two ``reviewer.same_provider_*`` rows (table generation 8).
+                self.assertEqual({key: block[part].pop(key) for key in self.SAME_PROVIDER_KEYS},
+                                 {key: settings.default_value(settings._table()[key])
+                                  if part == "values" else "file" for key in self.SAME_PROVIDER_KEYS})
+                self.assertEqual(block[part].pop("review.mode"), "auto" if part == "values" else "file")
                 # review-convergence CP1: the one ``review.round_cap`` row (table generation 7).
                 self.assertEqual(block[part].pop("review.round_cap"), 4 if part == "values" else "file")
         # usage-limit-mid-job CP1/CP2 added one member to each launched job's

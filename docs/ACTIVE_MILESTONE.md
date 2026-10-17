@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implementing.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14), plan revision 5
+**Awaiting functional review.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14), plan revision 5
 (`docs/ai-workflow/CONTROLLER_REVIEW_MODES_PLAN.md`), approved by policy at `4def744`. Base commit `40f9cef`. The
 previous milestone, `workflow-controller-review-convergence`, is archived at
 `docs/milestones/completed/workflow-controller-review-convergence.md`.
@@ -125,7 +125,63 @@ Checked and left as they are: a Claude stream with no `init` event and a non-zer
 (`launch_review` ingests no verdict from a non-zero exit); stream readings are account-wide window figures, so the
 last attempt's are the freshest.
 
+## Functional review checklist
+
+Scope: implementation revision 2 (technical approval recorded at `3cd336b`). Run every flow against a scratch
+repository, never this one.
+
+### Setup
+
+- Install the milestone head into a throwaway environment (`pipx install --force .` in a scratch venv, or run with
+  `PYTHONPATH=<this checkout>`; see `docs/guide/development.md`).
+- A scratch repository managed by the vendored Workflow, in `AWAITING_LOCAL_*`/external-review phase for a plan or
+  implementation round, with a scratch bare `origin` and a fake `gh` on `PATH` (a clone's own `origin` is the real
+  repository). Use `tests/scenarios/review.py` as the model for this world.
+- For the same-provider flows: a Workflow gate policy that lowers the external review to human-free (the captured
+  lowering adoption in `tests/verify_captures/`), and `claude` logged in on the machine. For the cross-model flows:
+  `codex` logged in and `reviewer.harness` set.
+
+### Flows and expected results
+
+1. **Default is unchanged.** `workflow-controller settings show <repo>`: `review.mode` is `auto`,
+   `reviewer.same_provider_model` and `reviewer.same_provider_effort` are listed. With a non-lowered policy and
+   nothing set, `step` stops at the ordinary external review gate (as before).
+2. **`--review-mode manual`.** `step --review-mode manual <repo>` at an external gate stops at the ordinary gate and
+   launches nothing; `explain --review-mode manual` says so.
+3. **`--review-mode cross-model`, no distinct provider.** With `reviewer.harness` unset, `step` exits `10` at
+   `review_mode_unavailable`, launches nothing, writes one `GATE_BLOCKED` record; the text names the ways out.
+4. **`auto` with a lowered policy.** `step` runs a same-provider (Claude) review job; the job record's `review` block
+   has `mode`, `mode_source`, `lowered: true` and `signal_key`; the ledger `run_ref` is `claude:<job id>`; the verdict
+   is recorded through the Workflow and the gate advances (or `REVISE` loops as for Codex).
+5. **`--review-mode single-provider`.** With the lowered signal: as flow 4. Without it (unadopted or tightened
+   policy): stops at `review_mode_unavailable` before launch.
+6. **Distinct-model refusal.** If the Workflow refuses the verdict because the models are not distinct, the job ends
+   `INCOMPLETE` (`DistinctReviewerModelsRequired`) with the three remedies; a repeated `step` stops at
+   `review_mode_unavailable` without launching (sticky) until the signal, stage or mode changes.
+7. **Usage limit.** A rate-limit result from the Claude reviewer ends the job as a limit (Claude windows), not a
+   failure.
+8. **`explain`.** At an external gate it prints `review mode: ...`, the source, the choice (`gate`, `review` or
+   `refused`), the harness and what the next step does; `--json` has a `review_mode` block, absent elsewhere; no
+   other key changed.
+9. **`telemetry --by review_mode`** groups by mode and `lowered`; older review records read `cross-model`; jobs that
+   are not reviews print `none`.
+10. **Bad value.** `--review-mode bogus` exits `2`.
+11. **Docs.** `python3 tools/check_docs.py` is clean; `docs/run.md`, `docs/common-problems.md#a-run-stopped-at-review_mode_unavailable`
+    and `docs/guide/runtime.md` match what flows 1-10 showed.
+
+Automated coverage of the same flows: `python3 tools/run_tests.py` (scenario `scenario-review-mode-single-provider`).
+
+### Known limitations / out of scope
+
+- Two tests fail locally under Git 2.56 (bare-URL trailer rule, follow-up 12); `plan_stage_decisions` golden differs on
+  the base commit too.
+- The lowered-policy signal in the scenario is patched in (the stub manager reports no adoption); a real lowering
+  adoption needs a real Workflow policy repository.
+- Real Claude reviews need a live login and consume account usage; use the fake `claude` unless you want that.
+- No release is cut by this milestone (`docs/releases/1.13.0.md` is the note for the next one).
+
 ## Next action
 
-All checkpoints are complete. Re-invoke `/milestone-implement workflow-controller-review-modes` for the self-review,
-the full verification record and the implementation review bundle.
+Test against the checklist above and put findings in
+`.ai-review/workflow-controller-review-modes/feedback/FUNCTIONAL_REVIEW.md`. Clean testing: `/accept-milestone`.
+Findings: `/apply-functional-review workflow-controller-review-modes`.

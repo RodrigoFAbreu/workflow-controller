@@ -8,25 +8,28 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-17).** Controller 1.13.1 is the latest release (PR #77, squash
-`f46999d`), the patch release of CU1, the first clean-up milestone (complete and released; accepted
-2026-10-17 by gate policy): it fixed the sixteen issues labelled `review-follow-up` or `bug` (#55-#59,
-#62-#67 and #71-#75) and added no setting, command or exit code. 1.13.0 (PR #70, squash `2804656`) lets
-the owner choose how the external review runs (`review.mode`), so a user with one provider is never
-blocked at an external gate (C14, review modes, [11.14](#1114-review-modes)). 1.12.0 (PR #61) added the
-review round cap and per-round `telemetry` (C13, [11.13](#1113-review-convergence)). It admits Workflow
-2.5.1 and 2.6.0, and any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This
-repository runs Workflow 2.12.0 with automatic gates (since 2026-10-16). C10 waited for C13
-on purpose: it is the largest step left, and C13 makes its review rounds cheaper. What is complete is marked in the tables below; what each release changed is in the
-[release history](release-history.md).
+**Where things stand (2026-10-17).** C10a, the first of the three gate-policy steps, is complete
+(accepted 2026-10-17 by gate policy): the Controller launches the Workflow's `/satisfy-gate` for the
+three automatic approvals, so a gate the policy satisfies passes without a person. Its `feat:` pull
+request (#81) releases the minor release 1.14.0 when it merges. Controller 1.13.1 is the latest
+release (PR #77, squash `f46999d`), the patch release of CU1, the first clean-up milestone: it fixed
+the sixteen issues labelled `review-follow-up` or `bug` (#55-#59, #62-#67 and #71-#75) and added no
+setting, command or exit code. 1.13.0 (PR #70, squash `2804656`) lets the owner choose how the
+external review runs (`review.mode`), so a user with one provider is never blocked at an external
+gate (C14, review modes, [11.14](#1114-review-modes)). 1.12.0 (PR #61) added the review round cap and
+per-round `telemetry` (C13, [11.13](#1113-review-convergence)). It admits Workflow 2.5.1 and 2.6.0, and
+any Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow
+2.12.0 with automatic gates (since 2026-10-16). What is complete is marked in the tables below; what
+each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15 and 2026-10-16):
-1. C10b, then C10c (C10a is implemented; C10 is three steps released on their own);
+1. C10b, then C10c (C10a is complete; C10 is three steps, each released on its own);
 2. C12, then C11;
 3. the orchestrator series O1-O7.
 
 CU2, the next clean-up milestone, slots in between these every few milestones, or sooner when the
-issue count grows (owner decision, 2026-10-16). It holds #78 and #79 so far (CU1's follow-ups).
+issue count grows (owner decision, 2026-10-16). It holds eight issues so far: #78 and #79 (CU1's
+follow-ups) and #82-#87 (found in C10a).
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -75,7 +78,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage (complete, released as 1.12.0, PR #61, squash `e989b55`; accepted 2026-10-16 by gate policy) | C7, W8 | [11.13](#1113-review-convergence) |
 | C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review (complete, accepted 2026-10-17 by gate policy, released as 1.13.0, PR #70, squash `2804656`) | C13, the Workflow's answers | [11.14](#1114-review-modes) |
 | CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up (complete, accepted 2026-10-17 by gate policy, released as 1.13.1 from PR #77, squash `f46999d`; sixteen issues, #55-#59, #62-#67 and #71-#75). Later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
-| C10a | Gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, a refused validation stops, a value a protocol 1.x minor adds is advisory or blocked (never refused), and a stop the Workflow calls blocked sends a blocker, not a request (follow-ups 17 and 26 in part) (implemented; complete when accepted) | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [follow-up 17](#known-follow-ups-carried-forward) |
+| C10a | Gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, a refused validation stops, a value a protocol 1.x minor adds is advisory or blocked (never refused), and a stop the Workflow calls blocked sends a blocker, not a request (follow-ups 17 and 26 in part) (complete, accepted 2026-10-17 by gate policy, `feat:` releases 1.14.0 when PR #81 merges) | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [follow-up 17](#known-follow-ups-carried-forward) |
 | C10b | The pull request defect loop: `pr.apply_review` and the `pr_review_result` reporter in the merge flow of C4 (rows 38d, 38f, 38g) | C10a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
@@ -384,6 +387,12 @@ hurts now, else in a later step or the next clean-up milestone.
    Fixed in CU1.
 47. [#78](https://github.com/RodrigoFAbreu/workflow-controller/issues/78): the common-problems entry for a refused review says the cost and tokens are always kept, which is true only for a Claude review (CU1 review; docs only; CU2).
 48. [#79](https://github.com/RodrigoFAbreu/workflow-controller/issues/79): `add_figures` drops a token key that only the running total has (CU1 review; harmless with today's data; CU2).
+49. [#82](https://github.com/RodrigoFAbreu/workflow-controller/issues/82) (label `bug`): `test_killed_and_broken_pipe_followers_leave_the_worker_and_exit_code_alone` flakes with exit -14 (`SIGALRM`) under load (found running C10a; test only; CU2).
+50. [#83](https://github.com/RodrigoFAbreu/workflow-controller/issues/83): a gate-policy validation's evidence line says `(automatic)`, not `(validation)` (C10a review; cosmetic; CU2).
+51. [#84](https://github.com/RodrigoFAbreu/workflow-controller/issues/84) (also `bug`): a refusal report loses its unmet requirement when "unmet:" appears again after the list (C10a review; only the `explain` diagnostic; CU2).
+52. [#85](https://github.com/RodrigoFAbreu/workflow-controller/issues/85): the compatibility page's 1.7.1 note reads as if no release launches `/satisfy-gate` (C10a review; docs only; CU2).
+53. [#86](https://github.com/RodrigoFAbreu/workflow-controller/issues/86): the `_protocol_job_class` docstring describes four return values, but it returns five (C10a review; docstring only; CU2).
+54. [#87](https://github.com/RodrigoFAbreu/workflow-controller/issues/87): the automation guide does not say that the worker report moves to `gate.what_is_required` once the loop guard stops the run (C10a review; docs only; CU2).
 
 ---
 

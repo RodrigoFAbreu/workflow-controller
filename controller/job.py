@@ -5030,7 +5030,8 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
     action and the validated post-state phase, ``milestone_started``,
     ``milestone_planned``, ``approval_recorded`` or ``milestone_accepted``;
     ``FAILED`` and ``INCOMPLETE`` give ``lane_blocked``; a ``GATE_BLOCKED``
-    lifecycle gate gives ``user_gate``. A branch-gate record gives nothing
+    lifecycle gate gives ``user_gate``, or ``lane_blocked`` when the Workflow's own
+    disposition was ``blocked`` (gate-policy D7). A branch-gate record gives nothing
     (it cannot be re-derived to its key; the live path sends branch gates
     through :func:`derive_branch_gate_event`), and neither do ``DECLINED``,
     ``HANDOFF_PENDING`` or a non-terminal record. Reads the record only,

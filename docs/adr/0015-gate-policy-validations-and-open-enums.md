@@ -39,9 +39,11 @@ adds.
    be classed `gate_reached`.
 4. **A rule per enum.** `protocol_schema.ENUM_RULES` classifies all twenty
    enum locations as `identity` (only the protocol name), `advisory`,
-   `blocked` (the step ends at a gate naming the value,
-   `workflow_unknown_value`) or `ignored`. The open set is derived from it,
-   and a test over the vendored schema fails when a location has no rule.
+   `blocked` (the step stops naming the value and launches nothing: a
+   blocked gate before a launch, or a `FAILED` job with the evidence reason
+   `workflow_unknown_value` for a reconcile class or record stage) or
+   `ignored`. The open set is derived from it, and a test over the vendored
+   schema fails when a location has no rule.
 5. **A stop that needs no person sends no request.** A `GATE_BLOCKED` job
    whose recorded disposition is `blocked` sends `lane_blocked`, not
    `user_gate`; human and external gates keep `user_gate`.

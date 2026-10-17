@@ -414,6 +414,10 @@ class ValidationTest(_Case):
         self.assertEqual((resolved.model, resolved.effort), ("claude-opus-5-5", "xhigh"))
         self.assertTrue(resolved.single_agent)
         self.assertEqual(resolved.disallowed_tools, routing.SUBAGENT_TOOLS)
+        # Under a milestone-branch binding the validator may still commit, but not push or call gh (plan Risks).
+        bound = routing.worker_disallowed_tools(resolved, branch_bound=True)
+        self.assertEqual(bound, routing.SUBAGENT_TOOLS + routing.BRANCH_GUARD_TOOLS + routing.ASYNC_UNOWNABLE_TOOLS)
+        self.assertFalse([tool for tool in bound if "commit" in tool])
 
 
 class InvocationRenderingTest(_Case):

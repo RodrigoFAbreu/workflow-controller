@@ -368,9 +368,12 @@ until you run `/satisfy-gate acceptance <id>` by hand; reporting a fresh
 of the answer is never refused as outside the protocol. `protocol_schema.ENUM_RULES`
 gives each of the twenty enum locations a rule: `identity` (the protocol name:
 only a major change refuses), `advisory` (shown, changes nothing), `blocked` (a
-decision depends on it, so the step ends at a gate naming the value) or `ignored`
-(the Controller reads no decision from it). An unlisted reconcile class or record
-stage is the `workflow_unknown_value` gate.
+decision depends on it, so the step stops naming the value and launches nothing) or
+`ignored` (the Controller reads no decision from it). An unlisted action id, worker
+role or disposition is a blocked gate before any launch; an unlisted reconcile class
+or record stage, which arrives after the worker ran, ends the job `FAILED`
+(`workflow_protocol_failed`) with the evidence reason `workflow_unknown_value`,
+naming the field and the value.
 
 **Before a launch.** A decision is checked again against the Workflow
 before the job is recorded and once more immediately before the worker
@@ -395,7 +398,7 @@ class and any invalid reasons on the job's line. In order:
 |---|---|
 | the release, or a managed script's digest, differs from the one the job was decided under | `FAILED`, `workflow_release_changed`; `reconcile` is not run |
 | the worker failed or timed out | `FAILED`, `worker_outcome`; `reconcile` is not run |
-| `reconcile` fails, or answers a class the Controller does not know | `FAILED`, `workflow_protocol_failed` |
+| `reconcile` fails, or answers a class the Controller does not know | `FAILED`, `workflow_protocol_failed` (for an unknown class, the evidence reason `workflow_unknown_value` names it) |
 | `invalid` | `FAILED`, `reconcile_invalid`, with the Workflow's reasons verbatim |
 | `progress` for `implementation.checkpoint`, with a completion the working tree records but `HEAD` does not | `FAILED`, `completion_not_committed_at_head` |
 | `progress`, `gate_reached` | `FINISHED` |

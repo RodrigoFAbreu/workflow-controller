@@ -564,6 +564,14 @@ class GateLifecycle(Lifecycle):
             self.test.assertEqual(cli.main(argv), cli.EXIT_OK)
         return json.loads(out.getvalue())
 
+    def explain_text(self) -> str:
+        """``explain`` (text) for the repository, as an operator would read it."""
+        out = io.StringIO()
+        argv = ["--runtime-dir", str(self.runtime), "--workflow-manager", str(self.stub), "explain", str(self.root)]
+        with contextlib.redirect_stdout(out):
+            self.test.assertEqual(cli.main(argv), cli.EXIT_OK)
+        return out.getvalue()
+
     def effect(self, task: str) -> None:
         words = task.lstrip("/").split()
         if words[0] == "satisfy-gate":
@@ -641,10 +649,17 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
     def test_a_refused_validation_stops_the_run_after_two_launches_and_sends_no_approval(self) -> None:
         life = GateLifecycle(self)
         life.refused = {"plan"}
-        life.report = ("Refused: plan_approval is not satisfiable by policy; unmet: "
-                       "['distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol']. Nothing was written")
+        unmet = "distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol"
+        life.report = ("Refused: plan_approval is not satisfiable by policy. " + "The policy was evaluated. " * 30
+                       + f"unmet: ['{unmet}']. Nothing was written")
+        self.assertGreater(life.report.index("unmet"), 400)
         life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
-        first, second = life.step(), life.step()
+        first = life.step()
+        # After the first refusal the gate is still automatic, and explain already names the unmet requirement.
+        self.assertTrue(life.explain()["automatic"])
+        self.assertIn(unmet, life.explain()["last_worker_report"])
+        self.assertIn(unmet, life.explain_text())
+        second = life.step()
         for record in (first, second):
             self.assertEqual(record["status"], job.STATUS_FINISHED)
             self.assertEqual(record["protocol"]["progress"], "none")
@@ -661,8 +676,8 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         explained = life.explain()
         self.assertFalse(explained["automatic"])
         self.assertIn("no_progress_repeated", explained["gate"]["what_is_required"])
-        self.assertIn("distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol",
-                      explained["gate"]["what_is_required"])
+        self.assertIn(unmet, explained["gate"]["what_is_required"])
+        self.assertIn(unmet, life.explain_text())
 
     def pending_acceptance(self) -> GateLifecycle:
         """The acceptance stage reached with the pull request's checks still running: the validator is launched,

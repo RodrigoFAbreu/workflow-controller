@@ -385,7 +385,9 @@ spawn leaves a `FAILED` job with `reconciliation_evidence.code`
 `decision_stale_at_launch`: no worker started, nothing is pending, and the
 next step decides again. When the last two jobs for the same work item and
 action both ended with no progress, a third is not launched: the step
-stops at the `no_progress_repeated` gate.
+stops at the `no_progress_repeated` gate. After even one such job, `explain`
+shows what that worker reported (JSON: `last_worker_report`), so a refused
+`/satisfy-gate` names the requirement it found unmet before the gate applies.
 
 **Outcomes.** A protocol job is judged by the Workflow's `reconcile` on the
 decision it was launched for (kept as `jobs/<job_id>/decision.json`), both

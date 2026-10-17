@@ -5801,14 +5801,52 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
 
 def _worker_report(record: dict) -> str:
     """What the worker said it did, one line of at most 400 characters: a refused
-    ``/satisfy-gate`` names the requirement that is unmet there, and the loop
-    guard repeats it so ``explain`` can show it."""
+    ``/satisfy-gate`` names the requirement that is unmet there, and ``explain``
+    and the loop guard repeat it. A report with a preamble is cut from the
+    word ``unmet`` on, so the requirement survives the length limit."""
     worker_block = record.get("worker")
     excerpt = worker_block.get("result_excerpt") if isinstance(worker_block, dict) else None
     if not isinstance(excerpt, str):
         return ""
     line = " ".join(excerpt.split())
+    marker = line.lower().find("unmet")
+    if marker > 0:
+        line = line[marker:]
     return line if len(line) <= 400 else line[:399] + "\u2026"
+
+
+def _protocol_job_classes(runtime_root: Path, managed_repo: Any, work_item_id: str | None,
+                          action_id: str) -> list[tuple]:
+    """The reconciled protocol jobs for ``(work item, action id)``, unordered, each as
+    ``_protocol_job_class`` returns it; a job not yet reconciled is left out."""
+    found = []
+    for record in _stored_job_records(runtime_root):
+        classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, action_id)
+        if classified is not None and classified[1] is not None:
+            found.append(classified)
+    return found
+
+
+def last_refusal_report(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> str:
+    """What the most recent worker for the decided action reported, when that job ended
+    without progress and the work item has not moved since (else ``""``): ``explain``
+    shows it so a refused ``/satisfy-gate``'s unmet requirement is visible after the
+    first refusal, before the loop guard applies."""
+    info = decision.protocol
+    if info is None or info.action_id is None:
+        return ""
+    work_item_id = None if work_item is target_state.NoWorkItemYet else work_item.work_item_id
+    if info.action_id == protocol_decision.PLAN_START:
+        work_item_id = None
+    found = _protocol_job_classes(runtime_root, managed_repo, work_item_id, info.action_id)
+    if not found:
+        return ""
+    last = max(found, key=lambda entry: entry[0])
+    if last[1] != "no_progress":
+        return ""
+    if info.state_identity is not None and last[2] is not None and last[2] != info.state_identity:
+        return ""
+    return last[4]
 
 
 def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,
@@ -5830,22 +5868,7 @@ def _no_progress_gate(runtime_root: Path, managed_repo: Any, work_item: Any, dec
     work_item_id = None if work_item is target_state.NoWorkItemYet else work_item.work_item_id
     if info.action_id == protocol_decision.PLAN_START:
         work_item_id = None
-    jobs_dir = Path(runtime_root) / "jobs"
-    try:
-        paths = sorted(jobs_dir.glob("*.json")) if jobs_dir.is_dir() else []
-    except OSError:
-        return None
-    found = []
-    for path in paths:
-        if not _is_regular_job_file(path):
-            continue
-        try:
-            record = json.loads(path.read_text())
-        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
-            continue
-        classified = _protocol_job_class(record, str(managed_repo.root), work_item_id, info.action_id)
-        if classified is not None and classified[1] is not None:
-            found.append(classified)
+    found = _protocol_job_classes(runtime_root, managed_repo, work_item_id, info.action_id)
     recent = sorted(found, key=lambda entry: entry[0], reverse=True)[:2]
     if len(recent) < 2 or any(entry[1] != "no_progress" for entry in recent):
         return None

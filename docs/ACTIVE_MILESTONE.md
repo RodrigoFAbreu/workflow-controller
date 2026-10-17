@@ -2,7 +2,8 @@
 
 ## In progress: CU1 (`workflow-controller-cleanup-1`)
 
-Plan revision 3 is approved (`4d29850`); implementation is under way, one checkpoint per invocation.
+Plan revision 3 is approved (`4d29850`). Implementation is complete (CP1-CP6) and technical approval is recorded
+(`08cffc8`, implementation revision 4); the milestone is in functional review.
 - **CP1 complete** (#55, #59, #64): the release-tree docstring and the development guide state which tests read the
   installed `scripts/`; `tools/check_docs.py` rejects a roadmap step id on the task pages (`STEP_ID_RE`,
   `STEP_ID_PAGES`; the guides are exempt) and the ids it found were reworded; `docs/guide/runtime.md` explains the
@@ -102,6 +103,10 @@ real `origin` or `gh` (use a scratch bare `origin` and a fake `gh` on `PATH`).
     worker) finishes with exact coverage and only the known failures above; run the two flaky worker tests under
     `taskset -c 0,1` with parallel copies and see no failure.
 
+Round 1 (independent tester, 2026-10-17): flows 1-7 pass; flows 8 and 10 were blocked by the tester's sandbox and are
+re-run outside it in round 2; flow 9 found one Optional finding (this page still said "In progress ... under way" with
+`/milestone-plan` as the next action), corrected here with no source or test change. Re-test flow 9, 8 and 10.
+
 ### Known limitations and out of scope
 
 - A real Claude review consumes account usage; the flows use fake reviewers only.
@@ -154,6 +159,5 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-`/milestone-plan` for CU1, the clean-up milestone (`docs/ROADMAP.md`, "Next, in order"): it works through the GitHub
-issues labelled `review-follow-up` and small known defects labelled `bug`, now #55-#59, #62-#67 and #71-#75. After it
-come C10, C12, C11 and the orchestrator series O1-O7.
+CU1 is in functional review (the checklist above). After it is accepted, `docs/ROADMAP.md` ("Next, in order") puts
+C10 first, then C12, C11 and the orchestrator series O1-O7; `/milestone-plan` for C10 starts that step.

@@ -1,0 +1,5 @@
+{
+  "detail": "docs/ai-workflow/GATE_POLICY.json is invalid (docs/ai-workflow/GATE_POLICY.json is not valid JSON: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)); the adopted policy and the recorded floor stay in effect; gate-lowering event: the adoption 3fa86993e05f (commit 6d6ef93f3493) lowers plan_approval.require, technical_approval.require",
+  "id": "gate_policy",
+  "status": "fail"
+}

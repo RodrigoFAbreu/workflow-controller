@@ -105,8 +105,8 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_rounds, routing,
-    runtime, target_state, telemetry, usage, worker, workflow_contract,
+    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_mode, review_rounds,
+    routing, runtime, target_state, telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
     BRANCH_GATE_PHASE,
@@ -6295,22 +6295,54 @@ _REVIEW_MANUAL_COMMANDS = {"plan": "/record-manual-plan-review",
                            "implementation": "/record-manual-implementation-review"}
 
 
-def _review_gate(decision: Decision, reviewer: Mapping | None) -> tuple[str, str] | None:
-    """``(stage, verdict kind)`` when ``decision`` is an external gate the
-    review job couriers, else ``None`` (D2): a reviewer harness is configured,
-    the Workflow's answer is an ``external_gate`` whose action id is row 14's
-    or row 28's **and** whose snapshot phase is that row's manual external
-    phase. The phase is read from the answer's snapshot, never from ``row``
-    (section 5.5 lets an answer omit it); an answer with no snapshot stays a
-    gate, as does everything else."""
+def _external_review_stage(decision: Decision) -> tuple[str, str] | None:
+    """``(stage, verdict kind)`` when ``decision`` is an external gate a
+    review job could courier, else ``None``: the Workflow's answer is an
+    ``external_gate`` whose action id is row 14's or row 28's **and** whose
+    snapshot phase is that row's manual external phase. The phase is read
+    from the answer's snapshot, never from ``row`` (section 5.5 lets an
+    answer omit it); an answer with no snapshot stays a gate, as does
+    everything else."""
     info = decision.protocol
-    if reviewer is None or info is None or info.disposition != "external_gate" or info.action_id not in REVIEW_ACTIONS:
+    if info is None or info.disposition != "external_gate" or info.action_id not in REVIEW_ACTIONS:
         return None
     stage, kind = REVIEW_ACTIONS[info.action_id]
     snapshot = info.document.get("snapshot")
     if not isinstance(snapshot, Mapping) or snapshot.get("phase") != review.STAGES[stage].phase:
         return None
     return stage, kind
+
+
+def _review_gate(decision: Decision, reviewer: Mapping | None) -> tuple[str, str] | None:
+    """:func:`_external_review_stage` while a reviewer harness is configured
+    (D2), else ``None``."""
+    return None if reviewer is None else _external_review_stage(decision)
+
+
+def _review_mode_signal(managed_repo: Any) -> review_mode.Signal | None:
+    """The lowered-policy signal of the Workflow's ``verify`` (review-modes D3),
+    or ``None`` when ``verify`` cannot be read or has no ``gate_policy``
+    check: no signal, so neither ``auto`` nor ``single-provider`` runs a
+    same-provider review on it."""
+    try:
+        health = protocol.verify(managed_repo.root, expected_digests=_admitted_digests(managed_repo))
+    except ControllerError:
+        return None
+    return review_mode.signal_of_checks(health.checks)
+
+
+def _choose_review(managed_repo: Any, decision: Decision, reviewer: Mapping | None,
+                   mode_options: Mapping | None) -> tuple[tuple[str, str], review_mode.Choice] | None:
+    """The review the step runs at this decision (review-modes D1-D4), or
+    ``None`` when the decision is not an external review gate. The signal is
+    read from ``verify`` only where :func:`review_mode.needs_signal` says a
+    same-provider review could run."""
+    target = _external_review_stage(decision)
+    if target is None:
+        return None
+    mode = review_mode.MODE_AUTO if mode_options is None else mode_options["mode"]
+    signal = _review_mode_signal(managed_repo) if review_mode.needs_signal(mode, reviewer) else None
+    return target, review_mode.choose(mode, reviewer, target[0], signal)
 
 
 def _admitted_digests(managed_repo: Any) -> dict | None:
@@ -6653,6 +6685,7 @@ def execute_step(
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
     review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    review_mode_options: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -6711,7 +6744,13 @@ def execute_step(
     ``None`` while ``reviewer.harness`` is unset -- today's behaviour, byte for
     byte. Set, an ``external_gate`` of row 14 or 28 is not recorded
     ``GATE_BLOCKED`` but run as a review job (:func:`_run_review_job`); every
-    other gate is unchanged, and an unknown harness refuses."""
+    other gate is unchanged, and an unknown harness refuses.
+
+    ``review_mode_options`` (workflow-controller-review-modes D1) is
+    ``{"mode", "source"}`` as :func:`cli._review_mode_options` builds it; ``None``
+    is ``auto``, the mode that changes nothing for a repository that sets
+    nothing. It picks, at an external gate, the reviewer, the ordinary gate
+    or the ``review_mode_unavailable`` stop (:mod:`controller.review_mode`)."""
     with _acquire_lifecycle_lock(runtime, managed_repo) as lifecycle_lock:
         _refuse_pending_reconciliation(runtime, managed_repo, identity)
         return _execute_step_locked(
@@ -6721,7 +6760,7 @@ def execute_step(
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
             usage_gate=usage_gate, reviewer=reviewer,
-            review_round_cap=review_round_cap,
+            review_round_cap=review_round_cap, review_mode_options=review_mode_options,
         )
 
 
@@ -6801,6 +6840,7 @@ def _execute_step_locked(
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
     review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    review_mode_options: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -6921,7 +6961,22 @@ def _execute_step_locked(
         )
 
     if decision.gate is not None:
-        review_target = _review_gate(decision, reviewer)
+        chosen = _choose_review(managed_repo, decision, reviewer, review_mode_options)
+        review_target = None
+        if chosen is not None:
+            review_target, choice = chosen
+            if choice.kind == "refused":
+                refusal = protocol_decision.gate_for(
+                    managed_repo, work_item, decision, review_mode.REVIEW_MODE_UNAVAILABLE, choice.reason)
+                return _no_launch_record(
+                    runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase,
+                    pre_state, refusal, status=STATUS_GATE_BLOCKED, run_id=run_id,
+                )
+            if choice.kind != "review" or choice.lowered:
+                # The ordinary gate: `manual`, or `auto` with nothing to ask.
+                # A same-provider choice (the lowered-policy branch) is
+                # CP3's; until its job exists it stops here, as before.
+                review_target = None
         if review_target is not None:
             # Codex-reviewer D2: a configured harness couriers the external
             # review of rows 14 and 28 instead of stopping at the gate.

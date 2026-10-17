@@ -78,8 +78,12 @@ TYPE_OPTIONAL_STRING = "optional-string"
 TYPE_NOTIFICATIONS = "notifications"
 #: The routing section (:func:`controller.routing.validate_routing_mapping`).
 TYPE_ROUTING = "routing"
+#: A string among the row's closed ``choices`` (review-modes D1).
+TYPE_CHOICE = "choice"
 
 ROUTING_KEY = "routing"
+#: The closed values of ``review.mode`` (review-modes D1), default first.
+REVIEW_MODES = ("auto", "cross-model", "single-provider", "manual")
 NOTIFICATIONS_EVENTS_KEY = "notifications.events"
 NOTIFICATIONS_URL_KEY = "notifications.url"
 
@@ -107,6 +111,7 @@ class Setting:
     maximum: int | None
     cli_flag: str | None
     generation: int
+    choices: tuple[str, ...] = ()
 
 
 #: The closed table (I3). Every default equals the constant it replaces, so
@@ -174,6 +179,12 @@ TABLE: tuple[Setting, ...] = (
     # The review round cap (workflow-controller-review-convergence D4): a
     # protocol target's review loop stops at this round per stage.
     Setting("review.round_cap", TYPE_INT, 4, 1, 100, "run/step --review-round-cap", 7),
+    # workflow-controller-review-modes D1: how the external review runs, and
+    # the same-provider reviewer's model and effort (the string rows' bounds
+    # are lengths; unset uses the review harness's built-ins).
+    Setting("review.mode", TYPE_CHOICE, "auto", None, None, "run/step --review-mode", 8, REVIEW_MODES),
+    Setting("reviewer.same_provider_model", TYPE_OPTIONAL_STRING, None, 1, 128, None, 8),
+    Setting("reviewer.same_provider_effort", TYPE_OPTIONAL_STRING, None, 1, 32, None, 8),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -185,8 +196,9 @@ TABLE: tuple[Setting, ...] = (
 #: (workflow-controller-usage-budget D4). 5: the ``notifications.*`` rows
 #: (workflow-controller-signalhub-notifications D3). 6: the ``reviewer.*``
 #: rows (workflow-controller-codex-reviewer D10). 7: ``review.round_cap``
-#: (workflow-controller-review-convergence D4).
-TABLE_GENERATION = 7
+#: (workflow-controller-review-convergence D4). 8: ``review.mode`` and the
+#: ``reviewer.same_provider_*`` rows (workflow-controller-review-modes D1).
+TABLE_GENERATION = 8
 
 
 def _table() -> dict[str, Setting]:
@@ -338,6 +350,11 @@ def _check_setting(path: Path, setting: Setting, value: Any) -> None:
         return
     if setting.type == TYPE_OPTIONAL_STRING:
         _check_string(path, setting, value)
+        return
+    if setting.type == TYPE_CHOICE:
+        if value not in setting.choices or type(value) is not str:
+            raise _refuse(path, setting.key, f"{setting.key} must be one of {', '.join(setting.choices)}, "
+                          f"got {json.dumps(value)}", value=value, choices=list(setting.choices))
         return
     if setting.type == TYPE_BOOL:
         if type(value) is not bool:

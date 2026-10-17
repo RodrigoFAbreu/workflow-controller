@@ -2,47 +2,40 @@
 
 ## Status
 
-**Complete.** `workflow-controller-review-convergence` (`docs/ROADMAP.md` step C13, section 11.13) reached
-`MILESTONE_COMPLETE` on 2026-10-16. A review loop now stops at a round cap per review stage: the setting
-`review.round_cap` (default 4, 1 to 100) or `--review-round-cap` on `step` and `run` for one command. At the cap the
-Controller launches no worker and stops with the `review_round_cap_reached` gate (exit 10), which names the stage,
-the round, the cap, where the round came from and the three ways on. The round is the one Workflow 2.12.0 gives, or
-is counted from the job records for an older Workflow (a lower bound). `telemetry` reports action, stage and round
-per job (`--by stage,round` and others), so review usage can be compared before and after. It merged as pull
-request #61 (squash `e989b55`), which released the minor release **1.12.0** (release notes
-`docs/releases/1.12.0.md`).
+**Implementing.** `workflow-controller-review-modes` (`docs/ROADMAP.md` step C14, section 11.14), plan revision 5
+(`docs/ai-workflow/CONTROLLER_REVIEW_MODES_PLAN.md`), approved by policy at `4def744`. Base commit `40f9cef`. The
+previous milestone, `workflow-controller-review-convergence`, is archived at
+`docs/milestones/completed/workflow-controller-review-convergence.md`.
 
-The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
-acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).
-- Plan revision 6 was approved by policy at `10cab7d` after three Codex plan rounds. The base commit is `45e9325`.
-- Technical approval `b70be14` (implementation revision 3) was recorded by policy and is `CURRENT`: review content
-  id `0b92d55a`, reviewed implementation head `b3ac08c`.
-- Functional review round 1 (an independent Codex tester) passed nine of eleven flows. Flows 3 and 11 failed on one
-  Optional finding: the cap gate did not name a round given by the Workflow. The bounded fix `24e66a3` fixed it, and
-  Codex implementation round 3 approved revision 3. Round 2 passed every flow (flow-1 to flow-11), checked against
-  evidence commit `3a21c44`.
-- The Workflow's own GitHub query found pull request #61 at head `3a21c44` with every check passing and no
-  standing objection.
+The goal: the owner chooses how the external review runs (`review.mode`: `auto`, `cross-model`, `single-provider`,
+`manual`; `--review-mode` for one command), so a user with one provider is never blocked at an external gate.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record of progress.
 
-All registry checkpoints (CP1-CP4) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
-of this transition, including its eleven functional evidence records and its `acceptance_satisfaction` evidence, and
-`active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step C13 complete. The full milestone narrative is
-archived at `docs/milestones/completed/workflow-controller-review-convergence.md`, with the review history and every
-minor review finding's disposition; the functional reports are
-`.ai-review/archive/workflow-controller-review-convergence/functional-tester-round1-RESULTS.md` and
-`functional-review-round2-PASSED.md`.
+| Checkpoint | State |
+|---|---|
+| CP1 -- the mode setting and the choice | complete (see below) |
+| CP2 -- the Claude review harness | pending |
+| CP3 -- the same-provider review job | pending |
+| CP4 -- `explain`, telemetry and the lifecycle scenario | pending |
+| CP5 -- documentation and roadmap | pending |
 
-Deferred follow-ups, not conditions of acceptance:
-- **Minor review findings:** of eleven Optional review items, four were fixed, one dropped and six are follow-ups
-  in GitHub issues #63-#67 (label `review-follow-up`), worked off in the clean-up milestone after C14.
-- **Known limitations kept out of scope:** a plan round counted from job records is a lower bound; `explain` shows
-  the setting's cap, not a flag's; there is no "off" value (a long loop is a cap of 100); the cap does not stop the
-  Controller's own external-review courier or any non-apply action. The two Git 2.56 trailer tests
-  (`test_release_notes`, `test_pull_request_lifecycle`) fail locally and are unrelated; the `plan_stage_decisions`
-  golden differs on the base commit as well.
+### CP1 -- what was built
+
+- `controller/settings.py`: the closed-choice setting type (`TYPE_CHOICE`), the rows `review.mode` (default `auto`),
+  `reviewer.same_provider_model` and `reviewer.same_provider_effort`, and table generation 8.
+- `controller/review_mode.py` (pure): `read_signal` reads the Workflow's `gate_policy` check through D3's allow-list
+  (the lowering clause, its label-disagreement clause and the `unreferenced_runs` clause; any other clause, or a
+  `fail`, cancels the signal for both stages); `choose` implements D1-D4; `Signal.key` is D6's key.
+- `controller/cli.py`: `--review-mode` on `step` and `run` (a bad value exits 2), `review.mode` and its source passed
+  to `job.execute_step` as `review_mode_options`.
+- `controller/job.py`: at an external gate of row 14 or 28 the step consults `choose`. `manual` and the default
+  (`auto` with nothing set) stop at the gate as before; `cross-model` without a distinct provider and an unsignalled
+  `single-provider` stop at the new `review_mode_unavailable` gate with one `GATE_BLOCKED` record. The
+  same-provider review itself is CP3's: until then a lowered-policy choice stops at the ordinary gate.
+- `tests/verify_captures/`: real `gate_policy` check answers from scratch repositories (a lowering adoption alone,
+  plus an unadopted tightening file, plus a floor with the file reverted, plus an invalid file, plus an
+  `unreferenced_runs` warning, and no policy), regenerated by `generate.py` and pinned by `tests/test_review_mode.py`.
 
 ## Next action
 
-`/milestone-plan` for C14 (review modes, `docs/ROADMAP.md` section 11.14), the next step in `docs/ROADMAP.md`'s
-"Next, in order" (C14, then a clean-up milestone for the GitHub issues labelled `review-follow-up`, then C10, C12,
-C11 and the orchestrator series O1-O7).
+`/milestone-implement workflow-controller-review-modes` for CP2.

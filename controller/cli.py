@@ -367,6 +367,10 @@ def build_parser() -> argparse.ArgumentParser:
     step_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
                         help="stop a protocol review loop at round N of a stage for this command "
                              "(default: the review.round_cap setting, 4)")
+    step_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
+                        help="how the external review of a protocol target runs for this command: "
+                             "auto, cross-model, single-provider or manual "
+                             "(default: the review.mode setting, auto)")
 
     run_p = subparsers.add_parser("run")
     run_p.add_argument("repo")
@@ -380,6 +384,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
                        help="stop a protocol review loop at round N of a stage for this command "
                             "(default: the review.round_cap setting, 4)")
+    run_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
+                       help="how the external review of a protocol target runs for this command: "
+                            "auto, cross-model, single-provider or manual "
+                            "(default: the review.mode setting, auto)")
     run_p.add_argument("--pause-file", default=None)
 
     resume_p = subparsers.add_parser("resume")
@@ -1326,6 +1334,12 @@ def _reviewer_options(effective: settings.EffectiveSettings) -> dict | None:
     }
 
 
+def _review_mode_options(effective: settings.EffectiveSettings) -> dict:
+    """``review.mode`` and where it came from, as ``execute_step``'s
+    ``review_mode_options`` argument (review-modes D1)."""
+    return {"mode": effective["review.mode"], "source": effective.sources["review.mode"]}
+
+
 def _local_time(epoch: float) -> str:
     """``epoch`` in local time, with the epoch itself (D7, D10); a stored
     figure beyond the calendar shows as the bare epoch."""
@@ -1856,6 +1870,7 @@ def _run_one_step(
         usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
         reviewer=_reviewer_options(effective),
         review_round_cap=effective["review.round_cap"],
+        review_mode_options=_review_mode_options(effective),
     )
 
     if isinstance(result, job.UsageHold):
@@ -2248,6 +2263,7 @@ def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.Rou
         "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
         "usage.run_cap_percent": getattr(args, "usage_cap", None),
         "review.round_cap": getattr(args, "review_round_cap", None),
+        "review.mode": getattr(args, "review_mode", None),
         "usage.codex_run_cap_percent": getattr(args, "usage_codex_cap", None),
     }, cli_routing
 

@@ -1,0 +1,5 @@
+{
+  "detail": "gate-lowering event: the adoption 3fa86993e05f (commit ce50f5b18b3c) lowers plan_approval.require, technical_approval.require; 1 review verdict(s) were recorded without a run_ref, so the producing run cannot be traced (a/LOCAL_MODEL_PLAN_REVIEW)",
+  "id": "gate_policy",
+  "status": "warn"
+}

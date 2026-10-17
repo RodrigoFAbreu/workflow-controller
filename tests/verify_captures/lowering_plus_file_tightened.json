@@ -1,0 +1,5 @@
+{
+  "detail": "docs/ai-workflow/GATE_POLICY.json (9be5c10431aa) is not adopted and tightens the policy; it takes effect now and stays in effect once observed; a stricter setting is observed but not yet recorded in a committed floor (a /satisfy-gate run records it, or adopt it); gate-lowering event: the adoption 3fa86993e05f (commit e3a06b66dc61) lowers plan_approval.require, technical_approval.require",
+  "id": "gate_policy",
+  "status": "warn"
+}

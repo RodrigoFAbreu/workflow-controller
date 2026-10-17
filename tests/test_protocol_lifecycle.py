@@ -675,6 +675,11 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertIn(unmet, life.explain()["last_worker_report"])
         self.assertIn(unmet, life.explain_text())
         second = life.step()
+        # After the second refusal the loop guard applies: explain still names the requirement, in text and JSON.
+        after_second = life.explain()
+        self.assertFalse(after_second["automatic"])
+        self.assertIn(unmet, after_second["gate"]["what_is_required"])
+        self.assertIn(unmet, life.explain_text())
         for record in (first, second):
             self.assertEqual(record["status"], job.STATUS_FINISHED)
             self.assertEqual(record["protocol"]["progress"], "none")

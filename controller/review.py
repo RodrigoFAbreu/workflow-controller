@@ -1612,8 +1612,10 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
             exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
             raise
     elif run.exit_code == 0 and not run.timed_out:
-        raise _refuse("Claude's stream carries no init event, so its boundary cannot be checked", check="init",
+        exc = _refuse("Claude's stream carries no init event, so its boundary cannot be checked", check="init",
                       entry="init")
+        exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
+        raise exc
     result = stream.result or {}
     failed = bool(result.get("is_error")) or result.get("subtype") != "success"
     text = result.get("result") if isinstance(result.get("result"), str) else ""

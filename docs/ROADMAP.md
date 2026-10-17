@@ -14,16 +14,19 @@ provider is never blocked at an external gate (C14, review modes, [11.14](#1114-
 2026-10-17 by gate policy). 1.12.0 (PR #61) added the review round cap and per-round `telemetry` (C13,
 [11.13](#1113-review-convergence)). It admits Workflow 2.5.1 and 2.6.0, and any Workflow that speaks
 Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow 2.12.0 with automatic gates
-(since 2026-10-16). C10 waited for C13 on purpose: it is the largest step left, and C13 makes its review
-rounds cheaper. What is complete is marked in the tables below; what each release changed is in the
+(since 2026-10-16). CU1, the first clean-up milestone, is complete (accepted 2026-10-17 by gate policy):
+it fixed the sixteen issues labelled `review-follow-up` or `bug` (#55-#59, #62-#67 and #71-#75), and it
+is released as the patch release 1.13.1 when its `fix:` pull request (#77) merges. C10 waited for C13
+on purpose: it is the largest step left, and C13 makes its review rounds cheaper. What is complete is marked in the tables below; what each release changed is in the
 [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15 and 2026-10-16):
-1. C10, C12 and C11, then the orchestrator series O1-O7.
+1. C10;
+2. C12, then C11;
+3. the orchestrator series O1-O7.
 
-CU1, the first clean-up milestone, is complete: it worked through the sixteen issues labelled
-`review-follow-up` or `bug` (#55-#59, #62-#67 and #71-#75). Later clean-up milestones (CU2, ...) follow
-the rule in the table below.
+CU2, the next clean-up milestone, slots in between these every few milestones, or sooner when the
+issue count grows (owner decision, 2026-10-16). It holds #78 and #79 so far (CU1's follow-ups).
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -71,7 +74,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C7 | A review-only harness seam with a Codex reviewer: the Controller runs the cross-model review itself, and a Codex worker it starts passes the usage gate (`usage.admit`, `usage.complete`) (complete, released as 1.10.0, PR #45, squash `6aa8f66`; accepted 2026-10-15 by gate policy; ADR 0013; C10 reuses the seam, the supervision precedent and `record_external_result`) | C8 | the smallest slice of [5](#5-harness--agent-portability) |
 | C13 | Review convergence: a round cap per review stage, a stop that asks the owner at the cap, and rounds and usage recorded per round and stage (complete, released as 1.12.0, PR #61, squash `e989b55`; accepted 2026-10-16 by gate policy) | C7, W8 | [11.13](#1113-review-convergence) |
 | C14 | Review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`), so a user with one provider is never blocked by the cross-model review (complete, accepted 2026-10-17 by gate policy, released as 1.13.0, PR #70, squash `2804656`) | C13, the Workflow's answers | [11.14](#1114-review-modes) |
-| CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up (complete; sixteen issues, #55-#59, #62-#67 and #71-#75). Later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
+| CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up (complete, accepted 2026-10-17 by gate policy, `fix:` releases 1.13.1 when PR #77 merges; sixteen issues, #55-#59, #62-#67 and #71-#75). Later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
 | C10 | Gate policy: automatic approvals and automatic acceptance on sufficient evidence, the PR defect loop, and the automated functional review ([11.9](#119-automated-functional-review)) so acceptance passes on its evidence; a value a protocol 1.x minor adds is advisory or blocked, never refused | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity), [follow-up 17](#known-follow-ups-carried-forward) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
@@ -151,7 +154,7 @@ These are not blockers for the baseline, but should remain visible in later mile
 issue labelled [`review-follow-up`](https://github.com/RodrigoFAbreu/workflow-controller/labels/review-follow-up),
 listed here with a link; the one-time sweep of the findings archived before then is
 [recorded on its own page](milestones/optional-findings-sweep-2026-10-16.md). The clean-up milestones
-(CU1 first, after C14) work through these issues.
+(CU1 done; CU2 next) work through these issues.
 
 A defect found while running (not in a review) also becomes a GitHub issue with a priority (owner
 decision, 2026-10-16). A Workflow defect is filed in
@@ -369,8 +372,10 @@ hurts now, else in a later step or the next clean-up milestone.
 45. [#74](https://github.com/RodrigoFAbreu/workflow-controller/issues/74): recovery messages and the launch-refusal help still say "Codex" for a Claude review (C14 review).
    Fixed in CU1.
 46. [#75](https://github.com/RodrigoFAbreu/workflow-controller/issues/75): keep the cost and token totals of a Claude review job for `telemetry` (C14 review).
-
    Fixed in CU1.
+47. [#78](https://github.com/RodrigoFAbreu/workflow-controller/issues/78): the common-problems entry for a refused review says the cost and tokens are always kept, which is true only for a Claude review (CU1 review; docs only; CU2).
+48. [#79](https://github.com/RodrigoFAbreu/workflow-controller/issues/79): `add_figures` drops a token key that only the running total has (CU1 review; harmless with today's data; CU2).
+
 ---
 
 # 1. Release Runtime Isolation + Live Observability

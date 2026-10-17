@@ -54,6 +54,60 @@ Plan revision 3 is approved (`4d29850`); implementation is under way, one checkp
   no-policy lifecycle, protocol-vs-legacy; the bare 2.5.1 plan-stage `--check` keeps its documented known difference)
   and the full serial suite were run; results are in `TEST_RESULTS.md` of the review bundle.
 
+## Functional review checklist
+
+Scope: implementation revision 4 (technical approval recorded at `08cffc8`; the review rounds' fixes for revision 1-3 are
+included). CU1 is a clean-up milestone, so most of its checks are automated; the flows below confirm the behaviour a
+user can see. Run every flow in a scratch checkout or scratch repository, never in this one, and never against the
+real `origin` or `gh` (use a scratch bare `origin` and a fake `gh` on `PATH`).
+
+### Setup
+
+- Run from this checkout with `PYTHONPATH=<this checkout>` (`python3 -m controller ...`, see `docs/guide/development.md`) or
+  install the head into a throwaway environment. Leave `FORCE_COLOR` unset.
+- Test data: a scratch repository managed by the vendored Workflow (`tests/scenarios/review.py` builds the model world),
+  in a plan or implementation external-review phase; a Claude-style fake reviewer that prints a stream with and
+  without an init event; `tests/harness_contract/claude/stream_symlink_probe_haiku.jsonl` for the symlink probe.
+- Known unrelated local failures: the two Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`)
+  and the bare 2.5.1 plan-stage golden `--check`.
+
+### Flows and expected results
+
+1. **Documentation checks.** `python3 tools/check_docs.py` exits 0. Add a roadmap step id (for example `C5`) to
+   `docs/run.md` and it is rejected by name; the guides are exempt; undo the edit. `docs/guide/development.md` and the
+   release-tree docstring state which tests read the installed `scripts/`; `docs/guide/runtime.md` explains the
+   before-and-after telemetry figures.
+2. **Full model id.** `claude_argv` (or a `step` that would launch a Claude reviewer) with `reviewer.same_provider_model`
+   set to an alias such as `opus` refuses with `check="model"` before any launch and names the full-id rule; a full id
+   such as `claude-opus-5-5` launches the fake reviewer.
+3. **Review harness named in recovery.** Force a refusal in `_end_review_group` (the three refusals) and the reconciled
+   job record's message: each names the review's own harness (Claude or Codex), not a fixed one.
+4. **Round counting.** For a `"1"`-governed item the plan round is counted at `AWAITING_EXTERNAL_PLAN_REVIEW`; a
+   2.12.0-governed item after a consumed `REVISE` shows the Workflow's own round in `explain` and in `telemetry` with
+   source `workflow`; the `review_round_cap_reached` gate says the number is "given by the Workflow".
+5. **Claude review figures.** A same-provider review job record keeps the `result` event's cost and tokens (summed over
+   at most two invocations), including when the init event is missing and when init validation refuses the run (the
+   figures remain on the record, and the docs say the refusal follows a charged review). `telemetry --by review_mode`
+   shows that cost for the same-provider row; a Codex review shows none; the JSON rows gain no new key.
+6. **Telemetry rounds.** `telemetry` over a history of many records gives the same round columns as before the change
+   and does not slow down quadratically (the automated test compares the time for 4x the records).
+7. **Leftover guard and usage-limit tests (tests only).** `python3 -m unittest tests.test_write_containment
+   tests.test_review_rounds` pass; the unmerged-index usage-limit test runs all seven statuses live and through `resume`;
+   restoring one defect in place (for example the old `kill_group` use or the old round count) makes the matching test fail.
+8. **Workflow 2.12.0 vendored.** `python3 tools/workflow_releases.py check` passes; `tests/workflow_releases/2.12.0/`
+   exists; the release-iterating suites pass with the two stated skips; `docs/guide/development.md` lists 2.12.0.
+9. **Roadmap.** `docs/ROADMAP.md` marks CU1 complete, drops it from "Next, in order" and marks follow-ups 31-46 fixed in
+   CU1; `docs/ACTIVE_MILESTONE.md` has no stale claim.
+10. **Whole suite.** `python3 tools/run_tests.py` (serial, under a reaping subreaper if run in a Controller-launched
+    worker) finishes with exact coverage and only the known failures above; run the two flaky worker tests under
+    `taskset -c 0,1` with parallel copies and see no failure.
+
+### Known limitations and out of scope
+
+- A real Claude review consumes account usage; the flows use fake reviewers only.
+- The two Git 2.56 trailer tests and the bare 2.5.1 plan-stage golden difference are unrelated to CU1.
+- Orchestrator, C10, C12 and later steps are not part of this milestone.
+
 The previous milestone's record follows.
 
 ## Status

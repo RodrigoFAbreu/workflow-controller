@@ -9,7 +9,7 @@ command. Under a gate policy that lowers the external review, `auto` runs a fres
 (`reviewer.same_provider_model`, `reviewer.same_provider_effort`) inside a checked boundary, so a user with one
 provider is never blocked at an external gate. A mode that cannot run stops at the new `review_mode_unavailable` gate
 (exit 10) with the ways out. `explain` shows the mode and the choice; `telemetry --by review_mode` groups by mode. It
-is released as the minor release **1.13.0** when its `feat:` pull request (#70) merges (release notes
+merged as pull request #70 (squash `2804656`), which released the minor release **1.13.0** (release notes
 `docs/releases/1.13.0.md`).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every

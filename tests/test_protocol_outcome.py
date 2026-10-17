@@ -632,7 +632,8 @@ class UsageLimitTest(unittest.TestCase):
     def test_a_changed_unmerged_blob_is_not_an_unchanged_tree_in_all_seven_statuses(self) -> None:
         # The live check and ``resume`` both decide through ``_tracked_tree_unchanged``. The Workflow protocol
         # itself blocks the step (``GATE_BLOCKED``) over any dirty path besides its own state file, so a whole
-        # protocol step cannot run over an unmerged one; the decision is called directly (the legacy mode's
+        # protocol step cannot run over an unmerged path other than that file; the decision is called directly for
+        # those (the state file's own seven statuses run through a whole step in the test below; the legacy mode's
         # ``UsageLimitLegacyTest`` runs all seven statuses through a whole step and ``resume``).
         literal = gitrepo.subprocess_runner({**os.environ, "GIT_LITERAL_PATHSPECS": "1"})
 

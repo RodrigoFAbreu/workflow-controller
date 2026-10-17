@@ -171,8 +171,9 @@ def is_worker_job(record: Mapping) -> bool:
 def is_courier_job(record: Mapping) -> bool:
     """Whether ``record`` is a Controller external-review (courier) job:
     ``kind`` ``review`` with a ``review.action_id``. It stores no ``protocol``
-    block and no worker streams, so it has no figures, but it is a review
-    round and ``telemetry`` reports its action, stage and round."""
+    block and no worker streams, so it has no stream figures (a Claude review
+    keeps its own ``review.telemetry``, which ``record_block`` reads), but it
+    is a review round and ``telemetry`` reports its action, stage and round."""
     block = record.get("review")
     return record.get("kind") == "review" and isinstance(block, Mapping) \
         and isinstance(block.get("action_id"), str)

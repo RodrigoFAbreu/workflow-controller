@@ -1606,7 +1606,11 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
     run = run_bounded(command, cwd=layout.tree, env=ctx.env, timeout=ctx.timeout, stdin_text=prompt, on_spawn=on_spawn)
     stream = parse_claude_stream(run.stdout)
     if stream.init is not None:
-        check_claude_init(stream.init, model=ctx.model)
+        try:
+            check_claude_init(stream.init, model=ctx.model)
+        except ReviewLaunchRefusedError as exc:
+            exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
+            raise
     elif run.exit_code == 0 and not run.timed_out:
         raise _refuse("Claude's stream carries no init event, so its boundary cannot be checked", check="init",
                       entry="init")
@@ -1777,7 +1781,13 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
         for attempt in (1, 2):
             # the boundary is re-checked before every launch, the retry's included
             prompt = build_prompt(stage, expected, bundle_dir=bundle_dir, note=note)
-            made = selected.attempt(ctx, prompt, on_spawn if attempt == 1 else None)
+            try:
+                made = selected.attempt(ctx, prompt, on_spawn if attempt == 1 else None)
+            except ReviewLaunchRefusedError as exc:
+                paid = getattr(exc, "figures", None)  # a refused run's reported cost and tokens are kept
+                if paid is not None:
+                    result["telemetry"] = add_figures(result.get("telemetry"), paid)
+                raise
             run, scan = made.run, made
             result["subagents"] = made.subagents
             if made.figures is not None:

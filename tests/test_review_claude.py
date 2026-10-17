@@ -21,7 +21,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import review, runtime, review_mode  # noqa: E402
+from controller import job, review, runtime, review_mode  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import fake_claude_review, fixtures, process_fixtures  # noqa: E402
 
@@ -365,6 +365,17 @@ class FakeLaunchTest(unittest.TestCase):
         with self.assertRaises(ReviewLaunchRefusedError) as raised:
             self.launch({"no_init": True}, job="j-noinit")
         self.assertEqual(raised.exception.evidence["entry"], "init")
+
+    def test_the_reported_cost_and_tokens_survive_an_init_refusal(self):
+        # A completed run whose init event is refused (a model name resolving to another id) was still paid for.
+        out: dict = {}
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.launch({"init": {"model": "other"}}, job="j-paid", out=out)
+        figures = out["telemetry"]
+        self.assertEqual((figures["results"], figures["cost_usd"]), (1, 0.01))
+        self.assertEqual(figures["tokens"], {"input": 12, "output": 300, "cache_creation": 50, "cache_read": 1000})
+        # the Controller's refusal path reads the same dict into the review block
+        self.assertEqual(job._obtained(out)["telemetry"], figures)
 
     def test_a_wrong_family_verdict_is_a_mismatch_then_retried_once(self):
         result = self.launch({"verdict": "wrong_id_first"})

@@ -76,7 +76,7 @@ by `resume`, for a job that ended in the last 30 minutes. See
 
 ## A review the Controller ran did not finish
 
-Only with `reviewer.harness` set. The Controller started the external review itself and the job did not hand a verdict to the Workflow. `explain` and the job record say which of these it was; the external review gate is still open in every case, so you can always do the review by hand and paste the verdict.
+Only when the Controller ran the review itself (`reviewer.harness` set, or a same-provider review under `review.mode`; the same outcomes apply to the Claude reviewer, with the Claude windows). The Controller started the external review itself and the job did not hand a verdict to the Workflow. `explain` and the job record say which of these it was; the external review gate is still open in every case, so you can always do the review by hand and paste the verdict.
 
 - **Exit 35, `INCOMPLETE`**: the reviewer hit a usage limit, passed `reviewer.timeout_seconds`, ended with no verdict, or the repository or the Workflow state changed while it ran (the verdict is then never ingested). Run again. After a limit, that `run` is held at admission (exit 17 for `step`) until the Codex window resets, because the review's retained rollout is counted.
 - **Exit 30, `FAILED`**: the verdict's header did not match the bundle exactly even after the one retry, the retry's `Status:` differed from the first verdict's (the two attempts disagreed; both verdicts are in the job record and nothing is ingested), the Workflow refused the ingest (`refused`, or `not_applicable` because the stage had moved), or the reviewer failed with no limit text. A limit is recognised only from Codex's own rollout, never from words in the transcript, so a review whose files merely mention a rate limit is `FAILED`, not `INCOMPLETE`. Nothing was ingested. Fix what the record names, or review by hand.
@@ -86,6 +86,18 @@ Only with `reviewer.harness` set. The Controller started the external review its
 - **After Ctrl-C or a crash**: `workflow-controller resume <repo>` ends the review's process group, copies the credentials back, removes the copy and closes the record.
 
 See [pausing for usage limits](run.md#pausing-for-usage-limits), [`resume`](guide/workers.md#restart-resume-re-attaches) and [ADR 0013](adr/0013-review-only-harness-seam.md).
+
+## A run stopped at review_mode_unavailable
+
+`step` or `run` exits `10` with the reason `review_mode_unavailable` at an external review gate. Nothing was launched. Two causes:
+
+- **`cross-model` without a distinct provider**: `reviewer.harness` is unset or names the workers' own provider. Set `reviewer.harness` to a distinct one, or run with `--review-mode manual`.
+- **`single-provider` without the lowered-policy signal**, or a same-provider review the Workflow refused (`DistinctReviewerModelsRequiredError`, job `INCOMPLETE`). The stop holds while the state and the policy signal are unchanged and the mode again selects a same-family reviewer. The message names the ways out that apply to the mode and phase:
+  1. lower the stage's `require` by adopting a policy (`docs/ai-workflow/GATE_POLICY.md`); an open review bundle is not changed by it, so withdraw the bundle and generate it again first;
+  2. under `auto` only: turn the stage's gate human with an uncommitted edit of `docs/ai-workflow/GATE_POLICY.json`, which makes the next step stop at the ordinary gate;
+  3. record a verdict from a distinct model by hand (the Workflow's external-result ingest), turn on a distinct provider (`reviewer.harness` or `--review-mode cross-model`), or run with `--review-mode manual`.
+
+`explain` prints the same text. See [the mode table](guide/runtime.md#what-it-holds) and [the same-provider reviewer](guide/workers.md#the-same-provider-reviewer).
 
 ## A run stopped at the review round cap
 

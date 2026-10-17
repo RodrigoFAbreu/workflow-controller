@@ -17,7 +17,7 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
 | CP2 -- the Claude review harness | complete (see below) |
 | CP3 -- the same-provider review job | complete (see below) |
 | CP4 -- `explain`, telemetry and the lifecycle scenario | complete (see below) |
-| CP5 -- documentation and roadmap | pending |
+| CP5 -- documentation and roadmap | complete (see below) |
 
 ### CP1 -- what was built
 
@@ -88,6 +88,25 @@ The goal: the owner chooses how the external review runs (`review.mode`: `auto`,
   `claude`. The lowered-policy signal is the captured one, patched in (the stub manager reports no adoption).
 - Tests: `ReportTest` in `tests/test_review_same_provider.py`, a telemetry test, a parser test and the new mutation row.
 
+### CP5 -- what was built
+
+- Documentation: `docs/guide/runtime.md` (the three rows, the mode table, generation 8), `docs/guide/commands.md`
+  (`--review-mode` on `step`, `run`, `explain`; `telemetry --by review_mode`), `docs/guide/workers.md` (the
+  same-provider reviewer and its boundary), `docs/run.md`, `docs/common-problems.md` (a run stopped at
+  `review_mode_unavailable`, D6's three paths), `docs/guide/development.md` (the new scenario),
+  `docs/releases/1.13.0.md` (names the `auto` change for a lowered policy), `docs/release-history.md`,
+  `docs/README.md`, and `docs/ROADMAP.md` (C14 complete, next CU1).
+- Fallout of CP1-CP4 fixed by the full suite: the `no_policy_lifecycle` golden regenerated (three settings rows
+  only) with its generator note and `test_trunk_preflight` taught the rows; the Codex harness looks its
+  environment and home builders up when called (the scenario mutations reach them again) and the two copy-back
+  mutations take the new `selected` argument; `review_mode.py` no longer names `record-external-result`
+  (only `protocol.py` may); the leftover inventory, the `execute_step` signature pin and the scenario count.
+- Verification: `python3 tools/check_docs.py` clean; golden `--check`: `external_implementation_review_decisions` and
+  `protocol_vs_legacy_differences` current, `no_policy_lifecycle` current after regeneration,
+  `plan_stage_decisions` differs (it differs on the base commit too); `python3 tools/run_tests.py` (4149 tests, 8
+  shards): green apart from the two Git 2.56 trailer failures (follow-up 12).
+
 ## Next action
 
-`/milestone-implement workflow-controller-review-modes` for CP5.
+All checkpoints are complete. Re-invoke `/milestone-implement workflow-controller-review-modes` for the self-review,
+the full verification record and the implementation review bundle.

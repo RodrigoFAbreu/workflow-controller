@@ -6,7 +6,8 @@
 
 How the Controller runs a worker, knows when it has really finished, recovers after
 a crash or Ctrl-C, and lets you watch it. Sections: [concurrency and worker
-lifecycle](#concurrency-and-worker-lifecycle), [job dispositions](#job-dispositions)
+lifecycle](#concurrency-and-worker-lifecycle), [the same-provider
+reviewer](#the-same-provider-reviewer), [job dispositions](#job-dispositions)
 (recovering job records), [observing workers](#observing-workers) and
 [telemetry](#telemetry) (what each worker cost).
 
@@ -421,6 +422,32 @@ be unchanged. Any other limited job, including one whose transition verified,
 stays `FAILED` and carries the fact in its evidence. `run` then waits and
 repeats an interrupted one; see
 [pausing for usage limits](../run.md#pausing-for-usage-limits).
+
+## The same-provider reviewer
+
+With `review.mode` `auto` (under a lowered gate policy) or `single-provider`
+(see [the mode table](runtime.md#what-it-holds)) the external review is run by
+a fresh Claude session instead of Codex, as a second harness on the same
+review-only seam ([ADR 0013](../adr/0013-review-only-harness-seam.md)). It
+reviews in a disposable copy of the worktree with no `.git`, enforced
+read-only tools, no MCP servers, hooks or skills, no memory and a minimal
+configuration built in a fresh home; project `.claude/` and `.mcp.json` are
+stripped from the copy. The boundary was measured against `claude 2.1.296`
+(`tests/harness_contract/claude/`); a different Claude Code that changes an
+argument, event or state entry stops the launch with the name of the check
+(`ReviewLaunchRefused`, `not_started: true`). The repository, the Workflow
+state and the job record are compared before and after, as for Codex.
+
+The verdict's header must match the bundle exactly with the family
+`anthropic`, and is handed to `record-external-result` verbatim; the Workflow
+still decides. It is counted against the Claude budget. A usage limit ends the
+job `INCOMPLETE` as for Codex. If the Workflow refuses the approval because
+the reviewer is not a distinct model
+(`DistinctReviewerModelsRequiredError`), the job ends `INCOMPLETE`
+(`DistinctReviewerModelsRequired`) and the next step stops at
+`review_mode_unavailable` without launching, until the state, the policy
+signal, the mode or the harness changes. See
+[a run stopped at review_mode_unavailable](../common-problems.md#a-run-stopped-at-review_mode_unavailable).
 
 ## Job dispositions
 

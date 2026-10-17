@@ -5,7 +5,7 @@ row 14 or 28 is made here from the owner's ``review.mode``, the configured
 ``reviewer.harness`` and the Workflow's lowered-policy signal; the caller
 (:mod:`controller.job`) reads the signal from ``verify`` and acts on the
 :class:`Choice`. The Workflow still decides whether a verdict is acceptable
-(``record-external-result`` runs every guard); nothing here does.
+(the ingest of the verdict runs every guard); nothing here does.
 """
 
 from __future__ import annotations
@@ -198,9 +198,9 @@ def remedies(mode: str, stage: str) -> str:
         paths.append(
             f"(2) turn the {gate} gate human with an uncommitted edit of docs/ai-workflow/GATE_POLICY.json: it "
             "takes effect at once and the next step stops at the ordinary gate for a person")
-    third = ("record a verdict from a distinct model by hand (record-external-result), or run with "
+    third = ("record a verdict from a distinct model by hand through the Workflow's external-result ingest, or run with "
              "--review-mode manual (or set review.mode)" if mode == MODE_SINGLE_PROVIDER else
-             "record a verdict from a distinct model by hand (record-external-result)")
+             "record a verdict from a distinct model by hand through the Workflow's external-result ingest")
     paths.append(f"(3) {third}, or turn on a distinct provider (reviewer.harness, or "
                  "--review-mode cross-model), which runs that review")
     return "Ways out: " + "; ".join(paths) + "."

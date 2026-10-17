@@ -267,10 +267,10 @@ class World:
         elif name == "home-unchecked":
             patch(review, "check_home", noop)
         elif name == "no-copy-back":
-            patch(review, "copy_back_credentials", lambda layout, operator_home, captured: "unchanged")
+            patch(review, "copy_back_credentials", lambda layout, operator_home, captured, selected=None: "unchanged")
         elif name == "copy-back-over-changes":
-            patch(review, "copy_back_credentials", lambda layout, operator_home, captured: real_copy_back(
-                layout, operator_home, review._sha256_file(operator_home / "auth.json")))
+            patch(review, "copy_back_credentials", lambda layout, operator_home, captured, selected=None: real_copy_back(
+                layout, operator_home, review._sha256_file(operator_home / "auth.json"), selected))
         elif name == "admission-without-readings":
             patch(usage, "read_codex_homes", lambda homes: [])
         elif name == "admission-operator-only":

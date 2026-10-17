@@ -290,6 +290,8 @@ LEFTOVER_INVENTORY = (
      "venv, pip and install runs the test waits for; each exits by itself"),
     ("fixtures.py", "start:run:controller", 1, "short",
      "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
+    ("test_review_mode.py", "start:run", 1, "short",
+     "the captures generator's --check run: a read-only comparison that exits by itself"),
     ("process_fixtures.py", "start:Popen", 2, "bounded",
      "spawn_sleeper (LEFTOVER_LIFETIME_SECONDS) and the ZombieGroup helper (its release wait has a total deadline)"),
     ("process_fixtures.py", "wait", 1, "exception",

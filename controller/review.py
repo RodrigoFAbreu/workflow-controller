@@ -1368,8 +1368,19 @@ def _codex_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, in
     return Attempt(run, verdict, scan.limit_error, scan.limit_detail, scan.subagents)
 
 
-CODEX = ReviewHarness("codex", "openai", argv, _codex_end_readings, build_home=build_home,
-                      environment=child_environment, attempt=_codex_attempt)
+def _codex_build_home(layout: "JobLayout", operator_home: Path) -> str:
+    return build_home(layout, operator_home)
+
+
+def _codex_environment(layout: "JobLayout", binary: Path, ownership_tag: str,
+                       inherited: Mapping[str, str] | None = None) -> dict[str, str]:
+    return child_environment(layout, binary, ownership_tag, inherited)
+
+
+# The two hooks above look the module functions up when called, so a scenario mutation that replaces
+# ``build_home`` or ``child_environment`` still reaches the harness.
+CODEX = ReviewHarness("codex", "openai", argv, _codex_end_readings, build_home=_codex_build_home,
+                      environment=_codex_environment, attempt=_codex_attempt)
 
 
 # ---------------------------------------------------------------------------

@@ -161,6 +161,17 @@ worker, against the Codex windows, so a hold exits `17` like any other.
 Every other gate, and every repository with `reviewer.harness` unset, is
 unchanged.
 
+`review.mode` (or `--review-mode` for one command) chooses the reviewer: `auto`
+(the default) runs the Codex reviewer only when `reviewer.harness` is set, and a
+fresh Claude reviewer only where the repository adopted a lowered
+`distinct_reviewer_models` gate policy; `cross-model` needs a distinct provider;
+`single-provider` runs the Claude reviewer under that lowered policy; `manual`
+always stops at the gate. A choice that cannot run stops at the
+`review_mode_unavailable` gate, which names the ways on
+([troubleshooting](common-problems.md#a-run-stopped-at-review_mode_unavailable)).
+A repository that sets nothing behaves as before. `explain` shows what the next
+step will do.
+
 A review that ends without a verdict leaves the gate open, so the manual
 route still works. A limit, a timeout or an empty run ends the job
 `INCOMPLETE` (exit `35`) and needs a new `run`, which waits at admission for

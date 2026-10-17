@@ -1,5 +1,15 @@
 # Active Milestone
 
+## In progress
+
+`workflow-controller-gate-policy` (`docs/ROADMAP.md` step C10a, plan revision 5, plan approved by policy at `1729f63`)
+is being implemented on branch `milestone/workflow-controller-gate-policy`. Checkpoints complete: **CP1** (the
+`satisfy-gate` role, the three `.satisfy` action ids and the strict pairing, `e70715f`) and **CP2** (a satisfied gate
+passes in a run and a refused one stops: `approval_recorded` only when the phase moved, and four lifecycle scenarios on
+the vendored Workflow 2.12.0 -- rows 14a, 28a, 38h, the no-progress stop, the 38f stop and the 38d non-recovery).
+Remaining: CP3 (a rule per closed enum), CP4 (`lane_blocked` for a blocked gate), CP5 (documents, roadmap, the whole
+suite). The record of the previous milestone follows unchanged.
+
 ## Status
 
 **Complete.** `workflow-controller-cleanup-1` (`docs/ROADMAP.md` step CU1, the first clean-up milestone) reached

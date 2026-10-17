@@ -5054,7 +5054,10 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
         if after == "AWAITING_LOCAL_PLAN_REVIEW" and work_item:
             out.append(DerivedEvent("milestone_planned", str(job_id), f"Plan ready for review: {work_item}",
                                     work_item, f"{command} produced a plan awaiting review."))
-        if command == "/satisfy-gate" and work_item:
+        if command == "/satisfy-gate" and work_item and record.get("observed_phase_before") != after:
+            # A refused validation leaves the phase unchanged and writes nothing, so it is a
+            # step_done only (gate-policy D5); the reconcile class cannot tell, as it reads
+            # ``gate_reached`` for a real approval whose next answer is a human or external gate.
             out.append(DerivedEvent("approval_recorded", str(job_id), f"Approval recorded: {work_item}",
                                     work_item, f"{command} recorded the approval; the work item is now at {after}."))
         if after == "MILESTONE_COMPLETE" and work_item:

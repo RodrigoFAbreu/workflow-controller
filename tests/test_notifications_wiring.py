@@ -69,6 +69,25 @@ class DeriveJobEventTest(unittest.TestCase):
                                                 after="IMPLEMENTING"))
         self.assertEqual(types(plain), ["step_done"])
 
+    def test_an_approval_is_sent_only_when_the_phase_moved(self) -> None:
+        """gate-policy D5: a refused ``/satisfy-gate`` leaves the phase unchanged, and the reconcile class
+        (``gate_reached`` for a real approval whose next answer is a human or external gate) does not decide it."""
+        for stage_before, stage_after in (("AWAITING_PLAN_APPROVAL", "IMPLEMENTING"),
+                                          ("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "AWAITING_FUNCTIONAL_REVIEW"),
+                                          ("AWAITING_FUNCTIONAL_REVIEW", "MILESTONE_COMPLETE")):
+            with self.subTest(before=stage_before, after=stage_after):
+                moved = job.derive_job_event(job_record(job.STATUS_FINISHED, command="/satisfy-gate",
+                                                        before=stage_before, after=stage_after,
+                                                        protocol={"reconcile": {"class": "gate_reached"}}))
+                self.assertIn("approval_recorded", types(moved))
+                refused = job.derive_job_event(job_record(job.STATUS_FINISHED, command="/satisfy-gate",
+                                                          before=stage_before, after=stage_before,
+                                                          protocol={"reconcile": {"class": "none"}}))
+                self.assertEqual(types(refused), ["step_done"])
+        accepted = job.derive_job_event(job_record(job.STATUS_FINISHED, command="/satisfy-gate",
+                                                   before="AWAITING_FUNCTIONAL_REVIEW", after="MILESTONE_COMPLETE"))
+        self.assertEqual(types(accepted), ["step_done", "approval_recorded", "milestone_accepted"])
+
     def test_milestone_started_needs_the_bootstrap_and_names_the_new_item(self) -> None:
         record = job_record(job.STATUS_FINISHED, command="/milestone-plan", work_item=None,
                             before=job.NO_PHASE_WIRE, after="PLANNING")

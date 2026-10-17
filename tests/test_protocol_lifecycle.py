@@ -646,13 +646,28 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertTrue({"14a", "28a", "38h"} <= set(life.rows), life.rows)
         self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
 
+    UNMET = "distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol"
+
     def test_a_refused_validation_stops_the_run_after_two_launches_and_sends_no_approval(self) -> None:
+        self.refused_validation_run(("Refused: plan_approval is not satisfiable by policy. " + "The policy was evaluated. " * 30
+                                     + f"unmet: ['{self.UNMET}']. Nothing was written"))
+
+    def test_a_refusal_requirement_survives_a_preamble_that_already_says_unmet(self) -> None:
+        self.refused_validation_run("I checked the unmet requirements against the current review records. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"Refused; unmet: ['{self.UNMET}']. Nothing was written")
+
+    def test_a_refusal_requirement_survives_a_report_with_no_unmet_marker(self) -> None:
+        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
+
+    def refused_validation_run(self, report: str) -> None:
         life = GateLifecycle(self)
         life.refused = {"plan"}
-        unmet = "distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol"
-        life.report = ("Refused: plan_approval is not satisfiable by policy. " + "The policy was evaluated. " * 30
-                       + f"unmet: ['{unmet}']. Nothing was written")
-        self.assertGreater(life.report.index("unmet"), 400)
+        unmet = self.UNMET
+        life.report = report
+        self.assertGreater(life.report.index(unmet), 400)
         life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
         first = life.step()
         # After the first refusal the gate is still automatic, and explain already names the unmet requirement.

@@ -5799,20 +5799,35 @@ def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None,
     return key, None, None, None, ""
 
 
+_REPORT_LIMIT = 400
+
+#: The requirements a gate policy can name in a refusal (``REQUIRE_VALUES`` of the Workflow's gate policy).
+_POLICY_REQUIREMENTS = ("distinct_reviewer_models",)
+
+
 def _worker_report(record: dict) -> str:
     """What the worker said it did, one line of at most 400 characters: a refused
     ``/satisfy-gate`` names the requirement that is unmet there, and ``explain``
-    and the loop guard repeat it. A report with a preamble is cut from the
-    word ``unmet`` on, so the requirement survives the length limit."""
+    and the loop guard repeat it. A report over the limit is cut
+    from its last ``unmet:``, else from the first named requirement, else from the
+    word ``unmet``, so the requirement survives the length limit."""
     worker_block = record.get("worker")
     excerpt = worker_block.get("result_excerpt") if isinstance(worker_block, dict) else None
     if not isinstance(excerpt, str):
         return ""
     line = " ".join(excerpt.split())
-    marker = line.lower().find("unmet")
+    if len(line) <= _REPORT_LIMIT:
+        return line
+    lowered = line.lower()
+    # The refusal names its requirement after the last ``unmet:``; failing that, at the first
+    # requirement the policy knows by name; failing that, from the first word ``unmet``.
+    marker = lowered.rfind("unmet:")
+    if marker < 0:
+        named = [at for at in (lowered.find(name) for name in _POLICY_REQUIREMENTS) if at >= 0]
+        marker = min(named) if named else lowered.find("unmet")
     if marker > 0:
         line = line[marker:]
-    return line if len(line) <= 400 else line[:399] + "\u2026"
+    return line if len(line) <= _REPORT_LIMIT else line[:_REPORT_LIMIT - 1] + "\u2026"
 
 
 def _protocol_job_classes(runtime_root: Path, managed_repo: Any, work_item_id: str | None,

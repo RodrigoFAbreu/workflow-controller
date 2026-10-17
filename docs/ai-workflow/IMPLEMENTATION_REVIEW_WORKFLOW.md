@@ -109,10 +109,15 @@ committed"); it does not depend on the governing version.
 ## Reviewing only the changes (`workflow-2.12.0`)
 
 From the second round, the generator writes `CHANGES_SINCE_REVIEW.md` next to
-`current/` (and into `review-bundle.tar.gz`): the previous round's findings and
-the diff of the implementation-stage protected content from the previous
-round's reviewed head to this one. `/review-implementation` and the manual
-reviewer may then review only the changes and check each previous finding is
+`current/` (and into `review-bundle.tar.gz`) with one section per review stage
+(`workflow-2.13.0`): `## LOCAL_MODEL_IMPLEMENTATION_REVIEW` holds the diff of
+the implementation-stage protected content from the previous round's reviewed
+head to this one and that round's findings, `## MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW`
+holds the diff from the head the manual stage last reviewed and that stage's
+own last verdict. A section without a basis says `not available (<reason>):
+review the whole bundle.`; the first manual round after updating to 2.13.0 has
+none. `/review-implementation` and the manual reviewer read the section named
+for their role, may review only its changes and check each previous finding is
 resolved, declaring `Review scope: changes`, and return a `REVISE` or `BLOCK`.
 Any `APPROVE` is a full review of the whole bundle. A same-content
 republication leaves the file as it was. The file is reviewer convenience,

@@ -4586,6 +4586,27 @@ _PLAN_ANCHOR_ERRORS = (
 )
 
 
+def _plan_early_check_work_item(
+    repo_root: Path, work_item_id: str, state: dict | None, *, allow_bound_regeneration: bool,
+) -> dict | None:
+    """The gate the early plan checks share: the work item's state entry, or
+    `None` when the check does not apply -- the item is not two-stage, or
+    (only with `allow_bound_regeneration`) it sits at a ready plan-review
+    phase whose `plan_review_binding` is `BOUND`."""
+    if state is None:
+        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    work_item = (state.get("work_items") or {}).get(work_item_id)
+    if work_item is None:
+        raise fingerprint.UnknownWorkItemError(work_item_id)
+    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
+        return None
+    if allow_bound_regeneration and work_item.get("phase") in PLAN_REVIEW_READY_PHASES:
+        record = _plan_review_binding_record(work_item, work_item_id)
+        if record is not None and record["status"] == PLAN_REVIEW_BINDING_BOUND:
+            return None
+    return work_item
+
+
 def assert_plan_checkpoint_anchors(
     repo_root: Path, work_item_id: str, *, state: dict | None = None,
     pin_dir: Path | None = None, allow_bound_regeneration: bool = False,
@@ -4605,17 +4626,11 @@ def assert_plan_checkpoint_anchors(
     the work item, the registry's `plan_revision`, whether an amendment is
     open, the original message and `PLAN_ANCHOR_NEXT_STEP`, chained from
     the original."""
-    if state is None:
-        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
-    work_item = (state.get("work_items") or {}).get(work_item_id)
+    work_item = _plan_early_check_work_item(
+        repo_root, work_item_id, state, allow_bound_regeneration=allow_bound_regeneration,
+    )
     if work_item is None:
-        raise fingerprint.UnknownWorkItemError(work_item_id)
-    if work_item.get("governing_workflow_version") not in TWO_STAGE_PLAN_REVIEW_VERSIONS:
         return
-    if allow_bound_regeneration and work_item.get("phase") in PLAN_REVIEW_READY_PHASES:
-        record = _plan_review_binding_record(work_item, work_item_id)
-        if record is not None and record["status"] == PLAN_REVIEW_BINDING_BOUND:
-            return
     metadata = fingerprint.resolve_plan_stage_metadata(repo_root, work_item_id)
     base = pin_dir if pin_dir is not None else repo_root
     plan_text = (base / metadata.plan_path).read_text(encoding="utf-8")
@@ -4631,6 +4646,59 @@ def assert_plan_checkpoint_anchors(
         raise type(exc)(
             f"{work_item_id} plan {revision_text}{amendment}: {exc} -- {PLAN_ANCHOR_NEXT_STEP}"
         ) from exc
+
+
+class PlanGoverningVersionSweepError(Exception):
+    """Raised by `assert_plan_governing_version_sweep` (workflow-2.13.0) when
+    the installed governing-version sweep flags the plan document of a new
+    plan revision: the plan names a list of governing versions."""
+
+
+PLAN_SWEEP_NEXT_STEP = (
+    "reword each flagged passage so it names no list of governing versions (say a "
+    "feedback-only item or a two-stage item), then run the command again"
+)
+
+_PLAN_EARLY_CHECK_ERRORS = _PLAN_ANCHOR_ERRORS + (PlanGoverningVersionSweepError,)
+
+
+def assert_plan_governing_version_sweep(
+    repo_root: Path, work_item_id: str, *, state: dict | None = None,
+    pin_dir: Path | None = None, allow_bound_regeneration: bool = False,
+) -> None:
+    """workflow-2.13.0, `D-Sweep`: the early governing-version check for a
+    plan revision of a two-stage work item, called right after
+    `assert_plan_checkpoint_anchors` at the same call sites. Read-only, with
+    the same exemptions (a non-two-stage item; with `allow_bound_regeneration`,
+    a bound regeneration at a ready phase). Runs
+    `sweep_governing_version_enumeration` on the plan document the item
+    declares, read from `pin_dir` when given else from the working tree, under
+    its repository-relative path, only when that path is a top-level `.md`
+    file of `docs/ai-workflow/` (the corpus the installed sweep reads). A
+    finding raises `PlanGoverningVersionSweepError` naming the work item, the
+    plan revision, each finding as `<path>:<line> (<form>): <snippet>` and
+    `PLAN_SWEEP_NEXT_STEP`."""
+    work_item = _plan_early_check_work_item(
+        repo_root, work_item_id, state, allow_bound_regeneration=allow_bound_regeneration,
+    )
+    if work_item is None:
+        return
+    metadata = fingerprint.resolve_plan_stage_metadata(repo_root, work_item_id)
+    relative = Path(metadata.plan_path)
+    if relative.suffix != ".md" or relative.parent != Path("docs/ai-workflow"):
+        return
+    base = pin_dir if pin_dir is not None else repo_root
+    plan_text = (base / relative).read_text(encoding="utf-8")
+    findings = sweep_governing_version_enumeration({relative.as_posix(): plan_text})
+    if not findings:
+        return
+    registry = json.loads((base / metadata.registry_path).read_text(encoding="utf-8"))
+    revision = registry.get("plan_revision") if isinstance(registry, dict) else None
+    revision_text = f"revision {revision}" if revision is not None else "unknown revision"
+    listed = "; ".join(f"{f.path}:{f.line} ({f.form}): {f.snippet}" for f in findings)
+    raise PlanGoverningVersionSweepError(
+        f"{work_item_id} plan {revision_text}: {listed} -- {PLAN_SWEEP_NEXT_STEP}"
+    )
 
 
 _RECONCILIATION_ROW_FIELDS = ("name", "depends_on", "complexity", "session_target")
@@ -17347,10 +17415,59 @@ def ingest_manual_review_verdict(
         repo_root, work_item_id, stage=stage, verdict_text=verdict_text, parsed=parsed)
 
 
+_STAGE_BASELINE_ROLES = {
+    "plan": MANUAL_EXTERNAL_PLAN_REVIEW,
+    "implementation": MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW,
+}
+
+
+def _record_manual_stage_baseline(
+    repo_root: Path, work_item_id: str, new_state: dict, *, stage: str, status: str, review_content_id: str,
+    bundle_id: str | None, verdict_text: str, now: str,
+) -> int | None:
+    """workflow-2.13.0 (D-Baseline): records what the manual stage just
+    reviewed, from inside the ingest's mutator (under `state_lock`), for the
+    `REVISE` or `APPROVE` the new state records. Returns the `state_revision`
+    the record carries, or `None` when none was written. A failure (one
+    warning) leaves the role with no record: the next manual round is a full
+    review (INV-3); it never fails the ingest."""
+    role = _STAGE_BASELINE_ROLES[stage]
+    work_item = new_state["work_items"][work_item_id]
+    state_revision = work_item["state_revision"]
+    try:
+        head = None
+        if stage == "plan":
+            metadata = fingerprint.resolve_plan_stage_metadata(repo_root, work_item_id)
+            revision = metadata.plan_revision
+            classification = {
+                "protected_paths": sorted(metadata.protected_paths),
+                "excluded_paths": dict(metadata.excluded_paths),
+                "excluded_prefixes": dict(metadata.excluded_prefixes),
+            }
+        else:
+            revision = work_item["implementation_revision"]
+            head = work_item["reviewed_implementation_head"]
+            sets = fingerprint.load_implementation_stage_classification(
+                repo_root, fingerprint.artifacts_path_for_work_item(work_item_id))
+            classification = dict(zip(
+                ("protected_paths", "protected_prefixes", "excluded_paths", "excluded_prefixes"),
+                (dict(mapping) for mapping in sets)))
+    except Exception as exc:  # noqa: BLE001 -- reviewer convenience; never fails the ingest
+        print(f"warning: stage baseline not recorded ({type(exc).__name__}: {exc})", file=sys.stderr)
+        fingerprint.remove_stage_baseline(repo_root, work_item_id, role)
+        return None
+    written = fingerprint.record_stage_baseline(
+        repo_root, work_item_id, stage=stage, role=role, verdict=status, review_content_id=review_content_id,
+        bundle_id=bundle_id, revision=revision, reviewed_implementation_head=head,
+        classification=classification, verdict_text=verdict_text, now=now, state_revision=state_revision)
+    return state_revision if written else None
+
+
 def _ingest_two_stage_manual_verdict(repo_root: Path, work_item_id: str, *, stage: str, verdict_text: str,
                                      parsed: dict, now: str, two_stage_only: bool,
                                      run_ref: str | None = None) -> dict:
     outcome: dict = {}
+    baseline: dict = {"revision": None}  # the state_revision of the baseline this ingest wrote
 
     def mutator(state: dict) -> dict:
         work_item = state["work_items"][work_item_id]
@@ -17379,13 +17496,24 @@ def _ingest_two_stage_manual_verdict(repo_root: Path, work_item_id: str, *, stag
             "round": round_, "bundle_id": fields["reviewed_bundle_id"], "advisory": guarded["advisory"],
             "_state": state,
         })
+        if fields["status"] in ("REVISE", "APPROVE"):
+            baseline["revision"] = _record_manual_stage_baseline(
+                repo_root, work_item_id, new_state, stage=stage, status=fields["status"],
+                review_content_id=guarded["review_content_id"], bundle_id=fields["reviewed_bundle_id"],
+                verdict_text=verdict_text, now=now)
         return new_state
 
     def before_publish(new_state: dict) -> None:
         outcome["feedback_written"] = _store_manual_verdict(
             repo_root, work_item_id, verdict_text, state=outcome.pop("_state"))
 
-    state_transaction(repo_root, mutator, before_publish=before_publish)
+    try:
+        state_transaction(repo_root, mutator, before_publish=before_publish)
+    except BaseException:
+        if baseline["revision"] is not None:
+            fingerprint.remove_stage_baseline(
+                repo_root, work_item_id, _STAGE_BASELINE_ROLES[stage], only_state_revision=baseline["revision"])
+        raise
     return outcome
 
 

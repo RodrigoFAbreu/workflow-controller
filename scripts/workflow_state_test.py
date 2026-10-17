@@ -22,8 +22,10 @@ Stdlib-only. Run: python3 scripts/workflow_state_test.py
 from __future__ import annotations
 
 import ast
+import contextlib
 import copy
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -32,6 +34,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import workflow_fingerprint as fingerprint
@@ -3416,6 +3419,98 @@ class TestAssertPlanCheckpointAnchors(unittest.TestCase):
                 else:
                     with self.assertRaises(error):
                         call()
+
+
+
+class TestAssertPlanGoverningVersionSweep(unittest.TestCase):
+    """workflow-2.13.0 CP1 (D-Sweep): the early governing-version check, through
+    the same scratch repository the anchor check is tested with."""
+
+    _A = TestAssertPlanCheckpointAnchors
+    PLAN_DOC = _A.PLAN_DOC
+    REGISTRY_PATH = _A.REGISTRY_PATH
+    MAPPING_PATH = _A.MAPPING_PATH
+    ARTIFACTS_PATH = _A.ARTIFACTS_PATH
+    STATE_PATH = _A.STATE_PATH
+    GOOD = _A.GOOD
+    BOUND_ID = _A.BOUND_ID
+    _registry = _A._registry
+    _entry = _A._entry
+    _bound = _A._bound
+    _write = _A._write
+    setUp = _A.setUp
+    FLAGGED = (
+        "# Plan (Revision 2)\n<!-- CP1 -->\n### CP1\n<!-- /CP1 -->\n<!-- CP2 -->\n### CP2\n<!-- /CP2 -->\n"
+        'Plan review is scoped entirely to "2.1" work items.\n'
+    )
+
+    def _check(self, **kwargs):
+        return ws.assert_plan_governing_version_sweep(self.repo.root, "wi", **kwargs)
+
+    def test_a_flagged_plan_is_refused_with_line_form_and_next_step(self):
+        self._write(plan=self.FLAGGED)
+        with self.assertRaises(ws.PlanGoverningVersionSweepError) as ctx:
+            self._check()
+        message = str(ctx.exception)
+        self.assertIn("wi plan revision 2:", message)
+        self.assertIn(f"{self.PLAN_DOC}:8 (", message)
+        self.assertIn("bare_21_scoped", message)
+        self.assertTrue(message.endswith(ws.PLAN_SWEEP_NEXT_STEP), message)
+        self.assertIn(ws.PlanGoverningVersionSweepError, ws._PLAN_EARLY_CHECK_ERRORS)
+        for error in ws._PLAN_ANCHOR_ERRORS:
+            self.assertIn(error, ws._PLAN_EARLY_CHECK_ERRORS)
+
+    def test_a_clean_plan_passes(self):
+        self._write(plan=self.GOOD)
+        self._check()
+
+    def test_the_bound_regeneration_exemption(self):
+        for phase in sorted(ws.PLAN_REVIEW_READY_PHASES):
+            self._write(plan=self.FLAGGED, phase=phase, plan_review_binding=self._bound())
+            self._check(allow_bound_regeneration=True)
+            with self.assertRaises(ws.PlanGoverningVersionSweepError):
+                self._check()
+            self._write(plan=self.FLAGGED, phase=phase)
+            with self.assertRaises(ws.PlanGoverningVersionSweepError):
+                self._check(allow_bound_regeneration=True)
+
+    def test_a_feedback_only_item_and_a_plan_outside_the_corpus_pass(self):
+        self._write(plan=self.FLAGGED, governing_workflow_version="1")
+        self._check()
+        outside = "docs/OUTSIDE_PLAN.md"
+        for rel in (outside, "docs/ai-workflow/sub/PLAN.md"):
+            self._write(plan=self.FLAGGED)
+            entry = self.state["work_items"]["wi"]
+            entry["plan_path"] = rel
+            (self.repo.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo.root / rel).write_text(self.FLAGGED)
+            (self.repo.root / self.STATE_PATH).write_text(json.dumps(self.state))
+            artifacts = self.repo.root / self.ARTIFACTS_PATH
+            declared = json.loads(artifacts.read_text())
+            declared["plan_stage"]["protected_paths"].append(rel)
+            artifacts.write_text(json.dumps(declared))
+            _run(["git", "add", "-A"], cwd=self.repo.root)
+            self._check()
+
+    def test_a_pin_is_judged_from_its_own_bytes(self):
+        pin = Path(tempfile.mkdtemp(prefix="wf-pin-"))
+        self.addCleanup(__import__("shutil").rmtree, pin, True)
+        self._write(plan=self.FLAGGED)  # the worktree is flagged...
+        self._write(root=pin)  # ...the pinned bytes are clean
+        self._check(pin_dir=pin)
+        self._write(plan=self.GOOD)
+        self._write(plan=self.FLAGGED, root=pin)
+        with self.assertRaises(ws.PlanGoverningVersionSweepError):
+            self._check(pin_dir=pin)
+
+    def test_reads_only_and_writes_nothing(self):
+        self._write(plan=self.FLAGGED)
+        before = (self.repo.root / self.STATE_PATH).read_bytes()
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout
+        with self.assertRaises(ws.PlanGoverningVersionSweepError):
+            self._check()
+        self.assertEqual(before, (self.repo.root / self.STATE_PATH).read_bytes())
+        self.assertEqual(status, subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout)
 
 
 class TestImplementationStageApprovalSecondItem(unittest.TestCase):
@@ -9626,7 +9721,23 @@ class TestGlobalLockOrderItem372h(unittest.TestCase):
         self.assertEqual(failures, [], "\n".join(failures))
 
 
-_GUARD_WORKER_SOURCE = """
+# workflow#32: the holder publishes its ready file atomically, so the reader
+# never sees an empty or half-written file. A constant of its own so a test can
+# run the very source the worker runs.
+_PUBLISH_ATOMICALLY_SOURCE = """
+import os
+
+
+def publish_atomically(path, text):
+    temporary = path.with_name(path.name + ".tmp")
+    with open(temporary, "w") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+"""
+
+_GUARD_WORKER_SOURCE = _PUBLISH_ATOMICALLY_SOURCE + """
 import json
 import sys
 import time
@@ -9649,7 +9760,7 @@ if mode == "hold":
     lease = ws.acquire_guard(repo_root, work_item_id, holder_owner_token=holder_owner_token,
                              checkpoint_id=checkpoint_id, step="1f-commit", step_class=step_class,
                              now=now)
-    ready_path.write_text(json.dumps(lease))
+    publish_atomically(ready_path, json.dumps(lease))
     deadline = time.monotonic() + 15
     while not release_path.exists():
         if time.monotonic() > deadline:
@@ -9667,6 +9778,40 @@ elif mode == "reclaim":
     except ws.CheckpointOwnershipUnavailableError as exc:
         out_path.write_text(json.dumps({"outcome": "refused", "detail": str(exc)}))
 """
+
+
+class TestPublishAtomically(unittest.TestCase):
+    """workflow#32: the ready file's writer, exercised deterministically."""
+
+    def test_destination_appears_only_complete_through_one_replace(self):
+        namespace = {}
+        exec(_PUBLISH_ATOMICALLY_SOURCE, namespace)
+        publish = namespace["publish_atomically"]
+        with tempfile.TemporaryDirectory(prefix="wf-atomic-") as scratch:
+            destination = Path(scratch) / "ready"
+            text = json.dumps({"lease_id": "x" * 4096})
+            seen = []
+            real_replace = os.replace
+
+            def observing_replace(source, target):
+                seen.append((Path(source), Path(target), Path(target).exists(),
+                             Path(source).read_text()))
+                return real_replace(source, target)
+
+            with mock.patch.object(os, "replace", observing_replace):
+                publish(destination, text)
+            self.assertEqual(len(seen), 1)
+            source, target, existed, content = seen[0]
+            self.assertEqual(target, destination)
+            self.assertNotEqual(source, destination)
+            self.assertFalse(existed, "the destination must not exist before the replace")
+            self.assertEqual(content, text, "the temporary file must be complete at the replace")
+            self.assertEqual(destination.read_text(), text)
+            self.assertEqual(os.listdir(scratch), ["ready"])
+
+    def test_the_worker_source_publishes_through_it(self):
+        self.assertIn("publish_atomically(ready_path, json.dumps(lease))", _GUARD_WORKER_SOURCE)
+        self.assertNotIn("ready_path.write_text(json.dumps(lease))", _GUARD_WORKER_SOURCE)
 
 
 class TestSameWorktreeConcurrencyRealProcesses(unittest.TestCase):
@@ -19783,6 +19928,265 @@ class TestNewWorkItemsAreRefusedUnderARetiredDefault(unittest.TestCase):
                 ]
                 self.assertTrue(admitted, f"{function.name} passes a version that was not admitted")
         self.assertEqual(callers, 3)  # route_work_item, create_remediation_child_work_item, import_legacy_work_item
+
+class TestStageBaselineRecording(unittest.TestCase):
+    """workflow-2.13.0 (D-Baseline, CP2): the manual ingest records what the
+    manual stage last reviewed, and the reader proves it consistent or returns
+    `None` (the full-review fallback)."""
+
+    BASELINE_KEYS = {
+        "schema_version", "state_revision", "work_item_id", "role", "verdict", "review_content_id", "bundle_id",
+        "revision", "reviewed_implementation_head", "classification", "recorded_at"}
+
+    def _role_dir(self, repo, role):
+        return repo.root / ".ai-review" / _CP4_WI / fingerprint.STAGE_BASELINE_DIR / role
+
+    def _ingest(self, repo, stage, status, content_id, bundle_id, role):
+        text = _cp4_verdict(status, rcid=content_id, bundle=bundle_id, base=repo.base, role=role)
+        _cp5_ingest(repo, stage, text)
+        return text
+
+    def test_revise_and_approve_record_exactly_the_baseline_set(self):
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            for status in ("REVISE", "APPROVE"):
+                with self.subTest(stage=stage, status=status), _harness.ScratchRepo() as repo:
+                    content_id, bundle_id = build(repo)
+                    text = self._ingest(repo, stage, status, content_id, bundle_id, role)
+                    role_dir = self._role_dir(repo, role)
+                    record = json.loads((role_dir / "BASELINE.json").read_text())
+                    self.assertEqual(set(record), self.BASELINE_KEYS)
+                    state = _harness.read_state(repo)["work_items"][_CP4_WI]
+                    self.assertEqual(record["state_revision"], state["state_revision"])
+                    self.assertEqual((record["verdict"], record["role"], record["review_content_id"],
+                                      record["bundle_id"], record["work_item_id"]),
+                                     (status, role, content_id, bundle_id, _CP4_WI))
+                    self.assertEqual((role_dir / "VERDICT.md").read_text(), text)
+                    self.assertEqual(ws.read_review_feedback(repo.root, _CP4_WI), text)
+                    if stage == "plan":
+                        self.assertEqual(record["revision"], state["plan_revision"])
+                        self.assertIsNone(record["reviewed_implementation_head"])
+                        pin = repo.root / ".ai-review" / _CP4_WI / ".pin"
+                        names = sorted(p.relative_to(pin).as_posix() for p in pin.rglob("*") if p.is_file())
+                        self.assertEqual(
+                            sorted(p.relative_to(role_dir / "pin").as_posix()
+                                   for p in (role_dir / "pin").rglob("*") if p.is_file()), names)
+                        for name in names:
+                            self.assertEqual((pin / name).read_bytes(), (role_dir / "pin" / name).read_bytes())
+                        self.assertEqual(set(record["classification"]),
+                                         {"protected_paths", "excluded_paths", "excluded_prefixes"})
+                    else:
+                        self.assertEqual(record["revision"], state["implementation_revision"])
+                        self.assertEqual(record["reviewed_implementation_head"], state["reviewed_implementation_head"])
+                        self.assertEqual(set(record["classification"]), {
+                            "protected_paths", "protected_prefixes", "excluded_paths", "excluded_prefixes"})
+                    read = fingerprint.read_stage_baseline(repo.root, _CP4_WI, role)
+                    self.assertIsNotNone(read)
+                    self.assertEqual(read["verdict_text"], text)
+                    self.assertEqual(read["review_content_id"], content_id)
+
+    def test_a_feedback_only_row_records_no_baseline_and_leaves_an_earlier_record_byte_identical(self):
+        for stage, version in (("plan", "1"), ("implementation", "1"), ("implementation", "2.1")):
+            with self.subTest(stage=stage, version=version), _harness.ScratchRepo() as repo:
+                bundle_id = _cp5_feedback_only_item(repo, stage, version)
+                text = _cp4_verdict("REVISE", bundle=bundle_id, base=repo.base)
+                baselines = repo.root / ".ai-review" / _CP4_WI / fingerprint.STAGE_BASELINE_DIR
+                ws.ingest_manual_review_verdict(repo.root, _CP4_WI, stage=stage, verdict_text=text, now=_CP5_NOW)
+                self.assertEqual(ws.read_review_feedback(repo.root, _CP4_WI), text)
+                self.assertFalse(baselines.exists())
+                # With an earlier record in place (the shape a two-stage item's has), a feedback-only
+                # ingest leaves it byte-identical and adds none.
+                role = _CP5_PLAN_ROLE if stage == "plan" else _CP5_IMPL_ROLE
+                planted = baselines / role
+                planted.mkdir(parents=True)
+                (planted / "BASELINE.json").write_text('{"planted": true}\n')
+                (planted / "VERDICT.md").write_text("planted\n")
+                ws.ingest_manual_review_verdict(repo.root, _CP4_WI, stage=stage, verdict_text=text, now=_CP5_NOW)
+                self.assertEqual((planted / "BASELINE.json").read_bytes(), b'{"planted": true}\n')
+                self.assertEqual((planted / "VERDICT.md").read_bytes(), b"planted\n")
+                self.assertEqual([p.name for p in baselines.iterdir()], [role])
+
+    def test_block_malformed_stale_and_refused_verdicts_record_nothing_and_keep_the_earlier_record(self):
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            with self.subTest(stage=stage), _harness.ScratchRepo() as repo:
+                content_id, bundle_id = build(repo)
+                self._ingest(repo, stage, "BLOCK", content_id, bundle_id, role)
+                self.assertFalse(self._role_dir(repo, role).exists())
+                self._ingest(repo, stage, "REVISE", content_id, bundle_id, role)
+                if stage == "plan":
+                    state = _harness.read_state(repo)
+                    state["work_items"][_CP4_WI]["phase"] = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+                    _harness.write_state(repo, state)
+                else:
+                    state = _harness.read_state(repo)
+                    state["work_items"][_CP4_WI]["phase"] = "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+                    _harness.write_state(repo, state)
+                before = (self._role_dir(repo, role) / "BASELINE.json").read_bytes()
+                stale = _cp4_verdict("REVISE", rcid="0" * 64, bundle=bundle_id, role=role)
+                with self.assertRaises(Exception):
+                    _cp5_ingest(repo, stage, stale)
+                malformed = _cp4_verdict("APPROVE", rcid=content_id, bundle=bundle_id, role=role).replace(
+                    "None.", "- a blocking finding")
+                with self.assertRaises(fingerprint.MalformedVerdictError):
+                    _cp5_ingest(repo, stage, malformed)
+                self.assertEqual((self._role_dir(repo, role) / "BASELINE.json").read_bytes(), before)
+
+    def test_the_writer_replaces_and_never_replaces_a_higher_state_revision(self):
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_plan_at_manual(repo)
+            self._ingest(repo, "plan", "REVISE", content_id, bundle_id, _CP5_PLAN_ROLE)
+            role_dir = self._role_dir(repo, _CP5_PLAN_ROLE)
+            record = json.loads((role_dir / "BASELINE.json").read_text())
+            kwargs = dict(
+                stage="plan", role=_CP5_PLAN_ROLE, verdict="APPROVE", review_content_id=content_id,
+                bundle_id=bundle_id, revision=record["revision"], reviewed_implementation_head=None,
+                classification=record["classification"], verdict_text="second", now="t2")
+            n = record["state_revision"]
+            self.assertFalse(fingerprint.record_stage_baseline(repo.root, _CP4_WI, state_revision=n - 1, **kwargs))
+            self.assertEqual(json.loads((role_dir / "BASELINE.json").read_text())["state_revision"], n)
+            self.assertTrue(fingerprint.record_stage_baseline(repo.root, _CP4_WI, state_revision=n + 1, **kwargs))
+            self.assertEqual((role_dir / "VERDICT.md").read_text(), "second")
+            self.assertEqual(json.loads((role_dir / "BASELINE.json").read_text())["verdict"], "APPROVE")
+            self.assertEqual([p.name for p in role_dir.parent.iterdir()], [_CP5_PLAN_ROLE])
+
+    def test_the_reader_returns_none_for_each_malformed_form(self):
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            def corrupt_json(role_dir, change):
+                record = json.loads((role_dir / "BASELINE.json").read_text())
+                change(record)
+                (role_dir / "BASELINE.json").write_text(json.dumps(record))
+
+            def symlink_record(role_dir):
+                (role_dir / "BASELINE.json").rename(role_dir / "real.json")
+                (role_dir / "BASELINE.json").symlink_to("real.json")
+
+            def other_header(role_dir, old, new):
+                path = role_dir / "VERDICT.md"
+                path.write_text(path.read_text().replace(old, new))
+
+            forms = {
+                "missing file": lambda d: (d / "BASELINE.json").unlink(),
+                "symlink": symlink_record,
+                "extra key": lambda d: corrupt_json(d, lambda r: r.update(extra=1)),
+                "missing key": lambda d: corrupt_json(d, lambda r: r.pop("recorded_at")),
+                "foreign work item": lambda d: corrupt_json(d, lambda r: r.update(work_item_id="other")),
+                "foreign role": lambda d: corrupt_json(d, lambda r: r.update(
+                    role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW" if stage == "plan"
+                    else "MANUAL_EXTERNAL_PLAN_REVIEW")),
+                "bad id": lambda d: corrupt_json(d, lambda r: r.update(review_content_id="xyz")),
+                "other id": lambda d: corrupt_json(d, lambda r: r.update(review_content_id="1" * 64)),
+                "verdict header status": lambda d: other_header(d, "Status: REVISE", "Status: APPROVE"),
+                "verdict header role": lambda d: other_header(d, f"Reviewer role: {role}", "Reviewer role: X"),
+                "verdict header id": lambda d: other_header(d, "Reviewed review_content_id:",
+                                                             "Reviewed review_content_id: 2222 "),
+                "unreadable verdict": lambda d: (d / "VERDICT.md").unlink(),
+            }
+            if stage == "plan":
+                forms["missing pin"] = lambda d: shutil.rmtree(d / "pin")
+                forms["changed pin"] = lambda d: next((d / "pin").rglob("*.md")).write_text("changed\n")
+            for name, damage in forms.items():
+                with self.subTest(stage=stage, form=name), _harness.ScratchRepo() as repo:
+                    content_id, bundle_id = build(repo)
+                    self._ingest(repo, stage, "REVISE", content_id, bundle_id, role)
+                    self.assertIsNotNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, role))
+                    damage(self._role_dir(repo, role))
+                    self.assertIsNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, role))
+
+    def test_an_unreachable_head_and_an_unknown_id_give_none(self):
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_impl_at_manual(repo)
+            self._ingest(repo, "implementation", "REVISE", content_id, bundle_id, _CP5_IMPL_ROLE)
+            role_dir = self._role_dir(repo, _CP5_IMPL_ROLE)
+            original = (role_dir / "BASELINE.json").read_text()
+            record = json.loads(original)
+            record["reviewed_implementation_head"] = "f" * 40
+            (role_dir / "BASELINE.json").write_text(json.dumps(record))
+            self.assertIsNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_IMPL_ROLE))
+            (role_dir / "BASELINE.json").write_text(original)
+            self.assertIsNotNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_IMPL_ROLE))
+            state = _harness.read_state(repo)
+            state["work_items"][_CP4_WI]["implementation_revision"] = 0
+            _harness.write_state(repo, state)
+            self.assertIsNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_IMPL_ROLE))
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_plan_at_manual(repo)
+            self._ingest(repo, "plan", "REVISE", content_id, bundle_id, _CP5_PLAN_ROLE)
+            state = _harness.read_state(repo)
+            item = state["work_items"][_CP4_WI]
+            item["consumed_plan_review_content_ids"] = []
+            item["plan_review_binding"] = None
+            _harness.write_state(repo, state)
+            self.assertIsNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_PLAN_ROLE))
+
+    def test_a_plan_baseline_survives_a_plan_revision_bump(self):
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_plan_at_manual(repo)
+            self._ingest(repo, "plan", "REVISE", content_id, bundle_id, _CP5_PLAN_ROLE)
+            state = _harness.read_state(repo)
+            state["work_items"][_CP4_WI]["plan_revision"] += 1
+            _harness.write_state(repo, state)
+            read = fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_PLAN_ROLE)
+            self.assertIsNotNone(read)
+            self.assertEqual(read["revision"], state["work_items"][_CP4_WI]["plan_revision"] - 1)
+
+    def test_an_implementation_baseline_survives_a_declaration_change(self):
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_impl_at_manual(repo)
+            self._ingest(repo, "implementation", "REVISE", content_id, bundle_id, _CP5_IMPL_ROLE)
+            artifacts = repo.root / fingerprint.artifacts_path_for_work_item(_CP4_WI)
+            data = json.loads(artifacts.read_text())
+            data["implementation_stage"]["excluded_paths"]["newly-excluded.txt"] = "test"
+            artifacts.write_text(json.dumps(data))
+            read = fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_IMPL_ROLE)
+            self.assertIsNotNone(read)
+            self.assertEqual(read["review_content_id"], content_id)
+
+    def test_a_write_failure_publishes_the_state_removes_the_earlier_record_and_warns_once(self):
+        original = Path.write_text
+
+        def failing(self_, *args, **kwargs):
+            if self_.name == "VERDICT.md":
+                raise OSError("disk full")
+            return original(self_, *args, **kwargs)
+
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            with self.subTest(stage=stage), _harness.ScratchRepo() as repo:
+                content_id, bundle_id = build(repo)
+                role_dir = self._role_dir(repo, role)
+                role_dir.mkdir(parents=True)
+                (role_dir / "stale").write_text("an earlier record")
+                text = _cp4_verdict("REVISE", rcid=content_id, bundle=bundle_id, base=repo.base, role=role)
+                stderr = io.StringIO()
+                with mock.patch.object(Path, "write_text", failing), contextlib.redirect_stderr(stderr):
+                    result = _cp5_ingest(repo, stage, text)
+                self.assertEqual(result["verdict"], "REVISE")
+                self.assertNotEqual(_harness.read_state(repo)["work_items"][_CP4_WI]["phase"],
+                                    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+                                    if stage == "plan" else "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+                self.assertFalse(role_dir.exists())
+                self.assertEqual(stderr.getvalue().count("warning: stage baseline not recorded"), 1)
+                self.assertEqual(ws.read_review_feedback(repo.root, _CP4_WI), text)
+
+    def test_a_failed_transaction_removes_the_record_it_wrote(self):
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            with self.subTest(stage=stage), _harness.ScratchRepo() as repo:
+                content_id, bundle_id = build(repo)
+                text = _cp4_verdict("REVISE", rcid=content_id, bundle=bundle_id, base=repo.base, role=role)
+                with mock.patch.object(ws, "_store_manual_verdict", side_effect=OSError("boom")):
+                    with self.assertRaises(OSError):
+                        _cp5_ingest(repo, stage, text)
+                self.assertFalse(self._role_dir(repo, role).exists())
+
+    def test_the_directory_changes_no_identifier(self):
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_plan_at_manual(repo)
+            self._ingest(repo, "plan", "REVISE", content_id, bundle_id, _CP5_PLAN_ROLE)
+            with_dir = fingerprint.compute_bundle_id(_cp4_bundle_dir(repo))[0]
+            computed = fingerprint.compute_review_content_id_plan_stage_for_work_item(repo.root, _CP4_WI)[0]
+            shutil.rmtree(self._role_dir(repo, _CP5_PLAN_ROLE).parent)
+            self.assertEqual(fingerprint.compute_bundle_id(_cp4_bundle_dir(repo))[0], with_dir)
+            self.assertEqual(
+                fingerprint.compute_review_content_id_plan_stage_for_work_item(repo.root, _CP4_WI)[0], computed)
+
 
 def _git_out(repo, args):
     return subprocess.run(["git", *args], cwd=repo.root, check=True, capture_output=True, text=True).stdout

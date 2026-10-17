@@ -116,6 +116,17 @@ the design; operationally:
   `<!-- CPn -->`/`<!-- /CPn -->` pair. Like any failed plan-stage generation it
   leaves the previous bundle intact and writes no `REJECTED` marker. Add the
   pair, then run the command again.
+- **A new plan revision that names a list of governing versions fails
+  generation** (2.13.0). Right after the anchor check, at the same command
+  steps and in the plan-stage generator, `assert_plan_governing_version_sweep`
+  runs the installed governing-version sweep on the plan document (when it is
+  a top-level `.md` file of `docs/ai-workflow/`, the sweep's own corpus), so a
+  plan the sweep would reject at pull-request time is refused before any
+  review. Regenerating an already-bound review at a ready phase is not
+  re-judged. The refusal lists each finding as `<path>:<line> (<form>):
+  <snippet>`; like any failed plan-stage generation it leaves the previous
+  bundle intact and writes no `REJECTED` marker. Reword each flagged passage
+  (say a feedback-only item or a two-stage item), then run the command again.
 - **A failed generation after the publish** leaves the item at
   `PUBLISHED_UNBOUND`. Re-run the same command with the explicit id —
   `/milestone-plan <id>` or `/apply-plan-review <id>` — which regenerates
@@ -154,11 +165,15 @@ tree until approval. The rule for every review stage is in `REVIEW_PROTOCOL.md`
 ## Reviewing only the changes (`workflow-2.12.0`)
 
 From the second round, the generator writes `CHANGES_SINCE_REVIEW.md` next to
-`current/` (and into `review-bundle.tar.gz`): the previous round's findings and
-the diff of the protected plan content from the previous round to this one.
-`/review-plan` and the manual reviewer may then review only the changes and
-check each previous finding is resolved, declaring `Review scope: changes`,
-and return a `REVISE` or `BLOCK`. Any `APPROVE` is a full review of the whole
+`current/` (and into `review-bundle.tar.gz`) with one section per review stage
+(`workflow-2.13.0`): `## LOCAL_MODEL_PLAN_REVIEW` compares against the last
+generation and quotes the last local verdict, `## MANUAL_EXTERNAL_PLAN_REVIEW`
+compares against the content the manual stage last reviewed and quotes its own
+last verdict. A section without a basis says `not available (<reason>): review
+the whole bundle.`; the first manual round after updating to 2.13.0 has none.
+`/review-plan` and the manual reviewer read the section named for their role,
+may review only its changes and check each previous finding is resolved,
+declaring `Review scope: changes`, and return a `REVISE` or `BLOCK`. Any `APPROVE` is a full review of the whole
 bundle, so the round that approves is by rule a full round. The file is
 reviewer convenience, outside `bundle_id` and `review_content_id`; its
 semantics are in `REVIEW_PROTOCOL.md` ("Bundle location").

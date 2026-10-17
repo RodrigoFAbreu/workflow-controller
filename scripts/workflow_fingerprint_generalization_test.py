@@ -2892,6 +2892,49 @@ class TestPrepareAiReviewShEarlyAnchorCheck(unittest.TestCase):
             self.assertEqual(
                 (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes(), state_bytes)
 
+    FLAGGED_LINE = 'Plan review is scoped entirely to "2.1" work items.\n'
+
+    def test_a_plan_the_governing_version_sweep_flags_is_refused_and_the_previous_bundle_is_untouched(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            self.assertEqual(self._generate(repo).returncode, 0)
+            state_bytes = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes()
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            self._write_plan(repo, plan + self.FLAGGED_LINE)
+            self._prepare(repo)
+            before = self._snapshot(repo)
+            result = self._run(repo)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("error: PlanGoverningVersionSweepError:", result.stderr)
+            self.assertIn("docs/ai-workflow/WORKFLOW_V2_PLAN.md:", result.stderr)
+            self.assertIn(ws.PLAN_SWEEP_NEXT_STEP, result.stderr)
+            self.assertEqual(self._snapshot(repo), before)
+            names = sorted(q.name for q in self._item_root(repo).iterdir())
+            self.assertEqual([n for n in names if n.startswith(("current.staging-", ".pin.staging-"))], [], names)
+            self.assertFalse((self._item_root(repo) / "REJECTED").exists())
+            self.assertEqual(list(self._item_root(repo).glob("current.rejected-*")), [])
+            fingerprint.assert_bundle_not_rejected(repo.root, self.WI)
+            self.assertEqual(
+                (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes(), state_bytes)
+
+    def test_anchors_are_refused_before_the_sweep(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            self._write_plan(repo, self.ANCHORLESS_PLAN + self.FLAGGED_LINE)
+            result = self._generate(repo)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("error: AmendmentAnchorCoverageError:", result.stderr)
+            self.assertNotIn("PlanGoverningVersionSweepError", result.stderr)
+
+    def test_a_bound_ready_item_regenerates_a_flagged_plan_without_the_sweep(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            h.publish_and_bind_plan_bundle(repo, self.WI)
+            h.commit_state(repo, "bound")
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            self._write_plan(repo, plan + self.FLAGGED_LINE)
+            self.assertEqual(self._generate(repo).returncode, 0)
+
     def test_a_refusal_during_an_open_amendment_says_so(self):
         with h.ScratchRepo() as repo:
             self._seed(repo, phase="AMENDING_PLAN", amendment_history=[{"resolved_at_plan_revision": None}])
@@ -3169,6 +3212,311 @@ class TestChangesSinceReview(unittest.TestCase):
                 "Workflow-Supersedes": record})
             h._run_generator(repo, "post-fix", self.WI)
             self.assertEqual(self._changes(repo).read_bytes(), before)
+
+
+class TestChangesSinceReviewSections(unittest.TestCase):
+    """workflow-2.13.0 `D-Keyed`/`D-Baseline` (CP3): one section per review
+    stage; the manual section compares against the manual stage's own baseline
+    and quotes its own last verdict; the local section is unchanged."""
+
+    WI = "wi"
+    PLAN = "docs/ai-workflow/WORKFLOW_V2_PLAN.md"
+    PLAN_LOCAL = "LOCAL_MODEL_PLAN_REVIEW"
+    PLAN_MANUAL = "MANUAL_EXTERNAL_PLAN_REVIEW"
+    IMPL_LOCAL = "LOCAL_MODEL_IMPLEMENTATION_REVIEW"
+    IMPL_MANUAL = "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"
+    NO_RECORD = "not available (no previous review of this stage is recorded): review the whole bundle."
+    UNIDENTIFIED = "not available (the previous round cannot be identified): review the whole bundle."
+
+    def _path(self, repo):
+        return repo.root / ".ai-review" / self.WI / "CHANGES_SINCE_REVIEW.md"
+
+    def _text(self, repo):
+        return self._path(repo).read_text()
+
+    def _section(self, repo, role):
+        text = self._text(repo)
+        head = f"## {role}\n"
+        self.assertIn(head, text)
+        rest = text.split(head, 1)[1]
+        for other in (self.PLAN_LOCAL, self.PLAN_MANUAL, self.IMPL_LOCAL, self.IMPL_MANUAL):
+            rest = rest.split(f"\n## {other}\n", 1)[0]
+        return rest
+
+    def _consume(self, repo, *ids):
+        state = h.read_state(repo)
+        state["work_items"][self.WI]["consumed_plan_review_content_ids"] = list(ids)
+        h.write_state(repo, state)
+
+    def _local_feedback(self, repo, review_content_id, text):
+        path = repo.root / ".ai-review" / self.WI / "feedback" / "REVIEW_FEEDBACK.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"Status: REVISE\nReviewed review_content_id: {review_content_id}\n\n## Findings\n{text}\n")
+
+    def _edit_plan(self, repo, line):
+        path = repo.root / self.PLAN
+        path.write_text(path.read_text() + line + "\n")
+
+    def _record_manual(self, repo, stage, content_id, finding):
+        role = self.PLAN_MANUAL if stage == "plan" else self.IMPL_MANUAL
+        state = h.read_state(repo)["work_items"][self.WI]
+        if stage == "plan":
+            metadata = fingerprint.resolve_plan_stage_metadata(repo.root, self.WI)
+            revision, head = metadata.plan_revision, None
+            classification = {
+                "protected_paths": sorted(metadata.protected_paths),
+                "excluded_paths": dict(metadata.excluded_paths),
+                "excluded_prefixes": dict(metadata.excluded_prefixes),
+            }
+        else:
+            revision, head = state["implementation_revision"], state["reviewed_implementation_head"]
+            sets = fingerprint.load_implementation_stage_classification(
+                repo.root, fingerprint.artifacts_path_for_work_item(self.WI))
+            classification = dict(zip(
+                ("protected_paths", "protected_prefixes", "excluded_paths", "excluded_prefixes"),
+                (dict(mapping) for mapping in sets)))
+        text = (f"Work item: {self.WI}\nReviewer role: {role}\nStatus: REVISE\n"
+                f"Reviewed review_content_id: {content_id}\n\n## Findings\n{finding}\n")
+        self.assertTrue(fingerprint.record_stage_baseline(
+            repo.root, self.WI, stage=stage, role=role, verdict="REVISE", review_content_id=content_id,
+            bundle_id=None, revision=revision, reviewed_implementation_head=head,
+            classification=classification, verdict_text=text, now="t-man", state_revision=1))
+        self.assertIsNotNone(fingerprint.read_stage_baseline(repo.root, self.WI, role))
+
+    def _baseline_dir(self, repo, role):
+        return repo.root / ".ai-review" / self.WI / fingerprint.STAGE_BASELINE_DIR / role
+
+    def _members(self, repo):
+        with tarfile.open(repo.root / ".ai-review" / self.WI / "review-bundle.tar.gz") as tar:
+            return tar.getnames()
+
+    # -- plan stage ---------------------------------------------------------
+
+    def test_local_round_two_has_the_headings_the_basis_and_the_unavailable_manual_section(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo)
+            first = h.generate_plan_bundle(repo)
+            self._consume(repo, first)
+            self._local_feedback(repo, first, "- L-1 Blocking: local finding.")
+            self._edit_plan(repo, "a revised plan line")
+            second = h.generate_plan_bundle(repo)
+            text = self._text(repo)
+            self.assertLess(text.index(f"## {self.PLAN_LOCAL}\n"), text.index(f"## {self.PLAN_MANUAL}\n"))
+            self.assertIn(f"review_content_id: {second}", text.split("## ", 1)[0])
+            self.assertNotIn("previous_review_content_id", text.split("## ", 1)[0])
+            local = self._section(repo, self.PLAN_LOCAL)
+            self.assertIn(f"previous_review_content_id: {first}", local)
+            self.assertIn("### Previous findings\n\nStatus: REVISE\n", local)
+            self.assertIn("- L-1 Blocking: local finding.", local)
+            self.assertIn("+a revised plan line", local)
+            # (c) no manual baseline: the explicit fallback; the file is still written for the local section
+            self.assertEqual(self._section(repo, self.PLAN_MANUAL).strip(), self.NO_RECORD)
+
+    def test_the_manual_section_diffs_from_the_manual_baseline_and_quotes_the_manual_verdict(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo)
+            first = h.generate_plan_bundle(repo)
+            self._consume(repo, first)
+            self._record_manual(repo, "plan", first, "- M-1 Blocking: manual finding.")
+            self._edit_plan(repo, "line added for round two")
+            second = h.generate_plan_bundle(repo)
+            self._consume(repo, first, second)
+            self._local_feedback(repo, second, "- L-2 Blocking: local finding of round two.")
+            self._edit_plan(repo, "line added for round three")
+            h.generate_plan_bundle(repo)
+            local = self._section(repo, self.PLAN_LOCAL)
+            manual = self._section(repo, self.PLAN_MANUAL)
+            self.assertIn(f"previous_review_content_id: {second}", local)
+            self.assertIn("L-2 Blocking", local)
+            self.assertNotIn("M-1", local)
+            self.assertIn("+line added for round three", local)
+            self.assertNotIn("+line added for round two", local)
+            self.assertIn(f"previous_review_content_id: {first}", manual)
+            self.assertIn("M-1 Blocking: manual finding.", manual)
+            self.assertNotIn("L-2", manual)
+            self.assertIn("+line added for round two", manual)
+            self.assertIn("+line added for round three", manual)
+
+    def test_no_basis_in_either_section_deletes_the_file(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo)
+            h.generate_plan_bundle(repo)
+            self._edit_plan(repo, "a revised plan line")
+            self._path(repo).write_text("stale\n")
+            h.generate_plan_bundle(repo)
+            self.assertFalse(self._path(repo).exists())
+            self.assertNotIn("CHANGES_SINCE_REVIEW.md", self._members(repo))
+
+    def test_a_baseline_naming_this_generations_id_gives_no_manual_section(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo)
+            plan_path = repo.root / self.PLAN
+            original = plan_path.read_text()
+            first = h.generate_plan_bundle(repo)
+            self._consume(repo, first)
+            self._record_manual(repo, "plan", first, "- M-1 manual.")
+            self._edit_plan(repo, "a transient line")
+            second = h.generate_plan_bundle(repo)
+            plan_path.write_text(original)
+            self._consume(repo, first, second)
+            self.assertEqual(h.generate_plan_bundle(repo), first)
+            self.assertEqual(self._section(repo, self.PLAN_MANUAL).strip(), self.UNIDENTIFIED)
+            self.assertIn(f"previous_review_content_id: {second}", self._section(repo, self.PLAN_LOCAL))
+
+    def test_a_corrupt_baseline_or_a_missing_pin_fails_only_the_manual_section(self):
+        for damage in ("json", "pin"):
+            with self.subTest(damage=damage), h.ScratchRepo() as repo:
+                h.seed_bundle_item(repo)
+                first = h.generate_plan_bundle(repo)
+                self._consume(repo, first)
+                self._record_manual(repo, "plan", first, "- M-1 manual.")
+                role_dir = self._baseline_dir(repo, self.PLAN_MANUAL)
+                if damage == "json":
+                    (role_dir / "BASELINE.json").write_text("{not json")
+                else:
+                    shutil.rmtree(role_dir / "pin")
+                self._edit_plan(repo, "a revised plan line")
+                h.generate_plan_bundle(repo)
+                self.assertEqual(self._section(repo, self.PLAN_MANUAL).strip(), self.NO_RECORD)
+                self.assertIn("+a revised plan line", self._section(repo, self.PLAN_LOCAL))
+
+    def test_a_failing_section_builder_fails_only_that_section(self):
+        ok = {"previous_id": "a" * 64, "previous_revision": 1, "extra_lines": [], "findings": "f", "diff": b""}
+
+        def boom():
+            raise RuntimeError("boom")
+
+        local, manual = fingerprint._CHANGES_ROLES["plan"]
+        for failing, fine in ((manual, local), (local, manual)):
+            with self.subTest(failing=failing), mock.patch("sys.stderr"):
+                sections = dict(fingerprint._collect_sections(
+                    "plan", {failing: boom, fine: lambda: ok}))
+                self.assertEqual(sections[failing], "the previous round cannot be identified")
+                self.assertIs(sections[fine], ok)
+
+    def test_a_wrapper_only_regeneration_keeps_both_sections_and_the_archive_carries_the_file(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo)
+            first = h.generate_plan_bundle(repo)
+            self._consume(repo, first)
+            self._record_manual(repo, "plan", first, "- M-1 manual.")
+            self._edit_plan(repo, "a revised plan line")
+            h.generate_plan_bundle(repo)
+            before = self._path(repo).read_bytes()
+            h.generate_plan_bundle(repo)
+            self.assertEqual(self._path(repo).read_bytes(), before)
+            self.assertIn(f"## {self.PLAN_LOCAL}", before.decode())
+            self.assertIn(f"## {self.PLAN_MANUAL}", before.decode())
+            with tarfile.open(repo.root / ".ai-review" / self.WI / "review-bundle.tar.gz") as tar:
+                member = tar.extractfile("CHANGES_SINCE_REVIEW.md").read().decode()
+            self.assertIn("\nstage: plan\n", member)
+            self.assertEqual(member.encode(), before)
+
+    def test_the_identifiers_are_identical_with_and_without_the_file_and_the_baselines(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo)
+            first = h.generate_plan_bundle(repo)
+            self._consume(repo, first)
+            self._record_manual(repo, "plan", first, "- M-1 manual.")
+            self._edit_plan(repo, "a revised plan line")
+            h.generate_plan_bundle(repo)
+            manifest = repo.root / ".ai-review" / self.WI / "current" / "MANIFEST.md"
+            with_files = fingerprint.read_manifest_identifiers(manifest)
+            self.assertIn(self.PLAN_MANUAL, self._text(repo))
+            self._path(repo).unlink()
+            shutil.rmtree(self._baseline_dir(repo, self.PLAN_MANUAL).parent)
+            h.generate_plan_bundle(repo)
+            without = fingerprint.read_manifest_identifiers(manifest)
+            self.assertEqual(with_files["review_content_id"], without["review_content_id"])
+            self.assertEqual(with_files["bundle_id"], without["bundle_id"])
+
+    # -- implementation stage -----------------------------------------------
+
+    def _impl_round_one(self, repo):
+        h.seed_bundle_item(repo, phase="SELF_REVIEWING_IMPLEMENTATION")
+        repo.commit("excluded file", filename="README.md")
+        repo.commit("implement", filename=h.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+        return h.generate_implementation_bundle(repo)
+
+    def _applying(self, repo):
+        state = h.read_state(repo)
+        state["work_items"][self.WI]["phase"] = "APPLYING_REVIEW_FEEDBACK"
+        h.write_state(repo, state)
+        h.commit_state(repo, "record the REVISE")
+
+    def test_implementation_sections_quote_each_stages_own_verdict_and_diff_from_its_own_head(self):
+        with h.ScratchRepo() as repo:
+            first = self._impl_round_one(repo)
+            self._record_manual(repo, "implementation", first, "- M-1 Important: manual finding.")
+            manual_head = h.read_state(repo)["work_items"][self.WI]["reviewed_implementation_head"]
+            self._local_feedback(repo, first, "- L-1 Important: local finding.")
+            self._applying(repo)
+            repo.commit("fix one", filename=h.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+            second = h.generate_implementation_bundle(repo, stage="post-fix")
+            self.assertNotEqual(first, second)
+            self._applying(repo)
+            self._local_feedback(repo, second, "- L-2 Important: second local finding.")
+            repo.commit("fix two", filename=h.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+            third = h.generate_implementation_bundle(repo, stage="post-fix")
+            text = self._text(repo)
+            self.assertIn(f"review_content_id: {third}", text.split("## ", 1)[0])
+            local = self._section(repo, self.IMPL_LOCAL)
+            manual = self._section(repo, self.IMPL_MANUAL)
+            self.assertIn(f"previous_review_content_id: {second}", local)
+            self.assertIn("L-2 Important", local)
+            self.assertNotIn("M-1", local)
+            self.assertIn(f"previous_review_content_id: {first}", manual)
+            self.assertIn(f"previous_reviewed_implementation_head: {manual_head}", manual)
+            self.assertIn("M-1 Important: manual finding.", manual)
+            self.assertNotIn("L-", manual)
+            self.assertGreater(manual.count("diff --git "), 0)
+            self.assertNotEqual(manual.split("### Changes", 1)[1], local.split("### Changes", 1)[1])
+
+    def test_an_implementation_round_with_no_baseline_prints_the_fallback_and_keeps_the_local_section(self):
+        with h.ScratchRepo() as repo:
+            first = self._impl_round_one(repo)
+            self._local_feedback(repo, first, "- L-1 Important: local finding.")
+            self._applying(repo)
+            repo.commit("fix", filename=h.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+            h.generate_implementation_bundle(repo, stage="post-fix")
+            self.assertEqual(self._section(repo, self.IMPL_MANUAL).strip(), self.NO_RECORD)
+            self.assertIn("L-1 Important", self._section(repo, self.IMPL_LOCAL))
+            self.assertIn("CHANGES_SINCE_REVIEW.md", self._members(repo))
+
+    def test_an_unreachable_baseline_head_fails_only_the_manual_section(self):
+        with h.ScratchRepo() as repo:
+            first = self._impl_round_one(repo)
+            self._record_manual(repo, "implementation", first, "- M-1 manual.")
+            record = self._baseline_dir(repo, self.IMPL_MANUAL) / "BASELINE.json"
+            data = json.loads(record.read_text())
+            data["reviewed_implementation_head"] = "1" * 40
+            record.write_text(json.dumps(data))
+            self._local_feedback(repo, first, "- L-1 Important: local.")
+            self._applying(repo)
+            repo.commit("fix", filename=h.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+            h.generate_implementation_bundle(repo, stage="post-fix")
+            self.assertEqual(self._section(repo, self.IMPL_MANUAL).strip(), self.NO_RECORD)
+            self.assertIn("diff --git a/", self._section(repo, self.IMPL_LOCAL))
+
+    def test_the_manual_diff_paths_are_the_union_of_the_recorded_and_the_current_classifications(self):
+        with h.ScratchRepo() as repo:
+            first = self._impl_round_one(repo)
+            self._record_manual(repo, "implementation", first, "- M-1 manual.")
+            artifacts = repo.root / fingerprint.artifacts_path_for_work_item(self.WI)
+            declarations = json.loads(artifacts.read_text())
+            stage = declarations["implementation_stage"]
+            reason = stage["excluded_paths"].pop("README.md")
+            stage["protected_paths"]["README.md"] = reason
+            artifacts.write_text(json.dumps(declarations) + "\n")
+            repo.commit_files("amend the declaration", {
+                str(artifacts.relative_to(repo.root)): json.dumps(declarations) + "\n"})
+            self._applying(repo)
+            repo.commit_files("edit the newly protected file", {"README.md": "newly protected edit\n"})
+            h.generate_implementation_bundle(repo, stage="post-fix")
+            manual = self._section(repo, self.IMPL_MANUAL)
+            self.assertIn(f"previous_review_content_id: {first}", manual)
+            self.assertIn("diff --git a/README.md b/README.md", manual)
+            self.assertIn("newly protected edit", manual)
 
 
 if __name__ == "__main__":

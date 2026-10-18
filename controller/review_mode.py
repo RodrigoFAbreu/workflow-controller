@@ -14,6 +14,7 @@ import dataclasses
 import re
 from typing import Any, Mapping
 
+from controller import harness
 from controller.settings import REVIEW_MODES
 
 MODE_AUTO, MODE_CROSS_MODEL, MODE_SINGLE_PROVIDER, MODE_MANUAL = REVIEW_MODES
@@ -27,7 +28,7 @@ WORKER_FAMILY = "anthropic"
 #: The verdict family of each review harness (``review.HARNESSES``; a test
 #: pins this table to the registry). A harness not listed is a distinct,
 #: unknown provider here: the launch refuses it as it always has.
-HARNESS_FAMILY: Mapping[str, str] = {"codex": "openai", "claude": "anthropic"}
+HARNESS_FAMILY: Mapping[str, str] = harness.REVIEWER_FAMILY
 
 #: The harness a same-provider review runs on.
 SAME_PROVIDER_HARNESS = "claude"

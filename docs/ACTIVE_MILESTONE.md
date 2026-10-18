@@ -32,4 +32,6 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-No milestone is active. Plan the adapters step (A1, `docs/ROADMAP.md`): run `/milestone-plan`.
+`workflow-controller-adapters-1` (A1, `docs/ROADMAP.md`) is `IMPLEMENTING` (plan revision 5, base `859eda5`). Checkpoint
+CP1 (the harness adapter registry, `controller/harness.py`) is complete; CP2-CP5 follow, one per `/milestone-implement`
+invocation. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth.

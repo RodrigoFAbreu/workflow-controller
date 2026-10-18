@@ -26,9 +26,9 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from controller import review_rounds, worker_stream
+from controller import harness, review_rounds, worker_stream
 
-HARNESS = "claude-code"
+HARNESS = harness.worker_adapter().name
 
 #: The ``--by`` groupings the ``telemetry`` command accepts.
 GROUPINGS = {

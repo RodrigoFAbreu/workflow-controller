@@ -46,6 +46,6 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-`/milestone-plan` for C10c, the automated functional review (`docs/ROADMAP.md`, "Next, in order"). After it come C10d,
-C12, C11 and the orchestrator series O1-O7; CU2, the next clean-up milestone (#78, #79, #82-#88, #91 and #93-#95 so
-far), slots in every few milestones or sooner when the issue count grows.
+`/milestone-plan` for CU2, the second clean-up milestone (`docs/ROADMAP.md`, "Next, in order"; owner decision,
+2026-10-18): issues #78, #79, #82-#87, #91 and #93-#95. After it come C10c (the automated functional review), C10d,
+C12, C11 and the orchestrator series O1-O7.

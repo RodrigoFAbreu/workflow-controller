@@ -7,9 +7,10 @@ steps) reached `MILESTONE_COMPLETE` on 2026-10-17. The Controller now launches t
 three automatic approvals (rows 14a, 28a and 38h, on the new `satisfy-gate` role), so a gate the policy satisfies
 passes without a person, and a refused validation stops the run with its unmet requirement in `explain`. A value a
 protocol 1.x minor release adds is advisory or blocked, never refused (`protocol_schema.ENUM_RULES`, follow-up 17),
-and a stop the Workflow calls blocked sends `lane_blocked`, not `user_gate` (part of follow-up 26). It is released as
-the minor release **1.14.0** when its `feat:` pull request (#81) merges. No `docs/releases/1.14.0.md` was written by
-the milestone; the release notes come in the docs pull request after the release.
+and a stop the Workflow calls blocked sends `lane_blocked`, not `user_gate` (part of follow-up 26). Its `feat:` pull
+request (#81) merged on 2026-10-17 (squash `8a38a85`), and it is released as the minor release **1.14.0**, the latest
+release. The release notes are `docs/releases/1.14.0.md`. This repository has since moved to Workflow 2.13.0 (a
+`chore:` pull request, #89, 2026-10-18).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every
 acceptance requirement met (policy source `default`, digest `bae758b4f4ce`).

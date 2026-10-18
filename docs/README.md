@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.14.0](releases/1.14.0.md) | gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` at an automatic gate (the `satisfy-gate` role, settings generation 9) and stops on a refusal with the unmet requirement in `explain`; a rule per protocol enum, so a 1.x minor release is never refused; `lane_blocked` for a stop the Workflow calls blocked |
 | [1.13.1](releases/1.13.1.md) | a patch release of sixteen fixes: a full model id required for the Claude reviewer before launch, a Claude review's cost and tokens kept and counted by `telemetry`, the review's harness named in recovery messages, the plan round cap on `"1"`-governed items, one-pass `telemetry` rounds, and test and documentation fixes; no new setting |
 | [1.13.0](releases/1.13.0.md) | review modes: `review.mode` (`auto`, `cross-model`, `single-provider`, `manual`) and `--review-mode` choose the external reviewer; a same-provider Claude reviewer under a lowered gate policy; the `review_mode_unavailable` gate; settings generation 8 |
 | [1.12.0](releases/1.12.0.md) | the review round cap: a protocol review loop stops at a round cap per stage (`review.round_cap`, default 4, `--review-round-cap`, settings generation 7) with a gate that names the three ways on, and `telemetry` reports action, stage and round per job (`--by stage,round` and others) |

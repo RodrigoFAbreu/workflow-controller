@@ -4452,6 +4452,9 @@ def _review_usage_fields(harness: Any, out: Mapping, *, model: str, wall_ms: int
     the end-of-job scan (``usage_rollouts``, each root once whatever the retry did); a Claude review's are the
     attempts' summed figures (``telemetry``) and reasoning (``usage_reasoning``), as the harness left them in
     ``out`` (D8, D9a)."""
+    if out.get("usage_reasoning_failed"):  # the harness's reasoning reading raised (D9)
+        return {"usage_record_failed": out["usage_reasoning_failed"]}
+
     def build() -> "usage_record.UsageRecord":
         if harness.keeps_sessions:
             return usage_record.from_codex_rollouts(out.get("usage_rollouts") or [], model=model, wall_ms=wall_ms)

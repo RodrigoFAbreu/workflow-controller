@@ -1322,8 +1322,16 @@ class Attempt:
     failure: str | None = None
     first_readings: list | None = None
     figures: dict | None = None
-    #: The ``thinking_tokens`` of a Claude run's ``result`` event (usage record only; ``figures`` is unchanged).
-    reasoning: int | None = None
+    #: The ``thinking_tokens`` of a Claude run's ``result`` event (usage record only; ``figures`` is unchanged),
+    #: or the ``UsageReadingFailed`` its extraction raised into (advisory data never fails the review, D9).
+    reasoning: "int | UsageReadingFailed | None" = None
+
+
+@dataclasses.dataclass(frozen=True)
+class UsageReadingFailed:
+    """A usage-only reading that raised: the exception text, carried to the job record as
+    ``usage_record_failed`` instead of failing the review (adapters-1 D9)."""
+    text: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1646,10 +1654,14 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
                    result_figures(stream.result), result_reasoning(stream.result))
 
 
-def result_reasoning(result: Mapping | None) -> int | None:
+def result_reasoning(result: Mapping | None) -> "int | UsageReadingFailed | None":
     """The reasoning tokens of one Claude ``result`` event, for the usage record only (``result_figures`` and
-    so ``telemetry`` do not carry it), or ``None`` when the run printed none."""
-    return usage_record.reasoning_tokens([dict(result)]) if isinstance(result, Mapping) else None
+    so ``telemetry`` do not carry it), or ``None`` when the run printed none. The reading is advisory: one that
+    raises gives a ``UsageReadingFailed`` rather than failing the review (adapters-1 D9)."""
+    try:
+        return usage_record.reasoning_tokens([dict(result)]) if isinstance(result, Mapping) else None
+    except Exception as exc:  # noqa: BLE001 -- the failure boundary: usage-only data never fails the review
+        return UsageReadingFailed(f"{type(exc).__name__}: {exc}")
 
 
 def result_figures(result: Mapping | None) -> dict | None:
@@ -1875,11 +1887,18 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     return result
 
 
-def _add_reasoning(result: dict, reasoning: int | None) -> None:
+def _add_reasoning(result: dict, reasoning: "int | UsageReadingFailed | None") -> None:
     """A Claude review's reasoning tokens, summed over its attempts under ``usage_reasoning`` (not copied
-    into the job record's ``review`` block); an attempt that reports none adds nothing."""
-    if isinstance(reasoning, int):
-        result["usage_reasoning"] = result.get("usage_reasoning", 0) + reasoning
+    into the job record's ``review`` block); an attempt that reports none adds nothing. A reading that
+    failed, or a sum that raises, is kept as ``usage_reasoning_failed`` for the job record's
+    ``usage_record_failed`` (D9) and never raised."""
+    try:
+        if isinstance(reasoning, UsageReadingFailed):
+            result.setdefault("usage_reasoning_failed", reasoning.text)
+        elif isinstance(reasoning, int):
+            result["usage_reasoning"] = result.get("usage_reasoning", 0) + reasoning
+    except Exception as exc:  # noqa: BLE001 -- the failure boundary: usage-only data never fails the review
+        result.setdefault("usage_reasoning_failed", f"{type(exc).__name__}: {exc}")
 
 
 def _text_status(text: str) -> str | None:

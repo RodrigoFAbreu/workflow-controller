@@ -82,11 +82,13 @@ ran, records what it used in a `usage_record` key of its job record, in one
 format for every harness ([workers](workers.md#telemetry) lists the fields).
 One converter per harness builds it from the harness's own output: the Claude
 converter from the stream's `result` events, the Codex converter from the
-rollouts of the job. The cost is the four priced token groups (input, cache-read,
-cache-write, output) times their prices in `controller/prices.json`, never the
-reasoning count, which is inside output. The price table is versioned and ships
-with no model prices until one is taken from a provider's published list; a model
-absent from the table gives cost `null` and quality `unknown`. A built record
+rollouts of the job. A cost the harness reports (Claude's `total_cost_usd`) is
+kept as it is, with source `reported`. Otherwise the cost is the four priced
+token groups (input, cache-read, cache-write, output) times their prices in
+`controller/prices.json`, never the reasoning count, which is inside output. The
+price table is versioned and ships with no model prices until one is taken from
+a provider's published list; with no reported cost, a model absent from the table
+gives cost `null` and quality `unknown`. A built record
 keeps the table version it was computed under and is never rewritten.
 
 The `--json` output of `resume` prints each job record as stored, so a job

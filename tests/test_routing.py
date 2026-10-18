@@ -28,15 +28,21 @@ from controller.errors import ControllerError, RoutingConfigError  # noqa: E402
 #: plus the final self-review pass of ``/milestone-implement``.
 NAMED_ROLES = (
     "milestone-implement", "apply-plan-review", "apply-implementation-review", "review-plan",
-    "review-implementation", "apply-functional-review", "satisfy-gate", "apply-pr-review",
+    "review-implementation", "apply-functional-review", "apply-pr-review",
 )
+#: The validator roles (cleanup-2 D2): not Opus; each has its own built-in route.
+VALIDATOR_ROUTES = {
+    "satisfy-gate": ("claude-haiku-5-5", "high"),
+    "satisfy-gate-acceptance": ("claude-sonnet-5-5", "medium"),
+}
 SELF_REVIEW_ROLE = "milestone-implement-self-review"
-SINGLE_AGENT_ROLES = frozenset({SELF_REVIEW_ROLE, "review-plan", "review-implementation", "satisfy-gate"})
+SINGLE_AGENT_ROLES = frozenset({SELF_REVIEW_ROLE, "review-plan", "review-implementation",
+                                *VALIDATOR_ROUTES})
 INHERIT_ROLES = ("milestone-plan", "record-manual-plan-review", "record-manual-implementation-review",
                  "prepare-functional-review")
 #: The roles a protocol target adds (orchestration-protocol-v1 C.3, and the
 #: validator of gate-policy D4): the legacy command map names none of them.
-PROTOCOL_ONLY_ROLES = ("prepare-functional-review", "apply-functional-review", "satisfy-gate", "apply-pr-review")
+PROTOCOL_ONLY_ROLES = ("prepare-functional-review", "apply-functional-review", *VALIDATOR_ROUTES, "apply-pr-review")
 
 
 def _config(**data) -> routing.RoutingConfig:
@@ -46,7 +52,7 @@ def _config(**data) -> routing.RoutingConfig:
 class RoutingTableTest(unittest.TestCase):
     def test_the_role_set_is_closed_and_exactly_the_table(self) -> None:
         self.assertEqual(routing.ROLES, frozenset(routing.ROLE_ROUTES))
-        self.assertEqual(routing.ROLES, frozenset({*NAMED_ROLES, SELF_REVIEW_ROLE, *INHERIT_ROLES}))
+        self.assertEqual(routing.ROLES, frozenset({*NAMED_ROLES, *VALIDATOR_ROUTES, SELF_REVIEW_ROLE, *INHERIT_ROLES}))
 
     def test_each_named_role_defaults_to_opus_5_5_at_xhigh(self) -> None:
         for role in (*NAMED_ROLES, SELF_REVIEW_ROLE):
@@ -55,6 +61,26 @@ class RoutingTableTest(unittest.TestCase):
                 self.assertEqual((route.model, route.effort), ("claude-opus-5-5", "xhigh"))
                 self.assertEqual((route.model_source, route.effort_source), ("default", "default"))
         self.assertEqual((routing.DEFAULT_MODEL, routing.DEFAULT_EFFORT), ("claude-opus-5-5", "xhigh"))
+
+    def test_the_validator_roles_have_their_own_single_agent_routes(self) -> None:
+        for role, (model, effort) in VALIDATOR_ROUTES.items():
+            with self.subTest(role=role):
+                route = routing.resolve_route(role)
+                self.assertEqual((route.model, route.effort), (model, effort))
+                self.assertEqual((route.model_source, route.effort_source), ("default", "default"))
+                self.assertTrue(route.single_agent)
+                self.assertEqual(route.disallowed_tools, routing.SUBAGENT_TOOLS)
+
+    def test_each_validator_route_is_overridable_alone(self) -> None:
+        for role in VALIDATOR_ROUTES:
+            other = next(r for r in VALIDATOR_ROUTES if r != role)
+            with self.subTest(role=role):
+                route = routing.resolve_route(role, cli_role_models={role: "claude-opus-5-5"},
+                                              cli_role_efforts={role: "xhigh"})
+                self.assertEqual((route.model, route.effort), ("claude-opus-5-5", "xhigh"))
+                self.assertEqual((route.model_source, route.effort_source), ("role-cli", "role-cli"))
+                kept = routing.resolve_route(other, cli_role_models={role: "claude-opus-5-5"})
+                self.assertEqual((kept.model, kept.effort), VALIDATOR_ROUTES[other])
 
     def test_the_self_review_role_and_the_review_roles_are_single_agent(self) -> None:
         for role in routing.ROLES:

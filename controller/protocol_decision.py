@@ -113,7 +113,7 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
     "pr.apply_review": ProtocolAction("apply-pr-review", "apply-pr-review"),
     "plan.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("plan",), "validation"),
     "implementation.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("implementation",), "validation"),
-    "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("acceptance",), "validation"),
+    "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate-acceptance", ("acceptance",), "validation"),
 })
 
 #: The worker role an automatic action must name, where the Workflow's table pins one

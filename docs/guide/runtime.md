@@ -511,6 +511,11 @@ which it ignores, and its `settings clean` refuses.
 The release that adds the `apply-pr-review` routing role is table generation 10, on the same terms: no key added, no value moved,
 an older Controller ignores a `routing.roles` entry for `apply-pr-review` with a warning and its `settings clean` refuses.
 
+The release that adds the `satisfy-gate-acceptance` routing role is table generation 11, on the same terms: no key added, no value moved,
+an older Controller refuses the role in a `--routing-config` file, ignores a `routing.roles` entry for it with a warning and its
+`settings clean` refuses. The same release gives `satisfy-gate` the route Haiku 5.5 `high`; a value you pinned for `satisfy-gate`
+now covers plan and implementation approval only, and acceptance takes its own route (Sonnet 5.5 `medium`) until you name it.
+
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer
 release's value alone. `_table_generation` records the newest release

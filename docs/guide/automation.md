@@ -325,8 +325,8 @@ decision:
 
 | Disposition | Decision |
 |---|---|
-| `automatic` | a launch, when the action id is one the Controller knows (twelve, from `plan.start` to `functional.apply_findings`), its worker is not `user_only` and its worker role is known; otherwise a blocked gate (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
-| `validation` | a launch of `/satisfy-gate <stage> <work item>` on the `satisfy-gate` role, when the action id is `plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`, its worker is not `user_only` and its role is `validator`; any other id, worker or pairing of id and disposition is blocked as above (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
+| `automatic` | a launch, when the action id is one the Controller knows (thirteen, from `plan.start` to `pr.apply_review`), its worker is not `user_only` and its worker role is known; otherwise a blocked gate (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
+| `validation` | a launch of `/satisfy-gate <stage> <work item>` on the `satisfy-gate` role (`satisfy-gate-acceptance` for `acceptance.satisfy`), when the action id is `plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`, its worker is not `user_only` and its role is `validator`; any other id, worker or pairing of id and disposition is blocked as above (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
 | `human_gate`, `external_gate` | a gate carrying the Workflow's reason, remedy and alternatives |
 | `blocked` | a gate carrying the Workflow's reason code, text and remedy |
 | `complete` | nothing to do |

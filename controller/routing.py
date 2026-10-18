@@ -70,9 +70,12 @@ APPLY_FUNCTIONAL_REVIEW = "apply-functional-review"
 #: The pull-request defect role (pr-defect-loop D3): ``/apply-pr-review``
 #: fixes code on the bounded branch and delegates like the other apply roles.
 APPLY_PR_REVIEW = "apply-pr-review"
-#: The validator role (gate-policy D4): ``/satisfy-gate`` records a decision in
-#: a transaction that commits, so it is single-agent like the reviews.
+#: The validator roles (gate-policy D4, cleanup-2 D2): ``/satisfy-gate`` records
+#: a decision in a transaction that commits, so it is single-agent like the
+#: reviews. Plan and technical approval are a mechanical check (Haiku);
+#: acceptance also writes the narrative, roadmap and findings table (Sonnet).
 SATISFY_GATE = "satisfy-gate"
+SATISFY_GATE_ACCEPTANCE = "satisfy-gate-acceptance"
 
 #: The built-in model and effort of the named lifecycle roles.
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -91,6 +94,8 @@ class Route:
 
 _OPUS = Route(model=DEFAULT_MODEL, effort=DEFAULT_EFFORT, single_agent=False)
 _OPUS_SINGLE_AGENT = Route(model=DEFAULT_MODEL, effort=DEFAULT_EFFORT, single_agent=True)
+_HAIKU_SINGLE_AGENT = Route(model="claude-haiku-5-5", effort="high", single_agent=True)
+_SONNET_SINGLE_AGENT = Route(model="claude-sonnet-5-5", effort="medium", single_agent=True)
 _INHERIT = Route(model=None, effort=None, single_agent=False)
 
 #: Role -> built-in :class:`Route`. The roles the milestone scope does not
@@ -114,7 +119,8 @@ ROLE_ROUTES: Mapping[str, Route] = MappingProxyType({
     # It reopens a work item and fixes a pull request's defect, as the other
     # apply roles do.
     APPLY_PR_REVIEW: _OPUS,
-    SATISFY_GATE: _OPUS_SINGLE_AGENT,
+    SATISFY_GATE: _HAIKU_SINGLE_AGENT,
+    SATISFY_GATE_ACCEPTANCE: _SONNET_SINGLE_AGENT,
 })
 
 #: The closed set of role names ``--role-model``/``--role-effort`` and the

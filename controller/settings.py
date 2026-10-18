@@ -199,8 +199,9 @@ TABLE: tuple[Setting, ...] = (
 #: (workflow-controller-review-convergence D4). 8: ``review.mode`` and the
 #: ``reviewer.same_provider_*`` rows (workflow-controller-review-modes D1). 9: the role
 #: ``satisfy-gate`` (workflow-controller-gate-policy D4). 10: the role
-#: ``apply-pr-review`` (workflow-controller-pr-defect-loop D3).
-TABLE_GENERATION = 10
+#: ``apply-pr-review`` (workflow-controller-pr-defect-loop D3). 11: the role
+#: ``satisfy-gate-acceptance`` (workflow-controller-cleanup-2 D4).
+TABLE_GENERATION = 11
 
 
 def _table() -> dict[str, Setting]:

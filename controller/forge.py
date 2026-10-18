@@ -44,6 +44,11 @@ PR_FIELDS = ("number,state,isDraft,headRefName,headRefOid,baseRefName,isCrossRep
 RELEASE_FIELDS = "tagName,isDraft,assets,url"
 CHECK_FIELDS = "name,state,bucket"
 RUN_FIELDS = "databaseId,workflowName,status,conclusion,attempt,url"
+#: The Workflow's one fixed pull-request query (`pr-list-v1`, vendored in
+#: `workflow_forge`): the Controller reports its verbatim output, so the
+#: field list and the limit are the Workflow's, not the `forge.*` settings.
+REPORT_QUERY_FIELDS = "number,url,state,headRefOid,reviewDecision,reviews,statusCheckRollup"
+REPORT_QUERY_LIMIT = 200
 
 #: ``gh pr list`` truncates at ``--limit``; a full page is undecidable.
 #: The built-in default of the ``forge.pr_list_limit`` setting.
@@ -160,6 +165,7 @@ class Forge(Protocol):
     def edit_pr(self, number: int, *, title: str | None = None, body: str | None = None) -> PullRequest: ...
     def merge_squash(self, number: int, *, head: str, subject: str, body: str) -> None: ...
     def pr_checks(self, number: int) -> Checks: ...
+    def query_pull_requests(self, commit: str) -> str: ...
     def commit_runs(self, commit: str, branch: str, workflow: str) -> tuple[Run, ...]: ...
     def view_release(self, tag: str) -> Release | None: ...
     def create_release(self, tag: str, files: Sequence[Path], title: str, notes: str) -> None: ...
@@ -347,6 +353,21 @@ class GhForge:
             raise ValueError(f"merge_squash needs a full commit id, not {head!r}")
         self._ok(["pr", "merge", str(number), "--squash", "--match-head-commit", head,
                   "--subject", subject, "--body", body])
+
+    def query_pull_requests(self, commit: str) -> str:
+        """The verbatim stdout of the Workflow's fixed query for ``commit``
+        (``gh pr list --state all --search <commit> --limit 200``, the
+        `pr-list-v1` argv): read-only, and never parsed here -- the Workflow
+        parses what the Controller reports (`pr_review_result`)."""
+        argv = [self._gh, "pr", "list", "--repo", self.repository, "--state", "all", "--search", commit,
+                "--limit", str(REPORT_QUERY_LIMIT), "--json", REPORT_QUERY_FIELDS]
+        try:
+            result = self._runner(argv)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise _undecidable(f"gh could not run: {exc}", argv) from None
+        if result.returncode != 0:
+            raise _undecidable(f"gh pr list failed (exit {result.returncode})", argv, result)
+        return _text(result.stdout)
 
     def pr_checks(self, number: int) -> Checks:
         """The PR's checks. ``gh`` reports normal outcomes through its exit

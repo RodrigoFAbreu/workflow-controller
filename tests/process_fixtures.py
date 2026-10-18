@@ -319,6 +319,8 @@ LEFTOVER_INVENTORY = (
      "the captures generator's --check run: a read-only comparison that exits by itself"),
     ("test_harness.py", "start:run", 1, "short",
      "the fresh-interpreter import of one module: exits at once"),
+    ("test_usage_record.py", "start:run", 1, "short",
+     "the fresh-interpreter import of a copied package: exits at once"),
     ("process_fixtures.py", "start:Popen", 2, "bounded",
      "spawn_sleeper (LEFTOVER_LIFETIME_SECONDS) and the ZombieGroup helper (its release wait has a total deadline)"),
     ("process_fixtures.py", "wait", 1, "exception",

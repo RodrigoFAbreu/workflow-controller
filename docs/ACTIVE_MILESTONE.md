@@ -3,7 +3,7 @@
 ## Status
 
 **Awaiting functional review.** `workflow-controller-pr-defect-loop` (`docs/ROADMAP.md` step C10b, the second of the
-three gate-policy steps) is at implementation revision 3 with technical approval recorded (`f1c7e28`). All registry
+three gate-policy steps) is at implementation revision 4 with technical approval recorded (`2ee65f4`). All registry
 checkpoints (CP1-CP4) are implemented. The plan is `docs/ai-workflow/CONTROLLER_PR_DEFECT_LOOP_PLAN.md` (revision 5),
 the decision record is `docs/adr/0016-pull-request-report-and-apply.md`, and `docs/ai-workflow/WORKFLOW_STATE.json`
 is the ground truth for the phase. The previous milestone, `workflow-controller-gate-policy`, is archived at
@@ -71,4 +71,4 @@ runner and the vendored Workflow 2.12.0 answers. Run them with `-v` to read each
 
 ## Next action
 
-The fix needs a fresh implementation review round (`/review-implementation`, then `/record-manual-implementation-review`), then `/approve-review implementation` (or `/satisfy-gate implementation`), then `/prepare-functional-review`.
+Re-test the round 1 fix (flows 10 and 11 above, documents only), then write findings to the feedback file, or run `/accept-milestone` if clean.

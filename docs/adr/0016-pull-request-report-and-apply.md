@@ -39,8 +39,8 @@ person acted.
    plan accepts that one bounded launch rather than parse the fact in the
    Controller.
 4. **Pending checks wait only when they are the one thing awaited.** The step
-   waits (`pr_checks_pending`, polled by the shared bounded wait that
-   `--wait` uses) only at row 38f, only when the Workflow's own stop text names
+   waits (`pr_checks_pending`, polled by `run`'s shared bounded wait,
+   `merge.wait_seconds` at `merge.poll_seconds`; `step` never waits) only at row 38f, only when the Workflow's own stop text names
    `ci_green`, and only when the record carries no standing objection. At row
    38g, or with a `CHANGES_REQUESTED` decision or a failing check, pending
    checks are reported like any other result, so they never hide an approval or

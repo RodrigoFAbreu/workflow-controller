@@ -368,7 +368,8 @@ closes the pull request rows itself:
   the result, and the reported fact only arms the Workflow's own query.
 - At row 38f, while the checks are pending and `ci_green` is the one thing unmet, with no
   `CHANGES_REQUESTED` decision and no failing check, the step reports nothing and waits
-  (`pr_checks_pending`, polled by `--wait`; without `--wait` it is a stop that names the pending
+  (`pr_checks_pending`, polled by `run` within the `merge.wait_seconds` budget at the
+  `merge.poll_seconds` interval; `step` never waits, so it is a stop that names the pending
   checks, or "no checks reported" when the pull request has none). A pending rollup never hides an
   approval (row 38g) or an objection.
 - A result equal to the last one the Controller sent is not sent again: the step stops
@@ -386,8 +387,8 @@ A person is asked only where one is needed: row 38g with the approval still miss
 a human acceptance gate (`/accept-milestone`; the Controller reports nothing there), a stop the
 Controller itself ends in (`pr_report_no_pull_request`, `pr_report_forge_unavailable`,
 `pr_report_refused`, `pr_report_stale`), and row 38e. Pending checks are never a decision for a
-person: a step that did not wait ends on `pr_checks_pending` with no notification, and one whose
-`--wait` budget ran out with only the checks pending sends `lane_blocked`. A red pull request found after acceptance, in
+person: a step that did not wait ends on `pr_checks_pending` with no notification, and a `run` whose
+`merge.wait_seconds` budget ran out with only the checks pending sends `lane_blocked`. A red pull request found after acceptance, in
 the merge flow, still ends at that flow's `checks_failing` stop, with a person (roadmap step C10d).
 
 **A protocol minor release.** A value a 1.x minor release adds to a closed enum

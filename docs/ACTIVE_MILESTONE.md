@@ -49,7 +49,7 @@ runner and the vendored Workflow 2.12.0 answers. Run them with `-v` to read each
 | 7 | Boundaries (scenario 7, 8, 9). | No binding: old 38f stop. Human acceptance gate at 38g: nothing reported, `user_gate` with the `/accept-milestone` remedy. Red pull request after acceptance: the merge flow's own `checks_failing` stop, no `pr_report` job, no apply (deferred to C10d). |
 | 8 | Reporter refusals (`tests.test_pr_report`). | Non-`github.com` origin ends in a gate naming `forge_unavailable`; no record at the anchor commit stops with the missing-pull-request code; a binding repository differing from `origin` ends in the Workflow's mismatch gate; nothing is written but `record-external-result`. |
 | 9 | Notifications (CP4). | `pr_report` `reported` sends `step_done`; stops needing a person send `user_gate`; a Workflow-blocked stop or a spent wait budget sends `lane_blocked`; a step that did not wait sends nothing. Read `docs/guide/automation.md` against this. |
-| 10 | Wait budget. Run with a short `--wait` against pending checks in a scenario. | One deadline across gate changes; ends with a stop text naming the pending checks ("no checks reported" for an empty rollup). Ctrl-C ends the wait cleanly. |
+| 10 | Wait budget. Run (not `step`, which never waits) with a short `merge.wait_seconds` against pending checks in a scenario. | One deadline across gate changes; ends with a stop text naming the pending checks ("no checks reported" for an empty rollup). Ctrl-C ends the wait cleanly. |
 | 11 | Documents. Read `docs/guide/runtime.md`, `automation.md`, `commands.md`, `troubleshooting.md`, `docs/run.md`, `docs/compatibility.md`, ADR 0016 and the ROADMAP C10b/C10d rows. | They describe what the Controller does now; no "until C10b" sentence; C10d is a named follow-up; follow-up 26 done except row 38e. |
 | 12 | Optional: re-run lifecycle scenarios against the installed Workflow 2.13.0 scripts if importable. | Same results; record any difference as a finding. |
 
@@ -60,6 +60,15 @@ runner and the vendored Workflow 2.12.0 answers. Run them with `-v` to read each
 - A real `/apply-pr-review` worker and a real GitHub query are not exercised; fakes only.
 - The two Git 2.56 trailer tests and flake #82 fail locally and are unrelated.
 
+### Functional review round 1 (applied)
+
+- Finding 1 (documentation): the pull request wait was described as a `--wait` option that `run`/`step` do not have.
+  Fixed in `docs/guide/automation.md`, `docs/adr/0016-pull-request-report-and-apply.md`, `docs/run.md` and flow 10
+  above: the wait belongs to `run`, bounded by `merge.wait_seconds`/`merge.poll_seconds`; `step` never waits.
+  No code change; no broad finding, so no remediation child.
+- Re-test: flow 11 (documents agree) and flow 10 wording. Flow 9 stays BLOCKED by sandbox sockets in the tester's
+  environment; the notification-wiring tests need a run outside it.
+
 ## Next action
 
-Test, then put findings in the feedback file and run `/apply-functional-review`, or, if clean, run `/accept-milestone`.
+The fix needs a fresh implementation review round (`/review-implementation`, then `/record-manual-implementation-review`), then `/approve-review implementation` (or `/satisfy-gate implementation`), then `/prepare-functional-review`.

@@ -54,7 +54,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
        The input fields are in "Evidence kinds" in the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md).
      - `pr_evidence_needed`, `pr_approval_needed`: the Controller handles these itself under an
        automatic acceptance gate. It queries GitHub for the pull request, reports the result to the
-       Workflow, waits (with `--wait`) while the checks are the only thing pending, and launches
+       Workflow, waits (`run` only, within `merge.wait_seconds`) while the checks are the only thing pending, and launches
        `/apply-pr-review` when the Workflow asks for it, so a run carries on once the checks are
        green and a red pull request reopens the work item. It stops for a person only when the
        pull request still needs an approval, has no pull request or no GitHub answer, or the

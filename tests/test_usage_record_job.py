@@ -311,8 +311,9 @@ class WorkerRecordTest(test_job._StreamingCase):
             "usage_record", "usage_record_failed", "updated_at", "created_at", "job_id", "worker", "worker_process",
             "worker_anchor", "worker_streams", "ownership_tag", "worker_state", "event_seq", "ending_offset",
             "lifecycle_lock", "run_id")}
-        self.assertEqual(keep(record), keep(baseline))
-        self.assertTrue(baseline["telemetry"]["tokens"]["output"])  # the whole telemetry block is compared above
+        wall = lambda r: {**keep(r), "telemetry": {**r["telemetry"], "job_seconds": None, "worker_seconds": None}}  # noqa: E731
+        self.assertEqual(wall(record), wall(baseline))  # only the two wall-clock leaves are normalised
+        self.assertTrue(baseline["telemetry"]["tokens"]["output"])  # the rest of the telemetry block is compared above
         self.assertEqual(record["status"], baseline["status"])
 
     def test_a_record_has_a_usage_record_exactly_when_it_has_a_telemetry_block(self) -> None:

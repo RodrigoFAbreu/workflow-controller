@@ -2917,6 +2917,40 @@ class TestPrepareAiReviewShEarlyAnchorCheck(unittest.TestCase):
             self.assertEqual(
                 (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes(), state_bytes)
 
+    UNDECLARED_FILES = "\n<!-- CP1 -->\n**Files:** `uncovered_new.py`\n<!-- /CP1 -->\n"
+
+    def test_a_plan_naming_an_unclassified_path_is_refused_and_the_previous_bundle_is_untouched(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            self.assertEqual(self._generate(repo).returncode, 0)
+            state_bytes = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes()
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            self._write_plan(repo, plan + self.UNDECLARED_FILES)
+            self._prepare(repo)
+            before = self._snapshot(repo)
+            result = self._run(repo)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("error: PlanArtifactDeclarationCoverageError:", result.stderr)
+            self.assertIn("CP1: uncovered_new.py (unclassified at both stages)", result.stderr)
+            self.assertIn(ws.PLAN_DECLARATION_NEXT_STEP, result.stderr)
+            self.assertEqual(self._snapshot(repo), before)
+            names = sorted(q.name for q in self._item_root(repo).iterdir())
+            self.assertEqual([n for n in names if n.startswith(("current.staging-", ".pin.staging-"))], [], names)
+            self.assertFalse((self._item_root(repo) / "REJECTED").exists())
+            self.assertEqual(list(self._item_root(repo).glob("current.rejected-*")), [])
+            fingerprint.assert_bundle_not_rejected(repo.root, self.WI)
+            self.assertEqual(
+                (repo.root / "docs" / "ai-workflow" / "WORKFLOW_STATE.json").read_bytes(), state_bytes)
+
+    def test_a_bound_ready_item_regenerates_an_undeclared_path_without_the_check(self):
+        with h.ScratchRepo() as repo:
+            self._seed(repo)
+            h.publish_and_bind_plan_bundle(repo, self.WI)
+            h.commit_state(repo, "bound")
+            plan = (repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md").read_text()
+            self._write_plan(repo, plan + self.UNDECLARED_FILES)
+            self.assertEqual(self._generate(repo).returncode, 0)
+
     def test_anchors_are_refused_before_the_sweep(self):
         with h.ScratchRepo() as repo:
             self._seed(repo)

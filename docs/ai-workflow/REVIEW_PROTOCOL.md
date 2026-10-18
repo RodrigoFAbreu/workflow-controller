@@ -774,6 +774,21 @@ check their own text before writing it, and the manual ingest
 (`ingest_manual_review_verdict`, so `record-external-result` too) refuses it
 with nothing written. A verdict already recorded is applied as before.
 
+**Optional findings are recorded** (workflow-2.14.0, `D-Parse`, `D-Ledger`).
+The writer of every `APPROVE` or `REVISE` of a two-stage item (the local
+reviewers and the manual ingest, plan and implementation stages) also records
+each finding under `## Optional findings` in the item's `optional_findings`
+state, in the verdict's own transaction. An entry is a top-level list item or a
+`### ` heading (a nested or sub-bullet line is body; a placeholder is skipped).
+Its identity is the whole entry as written, label included, whitespace
+collapsed; the key is `F-` plus 12 hex characters of its sha256. Identical
+entries merge across verdicts into one entry with several references; two
+identical entries inside one verdict are two findings. Declared limits: (a) a
+finding under another heading is not an Optional finding; (b) a re-raise
+changed by any non-whitespace character is a new key; (c) a verdict that no
+writer received records nothing; (d) two findings with the same twelve hex
+characters would merge.
+
 The three binding fields (`Reviewed bundle ID:`, `Reviewed base commit:`,
 `Work item:`) are required on every ordinary review round, not only WF0's
 one-time bootstrap check (`OPUS-R14-002`, generalized here), and they keep

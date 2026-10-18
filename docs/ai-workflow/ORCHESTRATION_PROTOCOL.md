@@ -40,7 +40,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0** and **Workflow 2.13.0** (both protocol `1.4`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`).
 
 ## 2. Invocation and the envelope
 
@@ -60,7 +60,7 @@ stdout is exactly one JSON document, the **envelope**
 ```json
 {
   "protocol": {"name": "workflow-orchestration", "version": "1.4"},
-  "workflow_release": "2.13.0",
+  "workflow_release": "2.14.0",
   "operation": "next-action",
   "ok": true,
   "result": { "...": "operation-specific" }
@@ -1149,7 +1149,7 @@ under automatic gates). A courier is admissible when, and only when:
 
 ## 10. Compatibility notes
 
-- **Protocol `1.4`** (Workflow 2.12.0; Workflow 2.13.0 keeps it: no snapshot field,
+- **Protocol `1.4`** (Workflow 2.12.0; Workflow 2.13.0 and Workflow 2.14.0 keep it: no snapshot field,
   row, action, envelope key or classification changed). The snapshot of an item's `next-action`
   decision gains the additive `review_round` field (section 5.4). No row,
   action, reason code, check or error code changed. A `1.3` consumer ignores

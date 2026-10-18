@@ -101,6 +101,22 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
       `<parent-id>-remediation-<n>` child work item running its own full
       cycle). There is no command that records functional acceptance of a
       partial round.
+    - **Optional-finding dispositions pre-flight** (workflow-2.14.0, `D-Gate`;
+      applies to every item, a remediation child included; **runs before the
+      `requires_pr_approved` pre-flight below**, so a refusal happens before any
+      query or write): call
+      `workflow_state.assert_finding_dispositions_recorded(repo_root, state,
+      work_item_id)`. `UndispositionedFindingsError` stops here: report each
+      listed finding (key, stage, role, round, text) and the next step it
+      names -- record a disposition for each in
+      `docs/ai-workflow/registry/<id>-dispositions.json` (`fixed`, `dropped`
+      with a `reason`, or `follow-up` with a `link`; `python3
+      scripts/workflow_state.py --finding-dispositions <id>` lists them and
+      prints a skeleton), save the file, run this command again. A follow-up is
+      a complete disposition: acceptance never waits for its fix.
+      `InvalidFindingDispositionsError` stops here too, naming every problem in
+      the file. The file is not committed on its own; step 6 stages it.
+      `complete_work_item` re-checks the same condition below.
     - **`requires_pr_approved` pre-flight** (`workflow-2.8.0`, `D-GP-Acceptance`;
       added only when the effective policy sets `requires_pr_approved`, which is
       off by default, so a repository without it behaves as 2.7.0): call
@@ -122,6 +138,8 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
       registry failed to resolve, read, parse, or declare the expected
       `work_item_id`; report the specific failure verbatim, this is a data-
       integrity defect, never silently treated as "nothing to check."
+      `UndispositionedFindingsError` and `InvalidFindingDispositionsError`
+      stop here as the pre-flight above says.
       `IncompleteOwnCheckpointsError` stops here — report the named
       outstanding checkpoint as the bullet above says. The exception's
       own message still carries 2.6.0's `/milestone-implement` advice,
@@ -149,7 +167,7 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
     `parent_work_item_id` is non-null is a `<parent-id>-remediation-<n>`
     child, not a roadmap milestone — it was never listed in
     `docs/ROADMAP.md` and has no milestone summary to archive. For such an
-    item, skip steps 3, 5 and 7 entirely, and replace step 4 with a
+    item, skip steps 3, 5 and 7, but run step 5a, and replace step 4 with a
     report rather than an edit: `workflow_state.FUNCTIONAL_CHECKLIST_PATH`
     is a single shared file (`docs/ACTIVE_MILESTONE.md`), and the child's
     own `/prepare-functional-review <child-id>` has already overwritten
@@ -179,6 +197,15 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
    re-acceptance overwrites `acceptance_satisfaction`, and
    `completion_obligations_accepted` is kept (not rewritten) when the item
    declares no completion obligations.
+5a. **Write the findings record** (workflow-2.14.0, `D-Record`; every item,
+   a remediation child included): call
+   `workflow_state.write_finding_dispositions_record(repo_root, state,
+   work_item_id)` on the completed state. It writes
+   `docs/milestones/completed/<id>-findings.md` (every recorded Optional
+   finding with its disposition, reason or link; a re-acceptance overwrites it)
+   and returns the paths the completion commit stages: the record and the
+   dispositions file when it exists. An item with no recorded finding returns
+   nothing. A child's findings do not roll up into its parent's.
 6. Create the final completion commit if verification/doc updates are not
    already committed, carrying a `Workflow-Work-Item: <work_item_id>`
    trailer (the established convention every real completion commit to
@@ -194,7 +221,8 @@ missing, ask for it and stop — do not proceed on an inferred "yes."
    block) silently discards it. No command currently re-discovers this
    trailer by search -- `/accept-milestone` is a terminal, one-way
    transition -- but the same layout rule still applies so the trailer is
-   a genuine Git trailer rather than merely trailer-shaped text.
+   a genuine Git trailer rather than merely trailer-shaped text. The commit
+   stages the paths step 5a returned.
 7. Set `docs/ACTIVE_MILESTONE.md`'s "Next action" to point at the next
    incomplete milestone in `docs/ROADMAP.md`, ready for `PLANNING`.
 8. Report the milestone as complete and the next action as

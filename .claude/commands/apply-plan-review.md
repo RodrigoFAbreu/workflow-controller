@@ -221,7 +221,14 @@ normative definition.
    work_item_id)`; a refusal (`workflow_state.PlanGoverningVersionSweepError`)
    lists each finding and ends with `workflow_state.PLAN_SWEEP_NEXT_STEP`:
    report it as `error: PlanGoverningVersionSweepError: ...` and stop, with
-   nothing published.
+   nothing published. **Then, [2.14.0] declaration check**: call
+   `workflow_state.assert_plan_artifact_declaration_coverage(repo_root,
+   work_item_id)`; a refusal
+   (`workflow_state.PlanArtifactDeclarationCoverageError`) names each
+   checkpoint and unclassified path and ends with
+   `workflow_state.PLAN_DECLARATION_NEXT_STEP`: report it as
+   `error: PlanArtifactDeclarationCoverageError: ...` and stop, with nothing
+   published.
    Then publish, in the same operation and before the bundle below is
    regenerated (`D-Plan-Revision-Publication`, `WFR-65`), by calling
    `workflow_state.state_transaction(repo_root, lambda state:
@@ -256,8 +263,10 @@ normative definition.
      `PlanReviewInProgressError`, `PlanReviewPhaseNotPlanStageError` or
      `PlanReviewBindingInconsistentError` as step 0's status would predict.
    After the publish, print `workflow_state.plan_size_advisory(registry)`
-   when it returns a warning (workflow-2.12.0, `D-Size`) and continue: it
-   never refuses and writes nothing.
+   when it returns a warning (workflow-2.12.0, `D-Size`), and
+   `workflow_state.plan_files_advisory(plan_text, registry)` when it returns a
+   warning (workflow-2.14.0, `D-Coverage`), and continue: neither refuses and
+   neither writes anything.
 
    This step applies only to a work item with an existing `WORKFLOW_STATE.json`
    entry (`registry_path` non-null); an ordinary `"1"`-governed milestone
@@ -339,8 +348,11 @@ normative definition.
        `workflow_state.PLAN_ANCHOR_NEXT_STEP`: report it and stop), then
        `workflow_state.assert_plan_governing_version_sweep(repo_root,
        work_item_id)` (a refusal, `PlanGoverningVersionSweepError`, ends with
-       `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it and stop), then call
-       `binding = workflow_state.verify_plan_review_bundle(repo_root,
+       `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it and stop), then
+       `workflow_state.assert_plan_artifact_declaration_coverage(repo_root,
+       work_item_id)` (a refusal, `PlanArtifactDeclarationCoverageError`, ends
+       with `workflow_state.PLAN_DECLARATION_NEXT_STEP`: report it and stop),
+       then call `binding = workflow_state.verify_plan_review_bundle(repo_root,
        work_item_id)`, then `workflow_state.state_transaction(repo_root, lambda state:
        workflow_state.bind_plan_review_bundle(state, work_item_id,
        binding=binding, now=now))` -- the **sole** writer of

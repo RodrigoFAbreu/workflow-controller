@@ -703,7 +703,10 @@ this value is still honoured — nothing writes it.
 - **Allowed actions**: none besides answering questions — no further code
   changes.
 - **Artifacts**: none new.
-- **Exit**: user explicitly accepts the milestone.
+- **Exit**: user explicitly accepts the milestone, every recorded Optional
+  finding has a disposition (`fixed`, `dropped` with a reason, or `follow-up`
+  with a link; a follow-up is complete), and acceptance writes the findings
+  record `docs/milestones/completed/<id>-findings.md`.
 - **Stop for user/reviewer?** Yes — hard gate. Claude must stop here.
 
 ### MILESTONE_COMPLETE

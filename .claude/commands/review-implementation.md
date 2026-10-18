@@ -532,6 +532,12 @@ A6. **Write set, exact.** **`REJECTED`-bundle refusal, second of two, under
     - `BLOCK`: `REVIEW_FEEDBACK.md` only --
       `record_local_implementation_review(..., verdict="BLOCK", ...)` is a
       true no-op; the work item stays at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`.
+    **Optional findings** (workflow-2.14.0, `D-Ledger`): the
+    `record_local_implementation_review` call, for an `APPROVE` or a
+    `REVISE`, also passes `verdict_text=<the REVIEW_FEEDBACK.md text just
+    written>`, so every finding under `## Optional findings` is recorded in the
+    item's state in the same transaction. A call without `verdict_text` records
+    nothing; a `BLOCK` records nothing.
     Never the plan, registry, mapping, command, product, or bundle-content
     files, and never another work item's fields.
 A7. **Report and stop.** For an `APPROVE`: state the exact bundle path,

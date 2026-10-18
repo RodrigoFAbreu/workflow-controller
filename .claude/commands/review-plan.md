@@ -104,6 +104,13 @@ normative definition.
    addressed against the actual repository state — never take the
    disposition table's word for it — and search for new findings, exactly
    as thoroughly as `/apply-plan-review`'s own validation requirement.
+   The declaration gate (workflow-2.14.0, `D-Coverage`) reads only the
+   `**Files:**` paragraphs of the checkpoints: in one, every backtick span is a
+   path, apart from a span with whitespace or a glob or placeholder character,
+   a URL, one starting `/`, `~` or `..`, or a version string. It does not
+   decide whether a path is rightly protected or excluded; that judgment is
+   yours, and so is a path named in prose, a glob or a path outside the
+   repository, which the gate does not read.
 7. **Decide the verdict** (`Status: APPROVE | REVISE | BLOCK`) and write
    `<feedback_dir>/REVIEW_FEEDBACK.md` per
    `docs/ai-workflow/REVIEW_PROTOCOL.md`'s required structure, **plus**
@@ -196,6 +203,11 @@ normative definition.
    - `BLOCK`: `REVIEW_FEEDBACK.md` only — `record_local_plan_review(...,
      verdict="BLOCK", ...)` is a true no-op; the work item stays at
      `AWAITING_LOCAL_PLAN_REVIEW`.
+   **Optional findings** (workflow-2.14.0, `D-Ledger`): the `record_local_plan_review`
+   call, for an `APPROVE` or a `REVISE`, also passes `verdict_text=<the
+   REVIEW_FEEDBACK.md text just written>`, so every finding under `## Optional
+   findings` is recorded in the item's state in the same transaction. A call
+   without `verdict_text` records nothing; a `BLOCK` records nothing.
    Plan-stage writes are not committed here (workflow-2.9.1,
    `REVIEW_PROTOCOL.md`'s commit rule for review-stage writes): there is no
    generation-record commit at the plan stage, the plan-approval commit

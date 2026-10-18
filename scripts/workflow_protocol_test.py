@@ -5509,7 +5509,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         body, code = call("describe")
         self.assertEqual(code, wp.EXIT_OK)
         result = body["result"]
-        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.4", "2.13.0"))
+        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.4", "2.14.0"))
         caps = result["capabilities"]
         self.assertEqual(sorted(set(NEW_ACTION_IDS + NEW_1_2_ACTION_IDS) - set(caps["action_ids"])), [])
         self.assertEqual(caps["reserved_result_kinds"], [])
@@ -5519,7 +5519,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         self.assertIn("validation", caps["dispositions"])
 
     def test_the_release_constant_and_the_protocol_version(self):
-        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.13.0", "1.4", 1))
+        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.14.0", "1.4", 1))
         self.assertIn("validator", wp.WORKER_ROLES)
         self.assertEqual(wp.ACTIONS["acceptance.satisfy"]["role"], "validator")
         self.assertEqual(wp.ACTIONS["pr.apply_review"]["role"], "applier")

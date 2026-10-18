@@ -265,6 +265,10 @@ try:
         repo_root, work_item_id, pin_dir=repo_root / sys.argv[3],
         allow_bound_regeneration=True,
     )
+    state.assert_plan_artifact_declaration_coverage(
+        repo_root, work_item_id, pin_dir=repo_root / sys.argv[3],
+        allow_bound_regeneration=True,
+    )
 except state._PLAN_EARLY_CHECK_ERRORS as exc:
     print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
     sys.exit(1)

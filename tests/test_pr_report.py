@@ -471,9 +471,6 @@ class DispatchTest(ReporterCase):
         self.assertEqual(forge.calls, [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ReporterExecutableTest(unittest.TestCase):
     """I1: the reporter runs only a ``gh`` the Workflow's own resolver would accept."""
@@ -510,9 +507,43 @@ class ReporterExecutableTest(unittest.TestCase):
                     self.assertEqual(self.calls, [])
                     self.assertIn("gh", caught.exception.message)
 
+    def test_a_world_writable_gh_directory_is_undecidable_and_never_run(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory(dir=Path.home()) as root_name, \
+                tempfile.TemporaryDirectory(dir=Path.home()) as other:
+            root = Path(root_name)
+            fixtures.git_init(root)
+            bin_dir = Path(other) / "bin"
+            self.fake_gh(bin_dir)
+            bin_dir.chmod(0o777)
+            with self.assertRaises(ForgeUndecidableError):
+                self.vetted_query(bin_dir, root)
+            self.assertEqual(self.calls, [])
+
     def test_a_missing_gh_is_undecidable(self) -> None:
         with mock.patch.dict("os.environ", {"PATH": "/nonexistent"}), self.assertRaises(ForgeUndecidableError):
             forge_mod.vet_gh("gh", Path.cwd())
+
+
+    def test_the_production_context_vets_the_gh_it_builds(self) -> None:
+        """I1-R2: ``Context.forge`` is the one place that turns the check on."""
+        root = Path.cwd()
+        context = milestone_branch.Context(repo_root=root, runtime_root=root)
+        self.assertEqual(context.forge("owner/repo").vet_root, root)
+
+    def test_a_gh_inside_the_repository_is_never_run_through_the_production_context(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory(dir=Path.home()) as root_name:
+            root = Path(root_name)
+            fixtures.git_init(root)
+            marker = root / "ran"
+            gh = self.fake_gh(root / "bin")
+            gh.write_text(f"#!/bin/sh\ntouch {marker}\necho '[]'\n")
+            context = milestone_branch.Context(repo_root=root, runtime_root=root)
+            with mock.patch.dict("os.environ", {"PATH": f"{root / 'bin'}:/usr/bin:/bin"}):
+                with self.assertRaises(ForgeUndecidableError):
+                    context.forge("owner/repo").query_pull_requests(COMMIT)
+            self.assertFalse(marker.exists())
 
 
 class ReportNotificationTest(unittest.TestCase):
@@ -570,3 +601,6 @@ class ReportNotificationTest(unittest.TestCase):
 
     def test_a_stop_the_workflow_calls_blocked_is_not_a_decision(self) -> None:
         self.assertEqual(self.events(self.record(pr_report.REFUSED, disposition="blocked")), ["lane_blocked"])
+
+if __name__ == "__main__":
+    unittest.main()

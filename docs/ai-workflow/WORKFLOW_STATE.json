@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-adapters-1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -17804,6 +17804,324 @@
         },
         "evaluated_at": "2026-10-18T18:41:46Z",
         "workflow_release": "2.14.0"
+      }
+    },
+    "workflow-controller-adapters-1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-adapters-1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ADAPTERS_1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-adapters-1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adapters-1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "859eda531c4afad10a76870fd8524256b70bbb7a",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+        "approved_review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ADAPTERS_1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cfd9b9ac114b5b33bfb3dbd7368829a468639417"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-adapters-1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2f7314d28ebcac7fec74e930e37b1ac48894bf4d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-adapters-1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5829a6f60d17aa39f630ee69d120f0c43a4152f1"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-18T20:51:29Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+            "ledger": {
+              "local": {
+                "bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "38709cb0de12c6222d6e7ab4e7d5c065d172d699e30563c250e43984b18ac90e",
+                "ledger_entry_sha256": "56a861402517744bccc03d6853798be8840fd7419a316131ee4e43d246fedd4d",
+                "run_ref": "session:local .ai-review/workflow-controller-adapters-1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "8349c042e3b7d1c065d032c51d12e08dc3201b89ea167f0fa9c537c81a30a668",
+                "ledger_entry_sha256": "6eb003efd332f24023c5d6bf2a4794dfa0332e97428f1969afbeb2e0f67e1a07",
+                "run_ref": "session:local .ai-review/workflow-controller-adapters-1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-18T20:51:29Z",
+          "workflow_release": "2.14.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-18T20:46:49Z",
+          "verdict_sha256": "38709cb0de12c6222d6e7ab4e7d5c065d172d699e30563c250e43984b18ac90e",
+          "run_ref": "session:local .ai-review/workflow-controller-adapters-1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-18T20:50:07Z",
+          "verdict_sha256": "8349c042e3b7d1c065d032c51d12e08dc3201b89ea167f0fa9c537c81a30a668",
+          "run_ref": "session:local .ai-review/workflow-controller-adapters-1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 19,
+      "last_transition": "2026-10-18T20:51:29Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-18T20:44:15Z",
+        "consumed": {
+          "review_content_id": "9efa812d0ea70d0e41df67fc9c429761cf390438bf367baffc92037bf18a72e1",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+          "bundle_id": "0128b14d32591d64d5be34e4259116b367b76471508a2427f7e4bc35a3cc41a9",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "4c406087f26ee16317e5ad8d8b86053da339af017b42a1bda3e90b6cfedd9186",
+        "7f6f0b2c98cedd64fcdaed5de1b55d2aa5b6756d359cb6da66aa59c43d3a8400",
+        "9efa812d0ea70d0e41df67fc9c429761cf390438bf367baffc92037bf18a72e1",
+        "faddc233395f5eb6b681bf8251841e0dd2a1e44a6c7b6b1191d8c14be2e42024"
+      ],
+      "optional_findings": {
+        "F-ac2b4ad08122": {
+          "digest": "ac2b4ad08122cbca3573e8590004135c63741ace9354001740a824b968cc40f2",
+          "text": "**O1. Some plan-stage exclusion reasons were copied unchanged from an earlier milestone and no longer fit this one.** In the plan-stage `excluded_paths` of `workflow-controller-adapters-1-artifacts.json`, `pyproject.toml` says \"this milestone does not change it\" (CP3 changes it; the implementation-stage entry correctly protects it), `docs/run.md` says \"CP4 edits (the sentence on the /satisfy-gate launch)\", `docs/common-problems.md` says \"CP1 edits (the ReviewLaunchRefused entry)\" and `docs/compatibility.md` says \"CP1 edits (the 1.7.1 note)\", all from CU2. The classification is right; only the reasons are wrong. Correct them in the same revision.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faddc233395f5eb6b681bf8251841e0dd2a1e44a6c7b6b1191d8c14be2e42024",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:20:33Z"
+            }
+          ]
+        },
+        "F-ba38941fcdc2": {
+          "digest": "ba38941fcdc282afd4cae984df9fbfb49aa34c31ba720a183fd52afdbce9acf3",
+          "text": "**O2. D9's test oracle \"the same record as before\" is ambiguous.** Say whether it means the job record is identical except for the absent `usage_record` key and the added `usage_record_failed` problem, and where that problem is recorded (inside the telemetry block's `problems`, which would change the telemetry block D1 freezes, or in a separate key).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faddc233395f5eb6b681bf8251841e0dd2a1e44a6c7b6b1191d8c14be2e42024",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:20:33Z"
+            }
+          ]
+        },
+        "F-85009a38acc3": {
+          "digest": "85009a38acc30085b347d70e1bc2c5470fa44455d697d35d9c7e3becc2497d12",
+          "text": "**O3. The import-cycle risk is stated loosely.** \"import it lazily or through the constant's module\" can't apply to the module-level constant `HARNESS_FAMILY` without a module `__getattr__`. Also note that `telemetry` (documented as a light module) would then import all of `review.py` through `harness.py`. Either accept that and say so, or have `harness.py` hold plain declarations and let `review.py` stay the one that refers to `ReviewHarness` objects.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faddc233395f5eb6b681bf8251841e0dd2a1e44a6c7b6b1191d8c14be2e42024",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:20:33Z"
+            }
+          ]
+        },
+        "F-a278fa4162ca": {
+          "digest": "a278fa4162cadf54b65669c642d40f9a738f99ec7ee007044ea6ca529cece2e2",
+          "text": "**O1. Say whether `Context.forge`'s registry check runs before or after the existing `forge_factory` short-cut.** Today `forge_factory`, when set, wins outright (`milestone_branch.py` lines 289-292), and every test that fakes `gh` sets it. If the `forge_kind` check runs only on the default branch, CP2's \"an unregistered `forge_kind` raises\" test has to leave `forge_factory` unset. If it runs first, a test context with a factory and a bad kind also refuses. Either order is fine and keeps D1, but the plan should pick one so the CP2 test says which it covers.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "4c406087f26ee16317e5ad8d8b86053da339af017b42a1bda3e90b6cfedd9186",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:26:32Z"
+            }
+          ]
+        },
+        "F-ba6c51d6dc79": {
+          "digest": "ba6c51d6dc7921313479c82d8d10f2a3d6feb1b2789ae909f4008f7cf03070e0",
+          "text": "**O1. Say how `controller/prices.json` is read, because `tests/test_package_structure.py`'s `NoLateResourceReadTest` constrains it.** That test forbids `importlib.resources`/`pkgutil.get_data` anywhere in `controller/`. It also forbids any `open`/`read_text`/`read_bytes` of a path built from `__file__` inside the same function, outside a two-site allowlist in the test. A loader written the obvious way would need another edit to an existing test. The existing precedent passes unchanged: `protocol_schema.py` line 95 (`SCHEMA_PATH = Path(__file__).with_name(\"protocol_schema.json\")` at module level, with `load(path: Path = SCHEMA_PATH)`). Naming that pattern for the price-table loader in CP3 keeps D1 intact. The runtime snapshot (`identity._copy_package_tree`) copies every regular file of the package, so the table is present in a materialised runtime.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "7f6f0b2c98cedd64fcdaed5de1b55d2aa5b6756d359cb6da66aa59c43d3a8400",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:32:37Z"
+            }
+          ]
+        },
+        "F-fb9d85d77fe9": {
+          "digest": "fb9d85d77fe95165641b758e7d9225649770d1b7a95f64bdf729af6531a72198",
+          "text": "**O1. The Codex adapter's pinned version is a second copy of `review.PINNED_VERSION` (`\"codex-cli 0.162.1\"`, `review.py` line 57), and D3 does not list it among the declarations it derives or pins.** R1 says the registry \"pins the other declarations by test\". Nothing reads the adapter's version yet, so nothing goes wrong today. But a later pin bump in `review.py` alone would leave the adapter declaring a stale version without any test failing. Add one assertion to `tests/test_harness.py` (`ADAPTERS[\"codex\"].pinned_version == review.PINNED_VERSION`) and one bullet to D3, the same way `verdict_family` is pinned.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "9efa812d0ea70d0e41df67fc9c429761cf390438bf367baffc92037bf18a72e1",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T20:37:21Z"
+            }
+          ]
+        },
+        "F-3ee782a786f3": {
+          "digest": "3ee782a786f35b809879b89b6cc1195e514996a229c44435e1cdc3933a56da97",
+          "text": "**O1. Complete the declaration pins.** CP1 does not explicitly pin adapter versions to `review.PINNED_VERSION` and `review.CLAUDE_PINNED_VERSION`. D3 also omits `review_mode.WORKER_FAMILY` and `SAME_PROVIDER_HARNESS` from its derive-or-pin inventory.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "9efa812d0ea70d0e41df67fc9c429761cf390438bf367baffc92037bf18a72e1",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:42:25Z"
+            }
+          ]
+        },
+        "F-b4f8d68aa62d": {
+          "digest": "b4f8d68aa62d207db6b0b35bf8582e3ffd60450a8a9ca524f533d02099f433f9",
+          "text": "**O2. Document price-table maintenance.** CP5 names the table but specifies no update procedure covering source/date, model identifiers, units, version changes, and historical-record preservation.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "9efa812d0ea70d0e41df67fc9c429761cf390438bf367baffc92037bf18a72e1",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:42:25Z"
+            }
+          ]
+        },
+        "F-fe9a2fcbc0d1": {
+          "digest": "fe9a2fcbc0d179f24bf56a98f40f2d058961e83e1907744524352cf0a75a71ee",
+          "text": "**O3. Keep unsupported Codex cache-write semantics explicit.** The captured cache-write figure is zero. A synthetic positive figure validates the planned arithmetic but cannot establish whether real Codex input includes cache writes. Until established, positive cache-write cases should not claim an exact disjoint input breakdown and cost.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "9efa812d0ea70d0e41df67fc9c429761cf390438bf367baffc92037bf18a72e1",
+              "verdict": "REVISE",
+              "at": "2026-10-18T20:42:25Z"
+            }
+          ]
+        },
+        "F-bfcb299cd376": {
+          "digest": "bfcb299cd3762e688ec2ffed4a80cdd680fab25d93e02928d31c7ef06a958a88",
+          "text": "**O1. Say what happens to reasoning when only some of a job's results carry `thinking_tokens`.** D8 makes reasoning `unknown` \"only when that field is absent from every result of the job\". So if some results carry the field and others don't, the sum covers only some results but is still labelled `reported`. `session_telemetry` handles a missing per-turn figure differently: it makes the figure `None` and adds a problem. Every captured stream carries the field on every result, so nothing goes wrong today. Treating a partly missing field the same way (`unknown`), and adding a converter test for it, would keep D6's \"a figure the harness does not give is `null`\" consistent across results.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T20:46:49Z"
+            }
+          ]
+        },
+        "F-b818f62438c9": {
+          "digest": "b818f62438c9bc6d0ce3a521ef6ee9102a552ab96d2393e4437c4a8913125361",
+          "text": "**O4. Clarify partially reported reasoning totals.** D8 sums available `thinking_tokens` and marks reasoning `reported` unless every result omits it. When only some results report it, that sum has incomplete coverage. Document that distinction and add a mixed-presence case to CP3/CP4 so a reported subtotal cannot be mistaken for a complete job total. Reasoning is informational and unpriced, so this does not block approval.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "89c852ac5f93b1c9c0fb8eea16ba7190933ab54eaf247bb362bc42b64cc0890c",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T20:50:07Z"
+            }
+          ]
+        }
       }
     }
   }

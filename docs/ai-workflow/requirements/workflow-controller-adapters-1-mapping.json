@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-adapters-1",
+  "requirements": {
+    "R1": {
+      "description": "The Claude and Codex harnesses are reached through one adapter registry that declares their names, family, roles, restriction ability, usage reporting and pinned version, refuses a role an adapter lacks with a typed error, derives the family and harness-name tables and pins the other declarations by test, all keeping their values (D3, D4)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The git host is reached through a registry of adapters with declared capabilities whose closed set equals the repository policy's `FORGE_KINDS`, and an unregistered kind refuses with a typed error (D5)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "One usage record, with per-group quality flags, cost with its source and a versioned price table, is built by one converter per harness from a captured sample, and invents no figure (D6, D7, D8)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The record is written where the figures exist (worker completion paths; every review job end in which an attempt ran), cannot change a job's outcome, and leaves every printed line and every existing test unchanged, adding only the one key to `resume --json` (D1, D6, D9, D9a)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "The guides and the roadmap agree with the behaviour; `check_docs`, the golden `--check` forms and the full suite are green (D10)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

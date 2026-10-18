@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-adapters-1",
+  "plan_revision": 5,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The harness adapter and its registry: declared capabilities, role check, the family and harness-name tables derived from it",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The git-host adapter registry over the Forge protocol, pinned to the policy's host set",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The usage record, the versioned price table and the Claude and Codex converters",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Write the usage record where the figures exist, on worker completion paths and every review job end that ran an attempt, without changing any printed line",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Documentation, roadmap and the whole suite: A1 complete, the guides agree, check_docs, golden checks and the full suite green",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

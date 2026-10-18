@@ -92,4 +92,3 @@ keeps the table version it was computed under and is never rewritten.
 The `--json` output of `resume` prints each job record as stored, so a job
 that has `usage_record` (or `usage_record_failed`) shows that key there; a record
 without it prints exactly as before. No other output changes.
-

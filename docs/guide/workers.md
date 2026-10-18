@@ -746,7 +746,9 @@ review job in which an attempt ran (whatever its terminal status), carries a
 harness, provider and model, the input, cache-read, cache-write, output and
 reasoning tokens (input excludes cached tokens, output includes reasoning), wall
 time, turns, a quality flag per figure (`reported`, `derived` or `unknown`), the
-cost with its source, and the price-table version and currency. A figure the
+cost with its source, the price-table version and currency, the record's own
+`version`, and for a Codex review `subagent_total_tokens`, the sub-agents' summed
+total, which is kept out of the token figures. A figure the
 harness does not give is `null` and `unknown`; none is invented. It is advisory
 like `telemetry`: if building it fails the job is unchanged and the record has a
 `usage_record_failed` key instead. Nothing reads it yet; `telemetry`, `status`

@@ -16924,7 +16924,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -17070,8 +17070,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 40,
-      "last_transition": "2026-10-18T16:42:11.876801Z",
+      "state_revision": 42,
+      "last_transition": "2026-10-18T17:04:39Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -17212,7 +17212,34 @@
               "at": "2026-10-18T13:54:13Z"
             }
           ]
+        },
+        "F-844b64608d11": {
+          "digest": "844b64608d11ede4f4238f353c549723b4943d8659e5b881cebbeaa08207649c",
+          "text": "**O1 — D7’s diagnosis-first chronology is not demonstrated.** The supplied reproduction describes self-review on `d3958da`, after CP3, rather than the required pre-change reproduction under CPU pressure. Preserve earlier evidence if available, or acknowledge the deviation. The cause and remedy are supported: independent accelerated-timer runs produced `SIGALRM` in 20/20 pre-CP3 workers and 0/20 fixed workers, each emitting its normal result. This does not establish an unresolved #82 defect.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "5dc56aa2392694fe50758b6f18763b068ff369f4b6ba41a1ed1734549d7c588d",
+              "verdict": "REVISE",
+              "at": "2026-10-18T17:04:39Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "5dc56aa2392694fe50758b6f18763b068ff369f4b6ba41a1ed1734549d7c588d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "837de34112ea873ca91bec9446dd219722954880013ff0d73f9098ae933f6036",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-18T16:53:35Z",
+          "verdict_sha256": "0ef121417022465d17ac3c08fb58725f5b7df3ed8b7c35a01a6903c76bc40b18",
+          "run_ref": "session:local .ai-review/workflow-controller-cleanup-2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

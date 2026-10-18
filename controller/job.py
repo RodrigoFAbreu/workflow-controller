@@ -6878,8 +6878,8 @@ def pr_report_forecast(runtime_root: Path, managed_repo: Any, work_item: Any, de
     """What the next ``step`` does at the pull-request external gate ``decision`` (D4-D6), for ``explain``:
     ``None`` unless the reporter acts here (the conditions of :func:`_run_pr_report`: a binding with a pull request
     and an anchor commit under an automatic acceptance gate), else the ``row``, the commit and pull request it
-    queries, ``waits`` (whether pending checks may hold the report) and ``repeats`` (whether the last report already
-    sent what a query may return again). Read-only: no ``gh`` call, no write."""
+    queries, ``waits`` (whether pending checks may hold the report) and ``last_report`` (the ``raw_sha256`` the last
+    report of this item sent, else ``None``). Read-only: no ``gh`` call, no write."""
     row = _pr_report_row(decision)
     work_item_id = getattr(work_item, "work_item_id", None)
     commit = pr_report.anchor_commit(work_item)

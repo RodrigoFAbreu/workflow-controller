@@ -28,8 +28,8 @@ CONTRACT = Path(__file__).resolve().parent / "harness_contract" / "codex"
 
 #: The top-level keys that differ between two runs of the same scenario, or that the record adds.
 _VOLATILE = ("job_id", "created_at", "updated_at", "event_seq", "ownership_tag", "worker_process", "worker_anchor",
-             "worker_streams", "worker_state", "ending_offset", "lifecycle_lock", "run_id", "worker", "usage",
-             "usage_record", "usage_record_failed", "reconciliation_evidence")
+             "worker_streams", "worker_state", "ending_offset", "lifecycle_lock", "run_id", "usage_record",
+             "usage_record_failed")
 
 
 def _stable(record: dict) -> dict:
@@ -120,10 +120,11 @@ class ScanKeepsRolloutFiguresTest(unittest.TestCase):
 class _UsageDouble(test_review_job.LaunchDouble):
     """The launch double, leaving the figures the real ``launch_review`` leaves in ``out``."""
 
-    def __init__(self, test, life, *, usage_rollouts=None, usage_reasoning=None, **scenario) -> None:
+    def __init__(self, test, life, *, usage_rollouts=None, usage_reasoning=None, usage_reasoning_failed=None,
+                 **scenario) -> None:
         super().__init__(test, life, **scenario)
-        self.extra = {k: v for k, v in (("usage_rollouts", usage_rollouts), ("usage_reasoning", usage_reasoning))
-                      if v is not None}
+        self.extra = {k: v for k, v in (("usage_rollouts", usage_rollouts), ("usage_reasoning", usage_reasoning),
+                                        ("usage_reasoning_failed", usage_reasoning_failed)) if v is not None}
 
     def __call__(self, **kw):
         kw["out"].update(self.extra)
@@ -132,7 +133,8 @@ class _UsageDouble(test_review_job.LaunchDouble):
 
 class _JobCase(test_review_job._ReviewCase):
     def run_step(self, **scenario):
-        extras = {k: scenario.pop(k) for k in ("usage_rollouts", "usage_reasoning") if k in scenario}
+        extras = {k: scenario.pop(k) for k in ("usage_rollouts", "usage_reasoning", "usage_reasoning_failed")
+                  if k in scenario}
         return self.step(_UsageDouble(self, self.life, **extras, **scenario))
 
 
@@ -208,8 +210,9 @@ class ClaudeReviewRecordTest(test_review_same_provider.SameProviderCase):
     TELEMETRY = {"version": 1, "results": 2, "cost_usd": 0.5,
                  "tokens": {"input": 30, "output": 700, "cache_creation": 40, "cache_read": 500}}
 
-    def run_claude(self, *, usage_reasoning=None, **scenario):
-        double = _UsageDouble(self, self.life, usage_reasoning=usage_reasoning, **scenario)
+    def run_claude(self, *, usage_reasoning=None, usage_reasoning_failed=None, **scenario):
+        double = _UsageDouble(self, self.life, usage_reasoning=usage_reasoning,
+                              usage_reasoning_failed=usage_reasoning_failed, **scenario)
         options = {"mode": "auto", "source": "cli", "same_provider": self.same}
         forbidden = unittest.mock.Mock(side_effect=AssertionError("no Claude worker may launch"))
         with unittest.mock.patch.object(job, "_review_mode_signal", return_value=test_review_mode.signal("lowering_only")), \
@@ -227,6 +230,15 @@ class ClaudeReviewRecordTest(test_review_same_provider.SameProviderCase):
         self.assertEqual((built["reasoning"], built["quality"]["reasoning"]), (311, "reported"))
         self.assertEqual((built["cost"], built["cost_source"]), (0.5, "reported"))
         self.assertEqual(record["review"]["telemetry"], self.TELEMETRY)
+
+    def test_a_failed_reasoning_reading_changes_nothing_but_the_record(self) -> None:
+        failed = self.run_claude(telemetry=dict(self.TELEMETRY), usage_reasoning=311,
+                                 usage_reasoning_failed="RuntimeError: injected")
+        self.assertNotIn("usage_record", failed)
+        self.assertEqual(failed["usage_record_failed"], "RuntimeError: injected")
+        self.assertEqual(failed["status"], job.STATUS_FINISHED)
+        self.assertEqual(failed["review"]["telemetry"], self.TELEMETRY)
+        self.assertNotIn("usage_reasoning_failed", failed["review"])
 
     def test_absent_reasoning_is_unknown(self) -> None:
         built = self.run_claude(telemetry=dict(self.TELEMETRY))["usage_record"]
@@ -248,7 +260,8 @@ class FailureBoundaryTest(_JobCase):
         self.assertEqual(failed["usage_record_failed"], "RuntimeError: injected")
         self.assertEqual(failed["status"], control["status"])
         self.assertEqual(_stable(failed), _stable(control))
-        self.assertEqual(failed["reconciliation_evidence"]["code"], control["reconciliation_evidence"]["code"])
+        self.assertEqual(failed["reconciliation_evidence"], control["reconciliation_evidence"])
+        self.assertTrue(control["reconciliation_evidence"]["message"])  # the comparison above is not of two empties
 
     def test_keyboard_interrupt_is_not_swallowed(self) -> None:
         def build():
@@ -297,9 +310,9 @@ class WorkerRecordTest(test_job._StreamingCase):
         keep = lambda r: {k: v for k, v in r.items() if k not in (  # noqa: E731
             "usage_record", "usage_record_failed", "updated_at", "created_at", "job_id", "worker", "worker_process",
             "worker_anchor", "worker_streams", "ownership_tag", "worker_state", "event_seq", "ending_offset",
-            "lifecycle_lock", "run_id", "telemetry")}
+            "lifecycle_lock", "run_id")}
         self.assertEqual(keep(record), keep(baseline))
-        self.assertEqual(record["telemetry"].keys(), baseline["telemetry"].keys())
+        self.assertTrue(baseline["telemetry"]["tokens"]["output"])  # the whole telemetry block is compared above
         self.assertEqual(record["status"], baseline["status"])
 
     def test_a_record_has_a_usage_record_exactly_when_it_has_a_telemetry_block(self) -> None:

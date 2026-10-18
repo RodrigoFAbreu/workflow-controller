@@ -5082,13 +5082,29 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
             ident = notify.lifecycle_gate_identity(str(work_item), str(gate.get("phase")),
                                                    pre_state.get("state_revision"), code)
             body = f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"
-            if _protocol_disposition(record) == "blocked":
+            waits = _pending_checks_wait(record)
+            if waits is False:
+                # Pending checks are a normal end of a step that did not wait, as for a branch gate
+                # (pull-request-defect-loop D8): nothing asks a person for anything.
+                pass
+            elif waits is True or _protocol_disposition(record) == "blocked":
                 # The Workflow itself calls the stop a blocker, so no person's decision is asked for
                 # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
                 out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
             else:
                 out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item, body))
     return out
+
+
+def _pending_checks_wait(record: Mapping) -> bool | None:
+    """For a reporter record that stopped on pending checks: whether its step waited (the
+    budget was spent, so the stop is a blocker); ``None`` for any other record."""
+    block = record.get("pr_report")
+    if record.get("kind") != PR_REPORT_KIND or not isinstance(block, Mapping) \
+            or block.get("outcome") != pr_report.PENDING:
+        return None
+    wait = block.get("wait")
+    return bool(wait.get("waited")) if isinstance(wait, Mapping) else False
 
 
 def _protocol_disposition(record: Mapping) -> str | None:
@@ -7031,7 +7047,8 @@ def _run_pr_report(managed_repo: Any, *, runtime_root: Path, identity: Any, run_
         poll_seconds=ctx.poll_seconds, clock=ctx.clock, on_wait=on_wait)
     block = {"outcome": final.outcome, "row": row, "queried_commit": commit, "repository": repository,
              "pull_request": pull_request.get("number"), "raw_sha256": final.raw_sha256, "detail": final.detail,
-             "wait": {"checks_empty": final.wait.empty} if final.outcome == pr_report.PENDING else None,
+             "wait": ({"checks_empty": final.wait.empty, "waited": ctx.wait_seconds > 0}
+                      if final.outcome == pr_report.PENDING else None),
              "result": None if final.stored is None else dict(final.stored),
              "refusal": None if final.refusal is None else dict(final.refusal)}
     job_id = final.job_id or _new_job_id()

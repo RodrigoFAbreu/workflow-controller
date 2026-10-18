@@ -331,7 +331,8 @@ hurts now, else in a later step or the next clean-up milestone.
    **Partly done in C10a:** a stop the Workflow answers with the disposition `blocked` sends
    `lane_blocked`, not `user_gate`. **Done in C10b** for the pull request rows: 38f is cleared by
    the reporter or waits, 38d is launched, and what remains sends `user_gate` only where a person
-   is needed (row 38g unapproved, a human gate, the Controller's own `pr_report_*` gates). Only
+   is needed (row 38g unapproved, a human gate, the Controller's own `pr_report_*` gates; pending
+   checks send nothing, or `lane_blocked` once a wait budget is spent). Only
    row 38e (functional evidence, C10c) still sends `user_gate` under an automatic gate.
 27. Flaky test: `tests.test_cli.ResumeWorkerHoldExitTest.test_an_unverifiable_worker_exits_45_naming_no_group_and_abandon_clears_it`
    asserts `str(pid) not in out`; on CI the pid matched inside another number. Match on word

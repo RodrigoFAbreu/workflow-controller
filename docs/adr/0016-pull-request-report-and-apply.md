@@ -49,7 +49,9 @@ person acted.
 5. **A stop asks for a person only when one is needed.** A reported result is a
    `step_done`; a stop that needs a person (an approval missing at 38g, a human
    gate, the Controller's own `pr_report_*` gates, row 38e) is a `user_gate`; a
-   stop the Workflow calls `blocked` is a `lane_blocked`.
+   stop the Workflow calls `blocked` is a `lane_blocked`. Pending checks follow the
+   wait semantics of the branch gates: a step that did not wait sends nothing, and
+   one whose wait budget ran out sends `lane_blocked`; they never ask for a person.
 
 ## Consequences
 

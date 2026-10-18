@@ -385,7 +385,9 @@ closes the pull request rows itself:
 A person is asked only where one is needed: row 38g with the approval still missing, row 38g under
 a human acceptance gate (`/accept-milestone`; the Controller reports nothing there), a stop the
 Controller itself ends in (`pr_report_no_pull_request`, `pr_report_forge_unavailable`,
-`pr_report_refused`, `pr_report_stale`), and row 38e. A red pull request found after acceptance, in
+`pr_report_refused`, `pr_report_stale`), and row 38e. Pending checks are never a decision for a
+person: a step that did not wait ends on `pr_checks_pending` with no notification, and one whose
+`--wait` budget ran out with only the checks pending sends `lane_blocked`. A red pull request found after acceptance, in
 the merge flow, still ends at that flow's `checks_failing` stop, with a person (roadmap step C10d).
 
 **A protocol minor release.** A value a 1.x minor release adds to a closed enum

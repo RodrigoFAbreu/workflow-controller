@@ -475,6 +475,46 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class ReporterExecutableTest(unittest.TestCase):
+    """I1: the reporter runs only a ``gh`` the Workflow's own resolver would accept."""
+
+    def fake_gh(self, directory: Path) -> Path:
+        directory.mkdir(parents=True, exist_ok=True)
+        gh = directory / "gh"
+        gh.write_text("#!/bin/sh\necho '[]'\n")
+        gh.chmod(0o755)
+        return gh
+
+    def vetted_query(self, directory: Path, root: Path) -> list:
+        calls: list = []
+        runner = lambda argv: calls.append(argv) or mock.Mock(returncode=0, stdout="[]", stderr="")  # noqa: E731
+        with mock.patch.dict("os.environ", {"PATH": str(directory)}):
+            try:
+                forge = forge_mod.GhForge("owner/repo", runner)
+                forge.vet_root = root
+                forge.query_pull_requests(COMMIT)
+            finally:
+                self.calls = calls
+        return calls
+
+    def test_a_gh_inside_the_repository_or_a_temporary_directory_is_undecidable_and_never_run(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory(dir=Path.home()) as root_name, tempfile.TemporaryDirectory() as tmp:
+            root = Path(root_name)
+            fixtures.git_init(root)
+            for directory in (root / "bin", Path(tmp) / "bin"):
+                with self.subTest(directory=str(directory)):
+                    self.fake_gh(directory)
+                    with self.assertRaises(ForgeUndecidableError) as caught:
+                        self.vetted_query(directory, root)
+                    self.assertEqual(self.calls, [])
+                    self.assertIn("gh", caught.exception.message)
+
+    def test_a_missing_gh_is_undecidable(self) -> None:
+        with mock.patch.dict("os.environ", {"PATH": "/nonexistent"}), self.assertRaises(ForgeUndecidableError):
+            forge_mod.vet_gh("gh", Path.cwd())
+
+
 class ReportNotificationTest(unittest.TestCase):
     """CP4 / D8: a ``pr_report`` job asks for a person only where one is needed.
 
@@ -483,7 +523,7 @@ class ReportNotificationTest(unittest.TestCase):
     a person, and a stop the Workflow calls ``blocked`` is a ``lane_blocked``.
     """
 
-    def record(self, outcome: str, *, disposition: str = "external_gate") -> dict:
+    def record(self, outcome: str, *, disposition: str = "external_gate", waited: bool = False) -> dict:
         gate = {"repository": "/r", "work_item_id": WID, "phase": "AWAITING_FUNCTIONAL_REVIEW",
                 "what_is_required": f"{outcome}: needs a person", "artifact_path": None,
                 "safe_resume_command": "gh pr review --approve"}
@@ -495,7 +535,9 @@ class ReportNotificationTest(unittest.TestCase):
                 "pre_state": {"state_revision": 3},
                 "human_gate_pending": None if reported else gate,
                 "protocol": {"decision": {"disposition": disposition}},
-                "pr_report": {"outcome": outcome}}
+                "pr_report": {"outcome": outcome,
+                              "wait": {"checks_empty": False, "waited": waited}
+                              if outcome == pr_report.PENDING else None}}
 
     def events(self, record: dict) -> list[str]:
         return [e.event_type for e in job.derive_job_event(record)]
@@ -504,10 +546,27 @@ class ReportNotificationTest(unittest.TestCase):
         self.assertEqual(self.events(self.record(pr_report.REPORTED)), ["step_done"])
 
     def test_every_stop_of_the_step_asks_for_a_person(self) -> None:
-        for outcome in (pr_report.UNCHANGED, pr_report.PENDING, pr_report.NO_PULL_REQUEST,
+        for outcome in (pr_report.UNCHANGED, pr_report.NO_PULL_REQUEST,
                         pr_report.FORGE_UNAVAILABLE, pr_report.REFUSED, pr_report.STALE):
             with self.subTest(outcome=outcome):
                 self.assertEqual(self.events(self.record(outcome)), ["user_gate"])
+
+    def test_pending_checks_without_a_wait_send_nothing(self) -> None:
+        self.assertEqual(self.events(self.record(pr_report.PENDING)), [])
+
+    def test_pending_checks_left_after_the_wait_budget_is_spent_are_a_blocker(self) -> None:
+        self.assertEqual(self.events(self.record(pr_report.PENDING, waited=True)), ["lane_blocked"])
+
+    def test_notifications_follow_the_real_pending_check_records(self) -> None:
+        for wait_seconds, expected in ((0, []), (25, ["lane_blocked"])):
+            with self.subTest(wait_seconds=wait_seconds):
+                case = ReportTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
+                life = case.at_38f()
+                case.bind(life)
+                record = case.report(life, [lambda commit: raw_of(commit, rollup=(RUNNING,))],
+                                     wait_seconds=wait_seconds, sleeps=[])
+                self.assertEqual(record["pr_report"]["outcome"], pr_report.PENDING)
+                self.assertEqual(self.events(record), expected)
 
     def test_a_stop_the_workflow_calls_blocked_is_not_a_decision(self) -> None:
         self.assertEqual(self.events(self.record(pr_report.REFUSED, disposition="blocked")), ["lane_blocked"])

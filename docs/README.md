@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.16.0](releases/1.16.0.md) | `/satisfy-gate` routed by stage (Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance; the `satisfy-gate-acceptance` role, settings generation 11) and twelve clean-up fixes |
 | [1.15.0](releases/1.15.0.md) | the pull request defect loop: the Controller reports a pull request's state to the Workflow itself (a vetted `gh`, `run` waits for pending checks) and launches `/apply-pr-review` (the `apply-pr-review` role, settings generation 10), so acceptance clears itself; a red pull request after acceptance still stops with a person |
 | [1.14.0](releases/1.14.0.md) | gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` at an automatic gate (the `satisfy-gate` role, settings generation 9) and stops on a refusal with the unmet requirement in `explain`; a rule per protocol enum, so a 1.x minor release is never refused; `lane_blocked` for a stop the Workflow calls blocked |
 | [1.13.1](releases/1.13.1.md) | a patch release of sixteen fixes: a full model id required for the Claude reviewer before launch, a Claude review's cost and tokens kept and counted by `telemetry`, the review's harness named in recovery messages, the plan round cap on `"1"`-governed items, one-pass `telemetry` rounds, and test and documentation fixes; no new setting |

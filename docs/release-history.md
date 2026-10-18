@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.15.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.16.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.16.0 | `/satisfy-gate` is routed by stage: Haiku 5.5 `high` for plan and technical approval, Sonnet 5.5 `medium` for acceptance (new `satisfy-gate-acceptance` role; settings generation 11), and twelve follow-up issues are fixed (no new setting) | [1.16.0](releases/1.16.0.md) |
 | 1.15.0 | Under an automatic acceptance gate the Controller reports the pull request's state to the Workflow itself (a vetted `gh`; `run` waits for pending checks) and launches `/apply-pr-review` (the `apply-pr-review` role; settings generation 10), so a pull request whose checks were pending or whose defect was fixed reaches acceptance without a person; a CI-only wait sends no request | [1.15.0](releases/1.15.0.md) |
 | 1.14.0 | Under an automatic gate the Controller launches the Workflow's `/satisfy-gate` itself (the `satisfy-gate` role; settings generation 9), so a satisfied gate passes without a person and a refused one stops naming the unmet requirement; a value a protocol 1.x minor release adds is advisory, ignored or a stop, never a refusal; a stop the Workflow calls blocked sends `lane_blocked` | [1.14.0](releases/1.14.0.md) |
 | 1.13.1 | A patch release that fixes sixteen review follow-ups and known defects: a model alias for the Claude reviewer is refused before launch, a Claude review's cost and tokens are kept for `telemetry`, recovery messages name the review's harness, and the plan round cap works on `"1"`-governed work items (no new setting) | [1.13.1](releases/1.13.1.md) |

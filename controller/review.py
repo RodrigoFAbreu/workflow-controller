@@ -45,7 +45,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
-from . import gitrepo, runtime, usage, worker_stream
+from . import gitrepo, runtime, usage, usage_record, worker_stream
 from .anchor import OWNERSHIP_VAR
 from .errors import ReviewLaunchRefusedError
 
@@ -1220,6 +1220,9 @@ class RolloutScan:
     #: ``limit`` alone (telemetry at 100 percent) feeds admission and accounting, never a failure's class.
     limit_error: bool = False
     subagents: list[dict] = dataclasses.field(default_factory=list)
+    #: Every rollout's figures (adapters-1 D8/D9a): ``{"subagent", "usage"}`` with ``usage`` the last
+    #: ``token_count`` event's ``total_token_usage`` (``None`` when it has none). Read by the usage record only.
+    rollouts: list[dict] = dataclasses.field(default_factory=list)
 
 
 def scan_rollouts(codex_home: Path) -> RolloutScan:
@@ -1239,6 +1242,7 @@ def scan_rollouts(codex_home: Path) -> RolloutScan:
     for path in files:
         subagent = False
         tokens: int | None = None
+        last_usage: dict | None = None
         try:
             fh = open(path, "rb")
         except OSError:
@@ -1260,6 +1264,8 @@ def scan_rollouts(codex_home: Path) -> RolloutScan:
                 elif payload.get("type") == "token_count":
                     info = payload.get("info")
                     usage_block = info.get("total_token_usage") if isinstance(info, dict) else None
+                    if isinstance(usage_block, dict):
+                        last_usage = dict(usage_block)
                     if isinstance(usage_block, dict) and isinstance(usage_block.get("total_tokens"), int):
                         tokens = usage_block["total_tokens"]
                     limits = payload.get("rate_limits")
@@ -1275,6 +1281,7 @@ def scan_rollouts(codex_home: Path) -> RolloutScan:
                     info = error.get("codex_error_info") if isinstance(error, dict) else None
                     if _is_limit_error(info):
                         scan.limit, scan.limit_error, scan.limit_detail = True, True, json.dumps(info)
+        scan.rollouts.append({"subagent": subagent, "usage": last_usage})
         if subagent:
             scan.subagents.append({"rollout": str(path.relative_to(root)), "total_tokens": tokens})
     return scan
@@ -1315,6 +1322,8 @@ class Attempt:
     failure: str | None = None
     first_readings: list | None = None
     figures: dict | None = None
+    #: The ``thinking_tokens`` of a Claude run's ``result`` event (usage record only; ``figures`` is unchanged).
+    reasoning: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1610,11 +1619,13 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
             check_claude_init(stream.init, model=ctx.model)
         except ReviewLaunchRefusedError as exc:
             exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
+            exc.reasoning = result_reasoning(stream.result)
             raise
     elif run.exit_code == 0 and not run.timed_out:
         exc = _refuse("Claude's stream carries no init event, so its boundary cannot be checked", check="init",
                       entry="init")
         exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
+        exc.reasoning = result_reasoning(stream.result)
         raise exc
     result = stream.result or {}
     failed = bool(result.get("is_error")) or result.get("subtype") != "success"
@@ -1632,7 +1643,13 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
     first, last = usage.read_claude_stream_span(run.stdout)
     return Attempt(run, verdict, limited, detail, [], [last[w] for w in usage.WINDOWS if w in last],
                    text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first],
-                   result_figures(stream.result))
+                   result_figures(stream.result), result_reasoning(stream.result))
+
+
+def result_reasoning(result: Mapping | None) -> int | None:
+    """The reasoning tokens of one Claude ``result`` event, for the usage record only (``result_figures`` and
+    so ``telemetry`` do not carry it), or ``None`` when the run printed none."""
+    return usage_record.reasoning_tokens([dict(result)]) if isinstance(result, Mapping) else None
 
 
 def result_figures(result: Mapping | None) -> dict | None:
@@ -1790,11 +1807,13 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
                 paid = getattr(exc, "figures", None)  # a refused run's reported cost and tokens are kept
                 if paid is not None:
                     result["telemetry"] = add_figures(result.get("telemetry"), paid)
+                _add_reasoning(result, getattr(exc, "reasoning", None))
                 raise
             run, scan = made.run, made
             result["subagents"] = made.subagents
             if made.figures is not None:
                 result["telemetry"] = add_figures(result.get("telemetry"), made.figures)
+            _add_reasoning(result, made.reasoning)
             if made.readings is not None:
                 # the latest reading of each window wins; a retry that read none keeps the first run's
                 merged = {r["window"]: r for r in result.get("stream_readings") or []}
@@ -1854,6 +1873,13 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     finally:
         _settle(result, runtime_root, layout, operator_home, captured, selected)
     return result
+
+
+def _add_reasoning(result: dict, reasoning: int | None) -> None:
+    """A Claude review's reasoning tokens, summed over its attempts under ``usage_reasoning`` (not copied
+    into the job record's ``review`` block); an attempt that reports none adds nothing."""
+    if isinstance(reasoning, int):
+        result["usage_reasoning"] = result.get("usage_reasoning", 0) + reasoning
 
 
 def _text_status(text: str) -> str | None:
@@ -1916,7 +1942,12 @@ def _settle(result: dict, runtime_root: Path, layout: JobLayout, operator_home: 
     steps.append(lambda: result.__setitem__("readings", selected.end_readings(home)
                                             or result.get("stream_readings") or []))
     if selected.keeps_sessions:
-        steps.append(lambda: result.__setitem__("subagents", scan_rollouts(home).subagents))
+        def scan_sessions() -> None:
+            scan = scan_rollouts(home)  # the job's one end-of-job scan: every rollout of the one home, once
+            result["subagents"] = scan.subagents
+            result["usage_rollouts"] = scan.rollouts
+
+        steps.append(scan_sessions)
     steps.append(lambda: result.__setitem__("first_readings", list((result.get("stream_first") or {}).values())))
     steps.append(lambda: result.pop("stream_first", None))
     steps.append(lambda: result.pop("stream_readings", None))

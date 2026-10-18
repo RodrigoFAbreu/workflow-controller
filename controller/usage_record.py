@@ -20,7 +20,8 @@ import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from controller import harness, worker_stream
+from controller import harness
+from controller.worker_stream import session_telemetry
 
 RECORD_VERSION = 1
 
@@ -119,7 +120,7 @@ def _sum_present(values: Iterable) -> int | None:
     return total if seen else None
 
 
-def _reasoning(results: list[dict]) -> int | None:
+def reasoning_tokens(results: list[dict]) -> int | None:
     """The sum of ``usage.output_tokens_details.thinking_tokens`` over the
     results that carry it; ``None`` only when none does. An additive,
     usage-only read: ``worker_stream.session_telemetry`` omits it."""
@@ -137,11 +138,23 @@ def from_claude_results(results: Iterable[dict], *, model: str | None = None,
                         table: Mapping | None = None) -> UsageRecord:
     """The record of a Claude job from its ``result`` events, in stream order.
     Tokens, turns, wall time and cost are ``worker_stream.session_telemetry``'s
-    own figures, so they equal the ``telemetry`` block's by construction."""
-    table = PRICES if table is None else table
+    own figures (the function bound at import: a fault injected into the telemetry block's computation is not
+    the record's), so they equal the ``telemetry`` block's by construction."""
     events = [event for event in results if isinstance(event, dict)]
-    block = worker_stream.session_telemetry(events)
+    return from_claude_block(session_telemetry(events), reasoning=reasoning_tokens(events),
+                             model=model, table=table)
+
+
+def from_claude_block(block: Mapping | None, *, reasoning: int | None, model: str | None = None,
+                      wall_ms: int | None = None, table: Mapping | None = None) -> UsageRecord:
+    """The record of a Claude job from a telemetry-shaped ``block`` (``tokens``,
+    ``cost_usd``, ``duration_ms``, ``turns``) and its reasoning figure. A review
+    keeps its attempts' figures summed in this form; ``None`` (no ``result`` ran)
+    gives a record with every figure unknown."""
+    table = PRICES if table is None else table
     adapter = harness.ADAPTERS["claude-code"]
+    if not isinstance(block, Mapping):
+        return _unknown_record(adapter, model, table, wall_ms=wall_ms)
     tokens = block.get("tokens") or {}
     if model is None:
         models = block.get("models")
@@ -150,7 +163,7 @@ def from_claude_results(results: Iterable[dict], *, model: str | None = None,
     figures = {
         "input": tokens.get("input"), "cache_read": tokens.get("cache_read"),
         "cache_write": tokens.get("cache_creation"), "output": tokens.get("output"),
-        "reasoning": _reasoning(events),
+        "reasoning": reasoning,
     }
     figures = {group: (value if _int(value) else None) for group, value in figures.items()}
     quality = {group: (REPORTED if figures[group] is not None else UNKNOWN) for group in GROUPS}
@@ -164,7 +177,8 @@ def from_claude_results(results: Iterable[dict], *, model: str | None = None,
     wall, turns = block.get("duration_ms"), block.get("turns")
     return UsageRecord(
         harness=adapter.name, provider=adapter.family, model=model, quality=quality,
-        wall_ms=wall if _int(wall) else None, turns=turns if _int(turns) else None,
+        wall_ms=wall if _int(wall) else (wall_ms if _int(wall_ms) else None),
+        turns=turns if _int(turns) else None,
         cost=cost, cost_source=source, price_table_version=version, currency=currency, **figures,
     )
 

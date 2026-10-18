@@ -648,6 +648,8 @@ class LaunchPathTest(unittest.TestCase):
             "ending_offset",
             # Settings-and-telemetry CP3.
             "telemetry",
+            # Workflow-controller-adapters-1 CP4: the one additive key.
+            "usage_record",
         }
         self.assertEqual(set(record.keys()), expected_keys)
         self.assertEqual(record["status"], job.STATUS_COMPLETED)

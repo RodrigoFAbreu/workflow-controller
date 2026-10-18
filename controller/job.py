@@ -107,7 +107,7 @@ from typing import Any, Callable
 
 from controller import (
     evidence, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
-    routing, runtime, target_state, telemetry, usage, worker, workflow_contract,
+    routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_stream, workflow_contract,
 )
 from controller.decision import (
     BRANCH_GATE_PHASE,
@@ -4369,6 +4369,7 @@ def _reattach(runtime_root: Path, root: Path, record: JobRecord, streams: Mappin
         "worker": _worker_dict(result, stdout_path=streams["stdout_path"], stderr_path=streams["stderr_path"]),
         "worker_outcome": result.outcome,
         "telemetry": block,
+        **_worker_usage_fields(streams),
         "updated_at": completed_at,
     }
     first: dict = {}
@@ -4423,6 +4424,41 @@ def _telemetry_block(record: Mapping, streams: Mapping, *, completed_at: str,
         return block
     except Exception as exc:  # the failure boundary: never raised into the completion write
         return telemetry.failed_block(exc)
+
+
+def _usage_fields(build: Callable[[], "usage_record.UsageRecord"]) -> dict:
+    """The ``usage_record`` key of a job record (adapters-1 D6, D9) and its failure boundary: the record is
+    advisory data, so a build that raises gives ``usage_record_failed`` with the exception text and the job
+    record is otherwise what it would be without the record. ``KeyboardInterrupt`` and ``SystemExit`` are not
+    caught."""
+    try:
+        return {"usage_record": build().to_dict()}
+    except Exception as exc:  # noqa: BLE001 -- the failure boundary: never raised into the completion write
+        return {"usage_record_failed": f"{type(exc).__name__}: {exc}"}
+
+
+def _worker_usage_fields(streams: Mapping) -> dict:
+    """``usage_record`` of a completed worker job, from its stdout's ``result`` events (the same source as
+    its ``telemetry`` block, D9a)."""
+    def build() -> "usage_record.UsageRecord":
+        data = Path(streams["stdout_path"]).read_bytes()  # the record is independent of the telemetry block
+        return usage_record.from_claude_results([entry["event"] for entry in worker_stream.read_stream(data).results])
+
+    return _usage_fields(build)
+
+
+def _review_usage_fields(harness: Any, out: Mapping, *, model: str, wall_ms: int | None) -> dict:
+    """``usage_record`` of a review job in which an attempt ran. A Codex review's figures are the rollouts of
+    the end-of-job scan (``usage_rollouts``, each root once whatever the retry did); a Claude review's are the
+    attempts' summed figures (``telemetry``) and reasoning (``usage_reasoning``), as the harness left them in
+    ``out`` (D8, D9a)."""
+    def build() -> "usage_record.UsageRecord":
+        if harness.keeps_sessions:
+            return usage_record.from_codex_rollouts(out.get("usage_rollouts") or [], model=model, wall_ms=wall_ms)
+        return usage_record.from_claude_block(out.get("telemetry"), reasoning=out.get("usage_reasoning"),
+                                              model=model, wall_ms=wall_ms)
+
+    return _usage_fields(build)
 
 
 def _record_drain_detached(runtime_root: Path, root: Path, job_id: str, record: JobRecord,
@@ -6683,6 +6719,9 @@ def _run_review_job(
                 usage.complete(runtime_root, token, None, usage.OUTCOME_NOT_STARTED, now=usage_now())
         raise
 
+    spawned: dict = {}
+    out: dict = {}
+
     def finish(status: str, *, evidence_block: dict | None = None, review_fields: Mapping | None = None,
                readings: list | None = None, first: list | None = None, after: str | None = None, verified: bool = False,
                event: str | None = None) -> JobRecord:
@@ -6695,6 +6734,10 @@ def _run_review_job(
         if evidence_block is not None:
             fields["reconciliation_evidence"] = evidence_block
         started = fields["review"].get("launched") is True and fields["review"].get("not_started") is not True
+        if started:  # the run was paid for on every terminal status (D9a)
+            seconds = telemetry.seconds_between(record["review"].get("launched_at"), fields["updated_at"])
+            fields.update(_review_usage_fields(harness, out, model=reviewer["model"],
+                                               wall_ms=None if seconds is None else seconds * 1000))
         block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
         if block is not None and started:
             fields["usage"] = _codex_end_block(block, readings or [], first or [])
@@ -6730,8 +6773,6 @@ def _run_review_job(
         "review": {**record["review"], "launched": True, "launched_at": _now()},
     }, event="launched")
 
-    spawned: dict = {}
-    out: dict = {}
     ticker = (_usage_ticker(runtime_root, token, _usage_reservation_seconds(record)) if token is not None else None)
 
     def on_spawn(pid: int, pgid: int) -> None:
@@ -6783,6 +6824,7 @@ def _run_review_job(
         if ticker is not None:
             ticker.stop()
 
+    out.update(result)  # the very dict `launch_review` built in `out`; a double may return a separate one
     outcome = result["outcome"]
     readings = result.get("readings")
     first = result.get("first_readings")
@@ -7907,6 +7949,7 @@ def _launch_job(
                                stderr_path=worker_streams["stderr_path"]),
         "worker_outcome": result.outcome,
         "telemetry": block,
+        **_worker_usage_fields(worker_streams),
         "updated_at": completed_at,
     }
     if usage_block is not None:

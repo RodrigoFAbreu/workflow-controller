@@ -166,14 +166,18 @@ class Wait:
 NO_WAIT = Wait(False)
 
 
+_ENTRY_PREAMBLE = "pull-request fact: "
+
+
 def names_ci_green(reason_text: str | None) -> bool:
-    """The stop text names ``ci_green`` as an unmet requirement: ``ci_green: `` at the start, or
-    right after ``: `` or ``; `` -- not the word inside another entry's detail."""
+    """The stop text names ``ci_green`` as an unmet requirement: ``ci_green: `` at the start, right
+    after the row's preamble (``... pull-request fact: ``), or right after an entry separator
+    ``; `` -- not the token inside another entry's detail, whatever colons that detail holds."""
     text = reason_text or ""
     token = CI_GREEN_REQUIREMENT + ": "
     at = text.find(token)
     while at >= 0:
-        if at == 0 or text[:at].endswith((": ", "; ")):
+        if at == 0 or text[:at].endswith((_ENTRY_PREAMBLE, "; ")):
             return True
         at = text.find(token, at + 1)
     return False

@@ -71,6 +71,10 @@ class PurePartsTest(unittest.TestCase):
         self.assertTrue(pr_report.pending_checks(pending, row="38f", reason_text=second).applies)
         detail = "the automatic acceptance gate awaits a pull-request fact: pr_fact_current: the record lacks ci_green"
         self.assertFalse(pr_report.pending_checks(pending, row="38f", reason_text=detail).applies)
+        # ... including a detail that holds its own colons: `: ci_green: ` inside it is not an entry boundary
+        colon = ("the automatic acceptance gate awaits a pull-request fact: "
+                 "pr_fact_current: record missing field: ci_green: unknown")
+        self.assertFalse(pr_report.pending_checks(pending, row="38f", reason_text=colon).applies)
         # (c) a standing objection is reported, not waited on
         self.assertFalse(pr_report.pending_checks(raw_of(rollup=(RUNNING,), decision="CHANGES_REQUESTED"),
                                                   row="38f", reason_text=CI_TEXT).applies)

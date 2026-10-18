@@ -21,7 +21,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import job, review, runtime, review_mode, usage_record  # noqa: E402
+from controller import job, review, runtime, review_mode  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import fake_claude_review, fixtures, process_fixtures  # noqa: E402
 
@@ -410,19 +410,6 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(len(self.records()), 3)
         self.assertEqual((two["results"], two["cost_usd"]), (2, 0.02))
         self.assertEqual(two["tokens"], {"input": 24, "output": 600, "cache_creation": 100, "cache_read": 2000})
-
-    def test_a_reasoning_extraction_failure_leaves_the_review_alone_and_is_reported(self):
-        control = self.launch(job="j-ok")
-        with mock.patch.object(usage_record, "reasoning_tokens", side_effect=RuntimeError("injected")):
-            failed = self.launch(job="j-bad")
-        for key in ("outcome", "status", "verdict", "telemetry", "credentials"):
-            self.assertEqual(failed[key], control[key], key)
-        self.assertEqual(failed["outcome"], "verdict")
-        self.assertEqual(failed["usage_reasoning_failed"], "RuntimeError: injected")
-        self.assertNotIn("usage_reasoning_failed", control)
-        # the refusal paths read the same figure: a refused run keeps its figures and reports the failure
-        with mock.patch.object(usage_record, "reasoning_tokens", side_effect=RuntimeError("injected")):
-            self.assertEqual(review.result_reasoning({"usage": {}}), review.UsageReadingFailed("RuntimeError: injected"))
 
     def test_a_run_with_no_result_adds_nothing_and_an_unreadable_figure_stays_unknown(self):
         self.assertIsNone(review.add_figures(None, None))

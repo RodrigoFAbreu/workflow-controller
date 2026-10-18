@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, identity, job, review, usage_record  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
-from tests import fixtures, test_cli, test_job, test_review_job, test_review_mode, test_review_same_provider  # noqa: E402
+from tests import (fixtures, test_cli, test_job, test_review_claude, test_review_job, test_review_mode,  # noqa: E402
+                   test_review_same_provider)
 from tests.test_job import _telemetry_end_turn  # noqa: E402
 
 CONTRACT = Path(__file__).resolve().parent / "harness_contract" / "codex"
@@ -248,6 +249,29 @@ class ClaudeReviewRecordTest(test_review_same_provider.SameProviderCase):
     def test_a_run_that_printed_no_result_has_a_record_with_every_figure_unknown(self) -> None:
         built = self.run_claude(outcome="empty")["usage_record"]
         self.assertTrue(all(built[g] is None for g in usage_record.GROUPS))
+
+
+class ReasoningFailureBoundaryTest(unittest.TestCase):
+    """A real ``launch_review`` against the fake Claude: a failed reasoning reading leaves the review alone."""
+
+    def setUp(self) -> None:
+        # borrow the fake-Claude launch fixture without re-running its own tests
+        self.fixture = test_review_claude.FakeLaunchTest("setUp")
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+
+    def test_a_reasoning_extraction_failure_leaves_the_review_alone_and_is_reported(self) -> None:
+        control = self.fixture.launch(job="j-ok")
+        with unittest.mock.patch.object(usage_record, "reasoning_tokens", side_effect=RuntimeError("injected")):
+            failed = self.fixture.launch(job="j-bad")
+        for key in ("outcome", "status", "verdict", "telemetry", "credentials"):
+            self.assertEqual(failed[key], control[key], key)
+        self.assertEqual(failed["outcome"], "verdict")
+        self.assertEqual(failed["usage_reasoning_failed"], "RuntimeError: injected")
+        self.assertNotIn("usage_reasoning_failed", control)
+        # the refusal paths read the same figure: a refused run keeps its figures and reports the failure
+        with unittest.mock.patch.object(usage_record, "reasoning_tokens", side_effect=RuntimeError("injected")):
+            self.assertEqual(review.result_reasoning({"usage": {}}), review.UsageReadingFailed("RuntimeError: injected"))
 
 
 class FailureBoundaryTest(_JobCase):

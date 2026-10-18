@@ -67,6 +67,9 @@ RECORD_MANUAL_IMPLEMENTATION_REVIEW = "record-manual-implementation-review"
 #: is in :data:`ROLE_BY_COMMAND_STEM`.
 PREPARE_FUNCTIONAL_REVIEW = "prepare-functional-review"
 APPLY_FUNCTIONAL_REVIEW = "apply-functional-review"
+#: The pull-request defect role (pr-defect-loop D3): ``/apply-pr-review``
+#: fixes code on the bounded branch and delegates like the other apply roles.
+APPLY_PR_REVIEW = "apply-pr-review"
 #: The validator role (gate-policy D4): ``/satisfy-gate`` records a decision in
 #: a transaction that commits, so it is single-agent like the reviews.
 SATISFY_GATE = "satisfy-gate"
@@ -108,6 +111,9 @@ ROLE_ROUTES: Mapping[str, Route] = MappingProxyType({
     PREPARE_FUNCTIONAL_REVIEW: _INHERIT,
     # It classifies and fixes findings, as `apply-plan-review` does.
     APPLY_FUNCTIONAL_REVIEW: _OPUS,
+    # It reopens a work item and fixes a pull request's defect, as the other
+    # apply roles do.
+    APPLY_PR_REVIEW: _OPUS,
     SATISFY_GATE: _OPUS_SINGLE_AGENT,
 })
 

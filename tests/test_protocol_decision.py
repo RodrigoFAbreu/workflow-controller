@@ -200,21 +200,22 @@ class DispositionTest(_Case):
 
 
 class ActionTableTest(_Case):
-    def test_the_table_has_the_twelve_automatic_ids_and_the_three_validations(self) -> None:
+    def test_the_table_has_the_thirteen_automatic_ids_and_the_three_validations(self) -> None:
         self.assertEqual({a for a, e in protocol_decision.PROTOCOL_ACTIONS.items() if e.disposition == "validation"},
                          {"plan.satisfy", "implementation.satisfy", "acceptance.satisfy"})
         self.assertEqual({a for a, e in protocol_decision.PROTOCOL_ACTIONS.items() if e.disposition == "automatic"}, {
             "plan.start", "plan.author", "plan.apply_review", "plan.review.local", "plan.record_external",
             "implementation.checkpoint", "implementation.self_review", "implementation.review.local",
             "implementation.record_external", "implementation.apply_review", "functional.prepare",
-            "functional.apply_findings"})
-        self.assertEqual(len(protocol_decision.PROTOCOL_ACTIONS), 15)
+            "functional.apply_findings", "pr.apply_review"})
+        self.assertEqual(len(protocol_decision.PROTOCOL_ACTIONS), 16)
 
     def test_every_id_launches_its_command_with_its_route(self) -> None:
         roles = {"plan.start": "planner", "plan.apply_review": "applier", "plan.review.local": "independent_reviewer",
                  "implementation.self_review": "self_reviewer", "implementation.review.local": "independent_reviewer",
                  "implementation.apply_review": "applier", "plan.record_external": "applier",
                  "implementation.record_external": "applier", "functional.apply_findings": "applier",
+                 "pr.apply_review": "applier",
                  "implementation.checkpoint": "implementer", "functional.prepare": "implementer",
                  "plan.satisfy": "validator", "implementation.satisfy": "validator",
                  "acceptance.satisfy": "validator"}
@@ -236,7 +237,9 @@ class ActionTableTest(_Case):
             fixtures.seed_workflow_item(root, "2.7.0", "route", work_item_id="demo")
             listed = set(protocol.describe(root).capabilities["action_ids"])
         # 2.7.0 predates the validations; the 2.12.0 test below covers them.
-        automatic = {a for a, e in protocol_decision.PROTOCOL_ACTIONS.items() if e.disposition == "automatic"}
+        # ... and the 2.7.0 catalogue predates ``pr.apply_review``; the 2.12.0 test below covers it.
+        automatic = {a for a, e in protocol_decision.PROTOCOL_ACTIONS.items()
+                     if e.disposition == "automatic" and a != "pr.apply_review"}
         self.assertLessEqual(automatic, listed)
         scripts = fixtures.workflow_release_tree("2.7.0") / "scripts" / "workflow_protocol.py"
         catalogue = _catalogue_actions(scripts)
@@ -265,7 +268,13 @@ class ActionTableTest(_Case):
                 # The release's own invocation text for the action is what the Controller renders.
                 self.assertEqual(catalogue[action_id]["template"].format(id="wi-1"),
                                  protocol_decision.bare_invocation(action_id, "wi-1"))
-        self.assertNotIn("pr.apply_review", protocol_decision.PROTOCOL_ACTIONS)
+
+    def test_pr_apply_review_agrees_with_the_2_12_0_catalogue(self) -> None:
+        scripts = fixtures.workflow_release_tree("2.12.0") / "scripts" / "workflow_protocol.py"
+        spec = _catalogue_actions(scripts)["pr.apply_review"]
+        entry = protocol_decision.PROTOCOL_ACTIONS["pr.apply_review"]
+        self.assertEqual((spec["command"], spec["role"], spec["user_only"]), (entry.command, "applier", False))
+        self.assertEqual(spec["template"].format(id="wi-1"), protocol_decision.bare_invocation("pr.apply_review", "wi-1"))
 
     def test_inspect_advises_of_listed_ids_this_release_does_not_know_and_never_refuses(self) -> None:
         # Plan C.3: a gate id of the vendored catalogue is known (never launched
@@ -282,17 +291,50 @@ class ActionTableTest(_Case):
         self.assertIn("advisory: the Workflow lists action ids this Controller release cannot launch: "
                       "forge.open_pr, gate.policy", out.getvalue())
 
-    def test_a_listing_advises_of_exactly_the_one_unlaunched_automatic_id(self) -> None:
+    def test_a_listing_of_the_whole_catalogue_advises_of_no_id(self) -> None:
         listed = sorted(protocol.KNOWN_ACTION_IDS)
-        self.assertEqual(protocol_decision.unknown_action_ids(listed), ["pr.apply_review"])
-        self.assertEqual(protocol_decision.unknown_action_ids([*listed, "future.action"]),
-                         ["future.action", "pr.apply_review"])
-        self.assertEqual(protocol_decision.UNLAUNCHED_AUTOMATIC_ACTION_IDS, {"pr.apply_review"})
+        self.assertEqual(protocol_decision.unknown_action_ids(listed), [])
+        self.assertEqual(protocol_decision.unknown_action_ids([*listed, "future.action"]), ["future.action"])
+        self.assertEqual(protocol_decision.UNLAUNCHED_AUTOMATIC_ACTION_IDS, frozenset())
 
-    def test_pr_apply_review_is_still_blocked(self) -> None:
-        got = self.decide(_result(row="38d", action=_action("pr.apply_review", role="applier", invocation=None)))
-        self.assertFalse(got.automatic)
-        self.assertIn(protocol_decision.UNKNOWN_ACTION, got.gate.what_is_required)
+    PR_ROWS = (("38d", "pr_query_due"), ("38d", "pr_review_actionable"))
+
+    def test_the_row_38d_answers_launch_apply_pr_review_on_its_own_role(self) -> None:
+        for row, code in self.PR_ROWS:
+            with self.subTest(code=code):
+                got = self.decide(_result(row=row, code=code, phase="AWAITING_FUNCTIONAL_REVIEW",
+                                          action=_action("pr.apply_review", role="applier")))
+                self.assertTrue(got.automatic, got.gate)
+                self.assertEqual(got.action.command, "/apply-pr-review wi-1")
+                self.assertEqual(got.protocol.route, "apply-pr-review")
+                self.assertEqual(got.protocol.action_id, "pr.apply_review")
+        # The merge-flow preflight keeps this answer unreachable in a run (C10d); the decision still launches it.
+        got = self.decide(_result(row="38d", code="pr_review_actionable", phase="MILESTONE_COMPLETE",
+                                  action=_action("pr.apply_review", role="applier")))
+        self.assertTrue(got.automatic, got.gate)
+
+    def test_pr_apply_review_pairings_are_blocked_with_their_code_and_launch_nothing(self) -> None:
+        cases = (
+            (protocol_decision.UNKNOWN_WORKER_ROLE, _action("pr.apply_review", role="a_future_role")),
+            (protocol_decision.UNKNOWN_WORKER_ROLE, _action("pr.apply_review", role="validator")),
+            (protocol_decision.USER_ONLY_ACTION, _action("pr.apply_review", role="applier", user_only=True)),
+            (protocol_decision.INVOCATION_MISMATCH,
+             _action("pr.apply_review", role="applier", invocation="/apply-pr-review wi-2")),
+            (protocol_decision.INVOCATION_MISMATCH,
+             _action("pr.apply_review", role="applier", invocation="/apply-functional-review wi-1")),
+        )
+        for code, action in cases:
+            with self.subTest(code=code, invocation=action["invocation"]):
+                got = self.decide(_result(row="38d", phase="AWAITING_FUNCTIONAL_REVIEW", action=action))
+                self.assertFalse(got.automatic)
+                self.assertIn(code, got.gate.what_is_required)
+
+    def test_pr_apply_review_without_a_work_item_is_a_protocol_failure(self) -> None:
+        answer = _result(row="38d", phase="AWAITING_FUNCTIONAL_REVIEW",
+                         action=_action("pr.apply_review", None, role="applier", invocation="/apply-pr-review wi-1"))
+        with self.assertRaises(WorkflowProtocolFailedError) as caught:
+            self.decide(answer)
+        self.assertEqual(caught.exception.evidence["reason"], "protocol_decision_invalid")
 
     def test_an_automatic_id_the_table_lacks_is_blocked(self) -> None:
         got = self.decide(_result(action=_action("plan.withdraw", invocation="/milestone-plan wi-1")))

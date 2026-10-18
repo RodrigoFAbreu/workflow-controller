@@ -586,6 +586,10 @@ class GateLifecycle(Lifecycle):
             else:
                 self.workflow(_SATISFY_ACCEPTANCE, WID, str(self.checks))
             return
+        if words[0] == "apply-pr-review":
+            # The command's own effect (a refreshed fact, a reopen) is CP3's scenarios; here only the launch is observed.
+            self.tasks.append(words[0])
+            return
         if words[0] in _EFFECTS:
             self.tasks.append(words[0])
             stage, verdict, how = _EFFECTS[words[0]]
@@ -734,19 +738,22 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
         self.assertEqual(len(life.tasks), launched)
 
-    def test_a_reported_pr_review_result_leads_to_the_unlaunchable_apply_review(self) -> None:
+    def test_a_reported_pr_review_result_leads_to_the_launched_apply_review(self) -> None:
         life = self.pending_acceptance()
         self.assertEqual(life.step()["status"], job.STATUS_GATE_BLOCKED)
         life.checks.write_text("green")
         life.user_step(_REPORT_PR, str(life.checks))
-        self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38d")
+        answer = protocol.next_action(life.root, WID)
+        self.assertEqual(answer.raw["row"], "38d")
+        self.assertEqual(answer.raw["action"]["id"], "pr.apply_review")
+        self.assertEqual(answer.raw["action"]["invocation"], f"/apply-pr-review {WID}")
         launched = len(life.tasks)
-        blocked = life.step()
-        self.assertEqual(blocked["status"], job.STATUS_GATE_BLOCKED)
+        record = life.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
         self.assertEqual(life.rows[-1], "38d")
-        self.assertEqual(len(life.tasks), launched)
-        self.assertIn("workflow_unknown_action", json.dumps(blocked["human_gate_pending"]))
-        self.assertEqual([e.event_type for e in job.derive_job_event(blocked)], ["user_gate"])
+        self.assertEqual(life.tasks[launched:], ["apply-pr-review"])
+        self.assertEqual(record["protocol"]["action_id"], "pr.apply_review")
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["step_done"])
 
     def records(self, life: Lifecycle) -> list[dict]:
         return [json.loads(path.read_text()) for path in sorted((life.runtime / "jobs").glob("*.json"))]

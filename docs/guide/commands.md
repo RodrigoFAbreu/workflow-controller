@@ -300,14 +300,16 @@ In protocol mode the role comes from the Workflow's action id rather than
 from the command: `implementation.self_review` is
 `milestone-implement-self-review`, `acceptance.satisfy` is
 `satisfy-gate-acceptance`, and each other action takes its
-command's role. The two functional-review roles, `satisfy-gate`, `satisfy-gate-acceptance` and `apply-pr-review` exist only there, since
-legacy mode never launches those commands
+command's role. Five roles exist only there, since legacy mode never
+launches their commands: the two functional-review roles, `satisfy-gate`,
+`satisfy-gate-acceptance` and `apply-pr-review`
 ([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). All
-three are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
+five are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
 and the settings file's `routing` section, and `telemetry --by role`
 groups their jobs under these names. A Controller before 1.7.0 rejects
 the functional-review roles in a `--routing-config` file and ignores them, with a warning, in the
-settings file; a Controller before the one that adds `satisfy-gate` (`apply-pr-review`, `satisfy-gate-acceptance`) does the same with that role.
+settings file; a Controller older than the release that adds `satisfy-gate`, `apply-pr-review` or
+`satisfy-gate-acceptance` does the same with that role.
 A `satisfy-gate` value you pinned earlier now applies to plan and implementation approval only;
 acceptance takes its own built-in route until you name `satisfy-gate-acceptance`.
 

@@ -45,6 +45,10 @@ prior turn; if it is missing, show step 1 and stop and wait.
      record -- a non-empty `lowered` makes the adoption a **gate-lowering
      event**, which `verify` and `next-action` report and every automatic
      satisfaction copies into its audit record;
+   - `adoption_merge_notice` when `adoption_merge` is not `null`: an earlier
+     adoption reached this line through a merge commit that does not record it
+     on this line, so older versions of `GATE_POLICY.json` still count. Print
+     the notice as given; the fix is to merge an adoption with a squash;
    - every open plan-stage and implementation-stage bundle of **any** work item
      that the adoption commit will stale (`stales`), with the way out of each.
      `HEAD` is repository-wide, so the adoption commit moves it past every open
@@ -91,4 +95,7 @@ prior turn; if it is missing, show step 1 and stop and wait.
    their changes, never by the commit message. Two branches that each adopt from
    the same base conflict in their chains; the second **fails closed** (every
    gate human, `source: provenance_failed`), and the remedy is to take
-   `main`'s adoption record on the update merge and run this command again.
+   `main`'s adoption record on the update merge and run this command again. When
+   `workflow_gate_policy.effective_policy(...)["adoption_merge"]` is not `null`,
+   say that the new adoption must be merged with a **squash** (a merge commit
+   repeats the cause step 1 printed).

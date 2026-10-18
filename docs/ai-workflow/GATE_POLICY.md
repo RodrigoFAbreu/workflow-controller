@@ -106,7 +106,16 @@ enabled, a larger `reopen_on`.
 
 The adopted policy and the floor are verified by content and by the chain of
 their changes, never by a commit message, so they keep verifying after a squash
-merge. When that verification fails (a record that is not self-consistent, a
+merge. **An adoption must reach a protected line by a squash merge.** A branch
+merged with a merge commit brings the adoption in as the second parent's change,
+which the first-parent history does not record as an introduction on this line
+(the same shape as an update merge, `git merge main`, which must not count), so
+older versions of `GATE_POLICY.json` on the line keep counting and the gates can
+read stricter than adopted. `verify`'s `gate_policy` check warns with the cause
+(`adoption_merge` in `effective_policy`) when the effective policy is stricter
+than the adopted one; the evaluation itself is unchanged. The fix is to merge an
+adoption with a squash, or to run `/adopt-gate-policy` again on a branch and
+merge that branch with a squash. When that verification fails (a record that is not self-consistent, a
 removed or spliced adoption, a floor loosened outside an adoption) the
 effective policy is **all three gates human**, `source: provenance_failed`, and
 `verify`'s `gate_policy` check is `fail`, naming the field and the commit. The
@@ -160,6 +169,12 @@ trailer `Workflow-Gate-Satisfied-By: policy:<digest first 12>`.
    its checks are not `failure`;
 6. `ci_green` (when `require_ci`) and `pr_approved` (when
    `requires_pr_approved`).
+
+**Dispositions are not a policy requirement.** Under every policy, automatic
+or human, acceptance also refuses while a recorded Optional finding has no
+disposition (`workflow_state.assert_finding_dispositions_recorded`, called by
+`complete_work_item`); it is not listed above and `evaluate_gate` does not
+predict it. Record each in `docs/ai-workflow/registry/<id>-dispositions.json`.
 
 **Automatic acceptance needs an open pull request first.** Requirement 4 is
 always required, so open (and push) the pull request before the acceptance

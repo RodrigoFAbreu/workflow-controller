@@ -4659,7 +4659,26 @@ PLAN_SWEEP_NEXT_STEP = (
     "feedback-only item or a two-stage item), then run the command again"
 )
 
-_PLAN_EARLY_CHECK_ERRORS = _PLAN_ANCHOR_ERRORS + (PlanGoverningVersionSweepError,)
+class PlanArtifactDeclarationCoverageError(Exception):
+    """Raised by `assert_plan_artifact_declaration_coverage` (workflow-2.14.0,
+    `D-Coverage`) when a path a checkpoint's Files paragraph names is left
+    unclassified by the work item's artifact declaration at the plan stage, the
+    implementation stage or both."""
+
+
+PLAN_DECLARATION_NEXT_STEP = (
+    "add each path, or its directory prefix, to `plan_stage` and/or "
+    "`implementation_stage` of `docs/ai-workflow/registry/<id>-artifacts.json` "
+    "(protected for a deliverable, excluded for repository territory); a bare file "
+    "name is a root-level path, so write every path in full from the repository "
+    "root; when the span is not a path (a dotted identifier, a function name, a "
+    "flag), drop its backticks or move it out of the Files paragraph; then run the "
+    "command again"
+)
+
+_PLAN_EARLY_CHECK_ERRORS = _PLAN_ANCHOR_ERRORS + (
+    PlanGoverningVersionSweepError, PlanArtifactDeclarationCoverageError,
+)
 
 
 def assert_plan_governing_version_sweep(
@@ -4698,6 +4717,131 @@ def assert_plan_governing_version_sweep(
     listed = "; ".join(f"{f.path}:{f.line} ({f.form}): {f.snippet}" for f in findings)
     raise PlanGoverningVersionSweepError(
         f"{work_item_id} plan {revision_text}: {listed} -- {PLAN_SWEEP_NEXT_STEP}"
+    )
+
+
+_FILES_PARAGRAPH_RE = re.compile(r"^(?:- )?\*\*Files:\*\*")
+_BACKTICK_SPAN_RE = re.compile(r"`([^`\n]+)`")
+_NAMED_PATH_ANNOTATION_RE = re.compile(r"(?::\d+(?:-\d+)?|#L\d+(?:-L?\d+)?)\Z")
+_NAMED_PATH_NON_PATH_CHARS = frozenset("*?[]{}<>()\u2026")
+_URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_VERSION_STRING_RE = re.compile(r"^(?=.*\d)[0-9.]+\Z")
+
+
+def _files_paragraph_path(span: str) -> str | None:
+    """One backtick span of a Files paragraph as a repository-relative path, or
+    `None` when `D-Coverage`'s notation exempts it (whitespace or a glob or
+    placeholder character, a URL, an absolute, home or outside-repository
+    start, a version string). A trailing line annotation is stripped first."""
+    text = _NAMED_PATH_ANNOTATION_RE.sub("", span.strip())
+    if not text or any(c.isspace() or c in _NAMED_PATH_NON_PATH_CHARS for c in text):
+        return None
+    if _URL_RE.match(text) or text.startswith(("/", "~", "..")) or _VERSION_STRING_RE.match(text):
+        return None
+    while text.startswith("./"):
+        text = text[2:]
+    return text or None
+
+
+def plan_named_paths(plan_text: str) -> dict[str, list[str]]:
+    """workflow-2.14.0, `D-Coverage`: the paths each checkpoint's Files
+    paragraph names, `{checkpoint_id: [path, ...]}` in document order without
+    duplicates. The Files paragraph is the line starting `**Files:**` (after an
+    optional `- `) through the next blank line, inside a well-formed anchor span
+    of the checkpoint; in it every backtick span is a named path apart from the
+    exemptions `_files_paragraph_path` applies. A checkpoint with no Files
+    paragraph maps to an empty list. Pure."""
+    named: dict[str, list[str]] = {}
+    spans = parse_checkpoint_anchor_spans(plan_text, strict=False)
+    for checkpoint_id, ranges in spans.items():
+        paths = named.setdefault(checkpoint_id, [])
+        for start, end in ranges:
+            in_paragraph = False
+            for line in plan_text[start:end].splitlines():
+                if not line.strip():
+                    in_paragraph = False
+                    continue
+                if _FILES_PARAGRAPH_RE.match(line):
+                    in_paragraph = True
+                if not in_paragraph:
+                    continue
+                for match in _BACKTICK_SPAN_RE.finditer(line):
+                    path = _files_paragraph_path(match.group(1))
+                    if path is not None and path not in paths:
+                        paths.append(path)
+    return named
+
+
+def plan_files_advisory(plan_text: str, registry: dict) -> str | None:
+    """workflow-2.14.0, `D-Coverage`: a warning line per registry checkpoint
+    whose Files paragraph is absent or names no path, else `None`. Never
+    refuses; printed beside `plan_size_advisory`."""
+    named = plan_named_paths(plan_text)
+    lines = [
+        f"warning: {entry['id']} names no files, so its paths are not checked"
+        for entry in registry.get("checkpoints") or []
+        if not named.get(entry.get("id"))
+    ]
+    return "\n".join(lines) if lines else None
+
+
+def assert_plan_artifact_declaration_coverage(
+    repo_root: Path, work_item_id: str, *, state: dict | None = None,
+    pin_dir: Path | None = None, allow_bound_regeneration: bool = False,
+) -> None:
+    """workflow-2.14.0, `D-Coverage` (#40): the early declaration check for a
+    plan revision of a two-stage work item, called after
+    `assert_plan_governing_version_sweep` at the same call sites. Read-only,
+    with the same exemptions. Every path `plan_named_paths` finds must classify
+    at the plan stage (`classify_path` over the item's plan-stage sets) and at
+    the implementation stage (`classify_path_implementation_stage` over its
+    sets), protected or excluded both counting; both declarations are read from
+    the working tree, the plan text from `pin_dir` when given. A refusal raises
+    `PlanArtifactDeclarationCoverageError` naming the work item, the plan
+    revision, each `<checkpoint>: <path> (unclassified at ...)` and
+    `PLAN_DECLARATION_NEXT_STEP`."""
+    work_item = _plan_early_check_work_item(
+        repo_root, work_item_id, state, allow_bound_regeneration=allow_bound_regeneration,
+    )
+    if work_item is None:
+        return
+    metadata = fingerprint.resolve_plan_stage_metadata(repo_root, work_item_id)
+    base = pin_dir if pin_dir is not None else repo_root
+    plan_text = (base / metadata.plan_path).read_text(encoding="utf-8")
+    named = plan_named_paths(plan_text)
+    if not any(named.values()):
+        return
+    protected_paths, protected_prefixes, impl_excluded_paths, impl_excluded_prefixes = (
+        fingerprint.load_implementation_stage_classification(
+            repo_root, fingerprint.artifacts_path_for_work_item(work_item_id),
+        )
+    )
+    unclassified: list[str] = []
+    for checkpoint_id, paths in named.items():
+        for path in paths:
+            stages = []
+            try:
+                fingerprint.classify_path(
+                    path, metadata.protected_paths, metadata.excluded_paths, metadata.excluded_prefixes,
+                )
+            except fingerprint.UnclassifiedPathError:
+                stages.append("the plan stage")
+            try:
+                fingerprint.classify_path_implementation_stage(
+                    path, protected_paths, protected_prefixes, impl_excluded_paths, impl_excluded_prefixes,
+                )
+            except fingerprint.UnclassifiedPathError:
+                stages.append("the implementation stage")
+            if stages:
+                where = "both stages" if len(stages) == 2 else stages[0]
+                unclassified.append(f"{checkpoint_id}: {path} (unclassified at {where})")
+    if not unclassified:
+        return
+    registry = json.loads((base / metadata.registry_path).read_text(encoding="utf-8"))
+    revision = registry.get("plan_revision") if isinstance(registry, dict) else None
+    revision_text = f"revision {revision}" if revision is not None else "unknown revision"
+    raise PlanArtifactDeclarationCoverageError(
+        f"{work_item_id} plan {revision_text}: {'; '.join(unclassified)} -- {PLAN_DECLARATION_NEXT_STEP}"
     )
 
 
@@ -13026,6 +13170,8 @@ def complete_work_item(state: dict, work_item_id: str, now: str, *, repo_root: P
             f"completion obligation(s): {details}"
         )
 
+    assert_finding_dispositions_recorded(repo_root, state, work_item_id)
+
     new_state = copy.deepcopy(state)
     work_item = new_state["work_items"][work_item_id]
     work_item["phase"] = "MILESTONE_COMPLETE"
@@ -14559,6 +14705,10 @@ ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     # item's own `reopenings` entries (and a reopen's `phase`) sit uncommitted
     # until its next commit, exactly as its `gate_evidence` does.
     "reopenings",
+    # workflow-2.14.0 CP1 (`D-Ledger`, `finding-dispositions`): this item's own
+    # recorded Optional findings sit uncommitted until its next commit,
+    # exactly as its `gate_evidence` does.
+    "optional_findings",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
@@ -14576,6 +14726,8 @@ RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     # item's own `reopenings` entries (and a reopen's `phase`) sit uncommitted
     # until its next commit, exactly as its `gate_evidence` does.
     "reopenings",
+    # workflow-2.14.0 CP1 (`D-Ledger`): as in the ordinary set above.
+    "optional_findings",
 })
 
 # workflow-2.9.1 (`D-Helper`, step 3): the item fields a committed entry into
@@ -14585,6 +14737,8 @@ RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
 REVIEW_STAGE_WRITE_COMMIT_FIELDS = frozenset({
     "phase", "state_revision", "last_transition",
     "implementation_review_stages", "gate_evidence", "reopenings",
+    # workflow-2.14.0 CP1 (`D-Ledger`): a REVISE carrying an Optional finding.
+    "optional_findings",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES = (
@@ -14782,6 +14936,9 @@ TECHNICAL_APPROVAL_COMMIT_FIELDS = frozenset({
     # item's own `reopenings` entries (and a reopen's `phase`) sit uncommitted
     # until its next commit, exactly as its `gate_evidence` does.
     "reopenings",
+    # workflow-2.14.0 CP1 (`D-Ledger`): an APPROVE that recorded an Optional
+    # finding leaves the ledger pending until this commit.
+    "optional_findings",
 })
 
 
@@ -15656,9 +15813,246 @@ def _validate_ledger_entry_audit(label: str, entry: dict | None) -> None:
         raise InvalidLedgerAuditError(f"{label}.reviewer_model must be a non-empty string")
 
 
+OPTIONAL_FINDING_STAGES = ("plan", "implementation")
+OPTIONAL_FINDING_VERDICTS = ("APPROVE", "REVISE")
+_OPTIONAL_FINDING_KEY_RE = re.compile(r"^F-[0-9a-f]{12}$")
+_OPTIONAL_FINDING_REF_FIELDS = frozenset({"stage", "role", "round", "review_content_id", "verdict", "at"})
+
+
+def merge_optional_findings(work_item: dict, findings: list, ref: dict) -> None:
+    """`D-Ledger`, workflow-2.14.0: merges a verdict's Optional findings into
+    `work_item["optional_findings"]` in place (the caller owns a deep copy).
+    Pure and idempotent: a finding already recorded gains one reference unless
+    an identical `(stage, role, round, review_content_id, verdict)` reference is
+    present, so a re-raised finding is one entry with several references. An
+    empty `findings` list writes nothing, not even the key."""
+    if not findings:
+        return
+    ledger = work_item.setdefault("optional_findings", {})
+    identity = ("stage", "role", "round", "review_content_id", "verdict")
+    for finding in findings:
+        entry = ledger.setdefault(finding.key, {"digest": finding.digest, "text": finding.text, "raised": []})
+        if not any(all(r.get(k) == ref.get(k) for k in identity) for r in entry["raised"]):
+            entry["raised"].append(dict(ref))
+
+
+def _record_optional_findings(work_item: dict, verdict_text: str | None, *, verdict: str, stage: str,
+                              role: str, round: int | None, review_content_id: str, now: str) -> None:
+    if verdict_text is None or verdict not in OPTIONAL_FINDING_VERDICTS:
+        return
+    merge_optional_findings(work_item, fingerprint.parse_optional_findings(verdict_text), {
+        "stage": stage, "role": role, "round": round, "review_content_id": review_content_id,
+        "verdict": verdict, "at": now,
+    })
+
+
+class InvalidOptionalFindingsError(Exception):
+    """`work_items[<id>].optional_findings` is not the shape `D-Ledger` fixes."""
+
+
+def optional_findings_errors(ledger: object) -> list[str]:
+    """Every shape problem of an `optional_findings` value (empty when valid)."""
+    if not isinstance(ledger, dict):
+        return [f"optional_findings must be an object, not {type(ledger).__name__}"]
+    problems: list[str] = []
+    for key, entry in ledger.items():
+        if not (isinstance(key, str) and _OPTIONAL_FINDING_KEY_RE.match(key)):
+            problems.append(f"optional_findings key {key!r} is not F- and 12 lowercase hex characters")
+            continue
+        if not isinstance(entry, dict) or set(entry) != {"digest", "text", "raised"}:
+            problems.append(f"optional_findings[{key!r}] must hold exactly digest, text and raised")
+            continue
+        digest, text, raised = entry["digest"], entry["text"], entry["raised"]
+        if not (isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) and key == "F-" + digest[:12]):
+            problems.append(f"optional_findings[{key!r}].digest must be 64 hex characters matching the key")
+        if not (isinstance(text, str) and text.strip() and len(text) <= fingerprint.OPTIONAL_FINDING_TEXT_LIMIT):
+            problems.append(f"optional_findings[{key!r}].text must be a non-empty string of at most "
+                            f"{fingerprint.OPTIONAL_FINDING_TEXT_LIMIT} characters")
+        if not (isinstance(raised, list) and raised):
+            problems.append(f"optional_findings[{key!r}].raised must be a non-empty list")
+            continue
+        for index, ref in enumerate(raised):
+            where = f"optional_findings[{key!r}].raised[{index}]"
+            if not isinstance(ref, dict) or set(ref) != _OPTIONAL_FINDING_REF_FIELDS:
+                problems.append(f"{where} must hold exactly {sorted(_OPTIONAL_FINDING_REF_FIELDS)}")
+                continue
+            if ref["stage"] not in OPTIONAL_FINDING_STAGES:
+                problems.append(f"{where}.stage must be one of {list(OPTIONAL_FINDING_STAGES)}")
+            if ref["verdict"] not in OPTIONAL_FINDING_VERDICTS:
+                problems.append(f"{where}.verdict must be one of {list(OPTIONAL_FINDING_VERDICTS)}")
+            for name in ("role", "review_content_id", "at"):
+                if not (isinstance(ref[name], str) and ref[name]):
+                    problems.append(f"{where}.{name} must be a non-empty string")
+            if ref["round"] is not None and not (isinstance(ref["round"], int) and not isinstance(ref["round"], bool)):
+                problems.append(f"{where}.round must be an integer or null")
+    return problems
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.14.0 CP2 (`finding-dispositions`, D-Dispositions, D-Gate,
+# D-Record): every recorded Optional finding needs a disposition before
+# acceptance, and the dispositions go into a committed completed-milestone record.
+# ---------------------------------------------------------------------------
+
+FINDING_DISPOSITIONS = ("fixed", "dropped", "follow-up")
+FINDING_DISPOSITIONS_SCHEMA_VERSION = 1
+_FINDING_LINK_RE = re.compile(r"^(https://\S+|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+)$")
+
+
+class UndispositionedFindingsError(Exception):
+    """A recorded Optional finding has no valid disposition; acceptance refuses."""
+
+
+class InvalidFindingDispositionsError(Exception):
+    """The dispositions file is not the shape `D-Dispositions` fixes."""
+
+
+def finding_dispositions_path(work_item_id: str) -> Path:
+    return Path("docs/ai-workflow/registry") / f"{work_item_id}-dispositions.json"
+
+
+def finding_dispositions_record_path(work_item_id: str) -> Path:
+    return Path("docs/milestones/completed") / f"{work_item_id}-findings.md"
+
+
+def _finding_disposition_problems(key: str, entry: object) -> list[str]:
+    where = f"dispositions[{key!r}]"
+    if not isinstance(entry, dict):
+        return [f"{where} must be an object"]
+    disposition = entry.get("disposition")
+    if disposition not in FINDING_DISPOSITIONS:
+        return [f"{where}.disposition must be one of {list(FINDING_DISPOSITIONS)}, not {disposition!r}"]
+    if disposition == "dropped":
+        reason = entry.get("reason")
+        if not (isinstance(reason, str) and reason.strip()):
+            return [f"{where}: a dropped finding needs a non-empty reason"]
+    if disposition == "follow-up":
+        link = entry.get("link")
+        if not (isinstance(link, str) and _FINDING_LINK_RE.match(link)):
+            return [f"{where}: a follow-up needs a link, https://... or owner/repo#N, not {link!r}"]
+    return []
+
+
+def read_finding_dispositions(repo_root: Path, work_item_id: str) -> dict:
+    """The `dispositions` object of the item's dispositions file (`{}` when the
+    file does not exist). Raises `InvalidFindingDispositionsError` naming every
+    problem when the file is not JSON, names another work item, or holds an entry
+    that is not a valid disposition."""
+    path = Path(repo_root) / finding_dispositions_path(work_item_id)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise InvalidFindingDispositionsError(f"{path}: not readable JSON ({exc})") from exc
+    problems: list[str] = []
+    if not isinstance(data, dict):
+        raise InvalidFindingDispositionsError(f"{path}: must be a JSON object")
+    if data.get("schema_version") != FINDING_DISPOSITIONS_SCHEMA_VERSION:
+        problems.append(f"schema_version must be {FINDING_DISPOSITIONS_SCHEMA_VERSION}")
+    if data.get("work_item_id") != work_item_id:
+        problems.append(f"work_item_id must be {work_item_id!r}, not {data.get('work_item_id')!r}")
+    dispositions = data.get("dispositions")
+    if not isinstance(dispositions, dict):
+        problems.append("dispositions must be an object")
+        dispositions = {}
+    for key, entry in dispositions.items():
+        problems.extend(_finding_disposition_problems(key, entry))
+    if problems:
+        raise InvalidFindingDispositionsError(f"{path}: " + "; ".join(problems))
+    return dispositions
+
+
+def finding_dispositions_report(repo_root: Path, state: dict, work_item_id: str) -> list[dict]:
+    """Every recorded finding with its references and disposition (`None` when it
+    has none), in key order. A malformed dispositions file raises."""
+    ledger = state["work_items"][work_item_id].get("optional_findings") or {}
+    dispositions = read_finding_dispositions(repo_root, work_item_id) if ledger else {}
+    return [
+        {"key": key, "text": entry["text"], "raised": entry["raised"], "disposition": dispositions.get(key)}
+        for key, entry in sorted(ledger.items())
+    ]
+
+
+def _finding_label(item: dict) -> str:
+    ref = item["raised"][0]
+    return f"{item['key']} ({ref['stage']} {ref['role']} round {ref['round']}): {item['text']}"
+
+
+def assert_finding_dispositions_recorded(repo_root: Path, state: dict, work_item_id: str) -> None:
+    """`D-Gate`: raises `UndispositionedFindingsError` listing each recorded
+    finding that has no valid disposition. An item with no recorded finding
+    passes; a malformed dispositions file raises `InvalidFindingDispositionsError`."""
+    missing = [item for item in finding_dispositions_report(repo_root, state, work_item_id)
+               if item["disposition"] is None]
+    if not missing:
+        return
+    listing = "; ".join(_finding_label(item) for item in missing)
+    raise UndispositionedFindingsError(
+        f"{work_item_id!r} cannot be accepted -- {len(missing)} recorded Optional finding(s) have no "
+        f"disposition: {listing}. Record a disposition for each in "
+        f"{finding_dispositions_path(work_item_id)} (fixed, dropped with a reason, or follow-up with a link; "
+        f"`python3 scripts/workflow_state.py --finding-dispositions {work_item_id}` lists them and prints a "
+        f"skeleton), save the file, then run the command again"
+    )
+
+
+def finding_dispositions_skeleton(report: list[dict], work_item_id: str) -> dict:
+    return {
+        "schema_version": FINDING_DISPOSITIONS_SCHEMA_VERSION,
+        "work_item_id": work_item_id,
+        "dispositions": {item["key"]: {"disposition": "?"} for item in report if item["disposition"] is None},
+    }
+
+
+def _table_cell(text: object) -> str:
+    return " ".join(str(text).split()).replace("|", "\\|")
+
+
+def render_finding_dispositions(repo_root: Path, state: dict, work_item_id: str) -> str | None:
+    """`D-Record`: the completed-milestone findings record, or `None` when the
+    item recorded no finding. Deterministic for a given ledger and file."""
+    report = finding_dispositions_report(repo_root, state, work_item_id)
+    if not report:
+        return None
+    lines = [
+        f"# Optional findings: {work_item_id}", "",
+        "| Key | Raised | Finding | Disposition | Reason or link |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for item in report:
+        raised = "; ".join(f"{r['stage']} {r['role']} round {r['round']}" for r in item["raised"])
+        disposition = item["disposition"] or {}
+        detail = disposition.get("reason") or disposition.get("link") or disposition.get("note") or ""
+        lines.append("| " + " | ".join(_table_cell(c) for c in (
+            item["key"], raised, item["text"], disposition.get("disposition", "none"), detail)) + " |")
+    known = {item["key"] for item in report}
+    unmatched = sorted(set(read_finding_dispositions(repo_root, work_item_id)) - known)
+    if unmatched:
+        lines += ["", "Dispositions that matched no recorded finding: " + ", ".join(unmatched)]
+    return "\n".join(lines) + "\n"
+
+
+def write_finding_dispositions_record(repo_root: Path, state: dict, work_item_id: str) -> list[Path]:
+    """Writes the record and returns the repository-relative paths the completion
+    commit stages: the record, plus the dispositions file when it exists. Nothing
+    is written, and `[]` returned, for an empty ledger. A re-acceptance overwrites."""
+    text = render_finding_dispositions(repo_root, state, work_item_id)
+    if text is None:
+        return []
+    record = finding_dispositions_record_path(work_item_id)
+    (Path(repo_root) / record).parent.mkdir(parents=True, exist_ok=True)
+    (Path(repo_root) / record).write_text(text, encoding="utf-8")
+    paths = [record]
+    if (Path(repo_root) / finding_dispositions_path(work_item_id)).exists():
+        paths.append(finding_dispositions_path(work_item_id))
+    return paths
+
+
 def record_local_plan_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str,
     review_content_id: str, round: int, now: str, audit: dict | None = None,
+    verdict_text: str | None = None,
 ) -> dict:
     """`/review-plan`'s sole state write set (D-Plan-Review-Stages transition
     table, resolves `GPT-R12-001`/`-002`):
@@ -15700,6 +16094,9 @@ def record_local_plan_review(
     else:  # BLOCK
         return state
 
+    _record_optional_findings(
+        work_item, verdict_text, verdict=verdict, stage="plan", role=LOCAL_MODEL_PLAN_REVIEW, round=round,
+        review_content_id=review_content_id, now=now)
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
     _validate_plan_review_stages(work_item)
@@ -15786,6 +16183,7 @@ def record_manual_plan_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str, round: int,
     now: str, current_review_content_id: str, feedback_role: str,
     feedback_review_content_id: str, audit: dict | None = None,
+    verdict_text: str | None = None,
 ) -> dict:
     """`/record-manual-plan-review`'s sole state write set (D-Plan-Review-
     Stages transition table, resolves `GPT-R12-002`/`-003`):
@@ -15824,6 +16222,9 @@ def record_manual_plan_review(
     else:  # BLOCK
         return state
 
+    _record_optional_findings(
+        work_item, verdict_text, verdict=verdict, stage="plan", role=MANUAL_EXTERNAL_PLAN_REVIEW, round=round,
+        review_content_id=current_review_content_id, now=now)
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
     _validate_plan_review_stages(work_item)
@@ -16978,6 +17379,7 @@ def validate_local_implementation_review_preconditions(work_item: dict) -> None:
 def record_local_implementation_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str,
     review_content_id: str, round: int, now: str, audit: dict | None = None,
+    verdict_text: str | None = None,
 ) -> dict:
     """`/review-implementation`'s sole state write set in its `"2.2"`
     authoritative role (D-Implementation-Review-Stages transition table),
@@ -17021,6 +17423,9 @@ def record_local_implementation_review(
     else:  # BLOCK
         return state
 
+    _record_optional_findings(
+        work_item, verdict_text, verdict=verdict, stage="implementation", role=LOCAL_MODEL_IMPLEMENTATION_REVIEW, round=round,
+        review_content_id=review_content_id, now=now)
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
     _validate_implementation_review_stages(work_item)
@@ -17092,6 +17497,7 @@ def record_manual_implementation_review(
     state: dict, work_item_id: str, *, verdict: str, bundle_id: str, round: int,
     now: str, current_review_content_id: str, feedback_role: str,
     feedback_review_content_id: str, audit: dict | None = None,
+    verdict_text: str | None = None,
 ) -> dict:
     """`/record-manual-implementation-review`'s sole state write set
     (D-Implementation-Review-Stages transition table), mirroring
@@ -17135,6 +17541,9 @@ def record_manual_implementation_review(
     else:  # BLOCK
         return state
 
+    _record_optional_findings(
+        work_item, verdict_text, verdict=verdict, stage="implementation", role=MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW, round=round,
+        review_content_id=current_review_content_id, now=now)
     work_item["state_revision"] = work_item.get("state_revision", 1) + 1
     work_item["last_transition"] = now
     _validate_implementation_review_stages(work_item)
@@ -17489,7 +17898,7 @@ def _ingest_two_stage_manual_verdict(repo_root: Path, work_item_id: str, *, stag
             state, work_item_id, verdict=fields["status"], bundle_id=fields["reviewed_bundle_id"], round=round_,
             now=now, current_review_content_id=guarded["review_content_id"],
             feedback_role=fields["reviewer_role"], feedback_review_content_id=fields["review_content_id"],
-            audit=audit,
+            audit=audit, verdict_text=verdict_text,
         )
         outcome.update({
             "stage": stage, "verdict": fields["status"], "review_content_id": guarded["review_content_id"],
@@ -18246,6 +18655,11 @@ def _validate_work_item(work_item_id: str, work_item: dict) -> None:
         problems = acceptance_satisfaction_errors(work_item["acceptance_satisfaction"])
         if problems:
             raise InvalidAcceptanceSatisfactionError(f"work_items[{work_item_id!r}]: " + "; ".join(problems))
+
+    if "optional_findings" in work_item:
+        problems = optional_findings_errors(work_item["optional_findings"])
+        if problems:
+            raise InvalidOptionalFindingsError(f"work_items[{work_item_id!r}]: " + "; ".join(problems))
 
     if "reopenings" in work_item:
         problems = reopenings_errors(work_item["reopenings"], work_item.get("gate_evidence"))
@@ -19096,18 +19510,42 @@ def sweep_applying_review_feedback_version_claims(
     return findings
 
 
+def _finding_dispositions_cli(repo_root: Path, work_item_id: str) -> int:
+    """`--finding-dispositions`: print every recorded Optional finding with its
+    disposition and a skeleton `dispositions` object for the ones without."""
+    state = _load_json(repo_root / DEFAULT_STATE_PATH)
+    if work_item_id not in state["work_items"]:
+        print(json.dumps({"error": "UnknownWorkItem", "message": work_item_id}, sort_keys=True))
+        return 1
+    try:
+        report = finding_dispositions_report(repo_root, state, work_item_id)
+    except InvalidFindingDispositionsError as exc:
+        print(json.dumps({"error": type(exc).__name__, "message": str(exc)}, sort_keys=True))
+        return 1
+    print(json.dumps({
+        "findings": report,
+        "skeleton": finding_dispositions_skeleton(report, work_item_id),
+    }, sort_keys=True, indent=2))
+    return 0
+
+
 def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
     """Read-only CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0): print
     `plan_review_publication_status` for one work item as a single JSON
     object -- the contract Controller consumes instead of re-deriving the
     table. Rows 4d and 6 print `{"error": <name>, "message": ...}` and exit
-    1. Writes nothing."""
+    1. Writes nothing. `--finding-dispositions` (workflow-2.14.0) is the second,
+    equally read-only option."""
     import argparse
 
     parser = argparse.ArgumentParser(description=_plan_review_publication_status_cli.__doc__)
-    parser.add_argument("--plan-review-publication-status", metavar="WORK_ITEM_ID", required=True)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--plan-review-publication-status", metavar="WORK_ITEM_ID")
+    group.add_argument("--finding-dispositions", metavar="WORK_ITEM_ID")
     args = parser.parse_args(argv)
     repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+    if args.finding_dispositions:
+        return _finding_dispositions_cli(repo_root, args.finding_dispositions)
     work_item_id = args.plan_review_publication_status
     state = _load_json(repo_root / DEFAULT_STATE_PATH)
     try:
@@ -19641,6 +20079,9 @@ def gate_policy_adoption_preview(repo_root: Path) -> dict:
         "floor_before": before["floor"],
         "stales": open_bundles_staled_by_adoption(state),
         "provenance_ok": before["provenance"]["ok"],
+        "adoption_merge": before["adoption_merge"],
+        "adoption_merge_notice": (gate_policy.adoption_merge_notice(before["adoption_merge"])
+                                  if before["adoption_merge"] is not None else None),
     }
 
 

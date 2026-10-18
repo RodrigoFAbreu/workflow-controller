@@ -4127,6 +4127,85 @@ def _section_has_finding(content: str, heading: str) -> bool:
     return False
 
 
+OPTIONAL_FINDING_TEXT_LIMIT = 1200
+_OPTIONAL_FINDING_LABEL_RE = re.compile(
+    r"^(?P<label>[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)(?: (?:remains|persists))?(?:[:.)]|\s[\u2014\u2013-]\s)")
+
+
+class OptionalFinding(NamedTuple):
+    """One Optional finding of a verdict (`D-Parse`, workflow-2.14.0): `key`
+    (`F-` plus 12 hex characters of `digest`) identifies the whole entry as
+    written; `label` is display only; `text` is the entry as written, cut to
+    `OPTIONAL_FINDING_TEXT_LIMIT` characters."""
+
+    key: str
+    digest: str
+    label: str | None
+    text: str
+
+
+def _optional_finding_label(first_line: str) -> str | None:
+    plain = re.sub(r"[*_`]", "", first_line).strip()
+    match = _OPTIONAL_FINDING_LABEL_RE.match(plain)
+    if match is None or not any(ch.isdigit() for ch in match.group("label")):
+        return None
+    return match.group("label")
+
+
+def parse_optional_findings(content: str) -> list[OptionalFinding]:
+    """The Optional findings of a verdict, in order (`D-Parse`). Reads the
+    text only. The section is the lines under `## Optional findings`; a `### `
+    heading is an item whose body runs to the next heading; list items before
+    the first heading are items by indentation, a more indented one being the
+    previous item's body. The identity text is the entry as written (label
+    included) with whitespace runs collapsed; identical entries inside one
+    verdict are separate findings, the later ones keyed with a newline and an
+    ordinal appended (a newline cannot occur in an identity)."""
+    entries: list[tuple[str, list[str]]] = []  # (first line, body lines)
+    in_section = False
+    seen_heading = False
+    skipping = False
+    indent: int | None = None
+    for line in content.splitlines():
+        if line.startswith("## "):
+            in_section = line[3:].strip().lower() == "optional findings"
+            continue
+        if not in_section:
+            continue
+        match = _FINDING_ITEM_RE.match(line)
+        starts = False
+        if match is not None:
+            heading = line.lstrip(" ").startswith("###")
+            width = len(line) - len(line.lstrip(" "))
+            if heading:
+                starts, seen_heading, indent = True, True, None
+            elif not seen_heading:
+                if indent is None or width <= indent:
+                    starts, indent = True, width
+        if starts:
+            first = match.group(1)
+            skipping = _is_placeholder(first)
+            if not skipping:
+                entries.append((first, []))
+        elif entries and not skipping:
+            entries[-1][1].append(line)
+    findings: list[OptionalFinding] = []
+    ordinals: dict[str, int] = {}
+    for first, body in entries:
+        while body and not body[-1].strip():
+            body.pop()
+        identity = re.sub(r"\s+", " ", " ".join([first, *body])).strip()
+        ordinals[identity] = ordinals.get(identity, 0) + 1
+        # A newline never occurs in an identity (whitespace runs collapse to one
+        # space), so no literal entry can equal a later duplicate's key text.
+        keyed = identity if ordinals[identity] == 1 else f"{identity}\n@{ordinals[identity]}"
+        digest = hashlib.sha256(keyed.encode("utf-8")).hexdigest()
+        text = "\n".join([first, *body])[:OPTIONAL_FINDING_TEXT_LIMIT]
+        findings.append(OptionalFinding(
+            key="F-" + digest[:12], digest=digest, label=_optional_finding_label(first), text=text))
+    return findings
+
+
 def assert_verdict_well_formed(content: str) -> None:
     """`D-Severity`, workflow-2.12.0: refuses (`MalformedVerdictError`) a
     `REVISE` that names no Blocking or Important finding, an `APPROVE` that

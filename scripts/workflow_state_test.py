@@ -3512,6 +3512,217 @@ class TestAssertPlanGoverningVersionSweep(unittest.TestCase):
         self.assertEqual(before, (self.repo.root / self.STATE_PATH).read_bytes())
         self.assertEqual(status, subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout)
 
+class TestPlanNamedPaths(unittest.TestCase):
+    """workflow-2.14.0 CP4 (D-Coverage): the Files-paragraph notation."""
+
+    @staticmethod
+    def _plan(files, cp="CP1"):
+        return f"<!-- {cp} -->\n### {cp}\n\n{files}\n\nProse naming `prose/only.py`.\n<!-- /{cp} -->\n"
+
+    def _paths(self, files, cp="CP1"):
+        return ws.plan_named_paths(self._plan(files, cp)).get(cp)
+
+    def test_paths_directories_and_new_root_files_are_named(self):
+        files = (
+            "**Files:** `payload/scripts/a.py`, `payload/scripts/` (new), `manifest.json`,\n"
+            "`fresh_tool.py`, `Dockerfile`, `Makefile`, `.env`."
+        )
+        self.assertEqual(
+            self._paths(files),
+            ["payload/scripts/a.py", "payload/scripts/", "manifest.json", "fresh_tool.py",
+             "Dockerfile", "Makefile", ".env"],
+        )
+
+    def test_a_dash_prefixed_paragraph_runs_to_the_next_blank_line_only(self):
+        plan = "<!-- CP1 -->\n- **Files:** `a.py`,\n  `b.py`\n\n`c.py` in prose\n<!-- /CP1 -->\n"
+        self.assertEqual(ws.plan_named_paths(plan), {"CP1": ["a.py", "b.py"]})
+
+    def test_line_annotations_are_stripped(self):
+        files = "**Files:** `docs/gates.md:12`, `docs/gates.md:12-30`, `docs/gates.md#L12`, `docs/gates.md#L12-L30`."
+        self.assertEqual(self._paths(files), ["docs/gates.md"])
+
+    def test_a_version_string_is_ignored_beside_its_neighbour(self):
+        files = "**Files:** `manifest.json` (version `2.14.0`), `1.3`, `2.9.1`."
+        self.assertEqual(self._paths(files), ["manifest.json"])
+
+    def test_a_backticked_identifier_is_a_path(self):
+        self.assertEqual(self._paths("**Files:** `json.dumps`, `--flag`."), ["json.dumps", "--flag"])
+
+    def test_globs_placeholders_urls_and_outside_paths_are_not_read(self):
+        files = (
+            "**Files:** `payload/**/*.py`, `<id>-artifacts.json`, `a b.py`, `fn()`, "
+            "`https://example.com/x`, `/tmp/x/`, `~/Workspace/repflow-android/x`, "
+            "`../other-repo/file`, `kept.py`."
+        )
+        self.assertEqual(self._paths(files), ["kept.py"])
+
+    def test_a_second_span_of_the_same_checkpoint_adds_its_paths(self):
+        plan = (
+            "<!-- CP1 -->\n**Files:** `a.py`\n<!-- /CP1 -->\n<!-- CP1 -->\n**Files:** `b.py`, `a.py`\n<!-- /CP1 -->\n"
+        )
+        self.assertEqual(ws.plan_named_paths(plan), {"CP1": ["a.py", "b.py"]})
+
+    def test_no_files_paragraph_maps_to_an_empty_list(self):
+        self.assertEqual(self._paths("No paragraph here."), [])
+        self.assertEqual(ws.plan_named_paths("`a.py` outside any anchor"), {})
+
+    def test_advisory_names_each_checkpoint_without_named_files(self):
+        registry = {"checkpoints": [{"id": "CP1"}, {"id": "CP2"}, {"id": "CP3"}]}
+        plan = (
+            self._plan("**Files:** `a.py`", "CP1") + self._plan("No paragraph.", "CP2")
+            + self._plan("**Files:** `1.3`", "CP3")
+        )
+        advisory = ws.plan_files_advisory(plan, registry)
+        self.assertIn("CP2 names no files, so its paths are not checked", advisory)
+        self.assertIn("CP3 names no files", advisory)
+        self.assertNotIn("CP1", advisory)
+        self.assertIsNone(ws.plan_files_advisory(self._plan("**Files:** `a.py`", "CP1"), {"checkpoints": [{"id": "CP1"}]}))
+        # a registry checkpoint with no anchor span at all draws it as well
+        self.assertIn("CP9 names no files", ws.plan_files_advisory("", {"checkpoints": [{"id": "CP9"}]}))
+
+
+class TestAssertPlanArtifactDeclarationCoverage(unittest.TestCase):
+    """workflow-2.14.0 CP4 (D-Coverage, #40): the early declaration check, through
+    the same scratch repository the anchor and sweep checks are tested with."""
+
+    _A = TestAssertPlanCheckpointAnchors
+    PLAN_DOC = _A.PLAN_DOC
+    REGISTRY_PATH = _A.REGISTRY_PATH
+    MAPPING_PATH = _A.MAPPING_PATH
+    ARTIFACTS_PATH = _A.ARTIFACTS_PATH
+    STATE_PATH = _A.STATE_PATH
+    BOUND_ID = _A.BOUND_ID
+    _registry = _A._registry
+    _entry = _A._entry
+    _bound = _A._bound
+    _write = _A._write
+    setUp = _A.setUp
+
+    @staticmethod
+    def _plan(*files):
+        out = "# Plan (Revision 2)\n"
+        for n, line in enumerate(files, start=1):
+            out += f"<!-- CP{n} -->\n### CP{n}\n\n{line}\n<!-- /CP{n} -->\n"
+        return out
+
+    def _declare(self, plan_protected=(), plan_prefixes=None, impl_protected=(), impl_prefixes=None,
+                 impl_excluded=None, impl_excluded_prefixes=None):
+        path = self.repo.root / self.ARTIFACTS_PATH
+        declared = json.loads(path.read_text())
+        declared["plan_stage"]["protected_paths"] = sorted(
+            set(declared["plan_stage"]["protected_paths"]) | set(plan_protected)
+        )
+        declared["plan_stage"]["excluded_prefixes"].update(plan_prefixes or {})
+        declared["implementation_stage"] = {
+            "protected_paths": {p: "deliverable" for p in impl_protected},
+            "protected_prefixes": dict(impl_prefixes or {}),
+            "excluded_paths": dict(impl_excluded or {}),
+            "excluded_prefixes": dict(impl_excluded_prefixes or {}),
+        }
+        path.write_text(json.dumps(declared))
+        _run(["git", "add", "-A"], cwd=self.repo.root)
+
+    def _check(self, **kwargs):
+        return ws.assert_plan_artifact_declaration_coverage(self.repo.root, "wi", **kwargs)
+
+    def _refusal(self, **kwargs):
+        with self.assertRaises(ws.PlanArtifactDeclarationCoverageError) as ctx:
+            self._check(**kwargs)
+        return str(ctx.exception)
+
+    def test_a_declaration_that_classifies_everything_passes(self):
+        self._write(plan=self._plan("**Files:** `src/a.py`, `src/`"))
+        self._declare(plan_protected=["src/a.py"], plan_prefixes={"src/": "territory"},
+                      impl_protected=["src/a.py"], impl_prefixes={"src/": "deliverable"})
+        self._check()
+
+    def test_protected_and_excluded_both_satisfy(self):
+        self._write(plan=self._plan("**Files:** `src/a.py`, `notes/b.md`"))
+        self._declare(plan_protected=["src/a.py"], plan_prefixes={"notes/": "territory"},
+                      impl_protected=["src/a.py"], impl_excluded={"notes/b.md": "housekeeping"})
+        self._check()
+
+    def test_the_stage_wording_the_checkpoint_and_the_next_step(self):
+        self._write(plan=self._plan("**Files:** `plan_only.py`", "**Files:** `impl_only.py`", "**Files:** `neither.py`"))
+        self._declare(plan_protected=["plan_only.py"], impl_protected=["impl_only.py"])
+        message = self._refusal()
+        self.assertIn("wi plan revision 2:", message)
+        self.assertIn("CP1: plan_only.py (unclassified at the implementation stage)", message)
+        self.assertIn("CP2: impl_only.py (unclassified at the plan stage)", message)
+        self.assertIn("CP3: neither.py (unclassified at both stages)", message)
+        self.assertTrue(message.endswith(ws.PLAN_DECLARATION_NEXT_STEP), message)
+        self.assertIn("drop its backticks", ws.PLAN_DECLARATION_NEXT_STEP)
+        self.assertIn(ws.PlanArtifactDeclarationCoverageError, ws._PLAN_EARLY_CHECK_ERRORS)
+
+    def test_new_root_files_are_refused_not_advised(self):
+        self._write(plan=self._plan("**Files:** `src/a.py`, `Dockerfile`, `Makefile`, `.env`"))
+        self._declare(plan_protected=["src/a.py"], impl_protected=["src/a.py"])
+        message = self._refusal()
+        for name in ("Dockerfile", "Makefile", ".env"):
+            self.assertIn(f"{name} (unclassified at both stages)", message)
+        self.assertNotIn("src/a.py", message)
+
+    def test_a_backticked_identifier_is_refused_with_the_non_path_remedy(self):
+        self._write(plan=self._plan("**Files:** `src/a.py`, `json.dumps`"))
+        self._declare(plan_protected=["src/a.py"], impl_protected=["src/a.py"])
+        message = self._refusal()
+        self.assertIn("json.dumps (unclassified at both stages)", message)
+        self.assertIn("a dotted identifier, a function name, a flag", message)
+
+    def test_a_version_string_and_a_path_in_prose_are_not_read(self):
+        self._write(plan=self._plan("**Files:** `src/a.py` (version `2.14.0`).\n\nProse naming `elsewhere.py`."))
+        self._declare(plan_protected=["src/a.py"], impl_protected=["src/a.py"])
+        self._check()
+
+    def test_a_directory_needs_a_covering_prefix_not_an_exact_path_inside_it(self):
+        self._write(plan=self._plan("**Files:** `lib/`"))
+        self._declare(plan_protected=["lib/x.py"], impl_protected=["lib/x.py"])
+        self.assertIn("lib/ (unclassified at both stages)", self._refusal())
+        self._declare(plan_prefixes={"lib/": "territory"}, impl_prefixes={"lib/": "deliverable"})
+        self._check()
+
+    def test_the_exemptions(self):
+        self._write(plan=self._plan("**Files:** `uncovered.py`"), governing_workflow_version="1")
+        self._declare()
+        self._check()
+        for phase in sorted(ws.PLAN_REVIEW_READY_PHASES):
+            self._write(plan=self._plan("**Files:** `uncovered.py`"), phase=phase, plan_review_binding=self._bound())
+            self._declare()
+            self._check(allow_bound_regeneration=True)
+            with self.assertRaises(ws.PlanArtifactDeclarationCoverageError):
+                self._check()
+            self._write(plan=self._plan("**Files:** `uncovered.py`"), phase=phase)
+            self._declare()
+            with self.assertRaises(ws.PlanArtifactDeclarationCoverageError):
+                self._check(allow_bound_regeneration=True)
+
+    def test_a_plan_with_no_named_path_passes_without_reading_the_implementation_declaration(self):
+        self._write(plan=self._plan("No paragraph."))
+        self._check()  # the scratch declaration has no implementation_stage
+
+    def test_the_plan_is_read_through_the_pin_and_the_declaration_through_the_worktree(self):
+        pin = Path(tempfile.mkdtemp(prefix="wf-pin-"))
+        self.addCleanup(__import__("shutil").rmtree, pin, True)
+        self._write(plan=self._plan("**Files:** `uncovered.py`"))
+        self._declare()
+        self._write(plan=self._plan("**Files:** `src/a.py`"), root=pin)
+        self._declare(plan_protected=["src/a.py"], impl_protected=["src/a.py"])
+        self._check(pin_dir=pin)  # pinned bytes name only the declared path
+        self._write(plan=self._plan("**Files:** `src/a.py`"))
+        self._declare(plan_protected=["src/a.py"], impl_protected=["src/a.py"])
+        self._write(plan=self._plan("**Files:** `uncovered.py`"), root=pin)
+        self.assertIn("uncovered.py", self._refusal(pin_dir=pin))
+
+    def test_reads_only_and_writes_nothing(self):
+        self._write(plan=self._plan("**Files:** `uncovered.py`"))
+        self._declare()
+        before = (self.repo.root / self.STATE_PATH).read_bytes()
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout
+        self._refusal()
+        self.assertEqual(before, (self.repo.root / self.STATE_PATH).read_bytes())
+        self.assertEqual(status, subprocess.run(["git", "status", "--porcelain"], cwd=self.repo.root, capture_output=True, text=True).stdout)
+
+
 
 class TestImplementationStageApprovalSecondItem(unittest.TestCase):
     """Missing-test item 164 (`OPUS-R27-002`/`OPUS-R28-001`, `GPT-R30-004`
@@ -5421,6 +5632,47 @@ class TestRecordBundleGeneration(unittest.TestCase):
             self.assertEqual(
                 fresh_session["work_items"]["wi"]["phase"], "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
             )
+
+    def test_optional_findings_residue_rides_into_the_ordinary_record_commit(self):
+        """workflow-2.14.0 CP1 (`D-Ledger`): a round that recorded Optional findings leaves
+        the ledger pending until the generation-record commit, which must validate."""
+        with ScratchRepo() as repo:
+            _write_test_artifacts_declaration(repo, "wi")
+            _seed_base_provenance_state(repo, "wi")
+            p = repo.commit("protected fix", filename="src/Foo.kt")
+            pre_state = _base_state(wi={
+                "work_item_id": "wi", "reviewed_implementation_head": None, "implementation_revision": None,
+                "phase": "SELF_REVIEWING_IMPLEMENTATION", "state_revision": 0, "last_transition": "t0"})
+            wi_after = ws.record_bundle_generation(
+                pre_state, "wi", stage="implementation", head=p, now="t1")["work_items"]["wi"]
+            wi_after["optional_findings"] = {"F-0123456789ab": {"digest": "0123456789ab" + "0" * 52, "text": "O1: x",
+                "raised": [{"stage": "implementation", "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW", "round": 1,
+                            "review_content_id": "c", "verdict": "APPROVE", "at": "t"}]}}
+            s = _commit_state_only(repo, "wi", wi_after, "record gen",
+                                   trailers=_record_trailers("wi", wi_after["implementation_revision"]))
+            ws.validate_bundle_generation_record_commit(repo.root, s, "wi")  # must not raise
+
+    def test_optional_findings_residue_rides_into_the_recovered_record_commit(self):
+        """workflow-2.14.0 CP1 (`D-Ledger`), I2: the recovered generation record (the
+        post-fix republication) validates with the ledger pending, and the ledger's
+        absence from its field set would be refused."""
+        ledger = {"F-0123456789ab": {"digest": "0123456789ab" + "0" * 52, "text": "O1: x",
+            "raised": [{"stage": "implementation", "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW", "round": 1,
+                        "review_content_id": "c", "verdict": "REVISE", "at": "t"}]}}
+        with ScratchRepo() as repo:
+            _write_test_artifacts_declaration(repo, "wi")
+            _seed_base_provenance_state(repo, "wi")
+            p = repo.commit("protected fix", filename="src/Foo.kt")
+            state = _provenance_state("wi", reviewed_implementation_head=p, implementation_revision=1)
+            s = _commit_state_only(repo, "wi", state, "record gen", trailers=_record_trailers("wi", 1))
+            repo.commit("excluded-only doc fix", filename="docs/notes.md")
+            s2_state = state | {"state_revision": 3, "optional_findings": ledger}
+            s2 = _commit_state_only(repo, "wi", s2_state, "recover stale generation_head",
+                                    trailers=_recovered_trailers("wi", 1, s))
+            ws.validate_bundle_generation_record_commit(repo.root, s2, "wi")  # must not raise
+            self.assertEqual(
+                ws.verify_implementation_provenance_interval(
+                    repo.root, s2_state | {"work_item_id": "wi"}, repo.base), s2)
 
     def test_v1_implementing_entry_record_commit_validates_and_the_interval_is_reachable(self):
         """`v2.6.0-003` (a), workflow-2.9.0 CP4: a governing-`"1"` item at
@@ -7360,6 +7612,31 @@ class TestTechnicalApprovalCommitAdmitsImplementationReviewStagesResidue(unittes
             }
             commit = _commit_state_only(repo, self.WI, child_state, "technical approval")
             ws.validate_technical_approval_commit(repo.root, commit, self.WI)  # must not raise
+
+    def test_technical_approval_commit_with_optional_findings_residue_passes(self):
+        """workflow-2.14.0 CP1 (`D-Ledger`): an `APPROVE` that recorded an Optional finding
+        leaves the ledger pending until this commit, which must validate."""
+        with ScratchRepo() as repo:
+            _seed_base_provenance_state(repo, self.WI)
+            parent_state = {
+                "work_item_id": self.WI, "work_item_type": "process",
+                "phase": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+                "technical_approval": None, "state_revision": 5, "last_transition": "t5",
+            }
+            _commit_state_only(repo, self.WI, parent_state, "parent")
+            child_state = parent_state | {
+                "technical_approval": {"status": "CURRENT"},
+                "phase": "AWAITING_FUNCTIONAL_REVIEW", "state_revision": 6, "last_transition": "t6",
+                "optional_findings": {"F-0123456789ab": {"digest": "0123456789ab" + "0" * 52, "text": "O1: x", "raised": [{
+                "stage": "implementation", "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW", "round": 1,
+                "review_content_id": "c-1", "verdict": "REVISE", "at": "t"}]}},
+            }
+            commit = _commit_state_only(repo, self.WI, child_state, "technical approval")
+            ws.validate_technical_approval_commit(repo.root, commit, self.WI)  # must not raise
+            child_state["stray_field"] = 1
+            stray = _commit_state_only(repo, self.WI, child_state, "stray")
+            with self.assertRaises(ws.MalformedTechnicalApprovalCommitError):
+                ws.validate_technical_approval_commit(repo.root, stray, self.WI)
 
     def test_a_1_or_21_item_never_carries_this_residue_so_the_widening_is_moot_for_it(self):
         """Safety argument, made concrete: `"1"`/`"2.1"`'s own state
@@ -18324,6 +18601,44 @@ class TestManualVerdictIngestRecordsAs260(unittest.TestCase):
                 self.assertEqual(path.stat().st_mtime_ns, before)
 
 
+class TestManualVerdictIngestRecordsOptionalFindings(unittest.TestCase):
+    """workflow-2.14.0 CP1 (`D-Ledger`): the manual ingest records a verdict's
+    Optional findings inside the one transaction, at both stages."""
+
+    @staticmethod
+    def _with_optional(text: str, *entries: str) -> str:
+        return text.rstrip("\n") + "\n\n## Optional findings\n\n" + "\n".join(f"- {e}" for e in entries) + "\n"
+
+    def test_approve_and_revise_record_at_both_stages(self):
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            for status in ("APPROVE", "REVISE"):
+                with self.subTest(stage=stage, status=status), _harness.ScratchRepo() as repo:
+                    content_id, bundle_id = build(repo)
+                    text = self._with_optional(
+                        _cp4_verdict(status, rcid=content_id, bundle=bundle_id, base=repo.base, role=role),
+                        "O1: add a test", "O2: rename x")
+                    _cp5_ingest(repo, stage, text)
+                    ledger = _harness.read_state(repo)["work_items"][_CP4_WI]["optional_findings"]
+                    self.assertEqual(len(ledger), 2)
+                    for entry in ledger.values():
+                        self.assertEqual(entry["raised"], [{
+                            "stage": stage, "role": role, "round": 1, "review_content_id": content_id,
+                            "verdict": status, "at": _CP5_NOW}])
+
+    def test_a_refused_ingest_records_nothing(self):
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            with self.subTest(stage=stage), _harness.ScratchRepo() as repo:
+                content_id, bundle_id = build(repo)
+                blocking_approve = self._with_optional(
+                    _cp4_verdict("APPROVE", rcid=content_id, bundle=bundle_id, base=repo.base, role=role).replace(
+                        "None.", "- a blocking finding"), "O1: x")
+                before = _cp5_files(repo)
+                with self.assertRaises(fingerprint.MalformedVerdictError):
+                    _cp5_ingest(repo, stage, blocking_approve)
+                self.assertEqual(_cp5_files(repo), before)
+                self.assertNotIn("optional_findings", _harness.read_state(repo)["work_items"][_CP4_WI])
+
+
 class TestManualVerdictIngestRefusals(unittest.TestCase):
     """Every refusal writes nothing: neither the feedback file nor the
     state."""
@@ -19721,6 +20036,41 @@ class TestCommitPendingApplyingReviewFeedbackEntry(unittest.TestCase):
             working = json.loads((repo.root / STATE_REL_PATH).read_text())
             self.assertEqual(working["work_items"]["other"]["phase"], "SELF_REVIEWING_IMPLEMENTATION")
 
+    def test_optional_findings_residue_rides_in_and_foreign_residue_does_not(self):
+        """workflow-2.14.0 CP1 (`D-Ledger`): the item's own pending ledger is committed;
+        another item's is neither staged nor admitted; a stray field is still refused;
+        and once committed the item's state shows no hunk against HEAD."""
+        ledger = {"F-0123456789ab": {"digest": "0123456789ab" + "0" * 52, "text": "O1: x", "raised": [{
+        "stage": "implementation", "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW", "round": 1,
+        "review_content_id": "c-1", "verdict": "REVISE", "at": "t"}]}}
+        with ScratchRepo() as repo:
+            other_head = _base_work_item(work_item_id="other", phase="IMPLEMENTING")
+            other_working = dict(other_head, optional_findings=ledger)
+            self._setup(repo, self.LOCAL, self.APPLYING, other_head=other_head, other_working=other_working,
+                        working_extra={"optional_findings": ledger})
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            committed = json.loads(_git_out(repo, ["show", f"HEAD:{STATE_REL_PATH}"]))
+            self.assertEqual(committed["work_items"][self.WID]["optional_findings"], ledger)
+            self.assertNotIn("optional_findings", committed["work_items"]["other"])
+            working = json.loads((repo.root / STATE_REL_PATH).read_text())
+            self.assertEqual(working["work_items"]["other"]["optional_findings"], ledger)
+            committed_item = committed["work_items"][self.WID]
+            self.assertEqual(committed_item, working["work_items"][self.WID])
+            # D-Downgrade: the item's own pending state, once committed, leaves no hunk
+            # for it; only the other item's still-pending ledger remains in the diff.
+            diff = _git_out(repo, ["diff", "HEAD", "--", STATE_REL_PATH])
+            self.assertNotIn(self.WID, diff)
+            self.assertIn('"phase": "IMPLEMENTING"', diff)  # the other item's context
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING, working_extra={"optional_findings": ledger})
+            self.assertIsNotNone(ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID))
+            self.assertEqual(_git_out(repo, ["diff", "HEAD", "--", STATE_REL_PATH]).strip(), "")
+        with ScratchRepo() as repo:
+            self._setup(repo, self.LOCAL, self.APPLYING,
+                        working_extra={"optional_findings": ledger, "technical_review_block_pins": {}})
+            with self.assertRaises(ws.ReviewStageWriteNotCommittableError):
+                ws.commit_pending_applying_review_feedback_entry(repo.root, self.WID)
+
     def _interrupted_commit(self, repo):
         real_run = ws._run
 
@@ -20190,6 +20540,126 @@ class TestStageBaselineRecording(unittest.TestCase):
 
 def _git_out(repo, args):
     return subprocess.run(["git", *args], cwd=repo.root, check=True, capture_output=True, text=True).stdout
+
+# ---------------------------------------------------------------------------
+# workflow-2.14.0 CP1 (`finding-dispositions`): D-Ledger -- every Optional
+# finding of a recorded verdict is kept in the item's state.
+# ---------------------------------------------------------------------------
+
+def _optional_verdict(*entries: str) -> str:
+    body = "\n".join(f"- {entry}" for entry in entries) or "None."
+    return f"## Important findings\n\nNone.\n\n## Optional findings\n\n{body}\n"
+
+
+class TestOptionalFindingsLedger(unittest.TestCase):
+    def _plan_local(self, verdict, text, **kw):
+        wi = _v21_work_item(state_revision=1, governing_workflow_version="2.2")
+        return ws.record_local_plan_review(
+            _base_state(wi=wi), "wi", verdict=verdict, bundle_id="b1", review_content_id="c1", round=1,
+            now="t1", verdict_text=text, **kw)
+
+    def test_approve_and_revise_record_and_block_or_missing_text_do_not(self):
+        text = _optional_verdict("O1: add a test", "O2: rename x")
+        for verdict in ("APPROVE", "REVISE"):
+            with self.subTest(verdict=verdict):
+                item = self._plan_local(verdict, text)["work_items"]["wi"]
+                self.assertEqual(len(item["optional_findings"]), 2)
+                ref = next(iter(item["optional_findings"].values()))["raised"][0]
+                self.assertEqual(ref, {"stage": "plan", "role": "LOCAL_MODEL_PLAN_REVIEW", "round": 1,
+                                       "review_content_id": "c1", "verdict": verdict, "at": "t1"})
+                self.assertEqual(ws.optional_findings_errors(item["optional_findings"]), [])
+        self.assertNotIn("optional_findings", self._plan_local("APPROVE", None)["work_items"]["wi"])
+        self.assertNotIn("optional_findings", self._plan_local("APPROVE", _optional_verdict())["work_items"]["wi"])
+        wi = _v21_work_item(state_revision=1, governing_workflow_version="2.2")
+        state = _base_state(wi=wi)
+        blocked = ws.record_local_plan_review(state, "wi", verdict="BLOCK", bundle_id="b1", review_content_id="c1",
+                                              round=1, now="t1", verdict_text=_optional_verdict("O1: x"))
+        self.assertEqual(blocked, state)
+
+    def test_recording_leaves_everything_else_byte_identical(self):
+        text = _optional_verdict("O1: x")
+        with_text = self._plan_local("APPROVE", text)["work_items"]["wi"]
+        without = self._plan_local("APPROVE", None)["work_items"]["wi"]
+        with_text.pop("optional_findings")
+        self.assertEqual(with_text, without)
+
+    def test_same_finding_across_rounds_stages_and_applications_is_one_entry(self):
+        wi = _v21_work_item(state_revision=1, governing_workflow_version="2.2")
+        state = _base_state(wi=wi)
+        first = ws.record_local_plan_review(state, "wi", verdict="APPROVE", bundle_id="b1", review_content_id="c1",
+                                            round=1, now="t1", verdict_text=_optional_verdict("O1: x"))
+        manual = ws.record_manual_plan_review(
+            first, "wi", verdict="APPROVE", bundle_id="b1", round=1, now="t2", current_review_content_id="c1",
+            feedback_role="MANUAL_EXTERNAL_PLAN_REVIEW", feedback_review_content_id="c1",
+            verdict_text=_optional_verdict("O1:   x"))
+        ledger = manual["work_items"]["wi"]["optional_findings"]
+        self.assertEqual(len(ledger), 1)
+        self.assertEqual([r["role"] for r in next(iter(ledger.values()))["raised"]],
+                         ["LOCAL_MODEL_PLAN_REVIEW", "MANUAL_EXTERNAL_PLAN_REVIEW"])
+        again = copy.deepcopy(manual["work_items"]["wi"])
+        ws.merge_optional_findings(again, fingerprint.parse_optional_findings(_optional_verdict("O1: x")),
+                                   {"stage": "plan", "role": "MANUAL_EXTERNAL_PLAN_REVIEW", "round": 1,
+                                    "review_content_id": "c1", "verdict": "APPROVE", "at": "t9"})
+        self.assertEqual(again["optional_findings"], ledger)
+
+    def test_implementation_writers_record_at_the_implementation_stage(self):
+        text = _optional_verdict("O1: x")
+        local = ws.record_local_implementation_review(
+            _base_state(wi=_v22_work_item(state_revision=1)), "wi", verdict="REVISE", bundle_id="b1",
+            review_content_id="c1", round=2, now="t1", verdict_text=text)["work_items"]["wi"]
+        ref = next(iter(local["optional_findings"].values()))["raised"][0]
+        self.assertEqual((ref["stage"], ref["role"], ref["round"]), ("implementation", "LOCAL_MODEL_IMPLEMENTATION_REVIEW", 2))
+        wi = _v22_work_item(phase="AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", implementation_review_stages={
+            "review_content_id": "c1",
+            "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {"bundle_id": "b1", "verdict": "APPROVE", "round": 1, "completed_at": "t1"},
+            "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": None})
+        manual = ws.record_manual_implementation_review(
+            _base_state(wi=wi), "wi", verdict="APPROVE", bundle_id="b1", round=1, now="t2",
+            current_review_content_id="c1", feedback_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+            feedback_review_content_id="c1", verdict_text=text)["work_items"]["wi"]
+        ref = next(iter(manual["optional_findings"].values()))["raised"][0]
+        self.assertEqual((ref["stage"], ref["role"]), ("implementation", "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"))
+
+    def test_validation_accepts_the_shape_and_refuses_malformed_entries(self):
+        item = self._plan_local("APPROVE", _optional_verdict("O1: x"))["work_items"]["wi"]
+        ws.validate_state(_base_state(wi=item))
+        key = next(iter(item["optional_findings"]))
+        mutations = {
+            "not an object": lambda d: d.update(optional_findings=[]),
+            "bad key": lambda d: d["optional_findings"].update({"F-xyz": d["optional_findings"].pop(key)}),
+            "extra field": lambda d: d["optional_findings"][key].update(extra=1),
+            "digest mismatch": lambda d: d["optional_findings"][key].update(digest="0" * 64),
+            "empty raised": lambda d: d["optional_findings"][key].update(raised=[]),
+            "bad verdict": lambda d: d["optional_findings"][key]["raised"][0].update(verdict="BLOCK"),
+            "bad stage": lambda d: d["optional_findings"][key]["raised"][0].update(stage="functional"),
+            "bool round": lambda d: d["optional_findings"][key]["raised"][0].update(round=True),
+            "long text": lambda d: d["optional_findings"][key].update(text="x" * 1201),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                bad = copy.deepcopy(item)
+                mutate(bad)
+                with self.assertRaises(ws.InvalidOptionalFindingsError):
+                    ws.validate_state(_base_state(wi=bad))
+
+    def test_the_four_commit_field_sets_admit_the_key(self):
+        for name in ("ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS", "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS",
+                     "REVIEW_STAGE_WRITE_COMMIT_FIELDS", "TECHNICAL_APPROVAL_COMMIT_FIELDS"):
+            with self.subTest(name=name):
+                self.assertIn("optional_findings", getattr(ws, name))
+
+    def test_an_unrelated_closed_field_set_does_not_gain_the_key(self):
+        # CP1's audit of every other `_FIELDS = frozenset`: none concerns a verdict's write.
+        for name in ("LEGACY_RETIREMENT_FIELDS", "RESUME_IMPLEMENTATION_FIELDS", "_ACCEPTANCE_SATISFACTION_FIELDS"):
+            with self.subTest(name=name):
+                self.assertNotIn("optional_findings", getattr(ws, name))
+
+    def test_the_command_files_pass_verdict_text(self):
+        commands = Path(__file__).resolve().parent.parent / ".claude" / "commands"
+        for name in ("review-plan.md", "review-implementation.md"):
+            with self.subTest(name=name):
+                self.assertIn("verdict_text", (commands / name).read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

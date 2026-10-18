@@ -127,6 +127,21 @@ the design; operationally:
   <snippet>`; like any failed plan-stage generation it leaves the previous
   bundle intact and writes no `REJECTED` marker. Reword each flagged passage
   (say a feedback-only item or a two-stage item), then run the command again.
+- **A new plan revision whose artifact declaration leaves a named path
+  unclassified fails generation** (2.14.0). Right after the sweep check, at the
+  same command steps and in the plan-stage generator,
+  `assert_plan_artifact_declaration_coverage` reads each checkpoint's `**Files:**`
+  paragraph (in it every backtick span is a path, apart from a span with
+  whitespace or a glob or placeholder character, a URL, one starting `/`, `~` or
+  `..`, or a version string) and refuses a path that the item's
+  `<id>-artifacts.json` leaves unclassified at the plan stage, the
+  implementation stage or both. Regenerating an already-bound review at a ready
+  phase is not re-judged, and an already approved or bound plan is not
+  re-checked. The refusal names each checkpoint and path; like any failed
+  plan-stage generation it leaves the previous bundle intact and writes no
+  `REJECTED` marker. Add each path (or its directory prefix) to the declaration,
+  or write a non-path without backticks, then run the command again. A
+  checkpoint with no Files paragraph only draws a warning.
 - **A failed generation after the publish** leaves the item at
   `PUBLISHED_UNBOUND`. Re-run the same command with the explicit id —
   `/milestone-plan <id>` or `/apply-plan-review <id>` — which regenerates

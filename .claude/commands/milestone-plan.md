@@ -410,7 +410,24 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
         with `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it as
         `error: PlanGoverningVersionSweepError: ...` and stop, with nothing
         written. Do not write a list of governing versions in the plan: say a
-        feedback-only item or a two-stage item;
+        feedback-only item or a two-stage item. **Then, [2.14.0] declaration
+        check**: call
+        `workflow_state.assert_plan_artifact_declaration_coverage(repo_root,
+        work_item_id)`, which refuses a plan whose artifact declaration
+        leaves a path named in a checkpoint's Files paragraph unclassified at
+        the plan stage, the implementation stage or both. A refusal
+        (`workflow_state.PlanArtifactDeclarationCoverageError`, one of
+        `workflow_state._PLAN_EARLY_CHECK_ERRORS`) names each checkpoint and
+        path and ends with `workflow_state.PLAN_DECLARATION_NEXT_STEP`: report
+        it as `error: PlanArtifactDeclarationCoverageError: ...` and stop,
+        with nothing written. Give every checkpoint a `**Files:**` paragraph
+        naming each path it changes, in backticks from the repository root
+        (a bare file name is a root-level path, a trailing `/` a directory);
+        **in a Files paragraph every backtick span is a path**, except a span
+        with whitespace or a glob or placeholder character, a URL, one
+        starting `/`, `~` or `..`, or a version string such as `2.14.0`; write a
+        non-path (a function name, a flag, a dotted identifier) without
+        backticks;
      5. call `workflow_state.state_transaction(repo_root, lambda state:
         workflow_state.publish_plan_revision(state, work_item_id,
         plan_revision, now, review_content_id=F))`, where `F` is the fresh
@@ -431,8 +448,10 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
         record at a non-ready phase. Report the refusal and stop.
 
      At this point also print `workflow_state.plan_size_advisory(registry)`
-     when it returns a warning (workflow-2.12.0, `D-Size`), and continue: it
-     never refuses and writes nothing.
+     when it returns a warning (workflow-2.12.0, `D-Size`), and print
+     `workflow_state.plan_files_advisory(plan_text, registry)` (workflow-2.14.0,
+     `D-Coverage`) when it returns a warning, and continue: neither refuses and
+     neither writes anything.
 
      `WFR-65`'s ordering (mirror published before any bundle is generated)
      holds because step 6 follows this point. A later edit to a protected
@@ -505,6 +524,9 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      `workflow_state.assert_plan_governing_version_sweep(repo_root,
      work_item_id)` (a refusal, `PlanGoverningVersionSweepError`, ends with
      `workflow_state.PLAN_SWEEP_NEXT_STEP`: report it and stop), then
+     `workflow_state.assert_plan_artifact_declaration_coverage(repo_root,
+     work_item_id)` (a refusal, `PlanArtifactDeclarationCoverageError`, ends with
+     `workflow_state.PLAN_DECLARATION_NEXT_STEP`: report it and stop), then
      call `binding = workflow_state.verify_plan_review_bundle(repo_root,
      work_item_id)`, then `workflow_state.state_transaction(repo_root,
      lambda state: workflow_state.bind_plan_review_bundle(state,

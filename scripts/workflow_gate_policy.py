@@ -732,6 +732,40 @@ def _range_for_floor(history: _History) -> list[str]:
     return result
 
 
+def adoption_merge_cause(repo_root: Path, head: str | None = None) -> dict | None:
+    """The cause of an adoption that reached this line through a merge commit
+    (`D-Adoption`, workflow#37): walking the first-parent history, the newest
+    commit whose adoption differs from its first parent's; when it has more
+    than one parent and `_introduces_adoption` is false for it, `{commit,
+    sha256, parents}`, else None. It names the cause only; no evaluation
+    reads it."""
+    history = _history(Path(repo_root), head)
+    if history is None:
+        return None
+    for commit in history.commits:
+        adoption, _ = history.gp(commit)
+        parent_adoption, _ = history.first_parent_gp(commit)
+        if adoption != parent_adoption:
+            parents = history.parents[commit]
+            if not isinstance(adoption, dict) or not isinstance(adoption.get("sha256"), str):
+                return None
+            if len(parents) > 1 and not _introduces_adoption(history, commit, adoption):
+                return {"commit": commit, "sha256": adoption["sha256"], "parents": list(parents)}
+            return None
+    return None
+
+
+def adoption_merge_notice(cause: dict) -> str:
+    """The wording `verify`, the adoption preview and `/adopt-gate-policy`
+    share for an `adoption_merge_cause`."""
+    return (
+        f"the adoption {cause['sha256'][:12]} reached this line through merge commit "
+        f"{cause['commit'][:12]}, which does not record it on this line, so older versions of "
+        f"{POLICY_PATH} on this line still count and the gates can read stricter than adopted; "
+        f"merge an adoption with a squash, or run /adopt-gate-policy again on a branch and merge "
+        f"that branch with a squash")
+
+
 def verify_gate_policy_provenance(repo_root: Path, head: str | None = None) -> dict:
     """Verifies the adopted policy and the floor at `HEAD` (never the working
     tree) by content and by the chain of their changes, never by a commit
@@ -973,6 +1007,7 @@ def effective_policy(repo_root: Path, state: dict | None = None, *, ignore_file:
         "provenance": provenance,
         "gate_lowering": lowering,
         "ignored_fields": [],
+        "adoption_merge": adoption_merge_cause(repo_root),
     }
     if not provenance["ok"]:
         resolved = copy.deepcopy(ALL_HUMAN_RESOLVED)
@@ -1113,6 +1148,11 @@ def verify_check(repo_root: Path, state: dict | None = None) -> tuple[str, str]:
             warns.append(
                 f"the adoption's recorded lowered label {lowering['label_lowered']!r} disagrees with "
                 f"the recomputed lowering {lowering['lowered']!r}")
+    cause = effective.get("adoption_merge")
+    if cause is not None and provenance["ok"]:
+        adoption, _ = _committed_gp(_history(repo_root))
+        if tightened_fields(_base_resolved(adoption), effective["policy"]):
+            warns.append(adoption_merge_notice(cause))
     unreferenced = unreferenced_runs(state)
     if unreferenced:
         warns.append(

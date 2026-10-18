@@ -2053,6 +2053,164 @@ class TestVerifyCheck(unittest.TestCase):
                 self.assertEqual(self.verify(repo)["gate_policy"]["status"], "fail", body)
 
 
+# ---------------------------------------------------------------------------
+# the cause of an adoption merged with a merge commit (workflow#37, `D-Adoption`)
+# ---------------------------------------------------------------------------
+
+
+class TestAdoptionMergeCause(unittest.TestCase):
+    def verify_detail(self, repo: PolicyRepo) -> tuple[str, str]:
+        g.clear_caches()
+        return g.verify_check(repo.root, repo.state())
+
+    def merged_adoption_repo(self, repo: PolicyRepo) -> str:
+        """`main` holds an older all-human policy file; a branch adopts an
+        all-automatic one and is merged with a merge commit."""
+        repo.commit_policy(HUMAN)
+        repo.branch("feature")
+        repo.adopt(AUTOMATIC)
+        repo.checkout("main")
+        return repo.merge("feature")
+
+    def test_a_merge_commit_adoption_over_an_older_stricter_file_names_the_cause(self):
+        with PolicyRepo() as repo:
+            merge = self.merged_adoption_repo(repo)
+            eff = repo.eff()
+            self.assertEqual(eff["base"]["source"], "adopted")
+            cause = eff["adoption_merge"]
+            self.assertEqual(cause["commit"], merge)
+            self.assertEqual(cause["sha256"], repo.state()[g.ADOPTION_KEY]["sha256"])
+            self.assertEqual(len(cause["parents"]), 2)
+            self.assertEqual(g.adoption_merge_cause(repo.root), cause)
+            self.assertEqual(repo.human_gates(), set(g.GATE_IDS), "the evaluation is unchanged: older versions count")
+            status, detail = self.verify_detail(repo)
+            self.assertEqual(status, "warn")
+            self.assertIn(merge[:12], detail)
+            self.assertIn(cause["sha256"][:12], detail)
+            self.assertIn("squash", detail)
+
+    def test_the_evaluation_apart_from_the_new_key_is_what_it_was(self):
+        with PolicyRepo() as repo:
+            self.merged_adoption_repo(repo)
+            eff = repo.eff()
+            self.assertEqual(set(eff) - {"adoption_merge"}, {
+                "file", "provenance", "gate_lowering", "ignored_fields", "policy", "source",
+                "digest", "base", "floor"})
+            self.assertTrue(eff["provenance"]["ok"])
+
+    def test_the_same_branch_squash_merged_has_no_cause_and_no_warning(self):
+        with PolicyRepo() as repo:
+            repo.commit_policy(HUMAN)
+            repo.branch("feature")
+            repo.adopt(AUTOMATIC)
+            repo.checkout("main")
+            repo.squash("feature")
+            eff = repo.eff()
+            self.assertEqual(eff["source"], "adopted")
+            self.assertIsNone(eff["adoption_merge"])
+            self.assertEqual(repo.human_gates(), set())
+            self.assertEqual(self.verify_detail(repo)[0], "pass")
+
+    def test_an_update_merge_on_a_feature_branch_changes_no_evaluation_field(self):
+        with PolicyRepo() as repo:
+            repo.branch("feature")
+            repo.checkout("main")
+            repo.adopt(HUMAN)
+            repo.checkout("feature")
+            merge = repo.merge("main")
+            eff = repo.eff()
+            self.assertEqual(eff["adoption_merge"]["commit"], merge, "the cause is named")
+            self.assertEqual(eff["source"], "adopted")
+            self.assertEqual(eff["policy"], g.resolve_policy(HUMAN))
+            self.assertTrue(eff["provenance"]["ok"])
+            self.assertEqual(self.verify_detail(repo)[0], "pass",
+                             "the effective policy is not stricter than the adopted one")
+
+    def test_no_adoption_an_introduced_adoption_and_a_later_non_adoption_merge_have_no_cause(self):
+        with PolicyRepo() as repo:
+            self.assertIsNone(repo.eff()["adoption_merge"])
+        with PolicyRepo() as repo:
+            repo.adopt(HUMAN)
+            self.assertIsNone(repo.eff()["adoption_merge"])
+        with PolicyRepo() as repo:
+            self.merged_adoption_repo(repo)
+            self.assertIsNotNone(repo.eff()["adoption_merge"])
+            repo.hand_state_commit(lambda state: state.update(note="x"))
+            self.assertIsNotNone(repo.eff()["adoption_merge"], "the newest adoption change is still the merge")
+            repo.adopt(PLAN_HUMAN)
+            self.assertIsNone(repo.eff()["adoption_merge"], "a later adoption introduced on this line")
+
+    def test_a_merge_that_removes_or_corrupts_the_adoption_has_no_cause_and_never_raises(self):
+        """I1: the walk stops at a merge whose adoption is gone or unusable;
+        `effective_policy` keeps 2.13.0's provenance failure, apart from
+        `adoption_merge: None`."""
+        def drop(ours, theirs, base):
+            return {k: v for k, v in theirs.items() if k not in (g.ADOPTION_KEY, g.FLOOR_KEY)}
+
+        def corrupt(value):
+            def resolve(ours, theirs, base):
+                return {**theirs, g.ADOPTION_KEY: value}
+            return resolve
+
+        resolvers = {"removed": drop, "string": corrupt("x"), "no sha256": corrupt({"policy": {}}),
+                     "non-string sha256": corrupt({"sha256": 1})}
+        for name, resolver in resolvers.items():
+            with self.subTest(name), PolicyRepo() as repo:
+                repo.adopt(HUMAN)
+                repo.branch("feature")
+                repo.hand_state_commit(lambda state: state.update(note="feature"))
+                repo.checkout("main")
+                repo.hand_state_commit(lambda state: state.update(note="main"))
+                merge = repo.merge("feature", resolver)
+                self.assertIsNone(g.adoption_merge_cause(repo.root))
+                eff = repo.eff()
+                self.assertIsNone(eff["adoption_merge"])
+                self.assertEqual(eff["source"], "provenance_failed")
+                self.assertFalse(eff["provenance"]["ok"])
+                status, detail = self.verify_detail(repo)
+                self.assertEqual(status, "fail")
+                self.assertIn(merge[:12], detail)
+                preview = ws.gate_policy_adoption_preview(repo.root)
+                self.assertIsNone(preview["adoption_merge"])
+
+    def test_a_merge_with_an_unparseable_state_has_no_cause_and_never_raises(self):
+        with PolicyRepo() as repo:
+            repo.adopt(HUMAN)
+            repo.branch("feature")
+            repo.hand_state_commit(lambda state: state.update(note="feature"))
+            repo.checkout("main")
+            repo.hand_state_commit(lambda state: state.update(note="main"))
+            subprocess.run(["git", "merge", "--no-ff", "--no-commit", "feature"], cwd=repo.root,
+                           capture_output=True, text=True)
+            (repo.root / STATE_REL).write_text("{not json")
+            repo.git("add", "--", STATE_REL)
+            repo.git("commit", "-q", "-m", "update from feature")
+            self.assertIsNone(g.adoption_merge_cause(repo.root))
+            g.clear_caches()
+            self.assertIsNone(g.effective_policy(repo.root, {})["adoption_merge"])
+            g.clear_caches()
+            self.assertEqual(g.verify_check(repo.root, {})[0], "fail")
+
+    def test_the_preview_carries_the_cause_and_the_command_names_it(self):
+        with PolicyRepo() as repo:
+            self.merged_adoption_repo(repo)
+            repo.commit_policy(PLAN_HUMAN)
+            preview = ws.gate_policy_adoption_preview(repo.root)
+            self.assertEqual(preview["adoption_merge"], repo.eff()["adoption_merge"])
+            self.assertEqual(preview["adoption_merge_notice"], g.adoption_merge_notice(preview["adoption_merge"]))
+        with PolicyRepo() as repo:
+            repo.commit_policy(PLAN_HUMAN)
+            preview = ws.gate_policy_adoption_preview(repo.root)
+            self.assertIsNone(preview["adoption_merge"])
+            self.assertIsNone(preview["adoption_merge_notice"])
+        text = (REPO_ROOT / ".claude/commands/adopt-gate-policy.md").read_text()
+        doc = (REPO_ROOT / "docs/ai-workflow/GATE_POLICY.md").read_text()
+        for needle in ("adoption_merge", "adoption_merge_notice", "squash"):
+            self.assertIn(needle, text)
+        for needle in ("adoption_merge", "squash"):
+            self.assertIn(needle, doc)
+
+
 class TestAllHumanEquivalence(unittest.TestCase):
     def test_an_adopted_all_human_policy_changes_only_the_top_level_fields(self):
         """D-GP-Compat's delta 7: the adoption adds the two top-level keys and
@@ -3632,6 +3790,38 @@ class AcceptanceRepo(EvidenceRepo):
         self.flow()
         self.query([pr_record(self.anchor, **pr)])
 
+    def add_remediation_child(self) -> str:
+        """A `<WI>-remediation-1` child that can be accepted on its own: its own
+        registry, artifacts file, plan approval and technical-approval identity."""
+        ev = self
+        child_id = f"{WI}-remediation-1"
+        state = ev.state()
+        child = copy.deepcopy(state["work_items"][WI])
+        child.update(work_item_id=child_id, parent_work_item_id=WI)
+        state["work_items"][child_id] = child
+        h.write_state(ev.repo, state)
+        registry_dir = ev.root / "docs" / "ai-workflow" / "registry"
+        (registry_dir / f"{child_id}-artifacts.json").write_text(
+            (registry_dir / f"{WI}-artifacts.json").read_text())
+        registry = json.loads((registry_dir / f"{WI}-registry.json").read_text())
+        registry["work_item_id"] = child_id
+        (registry_dir / f"{child_id}-registry.json").write_text(json.dumps(registry, indent=2) + "\n")
+        h.git(ev.repo, "add", f"docs/ai-workflow/registry/{child_id}-registry.json",
+              f"docs/ai-workflow/registry/{child_id}-artifacts.json")
+        state = ev.state()
+        child = state["work_items"][child_id]
+        child["registry_path"] = f"docs/ai-workflow/registry/{child_id}-registry.json"
+        import workflow_fingerprint as fingerprint
+        manifest = [{"path": path, **fingerprint._snapshot_worktree(ev.root, path)}
+                    for path in sorted(h.plan_stage_protected_paths(child_id))]
+        child["plan_approval"] = ws.build_approval_record(
+            basis="EXTERNAL_APPROVE", stage="plan", user_confirmation="approved", now=now(),
+            reviewed_bundle_id="b" * 64, approved_review_content_id="c" * 64, review_content_manifest=manifest)
+        child["technical_approval"]["approved_review_content_id"] = g.identity_at(
+            ev.root, child_id, child, ev.anchor)
+        h.write_state(ev.repo, state)
+        return child_id
+
     def satisfy(self, records=None, **kw) -> dict:
         body = json.dumps(records if records is not None else [pr_record(self.anchor)])
         return ws.satisfy_acceptance_gate(self.root, WI, now=now(), run=lambda a, t: body,
@@ -3940,32 +4130,7 @@ class TestSatisfyAcceptance(unittest.TestCase):
     def test_a_remediation_child_is_accepted_automatically_and_its_parent_unblocks(self):
         with AcceptanceRepo() as ev:
             ev.flow()
-            child_id = f"{WI}-remediation-1"
-            state = ev.state()
-            child = copy.deepcopy(state["work_items"][WI])
-            child.update(work_item_id=child_id, parent_work_item_id=WI)
-            state["work_items"][child_id] = child
-            h.write_state(ev.repo, state)
-            registry_dir = ev.root / "docs" / "ai-workflow" / "registry"
-            (registry_dir / f"{child_id}-artifacts.json").write_text(
-                (registry_dir / f"{WI}-artifacts.json").read_text())
-            registry = json.loads((registry_dir / f"{WI}-registry.json").read_text())
-            registry["work_item_id"] = child_id
-            (registry_dir / f"{child_id}-registry.json").write_text(json.dumps(registry, indent=2) + "\n")
-            h.git(ev.repo, "add", f"docs/ai-workflow/registry/{child_id}-registry.json",
-                  f"docs/ai-workflow/registry/{child_id}-artifacts.json")
-            state = ev.state()
-            child = state["work_items"][child_id]
-            child["registry_path"] = f"docs/ai-workflow/registry/{child_id}-registry.json"
-            import workflow_fingerprint as fingerprint
-            manifest = [{"path": path, **fingerprint._snapshot_worktree(ev.root, path)}
-                        for path in sorted(h.plan_stage_protected_paths(child_id))]
-            child["plan_approval"] = ws.build_approval_record(
-                basis="EXTERNAL_APPROVE", stage="plan", user_confirmation="approved", now=now(),
-                reviewed_bundle_id="b" * 64, approved_review_content_id="c" * 64, review_content_manifest=manifest)
-            child["technical_approval"]["approved_review_content_id"] = g.identity_at(
-                ev.root, child_id, child, ev.anchor)
-            h.write_state(ev.repo, state)
+            child_id = ev.add_remediation_child()
             body = json.dumps([pr_record(ev.anchor)])
             with self.assertRaises(ws.IncompleteChildWorkItemError):
                 ev.satisfy()
@@ -4661,6 +4826,263 @@ class TestReopenCommandText(unittest.TestCase):
             ev.satisfy([pr_record(ev.anchor, decision="APPROVED")])
             self.assertEqual(ev.item()["phase"], "MILESTONE_COMPLETE")
             self.assertEqual(len(ev.item()["reopenings"]), 1)
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.14.0 CP2 (`finding-dispositions`): D-Gate, D-Dispositions, D-Record
+# ---------------------------------------------------------------------------
+
+def _findings_text(*entries: str) -> str:
+    return "## Important findings\n\nNone.\n\n## Optional findings\n\n" + "\n".join(f"- {e}" for e in entries) + "\n"
+
+
+class TestFindingDispositions(unittest.TestCase):
+    def record(self, ev, item_id=WI, *entries):
+        import workflow_fingerprint as fingerprint
+        state = ev.state()
+        ws.merge_optional_findings(
+            state["work_items"][item_id], fingerprint.parse_optional_findings(_findings_text(*entries)),
+            {"stage": "plan", "role": "LOCAL_MODEL_PLAN_REVIEW", "round": 2, "review_content_id": "c" * 64,
+             "verdict": "APPROVE", "at": "t1"})
+        h.write_state(ev.repo, state)
+        return sorted(state["work_items"][item_id]["optional_findings"])
+
+    def write_dispositions(self, ev, mapping, item_id=WI, **top):
+        body = {"schema_version": 1, "work_item_id": item_id, "dispositions": mapping, **top}
+        path = ev.root / ws.finding_dispositions_path(item_id)
+        path.write_text(json.dumps(body))
+        return path
+
+    def test_no_key_passes_and_an_undispositioned_finding_refuses_naming_everything(self):
+        with AcceptanceRepo() as ev:
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            (key,) = self.record(ev, WI, "O1: add a test")
+            with self.assertRaises(ws.UndispositionedFindingsError) as caught:
+                ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            message = str(caught.exception)
+            for needle in (key, "plan LOCAL_MODEL_PLAN_REVIEW round 2", "O1: add a test",
+                           f"{WI}-dispositions.json", "--finding-dispositions"):
+                self.assertIn(needle, message)
+
+    def test_each_valid_disposition_satisfies(self):
+        with AcceptanceRepo() as ev:
+            keys = self.record(ev, WI, "O1: a", "O2: b", "O3: c")
+            self.write_dispositions(ev, {
+                keys[0]: {"disposition": "fixed"},
+                keys[1]: {"disposition": "dropped", "reason": "out of scope"},
+                keys[2]: {"disposition": "follow-up", "link": "owner/repo#12"}})
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            self.write_dispositions(ev, {**{k: {"disposition": "fixed"} for k in keys[:2]},
+                                         keys[2]: {"disposition": "follow-up", "link": "https://github.com/o/r/issues/1"}})
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+
+    def test_invalid_files_refuse_naming_every_problem(self):
+        with AcceptanceRepo() as ev:
+            keys = self.record(ev, WI, "O1: a", "O2: b", "O3: c", "O4: d")
+            bad = {keys[0]: {"disposition": "dropped"},
+                   keys[1]: {"disposition": "follow-up", "link": "not a link"},
+                   keys[2]: {"disposition": "?"},
+                   keys[3]: {"disposition": "ignored"}}
+            self.write_dispositions(ev, bad)
+            with self.assertRaises(ws.InvalidFindingDispositionsError) as caught:
+                ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            for key in keys:
+                self.assertIn(key, str(caught.exception))
+            path = self.write_dispositions(ev, {k: {"disposition": "fixed"} for k in keys})
+            body = json.loads(path.read_text())
+            body["work_item_id"] = "other"
+            path.write_text(json.dumps(body))
+            with self.assertRaises(ws.InvalidFindingDispositionsError):
+                ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            path.write_text("not json")
+            with self.assertRaises(ws.InvalidFindingDispositionsError):
+                ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+
+    def test_an_unmatched_key_is_ignored_by_the_gate_and_listed_in_the_record(self):
+        with AcceptanceRepo() as ev:
+            (key,) = self.record(ev, WI, "O1: a")
+            self.write_dispositions(ev, {key: {"disposition": "fixed"}, "F-000000000000": {"disposition": "fixed"}})
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            self.assertIn("F-000000000000", ws.render_finding_dispositions(ev.root, ev.state(), WI))
+
+    def test_a_finding_raised_in_three_rounds_needs_one_entry(self):
+        with AcceptanceRepo() as ev:
+            for rnd in (1, 2, 3):
+                state = ev.state()
+                import workflow_fingerprint as fingerprint
+                ws.merge_optional_findings(
+                    state["work_items"][WI], fingerprint.parse_optional_findings(_findings_text("O1: same")),
+                    {"stage": "implementation", "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "round": rnd,
+                     "review_content_id": "d" * 64, "verdict": "REVISE", "at": f"t{rnd}"})
+                h.write_state(ev.repo, state)
+            (key,) = ev.item()["optional_findings"]
+            self.assertEqual(len(ev.item()["optional_findings"][key]["raised"]), 3)
+            self.write_dispositions(ev, {key: {"disposition": "fixed"}})
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+
+    def test_complete_work_item_refuses_and_a_follow_up_completes(self):
+        with AcceptanceRepo() as ev:
+            ev.flow()
+            (key,) = self.record(ev, WI, "O1: a")
+            state = ev.state()
+            with self.assertRaises(ws.UndispositionedFindingsError):
+                ws.complete_work_item(state, WI, now(), repo_root=ev.root)
+            self.write_dispositions(ev, {key: {"disposition": "follow-up", "link": "owner/repo#7"}})
+            done = ws.complete_work_item(state, WI, now(), repo_root=ev.root)
+            self.assertEqual(done["work_items"][WI]["phase"], "MILESTONE_COMPLETE")
+
+    def test_the_policy_path_refuses_writing_nothing_and_completes_with_a_disposition(self):
+        with AcceptanceRepo() as ev:
+            ev.flow()
+            (key,) = self.record(ev, WI, "O1: a")
+            before = state_bytes(ev.repo)
+            with self.assertRaises(ws.UndispositionedFindingsError):
+                ev.satisfy()
+            self.assertEqual(state_bytes(ev.repo), before)
+            self.write_dispositions(ev, {key: {"disposition": "follow-up", "link": "owner/repo#7"}})
+            ev.satisfy()
+            self.assertEqual(ev.item()["phase"], "MILESTONE_COMPLETE")
+
+    def test_existing_refusals_keep_their_order(self):
+        with AcceptanceRepo() as ev:
+            self.record(ev, WI, "O1: a")
+            state = ev.state()
+            state["work_items"]["wi-child"] = copy.deepcopy(state["work_items"][WI])
+            state["work_items"]["wi-child"].update(work_item_id="wi-child", parent_work_item_id=WI)
+            with self.assertRaises(ws.IncompleteChildWorkItemError):
+                ws.complete_work_item(state, WI, now(), repo_root=ev.root)
+
+    def test_the_record_is_deterministic_overwritten_and_empty_for_an_empty_ledger(self):
+        with AcceptanceRepo() as ev:
+            self.assertIsNone(ws.render_finding_dispositions(ev.root, ev.state(), WI))
+            self.assertEqual(ws.write_finding_dispositions_record(ev.root, ev.state(), WI), [])
+            self.assertFalse((ev.root / ws.finding_dispositions_record_path(WI)).exists())
+            keys = self.record(ev, WI, "O1: a | b", "O2: c")
+            self.write_dispositions(ev, {keys[0]: {"disposition": "dropped", "reason": "not needed"},
+                                         keys[1]: {"disposition": "fixed"}})
+            first = ws.render_finding_dispositions(ev.root, ev.state(), WI)
+            self.assertEqual(first, ws.render_finding_dispositions(ev.root, ev.state(), WI))
+            self.assertIn("O1: a \\| b", first)
+            paths = ws.write_finding_dispositions_record(ev.root, ev.state(), WI)
+            self.assertEqual(paths, [ws.finding_dispositions_record_path(WI), ws.finding_dispositions_path(WI)])
+            record = ev.root / paths[0]
+            self.assertEqual(record.read_text(), first)
+            record.write_text("stale")
+            ws.write_finding_dispositions_record(ev.root, ev.state(), WI)
+            self.assertEqual(record.read_text(), first)
+            (ev.root / paths[1]).unlink()
+            self.assertEqual(ws.write_finding_dispositions_record(ev.root, ev.state(), WI), [paths[0]])
+
+    def test_a_remediation_child_has_its_own_ledger_record_and_disposition(self):
+        with AcceptanceRepo() as ev:
+            ev.flow()
+            child_id = f"{WI}-remediation-1"
+            state = ev.state()
+            child = copy.deepcopy(state["work_items"][WI])
+            child.update(work_item_id=child_id, parent_work_item_id=WI)
+            state["work_items"][child_id] = child
+            h.write_state(ev.repo, state)
+            (key,) = self.record(ev, child_id, "O1: child finding")
+            self.assertNotIn("optional_findings", ev.item())
+            with self.assertRaises(ws.UndispositionedFindingsError):
+                ws.assert_finding_dispositions_recorded(ev.root, ev.state(), child_id)
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            self.write_dispositions(ev, {key: {"disposition": "fixed"}}, item_id=child_id)
+            ws.assert_finding_dispositions_recorded(ev.root, ev.state(), child_id)
+            paths = ws.write_finding_dispositions_record(ev.root, ev.state(), child_id)
+            self.assertEqual(paths, [ws.finding_dispositions_record_path(child_id),
+                                     ws.finding_dispositions_path(child_id)])
+            self.assertEqual(ws.write_finding_dispositions_record(ev.root, ev.state(), WI), [])
+
+    def _child_with_a_finding(self, ev):
+        ev.flow()
+        child_id = ev.add_remediation_child()
+        (key,) = self.record(ev, child_id, "O1: child finding")
+        return child_id, key
+
+    def _assert_child_record_and_untouched_parent(self, ev, child_id, key, parent_before):
+        paths = ws.write_finding_dispositions_record(ev.root, ev.state(), child_id)
+        self.assertEqual(paths, [ws.finding_dispositions_record_path(child_id),
+                                 ws.finding_dispositions_path(child_id)])
+        self.assertIn("child finding", (ev.root / paths[0]).read_text())
+        self.assertEqual(ws.write_finding_dispositions_record(ev.root, ev.state(), WI), [])
+        self.assertFalse((ev.root / ws.finding_dispositions_record_path(WI)).exists())
+        self.assertEqual(ev.state()["work_items"][WI], parent_before)
+
+    def test_a_finding_bearing_child_is_refused_then_completed_by_the_human_path(self):
+        with AcceptanceRepo() as ev:
+            child_id, key = self._child_with_a_finding(ev)
+            parent_before = copy.deepcopy(ev.state()["work_items"][WI])
+            before = state_bytes(ev.repo)
+            with self.assertRaises(ws.UndispositionedFindingsError) as caught:
+                ws.complete_work_item(ev.state(), child_id, now(), repo_root=ev.root)
+            self.assertIn(key, str(caught.exception))
+            self.assertIn(f"{child_id}-dispositions.json", str(caught.exception))
+            self.assertEqual(state_bytes(ev.repo), before)
+            self.write_dispositions(ev, {key: {"disposition": "fixed"}}, item_id=child_id)
+            done = ws.complete_work_item(ev.state(), child_id, now(), repo_root=ev.root)
+            self.assertEqual(done["work_items"][child_id]["phase"], "MILESTONE_COMPLETE")
+            self.assertEqual(done["work_items"][WI], parent_before)
+            self._assert_child_record_and_untouched_parent(ev, child_id, key, parent_before)
+
+    def test_a_finding_bearing_child_is_refused_then_completed_by_the_policy_path(self):
+        with AcceptanceRepo() as ev:
+            child_id, key = self._child_with_a_finding(ev)
+            parent_before = copy.deepcopy(ev.state()["work_items"][WI])
+            body = json.dumps([pr_record(ev.anchor)])
+
+            def satisfy_child():
+                return ws.satisfy_acceptance_gate(ev.root, child_id, now=now(), run=lambda a, t: body,
+                                                  resolve=lambda r: dict(FAKE_GH))
+            before = state_bytes(ev.repo)
+            with self.assertRaises(ws.UndispositionedFindingsError):
+                satisfy_child()
+            self.assertEqual(state_bytes(ev.repo), before)
+            self.write_dispositions(ev, {key: {"disposition": "follow-up", "link": "owner/repo#9"}}, item_id=child_id)
+            satisfy_child()
+            self.assertEqual(ev.state()["work_items"][child_id]["phase"], "MILESTONE_COMPLETE")
+            self.assertEqual(ev.state()["work_items"][WI], parent_before)
+            self._assert_child_record_and_untouched_parent(ev, child_id, key, parent_before)
+
+    def test_accept_milestone_runs_the_disposition_preflight_before_the_pr_preflight(self):
+        text = (REPO_ROOT / ".claude" / "commands" / "accept-milestone.md").read_text()
+        self.assertLess(text.index("**Optional-finding dispositions pre-flight**"),
+                        text.index("**`requires_pr_approved` pre-flight**"))
+
+    def test_the_listing_option_prints_the_skeleton_and_the_status_option_still_works(self):
+        with AcceptanceRepo() as ev:
+            keys = self.record(ev, WI, "O1: a", "O2: b")
+            self.write_dispositions(ev, {keys[0]: {"disposition": "fixed"}})
+            script = Path(ws.__file__).resolve()
+            ran = subprocess.run([sys.executable, str(script), "--finding-dispositions", WI], cwd=ev.root,
+                                 capture_output=True, text=True)
+            self.assertEqual(ran.returncode, 0, ran.stderr)
+            out = json.loads(ran.stdout)
+            self.assertEqual(out["skeleton"]["dispositions"], {keys[1]: {"disposition": "?"}})
+            self.assertEqual([f["key"] for f in out["findings"]], keys)
+            status = subprocess.run([sys.executable, str(script), "--plan-review-publication-status", WI],
+                                    cwd=ev.root, capture_output=True, text=True)
+            self.assertIn(status.returncode, (0, 1), status.stderr)
+            self.assertTrue(json.loads(status.stdout))
+            neither = subprocess.run([sys.executable, str(script)], cwd=ev.root, capture_output=True, text=True)
+            self.assertNotEqual(neither.returncode, 0)
+
+    def test_the_dispositions_file_is_excluded_at_both_stages_for_both_item_types(self):
+        import workflow_fingerprint as fingerprint
+        for work_item_type in ("process", "product"):
+            with self.subTest(work_item_type=work_item_type):
+                d = ws.generate_artifacts_declarations(
+                    "wi", "docs/p.md", "docs/ai-workflow/registry/wi-registry.json",
+                    "docs/ai-workflow/requirements/wi-mapping.json", work_item_type=work_item_type)
+                path = str(ws.finding_dispositions_path("wi"))
+                plan, impl = d["plan_stage"], d["implementation_stage"]
+                self.assertEqual(fingerprint.classify_path(
+                    path, frozenset(plan["protected_paths"]), plan["excluded_paths"], plan["excluded_prefixes"]),
+                    "excluded")
+                self.assertEqual(fingerprint.classify_path_implementation_stage(
+                    path, impl["protected_paths"], impl["protected_prefixes"], impl["excluded_paths"],
+                    impl["excluded_prefixes"]), "excluded")
+
 
 
 if __name__ == "__main__":

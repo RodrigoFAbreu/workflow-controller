@@ -191,7 +191,12 @@ and this stage states only what differs.
    (or `/apply-pr-review`), or turn acceptance human. A fact for an **older**
    head (a bounded fix approved locally but not pushed) blocks `pr_fact_current`:
    push the approved head and re-run `/satisfy-gate acceptance`.
-3. **Complete, with the record.** In the same mutator,
+3. **Complete, with the record.** (First, `/accept-milestone` step 2a's
+   disposition pre-flight: `workflow_state.assert_finding_dispositions_recorded`.
+   `UndispositionedFindingsError` or `InvalidFindingDispositionsError` refuses
+   inside the transaction, so nothing is written, including the pull-request
+   fact the query read; record the dispositions, save the file and run the
+   stage again. The Orchestration Protocol's `next-action` does not predict it.) In the same mutator,
    `workflow_state.apply_acceptance_satisfaction` calls
    `workflow_state.complete_work_item` -- so every refusal of the human path
    still holds (an incomplete child, an outstanding checkpoint, an unsatisfied
@@ -204,7 +209,8 @@ and this stage states only what differs.
    statement, `evaluated_at` and `workflow_release`. A re-acceptance overwrites it.
 4. **The remaining steps.** Run `/accept-milestone` steps 2b and 3 to 8 as
    written (the roadmap, `docs/ACTIVE_MILESTONE.md`, the archive copy of step 5,
-   the completion commit, the next action). The completion commit's final
+   step 5a's findings record, whose returned paths the completion commit stages, the
+   completion commit, the next action). The completion commit's final
    paragraph carries `Workflow-Work-Item: <id>` **and**
    `Workflow-Gate-Satisfied-By: policy:<first 12 characters of the policy digest>`
    (`workflow_state.acceptance_satisfied_by_trailer(record)`) and nothing else;

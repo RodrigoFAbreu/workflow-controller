@@ -47,17 +47,21 @@ Global options go before the subcommand and the repository goes last, as in `wor
      [gates page](https://github.com/RodrigoFAbreu/workflow/blob/main/docs/gates.md) describes
      them), then run again.
    - **Acceptance may ask for evidence first:** `explain` can instead report
-     `functional_evidence_needed` or `pr_evidence_needed`. The Controller does not collect
-     either for you yet (the automated functional review and the pull request defect loop are later steps).
+     `functional_evidence_needed`, `pr_evidence_needed` or `pr_approval_needed`.
      - `functional_evidence_needed`: have one functional result recorded per required flow, for
        example `python3 scripts/workflow_protocol.py record-external-result --work-item <id> --kind functional_evidence --input result.json`.
+       The Controller does not collect it yet (the automated functional review is a later step).
        The input fields are in "Evidence kinds" in the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md).
-     - `pr_evidence_needed`: push the pull request, wait for its checks, then run
-       `/satisfy-gate acceptance <id>`, which asks GitHub itself. Automatic acceptance needs an
+     - `pr_evidence_needed`, `pr_approval_needed`: the Controller handles these itself under an
+       automatic acceptance gate. It queries GitHub for the pull request, reports the result to the
+       Workflow, waits (with `--wait`) while the checks are the only thing pending, and launches
+       `/apply-pr-review` when the Workflow asks for it, so a run carries on once the checks are
+       green and a red pull request reopens the work item. It stops for a person only when the
+       pull request still needs an approval, has no pull request or no GitHub answer, or the
+       Workflow refuses the report (see "The pull request defect loop" in the
+       [automation guide](guide/automation.md)). Automatic acceptance needs an
        open, pushed pull request. A repository without milestone branches has no pull request at
        acceptance, so it must make acceptance a person's (next item).
-       Once the checks turn green the run still stops here: run `/satisfy-gate acceptance <id>` by hand
-       (see "Automatic gates" in the [automation guide](guide/automation.md)).
      - Or make acceptance a person's: set `gates.acceptance.human: true`, commit the file and run
        `/adopt-gate-policy` (see Human gates below), then accept with `/accept-milestone`. The external reviews and, unless functional evidence is recorded,
        the functional review stay yours.

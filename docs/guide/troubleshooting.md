@@ -408,9 +408,13 @@ disposition and action beside it.
   1.7.0 refuses `explain`, `step` and `run` (exit 20; see the `'warn'` paragraph below the
   list). The adoption timing is under Human gates in [run](../run.md#steps). The Workflow's
   [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md) explains when to commit and adopt it.
-- `functional_evidence_needed`, `pr_evidence_needed`: at a Workflow 2.8 automatic
-  acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
-  not the unknown disposition; see [run](../run.md#steps) step 3.
+- `functional_evidence_needed`, `pr_evidence_needed`, `pr_approval_needed`: at a Workflow 2.8
+  automatic acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
+  not the unknown disposition; see [run](../run.md#steps) step 3. For the two pull request
+  ones the Controller acts itself; the stops it ends in (`pr_checks_pending`,
+  `pr_report_unchanged`, `pr_report_no_pull_request`, `pr_report_forge_unavailable`,
+  `pr_report_refused`, `pr_report_stale`) are described in the
+  [automation guide](automation.md#protocol-mode-workflow-27-and-later).
 - `workflow_user_only_action`: an `automatic` answer whose worker is
   `user_only`. The Controller never launches it.
 - `workflow_invocation_mismatch`: the Workflow's invocation text for the

@@ -473,3 +473,41 @@ class DispatchTest(ReporterCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportNotificationTest(unittest.TestCase):
+    """CP4 / D8: a ``pr_report`` job asks for a person only where one is needed.
+
+    A reported result is a ``step_done``; every stop the step ends in is the
+    Controller's own gate (or the Workflow's ``external_gate``), which waits on
+    a person, and a stop the Workflow calls ``blocked`` is a ``lane_blocked``.
+    """
+
+    def record(self, outcome: str, *, disposition: str = "external_gate") -> dict:
+        gate = {"repository": "/r", "work_item_id": WID, "phase": "AWAITING_FUNCTIONAL_REVIEW",
+                "what_is_required": f"{outcome}: needs a person", "artifact_path": None,
+                "safe_resume_command": "gh pr review --approve"}
+        reported = outcome == pr_report.REPORTED
+        return {"job_id": f"job-{outcome}", "work_item_id": WID, "kind": job.PR_REPORT_KIND,
+                "status": job.STATUS_FINISHED if reported else job.STATUS_GATE_BLOCKED,
+                "selected_action": {"command": job.PR_REPORT_COMMAND},
+                "observed_phase_after": "AWAITING_FUNCTIONAL_REVIEW",
+                "pre_state": {"state_revision": 3},
+                "human_gate_pending": None if reported else gate,
+                "protocol": {"decision": {"disposition": disposition}},
+                "pr_report": {"outcome": outcome}}
+
+    def events(self, record: dict) -> list[str]:
+        return [e.event_type for e in job.derive_job_event(record)]
+
+    def test_a_reported_result_is_step_done(self) -> None:
+        self.assertEqual(self.events(self.record(pr_report.REPORTED)), ["step_done"])
+
+    def test_every_stop_of_the_step_asks_for_a_person(self) -> None:
+        for outcome in (pr_report.UNCHANGED, pr_report.PENDING, pr_report.NO_PULL_REQUEST,
+                        pr_report.FORGE_UNAVAILABLE, pr_report.REFUSED, pr_report.STALE):
+            with self.subTest(outcome=outcome):
+                self.assertEqual(self.events(self.record(outcome)), ["user_gate"])
+
+    def test_a_stop_the_workflow_calls_blocked_is_not_a_decision(self) -> None:
+        self.assertEqual(self.events(self.record(pr_report.REFUSED, disposition="blocked")), ["lane_blocked"])

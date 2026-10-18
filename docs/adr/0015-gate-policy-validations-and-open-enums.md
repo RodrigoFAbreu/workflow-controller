@@ -31,7 +31,7 @@ adds.
 2. **The validator is a role of its own**, `satisfy-gate`: Opus at `xhigh`,
    single-agent, because it runs a transaction that commits and must not
    delegate it. It joins the settings file's role names (table generation 9).
-   `pr.apply_review` stays unlaunched until its own step.
+   `pr.apply_review` stayed unlaunched until its own step ([ADR 0016](0016-pull-request-report-and-apply.md)).
 3. **A refused validation is a stop, not an approval.** Nothing is written and
    the phase is unchanged; the step is recorded as no progress, so the loop
    guard blocks the third launch. `approval_recorded` is sent only when the
@@ -53,8 +53,8 @@ adds.
 - A run passes plan approval, technical approval and, when its requirements
   are met, acceptance without a person. Acceptance still stops at the
   functional evidence (row 38e) and pull request rows (38d, 38f, 38g) until
-  the steps that own them land; the 38f stop is cleared by running
-  `/satisfy-gate acceptance <id>` by hand.
+  the steps that own them land. The pull request rows landed in
+  [ADR 0016](0016-pull-request-report-and-apply.md).
 - A Workflow minor release that adds an enum value is no longer a Controller
   release. A new enum location with no rule fails the schema test, so it
   cannot be missed.

@@ -344,7 +344,7 @@ committed-state gate of legacy mode still applies before a launch.
 `inspect` lists, as an advisory, any action id the Workflow's `describe`
 reports that this Controller release cannot launch (`unknown_action_ids`
 with `--json`): an invented id, or the catalogue id it has no
-command for (`pr.apply_review`, which waits for a later step). Such an id is never a refusal; it is blocked only if it
+command for (no catalogue id is left without one in this release). Such an id is never a refusal; it is blocked only if it
 becomes the next action, as `workflow_unknown_action`.
 
 **Automatic gates.** A `validation` answer runs the Workflow's own
@@ -356,13 +356,37 @@ and the phase is unchanged: the step ends with no progress and sends only
 `step_done`, `explain` shows the unmet requirement from the worker's report,
 and the loop guard (`no_progress_repeated`) lets two such steps run and blocks
 the third. A gate that still needs evidence the Controller cannot yet produce
-stays a stop: the functional evidence of row 38e (the automated functional review),
-and the pull request rows 38f and 38g (`pr_evidence_needed`, `pr_approval_needed`).
-Once a refused `/satisfy-gate acceptance` has stored a pull request whose checks
-are pending, the answer stays `pr_evidence_needed` after the checks turn green
-until you run `/satisfy-gate acceptance <id>` by hand; reporting a fresh
-`pr_review_result` does not clear it, because the Workflow then answers
-`pr.apply_review` (row 38d), which this release does not launch.
+stays a stop: the functional evidence of row 38e (the automated functional review).
+
+**The pull request defect loop.** Under an automatic acceptance gate the Controller
+closes the pull request rows itself:
+
+- At row 38f (`pr_evidence_needed`) or 38g (`pr_approval_needed`), for a work item with a
+  milestone-branch binding and a pull request, the Controller runs the Workflow's one fixed
+  `gh pr list` query for the item's anchor commit and hands the verbatim output to the Workflow
+  with `record-external-result --kind pr_review_result`. It parses nothing: the Workflow reads
+  the result, and the reported fact only arms the Workflow's own query.
+- At row 38f, while the checks are pending and `ci_green` is the one thing unmet, with no
+  `CHANGES_REQUESTED` decision and no failing check, the step reports nothing and waits
+  (`pr_checks_pending`, polled by `--wait`; without `--wait` it is a stop that names the pending
+  checks, or "no checks reported" when the pull request has none). A pending rollup never hides an
+  approval (row 38g) or an objection.
+- A result equal to the last one the Controller sent is not sent again: the step stops
+  `pr_report_unchanged` ("reported; the report changed nothing"). An operator waiting on a person's
+  approval may see one refused `/satisfy-gate acceptance` worker after such a report, because the
+  Workflow then answers row 38h before it returns to 38g.
+- Row 38d (`pr.apply_review`, `pr_query_due` or `pr_review_actionable`) is launched like any
+  automatic action: `/apply-pr-review <id>` on the `apply-pr-review` role (Opus, `xhigh`,
+  overridable in the routing file and the settings file's role names). The Workflow's command
+  chooses the branch: it refreshes the fact and lets acceptance pass, or reopens the work item
+  into remediation for a red pull request, a `CHANGES_REQUESTED` decision or a changed head.
+  The Controller reads no fact and chooses no branch.
+
+A person is asked only where one is needed: row 38g with the approval still missing, row 38g under
+a human acceptance gate (`/accept-milestone`; the Controller reports nothing there), a stop the
+Controller itself ends in (`pr_report_no_pull_request`, `pr_report_forge_unavailable`,
+`pr_report_refused`, `pr_report_stale`), and row 38e. A red pull request found after acceptance, in
+the merge flow, still ends at that flow's `checks_failing` stop, with a person (roadmap step C10d).
 
 **A protocol minor release.** A value a 1.x minor release adds to a closed enum
 of the answer is never refused as outside the protocol. `protocol_schema.ENUM_RULES`

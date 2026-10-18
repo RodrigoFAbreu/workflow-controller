@@ -39,7 +39,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
-from .errors import ForgeError, ForgeUndecidableError
+from .errors import ForgeError, ForgeKindUnregisteredError, ForgeUndecidableError
 from .gitrepo import Runner, subprocess_runner
 
 PR_FIELDS = ("number,state,isDraft,headRefName,headRefOid,baseRefName,isCrossRepository,url,"
@@ -518,3 +518,48 @@ class GhForge:
         """Download every asset of ``tag``'s release into ``directory``;
         ``gh`` refuses to overwrite an existing file."""
         self._ok(["release", "download", tag, "--dir", str(directory)])
+
+
+@dataclasses.dataclass(frozen=True)
+class ForgeCapabilities:
+    """What a git host adapter declares it can do
+    (workflow-controller-adapters-1 D5)."""
+
+    pull_requests: bool
+    draft_pull_requests: bool
+    squash_merge: bool
+    check_reports: bool
+    releases_with_assets: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class ForgeAdapter:
+    """One registered git host: its ``kind`` (the repository policy's
+    ``forge.kind``), the class that implements :class:`Forge` for it, and its
+    declared capabilities."""
+
+    kind: str
+    implementation: type
+    capabilities: ForgeCapabilities
+
+
+GITHUB = ForgeAdapter(
+    kind="github", implementation=GhForge,
+    capabilities=ForgeCapabilities(pull_requests=True, draft_pull_requests=True, squash_merge=True,
+                                   check_reports=True, releases_with_assets=True),
+)
+
+#: The closed registry of git hosts, keyed by ``kind``. A test pins its keys
+#: to ``repo_policy.FORGE_KINDS``.
+FORGES: dict[str, ForgeAdapter] = {a.kind: a for a in (GITHUB,)}
+
+
+def adapter_for(kind: str) -> ForgeAdapter:
+    """The adapter registered for ``kind``, or ``ForgeKindUnregisteredError``."""
+    adapter = FORGES.get(kind)
+    if adapter is None:
+        raise ForgeKindUnregisteredError(
+            f"no git host adapter is registered for forge kind {kind!r}; registered: {sorted(FORGES)}",
+            evidence={"kind": kind, "registered": sorted(FORGES)},
+        )
+    return adapter

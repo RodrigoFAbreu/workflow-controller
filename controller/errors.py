@@ -923,3 +923,16 @@ class UnknownHarnessError(ControllerError):
     the ``harness`` and the ``registered`` names."""
 
     code = "HARNESS_UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-adapters-1 CP2 -- the git host adapter registry
+# (``controller.forge.FORGES``).
+# ---------------------------------------------------------------------------
+
+
+class ForgeKindUnregisteredError(ControllerError):
+    """A forge kind the git host adapter registry does not hold. ``evidence``
+    names the ``kind`` and the ``registered`` kinds."""
+
+    code = "FORGE_KIND_UNREGISTERED"

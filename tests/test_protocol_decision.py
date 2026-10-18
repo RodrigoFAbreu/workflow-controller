@@ -231,6 +231,7 @@ class ActionTableTest(_Case):
                 self.assertEqual(got.action.command, " ".join((f"/{entry.command}", *entry.leading))
                                  + ("" if item is None else " wi-1"))
                 self.assertEqual(got.protocol.route, entry.route)
+                self.assertIn(f"({entry.disposition})", got.evidence[0])
 
     def test_the_table_agrees_with_what_describe_lists_and_names_no_user_only_command(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -415,17 +416,17 @@ class ValidationTest(_Case):
     ``/satisfy-gate <stage> <id>`` on the validator role, blocked on any
     other pairing."""
 
-    STAGES = (("plan.satisfy", "plan", "AWAITING_PLAN_APPROVAL"),
-              ("implementation.satisfy", "implementation", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"),
-              ("acceptance.satisfy", "acceptance", "AWAITING_FUNCTIONAL_REVIEW"))
+    STAGES = (("plan.satisfy", "plan", "AWAITING_PLAN_APPROVAL", "satisfy-gate"),
+              ("implementation.satisfy", "implementation", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "satisfy-gate"),
+              ("acceptance.satisfy", "acceptance", "AWAITING_FUNCTIONAL_REVIEW", "satisfy-gate-acceptance"))
 
     def test_each_stage_launches_the_satisfy_gate_command_on_its_route(self) -> None:
-        for action_id, stage, phase in self.STAGES:
+        for action_id, stage, phase, route in self.STAGES:
             with self.subTest(action=action_id):
                 got = self.decide(_entry_answer(action_id, phase=phase), item=_item(phase=phase))
                 self.assertTrue(got.automatic, got.gate)
                 self.assertEqual(got.action.command, f"/satisfy-gate {stage} wi-1")
-                self.assertEqual(got.protocol.route, "satisfy-gate")
+                self.assertEqual(got.protocol.route, route)
                 self.assertEqual((got.protocol.disposition, got.protocol.action_id), ("validation", action_id))
 
     def test_a_user_only_validator_a_foreign_role_a_changed_invocation_and_an_unknown_id_are_blocked(self) -> None:
@@ -454,15 +455,21 @@ class ValidationTest(_Case):
         self.assertIn(protocol_decision.UNKNOWN_WORKER_ROLE, got.gate.what_is_required)
         self.assertNotIn("validator", protocol_decision.AUTOMATIC_WORKER_ROLES)
 
-    def test_the_route_is_opus_xhigh_single_agent_with_the_subagent_tools_disallowed(self) -> None:
-        resolved = routing.resolve_route("satisfy-gate")
-        self.assertEqual((resolved.model, resolved.effort), ("claude-opus-5-5", "xhigh"))
-        self.assertTrue(resolved.single_agent)
-        self.assertEqual(resolved.disallowed_tools, routing.SUBAGENT_TOOLS)
-        # Under a milestone-branch binding the validator may still commit, but not push or call gh (plan Risks).
-        bound = routing.worker_disallowed_tools(resolved, branch_bound=True)
-        self.assertEqual(bound, routing.SUBAGENT_TOOLS + routing.BRANCH_GUARD_TOOLS + routing.ASYNC_UNOWNABLE_TOOLS)
-        self.assertFalse([tool for tool in bound if "commit" in tool])
+    def test_each_stage_route_is_single_agent_with_the_subagent_tools_disallowed(self) -> None:
+        models = {"satisfy-gate": ("claude-haiku-5-5", "high"),
+                  "satisfy-gate-acceptance": ("claude-sonnet-5-5", "medium")}
+        for action_id, _stage, _phase, route in self.STAGES:
+            with self.subTest(action=action_id):
+                self.assertEqual(protocol_decision.PROTOCOL_ACTIONS[action_id].route, route)
+                resolved = routing.resolve_route(route)
+                self.assertEqual((resolved.model, resolved.effort), models[route])
+                self.assertTrue(resolved.single_agent)
+                self.assertEqual(resolved.disallowed_tools, routing.SUBAGENT_TOOLS)
+                # Under a milestone-branch binding the validator may still commit, but not push or call gh (plan Risks).
+                bound = routing.worker_disallowed_tools(resolved, branch_bound=True)
+                self.assertEqual(
+                    bound, routing.SUBAGENT_TOOLS + routing.BRANCH_GUARD_TOOLS + routing.ASYNC_UNOWNABLE_TOOLS)
+                self.assertFalse([tool for tool in bound if "commit" in tool])
 
 
 class InvocationRenderingTest(_Case):

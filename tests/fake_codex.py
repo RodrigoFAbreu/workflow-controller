@@ -68,6 +68,7 @@ root), ``tool_attempts`` (feature names), ``use_web_search``,
 
 from __future__ import annotations
 
+import atexit
 import datetime
 import json
 import os
@@ -437,6 +438,9 @@ def _install_watchdog(seconds: float) -> None:
 
     signal.signal(signal.SIGALRM, check)
     signal.setitimer(signal.ITIMER_REAL, _ORPHAN_POLL_SECONDS, _ORPHAN_POLL_SECONDS)
+    # Python resets SIGALRM to its default action while it shuts down; a tick landing
+    # there would end a worker that finished normally with exit -14 (#82).
+    atexit.register(signal.setitimer, signal.ITIMER_REAL, 0, 0)
 
 
 def _roots(args: list[str], cwd: Path) -> dict:

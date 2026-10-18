@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-2",
+  "dispositions": {
+    "F-2e94f878c3e3": {"disposition": "fixed", "note": "Plan revision 3 and later: when no unmet: qualifies, the cut goes to the first named requirement before any other unmet: (D6); implemented in CP2 with its test."},
+    "F-6c825bfe6dc9": {"disposition": "fixed", "note": "D6 defines 'followed by' (next non-space character is '[' or the text up to the next ';' starts with a requirement name); implemented in CP2."},
+    "F-6d14ca260d34": {"disposition": "fixed", "note": "CP4 (1d8b877) updated the automation guide's automatic-row count to thirteen."},
+    "F-84960b262859": {"disposition": "fixed", "note": "CP4 and the self-review df07c4b rewrote the commands guide paragraph: acceptance.satisfy takes satisfy-gate-acceptance, five protocol-only roles."},
+    "F-ef49ac5eeaa1": {"disposition": "fixed", "note": "Same commands guide paragraph as F-84960b262859, fixed in CP4 and df07c4b."},
+    "F-a333c6e7a1e1": {"disposition": "fixed", "note": "Plan revision 8's D5 starting state includes the committed functional checklist; the real acceptance run reached row 38h."},
+    "F-e7b3b8a6125f": {"disposition": "fixed", "note": "Same as F-a333c6e7a1e1: D5 names the checklist commit and its trailer."},
+    "F-db8c3b587557": {"disposition": "fixed", "note": "D7 names the timeout wrapper as a second place to look and says a controller/ cause would need an amendment; the cause was in the test fakes' timers."},
+    "F-844b64608d11": {"disposition": "dropped", "reason": "The pre-change reproduction log was not kept, and it cannot be recreated after the fact. The cause and the fix are independently confirmed: the external reviewer saw SIGALRM in 20 of 20 pre-CP3 workers and 0 of 20 fixed ones, and the functional review ran 120 pinned executions with no -14. So #82 closes on evidence, and the lesson (keep the reproduction log) needs no code change."},
+    "F-bb14f7776b9c": {"disposition": "dropped", "reason": "The same finding as F-844b64608d11, carried into round 2; dropped for the same reason."},
+    "F-4e5a3c3e9628": {"disposition": "follow-up", "link": "RodrigoFAbreu/workflow-controller#100"}
+  }
+}

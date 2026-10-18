@@ -113,7 +113,7 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
     "pr.apply_review": ProtocolAction("apply-pr-review", "apply-pr-review"),
     "plan.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("plan",), "validation"),
     "implementation.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("implementation",), "validation"),
-    "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("acceptance",), "validation"),
+    "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate-acceptance", ("acceptance",), "validation"),
 })
 
 #: The worker role an automatic action must name, where the Workflow's table pins one
@@ -350,7 +350,7 @@ def _automatic(context: "_Context", base: str | None) -> Decision:
                 route=None, artifact_path=str(context.managed_repo.root / _STATE_PATH))
     command = rendered_command(action.id, expected_item, base=base)
     return Decision(
-        observed_phase=context.phase, evidence=context.evidence("automatic", action.id), action=Action(command=command),
+        observed_phase=context.phase, evidence=context.evidence(entry.disposition, action.id), action=Action(command=command),
         automatic=True, gate=None, declined=False, reason=answer.reason.text, protocol=context.info(entry.route),
     )
 

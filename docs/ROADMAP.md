@@ -26,15 +26,13 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16 and 2026-10-18):
-1. CU2, the second clean-up milestone (owner decision, 2026-10-18: before C10c, because thirteen issues are
-   open and #91's cheaper approval route pays off in every later milestone);
-2. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
-3. C12, then C11;
-4. the orchestrator series O1-O7.
+1. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
+2. C12, then C11;
+3. the orchestrator series O1-O7.
 
 Clean-up milestones slot in between these every few milestones, or sooner when the issue count grows
-(owner decision, 2026-10-16). CU2 is next. It takes twelve issues: #78 and #79 (CU1's follow-ups), #82-#87
-and #91 (C10a and the lane's own work) and #93-#95 (C10b's follow-ups). #88, the two review round caps,
+(owner decision, 2026-10-16). CU2, which took twelve issues (#78 and #79, CU1's follow-ups; #82-#87 and #91,
+C10a and the lane's own work; #93-#95, C10b's follow-ups), is complete (accepted 2026-10-18). #88, the two review round caps,
 stays out of it: it needs the Workflow to count local and external rounds separately (workflow#43), so
 it follows once a Workflow release carries that.
 
@@ -87,7 +85,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up (complete, accepted 2026-10-17 by gate policy, released as 1.13.1 from PR #77, squash `f46999d`; sixteen issues, #55-#59, #62-#67 and #71-#75). Later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
 | C10a | Gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, a refused validation stops, a value a protocol 1.x minor adds is advisory or blocked (never refused), and a stop the Workflow calls blocked sends a blocker, not a request (follow-ups 17 and 26 in part) (complete, accepted 2026-10-17 by gate policy, released as 1.14.0 from PR #81, squash `8a38a85`) | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [follow-up 17](#known-follow-ups-carried-forward) |
 | C10b | The pull request defect loop: `pr.apply_review` and the `pr_review_result` reporter at the pull-request external gates before acceptance (rows 38d, 38f, 38g; complete, accepted 2026-10-18 by gate policy; released as 1.15.0 from PR #92, squash `3b7aa7a`) | C10a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
-| CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
+| CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (complete, accepted 2026-10-18 by gate policy; #82 fixed by disarming the fake workers' timers at exit; released as 1.16.0 when its pull request #99 merges; owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
@@ -169,7 +167,7 @@ These are not blockers for the baseline, but should remain visible in later mile
 issue labelled [`review-follow-up`](https://github.com/RodrigoFAbreu/workflow-controller/labels/review-follow-up),
 listed here with a link; the one-time sweep of the findings archived before then is
 [recorded on its own page](milestones/optional-findings-sweep-2026-10-16.md). The clean-up milestones
-(CU1 done; CU2 next) work through these issues.
+(CU1 and CU2 done) work through these issues.
 
 A defect found while running (not in a review) also becomes a GitHub issue with a priority (owner
 decision, 2026-10-16). A Workflow defect is filed in
@@ -401,13 +399,21 @@ hurts now, else in a later step or the next clean-up milestone.
 46. [#75](https://github.com/RodrigoFAbreu/workflow-controller/issues/75): keep the cost and token totals of a Claude review job for `telemetry` (C14 review).
    Fixed in CU1.
 47. [#78](https://github.com/RodrigoFAbreu/workflow-controller/issues/78): the common-problems entry for a refused review says the cost and tokens are always kept, which is true only for a Claude review (CU1 review; docs only; CU2).
+   Fixed in CU2.
 48. [#79](https://github.com/RodrigoFAbreu/workflow-controller/issues/79): `add_figures` drops a token key that only the running total has (CU1 review; harmless with today's data; CU2).
+   Fixed in CU2.
 49. [#82](https://github.com/RodrigoFAbreu/workflow-controller/issues/82) (label `bug`): `test_killed_and_broken_pipe_followers_leave_the_worker_and_exit_code_alone` flakes with exit -14 (`SIGALRM`) under load (found running C10a; test only; CU2).
+   Fixed in CU2.
 50. [#83](https://github.com/RodrigoFAbreu/workflow-controller/issues/83): a gate-policy validation's evidence line says `(automatic)`, not `(validation)` (C10a review; cosmetic; CU2).
+   Fixed in CU2.
 51. [#84](https://github.com/RodrigoFAbreu/workflow-controller/issues/84) (also `bug`): a refusal report loses its unmet requirement when "unmet:" appears again after the list (C10a review; only the `explain` diagnostic; CU2).
+   Fixed in CU2.
 52. [#85](https://github.com/RodrigoFAbreu/workflow-controller/issues/85): the compatibility page's 1.7.1 note reads as if no release launches `/satisfy-gate` (C10a review; docs only; CU2).
+   Fixed in CU2.
 53. [#86](https://github.com/RodrigoFAbreu/workflow-controller/issues/86): the `_protocol_job_class` docstring describes four return values, but it returns five (C10a review; docstring only; CU2).
+   Fixed in CU2.
 54. [#87](https://github.com/RodrigoFAbreu/workflow-controller/issues/87): the automation guide does not say that the worker report moves to `gate.what_is_required` once the loop guard stops the run (C10a review; docs only; CU2).
+   Fixed in CU2.
 55. [#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88): two review round caps per
    stage, one for local rounds (default 6) and one for external rounds (default 4) (owner decision,
    2026-10-18). They are named local and external, never after a provider, because any harness can
@@ -416,8 +422,11 @@ hurts now, else in a later step or the next clean-up milestone.
    Planned after C10b, once a Workflow release carries workflow#43. Until then the single cap
    (`review.round_cap`) stays at 4 and is raised for a milestone when needed, as it was for C10a.
 56. [#93](https://github.com/RodrigoFAbreu/workflow-controller/issues/93): `pr_report.pending_checks` finds the `ci_green` requirement by a plain substring over the stop text, not by its `ci_green: ` token (C10b review; no defect with the current Workflow wording; CU2).
+   Fixed in CU2.
 57. [#94](https://github.com/RodrigoFAbreu/workflow-controller/issues/94): tighten the tests of the Controller's `gh` vetting: assert the "world-writable" message, add a world-writable executable case, fix the blank lines (C10b review; tests only; CU2).
+   Fixed in CU2.
 58. [#95](https://github.com/RodrigoFAbreu/workflow-controller/issues/95): `Context.forge` tests for the real forge with an always-true `getattr(forge, "vet_root", False) is None`; set `vet_root` directly (C10b review; clarity only; CU2).
+   Fixed in CU2.
 
 ---
 

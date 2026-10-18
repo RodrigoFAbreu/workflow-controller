@@ -420,6 +420,15 @@ class FakeLaunchTest(unittest.TestCase):
             "input_tokens": 2, "output_tokens": 3, "cache_creation_input_tokens": 4, "cache_read_input_tokens": 5}}))
         self.assertEqual((both["cost_usd"], both["tokens"]["input"], both["tokens"]["output"]), (0.75, 3, None))
 
+    def test_a_figure_only_the_running_total_has_becomes_unknown(self):
+        total = review.result_figures({"total_cost_usd": 0.5, "usage": {"input_tokens": 1}})
+        total["tokens"]["extra"] = 7
+        figures = review.result_figures({"total_cost_usd": 0.25, "usage": {"input_tokens": 2}})
+        summed = review.add_figures(total, figures)
+        self.assertEqual((summed["tokens"]["input"], summed["tokens"]["extra"]), (3, None))
+        figures["tokens"]["only_new"] = 1
+        self.assertIsNone(review.add_figures(total, figures)["tokens"]["only_new"])
+
     def test_a_revise_and_a_block_verdict_are_returned_as_they_are(self):
         for kind, status in (("revise", "REVISE"), ("block", "BLOCK")):
             with self.subTest(kind):

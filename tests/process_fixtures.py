@@ -84,13 +84,14 @@ def python_release_wait(release_expr: str, *, seconds: float = LEFTOVER_LIFETIME
 #: (PEP 475), and while the parent lives it does nothing. The constant ends
 #: with a newline and is joined by plain concatenation, never by ``;``.
 PARENT_GUARD = (
-    "import os as _guard_os, signal as _guard_signal\n"
+    "import atexit as _guard_atexit, os as _guard_os, signal as _guard_signal\n"
     "_GUARD_PARENT = _guard_os.getppid()\n"
     "def _guard_check(*_ignored):\n"
     "    if _guard_os.getppid() != _GUARD_PARENT:\n"
     "        _guard_os._exit(0)\n"
     "_guard_signal.signal(_guard_signal.SIGALRM, _guard_check)\n"
     "_guard_signal.setitimer(_guard_signal.ITIMER_REAL, 1, 1)\n"
+    "_guard_atexit.register(_guard_signal.setitimer, _guard_signal.ITIMER_REAL, 0, 0)\n"
 )
 
 

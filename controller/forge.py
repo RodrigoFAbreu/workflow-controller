@@ -259,11 +259,12 @@ class GhForge:
     (:func:`vet_gh`): the one read whose output the Controller reports to the
     Workflow as evidence."""
 
-    def __init__(self, repository: str, runner: Runner | None = None, *, gh: str = "gh") -> None:
+    def __init__(self, repository: str, runner: Runner | None = None, *, gh: str = "gh",
+                 vet_root: Path | None = None) -> None:
         self.repository = repository
         self._runner = runner or subprocess_runner()
         self._gh = gh
-        self.vet_root: Path | None = None
+        self.vet_root = vet_root
 
     # -- plumbing ----------------------------------------------------------
 

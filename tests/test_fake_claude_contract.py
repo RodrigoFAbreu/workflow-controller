@@ -1742,6 +1742,27 @@ class ChildControllerLifetimeTest(unittest.TestCase):
                 return f"identity.{name} is not replaced before cli.main"
         return None
 
+    def test_every_interval_timer_is_disarmed_before_the_interpreter_shuts_down(self):
+        """#82: Python resets ``SIGALRM`` to its default action while it shuts down, so a tick
+        landing there ended a worker that had finished normally with exit -14. Each timer is
+        disarmed by an ``atexit`` hook; a hook registered first runs last and sees the timer."""
+        from tests import process_fixtures
+
+        tests_dir = str(Path(__file__).resolve().parent.parent)
+        probe = ("import atexit, signal, sys\n"
+                 "atexit.register(lambda: print(signal.getitimer(signal.ITIMER_REAL)))\n")
+        scripts = {
+            "fake_claude": probe + "from tests import fake_claude\nfake_claude._start_orphan_watchdog()\n",
+            "fake_codex": probe + "from tests import fake_codex\nfake_codex._install_watchdog(5.0)\n",
+            "guard": probe + process_fixtures.PARENT_GUARD,
+        }
+        for name, script in scripts.items():
+            with self.subTest(timer=name):
+                done = subprocess.run([sys.executable, "-c", script], cwd=tests_dir, capture_output=True,
+                                      text=True, timeout=30, env={**os.environ, "FAKE_CLAUDE_ORPHAN_SECONDS": "5"})
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.strip(), "(0.0, 0.0)")
+
     def test_no_guard_script_can_re_exec(self):
         import importlib
         from tests import process_fixtures

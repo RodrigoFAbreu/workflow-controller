@@ -5789,14 +5789,15 @@ def _decide_protocol_current(
 
 def _protocol_job_class(record: Any, target_repo: str, work_item_id: str | None, action_id: str) -> tuple | None:
     """For the loop guard: ``((created_at, decided_ns, job_id), counted, end_identity,
-    start_identity)``
+    start_identity, worker_report)``
     of a record that is a protocol job of this repository for this ``(work
     item, action id)`` pair, else ``None``. ``counted`` is ``None`` for a job
     that is neither a ``no_progress`` nor a reset (a ``FAILED`` job, an
     interrupted one, one with no reconcile class yet), else the reconcile
     class; ``end_identity`` is the state identity the job's reconcile found
     the work item at when it ended, ``start_identity`` the one it was decided
-    at; either is ``None`` when the record keeps none."""
+    at; either is ``None`` when the record keeps none. ``worker_report`` is
+    :func:`_worker_report` (one line of at most 400 characters), empty when the job is not counted."""
     if not isinstance(record, dict) or record.get("target_repo") != target_repo:
         return None
     block = record.get("protocol")
@@ -5822,12 +5823,20 @@ _REPORT_LIMIT = 400
 _POLICY_REQUIREMENTS = ("distinct_reviewer_models",)
 
 
+def _names_requirement(after_unmet: str) -> bool:
+    """The text after an ``unmet:`` begins an entry list (``[``) or a requirement the policy names
+    (up to the next ``;``), not an unrelated mention."""
+    rest = after_unmet.lstrip()
+    return rest.startswith("[") or rest.split(";", 1)[0].startswith(_POLICY_REQUIREMENTS)
+
+
 def _worker_report(record: dict) -> str:
     """What the worker said it did, one line of at most 400 characters: a refused
     ``/satisfy-gate`` names the requirement that is unmet there, and ``explain``
     and the loop guard repeat it. A report over the limit is cut
-    from its last ``unmet:``, else from the first named requirement, else from the
-    word ``unmet``, so the requirement survives the length limit."""
+    from its last ``unmet:`` that is followed by a requirement, else from the first named
+    requirement, else from the last ``unmet:``, else from the word ``unmet``, so the
+    requirement survives the length limit."""
     worker_block = record.get("worker")
     excerpt = worker_block.get("result_excerpt") if isinstance(worker_block, dict) else None
     if not isinstance(excerpt, str):
@@ -5836,12 +5845,18 @@ def _worker_report(record: dict) -> str:
     if len(line) <= _REPORT_LIMIT:
         return line
     lowered = line.lower()
-    # The refusal names its requirement after the last ``unmet:``; failing that, at the first
-    # requirement the policy knows by name; failing that, from the first word ``unmet``.
-    marker = lowered.rfind("unmet:")
+    # The refusal names its requirement after the last ``unmet:`` that is followed by one; failing
+    # that, at the first requirement the policy knows by name; failing that, from the last
+    # ``unmet:``, then the first word ``unmet``.
+    marker = -1
+    at = lowered.rfind("unmet:")
+    while at >= 0 and marker < 0:
+        if _names_requirement(lowered[at + len("unmet:"):]):
+            marker = at
+        at = lowered.rfind("unmet:", 0, at)
     if marker < 0:
         named = [at for at in (lowered.find(name) for name in _POLICY_REQUIREMENTS) if at >= 0]
-        marker = min(named) if named else lowered.find("unmet")
+        marker = min(named) if named else (lowered.rfind("unmet:") if "unmet:" in lowered else lowered.find("unmet"))
     if marker > 0:
         line = line[marker:]
     return line if len(line) <= _REPORT_LIMIT else line[:_REPORT_LIMIT - 1] + "\u2026"

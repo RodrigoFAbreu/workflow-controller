@@ -663,6 +663,16 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
                                     + "The policy was evaluated. " * 30
                                     + f"Refused; unmet: ['{self.UNMET}']. Nothing was written")
 
+    def test_a_refusal_requirement_survives_a_trailing_unmet_see_above(self) -> None:
+        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. unmet: see above")
+
+    def test_a_refusal_requirement_survives_an_early_unmet_followed_by_it_only_after_a_semicolon(self) -> None:
+        self.refused_validation_run("Refused: unmet: see the policy; the details follow. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
+
     def test_a_refusal_requirement_survives_a_report_with_no_unmet_marker(self) -> None:
         self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
                                     + "The policy was evaluated. " * 30
@@ -949,7 +959,7 @@ class LoopLifecycle(GateLifecycle):
             clock["now"] += seconds
 
         with mock.patch.object(milestone_branch, "waiting_preflight", return_value=milestone_branch.Proceed()), \
-                mock.patch.object(forge_mod, "GhForge", lambda repo: self.world), \
+                mock.patch.object(forge_mod, "GhForge", lambda repo, **_: self.world), \
                 mock.patch.object(milestone_branch, "_sleep", sleep), \
                 mock.patch.object(milestone_branch, "_monotonic", lambda: clock["now"]):
             return self._step_with_budget()
@@ -1200,7 +1210,7 @@ class PrDefectLoopLifecycleTest(unittest.TestCase):
         self.assertEqual(gate.code, milestone_branch.GATE_CHECKS_FAILING)
         reports, applies, launched = len(life.reports()), len(life.applies()), len(life.tasks)
         with mock.patch.object(milestone_branch, "waiting_preflight", return_value=gate), \
-                mock.patch.object(forge_mod, "GhForge", lambda repo: life.world):
+                mock.patch.object(forge_mod, "GhForge", lambda repo, **_: life.world):
             stopped = job.execute_step(life.inspect(), identity=IDENTITY, runtime=life.runtime)
         self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
         self.assertNotIn("kind", stopped)

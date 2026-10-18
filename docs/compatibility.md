@@ -34,7 +34,7 @@ advisory, ignored or a stop, by a rule per enum location (a blocked gate before 
 Controller 1.7.1
 accepts the Workflow's `warn` check status as advisory: `explain` shows it and nothing is
 refused. An undefined status is still refused with exit 20. The advisory lists the action ids it cannot launch (`acceptance.satisfy`,
-`implementation.satisfy`, `plan.satisfy` and `pr.apply_review` before the pull request defect loop; none after it) and any invented id, and
+`implementation.satisfy`, `plan.satisfy` and `pr.apply_review` for 1.7.1 itself; Controllers 1.14.0 and later launch the three `/satisfy-gate` gates and so list only `pr.apply_review`, and none after the pull request defect loop) and any invented id, and
 stays silent for the four gates it never launches. Controller 1.7.0 refuses `explain`,
 `step` and `run` (exit 20) on a repository whose `verify` reports `warn`: for example an
 unadopted gate policy file, or, while it is the newest adoption, one that lowers a gate.

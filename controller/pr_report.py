@@ -166,13 +166,30 @@ class Wait:
 NO_WAIT = Wait(False)
 
 
+_ENTRY_PREAMBLE = "pull-request fact: "
+
+
+def names_ci_green(reason_text: str | None) -> bool:
+    """The stop text names ``ci_green`` as an unmet requirement: ``ci_green: `` at the start, right
+    after the row's preamble (``... pull-request fact: ``), or right after an entry separator
+    ``; `` -- not the token inside another entry's detail, whatever colons that detail holds."""
+    text = reason_text or ""
+    token = CI_GREEN_REQUIREMENT + ": "
+    at = text.find(token)
+    while at >= 0:
+        if at == 0 or text[:at].endswith((_ENTRY_PREAMBLE, "; ")):
+            return True
+        at = text.find(token, at + 1)
+    return False
+
+
 def pending_checks(raw: str, *, row: str | None, reason_text: str) -> Wait:
     """D6: wait only when **all three** hold -- (a) the decision is row 38f,
     (b) the row's own stop text names the unmet ``ci_green`` requirement, and
     (c) the record the Workflow would select has pending checks and no
     standing objection (no ``CHANGES_REQUESTED`` decision, no failing check).
     A query with no record at the anchor commit never waits."""
-    if row != ROW_EVIDENCE_NEEDED or CI_GREEN_REQUIREMENT not in (reason_text or ""):
+    if row != ROW_EVIDENCE_NEEDED or not names_ci_green(reason_text):
         return NO_WAIT
     records = records_of(raw)
     record = None if records is None else selected_record(records)

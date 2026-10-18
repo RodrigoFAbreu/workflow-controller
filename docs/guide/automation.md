@@ -325,8 +325,8 @@ decision:
 
 | Disposition | Decision |
 |---|---|
-| `automatic` | a launch, when the action id is one the Controller knows (twelve, from `plan.start` to `functional.apply_findings`), its worker is not `user_only` and its worker role is known; otherwise a blocked gate (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
-| `validation` | a launch of `/satisfy-gate <stage> <work item>` on the `satisfy-gate` role, when the action id is `plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`, its worker is not `user_only` and its role is `validator`; any other id, worker or pairing of id and disposition is blocked as above (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
+| `automatic` | a launch, when the action id is one the Controller knows (thirteen, from `plan.start` to `pr.apply_review`), its worker is not `user_only` and its worker role is known; otherwise a blocked gate (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
+| `validation` | a launch of `/satisfy-gate <stage> <work item>` on the `satisfy-gate` role (`satisfy-gate-acceptance` for `acceptance.satisfy`), when the action id is `plan.satisfy`, `implementation.satisfy` or `acceptance.satisfy`, its worker is not `user_only` and its role is `validator`; any other id, worker or pairing of id and disposition is blocked as above (`workflow_unknown_action`, `workflow_unknown_worker_role`, `workflow_user_only_action`) |
 | `human_gate`, `external_gate` | a gate carrying the Workflow's reason, remedy and alternatives |
 | `blocked` | a gate carrying the Workflow's reason code, text and remedy |
 | `complete` | nothing to do |
@@ -414,7 +414,9 @@ next step decides again. When the last two jobs for the same work item and
 action both ended with no progress, a third is not launched: the step
 stops at the `no_progress_repeated` gate. After even one such job, `explain`
 shows what that worker reported (JSON: `last_worker_report`), so a refused
-`/satisfy-gate` names the requirement it found unmet before the gate applies.
+`/satisfy-gate` names the requirement it found unmet before the gate applies. Once the
+`no_progress_repeated` gate applies, `explain --json` has no `last_worker_report`: the
+report is in `gate.what_is_required` instead.
 
 **Outcomes.** A protocol job is judged by the Workflow's `reconcile` on the
 decision it was launched for (kept as `jobs/<job_id>/decision.json`), both

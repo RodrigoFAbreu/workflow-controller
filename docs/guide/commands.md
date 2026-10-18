@@ -289,7 +289,8 @@ each role has a built-in model and effort:
 | `apply-implementation-review` | `/apply-implementation-review` | `claude-opus-5-5` | `xhigh` | no |
 | `review-plan` | `/review-plan` | `claude-opus-5-5` | `xhigh` | yes |
 | `review-implementation` | `/review-implementation` | `claude-opus-5-5` | `xhigh` | yes |
-| `satisfy-gate` | `/satisfy-gate plan\|implementation\|acceptance` (protocol mode only: the Workflow's `plan.satisfy`, `implementation.satisfy` and `acceptance.satisfy` actions) | `claude-opus-5-5` | `xhigh` | yes |
+| `satisfy-gate` | `/satisfy-gate plan\|implementation` (protocol mode only: the Workflow's `plan.satisfy` and `implementation.satisfy` actions, a mechanical check and one transaction) | `claude-haiku-5-5` | `high` | yes |
+| `satisfy-gate-acceptance` | `/satisfy-gate acceptance` (protocol mode only: the `acceptance.satisfy` action, which also writes the milestone narrative, roadmap and findings table) | `claude-sonnet-5-5` | `medium` | yes |
 | `apply-pr-review` | `/apply-pr-review` (protocol mode only: the Workflow's `pr.apply_review` action, row 38d) | `claude-opus-5-5` | `xhigh` | no |
 | `milestone-plan`, `record-manual-plan-review`, `record-manual-implementation-review` | those commands | inherit | inherit | no |
 | `apply-functional-review` | `/apply-functional-review` (protocol mode only, 1.7.0 and later) | `claude-opus-5-5` | `xhigh` | no |
@@ -297,15 +298,20 @@ each role has a built-in model and effort:
 
 In protocol mode the role comes from the Workflow's action id rather than
 from the command: `implementation.self_review` is
-`milestone-implement-self-review`, and each other action takes its
-command's role. The two functional-review roles, `satisfy-gate` and `apply-pr-review` exist only there, since
-legacy mode never launches those commands
+`milestone-implement-self-review`, `acceptance.satisfy` is
+`satisfy-gate-acceptance`, and each other action takes its
+command's role. Five roles exist only there, since legacy mode never
+launches their commands: the two functional-review roles, `satisfy-gate`,
+`satisfy-gate-acceptance` and `apply-pr-review`
 ([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). All
-three are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
+five are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
 and the settings file's `routing` section, and `telemetry --by role`
 groups their jobs under these names. A Controller before 1.7.0 rejects
 the functional-review roles in a `--routing-config` file and ignores them, with a warning, in the
-settings file; a Controller before the one that adds `satisfy-gate` (or `apply-pr-review`) does the same with that role.
+settings file; a Controller older than the release that adds `satisfy-gate`, `apply-pr-review` or
+`satisfy-gate-acceptance` does the same with that role.
+A `satisfy-gate` value you pinned earlier now applies to plan and implementation approval only;
+acceptance takes its own built-in route until you name `satisfy-gate-acceptance`.
 
 "Inherit" means no flag is passed, so the `claude` CLI's own
 configuration applies. Model and effort are resolved separately, and the

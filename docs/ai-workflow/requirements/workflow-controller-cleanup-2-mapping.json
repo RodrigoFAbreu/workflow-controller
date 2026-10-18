@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-2",
+  "requirements": {
+    "R1": {
+      "description": "Three documents are corrected: a refused review's kept figures (#78), the 1.7.1 note (#85) and where the worker report goes once the loop guard applies (#87)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Six small code defects are fixed: add_figures (#79), the validation evidence label (#83), the report cut (#84) and the ci_green token (#93), each with a test that fails without the fix, and the _protocol_job_class docstring (#86) and vet_root (#95), which preserve behaviour and meet their stated done (D8)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The gh vetting tests assert what they claim (#94), and the SIGALRM flake is explained and fixed, or its diagnostic is added and the issue left open (#82)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "/satisfy-gate runs on a route chosen by stage, Haiku 5.5 high for plan and technical approval and Sonnet 5.5 medium for acceptance, both single-agent, documented with their table generation (#91)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "The roadmap and guides agree with the behaviour; check_docs, the golden --check forms and the full suite are green, and the pull request body closes the twelve issues, or eleven if #82 stays open (D7)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

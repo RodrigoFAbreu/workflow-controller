@@ -289,10 +289,7 @@ class Context:
     def forge(self, repository: str) -> forge_mod.Forge:
         if self.forge_factory is not None:
             return self.forge_factory(repository)
-        forge = forge_mod.GhForge(repository)
-        if getattr(forge, "vet_root", False) is None:  # the real gh forge, not a test double
-            forge.vet_root = self.repo_root
-        return forge
+        return forge_mod.GhForge(repository, vet_root=self.repo_root)
 
 
 @dataclasses.dataclass(frozen=True)

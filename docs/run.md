@@ -37,7 +37,7 @@ Global options go before the subcommand and the repository goes last, as in `wor
      repository bootstrapped before Workflow 2.9) keeps implementation approval with a person; a version 1
      item keeps plan and implementation approval with a person.
    - **What the Controller does there:** it launches the Workflow's `/satisfy-gate` itself, as a
-     worker, and a run goes on when the gate is satisfied. When a requirement is unmet nothing is
+     worker (Haiku 5.5 for plan and implementation approval, Sonnet 5.5 for acceptance), and a run goes on when the gate is satisfied. When a requirement is unmet nothing is
      recorded, the run stops after two such steps and `explain` shows the unmet requirement.
      Controller 1.7.0 to 1.13.1 stop at an automatic gate instead, because the Workflow answers
      with a disposition they do not know (`explain` reports `workflow_unknown_disposition`;

@@ -6874,6 +6874,28 @@ def _pr_report_row(decision: Decision) -> str | None:
     return info.row
 
 
+def pr_report_forecast(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> dict | None:
+    """What the next ``step`` does at the pull-request external gate ``decision`` (D4-D6), for ``explain``:
+    ``None`` unless the reporter acts here (the conditions of :func:`_run_pr_report`: a binding with a pull request
+    and an anchor commit under an automatic acceptance gate), else the ``row``, the commit and pull request it
+    queries, ``waits`` (whether pending checks may hold the report) and ``repeats`` (whether the last report already
+    sent what a query may return again). Read-only: no ``gh`` call, no write."""
+    row = _pr_report_row(decision)
+    work_item_id = getattr(work_item, "work_item_id", None)
+    commit = pr_report.anchor_commit(work_item)
+    if row is None or work_item_id is None or commit is None:
+        return None
+    root = managed_repo.root
+    binding = milestone_branch.read_record(runtime_root, milestone_branch.repo_key(gitrepo.common_dir(root)),
+                                           work_item_id)
+    pull_request = None if binding is None else binding.get("pr")
+    if not isinstance(pull_request, Mapping) or pull_request.get("number") is None:
+        return None
+    return {"row": row, "queried_commit": commit, "pull_request": pull_request["number"],
+            "waits": row == pr_report.ROW_EVIDENCE_NEEDED,
+            "last_report": last_reported_sha(runtime_root, str(root), work_item_id)}
+
+
 @dataclasses.dataclass(frozen=True)
 class _ReportAttempt:
     """One pass of the reporter: its ``outcome`` (:data:`pr_report.OUTCOMES`), the query it made and

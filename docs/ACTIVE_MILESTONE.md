@@ -3,10 +3,10 @@
 ## Status
 
 **Complete.** `workflow-controller-cleanup-2` (CU2, `docs/ROADMAP.md`) reached `MILESTONE_COMPLETE` on 2026-10-18. It
-fixes the twelve follow-up issues #78, #79, #82-#87, #91 and #93-#95 in one pull request (#99), released as the minor
-release **1.16.0** when its `feat:` pull request merges. `/satisfy-gate` is now routed by stage: Haiku 5.5 `high` for
-plan and technical approval, Sonnet 5.5 `medium` for acceptance (#91). No `docs/releases/1.16.0.md` was written by the
-milestone; the release notes come in the docs pull request after the release.
+fixes the twelve follow-up issues #78, #79, #82-#87, #91 and #93-#95 in one pull request (#99, squash `6b3c54b`,
+merged 2026-10-18), released as the minor release **1.16.0**, the latest release. `/satisfy-gate` is now routed by
+stage: Haiku 5.5 `high` for plan and technical approval, Sonnet 5.5 `medium` for acceptance (#91). The release notes
+are `docs/releases/1.16.0.md`.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every acceptance
 requirement met (policy source `default`, digest `bae758b4f4ce`).
@@ -32,4 +32,4 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-Plan the next milestone, C10c (the automated functional review, `docs/ROADMAP.md`): run `/milestone-plan`.
+No milestone is active. Plan the adapters step (A1, `docs/ROADMAP.md`): run `/milestone-plan`.

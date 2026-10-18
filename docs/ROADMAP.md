@@ -8,10 +8,13 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-18).** Controller 1.15.0 is the latest release (PR #92, squash `3b7aa7a`), from C10b,
-the second of the three gate-policy steps (accepted 2026-10-18 by gate policy): under an automatic acceptance gate
-the Controller launches the Workflow's `/apply-pr-review` and reports the pull request's state to the Workflow
-itself, so a pull request whose checks were pending, or whose defect was fixed, reaches acceptance without a person.
+**Where things stand (2026-10-18).** Controller 1.16.0 is the latest release (PR #99, squash `6b3c54b`), from CU2,
+the second clean-up milestone (accepted 2026-10-18 by gate policy): `/satisfy-gate` is routed by stage (Haiku 5.5 for
+plan and technical approval, Sonnet 5.5 for acceptance) and twelve follow-up issues are closed. 1.15.0 (PR #92, squash
+`3b7aa7a`) came from C10b, the second of the three gate-policy steps (accepted 2026-10-18 by gate policy): under an
+automatic acceptance gate the Controller launches the Workflow's `/apply-pr-review` and reports the pull request's
+state to the Workflow itself, so a pull request whose checks were pending, or whose defect was fixed, reaches
+acceptance without a person.
 1.14.0 (PR #81, squash `8a38a85`) came from C10a, the first of the three steps (accepted 2026-10-17 by gate policy):
 the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, so a gate the
 policy satisfies passes without a person, and a value a protocol 1.x minor release adds is never
@@ -26,15 +29,41 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16 and 2026-10-18):
-1. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
-2. C12, then C11;
-3. the orchestrator series O1-O7.
+1. A1, the harness and git-host adapters and the usage record (owner decision, 2026-10-18: steps A1 and A2 come right
+   after CU2 and before C10c; they never start while a milestone is active);
+2. A2, the backlog file and the generated roadmap, once workflow#48 is released;
+3. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
+4. C12, then C11;
+5. the orchestrator series O1-O7.
+
+A3, A4 and A5 follow their dependencies in the table below.
 
 Clean-up milestones slot in between these every few milestones, or sooner when the issue count grows
 (owner decision, 2026-10-16). CU2, which took twelve issues (#78 and #79, CU1's follow-ups; #82-#87 and #91,
-C10a and the lane's own work; #93-#95, C10b's follow-ups), is complete (accepted 2026-10-18). #88, the two review round caps,
+C10a and the lane's own work; #93-#95, C10b's follow-ups), was released as 1.16.0 (accepted 2026-10-18, PR #99). One
+Optional finding of CU2 is kept as issue #100 for a later clean-up milestone. #88, the two review round caps,
 stays out of it: it needs the Workflow to count local and external rounds separately (workflow#43), so
 it follows once a Workflow release carries that.
+
+**Adapters and backlog (owner decision, 2026-10-18).** The goal is a Controller that does not depend on the tools
+around it, so the owner can change harness, git host or backlog tool without rewriting it. Every outside tool is
+reached through one small interface with a registry, declared capabilities and a safe fallback. A harness adapter
+(Claude Code and Codex today) declares the roles it supports, whether it can enforce single-agent and tool
+restrictions and how it reports usage, and it fails closed on a version it does not know. A git-host adapter wraps
+what the Controller does with git and `gh` (GitHub first, another host later); only the Controller process uses it,
+never a worker.
+
+Every adapter converts its harness output into one usage record: harness, provider, model, the token counts, wall
+time and turns, with a quality flag (`reported`, `derived` or `unknown`) and a cost worked out once from a versioned
+price table. Job records, `telemetry` and the usage budget read only that record.
+
+The backlog moves out of the prose roadmap into a file, `docs/backlog.yaml`, with one entry per item (id, status,
+order, dependencies, size and a link to the item's page). `docs/ROADMAP.md` is then generated from it, and a CI check
+fails when the page is out of date. A board is a view of that file, never its source: the file adapter always works.
+Items are refined into increments that can each be released alone, split when they are above about five
+checkpoints, and the success of that is measured as cost per shipped outcome. Who may send commands from a board is a
+setting in the Controller's own settings file with levels `admin`, `maintainer` and `viewer`, and the default is
+closed. The steps are A1-A5 in the table below.
 
 **Where this is heading: a kanban loop.** The Controller takes the next open roadmap item, plans
 it, implements it, reviews it, tests it, merges it and releases it as a new increment. It then
@@ -85,12 +114,17 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | CU1 | Clean-up: work through the open issues labelled `review-follow-up` (the minor review findings each acceptance keeps as follow-ups) and small known defects labelled `bug`, in one milestone, so the debt does not pile up (complete, accepted 2026-10-17 by gate policy, released as 1.13.1 from PR #77, squash `f46999d`; sixteen issues, #55-#59, #62-#67 and #71-#75). Later ones (CU2, ...) come every few milestones, or sooner when the issue count grows (owner decision, 2026-10-16) | C14 | [known follow-ups](#known-follow-ups-carried-forward) |
 | C10a | Gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, a refused validation stops, a value a protocol 1.x minor adds is advisory or blocked (never refused), and a stop the Workflow calls blocked sends a blocker, not a request (follow-ups 17 and 26 in part) (complete, accepted 2026-10-17 by gate policy, released as 1.14.0 from PR #81, squash `8a38a85`) | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [follow-up 17](#known-follow-ups-carried-forward) |
 | C10b | The pull request defect loop: `pr.apply_review` and the `pr_review_result` reporter at the pull-request external gates before acceptance (rows 38d, 38f, 38g; complete, accepted 2026-10-18 by gate policy; released as 1.15.0 from PR #92, squash `3b7aa7a`) | C10a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
-| CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (complete, accepted 2026-10-18 by gate policy; #82 fixed by disarming the fake workers' timers at exit; released as 1.16.0 when its pull request #99 merges; owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
+| CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (complete, accepted 2026-10-18 by gate policy; #82 fixed by disarming the fake workers' timers at exit; released as 1.16.0 from PR #99, squash `6b3c54b`; owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
+| A1 | Harness and git-host adapters: one interface for the Claude and Codex seams and one for the git host (GitHub first), and the usage record, one format whatever the harness reports. A refactor with no change in behaviour: the existing contract tests pass unchanged (owner decision, 2026-10-18: right after CU2, before C10c) | CU2 | Adapters and backlog (above) |
+| A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It waits for [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released, because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it (owner decision, 2026-10-18: right after A1, before C10c) | A1, workflow#48 | Adapters and backlog (above) |
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
+| A3 | Backlog refinement: split every item above about five checkpoints into increments that can each be released alone, and measure the result as cost per shipped outcome, not cost per milestone | A1, A2 | Adapters and backlog (above) |
+| A4 | The tracker interface: the `file` adapter first, then a board mirror, then proposals back as pull requests and commands from trusted accounts (levels `admin`, `maintainer` and `viewer` in the settings file; default closed) | A2, C11 | Adapters and backlog (above) |
+| A5 | More harnesses, including Codex as a worker, each with its own safety review before it is used | A1 | Adapters and backlog (above) |
 
 **Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
 because C9, C10 and C13 depend on them; W9 and the rows after it change how every milestone's

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -178,12 +181,15 @@ class PriceTableTest(unittest.TestCase):
         self.assertIsInstance(table["models"], dict)
 
     def test_the_table_loads_from_a_copied_package_layout(self) -> None:
+        # a copy of the package imported on its own: the default resource path resolves beside the module
         with tempfile.TemporaryDirectory() as tmp:
-            pkg = Path(tmp) / "controller"
-            pkg.mkdir()
-            for name in ("usage_record.py", "prices.json"):
-                (pkg / name).write_bytes((REPO_ROOT / "controller" / name).read_bytes())
-            self.assertEqual(ur.load(pkg / "prices.json"), ur.load())
+            shutil.copytree(REPO_ROOT / "controller", Path(tmp) / "controller", ignore=shutil.ignore_patterns("__pycache__"))
+            code = ("import json, sys; sys.path.insert(0, sys.argv[1]); from controller import usage_record as u; "
+                    "print(u.__file__); print(json.dumps(u.load(), sort_keys=True))")
+            done = subprocess.run([sys.executable, "-I", "-c", code, tmp], capture_output=True, text=True, check=True)
+        copied, table = done.stdout.splitlines()
+        self.assertTrue(copied.startswith(tmp))
+        self.assertEqual(json.loads(table), ur.load())
 
     def test_the_table_is_package_data(self) -> None:
         text = (REPO_ROOT / "pyproject.toml").read_text()

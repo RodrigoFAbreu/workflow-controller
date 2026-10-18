@@ -116,6 +116,10 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
     "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("acceptance",), "validation"),
 })
 
+#: The worker role an automatic action must name, where the Workflow's table pins one
+#: (pull-request-defect-loop D1): any other known role is not the one that action launches.
+REQUIRED_WORKER_ROLES: Mapping[str, str] = MappingProxyType({"pr.apply_review": "applier"})
+
 #: The one action that has no work item (plan C.4).
 PLAN_START = "plan.start"
 
@@ -309,6 +313,8 @@ def _automatic(context: "_Context", base: str | None) -> Decision:
             f"release launches it only under {entry.disposition!r} (row {answer.row}); nothing is launched")
     allowed_roles = (frozenset({VALIDATOR_WORKER_ROLE}) if entry.disposition == "validation"
                      else AUTOMATIC_WORKER_ROLES)
+    if entry_role := REQUIRED_WORKER_ROLES.get(action.id):
+        allowed_roles = frozenset({entry_role})
     if action.worker.role not in allowed_roles:
         return context.blocked(
             UNKNOWN_WORKER_ROLE,

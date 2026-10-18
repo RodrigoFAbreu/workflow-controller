@@ -60,7 +60,8 @@ def _entry_answer(action_id: str, item: str | None = "wi-1", **overrides) -> dic
     """The answer the Workflow gives for ``action_id``: the table's own
     disposition, and the worker role the entry requires."""
     entry = protocol_decision.PROTOCOL_ACTIONS[action_id]
-    role = overrides.pop("role", "validator" if entry.disposition == "validation" else "planner")
+    role = overrides.pop("role", "validator" if entry.disposition == "validation"
+                         else protocol_decision.REQUIRED_WORKER_ROLES.get(action_id, "planner"))
     return _result(disposition=entry.disposition, action=_action(action_id, item, role=role),
                    phase=overrides.pop("phase", None if item is None else "PLANNING"), **overrides)
 
@@ -317,6 +318,8 @@ class ActionTableTest(_Case):
         cases = (
             (protocol_decision.UNKNOWN_WORKER_ROLE, _action("pr.apply_review", role="a_future_role")),
             (protocol_decision.UNKNOWN_WORKER_ROLE, _action("pr.apply_review", role="validator")),
+            *((protocol_decision.UNKNOWN_WORKER_ROLE, _action("pr.apply_review", role=role))
+              for role in sorted(protocol_decision.AUTOMATIC_WORKER_ROLES - {"applier"})),
             (protocol_decision.USER_ONLY_ACTION, _action("pr.apply_review", role="applier", user_only=True)),
             (protocol_decision.INVOCATION_MISMATCH,
              _action("pr.apply_review", role="applier", invocation="/apply-pr-review wi-2")),

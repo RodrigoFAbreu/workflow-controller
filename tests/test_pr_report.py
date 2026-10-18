@@ -521,14 +521,28 @@ class ReporterExecutableTest(unittest.TestCase):
             bin_dir = Path(other) / "bin"
             self.fake_gh(bin_dir)
             bin_dir.chmod(0o777)
-            with self.assertRaises(ForgeUndecidableError):
+            with self.assertRaises(ForgeUndecidableError) as caught:
                 self.vetted_query(bin_dir, root)
+            self.assertIn("world-writable", caught.exception.message)
+            self.assertEqual(self.calls, [])
+
+    def test_a_world_writable_gh_executable_is_undecidable_and_never_run(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory(dir=Path.home()) as root_name, \
+                tempfile.TemporaryDirectory(dir=Path.home()) as other:
+            root = Path(root_name)
+            fixtures.git_init(root)
+            bin_dir = Path(other) / "bin"
+            gh = self.fake_gh(bin_dir)
+            gh.chmod(0o777)
+            with self.assertRaises(ForgeUndecidableError) as caught:
+                self.vetted_query(bin_dir, root)
+            self.assertIn("world-writable", caught.exception.message)
             self.assertEqual(self.calls, [])
 
     def test_a_missing_gh_is_undecidable(self) -> None:
         with mock.patch.dict("os.environ", {"PATH": "/nonexistent"}), self.assertRaises(ForgeUndecidableError):
             forge_mod.vet_gh("gh", Path.cwd())
-
 
     def test_the_production_context_vets_the_gh_it_builds(self) -> None:
         """I1-R2: ``Context.forge`` is the one place that turns the check on."""

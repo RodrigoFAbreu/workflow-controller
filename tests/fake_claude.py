@@ -306,6 +306,7 @@ mode (the lifecycle lock's included).
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
@@ -1408,6 +1409,9 @@ def _start_orphan_watchdog() -> None:
 
         signal.signal(signal.SIGALRM, check)
         signal.setitimer(signal.ITIMER_REAL, _ORPHAN_POLL_SECONDS, _ORPHAN_POLL_SECONDS)
+        # Python resets SIGALRM to its default action while it shuts down; a tick landing
+        # there would end a worker that finished normally with exit -14 (#82).
+        atexit.register(signal.setitimer, signal.ITIMER_REAL, 0, 0)
     hold = os.environ.get("FAKE_CLAUDE_READY_HOLD_FILE")
     if hold:
         deadline = time.monotonic() + (seconds if seconds > 0 else ORPHAN_SECONDS_DEFAULT)

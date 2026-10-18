@@ -17815,7 +17815,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adapters-1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adapters-1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -17961,8 +17961,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 30,
-      "last_transition": "2026-10-18T22:16:33.310395+00:00",
+      "state_revision": 32,
+      "last_transition": "2026-10-18T22:44:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -18142,7 +18142,104 @@
               "at": "2026-10-18T20:50:07Z"
             }
           ]
+        },
+        "F-11f57d17ce3d": {
+          "digest": "11f57d17ce3da5f1369e8d860afe80eac507c824f85eb9b370d8a45dd3feecd1",
+          "text": "**O1. D1's wording is stricter than the planned D6 key allows.** D1 says an existing test that must change \"stops the checkpoint for a plan amendment\". Three existing expectations changed without one:\n  - `tests/test_job.py` `LaunchPathTest`'s exact key set;\n  - `tests/test_trunk_preflight.py`'s golden comparison;\n  - the regenerated `tests/golden/no_policy_lifecycle.json`. It gains only the `usage_record` key on its 8 completed jobs: 200 lines added, 0 removed. I checked the key histogram.\n\n  Each one admits exactly the one additive key D6 plans, and none of D1's named contract tests changed. So these are registrations of planned behaviour, not an unplanned behaviour change, and I do not require an amendment. Future plans that add a record key should name the exact-key-set tests in D1's allowed-edit list.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T22:34:34Z"
+            }
+          ]
+        },
+        "F-e1e0478e0e42": {
+          "digest": "e1e0478e0e42880213cd4ad015421bfd880aae3fe65f3e03389b1bc0dacd29ff",
+          "text": "**O2. `docs/guide/how-it-works.md` \"The usage record\" says cost is always computed from the price table.** It says the cost \"is the four priced token groups ... times their prices in `controller/prices.json`\". For Claude, D7 and `from_claude_block` keep the harness-reported `total_cost_usd` (source `reported`), and the table is only the fallback. Say that a reported cost is kept and the table prices only what is not reported.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T22:34:34Z"
+            }
+          ]
+        },
+        "F-ce42bc840d71": {
+          "digest": "ce42bc840d71e32582a7291a000433a193a25e6815139099ca8a69b3a8d44cf2",
+          "text": "**O3. Plan-review O4 (partially reported reasoning) is still open.** `usage_record.reasoning_tokens` sums the results that carry `thinking_tokens`. It marks reasoning `reported` unless every result lacks the field. A job where only some results report it therefore records an incomplete subtotal as `reported`, and the guides do not mention this. Reasoning is informational and unpriced, so nothing is decided on it. Either document it or add a mixed-presence test and decide the flag.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T22:34:34Z"
+            }
+          ]
+        },
+        "F-2f88710d53af": {
+          "digest": "2f88710d53af94fb11071a543fa9bef116f2a22ae526dc86a22c921c05758b83",
+          "text": "**O4. The \"a retried Codex review counts its first root rollout once\" property is tested only in parts.** The tests cover the end-of-job scan over a home with two roots and a sub-agent (`ScanKeepsRolloutFiguresTest`) and `_settle` storing the scan's rollouts. They also cover the job building its record only from `usage_rollouts`, through a launch double. No test drives the real `launch_review` retry with the fake Codex and checks `out[\"usage_rollouts\"]`. The single-source design makes this sound today, but an end-to-end case would catch a later change that reintroduces a per-attempt source.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T22:34:34Z"
+            }
+          ]
+        },
+        "F-01ce72a7e2b4": {
+          "digest": "01ce72a7e2b4334c2896c25312e6458df10a1289b17a1da5c9dff1aa55669a55",
+          "text": "**O5. `wall_ms` means different things per job kind.** A worker record takes the summed `duration_ms` of its `result` events (harness-reported). A review record takes `launched_at` to the terminal write, at whole-second resolution, so it includes verdict ingest time. Both are defensible under D6's \"wall time\", but the field carries no quality flag or note saying which one it is. Name the source in the workers guide, or align the two when a consumer (A3) starts reading it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T22:34:34Z"
+            }
+          ]
+        },
+        "F-3a70a546654d": {
+          "digest": "3a70a546654ddde61f9219de09c1443b3b645989fe5e330ca949073e43d1e889",
+          "text": "**O1. Strengthen the dedicated packaging test.** `tests/test_usage_record.py:180` copies files but calls the checkout’s loader with an explicit JSON path; it never imports the copied module. An isolated installed-module import would pin default resource resolution more directly. Actual wheel loading and the existing packaged-runtime worker test passed during this review.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+              "verdict": "REVISE",
+              "at": "2026-10-18T22:44:00Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "46ebe49303e836dddcbe7485dd51b4ce0b737e79b8e8a198939bca7d600655a2",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-18T22:34:34Z",
+          "verdict_sha256": "7588d524c2aaadc9d5ad118e733a315688ec483d113dabae7f71b0c433834cea",
+          "run_ref": "session:local .ai-review/workflow-controller-adapters-1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

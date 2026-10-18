@@ -34,7 +34,10 @@ Deferred follow-ups, not conditions of acceptance:
 
 `workflow-controller-adapters-1` (A1, `docs/ROADMAP.md`) is `IMPLEMENTING` (plan revision 5, base `859eda5`). Checkpoints
 CP1 (the harness adapter registry, `controller/harness.py`), CP2 (the git host adapter registry, `controller/forge.py`
-`FORGES`) and CP3 (the usage record, `controller/usage_record.py`, with the versioned `controller/prices.json`, which
-ships with no model prices until one is taken from a published price list), and CP4 (the record written beside `telemetry` on both
-worker completion paths and by every review job's terminal write in which an attempt ran, `usage_record_failed` on a failed build)
-are complete; CP5 follows in the next `/milestone-implement` invocation. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth.
+`FORGES`), CP3 (the usage record, `controller/usage_record.py`, with the versioned `controller/prices.json`, which
+ships with no model prices until one is taken from a published price list), CP4 (the record written beside `telemetry`
+on both worker completion paths and by every review job's terminal write in which an attempt ran, `usage_record_failed`
+on a failed build) and CP5 (the guides and the roadmap; the no-policy golden gains only the `usage_record` key; the git
+host adapter builds `GhForge` at call time, so a patched `forge.GhForge` still reaches `Context.forge`) are complete.
+Every registry checkpoint is `COMPLETE`; the next `/milestone-implement` invocation enters self-review.
+`docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth.

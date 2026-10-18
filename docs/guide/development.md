@@ -496,6 +496,35 @@ a reviewed plan, never a version-string edit:
 The record of the 2.6.0 admission is
 [ADR 0006](../adr/0006-workflow-release-admission-and-per-release-contracts.md).
 
+## Adding a harness or a git host
+
+**A harness** is one adapter, one converter and one captured sample:
+
+1. Add a `HarnessAdapter` to `controller/harness.py` and to `ADAPTERS`: its
+   name, reviewer name, family, roles, restriction abilities, usage reporting
+   and pinned version. Extend the pinning tests in `tests/test_harness.py` so
+   the objects that launch the harness cannot drift from the declaration.
+2. Add a converter to `controller/usage_record.py` that builds a `UsageRecord`
+   from the harness's own output, following the record's meanings (input
+   excludes cached tokens, output includes reasoning) and returning `null` with
+   quality `unknown` for any figure the harness does not give.
+3. Capture a real sample under `tests/harness_contract/<harness>/` and test the
+   converter against it. A derived sample is labelled as derived in its first
+   line.
+
+**A git host** is a `ForgeAdapter` in `controller/forge.py` (`FORGES`): its
+`kind`, the constructor of the class implementing the `Forge` protocol and its
+`ForgeCapabilities`. The registry's keys must equal `repo_policy.FORGE_KINDS`
+(a test pins this), and an unregistered kind raises
+`ForgeKindUnregisteredError`.
+
+**Maintaining the price table.** `controller/prices.json` holds a `version`, the
+`currency`, the `unit` (price per token, in the table's currency), the `date`,
+the `source` and the prices per model identifier. A price change adds a new table
+`version` with its source and date; it never edits history. A changed converter,
+or a new version of a harness, is a new converter version. Stored records keep
+the version they were computed under and are never rewritten.
+
 ## Design records
 
 Every design decision behind the Controller is recorded either in an ADR or in

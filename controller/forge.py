@@ -35,7 +35,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -535,16 +535,17 @@ class ForgeCapabilities:
 @dataclasses.dataclass(frozen=True)
 class ForgeAdapter:
     """One registered git host: its ``kind`` (the repository policy's
-    ``forge.kind``), the class that implements :class:`Forge` for it, and its
+    ``forge.kind``), the constructor of the class that implements :class:`Forge` for it, and its
     declared capabilities."""
 
     kind: str
-    implementation: type
+    implementation: Callable[..., Forge]
     capabilities: ForgeCapabilities
 
 
 GITHUB = ForgeAdapter(
-    kind="github", implementation=GhForge,
+    # Looked up at call time, so a patched ``forge.GhForge`` is what a ``Context`` builds.
+    kind="github", implementation=lambda *args, **kwargs: GhForge(*args, **kwargs),
     capabilities=ForgeCapabilities(pull_requests=True, draft_pull_requests=True, squash_merge=True,
                                    check_reports=True, releases_with_assets=True),
 )

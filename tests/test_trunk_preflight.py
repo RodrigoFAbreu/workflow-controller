@@ -150,6 +150,11 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
             self.assertEqual((block["accounting"], block["delta"], block["charged"], block["token"]),
                              ("done", "unknown", 8.0, "<V>"))
             record["event_seq"] -= 1
+        # adapters-1 CP4 added only the advisory ``usage_record`` key beside ``telemetry`` on each completed job.
+        records = [record for record in jobs if "usage_record" in record]
+        self.assertEqual(len(records), 8)
+        for record in records:
+            self.assertEqual(record.pop("usage_record")["harness"], "claude-code")
         expected = {"values": {"merge.auto": True, "merge.poll_seconds": 30, "merge.wait_seconds": 3600},
                     "sources": dict.fromkeys(self.MERGE_KEYS, "file")}
         for block in blocks:

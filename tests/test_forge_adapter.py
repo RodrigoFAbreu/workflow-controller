@@ -23,7 +23,7 @@ class ForgeRegistryTest(unittest.TestCase):
     def test_registry_content_and_capabilities(self) -> None:
         self.assertEqual(set(forge.FORGES), {"github"})
         github = forge.FORGES["github"]
-        self.assertIs(github.implementation, forge.GhForge)
+        self.assertIsInstance(github.implementation("owner/repo"), forge.GhForge)
         self.assertEqual(github.kind, "github")
         self.assertTrue(all(dataclasses.astuple(github.capabilities)))
 

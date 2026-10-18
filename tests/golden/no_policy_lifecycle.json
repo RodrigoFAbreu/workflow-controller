@@ -363,6 +363,31 @@
             "weekly_start": null,
             "window_resets_at": null
           },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": null,
+            "cost_source": "unknown",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": null,
+            "version": 1,
+            "wall_ms": null
+          },
           "work_item_id": null,
           "worker": {
             "duration_ms": null,
@@ -898,6 +923,31 @@
             "weekly_start": null,
             "window_resets_at": null
           },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": 0.0,
+            "cost_source": "reported",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": 1,
+            "version": 1,
+            "wall_ms": 1
+          },
           "work_item_id": "wi-1",
           "worker": {
             "duration_ms": "<V>",
@@ -1265,6 +1315,31 @@
             "weekly_first_resets_at": null,
             "weekly_start": null,
             "window_resets_at": null
+          },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": 0.0,
+            "cost_source": "reported",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": 1,
+            "version": 1,
+            "wall_ms": 1
           },
           "work_item_id": "wi-1",
           "worker": {
@@ -1635,6 +1710,31 @@
             "weekly_first_resets_at": null,
             "weekly_start": null,
             "window_resets_at": null
+          },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": 0.0,
+            "cost_source": "reported",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": 1,
+            "version": 1,
+            "wall_ms": 1
           },
           "work_item_id": "wi-1",
           "worker": {
@@ -2007,6 +2107,31 @@
             "weekly_first_resets_at": null,
             "weekly_start": null,
             "window_resets_at": null
+          },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": 0.0,
+            "cost_source": "reported",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": 1,
+            "version": 1,
+            "wall_ms": 1
           },
           "work_item_id": "wi-1",
           "worker": {
@@ -2389,6 +2514,31 @@
             "weekly_start": null,
             "window_resets_at": null
           },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": 0.0,
+            "cost_source": "reported",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": 1,
+            "version": 1,
+            "wall_ms": 1
+          },
           "work_item_id": "wi-1",
           "worker": {
             "duration_ms": "<V>",
@@ -2760,6 +2910,31 @@
             "weekly_first_resets_at": null,
             "weekly_start": null,
             "window_resets_at": null
+          },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": 0.0,
+            "cost_source": "reported",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": 1,
+            "version": 1,
+            "wall_ms": 1
           },
           "work_item_id": "wi-1",
           "worker": {
@@ -3437,6 +3612,31 @@
             "weekly_first_resets_at": null,
             "weekly_start": null,
             "window_resets_at": null
+          },
+          "usage_record": {
+            "cache_read": null,
+            "cache_write": null,
+            "cost": null,
+            "cost_source": "unknown",
+            "currency": "USD",
+            "harness": "claude-code",
+            "input": null,
+            "model": null,
+            "output": null,
+            "price_table_version": 1,
+            "provider": "anthropic",
+            "quality": {
+              "cache_read": "unknown",
+              "cache_write": "unknown",
+              "input": "unknown",
+              "output": "unknown",
+              "reasoning": "unknown"
+            },
+            "reasoning": null,
+            "subagent_total_tokens": null,
+            "turns": null,
+            "version": 1,
+            "wall_ms": null
           },
           "work_item_id": null,
           "worker": {

@@ -30,8 +30,11 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -203,15 +206,64 @@ def _field(obj: Any, key: str, kind: type | tuple[type, ...], argv: Sequence[str
     return value
 
 
+def _is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _world_writable(path: Path) -> bool:
+    try:
+        return bool(path.stat().st_mode & 0o002)
+    except OSError:
+        return True
+
+
+def vet_gh(gh: str, repo_root: Path) -> None:
+    """Refuse a ``gh`` the Workflow's own resolver (``workflow_forge.resolve_gh``)
+    would refuse: the first ``gh`` on ``PATH``, symlinks resolved, may not lie
+    inside the repository, any of its worktrees, a temporary directory or a
+    world-writable directory (nor be world-writable itself). Without this the
+    reporter would run repository-controlled code and report what it printed
+    as the pull request's state. Raises :class:`ForgeUndecidableError`."""
+    argv = [gh, "pr", "list"]
+    found = shutil.which(gh)
+    if found is None:
+        raise _undecidable("gh is not installed (not found on PATH)", argv)
+    resolved = Path(os.path.realpath(found))
+    roots = [Path(os.path.realpath(repo_root))]
+    try:
+        listing = subprocess.run(["git", "-C", str(repo_root), "worktree", "list", "--porcelain"],
+                                 capture_output=True, text=True, timeout=30, check=False).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        listing = ""
+    roots += [Path(os.path.realpath(line[len("worktree "):])) for line in listing.splitlines()
+              if line.startswith("worktree ")]
+    temp = {tempfile.gettempdir(), os.environ.get("TMPDIR") or "/tmp", "/tmp", "/var/tmp", "/dev/shm"}
+    for label, where in (("the repository or a worktree", roots),
+                         ("the temporary directory", [Path(os.path.realpath(t)) for t in temp if t])):
+        if any(_is_under(resolved, root) for root in where):
+            raise _undecidable(f"the resolved gh {str(resolved)!r} is inside {label}", argv)
+    if _world_writable(resolved.parent) or _world_writable(resolved):
+        raise _undecidable(f"the resolved gh {str(resolved)!r} is world-writable or in a world-writable "
+                           "directory", argv)
+
+
 class GhForge:
     """The ``gh`` implementation of :class:`Forge` for ``repository``
     (``OWNER/NAME``). ``runner`` executes an argv whose first element is
-    ``gh`` (default: the real one on ``PATH``)."""
+    ``gh`` (default: the real one on ``PATH``). ``vet_root``, when set, is
+    the checkout :meth:`query_pull_requests` vets ``gh`` against
+    (:func:`vet_gh`): the one read whose output the Controller reports to the
+    Workflow as evidence."""
 
     def __init__(self, repository: str, runner: Runner | None = None, *, gh: str = "gh") -> None:
         self.repository = repository
         self._runner = runner or subprocess_runner()
         self._gh = gh
+        self.vet_root: Path | None = None
 
     # -- plumbing ----------------------------------------------------------
 
@@ -361,6 +413,8 @@ class GhForge:
         parses what the Controller reports (`pr_review_result`)."""
         argv = [self._gh, "pr", "list", "--repo", self.repository, "--state", "all", "--search", commit,
                 "--limit", str(REPORT_QUERY_LIMIT), "--json", REPORT_QUERY_FIELDS]
+        if self.vet_root is not None:
+            vet_gh(self._gh, self.vet_root)
         try:
             result = self._runner(argv)
         except (OSError, subprocess.TimeoutExpired) as exc:

@@ -287,7 +287,12 @@ class Context:
     poll_seconds: int = 30
 
     def forge(self, repository: str) -> forge_mod.Forge:
-        return (self.forge_factory or forge_mod.GhForge)(repository)
+        if self.forge_factory is not None:
+            return self.forge_factory(repository)
+        forge = forge_mod.GhForge(repository)
+        if getattr(forge, "vet_root", False) is None:  # the real gh forge, not a test double
+            forge.vet_root = self.repo_root
+        return forge
 
 
 @dataclasses.dataclass(frozen=True)

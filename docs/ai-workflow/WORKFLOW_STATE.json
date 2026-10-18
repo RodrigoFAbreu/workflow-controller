@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-cleanup-2",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -16924,7 +16924,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 8,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -17291,8 +17291,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 46,
-      "last_transition": "2026-10-18T17:58:52Z",
+      "state_revision": 47,
+      "last_transition": "2026-10-18T18:41:46Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -17497,6 +17497,313 @@
           "run_ref": "session:local .ai-review/workflow-controller-cleanup-2/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in the operator re-test outside the tester's sandbox",
+              "tester": "workflow-controller lane orchestrator re-test"
+            },
+            "log_digest": "f2f03ba67b82b164ebdc10692242c640d2cd2a6fd7082742ee6e19cd96da29b4",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-review-round1-operator.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed in the operator re-test outside the tester's sandbox",
+              "tester": "workflow-controller lane orchestrator re-test"
+            },
+            "log_digest": "f2f03ba67b82b164ebdc10692242c640d2cd2a6fd7082742ee6e19cd96da29b4",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-review-round1-operator.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          },
+          "flow-10": {
+            "flow_id": "flow-10",
+            "status": "passed",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "ran_at": "2026-10-18T18:32:16Z",
+            "summary": {
+              "result": "passed: real Haiku 5.5 high plan approval and real Sonnet 5.5 medium acceptance in the isolated D5 harness",
+              "tester": "workflow-controller lane orchestrator (real models, isolated)"
+            },
+            "log_digest": "db46947be0c251460095034c332e8d89f4cc2b7c51d8ee47514b68c63c2cbdb2",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-flow10-real-models-D5.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T18:32:17Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 99,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/99"
+          },
+          "state": "open",
+          "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+          "observed_at": "2026-10-18T18:41:46Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "f413935ae87f0ef276e64a659f20adefb3c8cfe0",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-18T18:41:46Z",
+            "raw_sha256": "158e8de11e12476af42d179ebf36f2da94df939f36a5427ac99b2204a9b7148a",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "42a7856d6b182b717d8e59612a5d1c6b0e3c1bb707fcd7a57aa64029da75aae1"
+          },
+          "fact_id": "e5d5f328f26243964ad9c1ecdf8041019e3b0249c1aa71420182631039d21e82"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-10', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #99 at a3a7da7436d88bf045590aa0f3d474d0f061876d is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "f413935ae87f0ef276e64a659f20adefb3c8cfe0",
+          "anchor_identity": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "f09919b66b6707925e3170e3dbcee3d0762d726eab93d14fe2b372a7070c53fb",
+            "recorded_at": "2026-10-18T17:58:52Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "32ce1d73d2fbbade9f2eecbe676a9afaca72b3cbc3c69599c75e646d9f3287de",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-10": {
+              "evidence_id": "4b64186ae72a5f86d0973fa7a258306af5a7f02f32e398ca2fbb4e5af9bd6a4d",
+              "log_digest": "db46947be0c251460095034c332e8d89f4cc2b7c51d8ee47514b68c63c2cbdb2",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-flow10-real-models-D5.md"
+            },
+            "flow-2": {
+              "evidence_id": "5b5195adf85285788ca49666268449687bb621f3986d2b9d5ec71c73c6c00cd9",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-3": {
+              "evidence_id": "8c5c4712c992239fa83fd1768e7363b9da31d91a1864718c3be7562c135dee13",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-4": {
+              "evidence_id": "1d28cb2da7065b5543ad4c7991f5b0ffbcd79060a20fd3947aed12c79911ebeb",
+              "log_digest": "f2f03ba67b82b164ebdc10692242c640d2cd2a6fd7082742ee6e19cd96da29b4",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-review-round1-operator.md"
+            },
+            "flow-5": {
+              "evidence_id": "86bbf18ecfa5bc27c92232c0033c280f7d6ba0441ca3eaf5a0a8293c459c10de",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-6": {
+              "evidence_id": "4fd242a87549fb7421269d2358b0c23ce893a284bda1b15640500b82b6d5b0b0",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-7": {
+              "evidence_id": "cfe23c20405a7d4ff6c5891fe284300def9562646861852d84b98c7da3333d7a",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-8": {
+              "evidence_id": "4c6e676d54a2f25a6fa87c51db23de3bffaeecd769f8801c9367a52b70cb0e85",
+              "log_digest": "a0ca95cbefc51d53b9acad94046aafb597a3996fc454ad9c0c1c1efda8ff106f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-tester-round1-RESULTS.md"
+            },
+            "flow-9": {
+              "evidence_id": "b3d6814b7e258e367bf153dbbaf9eba0958251bdd5058dca4d80863471319a17",
+              "log_digest": "f2f03ba67b82b164ebdc10692242c640d2cd2a6fd7082742ee6e19cd96da29b4",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-cleanup-2/functional-review-round1-operator.md"
+            }
+          },
+          "pr": {
+            "fact_id": "e5d5f328f26243964ad9c1ecdf8041019e3b0249c1aa71420182631039d21e82",
+            "head": "a3a7da7436d88bf045590aa0f3d474d0f061876d",
+            "provenance": "workflow_gh",
+            "raw_sha256": "158e8de11e12476af42d179ebf36f2da94df939f36a5427ac99b2204a9b7148a"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-18T18:41:46Z",
+        "workflow_release": "2.14.0"
       }
     }
   }

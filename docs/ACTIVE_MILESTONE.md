@@ -8,9 +8,8 @@ Workflow's `/apply-pr-review` (`pr.apply_review`, on the new `apply-pr-review` r
 gates (rows 38f and 38g), runs the Workflow's one fixed `gh pr list` query itself and hands the verbatim result to
 `record-external-result --kind pr_review_result` (the `pr_report` step). Pending checks wait only when they are the
 one thing awaited, and an unchanged result is not reported twice, so a pull request whose checks were pending or whose
-defect was fixed reaches acceptance without a person. It is released as the minor release **1.15.0** when its `feat:`
-pull request (#92) merges. No `docs/releases/1.15.0.md` was written by the milestone; the release notes come in the
-docs pull request after the release.
+defect was fixed reaches acceptance without a person. Its `feat:` pull request (#92) merged on 2026-10-18 (squash
+`3b7aa7a`), and it is released as the minor release **1.15.0**, the latest release. The release notes are `docs/releases/1.15.0.md`.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every acceptance
 requirement met (policy source `default`, digest `bae758b4f4ce`).

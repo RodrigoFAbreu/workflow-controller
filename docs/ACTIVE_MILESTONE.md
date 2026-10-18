@@ -33,6 +33,7 @@ Deferred follow-ups, not conditions of acceptance:
 ## Next action
 
 `workflow-controller-adapters-1` (A1, `docs/ROADMAP.md`) is `IMPLEMENTING` (plan revision 5, base `859eda5`). Checkpoints
-CP1 (the harness adapter registry, `controller/harness.py`) and CP2 (the git host adapter registry, `controller/forge.py`
-`FORGES`) are complete; CP3-CP5 follow, one per `/milestone-implement`
+CP1 (the harness adapter registry, `controller/harness.py`), CP2 (the git host adapter registry, `controller/forge.py`
+`FORGES`) and CP3 (the usage record, `controller/usage_record.py`, with the versioned `controller/prices.json`, which
+ships with no model prices until one is taken from a published price list) are complete; CP4-CP5 follow, one per `/milestone-implement`
 invocation. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth.

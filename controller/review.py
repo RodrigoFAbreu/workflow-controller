@@ -1659,7 +1659,8 @@ def add_figures(total: dict | None, figures: dict | None) -> dict | None:
 
     return {"version": figures["version"], "results": total["results"] + figures["results"],
             "cost_usd": plus(total["cost_usd"], figures["cost_usd"]),
-            "tokens": {key: plus(total["tokens"].get(key), value) for key, value in figures["tokens"].items()}}
+            "tokens": {key: plus(total["tokens"].get(key), figures["tokens"].get(key))
+                       for key in [*total["tokens"], *(k for k in figures["tokens"] if k not in total["tokens"])]}}
 
 
 def _claude_end_readings(_home: Path) -> list[dict]:

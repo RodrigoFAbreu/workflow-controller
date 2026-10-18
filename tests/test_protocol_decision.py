@@ -231,6 +231,7 @@ class ActionTableTest(_Case):
                 self.assertEqual(got.action.command, " ".join((f"/{entry.command}", *entry.leading))
                                  + ("" if item is None else " wi-1"))
                 self.assertEqual(got.protocol.route, entry.route)
+                self.assertIn(f"({entry.disposition})", got.evidence[0])
 
     def test_the_table_agrees_with_what_describe_lists_and_names_no_user_only_command(self) -> None:
         with tempfile.TemporaryDirectory() as td:

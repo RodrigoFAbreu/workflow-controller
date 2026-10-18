@@ -66,6 +66,11 @@ class PurePartsTest(unittest.TestCase):
         self.assertFalse(pr_report.pending_checks(pending, row="38g", reason_text=CI_TEXT).applies)
         # (b) the stop text must name ci_green
         self.assertFalse(pr_report.pending_checks(pending, row="38f", reason_text="pr_fact_current: stale").applies)
+        # (b) ci_green is the requirement: second entry waits; the word inside another entry's detail does not
+        second = "the automatic acceptance gate awaits a pull-request fact: pr_fact_current: stale; ci_green: pending"
+        self.assertTrue(pr_report.pending_checks(pending, row="38f", reason_text=second).applies)
+        detail = "the automatic acceptance gate awaits a pull-request fact: pr_fact_current: the record lacks ci_green"
+        self.assertFalse(pr_report.pending_checks(pending, row="38f", reason_text=detail).applies)
         # (c) a standing objection is reported, not waited on
         self.assertFalse(pr_report.pending_checks(raw_of(rollup=(RUNNING,), decision="CHANGES_REQUESTED"),
                                                   row="38f", reason_text=CI_TEXT).applies)
@@ -436,7 +441,7 @@ class DispatchTest(ReporterCase):
         forge = FakeForge(outputs)
         proceed = milestone_branch.Proceed()
         with mock.patch.object(milestone_branch, "waiting_preflight", return_value=proceed), \
-                mock.patch.object(forge_mod, "GhForge", lambda repo: forge):
+                mock.patch.object(forge_mod, "GhForge", lambda repo, **_: forge):
             record = life.step()
         self.forge = forge
         return record
@@ -463,7 +468,7 @@ class DispatchTest(ReporterCase):
         human = self.decision(life, mode="human")
         forge = FakeForge([lambda commit: raw_of(commit)])
         with mock.patch.object(milestone_branch, "waiting_preflight", return_value=milestone_branch.Proceed()), \
-                mock.patch.object(forge_mod, "GhForge", lambda repo: forge), \
+                mock.patch.object(forge_mod, "GhForge", lambda repo, **_: forge), \
                 mock.patch.object(protocol_decision, "decide_after_preflight", return_value=(human, ())):
             record = life.step()
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
@@ -530,6 +535,8 @@ class ReporterExecutableTest(unittest.TestCase):
         root = Path.cwd()
         context = milestone_branch.Context(repo_root=root, runtime_root=root)
         self.assertEqual(context.forge("owner/repo").vet_root, root)
+        self.assertEqual(forge_mod.GhForge("owner/repo", vet_root=root).vet_root, root)
+        self.assertIsNone(forge_mod.GhForge("owner/repo").vet_root)
 
     def test_a_gh_inside_the_repository_is_never_run_through_the_production_context(self) -> None:
         import tempfile

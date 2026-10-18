@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-pr-defect-loop",
+  "requirements": {
+    "R1": {
+      "description": "A pr.apply_review answer launches /apply-pr-review <id> on a new apply-pr-review role (Opus, xhigh), and every other pairing, role, worker kind, rendering or missing work item is blocked as before",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "At an external pull-request gate (rows 38f, 38g) under an automatic acceptance gate the Controller runs the Workflow's fixed query, waits only while pending checks are the sole thing the Workflow awaits (never hiding an approval or an objection), and reports the verbatim result through record-external-result; an unchanged result is not reported twice, and nothing outside a bound pull request is touched",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "A run whose acceptance was refused for pending checks carries on to MILESTONE_COMPLETE once they are green, and a red pull request reopens the same item and returns to acceptance, with no stop and no loop-guard trip; a pull request still unapproved stops with the approval named",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "A stop asks for a person only when one is needed, the roadmap, the guides and an ADR agree with the behaviour, and the checks and the suite are green",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

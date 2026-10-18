@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-pr-defect-loop",
+  "plan_revision": 5,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Launch pr.apply_review: the apply-pr-review role and the action table",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The pr_review_result reporter: query, record, idempotence and the wait for pending checks",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The loop end to end on real answers: pending clears itself, a red pull request reopens the item",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Notifications, documents, roadmap and the whole suite",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

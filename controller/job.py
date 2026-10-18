@@ -106,7 +106,7 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, gitrepo, identity, lock, milestone_branch, notify, protocol, protocol_decision, review, review_mode, review_rounds,
+    evidence, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     routing, runtime, target_state, telemetry, usage, worker, workflow_contract,
 )
 from controller.decision import (
@@ -5082,13 +5082,29 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
             ident = notify.lifecycle_gate_identity(str(work_item), str(gate.get("phase")),
                                                    pre_state.get("state_revision"), code)
             body = f"{gate.get('what_is_required')} Next: {gate.get('safe_resume_command')}"
-            if _protocol_disposition(record) == "blocked":
+            waits = _pending_checks_wait(record)
+            if waits is False:
+                # Pending checks are a normal end of a step that did not wait, as for a branch gate
+                # (pull-request-defect-loop D8): nothing asks a person for anything.
+                pass
+            elif waits is True or _protocol_disposition(record) == "blocked":
                 # The Workflow itself calls the stop a blocker, so no person's decision is asked for
                 # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
                 out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
             else:
                 out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item, body))
     return out
+
+
+def _pending_checks_wait(record: Mapping) -> bool | None:
+    """For a reporter record that stopped on pending checks: whether its step waited (the
+    budget was spent, so the stop is a blocker); ``None`` for any other record."""
+    block = record.get("pr_report")
+    if record.get("kind") != PR_REPORT_KIND or not isinstance(block, Mapping) \
+            or block.get("outcome") != pr_report.PENDING:
+        return None
+    wait = block.get("wait")
+    return bool(wait.get("waited")) if isinstance(wait, Mapping) else False
 
 
 def _protocol_disposition(record: Mapping) -> str | None:
@@ -6845,6 +6861,228 @@ def _ingest_review(managed_repo: Any, *, runtime_root: Path, job_id: str, work_i
 
 
 # ---------------------------------------------------------------------------
+# The pull-request report (`workflow-controller-pr-defect-loop` CP2, D4-D6):
+# at an external pull-request gate under an automatic acceptance gate the
+# Controller runs the Workflow's fixed query itself and hands the verbatim
+# output to the Workflow's external-result recorder (kind `pr_review_result`).
+# ---------------------------------------------------------------------------
+
+PR_REPORT_KIND = pr_report.JOB_KIND
+#: The ``selected_action.command`` of a report record (a Controller step, not a slash command).
+PR_REPORT_COMMAND = "pr.report"
+
+
+def _pr_report_row(decision: Decision) -> str | None:
+    """The row (38f or 38g) when ``decision`` is a pull-request external gate
+    the reporter acts at (D4): an ``external_gate`` for ``pr.review.external``
+    satisfied by ``pr_review_result`` whose policy object names an
+    **automatic** acceptance gate. Row 38g under a human acceptance gate
+    stays an ordinary gate with the Workflow's ``/accept-milestone`` remedy."""
+    info = decision.protocol
+    if info is None or info.disposition != "external_gate" or info.action_id != pr_report.REPORT_ACTION_ID:
+        return None
+    document = info.document
+    policy = document.get("policy")
+    if document.get("satisfied_by") != pr_report.REPORT_SATISFIED_BY or info.row not in pr_report.REPORT_ROWS:
+        return None
+    if not isinstance(policy, Mapping) or policy.get("gate") != "acceptance" or policy.get("mode") != "automatic":
+        return None
+    return info.row
+
+
+def pr_report_forecast(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision) -> dict | None:
+    """What the next ``step`` does at the pull-request external gate ``decision`` (D4-D6), for ``explain``:
+    ``None`` unless the reporter acts here (the conditions of :func:`_run_pr_report`: a binding with a pull request
+    and an anchor commit under an automatic acceptance gate), else the ``row``, the commit and pull request it
+    queries, ``waits`` (whether pending checks may hold the report) and ``last_report`` (the ``raw_sha256`` the last
+    report of this item sent, else ``None``). Read-only: no ``gh`` call, no write."""
+    row = _pr_report_row(decision)
+    work_item_id = getattr(work_item, "work_item_id", None)
+    commit = pr_report.anchor_commit(work_item)
+    if row is None or work_item_id is None or commit is None:
+        return None
+    root = managed_repo.root
+    binding = milestone_branch.read_record(runtime_root, milestone_branch.repo_key(gitrepo.common_dir(root)),
+                                           work_item_id)
+    pull_request = None if binding is None else binding.get("pr")
+    if not isinstance(pull_request, Mapping) or pull_request.get("number") is None:
+        return None
+    return {"row": row, "queried_commit": commit, "pull_request": pull_request["number"],
+            "waits": row == pr_report.ROW_EVIDENCE_NEEDED,
+            "last_report": last_reported_sha(runtime_root, str(root), work_item_id)}
+
+
+@dataclasses.dataclass(frozen=True)
+class _ReportAttempt:
+    """One pass of the reporter: its ``outcome`` (:data:`pr_report.OUTCOMES`), the query it made and
+    what the Workflow answered."""
+
+    outcome: str
+    detail: str = ""
+    evidence: Mapping | None = None
+    raw_sha256: str | None = None
+    wait: pr_report.Wait = pr_report.NO_WAIT
+    job_id: str | None = None
+    stored: Mapping | None = None
+    refusal: Mapping | None = None
+    phase_after: str | None = None
+
+
+def last_reported_sha(runtime_root: Path, target_repo: str, work_item_id: str | None) -> str | None:
+    """The ``raw_sha256`` the most recent ``reported`` report job of this
+    item sent (D5), else ``None``. Reads tolerantly and never raises."""
+    best: tuple[tuple[str, str], str] | None = None
+    for record in _stored_job_records(runtime_root):
+        block = record.get("pr_report")
+        if record.get("kind") != PR_REPORT_KIND or record.get("target_repo") != target_repo \
+                or record.get("work_item_id") != work_item_id or not isinstance(block, Mapping) \
+                or block.get("outcome") != pr_report.REPORTED or not isinstance(block.get("raw_sha256"), str):
+            continue
+        key = (str(record.get("created_at")), str(record.get("job_id")))
+        if best is None or key > best[0]:
+            best = (key, block["raw_sha256"])
+    return None if best is None else best[1]
+
+
+def _report_attempt(managed_repo: Any, *, runtime_root: Path, ctx: Any, identity: Any, work_item_id: str | None,
+                    decision: Decision, forge: Any, commit: str, repository: str, digests: Mapping | None
+                    ) -> _ReportAttempt:
+    """One query and, when D5/D6 allow, one report."""
+    info = decision.protocol
+    try:
+        raw = forge.query_pull_requests(commit)
+    except ControllerError as exc:
+        return _ReportAttempt(pr_report.FORGE_UNAVAILABLE, exc.message, getattr(exc, "evidence", None))
+    sha = pr_report.raw_sha256(raw)
+    if pr_report.records_of(raw) == []:
+        return _ReportAttempt(pr_report.NO_PULL_REQUEST, f"no pull request carries {commit}", raw_sha256=sha)
+    reason = info.document.get("reason")
+    wait = pr_report.pending_checks(raw, row=info.row, reason_text=reason.get("text") if isinstance(reason, Mapping) else "")
+    if wait.applies:
+        return _ReportAttempt(pr_report.PENDING, pr_report.pending_text(wait), raw_sha256=sha, wait=wait)
+    if pr_report.is_unchanged(raw, last_reported_sha(runtime_root, str(managed_repo.root), work_item_id)):
+        return _ReportAttempt(pr_report.UNCHANGED, "the query output equals what the last report sent", raw_sha256=sha)
+    root = managed_repo.root
+    try:
+        if info.state_identity is not None:
+            protocol.next_action(root, work_item_id, expect_state_identity=info.state_identity, expected_digests=digests)
+    except ControllerError as exc:
+        refusal = getattr(exc, "evidence", {}).get("refusal") or {}
+        if refusal.get("code") == "stale_decision":
+            return _ReportAttempt(pr_report.STALE, "the Workflow state changed before the report", raw_sha256=sha)
+        return _ReportAttempt(pr_report.REFUSED, exc.message, {"code": type(exc).__name__}, raw_sha256=sha,
+                              refusal={"code": type(exc).__name__, "message": exc.message})
+    job_id = _new_job_id()
+    document = pr_report.input_document(
+        pr_report.forge_block(repository=repository, queried_commit=commit, raw=raw, fetched_at=ctx.clock(),
+                              version=identity.version), f"controller:{job_id}")
+    path = runtime.write_bytes(runtime_root, f"jobs/{job_id}/pr-review-result.json",
+                               json.dumps(document, sort_keys=True, indent=2).encode("utf-8"))
+    try:
+        ingested = protocol.record_external_result(root, work_item_id, protocol.PR_REVIEW_RESULT_KIND, path,
+                                                   run_ref=f"controller:{job_id}", expected_digests=digests)
+    except ControllerError as exc:
+        return _ReportAttempt(pr_report.REFUSED, exc.message, getattr(exc, "evidence", None), raw_sha256=sha,
+                              job_id=job_id, refusal={"code": type(exc).__name__, "message": exc.message})
+    if ingested.outcome != "recorded":
+        refusal = ingested.refusal
+        return _ReportAttempt(pr_report.REFUSED, refusal.message, raw_sha256=sha, job_id=job_id,
+                              refusal={"code": refusal.code, "message": refusal.message})
+    return _ReportAttempt(pr_report.REPORTED, "reported", raw_sha256=sha, job_id=job_id,
+                          stored={"pr_review": ingested.stage, "slot": ingested.slot, "fact_id": ingested.fact_id},
+                          phase_after=None if ingested.basis is None else ingested.basis.phase)
+
+
+_REPORT_GATES = {
+    pr_report.UNCHANGED: pr_report.GATE_UNCHANGED, pr_report.PENDING: pr_report.GATE_CHECKS_PENDING,
+    pr_report.NO_PULL_REQUEST: pr_report.GATE_NO_PULL_REQUEST,
+    pr_report.FORGE_UNAVAILABLE: pr_report.GATE_FORGE_UNAVAILABLE, pr_report.REFUSED: pr_report.GATE_REFUSED,
+    pr_report.STALE: pr_report.GATE_STALE,
+}
+
+
+def _report_stop_text(attempt: _ReportAttempt, decision: Decision) -> str:
+    """The words of a stop: what the step did, then the Workflow's own gate."""
+    base = {
+        pr_report.UNCHANGED: "reported; the report changed nothing -- the pull request's state is as the "
+                             "Workflow already holds it",
+        pr_report.PENDING: attempt.detail,
+        pr_report.NO_PULL_REQUEST: f"nothing was reported: {attempt.detail}",
+        pr_report.FORGE_UNAVAILABLE: f"nothing was reported: the query could not be answered ({attempt.detail})",
+        pr_report.REFUSED: f"the Workflow refused the report ({(attempt.refusal or {}).get('code')}: "
+                           f"{(attempt.refusal or {}).get('message')}); nothing was written",
+        pr_report.STALE: "nothing was reported: the Workflow state changed first; the next step re-decides",
+    }[attempt.outcome]
+    return f"{base}. The Workflow's gate: {decision.gate.what_is_required}"
+
+
+def _run_pr_report(managed_repo: Any, *, runtime_root: Path, identity: Any, run_id: str | None, work_item: Any,
+                   work_item_id: str | None, decision: Decision, pre_state: dict, row: str,
+                   ctx: milestone_branch.Context, on_wait: Callable[[str, str], None] | None
+                   ) -> "JobRecord | None":
+    """Run the report step for the external gate ``decision`` (D4-D6): ``None``
+    when nothing applies (no binding with a pull request, no anchor commit),
+    else the record of what the step did -- ``FINISHED`` for a report the
+    Workflow stored, a ``GATE_BLOCKED`` stop for everything else. Pending
+    checks are polled through the shared wait (``ctx.wait_seconds``)."""
+    root = managed_repo.root
+    key = milestone_branch.repo_key(gitrepo.common_dir(root, runner=ctx.runner))
+    binding = milestone_branch.read_record(runtime_root, key, work_item_id) if work_item_id else None
+    pull_request = None if binding is None else binding.get("pr")
+    commit = pr_report.anchor_commit(work_item)
+    if not isinstance(pull_request, Mapping) or pull_request.get("number") is None or commit is None:
+        return None
+    repository = binding["repository"]["forge_repository"]
+    forge = ctx.forge(repository)
+    digests = _admitted_digests(managed_repo)
+
+    def attempt() -> _ReportAttempt:
+        return _report_attempt(managed_repo, runtime_root=runtime_root, ctx=ctx, identity=identity,
+                               work_item_id=work_item_id, decision=decision, forge=forge, commit=commit,
+                               repository=repository, digests=digests)
+
+    final = milestone_branch.poll_waitable(
+        attempt(), attempt, is_waitable=lambda a: a.outcome == pr_report.PENDING,
+        code_of=lambda a: pr_report.GATE_CHECKS_PENDING, wait_seconds=ctx.wait_seconds,
+        poll_seconds=ctx.poll_seconds, clock=ctx.clock, on_wait=on_wait)
+    block = {"outcome": final.outcome, "row": row, "queried_commit": commit, "repository": repository,
+             "pull_request": pull_request.get("number"), "raw_sha256": final.raw_sha256, "detail": final.detail,
+             "wait": ({"checks_empty": final.wait.empty, "waited": ctx.wait_seconds > 0}
+                      if final.outcome == pr_report.PENDING else None),
+             "result": None if final.stored is None else dict(final.stored),
+             "refusal": None if final.refusal is None else dict(final.refusal)}
+    job_id = final.job_id or _new_job_id()
+    now = _now()
+    stop = None if final.outcome == pr_report.REPORTED else protocol_decision.gate_for(
+        managed_repo, work_item, decision, _REPORT_GATES[final.outcome], _report_stop_text(final, decision))
+    record: JobRecord = {
+        **_identity_block(managed_repo, identity, work_item_id, decision.observed_phase, job_id),
+        "kind": PR_REPORT_KIND,
+        "pre_state": _durable_pre_state(pre_state),
+        "selected_action": {
+            "kind": PR_REPORT_KIND, "command": PR_REPORT_COMMAND, "task_addendum": None, "automatic": False,
+            "declined": False, "reason": decision.reason, "evidence": list(decision.evidence),
+        },
+        "status": STATUS_FINISHED if stop is None else STATUS_GATE_BLOCKED,
+        "human_gate_pending": None if stop is None else _human_gate_dict(stop.gate),
+        "handoff_pending": False,
+        "protocol": _protocol_block(decision),
+        "pr_report": block,
+        "created_at": now,
+        "updated_at": now,
+    }
+    if stop is None:
+        record.update(transition_verified=True, observed_phase_after=final.phase_after)
+    if run_id is not None:
+        record["run_id"] = run_id
+    _run_job_started(run_id, job_id)
+    record = _persist(runtime_root, job_id, record, event=_final_event(record["status"]),
+                      details={"pr_report": {"outcome": final.outcome, "raw_sha256": final.raw_sha256}})
+    _run_job_ended(run_id, job_id, record["status"], record)
+    return record
+
+
+# ---------------------------------------------------------------------------
 # execute_step -- CP6 owns steps 1-6, CP6B extends it with steps 7-9.
 # ---------------------------------------------------------------------------
 
@@ -7147,6 +7385,16 @@ def _execute_step_locked(
         )
 
     if decision.gate is not None:
+        report_row = _pr_report_row(decision)
+        if report_row is not None:
+            # Pull-request-defect-loop D4: report the pull request's state to the Workflow
+            # instead of stopping at the external gate; `None`: nothing to report, the gate stays.
+            reported = _run_pr_report(
+                managed_repo, runtime_root=runtime, identity=identity, run_id=run_id, work_item=work_item,
+                work_item_id=resolved_work_item_id, decision=decision, pre_state=pre_state, row=report_row,
+                ctx=branch_ctx, on_wait=on_wait)
+            if reported is not None:
+                return reported
         chosen = _choose_review(managed_repo, decision, reviewer, review_mode_options)
         review_target = None
         if chosen is not None:

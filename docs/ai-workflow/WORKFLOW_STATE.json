@@ -16134,6 +16134,786 @@
         "evaluated_at": "2026-10-17T21:06:58Z",
         "workflow_release": "2.12.0"
       }
+    },
+    "workflow-controller-pr-defect-loop": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-pr-defect-loop",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_PR_DEFECT_LOOP_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-pr-defect-loop-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-pr-defect-loop-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 5,
+      "implementation_revision": 4,
+      "functional_review_round": null,
+      "base_commit": "164d813810d0c17805320fd661c51d82d00fcc70",
+      "reviewed_implementation_head": "15b3485e46ab1109b250d718b1fd3c1f351af0a1",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP4",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "751a968f35a4e55642a40103d5c965f98aff0c0b"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "712b6d5379fd4e18da3343bb43bbd8661d5d7a04"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "95729f1b4510464610343d408867e2e0cfeaa2e6"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "9caf94db89da419c4c4bb1bc5430be2e541a9678"
+        }
+      },
+      "current_bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+        "approved_review_content_id": "c0af9b596ea43abf64a7c06afb75816c30d6dd1f225e3e38829fe92f4a1c6241",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_PR_DEFECT_LOOP_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a0600fc5fb4fad03dc56c895f5a8e24a5a373ec2"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-pr-defect-loop-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4bf5751107f48573df6d0d8f29f59a2f07564700"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-pr-defect-loop-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f2553934a892a2cc14b7157bcc73b3d02a930e86"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-18T00:40:21Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c0af9b596ea43abf64a7c06afb75816c30d6dd1f225e3e38829fe92f4a1c6241",
+            "ledger": {
+              "local": {
+                "bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "33b5b2068a3b1e53b9765489083334fecd3fbae568df6636284d4540a8f4ad36",
+                "ledger_entry_sha256": "cf6135d2a6319f70d557f9a0db640cb4b460e4381b26dd929784837a67c6f661",
+                "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "da69c6d46191cc5111bb47bb1d1fefd5e7c56147dd70c53043df3d2fc3564944",
+                "ledger_entry_sha256": "3a7ae2fd6ef17b2e41b2349594649527da4c9a17ba89ff165b07e4b868ddf983",
+                "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-18T00:40:21Z",
+          "workflow_release": "2.13.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "222e8621a2f31799d2f921fe34f1e574282057ae36b6c4d32a7639cc21a73f1a",
+        "approved_review_content_id": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "12545e0de2054fc1397ce4919cc2f96f79f52b17"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c4c746b003f069724cc048472014dbb6058e4730"
+          },
+          {
+            "path": "controller/forge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e4d27c67013f1a8faf13582d9da3b74a4a959060"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6ee5a206bf3fb1503f4751dd9d56d4f50b9b9321"
+          },
+          {
+            "path": "controller/milestone_branch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c01f72e6847c2295a60134a6f7054fcb543704f8"
+          },
+          {
+            "path": "controller/pr_report.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "50dc01d5bd97e5d9e8fe882cd3f38d61a051523f"
+          },
+          {
+            "path": "controller/protocol.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e837266761974776df4af24e473d380d0380bf92"
+          },
+          {
+            "path": "controller/protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "acde4a423c705ca5796312a439c843e36abeea1a"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3bdb09d7ed4d10027237391c577b2de6b2aa21a5"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef1768d02619be60dd6f7f238c624b8215dff854"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d0d4b41355811b24cabe730298953fbb141951a2"
+          },
+          {
+            "path": "docs/adr/0015-gate-policy-validations-and-open-enums.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9ee46b90cc84e4b13d96243228baeb4dbf300786"
+          },
+          {
+            "path": "docs/adr/0016-pull-request-report-and-apply.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cfe05d3b16a1ba1a66d1c7893ff4ad4593d6ea2d"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-pr-defect-loop-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "112d8cb324f1c2b1dae51c9db3d8acc408322807"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9bc3677c3fbaab8f6c1a4750005fd8b8fe57c26d"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6851d16c5118691f1a55e9f222c92ab3ffd5bd2a"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e3a4d42ee7b911c040391cff3806f557efd71484"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e43c167837c96e34b0cac390e85e20bcd29349b"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1a754ea23d227147fe3b2d903179d21c4f9fde33"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ae4a7fface4820f83257c6e95f9d1796651d4aeb"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca0104b531e60e03f0b712f6d90f51daa1dcd56a"
+          },
+          {
+            "path": "tests/test_pr_report.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7576e39b2fc80bd5203068de179b7145f570f2b8"
+          },
+          {
+            "path": "tests/test_protocol.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7704864247e23d1c1e7c0ec7f344e54f4f36f745"
+          },
+          {
+            "path": "tests/test_protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5c5331471eefbc1a5169c1447383127979831493"
+          },
+          {
+            "path": "tests/test_protocol_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b49096d4dfdd26621f24fd1fd6068ee73c958914"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ec063f00a59437df1ac2a3b1b62b60a6772c99c8"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "32f5cc459aa866db4fcd6eff7da66772da5d1cb5"
+          }
+        ],
+        "reviewed_content_commit": "15b3485e46ab1109b250d718b1fd3c1f351af0a1",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-18T09:46:11Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "ledger": {
+              "local": {
+                "bundle_id": "222e8621a2f31799d2f921fe34f1e574282057ae36b6c4d32a7639cc21a73f1a",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "ef71a5c7fed8d278c1a2b6f513a11f75ff08c22dfab0dd2d69b65d577184659d",
+                "ledger_entry_sha256": "fea7b7cbf0aec6ac3f173915fa2603f802531c59f1715f1826f7c781f1657354",
+                "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "222e8621a2f31799d2f921fe34f1e574282057ae36b6c4d32a7639cc21a73f1a",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "6a521b8ea5962e82cc9d139628e65d3b9ebef0d3ef88b86ab2d464f46452fe8d",
+                "ledger_entry_sha256": "729ca70876fe9d0c0d2aae917608784032d49658fd7e84c38c9db81c51396735",
+                "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-18T09:46:11Z",
+          "workflow_release": "2.13.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c0af9b596ea43abf64a7c06afb75816c30d6dd1f225e3e38829fe92f4a1c6241",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-18T00:35:03Z",
+          "verdict_sha256": "33b5b2068a3b1e53b9765489083334fecd3fbae568df6636284d4540a8f4ad36",
+          "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-18T00:39:10Z",
+          "verdict_sha256": "da69c6d46191cc5111bb47bb1d1fefd5e7c56147dd70c53043df3d2fc3564944",
+          "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "state_revision": 42,
+      "last_transition": "2026-10-18T10:29:21Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-18T01:05:00Z",
+        "consumed": {
+          "review_content_id": "78e61a11612bd5a5fcc258b7ff51abe3a63d9c1ad1eacaca34ba941bfbaccf93",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c0af9b596ea43abf64a7c06afb75816c30d6dd1f225e3e38829fe92f4a1c6241",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "c0af9b596ea43abf64a7c06afb75816c30d6dd1f225e3e38829fe92f4a1c6241",
+          "bundle_id": "3439d84e82f3bc868740dcc2f9a28fa89aad14faa362bd227cd66865b6fb473a",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "29edcf12ce2f9994af85cb4e809a885caa687fb6ed9fbd8b4238a0251773e9d6",
+        "4865ee14b8074d699792cbec19af4db32082acc058b03573383c89172b15bacb",
+        "78e61a11612bd5a5fcc258b7ff51abe3a63d9c1ad1eacaca34ba941bfbaccf93",
+        "7e86fdf72c95255be232ef81e5d214c9ec0c66fef79066f91dd39823bee0d0e1"
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "222e8621a2f31799d2f921fe34f1e574282057ae36b6c4d32a7639cc21a73f1a",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-18T05:34:30Z",
+          "verdict_sha256": "ef71a5c7fed8d278c1a2b6f513a11f75ff08c22dfab0dd2d69b65d577184659d",
+          "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "222e8621a2f31799d2f921fe34f1e574282057ae36b6c4d32a7639cc21a73f1a",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-18T09:45:10.769834+00:00",
+          "verdict_sha256": "6a521b8ea5962e82cc9d139628e65d3b9ebef0d3ef88b86ab2d464f46452fe8d",
+          "run_ref": "session:local .ai-review/workflow-controller-pr-defect-loop/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:56Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:56Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 2 (operator re-test outside the sandbox; flow 11 after the documentation fix 15b3485)",
+              "tester": "workflow-controller lane orchestrator re-test"
+            },
+            "log_digest": "41c17cc4ce0fe6f86aa9ac77c34793f2cee168994c4c19444d58db72bde2a3fd",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-10": {
+            "flow_id": "flow-10",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-11": {
+            "flow_id": "flow-11",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 2 (operator re-test outside the sandbox; flow 11 after the documentation fix 15b3485)",
+              "tester": "workflow-controller lane orchestrator re-test"
+            },
+            "log_digest": "41c17cc4ce0fe6f86aa9ac77c34793f2cee168994c4c19444d58db72bde2a3fd",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          },
+          "flow-12": {
+            "flow_id": "flow-12",
+            "status": "passed",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "ran_at": "2026-10-18T09:47:56Z",
+            "summary": {
+              "result": "passed in round 1",
+              "tester": "independent Codex tester (openai/gpt-6.1-sol)"
+            },
+            "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:47:57Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 92,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/92"
+          },
+          "state": "open",
+          "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+          "observed_at": "2026-10-18T10:29:21Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "15b3485e46ab1109b250d718b1fd3c1f351af0a1",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-18T10:29:21Z",
+            "raw_sha256": "489e56ba509f6ce19b130a546b8c41a54c6a611942f3c22d8c3056e013248ae4",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "42a7856d6b182b717d8e59612a5d1c6b0e3c1bb707fcd7a57aa64029da75aae1"
+          },
+          "fact_id": "e7012e7602a82c7dac812a01d1c6ee78abe5a33cb8720a8148bde05390f8558a"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-10', 'flow-11', 'flow-12', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #92 at 0ba7ddc87c984ec2d0caae902b477d5208d0bcd1 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "15b3485e46ab1109b250d718b1fd3c1f351af0a1",
+          "anchor_identity": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "886c559d14fcee74a6b584f125339dbac8c55fcb6ca92c174ea674a5bb7ca9ba",
+            "recorded_at": "2026-10-18T09:46:11Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "32cb566f982dd2634292739eafd5b0f64cb280b7e761c86d9b8d19c8e08778ba",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-10": {
+              "evidence_id": "c6855bdd57fea96b71b8e894f52dd025588e0872a8e3c5f0b0389b919803c3c1",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-11": {
+              "evidence_id": "1849b8980b733a9f5c0951842254716bfa7c6fa9ee0622e995198767e0a4e072",
+              "log_digest": "41c17cc4ce0fe6f86aa9ac77c34793f2cee168994c4c19444d58db72bde2a3fd",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-review-round2-PASSED.md"
+            },
+            "flow-12": {
+              "evidence_id": "ba88fe0f93327cf91f3137484a24ceebf85d5fa833e0dcd33cf34ade1ece837b",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-2": {
+              "evidence_id": "24bfd0ccbd48edc03e315eab080fa1984e44636730c4c0ad95917acbe1059576",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-3": {
+              "evidence_id": "62662381ecd9c8e931d2aabc279e4e7ecc713bd515ed8a22c2f42e53b735e4ce",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-4": {
+              "evidence_id": "80bb5b6f7f0345a6009adedcf46b228083b351e801a2e8adca47e65fdb058a95",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-5": {
+              "evidence_id": "d0e4f8dc70959d2f6f40759d6a44b0439512706b54146b30fd996cd2db99ecbd",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-6": {
+              "evidence_id": "47989a43cc10c7ae33a0eb72789e799f730d7697a29bada6af370ec196967aac",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-7": {
+              "evidence_id": "ace297750a376c3731a276c2f7bc3298d771e82b776be0328f345cc8f6bd992d",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-8": {
+              "evidence_id": "14cd028b5b7a166df7d33d00ecf21a623d76645b665e1c00ad4cac995be2379c",
+              "log_digest": "e68209933871a3fe102062a94905f6da8f7f9ab851252a8676ca9b6957e2b543",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-tester-round1-RESULTS.md"
+            },
+            "flow-9": {
+              "evidence_id": "991036521452dcebff666f8693365b946c82abfb0ad423f98378e18aa265c97a",
+              "log_digest": "41c17cc4ce0fe6f86aa9ac77c34793f2cee168994c4c19444d58db72bde2a3fd",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-pr-defect-loop/functional-review-round2-PASSED.md"
+            }
+          },
+          "pr": {
+            "fact_id": "e7012e7602a82c7dac812a01d1c6ee78abe5a33cb8720a8148bde05390f8558a",
+            "head": "0ba7ddc87c984ec2d0caae902b477d5208d0bcd1",
+            "provenance": "workflow_gh",
+            "raw_sha256": "489e56ba509f6ce19b130a546b8c41a54c6a611942f3c22d8c3056e013248ae4"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-18T10:29:21Z",
+        "workflow_release": "2.13.0"
+      }
     }
   }
 }

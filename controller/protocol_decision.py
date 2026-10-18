@@ -92,7 +92,7 @@ class ProtocolAction:
     disposition: str = "automatic"
 
 
-#: The fifteen launchable action ids (plan C.3): twelve automatic and the
+#: The sixteen launchable action ids (plan C.3): thirteen automatic and the
 #: three ``.satisfy`` validations (D3). The route key is assigned
 #: here, not derived from ``routing.role_for``'s ``registry_complete`` rule:
 #: the protocol tells the two implementation actions apart by id.
@@ -110,21 +110,26 @@ PROTOCOL_ACTIONS: Mapping[str, ProtocolAction] = MappingProxyType({
     "implementation.apply_review": ProtocolAction("apply-implementation-review", "apply-implementation-review"),
     "functional.prepare": ProtocolAction("prepare-functional-review", "prepare-functional-review"),
     "functional.apply_findings": ProtocolAction("apply-functional-review", "apply-functional-review"),
+    "pr.apply_review": ProtocolAction("apply-pr-review", "apply-pr-review"),
     "plan.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("plan",), "validation"),
     "implementation.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("implementation",), "validation"),
     "acceptance.satisfy": ProtocolAction("satisfy-gate", "satisfy-gate", ("acceptance",), "validation"),
 })
+
+#: The worker role an automatic action must name, where the Workflow's table pins one
+#: (pull-request-defect-loop D1): any other known role is not the one that action launches.
+REQUIRED_WORKER_ROLES: Mapping[str, str] = MappingProxyType({"pr.apply_review": "applier"})
 
 #: The one action that has no work item (plan C.4).
 PLAN_START = "plan.start"
 
 
 #: The catalogue ids that are automatic actions this Controller has no
-#: :data:`PROTOCOL_ACTIONS` entry for (``pr.apply_review``, left to C10b).
-#: They are catalogue members (so the schema accepts them) but ``inspect``
-#: still advises about them: unlike the gates and user-only ids, they could
-#: become the next action and would then be blocked.
-UNLAUNCHED_AUTOMATIC_ACTION_IDS = frozenset({"pr.apply_review"})
+#: :data:`PROTOCOL_ACTIONS` entry for. Empty since ``pr.apply_review`` became
+#: launchable (workflow-controller-pr-defect-loop D1); kept so ``inspect``
+#: still advises about an automatic action a later Workflow release adds
+#: that could become the next action and would then be blocked.
+UNLAUNCHED_AUTOMATIC_ACTION_IDS: frozenset[str] = frozenset()
 
 
 def unknown_action_ids(listed: Any) -> list[str]:
@@ -308,6 +313,8 @@ def _automatic(context: "_Context", base: str | None) -> Decision:
             f"release launches it only under {entry.disposition!r} (row {answer.row}); nothing is launched")
     allowed_roles = (frozenset({VALIDATOR_WORKER_ROLE}) if entry.disposition == "validation"
                      else AUTOMATIC_WORKER_ROLES)
+    if entry_role := REQUIRED_WORKER_ROLES.get(action.id):
+        allowed_roles = frozenset({entry_role})
     if action.worker.role not in allowed_roles:
         return context.blocked(
             UNKNOWN_WORKER_ROLE,

@@ -601,6 +601,12 @@ def reconcile(root: Path, decision_file: Path, work_item: str | None = None, *,
 #: The verdict kinds ``record-external-result`` takes as review text; the
 #: other kinds' inputs are JSON objects the Controller does not produce.
 VERDICT_KINDS = ("plan_review_verdict", "implementation_review_verdict")
+#: The pull-request report kind (`pr_review_result`): its input is a JSON
+#: object the Controller builds (:mod:`controller.pr_report`), and its answer
+#: names the stored ``slot`` and ``fact_id``, not a verdict.
+PR_REVIEW_RESULT_KIND = "pr_review_result"
+PR_REVIEW_STAGE = "pr_review"
+RESULT_KINDS = VERDICT_KINDS + (PR_REVIEW_RESULT_KIND,)
 #: The refusals of ``record-external-result`` that are answers, not faults:
 #: "no row accepts this verdict here" and every other Workflow refusal.
 EXTERNAL_RESULT_OUTCOMES = ("recorded", "not_applicable", "refused")
@@ -626,19 +632,26 @@ class ExternalResult:
     basis: Basis | None
     refusal: Refusal | None
     raw: dict
+    #: The pull-request report's answer (kind ``pr_review_result``): the
+    #: slot the Workflow stored the reported fact in and its id; ``None``
+    #: for a verdict.
+    slot: str | None = None
+    fact_id: str | None = None
 
 
 def record_external_result(root: Path, work_item: str, kind: str, input_file: Path, *,
                            run_ref: str | None = None, timeout: float | None = None,
                            expected_digests: Mapping[str, str] | None = None) -> ExternalResult:
     """Hand the external reviewer's verdict text in ``input_file`` to the
-    Workflow (protocol section 5.6). ``kind`` must be a verdict kind.
+    Workflow (protocol section 5.6). ``kind`` must be a verdict kind, or
+    ``pr_review_result`` (``input_file`` is then the JSON object of
+    :func:`controller.pr_report.input_document`).
     ``not_applicable`` and ``refused`` are returned, not raised: the caller
     decides what each means. Any other refusal (``invalid_request``, a stale
     or unreadable state, ...) raises :class:`WorkflowProtocolRefusedError`,
     as every other operation does."""
-    if kind not in VERDICT_KINDS:
-        raise ValueError(f"record_external_result handles {VERDICT_KINDS}, not {kind!r}")
+    if kind not in RESULT_KINDS:
+        raise ValueError(f"record_external_result handles {RESULT_KINDS}, not {kind!r}")
     args = ["--work-item", work_item, "--kind", kind, "--input", str(input_file)]
     if run_ref is not None:
         args += ["--run-ref", run_ref]
@@ -649,6 +662,15 @@ def record_external_result(root: Path, work_item: str, kind: str, input_file: Pa
             return ExternalResult(error.code, None, None, None, None, None, None, None, error, envelope.document)
         return _answer_refused(envelope)
     result = envelope.result
+    if kind == PR_REVIEW_RESULT_KIND:
+        if result.get("stage") != PR_REVIEW_STAGE or not isinstance(result.get("slot"), str) \
+                or not isinstance(result.get("fact_id"), str):
+            raise _failed(f"protocol record-external-result answered a {kind} with a result outside it: "
+                          f"stage {result.get('stage')!r}", reason=UNKNOWN_VALUE,
+                          field="record-external-result.stage", value=result.get("stage"),
+                          problem="not a pr_review result", operation="record-external-result")
+        return ExternalResult("recorded", PR_REVIEW_STAGE, None, None, None, None, None, _basis(result["basis"]),
+                              None, envelope.document, slot=result["slot"], fact_id=result["fact_id"])
     if result["stage"] not in ("plan", "implementation") or "verdict" not in result:
         raise _failed(f"protocol record-external-result answered a {kind} with a result outside it: "
                       f"stage {result['stage']!r}", reason=UNKNOWN_VALUE, field="record-external-result.stage",

@@ -1087,6 +1087,11 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             runtime_root, target, None if work_item is target_state.NoWorkItemYet else work_item.work_item_id,
             decision, _reviewer_options(effective_settings), _review_mode_options(effective_settings))
     mode_block = {} if mode_report is None else {"review_mode": mode_report}
+    # pr-defect-loop D4-D6: at a pull-request external gate the next step reports the pull request itself.
+    report_forecast = None
+    if decision.gate is not None and decision.protocol is not None:
+        report_forecast = job.pr_report_forecast(runtime_root, target, work_item, decision)
+    mode_block.update({} if report_forecast is None else {"pr_report": report_forecast})
 
     refusal = ""
     if target.target_protocol is not None and decision.automatic and decision.protocol is not None:
@@ -1132,6 +1137,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     print(f"reason: {decision.reason}")
     if mode_report is not None:
         _print_review_mode(mode_report)
+    if report_forecast is not None:
+        _print_pr_report(report_forecast)
     if decision.gate is not None:
         gate = decision.gate
         print(f"human gate -- what is required: {gate.what_is_required}")
@@ -1163,6 +1170,16 @@ def _print_review_mode(report: dict) -> None:
         print("  the next step stops at the ordinary gate for an external verdict")
     else:
         print(f"  the next step stops at review_mode_unavailable: {report['reason']}")
+
+
+def _print_pr_report(forecast: dict) -> None:
+    """``explain``'s pull-request report line (pr-defect-loop D4-D6): what the next step does at row 38f or 38g.
+    The Workflow's own remedy below it stays the by-hand alternative."""
+    wait = (" It first waits while the checks are pending and ci_green is unmet." if forecast["waits"] else "")
+    repeat = (" A report was already sent: if GitHub's answer is the same, the step stops (reported; the report "
+              "changed nothing -- pr_report_unchanged)." if forecast["last_report"] else "")
+    print(f"pull request report: the next step queries pull request #{forecast['pull_request']} for commit "
+          f"{forecast['queried_commit'][:12]} and reports it to the Workflow (row {forecast['row']}).{wait}{repeat}")
 
 
 def _protocol_block(info: Any) -> dict:

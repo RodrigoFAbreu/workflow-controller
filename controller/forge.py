@@ -30,8 +30,11 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -44,6 +47,11 @@ PR_FIELDS = ("number,state,isDraft,headRefName,headRefOid,baseRefName,isCrossRep
 RELEASE_FIELDS = "tagName,isDraft,assets,url"
 CHECK_FIELDS = "name,state,bucket"
 RUN_FIELDS = "databaseId,workflowName,status,conclusion,attempt,url"
+#: The Workflow's one fixed pull-request query (`pr-list-v1`, vendored in
+#: `workflow_forge`): the Controller reports its verbatim output, so the
+#: field list and the limit are the Workflow's, not the `forge.*` settings.
+REPORT_QUERY_FIELDS = "number,url,state,headRefOid,reviewDecision,reviews,statusCheckRollup"
+REPORT_QUERY_LIMIT = 200
 
 #: ``gh pr list`` truncates at ``--limit``; a full page is undecidable.
 #: The built-in default of the ``forge.pr_list_limit`` setting.
@@ -160,6 +168,7 @@ class Forge(Protocol):
     def edit_pr(self, number: int, *, title: str | None = None, body: str | None = None) -> PullRequest: ...
     def merge_squash(self, number: int, *, head: str, subject: str, body: str) -> None: ...
     def pr_checks(self, number: int) -> Checks: ...
+    def query_pull_requests(self, commit: str) -> str: ...
     def commit_runs(self, commit: str, branch: str, workflow: str) -> tuple[Run, ...]: ...
     def view_release(self, tag: str) -> Release | None: ...
     def create_release(self, tag: str, files: Sequence[Path], title: str, notes: str) -> None: ...
@@ -197,15 +206,64 @@ def _field(obj: Any, key: str, kind: type | tuple[type, ...], argv: Sequence[str
     return value
 
 
+def _is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _world_writable(path: Path) -> bool:
+    try:
+        return bool(path.stat().st_mode & 0o002)
+    except OSError:
+        return True
+
+
+def vet_gh(gh: str, repo_root: Path) -> None:
+    """Refuse a ``gh`` the Workflow's own resolver (``workflow_forge.resolve_gh``)
+    would refuse: the first ``gh`` on ``PATH``, symlinks resolved, may not lie
+    inside the repository, any of its worktrees, a temporary directory or a
+    world-writable directory (nor be world-writable itself). Without this the
+    reporter would run repository-controlled code and report what it printed
+    as the pull request's state. Raises :class:`ForgeUndecidableError`."""
+    argv = [gh, "pr", "list"]
+    found = shutil.which(gh)
+    if found is None:
+        raise _undecidable("gh is not installed (not found on PATH)", argv)
+    resolved = Path(os.path.realpath(found))
+    roots = [Path(os.path.realpath(repo_root))]
+    try:
+        listing = subprocess.run(["git", "-C", str(repo_root), "worktree", "list", "--porcelain"],
+                                 capture_output=True, text=True, timeout=30, check=False).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        listing = ""
+    roots += [Path(os.path.realpath(line[len("worktree "):])) for line in listing.splitlines()
+              if line.startswith("worktree ")]
+    temp = {tempfile.gettempdir(), os.environ.get("TMPDIR") or "/tmp", "/tmp", "/var/tmp", "/dev/shm"}
+    for label, where in (("the repository or a worktree", roots),
+                         ("the temporary directory", [Path(os.path.realpath(t)) for t in temp if t])):
+        if any(_is_under(resolved, root) for root in where):
+            raise _undecidable(f"the resolved gh {str(resolved)!r} is inside {label}", argv)
+    if _world_writable(resolved.parent) or _world_writable(resolved):
+        raise _undecidable(f"the resolved gh {str(resolved)!r} is world-writable or in a world-writable "
+                           "directory", argv)
+
+
 class GhForge:
     """The ``gh`` implementation of :class:`Forge` for ``repository``
     (``OWNER/NAME``). ``runner`` executes an argv whose first element is
-    ``gh`` (default: the real one on ``PATH``)."""
+    ``gh`` (default: the real one on ``PATH``). ``vet_root``, when set, is
+    the checkout :meth:`query_pull_requests` vets ``gh`` against
+    (:func:`vet_gh`): the one read whose output the Controller reports to the
+    Workflow as evidence."""
 
     def __init__(self, repository: str, runner: Runner | None = None, *, gh: str = "gh") -> None:
         self.repository = repository
         self._runner = runner or subprocess_runner()
         self._gh = gh
+        self.vet_root: Path | None = None
 
     # -- plumbing ----------------------------------------------------------
 
@@ -347,6 +405,23 @@ class GhForge:
             raise ValueError(f"merge_squash needs a full commit id, not {head!r}")
         self._ok(["pr", "merge", str(number), "--squash", "--match-head-commit", head,
                   "--subject", subject, "--body", body])
+
+    def query_pull_requests(self, commit: str) -> str:
+        """The verbatim stdout of the Workflow's fixed query for ``commit``
+        (``gh pr list --state all --search <commit> --limit 200``, the
+        `pr-list-v1` argv): read-only, and never parsed here -- the Workflow
+        parses what the Controller reports (`pr_review_result`)."""
+        argv = [self._gh, "pr", "list", "--repo", self.repository, "--state", "all", "--search", commit,
+                "--limit", str(REPORT_QUERY_LIMIT), "--json", REPORT_QUERY_FIELDS]
+        if self.vet_root is not None:
+            vet_gh(self._gh, self.vet_root)
+        try:
+            result = self._runner(argv)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise _undecidable(f"gh could not run: {exc}", argv) from None
+        if result.returncode != 0:
+            raise _undecidable(f"gh pr list failed (exit {result.returncode})", argv, result)
+        return _text(result.stdout)
 
     def pr_checks(self, number: int) -> Checks:
         """The PR's checks. ``gh`` reports normal outcomes through its exit

@@ -508,6 +508,9 @@ but a file it fills records `"_table_generation": 9`. An older Controller sharin
 it warns only about a key it does not know, such as an entry for `satisfy-gate` under `routing.roles`,
 which it ignores, and its `settings clean` refuses.
 
+The release that adds the `apply-pr-review` routing role is table generation 10, on the same terms: no key added, no value moved,
+an older Controller ignores a `routing.roles` entry for `apply-pr-review` with a warning and its `settings clean` refuses.
+
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer
 release's value alone. `_table_generation` records the newest release

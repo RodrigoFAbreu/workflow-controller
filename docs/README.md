@@ -98,6 +98,7 @@ stay stable; the code and the guides must agree with them.
 | [0013](adr/0013-review-only-harness-seam.md) | the review-only harness seam: the Controller couriers a verdict from a distinct Codex reviewer in a disposable copy, the obligation-5 reading, the enforced boundary and what a later review harness reuses |
 | [0014](adr/0014-reuse-pull-request-results-on-main.md) | reusing a pull request's validated results on `main` for the identical tree, behind the `CI_MAIN_REUSE` switch, and what that gives up; amends 0003 and 0005 |
 | [0015](adr/0015-gate-policy-validations-and-open-enums.md) | launching the Workflow's `/satisfy-gate` validations on a role of their own, a refused validation as a stop, an open rule per closed enum of a protocol 1.x answer, and a stop the Workflow calls blocked sending `lane_blocked` |
+| [0016](adr/0016-pull-request-report-and-apply.md) | reporting the pull request's state to the Workflow as a Controller step, launching `pr.apply_review` on the `apply-pr-review` role, and when pending checks wait |
 
 Some ADR contents are checked by tests (for example ADR 0001's exit-code
 table), so edit them with care.

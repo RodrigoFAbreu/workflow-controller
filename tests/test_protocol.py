@@ -459,7 +459,7 @@ class RecordExternalResultTest(_TargetCase):
             self.answer(envelope("record-external-result", functional))
 
     def test_only_the_verdict_kinds_are_accepted(self) -> None:
-        for kind in ("functional_evidence", "pr_review_result", "anything"):
+        for kind in ("functional_evidence", "anything"):
             with self.subTest(kind=kind):
                 with self.assertRaises(ValueError):
                     protocol.record_external_result(self.root, "wi", kind, Path("/x/v"))

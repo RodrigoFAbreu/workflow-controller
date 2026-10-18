@@ -287,7 +287,12 @@ class Context:
     poll_seconds: int = 30
 
     def forge(self, repository: str) -> forge_mod.Forge:
-        return (self.forge_factory or forge_mod.GhForge)(repository)
+        if self.forge_factory is not None:
+            return self.forge_factory(repository)
+        forge = forge_mod.GhForge(repository)
+        if getattr(forge, "vet_root", False) is None:  # the real gh forge, not a test double
+            forge.vet_root = self.repo_root
+        return forge
 
 
 @dataclasses.dataclass(frozen=True)
@@ -2830,44 +2835,65 @@ class WaitInterrupted(KeyboardInterrupt):
                 f"the next step continues from the binding's last state")
 
 
+def poll_waitable(outcome: Any, again: Callable[[], Any], *, is_waitable: Callable[[Any], bool],
+                  code_of: Callable[[Any], str], wait_seconds: int, poll_seconds: int,
+                  clock: Callable[[], str], on_wait: Callable[[str, str], None] | None = None,
+                  sleep: Callable[[float], None] | None = None,
+                  monotonic: Callable[[], float] | None = None) -> Any:
+    """The bounded poll every wait of a step shares (auto-merge-release-wait
+    E.2; ``workflow-controller-pr-defect-loop`` D6): while ``outcome`` is
+    waitable and ``wait_seconds`` is above 0, sleep ``poll_seconds`` and take
+    ``again()``, for at most ``wait_seconds`` from the first waitable outcome
+    -- one budget across outcome changes. ``on_wait(code, deadline)`` is
+    called once per code before its first sleep (``deadline`` is the
+    wall-clock end of the budget, from ``clock``). Returns the last outcome;
+    ``wait_seconds`` 0 returns the first, never sleeping (I6). The sleep and
+    each re-read are plain, so Ctrl-C ends them like any other point of a
+    step (E.3), as :class:`WaitInterrupted`."""
+    sleep = sleep or _sleep
+    monotonic = monotonic or _monotonic
+    started: float | None = None
+    deadline = ""
+    announced: set[str] = set()
+    while is_waitable(outcome) and wait_seconds > 0:
+        now = monotonic()
+        if started is None:
+            started = now
+            begun = datetime.datetime.strptime(clock(), "%Y-%m-%dT%H:%M:%SZ")
+            deadline = (begun + datetime.timedelta(seconds=wait_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        remaining = wait_seconds - (now - started)
+        if remaining <= 0:
+            break
+        code = code_of(outcome)
+        if code not in announced:
+            announced.add(code)
+            if on_wait is not None:
+                on_wait(code, deadline)
+        try:
+            sleep(min(poll_seconds, remaining))
+            outcome = again()
+        except KeyboardInterrupt as exc:
+            raise WaitInterrupted(code, deadline) from exc
+    return outcome
+
+
 def waiting_preflight(ctx: Context, *, requested_work_item_id: str | None = None,
                       on_wait: Callable[[str, str], None] | None = None,
                       sleep: Callable[[float], None] | None = None,
                       monotonic: Callable[[], float] | None = None) -> Proceed | Gate:
     """:func:`repository_preflight`, polled while it returns a waitable gate
-    (auto-merge-release-wait E.2): at most ``ctx.wait_seconds`` from the
-    first waitable gate of this step, one budget across gate changes, a
-    fresh preflight every ``ctx.poll_seconds``. ``on_wait(code, deadline)``
-    is called once per gate code before its first sleep (``deadline`` is
-    the wall-clock end of the budget, from ``ctx.clock``). Returns the last
-    outcome; ``ctx.wait_seconds`` 0 returns the first, never sleeping (I6).
-    The sleep and each re-read are plain, so Ctrl-C ends them like any other
-    point of a step (E.3), as :class:`WaitInterrupted`, which the CLI reports in one line."""
-    sleep = sleep or _sleep
-    monotonic = monotonic or _monotonic
-    outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
-    started: float | None = None
-    deadline = ""
-    announced: set[str] = set()
-    while isinstance(outcome, Gate) and outcome.waitable and ctx.wait_seconds > 0:
-        now = monotonic()
-        if started is None:
-            started = now
-            begun = datetime.datetime.strptime(ctx.clock(), "%Y-%m-%dT%H:%M:%SZ")
-            deadline = (begun + datetime.timedelta(seconds=ctx.wait_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        remaining = ctx.wait_seconds - (now - started)
-        if remaining <= 0:
-            break
-        if outcome.code not in announced:
-            announced.add(outcome.code)
-            if on_wait is not None:
-                on_wait(outcome.code, deadline)
-        try:
-            sleep(min(ctx.poll_seconds, remaining))
-            outcome = repository_preflight(ctx, requested_work_item_id=requested_work_item_id)
-        except KeyboardInterrupt as exc:
-            raise WaitInterrupted(outcome.code, deadline) from exc
-    return outcome
+    (auto-merge-release-wait E.2) through :func:`poll_waitable`: at most
+    ``ctx.wait_seconds`` from the first waitable gate of this step, one
+    budget across gate changes, a fresh preflight every ``ctx.poll_seconds``.
+    ``on_wait(code, deadline)`` is called once per gate code before its first
+    sleep. Returns the last outcome; ``ctx.wait_seconds`` 0 returns the
+    first, never sleeping (I6)."""
+    return poll_waitable(
+        repository_preflight(ctx, requested_work_item_id=requested_work_item_id),
+        lambda: repository_preflight(ctx, requested_work_item_id=requested_work_item_id),
+        is_waitable=lambda outcome: isinstance(outcome, Gate) and outcome.waitable,
+        code_of=lambda outcome: outcome.code, wait_seconds=ctx.wait_seconds, poll_seconds=ctx.poll_seconds,
+        clock=ctx.clock, on_wait=on_wait, sleep=sleep, monotonic=monotonic)
 
 
 #: :func:`waiting_preflight`'s default sleep and clock, module attributes so

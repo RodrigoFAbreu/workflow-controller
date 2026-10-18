@@ -17815,7 +17815,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-adapters-1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-adapters-1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -17961,8 +17961,8 @@
       },
       "functional_acceptance_status": null,
       "blocking_decisions": [],
-      "state_revision": 35,
-      "last_transition": "2026-10-18T23:38:22Z",
+      "state_revision": 37,
+      "last_transition": "2026-10-18T23:59:30.408093+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -18226,16 +18226,58 @@
               "at": "2026-10-18T22:44:00Z"
             }
           ]
+        },
+        "F-4896ed6b7686": {
+          "digest": "4896ed6b7686584ce0ef7802198c3e6e539713438a64789a265a65a33cfff29a",
+          "text": "**O1. Two existing tests outside D1's named set changed to admit the planned key, and the plan text conflicts with\n  itself here.** `tests/test_job.py` `LaunchPathTest` adds `\"usage_record\"` to its exact key set.\n  `tests/test_trunk_preflight.py` pops the key before its golden comparison. `tests/process_fixtures.py` gains two\n  inventory rows. D1 says the one allowed edit to an existing test is the `test_package_structure` registration.\n  D6, however, requires the key on completed worker records, and `LaunchPathTest` asserts the exact key set, so the\n  plan cannot be met without some edit. No existing value assertion changed, and the summary discloses all three\n  files. Record this at acceptance as a plan-wording follow-up (D1 should allow the registration of a planned\n  additive key). It needs no code change.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1dd2df7dffad21fb0a578ea78d8c6d2328c15266197844e7759f2271362f13c0",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T23:47:56Z"
+            }
+          ]
+        },
+        "F-57eca807e209": {
+          "digest": "57eca807e2093370a3475d304941ae5eae1d116a6026a46e8895a411dc8cb65c",
+          "text": "**O2. `docs/ROADMAP.md` already marks A1 complete before acceptance.** D10 says \"the roadmap marks A1 complete at\n  acceptance\", while CP5 lists the roadmap edit as checkpoint work. This is harmless because the branch merges only\n  after acceptance. The acceptance step should keep the row's wording consistent with the accepted and released\n  facts it adds (date, PR, squash, 1.16.1).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1dd2df7dffad21fb0a578ea78d8c6d2328c15266197844e7759f2271362f13c0",
+              "verdict": "APPROVE",
+              "at": "2026-10-18T23:47:56Z"
+            }
+          ]
+        },
+        "F-ad7b425da07a": {
+          "digest": "ad7b425da07a40e5ba83227d027479fb593f9c0a81173fc2924249f0449e9c96",
+          "text": "`docs/ROADMAP.md` marks A1 complete before acceptance. Completion wording should follow acceptance.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1dd2df7dffad21fb0a578ea78d8c6d2328c15266197844e7759f2271362f13c0",
+              "verdict": "REVISE",
+              "at": "2026-10-18T23:59:30.408093+00:00"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "b11346db4752c0a035fd786fa292aabda131cd41a5540aae1853c4c1b5d1f945",
+        "review_content_id": "1dd2df7dffad21fb0a578ea78d8c6d2328c15266197844e7759f2271362f13c0",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "46ebe49303e836dddcbe7485dd51b4ce0b737e79b8e8a198939bca7d600655a2",
+          "bundle_id": "a6b6ac8f1fd0e4d26cff302422054a4d985c3df56d1c5e98e0c60b54671d5611",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-10-18T22:34:34Z",
-          "verdict_sha256": "7588d524c2aaadc9d5ad118e733a315688ec483d113dabae7f71b0c433834cea",
+          "round": 3,
+          "completed_at": "2026-10-18T23:47:56Z",
+          "verdict_sha256": "e0802188b02c0b8e2a9524ec5a6a3439c76c77aa5139215dcdb8b934648b4a4a",
           "run_ref": "session:local .ai-review/workflow-controller-adapters-1/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },

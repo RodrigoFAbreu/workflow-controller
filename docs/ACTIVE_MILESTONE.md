@@ -31,6 +31,7 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-No milestone is active. This repository moves to Workflow 2.16.0 next (a chore pull request). Then comes **A2** (the
-backlog, `docs/ROADMAP.md`) if [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) is released, which is
-the Workflow lane's current milestone; otherwise **C10c**. Run `/milestone-plan` for the next milestone.
+No milestone is active. This repository runs Workflow 2.16.0 since 2026-10-19. The next milestone is **C10c** (the
+automated functional review, `docs/ROADMAP.md`): **A2** (the backlog) waits for
+[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), the Workflow lane's current milestone, which is not
+released yet, so A2 follows once it is. Run `/milestone-plan` for C10c.

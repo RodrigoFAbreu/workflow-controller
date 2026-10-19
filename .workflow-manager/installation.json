@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "workflow_version": "2.15.0",
+  "workflow_version": "2.16.0",
   "profile": "full",
   "upstream": {
     "repository": "repflow-android",
@@ -14,13 +14,13 @@
   "source": {
     "kind": "package",
     "repository": "RodrigoFAbreu/workflow",
-    "archive": "workflow-2.15.0.tar.gz",
-    "sha256": "d3f2130cbbb5d82a3cc279ef2c3247e1ef21d44b5b600dc1969bdd60279cf2d6",
+    "archive": "workflow-2.16.0.tar.gz",
+    "sha256": "3b583bffcb9176513b6deb4517ea43bffbf44c3eb460e189fc3e8ac0871d6a88",
     "trust": "discovered",
     "from": "github:RodrigoFAbreu/workflow"
   },
   "installed_at": "2026-09-05T14:33:32Z",
-  "updated_at": "2026-10-19T04:25:14Z",
+  "updated_at": "2026-10-19T08:51:35Z",
   "managed": {
     ".claude/commands/accept-milestone.md": {
       "sha256": "c16b3c2558b3a0e6cb3e38b31f8c92149c86da3137a5f82e0b7c99119e7c0234",
@@ -111,7 +111,7 @@
       "executable": false
     },
     ".github/workflows/workflow-conformance.yml": {
-      "sha256": "0c78939c1d4216d653862d54d4e4024e68ea56e768783a398b3849dbbf96911c",
+      "sha256": "96c5448aac6457ca0867aec0b0bcef7e60bca0e9d0db853d0d99d58ab87ea9c9",
       "executable": false
     },
     "docs/ai-workflow/GATE_POLICY.md": {
@@ -127,7 +127,7 @@
       "executable": false
     },
     "docs/ai-workflow/ORCHESTRATION_PROTOCOL.md": {
-      "sha256": "b7e98265af0c3399015c261fb5b661346bead0cf34fba5d5e7a82d3434d554a8",
+      "sha256": "f079cc5c0b73c75dc830d928afc0014c81695cb1c1030d8900d6be68e38fbce5",
       "executable": false
     },
     "docs/ai-workflow/PLAN_REVIEW_WORKFLOW.md": {
@@ -291,11 +291,11 @@
       "executable": false
     },
     "scripts/workflow_protocol.py": {
-      "sha256": "f83df73095af015d3dd743399236acb6e8299352929b7765412b2593d95a2747",
+      "sha256": "52d3e82a49d0d5ef07365cd580957ca9e07f751a402430988de8be54076a1912",
       "executable": false
     },
     "scripts/workflow_protocol_test.py": {
-      "sha256": "81c6973d20f89979bfee0d3c719de74da52b0d54ce601016655170bf60578a71",
+      "sha256": "eb1e281b461f21b009039a2672f667dcf5c64ef50d10e015fa995f5da0849200",
       "executable": false
     },
     "scripts/workflow_state.py": {

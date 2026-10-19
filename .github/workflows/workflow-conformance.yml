@@ -6,11 +6,14 @@
 # commit, so an unrelated later change would fail them for reasons that are
 # not a Workflow regression. Run those explicitly when you want them.
 #
-# The suites run in parallel inside this one job (min(4, nproc) at a time,
-# longest first), each in its own copy of the checkout with its own TMPDIR and
-# HOME, and every suite always runs to its end. A pull request's earlier run is
-# cancelled when a newer push supersedes it; any other run is keyed by its own
-# run identity, so none is ever replaced.
+# The suites run in parallel inside this one job (min(width_cap, nproc) at a
+# time, longest first), each in its own copy of the checkout with its own
+# TMPDIR and HOME, and every suite always runs to its end. The acceptance-matrix
+# suite is split into `shards` groups of whole test classes (shards=0 runs it as
+# one suite); the shards and the other suites share the one queue and the one
+# limit, and a coverage check requires every acceptance test to run exactly once.
+# A pull request's earlier run is cancelled when a newer push supersedes it; any
+# other run is keyed by its own run identity, so none is ever replaced.
 
 name: Workflow conformance
 
@@ -35,34 +38,285 @@ jobs:
         shell: bash
         run: |
           suites="workflow_acceptance_matrix_test.py workflow_protocol_test.py workflow_state_test.py workflow_gate_policy_test.py workflow_fingerprint_generalization_test.py workflow_state_completion_obligations_test.py workflow_integration_test.py workflow_fingerprint_test.py workflow_test_harness_test.py"
-          width=$(nproc); [ "$width" -gt 4 ] && width=4
+          acceptance=workflow_acceptance_matrix_test.py
+          width_cap=4
+          shards=4
+          width=$(nproc); [ "$width" -gt "$width_cap" ] && width=$width_cap
           base="$RUNNER_TEMP/workflow-conformance"
           rm -rf "$base"; mkdir -p "$base"
+          cat >"$base/shards.py" <<'PY'
+          import argparse
+          import collections
+          import importlib
+          import json
+          import os
+          import sys
+          import unittest
+
+          HOOKS = ("load_tests", "setUpModule", "tearDownModule")
+          RANK = {"ok": 0, "skip": 1, "xfail": 1, "unexpected_success": 3, "fail": 4, "error": 4}
+          BAD = ("fail", "error", "unexpected_success")
+
+
+          def die(message):
+              print("shards.py: " + message, file=sys.stderr)
+              sys.exit(1)
+
+
+          def flatten(suite):
+              for item in suite:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from flatten(item)
+                  else:
+                      yield item
+
+
+          def load_module(directory, name):
+              sys.dont_write_bytecode = True
+              sys.path.insert(0, directory)
+              return importlib.import_module(name[:-3] if name.endswith(".py") else name)
+
+
+          def write_json(path, data):
+              with open(path + ".part", "w") as handle:
+                  json.dump(data, handle, indent=1)
+              os.replace(path + ".part", path)
+
+
+          def plan(args):
+              module = load_module(args.dir, args.module)
+              for hook in HOOKS:
+                  if hasattr(module, hook):
+                      die(f"{args.module} defines {hook}: a shard would not run it as the whole module does")
+              if args.shards < 1:
+                  die("the shard count must be at least 1")
+              by_class, expected = collections.defaultdict(list), []
+              for test in flatten(unittest.TestLoader().loadTestsFromModule(module)):
+                  name = type(test).__name__
+                  if getattr(module, name, None) is not type(test):
+                      die(f"{test.id()}: {name} is not a top-level class of {args.module}")
+                  by_class[name].append(test.id())
+                  expected.append(test.id())
+              if not expected:
+                  die(f"{args.module} has no tests")
+              count = min(args.shards, len(by_class))
+              bins = [{"classes": [], "ids": []} for _ in range(count)]
+              for name in sorted(by_class, key=lambda n: (-len(by_class[n]), n)):
+                  lightest = min(bins, key=lambda b: len(b["ids"]))
+                  lightest["classes"].append(name)
+                  lightest["ids"].extend(by_class[name])
+              shards = [{"index": i, "unit": f"acceptance-{i}of{count}", "name": f"acceptance {i}/{count}",
+                         "classes": sorted(b["classes"]), "ids": b["ids"]} for i, b in enumerate(bins, 1)]
+              write_json(args.out, {"module": args.module, "expected": expected, "shards": shards})
+              print(count)
+
+
+          class Recorder(unittest.TextTestResult):
+              def __init__(self, *args, **kwargs):
+                  super().__init__(*args, **kwargs)
+                  self.started, self.outcomes = [], {}
+
+              def note(self, test, outcome):
+                  sub = getattr(unittest.case, "_SubTest", ())
+                  key = (test.test_case if sub and isinstance(test, sub) else test).id()
+                  old = self.outcomes.get(key)
+                  if old is None or RANK[outcome] > RANK[old]:
+                      self.outcomes[key] = outcome
+
+              def startTest(self, test):
+                  self.started.append(test.id())
+                  super().startTest(test)
+
+              def addSuccess(self, test):
+                  self.note(test, "ok")
+                  super().addSuccess(test)
+
+              def addFailure(self, test, err):
+                  self.note(test, "fail")
+                  super().addFailure(test, err)
+
+              def addError(self, test, err):
+                  self.note(test, "error")
+                  super().addError(test, err)
+
+              def addSkip(self, test, reason):
+                  self.note(test, "skip")
+                  super().addSkip(test, reason)
+
+              def addExpectedFailure(self, test, err):
+                  self.note(test, "xfail")
+                  super().addExpectedFailure(test, err)
+
+              def addUnexpectedSuccess(self, test):
+                  self.note(test, "unexpected_success")
+                  super().addUnexpectedSuccess(test)
+
+              def addSubTest(self, test, subtest, err):
+                  if err is not None:
+                      self.note(test, "fail")
+                  super().addSubTest(test, subtest, err)
+
+
+          def run(args):
+              with open(args.plan) as handle:
+                  spec = json.load(handle)
+              shard = next(s for s in spec["shards"] if s["unit"] == args.unit)
+              result = {"unit": shard["unit"], "classes": shard["classes"], "completed": False,
+                        "started": [], "outcomes": {}}
+              module = load_module(args.dir, spec["module"])
+              loader = unittest.TestLoader()
+              suite = unittest.TestSuite(loader.loadTestsFromTestCase(getattr(module, c))
+                                         for c in shard["classes"])
+              if sorted(t.id() for t in flatten(suite)) != sorted(shard["ids"]):
+                  result["error"] = "the loaded tests differ from the plan"
+                  write_json(args.out, result)
+                  die(result["error"])
+              outcome = unittest.TextTestRunner(resultclass=Recorder, verbosity=2).run(suite)
+              result.update(completed=True, started=outcome.started, outcomes=outcome.outcomes)
+              write_json(args.out, result)
+              sys.exit(0 if outcome.wasSuccessful() else 1)
+
+
+          def names(ids):
+              return ", ".join(ids[:50]) + (f" (and {len(ids) - 50} more)" if len(ids) > 50 else "")
+
+
+          def inspect_shard(shard, base, recorded):
+              folder, problems, secs = os.path.join(base, shard["unit"]), [], 0
+              try:
+                  with open(os.path.join(folder, "result")) as handle:
+                      status, secs = (int(x) for x in handle.read().split())
+                  if status != 0:
+                      problems.append(f"exit {status}")
+              except (OSError, ValueError):
+                  return secs, ["did not finish (no result)"]
+              try:
+                  with open(os.path.join(folder, "shard.json")) as handle:
+                      found = json.load(handle)
+                  outcomes, started = found["outcomes"], found["started"]
+                  usable = (found["completed"] is True and found["unit"] == shard["unit"]
+                            and found["classes"] == shard["classes"] and isinstance(started, list)
+                            and isinstance(outcomes, dict)
+                            and all(isinstance(k, str) and v in RANK for k, v in outcomes.items()))
+              except (OSError, ValueError, KeyError, TypeError):
+                  usable = False
+              if not usable:
+                  return secs, problems + ["no complete shard file (missing, unparsable or incomplete)"]
+              recorded.update(outcomes.keys())
+              planned = set(shard["ids"])
+              for label, ids in (
+                      ("failed", sorted(i for i, o in outcomes.items() if o in BAD)),
+                      ("started and never finished", sorted(set(started) - set(outcomes))),
+                      ("executed more than once", sorted(i for i, n in collections.Counter(started).items() if n > 1)),
+                      ("missing", [i for i in shard["ids"] if i not in outcomes]),
+                      ("not in the plan", sorted(set(outcomes) - planned))):
+                  if ids:
+                      problems.append(f"{label}: {names(ids)}")
+              return secs, problems
+
+
+          def check(args):
+              with open(args.plan) as handle:
+                  spec = json.load(handle)
+              recorded, rows, longest, bad = collections.Counter(), [], 0, False
+              for shard in spec["shards"]:
+                  secs, problems = inspect_shard(shard, args.base, recorded)
+                  longest, bad = max(longest, secs), bad or bool(problems)
+                  message = f"{shard['name']} (classes {', '.join(shard['classes'])}): " + "; ".join(problems)
+                  rows.append("\t".join(["shard", shard["unit"], shard["name"], str(secs),
+                                         "bad" if problems else "ok", message if problems else ""]))
+              extra = []
+              if not bad and recorded != collections.Counter(spec["expected"]):
+                  bad = True
+                  extra.append("global\tthe recorded test ids differ from the expected ids")
+              print("\t".join(["total", str(len(spec["expected"])), str(sum(recorded.values())),
+                               str(len(spec["shards"])), str(longest), "bad" if bad else "ok"]))
+              print("\n".join(rows + extra))
+              sys.exit(1 if bad else 0)
+
+
+          parser = argparse.ArgumentParser()
+          sub = parser.add_subparsers(dest="command", required=True)
+          for name, handler in (("plan", plan), ("run", run), ("check", check)):
+              p = sub.add_parser(name)
+              p.set_defaults(handler=handler)
+              p.add_argument("--dir", default=".")
+              if name == "plan":
+                  p.add_argument("--module", required=True)
+                  p.add_argument("--shards", type=int, required=True)
+                  p.add_argument("--out", required=True)
+              if name == "run":
+                  p.add_argument("--plan", required=True)
+                  p.add_argument("--unit", required=True)
+                  p.add_argument("--out", required=True)
+              if name == "check":
+                  p.add_argument("--plan", required=True)
+                  p.add_argument("--base", required=True)
+          args = parser.parse_args()
+          args.handler(args)
+          PY
+          units="$suites"
+          if [ "$shards" -gt 0 ]; then
+            n=$(cd "$GITHUB_WORKSPACE/scripts" && python3 "$base/shards.py" plan --module "$acceptance" --shards "$shards" --out "$base/plan.json") || {
+              echo "::error title=acceptance plan failed::the acceptance tests could not be planned into shards"; exit 1; }
+            units=""; i=1
+            while [ "$i" -le "$n" ]; do units="$units acceptance-${i}of${n}"; i=$((i + 1)); done
+            for s in $suites; do if [ "$s" != "$acceptance" ]; then units="$units $s"; fi; done
+          fi
           run_suite() {
             d="$base/$1"; mkdir -p "$d/tmp" "$d/home"
             cp -a "$GITHUB_WORKSPACE/." "$d/repo"
-            start=$SECONDS; echo "start $1"
+            start=$SECONDS
             status=0
-            (cd "$d/repo/scripts" && TMPDIR="$d/tmp" HOME="$d/home" python3 "$1" >"$d/log" 2>&1) || status=$?
+            case "$1" in
+              acceptance-*of*) cmd=(python3 "$base/shards.py" run --plan "$base/plan.json" --unit "$1" --out "$d/shard.json") ;;
+              *) cmd=(python3 "$1") ;;
+            esac
+            (cd "$d/repo/scripts" && TMPDIR="$d/tmp" HOME="$d/home" "${cmd[@]}" >"$d/log" 2>&1) || status=$?
             echo "$status $((SECONDS - start))" >"$d/result"
             echo "done  $1 exit $status in $((SECONDS - start))s"
           }
-          for s in $suites; do
+          for s in $units; do
             while [ "$(jobs -rp | wc -l)" -ge "$width" ]; do wait -n || true; done
+            echo "start $s running $(( $(jobs -rp | wc -l) + 1 ))"
             ( run_suite "$s" ) &
           done
           wait
           failed=0
+          row() { echo "| $1 | $2 | $3 |" >>"$GITHUB_STEP_SUMMARY"; }
+          passed_unit() { echo "::group::$2 passed in ${3}s"; cat "$base/$1/log"; echo "::endgroup::"; row "$2" passed "$3"; }
+          failed_unit() { failed=$((failed + 1)); echo "::error title=$2 failed::$4"; cat "$base/$1/log" 2>/dev/null || true; row "$2" "FAILED ($5)" "$3"; }
+          report_acceptance() {
+            checked=0; total_bad=0; rc=0; before=$failed
+            python3 "$base/shards.py" check --plan "$base/plan.json" --base "$base" >"$base/check.out" 2>"$base/check.err" || rc=$?
+            while IFS=$'\t' read -r kind a b c d e; do
+              case "$kind" in
+                total)
+                  checked=1
+                  if [ "$e" = ok ]; then
+                    row "$acceptance" "passed ($c shards, $b tests)" "$d"; echo "coverage: expected $a, recorded $b"
+                  else
+                    total_bad=1; row "$acceptance" "FAILED (see the shard rows)" "$d"; echo "coverage: expected $a, recorded $b"
+                  fi ;;
+                shard)
+                  if [ "$d" = ok ]; then passed_unit "$a" "$b" "$c"; else failed_unit "$a" "$b" "$c" "$e" "$e"; fi ;;
+                global)
+                  failed=$((failed + 1)); echo "::error title=acceptance coverage failed::$a"; row "$acceptance" "FAILED ($a)" 0 ;;
+              esac
+            done <"$base/check.out"
+            if [ "$checked" -eq 0 ]; then
+              failed=$((failed + 1)); echo "::error title=acceptance check failed::the shard check did not run"; cat "$base/check.err"
+              row "$acceptance" "FAILED (the shard check did not run)" 0
+            elif [ "$failed" -eq "$before" ] && { [ "$rc" -ne 0 ] || [ "$total_bad" -eq 1 ]; }; then
+              failed=$((failed + 1)); echo "::error title=acceptance check failed::the shard check exited $rc without a failing shard row"; cat "$base/check.err"
+              row "$acceptance" "FAILED (the shard check exited $rc)" 0
+            fi
+          }
           { echo "| suite | result | seconds |"; echo "| --- | --- | --- |"; } >>"$GITHUB_STEP_SUMMARY"
           for s in $suites; do
+            if [ "$shards" -gt 0 ] && [ "$s" = "$acceptance" ]; then report_acceptance; continue; fi
             d="$base/$s"; read -r status secs <"$d/result" 2>/dev/null || { status=missing; secs=0; }
-            if [ "$status" = 0 ]; then
-              echo "::group::$s passed in ${secs}s"; cat "$d/log"; echo "::endgroup::"
-              echo "| $s | passed | $secs |" >>"$GITHUB_STEP_SUMMARY"
-            else
-              failed=$((failed + 1))
-              echo "::error title=$s failed::exit $status after ${secs}s"; cat "$d/log" 2>/dev/null || true
-              echo "| $s | FAILED (exit $status) | $secs |" >>"$GITHUB_STEP_SUMMARY"
-            fi
+            if [ "$status" = 0 ]; then passed_unit "$s" "$s" "$secs"
+            else failed_unit "$s" "$s" "$secs" "exit $status after ${secs}s" "exit $status"; fi
           done
           if [ "$failed" -ne 0 ]; then echo "$failed suite(s) failed"; exit 1; fi

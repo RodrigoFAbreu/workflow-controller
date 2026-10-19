@@ -182,11 +182,15 @@
         "review_round": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["plan", "implementation", "current"],
+          "required": ["plan", "implementation", "current", "plan_local", "plan_external", "implementation_local", "implementation_external"],
           "properties": {
             "plan": {"type": ["integer", "null"]},
             "implementation": {"type": ["integer", "null"]},
-            "current": {"enum": ["plan_local", "plan_external", "implementation_local", "implementation_external", null]}
+            "current": {"enum": ["plan_local", "plan_external", "implementation_local", "implementation_external", null]},
+            "plan_local": {"type": ["integer", "null"]},
+            "plan_external": {"type": ["integer", "null"]},
+            "implementation_local": {"type": ["integer", "null"]},
+            "implementation_external": {"type": ["integer", "null"]}
           }
         }
       }

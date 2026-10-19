@@ -209,7 +209,7 @@ class TestEnvelope(unittest.TestCase):
         self.assertEqual(out.stdout.count("\n"), 1)
         body = json.loads(out.stdout)
         assert_valid(body)
-        self.assertEqual(body["protocol"], {"name": "workflow-orchestration", "version": "1.4"})
+        self.assertEqual(body["protocol"], {"name": "workflow-orchestration", "version": "1.5"})
         self.assertEqual(body["workflow_release"], wp.WORKFLOW_RELEASE)
         self.assertEqual(body["operation"], "verify")
 
@@ -443,7 +443,7 @@ class TestDescribe(unittest.TestCase):
             sorted({"1"} | ws.TWO_STAGE_PLAN_REVIEW_VERSIONS))
 
     def test_the_v1_vocabulary(self):
-        self.assertEqual(wp.PROTOCOL_VERSION, "1.4")
+        self.assertEqual(wp.PROTOCOL_VERSION, "1.5")
         self.assertEqual(wp.PROTOCOL_MAJOR, 1)
         self.assertEqual(
             set(wp.OPERATIONS),
@@ -4550,7 +4550,7 @@ class TestAllHumanEquivalence(unittest.TestCase):
             new, _ = run_new(repo.root, "describe")
         assert_valid(new)
         old_result, new_result = old["result"], new["result"]
-        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.0", "1.4"))
+        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.0", "1.5"))
         for key in ("supported_protocol_majors", "supported_governing_versions"):
             self.assertEqual(new_result[key], old_result[key])
         old_caps, new_caps = old_result["capabilities"], new_result["capabilities"]
@@ -5509,7 +5509,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         body, code = call("describe")
         self.assertEqual(code, wp.EXIT_OK)
         result = body["result"]
-        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.4", "2.14.0"))
+        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.5", "2.15.0"))
         caps = result["capabilities"]
         self.assertEqual(sorted(set(NEW_ACTION_IDS + NEW_1_2_ACTION_IDS) - set(caps["action_ids"])), [])
         self.assertEqual(caps["reserved_result_kinds"], [])
@@ -5519,7 +5519,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         self.assertIn("validation", caps["dispositions"])
 
     def test_the_release_constant_and_the_protocol_version(self):
-        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.14.0", "1.4", 1))
+        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.15.0", "1.5", 1))
         self.assertIn("validator", wp.WORKER_ROLES)
         self.assertEqual(wp.ACTIONS["acceptance.satisfy"]["role"], "validator")
         self.assertEqual(wp.ACTIONS["pr.apply_review"]["role"], "applier")
@@ -5630,7 +5630,7 @@ class TestEquivalenceAgainstV280(unittest.TestCase):
         new, new_code = run_new(repo_root, *argv)
         self.assertEqual(old_code, new_code, (old, new))
         assert_valid(new)
-        self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.1", "1.4"))
+        self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.1", "1.5"))
         return old, new
 
     def added_scenarios(self) -> list:
@@ -5732,7 +5732,7 @@ class TestEquivalenceAgainstV280(unittest.TestCase):
             write_state(repo, empty_state())
             old, new = self.compare(repo.root, "describe")
         old_result, new_result = old["result"], new["result"]
-        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.1", "1.4"))
+        self.assertEqual((old_result["protocol_version"], new_result["protocol_version"]), ("1.1", "1.5"))
         self.assertEqual((old_result["workflow_release"], new_result["workflow_release"]), ("2.8.0", "2.9.0"))
         old_caps, new_caps = old_result["capabilities"], new_result["capabilities"]
         added = sorted(set(new_caps["action_ids"]) - set(old_caps["action_ids"]))
@@ -5956,7 +5956,7 @@ class TestUpdateSimulation27To28(unittest.TestCase):
                 self.assertEqual(json.dumps(without_release(old), sort_keys=True),
                                  json.dumps(without_release(new), sort_keys=True))
                 self.assertNotIn("policy", new["result"])
-                self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.0", "1.4"))
+                self.assertEqual((old["protocol"]["version"], new["protocol"]["version"]), ("1.0", "1.5"))
                 self.assertEqual(new["workflow_release"], "2.9.0")
 
     # -- the downgrade posture ------------------------------------------------
@@ -7029,7 +7029,8 @@ class TestReviewRoundField(unittest.TestCase):
             plan_item_at(repo, "AWAITING_LOCAL_PLAN_REVIEW")
             result = next_action(repo)
             self.assertEqual(result["snapshot"]["review_round"],
-                             {"plan": 1, "implementation": None, "current": "plan_local"})
+                             {"plan": 1, "implementation": None, "current": "plan_local", "plan_local": 0,
+                              "plan_external": 0, "implementation_local": 0, "implementation_external": 0})
         with h.ScratchRepo() as repo:
             write_config(repo, "2.2")
             write_state(repo, h.base_state())
@@ -7037,14 +7038,183 @@ class TestReviewRoundField(unittest.TestCase):
 
     def test_describe_reports_1_4_and_the_catalogue_is_unchanged(self):
         body, code = call("describe")
-        self.assertEqual((code, body["result"]["protocol_version"]), (wp.EXIT_OK, "1.4"))
-        self.assertEqual(wp.PROTOCOL_VERSION, "1.4")
+        self.assertEqual((code, body["result"]["protocol_version"]), (wp.EXIT_OK, "1.5"))
+        self.assertEqual(wp.PROTOCOL_VERSION, "1.5")
 
     def test_without_release_strips_the_field(self):
         stripped = without_release({"result": {"snapshot": {"phase": "x", "review_round": {}},
                                                "next": {"snapshot": {"review_round": {}}}},
-                                    "protocol": {"version": "1.4"}, "workflow_release": "x"})
+                                    "protocol": {"version": "1.5"}, "workflow_release": "x"})
         self.assertEqual(stripped["result"], {"snapshot": {"phase": "x"}, "next": {"snapshot": {}}})
+
+
+# ---------------------------------------------------------------------------
+# Protocol 1.5: the four per-role round fields (workflow-2.15.0, D-Derive)
+# ---------------------------------------------------------------------------
+
+ROLE_FIELDS = ("plan_local", "plan_external", "implementation_local", "implementation_external")
+GOLDEN_FIELDS = ("plan", "implementation", "current")
+
+
+def role_rounds(repo: h.ScratchRepo) -> dict:
+    snapshot = review_round(repo)
+    return {field: snapshot[field] for field in ROLE_FIELDS}
+
+
+class TestPerRoleRoundFields(unittest.TestCase):
+    def test_a_fresh_item_reads_zero(self):
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, governing_workflow_version="2.2", phase="PLANNING")
+            self.assertEqual(role_rounds(repo), dict.fromkeys(ROLE_FIELDS, 0))
+
+    def test_the_c10a_sequence_at_the_plan_stage(self):
+        """local REVISE, local REVISE, local APPROVE, external REVISE, then
+        republish and bind: `plan_local` 3, `plan_external` 1, `plan` 4."""
+        with h.ScratchRepo() as repo:
+            h.seed_bundle_item(repo, governing_workflow_version="2.2", phase="PLANNING")
+            for number in (1, 2):
+                P, B = h.publish_and_bind_plan_bundle(repo)
+                mutate(repo, ws.record_local_plan_review, verdict="REVISE", bundle_id=B, review_content_id=P,
+                       round=1, now="t-local")
+                self.assertEqual(role_rounds(repo)["plan_local"], number)
+                edit_plan_and_commit(repo, f"edit {number}")
+            P, B = h.publish_and_bind_plan_bundle(repo)
+            mutate(repo, ws.record_local_plan_review, verdict="APPROVE", bundle_id=B, review_content_id=P,
+                   round=1, now="t-local")
+            self.assertEqual(role_rounds(repo)["plan_local"], 3)
+            mutate(repo, ws.record_manual_plan_review, verdict="REVISE", bundle_id=B, round=1, now="t-manual",
+                   current_review_content_id=P, feedback_role="MANUAL_EXTERNAL_PLAN_REVIEW",
+                   feedback_review_content_id=P)
+            edit_plan_and_commit(repo, "after the external REVISE")
+            h.publish_and_bind_plan_bundle(repo)
+            self.assertEqual(role_rounds(repo), {"plan_local": 3, "plan_external": 1, "implementation_local": 0,
+                                                 "implementation_external": 0})
+            self.assertEqual(plan_round(repo), 4)
+
+    def test_a_complete_implementation_approval_counts_each_stage(self):
+        with h.ScratchRepo() as repo:
+            ids = implementation_item_at(repo, "2.2")
+            self.assertEqual(role_rounds(repo)["implementation_local"], 0)
+            mutate(repo, ws.record_local_implementation_review, verdict="APPROVE", bundle_id=ids["B"],
+                   review_content_id=ids["I"], round=1, now="t-local")
+            self.assertEqual((role_rounds(repo)["implementation_local"], role_rounds(repo)["implementation_external"]),
+                             (1, 0))
+            mutate(repo, ws.record_manual_implementation_review, verdict="APPROVE", bundle_id=ids["B"], round=1,
+                   now="t-manual", current_review_content_id=ids["I"],
+                   feedback_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", feedback_review_content_id=ids["I"])
+            self.assertEqual(role_rounds(repo), {"plan_local": 0, "plan_external": 0, "implementation_local": 1,
+                                                 "implementation_external": 1})
+
+    def test_none_for_an_absent_key_a_null_stage_and_a_malformed_key(self):
+        cases = {
+            "absent": None,
+            "null stages": {"plan": None, "implementation": None},
+            "string stage": {"plan": "x", "implementation": {"local": 0, "external": 0}},
+            "boolean": {"plan": {"local": True, "external": 0}, "implementation": None},
+            "negative": {"plan": {"local": -1, "external": 0}, "implementation": None},
+            "extra key": {"plan": {"local": 0, "external": 0, "x": 1}, "implementation": None},
+            "not an object": [],
+        }
+        for name, value in cases.items():
+            with self.subTest(case=name), h.ScratchRepo() as repo:
+                plan_item_at(repo, "AWAITING_LOCAL_PLAN_REVIEW")
+                state = h.read_state(repo)
+                if name == "absent":
+                    state["work_items"][WI].pop(ws.REVIEW_ROUND_COUNTS_KEY)
+                else:
+                    state["work_items"][WI][ws.REVIEW_ROUND_COUNTS_KEY] = value
+                h.write_state(repo, state)
+                self.assertEqual(role_rounds(repo), dict.fromkeys(ROLE_FIELDS, None))
+                self.assertEqual(review_round(repo)["current"], "plan_local")
+                self.assertEqual(plan_round(repo), 1)
+
+    def test_a_null_stage_is_none_only_for_that_stage(self):
+        item = {"implementation_revision": 2, ws.REVIEW_ROUND_COUNTS_KEY: {
+            "plan": None, "implementation": {"local": 4, "external": 1}}}
+        field = wp._review_round(item, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "2.2")
+        self.assertEqual({k: field[k] for k in ROLE_FIELDS},
+                         {"plan_local": None, "plan_external": None, "implementation_local": 4,
+                          "implementation_external": 1})
+
+    def test_a_feedback_only_item_reads_none(self):
+        for kind, version in _FEEDBACK_ONLY_ROWS:
+            with self.subTest(kind=kind, version=version), h.ScratchRepo() as repo:
+                _feedback_only_item(repo, kind, version)
+                fields = role_rounds(repo)
+                self.assertEqual({k: fields[k] for k in ROLE_FIELDS if k.startswith("implementation")},
+                                 {"implementation_local": None, "implementation_external": None})
+                if version == "1":
+                    self.assertEqual(fields, dict.fromkeys(ROLE_FIELDS, None))
+
+    def test_the_golden_fields_do_not_depend_on_the_counts(self):
+        """INV-1: `plan`, `implementation` and `current` are the values they
+        were before the key existed, whatever the key holds."""
+        phases = ("AWAITING_LOCAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_PLAN_APPROVAL")
+        for phase in phases:
+            with self.subTest(phase=phase), h.ScratchRepo() as repo:
+                plan_item_at(repo, phase)
+                with_key = review_round(repo)
+                state = h.read_state(repo)
+                state["work_items"][WI].pop(ws.REVIEW_ROUND_COUNTS_KEY)
+                h.write_state(repo, state)
+                without_key = review_round(repo)
+                self.assertEqual({k: with_key[k] for k in GOLDEN_FIELDS}, {k: without_key[k] for k in GOLDEN_FIELDS})
+
+    def test_a_number_is_never_lost_across_the_phases(self):
+        with h.ScratchRepo() as repo:
+            plan_item_at(repo, "AWAITING_PLAN_APPROVAL")
+            self.assertEqual(role_rounds(repo)["plan_local"], 1)
+            self.assertEqual(role_rounds(repo)["plan_external"], 1)
+
+    def test_the_schema_requires_the_four_fields(self):
+        schema = SCHEMA["$defs"]["snapshot"]["properties"]["review_round"]
+        full = wp._review_round({ws.REVIEW_ROUND_COUNTS_KEY: {"plan": {"local": 1, "external": 0},
+                                                              "implementation": None}}, "PLANNING", "2.2")
+        self.assertEqual(schema_errors(full, schema), [])
+        for field in ROLE_FIELDS:
+            stripped = {k: v for k, v in full.items() if k != field}
+            self.assertNotEqual(schema_errors(stripped, schema), [], field)
+
+    def test_the_malformed_key_fallback_through_the_public_entries(self):
+        malformed = {"plan": {"local": True, "external": 0}, "implementation": None}
+        for where in ("target", "unrelated"):
+            with self.subTest(where=where), h.ScratchRepo() as repo:
+                ids = plan_item_at(repo, "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+                clean = review_round(repo)
+                state = h.read_state(repo)
+                if where == "target":
+                    state["work_items"][WI][ws.REVIEW_ROUND_COUNTS_KEY] = malformed
+                else:
+                    other = copy.deepcopy(state["work_items"][WI])
+                    other["work_item_id"] = "other"
+                    for path_field in ("plan_path", "registry_path", "mapping_path"):
+                        if other.get(path_field):
+                            source = repo.root / other[path_field]
+                            other[path_field] = "docs/ai-workflow/other-" + source.name
+                            copy_path = repo.root / other[path_field]
+                            copy_path.write_text(source.read_text().replace(f'"work_item_id": "{WI}"',
+                                                                            '"work_item_id": "other"'))
+                            h.git(repo, "add", other[path_field])
+                    other[ws.REVIEW_ROUND_COUNTS_KEY] = malformed
+                    state["work_items"]["other"] = other
+                h.write_state(repo, state)
+                after = review_round(repo)
+                self.assertEqual({k: after[k] for k in GOLDEN_FIELDS}, {k: clean[k] for k in GOLDEN_FIELDS})
+                if where == "target":
+                    self.assertEqual(role_rounds(repo), dict.fromkeys(ROLE_FIELDS, None))
+                else:
+                    self.assertEqual({k: after[k] for k in ROLE_FIELDS}, {k: clean[k] for k in ROLE_FIELDS})
+                text = verdict("REVISE", rcid=ids["P"], bundle=ids["B"], base=repo.base,
+                               role="MANUAL_EXTERNAL_PLAN_REVIEW")
+                body, code = record_external(repo, "plan_review_verdict", text)
+                self.assertEqual(code, wp.EXIT_OK, body)
+                recorded_state = h.read_state(repo)["work_items"]
+                holder = WI if where == "target" else "other"
+                self.assertEqual(recorded_state[holder][ws.REVIEW_ROUND_COUNTS_KEY], malformed)
+                body, code = call("--repo-root", str(repo.root), "verify")
+                check = next(c for c in body["result"]["checks"] if c["id"] == "state_valid")
+                self.assertEqual(check["status"], "fail")
+                self.assertIn("review_round_counts", check["detail"])
 
 
 

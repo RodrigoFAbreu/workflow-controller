@@ -46,11 +46,11 @@ import workflow_state  # noqa: E402
 #: The Workflow release these bytes are. A build refuses when it differs
 #: from the manifest's `workflow_version` (CP7); it never reads the
 #: installation record.
-WORKFLOW_RELEASE = "2.14.0"
+WORKFLOW_RELEASE = "2.15.0"
 
 PROTOCOL_NAME = "workflow-orchestration"
 PROTOCOL_MAJOR = 1
-PROTOCOL_VERSION = "1.4"
+PROTOCOL_VERSION = "1.5"
 SUPPORTED_PROTOCOL_MAJORS = (PROTOCOL_MAJOR,)
 
 #: The single source of the governing versions the protocol supports
@@ -514,6 +514,7 @@ def op_verify(repo_root: Path, args: argparse.Namespace) -> dict:
     else:
         try:
             workflow_state.validate_state(state, repo_root=repo_root)
+            workflow_state.validate_review_round_counts(state)
             checks.append(_check("state_valid", "pass", "validate_state accepts the state"))
         except Exception as exc:
             if not _is_check_refusal(exc):
@@ -2275,13 +2276,28 @@ def _current_review_stage(phase: str, gv):
     return None
 
 
+def _role_round(work_item: dict, stage: str, role: str):
+    """One persisted per-role round count (`D-Derive`, workflow-2.15.0): the
+    integer, or `None` for an absent key, a `null` stage or any malformed
+    value. Never raises -- a damaged counter must not refuse `next-action`."""
+    counts = work_item.get(workflow_state.REVIEW_ROUND_COUNTS_KEY)
+    if workflow_state.review_round_counts_errors(counts):
+        return None
+    pair = counts[stage]
+    return pair[role] if pair is not None else None
+
+
 def _review_round(work_item: dict, phase: str, gv) -> dict:
     """The snapshot's `review_round` (D-Round): derived on every call, never
-    stored."""
+    stored; the four per-role fields read the persisted counts."""
     return {
         "plan": _plan_review_round(work_item),
         "implementation": work_item.get("implementation_revision"),
         "current": _current_review_stage(phase, gv),
+        "plan_local": _role_round(work_item, "plan", "local"),
+        "plan_external": _role_round(work_item, "plan", "external"),
+        "implementation_local": _role_round(work_item, "implementation", "local"),
+        "implementation_external": _role_round(work_item, "implementation", "external"),
     }
 
 

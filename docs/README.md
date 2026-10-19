@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.17.0](releases/1.17.0.md) | two review round caps per stage, local (6) and external (4), on the Workflow's split counts (`--review-local-round-cap`, `--review-external-round-cap`, settings generation 12); the external review is capped too; `review.round_cap` is deprecated |
 | [1.16.1](releases/1.16.1.md) | adapter registries for the harness and the git host, and the `usage_record` key on worker and review job records; no behaviour change |
 | [1.16.0](releases/1.16.0.md) | `/satisfy-gate` routed by stage (Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance; the `satisfy-gate-acceptance` role, settings generation 11) and twelve clean-up fixes |
 | [1.15.0](releases/1.15.0.md) | the pull request defect loop: the Controller reports a pull request's state to the Workflow itself (a vetted `gh`, `run` waits for pending checks) and launches `/apply-pr-review` (the `apply-pr-review` role, settings generation 10), so acceptance clears itself; a red pull request after acceptance still stops with a person |

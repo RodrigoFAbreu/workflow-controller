@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.16.1; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.17.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.17.0 | Two review round caps per stage, `review.local_round_cap` (default 6) and `review.external_round_cap` (default 4), on the Workflow's split counts (protocol 1.5, Workflow 2.15.0 and later); the external review is capped too; `review.round_cap` and `--review-round-cap` are deprecated (settings generation 12) | [1.17.0](releases/1.17.0.md) |
 | 1.16.1 | A patch release (a refactor): the Claude and Codex seams and the git host sit behind adapter registries, and every worker and review job record gets a `usage_record` key in one format beside `telemetry`; the price table ships empty, so a cost is `unknown` unless the harness reports one (no new setting) | [1.16.1](releases/1.16.1.md) |
 | 1.16.0 | `/satisfy-gate` is routed by stage: Haiku 5.5 `high` for plan and technical approval, Sonnet 5.5 `medium` for acceptance (new `satisfy-gate-acceptance` role; settings generation 11), and twelve follow-up issues are fixed (no new setting) | [1.16.0](releases/1.16.0.md) |
 | 1.15.0 | Under an automatic acceptance gate the Controller reports the pull request's state to the Workflow itself (a vetted `gh`; `run` waits for pending checks) and launches `/apply-pr-review` (the `apply-pr-review` role; settings generation 10), so a pull request whose checks were pending or whose defect was fixed reaches acceptance without a person; a CI-only wait sends no request | [1.15.0](releases/1.15.0.md) |

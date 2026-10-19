@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -19879,12 +19879,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 43,
-      "last_transition": "2026-10-19T16:08:22Z",
+      "state_revision": 44,
+      "last_transition": "2026-10-19T16:23:06Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20373,6 +20373,48 @@
               "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
               "verdict": "APPROVE",
               "at": "2026-10-19T12:04:14.032014Z"
+            }
+          ]
+        },
+        "F-143a8cce3fc5": {
+          "digest": "143a8cce3fc5811e6116749beee082478856bae501cce626dcb14154ce249b34",
+          "text": "The tester's shell can read files outside the sandbox: Claude's sandbox limits writes, not reads. That includes the job's credential copy in `<runtime root>/functional/<job_id>/<claude home>/` beside the output folder, and the operator's `~/.claude`. The tester's `summary` text is stored verbatim in `WORKFLOW_STATE.json` (`ingest_functional_evidence`), which is committed and pushed, and the log excerpt goes into the findings file. Lane workers already have unsandboxed home read access, so this adds no new class of exposure, but it is cheap to harden: deny reads of the job's Claude home and the operator's credential directory in the tester settings (proved like CP2), and cap the `summary` length the Controller records. Follow-up issue.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a61c41ec04a793f55695c317edd9badf1a48d0ee0dc2f28b337ee3326b13fe71",
+              "verdict": "REVISE",
+              "at": "2026-10-19T16:23:06Z"
+            }
+          ]
+        },
+        "F-de5e810df362": {
+          "digest": "de5e810df3626ad2c3e5cd63ab751ec448a2491724d716b7f3257b1ff10125fd",
+          "text": "`functional_review._linked_path` refuses any link target starting with `../` before it is joined with the checklist's directory. So a checklist section in `docs/ACTIVE_MILESTONE.md` that links to `../tests/checklist.md` (inside the repository) ends at `checklist_unrecognised`, though D4 refuses only links that leave the repository. `candidate_flows.read_file` already performs the correct containment check after the join.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a61c41ec04a793f55695c317edd9badf1a48d0ee0dc2f28b337ee3326b13fe71",
+              "verdict": "REVISE",
+              "at": "2026-10-19T16:23:06Z"
+            }
+          ]
+        },
+        "F-26e760c08b86": {
+          "digest": "26e760c08b86abaa62648c3d43d3c1ce975033eb396663cacdf1c8c6bd60cac5",
+          "text": "`review._local_origin_refs` treats a `file://` origin as a URL and never reads it, though it is a local path that `GIT_ALLOW_PROTOCOL=file` lets Git reach. The write deny prevents a push to it, so only the second detection layer is missing for that case.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a61c41ec04a793f55695c317edd9badf1a48d0ee0dc2f28b337ee3326b13fe71",
+              "verdict": "REVISE",
+              "at": "2026-10-19T16:23:06Z"
             }
           ]
         }

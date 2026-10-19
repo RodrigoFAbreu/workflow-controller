@@ -244,5 +244,91 @@ class CapDecisionTest(unittest.TestCase):
         self.assertEqual(rr.stage_of("pr.apply_review"), "none")
 
 
+class SplitRoundsTest(unittest.TestCase):
+    """D1: both per-role integers, else no split counts."""
+
+    def test_both_integers_are_read_per_stage(self) -> None:
+        s = snap("AWAITING_LOCAL_PLAN_REVIEW", rounds={"plan_local": 2, "plan_external": 0,
+                                                       "implementation_local": 5, "implementation_external": 3})
+        self.assertEqual(rr.split_rounds(s, "plan"), (2, 0))
+        self.assertEqual(rr.split_rounds(s, "implementation"), (5, 3))
+
+    def test_one_null_missing_or_malformed_count_is_no_split_counts(self) -> None:
+        for rounds in (None, {}, {"plan_local": 2, "plan_external": None}, {"plan_local": None, "plan_external": 1},
+                       {"plan_local": 2}, {"plan_local": "2", "plan_external": 1},
+                       {"plan_local": True, "plan_external": 1}, {"plan_local": -1, "plan_external": 1}):
+            with self.subTest(rounds=rounds):
+                self.assertIsNone(rr.split_rounds(snap("AWAITING_LOCAL_PLAN_REVIEW", rounds=rounds), "plan"))
+        self.assertIsNone(rr.split_rounds(None, "plan"))
+
+
+class EffectiveCapsTest(unittest.TestCase):
+    """D3: own value, else a deprecated cap given, else 6 and 4."""
+
+    def test_defaults(self) -> None:
+        self.assertEqual(rr.effective_caps(None, None, 4, deprecated_given=False), (6, 4))
+
+    def test_the_deprecated_cap_sets_every_cap_still_unset(self) -> None:
+        self.assertEqual(rr.effective_caps(None, None, 9, deprecated_given=True), (9, 9))
+        self.assertEqual(rr.effective_caps(2, None, 9, deprecated_given=True), (2, 9))
+        self.assertEqual(rr.effective_caps(None, 3, 9, deprecated_given=True), (9, 3))
+
+    def test_a_deprecated_cap_not_given_is_ignored(self) -> None:
+        self.assertEqual(rr.effective_caps(None, None, 4, deprecated_given=False), (6, 4))
+        self.assertEqual(rr.effective_caps(None, None, 9, deprecated_given=False), (6, 4))
+
+    def test_an_own_cap_always_wins(self) -> None:
+        self.assertEqual(rr.effective_caps(2, 3, 9, deprecated_given=True), (2, 3))
+        self.assertEqual(rr.effective_caps(2, 3, 9, deprecated_given=False), (2, 3))
+
+    def test_a_deprecated_four_given_on_the_command_line_sets_both(self) -> None:
+        self.assertEqual(rr.effective_caps(None, None, 4, deprecated_given=True), (4, 4))
+
+
+class SplitCapDecisionTest(unittest.TestCase):
+    """D2's rows over the split counts, at, below and above each cap."""
+
+    CAPS = rr.RoundCaps(6, 4)
+
+    def decide(self, action, local, external, caps=None):
+        return rr.split_cap_decision(action, rr.SplitRounds(local, external), caps or self.CAPS)
+
+    def test_apply_stops_at_either_cap_and_names_which(self) -> None:
+        for action in ("plan.apply_review", "implementation.apply_review"):
+            with self.subTest(action=action):
+                self.assertIsNone(self.decide(action, 5, 3))
+                self.assertEqual(self.decide(action, 6, 1), "local")
+                self.assertEqual(self.decide(action, 7, 1), "local")
+                self.assertEqual(self.decide(action, 2, 4), "external")
+                self.assertEqual(self.decide(action, 2, 5), "external")
+                self.assertEqual(self.decide(action, 6, 4), "local")
+
+    def test_local_review_stops_at_the_local_cap_only(self) -> None:
+        for action in ("plan.review.local", "implementation.review.local"):
+            with self.subTest(action=action):
+                self.assertIsNone(self.decide(action, 5, 4))
+                self.assertEqual(self.decide(action, 6, 0), "local")
+                self.assertEqual(self.decide(action, 7, 0), "local")
+
+    def test_external_review_stops_at_the_external_cap_only(self) -> None:
+        for action in ("plan.review.external", "implementation.review.external"):
+            with self.subTest(action=action):
+                self.assertIsNone(self.decide(action, 6, 3))
+                self.assertEqual(self.decide(action, 0, 4), "external")
+                self.assertEqual(self.decide(action, 0, 5), "external")
+
+    def test_no_other_action_stops(self) -> None:
+        for action in ("plan.start", "plan.author", "plan.record_external", "implementation.checkpoint",
+                       "implementation.self_review", "implementation.record_external", "functional.prepare",
+                       "functional.apply_findings", None):
+            self.assertIsNone(self.decide(action, 100, 100), action)
+
+    def test_external_review_is_not_a_fallback_capped_action(self) -> None:
+        """The fallback rule is untouched: ``cap_decision`` still never stops an external review."""
+        self.assertFalse(rr.EXTERNAL_REVIEW_ACTIONS & rr.CAPPED_ACTIONS)
+        for action in rr.EXTERNAL_REVIEW_ACTIONS:
+            self.assertFalse(rr.cap_decision(action, 100, 1), action)
+
+
 if __name__ == "__main__":
     unittest.main()

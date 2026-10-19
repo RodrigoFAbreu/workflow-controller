@@ -35,9 +35,13 @@ VALIDATOR_ROUTES = {
     "satisfy-gate": ("claude-haiku-5-5", "high"),
     "satisfy-gate-acceptance": ("claude-sonnet-5-5", "medium"),
 }
+#: The tester (workflow-controller-automated-functional-review D2): a
+#: Controller-run job, not a lifecycle worker, so no command stem maps to it;
+#: Sonnet at medium, single-agent.
+TESTER_ROLE = "functional-tester"
 SELF_REVIEW_ROLE = "milestone-implement-self-review"
 SINGLE_AGENT_ROLES = frozenset({SELF_REVIEW_ROLE, "review-plan", "review-implementation",
-                                *VALIDATOR_ROUTES})
+                                *VALIDATOR_ROUTES, "functional-tester"})
 INHERIT_ROLES = ("milestone-plan", "record-manual-plan-review", "record-manual-implementation-review",
                  "prepare-functional-review")
 #: The roles a protocol target adds (orchestration-protocol-v1 C.3, and the
@@ -52,7 +56,7 @@ def _config(**data) -> routing.RoutingConfig:
 class RoutingTableTest(unittest.TestCase):
     def test_the_role_set_is_closed_and_exactly_the_table(self) -> None:
         self.assertEqual(routing.ROLES, frozenset(routing.ROLE_ROUTES))
-        self.assertEqual(routing.ROLES, frozenset({*NAMED_ROLES, *VALIDATOR_ROUTES, SELF_REVIEW_ROLE, *INHERIT_ROLES}))
+        self.assertEqual(routing.ROLES, frozenset({*NAMED_ROLES, *VALIDATOR_ROUTES, SELF_REVIEW_ROLE, *INHERIT_ROLES, TESTER_ROLE}))
 
     def test_each_named_role_defaults_to_opus_5_5_at_xhigh(self) -> None:
         for role in (*NAMED_ROLES, SELF_REVIEW_ROLE):
@@ -61,6 +65,23 @@ class RoutingTableTest(unittest.TestCase):
                 self.assertEqual((route.model, route.effort), ("claude-opus-5-5", "xhigh"))
                 self.assertEqual((route.model_source, route.effort_source), ("default", "default"))
         self.assertEqual((routing.DEFAULT_MODEL, routing.DEFAULT_EFFORT), ("claude-opus-5-5", "xhigh"))
+
+    def test_the_functional_tester_is_sonnet_medium_single_agent_and_overridable(self) -> None:
+        route = routing.resolve_route(TESTER_ROLE)
+        self.assertEqual((route.model, route.effort), ("claude-sonnet-5-5", "medium"))
+        self.assertEqual((route.model_source, route.effort_source), ("default", "default"))
+        self.assertTrue(route.single_agent)
+        self.assertEqual(route.disallowed_tools, routing.SUBAGENT_TOOLS)
+        self.assertNotIn(TESTER_ROLE, routing.ROLE_BY_COMMAND_STEM.values())
+        by_option = routing.RoutingOptions(cli_role_models={TESTER_ROLE: "m-opt"},
+                                           cli_role_efforts={TESTER_ROLE: "e-opt"}).resolve(TESTER_ROLE)
+        self.assertEqual((by_option.model, by_option.effort, by_option.model_source, by_option.effort_source),
+                         ("m-opt", "e-opt", "role-cli", "role-cli"))
+        config = _config(roles={TESTER_ROLE: {"model": "m-file"}}, default={"effort": "e-default"})
+        by_file = routing.resolve_route(TESTER_ROLE, config=config)
+        self.assertEqual((by_file.model, by_file.model_source), ("m-file", "config-role"))
+        self.assertEqual((by_file.effort, by_file.effort_source), ("e-default", "config-default"))
+        self.assertTrue(by_file.single_agent)
 
     def test_the_validator_roles_have_their_own_single_agent_routes(self) -> None:
         for role, (model, effort) in VALIDATOR_ROUTES.items():

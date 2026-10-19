@@ -96,6 +96,11 @@ rows (``review.local_round_cap``, ``review.external_round_cap``; table generatio
 12) appear in each launched job's ``controller_settings`` ``values`` and
 ``sources``. Nothing else moved.
 
+And once by ``workflow-controller-automated-functional-review`` CP1, whose two
+rows (``functional.automated``, ``functional.timeout_seconds``; table generation
+13) appear in each launched job's ``controller_settings`` ``values`` and
+``sources``. Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

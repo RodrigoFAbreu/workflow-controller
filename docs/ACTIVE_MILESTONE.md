@@ -2,36 +2,23 @@
 
 ## Status
 
-**Complete.** `workflow-controller-round-caps` (C13b, `docs/ROADMAP.md`; controller issue
-[#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88)) reached `MILESTONE_COMPLETE` on 2026-10-19. It
-caps local and external review rounds separately (`review.local_round_cap` 6, `review.external_round_cap` 4, on the
-Workflow's split counts of protocol 1.5); `review.round_cap` and `--review-round-cap` keep working as deprecated
-aliases, retired after 1.17.0. Its pull request is #107 (squash `a76daff`, merged 2026-10-19), released as the minor release **1.17.0**, the
-latest release. The release notes are `docs/releases/1.17.0.md`.
+**In progress.** `workflow-controller-automated-functional-review` (C10c, `docs/ROADMAP.md`) makes the Controller run
+the functional review itself at row 38e: an isolated sandbox, an independent tester, one `functional_evidence` result
+per checklist flow, and findings for the applier when a flow fails. Plan revision 8 was approved by policy at
+`2480ee9`; the base commit is `1599a4d`. The plan is
+`docs/ai-workflow/CONTROLLER_AUTOMATED_FUNCTIONAL_REVIEW_PLAN.md`. `docs/ai-workflow/WORKFLOW_STATE.json` is the
+ground-truth record of the phase and of each checkpoint.
 
-The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every acceptance
-requirement met (policy source `default`, digest `bae758b4f4ce`).
-- Plan revision 3 was approved by policy at `513c873`. The base commit is `d6b9dfc`.
-- Technical approval `6e08dd8` (implementation revision 1) was recorded by policy and is `CURRENT`.
-- Functional review (an independent Codex tester and an operator re-run) passed all ten flows. Checklist evidence
-  commit `7449d1e`.
-- The Workflow's own GitHub query found pull request #107 at head `7449d1e` with every check passing and no standing
-  objection.
-
-All registry checkpoints (CP1-CP4) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
-of this transition. `docs/ROADMAP.md` marks step C13b complete. The full narrative is archived at
-`docs/milestones/completed/workflow-controller-round-caps.md`; the Optional findings are in
-`docs/milestones/completed/workflow-controller-round-caps-findings.md`.
-
-Deferred follow-ups, not conditions of acceptance:
-- **Minor review findings:** of ten Optional items, eight were fixed and two kept as a follow-up, GitHub issue #108
-  (label `review-follow-up`: `settings show` prints the stored, not the effective, caps).
-- **Follow-up 59:** retire `review.round_cap` and `--review-round-cap` after 1.17.0.
-- **Follow-up 60:** vendor Workflow 2.15.0 so the lifecycle tests exercise the split counts end to end.
+| Checkpoint | State |
+| --- | --- |
+| CP1 The role, the settings and the pure parts | complete: the `functional-tester` role (Sonnet 5.5, medium, single-agent), the rows `functional.automated` and `functional.timeout_seconds` (table generation 13), and `controller/functional_review.py` (checklist reader and the four flow shapes, `RESULTS.json` validator, "not run" entries, evidence input, findings text, writable-location derivation, prompt). Checked with `tests.test_functional_review`, `tests.test_routing`, `tests.test_settings`, `tests.test_trunk_preflight`, `tests.test_package_structure` and `tools/check_docs.py`; the no-policy golden was regenerated for the two rows. The whole suite (`tools/run_tests.py`, 4414 tests) fails only the two Git 2.56 trailer tests that fail on `main` too. |
+| CP2 The enforcement spike on the pinned Claude CLI | pending |
+| CP3 The sandbox and the tester run | pending |
+| CP4 The step at row 38e | pending |
+| CP5 Lifecycle scenarios and the isolation tests | pending |
+| CP6 Documentation, roadmap and the whole suite | pending |
 
 ## Next action
 
-No milestone is active. This repository runs Workflow 2.16.0 since 2026-10-19. The next milestone is **C10c** (the
-automated functional review, `docs/ROADMAP.md`): **A2** (the backlog) waits for
-[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), the Workflow lane's current milestone, which is not
-released yet, so A2 follows once it is. Run `/milestone-plan` for C10c.
+Run `/milestone-implement workflow-controller-automated-functional-review` for the next checkpoint (one checkpoint per
+invocation).

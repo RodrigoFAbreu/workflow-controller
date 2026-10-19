@@ -192,6 +192,11 @@ TABLE: tuple[Setting, ...] = (
     # round caps. Unset means the built-in 6 and 4.
     Setting("review.local_round_cap", TYPE_OPTIONAL_INT, None, 1, 100, "run/step --review-local-round-cap", 12),
     Setting("review.external_round_cap", TYPE_OPTIONAL_INT, None, 1, 100, "run/step --review-external-round-cap", 12),
+    # workflow-controller-automated-functional-review D8: the Controller-run
+    # functional tester at row 38e. ``functional.automated`` false keeps the
+    # person's stop; the timeout bounds one tester run.
+    Setting("functional.automated", TYPE_BOOL, True, None, None, None, 13),
+    Setting("functional.timeout_seconds", TYPE_INT, 3600, 60, 86400, None, 13),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -209,8 +214,10 @@ TABLE: tuple[Setting, ...] = (
 #: ``apply-pr-review`` (workflow-controller-pr-defect-loop D3). 11: the role
 #: ``satisfy-gate-acceptance`` (workflow-controller-cleanup-2 D4). 12: the
 #: rows ``review.local_round_cap`` and ``review.external_round_cap``
-#: (workflow-controller-round-caps D4).
-TABLE_GENERATION = 12
+#: (workflow-controller-round-caps D4). 13: the rows ``functional.automated``
+#: and ``functional.timeout_seconds`` and the role ``functional-tester``
+#: (workflow-controller-automated-functional-review D8).
+TABLE_GENERATION = 13
 
 
 def _table() -> dict[str, Setting]:

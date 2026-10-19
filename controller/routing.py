@@ -76,6 +76,13 @@ APPLY_PR_REVIEW = "apply-pr-review"
 #: acceptance also writes the narrative, roadmap and findings table (Sonnet).
 SATISFY_GATE = "satisfy-gate"
 SATISFY_GATE_ACCEPTANCE = "satisfy-gate-acceptance"
+#: The independent functional tester (workflow-controller-automated-
+#: functional-review D2): a Controller-run job in an isolated sandbox, not a
+#: lifecycle worker. It judges and reports, so single-agent; Sonnet at medium
+#: effort because a test run is cheaper than an implementation (user rule of
+#: 2026-10-09). No command stem maps to it: only the step at row 38e launches
+#: it, so it is not in :data:`ROLE_BY_COMMAND_STEM`.
+FUNCTIONAL_TESTER = "functional-tester"
 
 #: The built-in model and effort of the named lifecycle roles.
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -121,6 +128,7 @@ ROLE_ROUTES: Mapping[str, Route] = MappingProxyType({
     APPLY_PR_REVIEW: _OPUS,
     SATISFY_GATE: _HAIKU_SINGLE_AGENT,
     SATISFY_GATE_ACCEPTANCE: _SONNET_SINGLE_AGENT,
+    FUNCTIONAL_TESTER: _SONNET_SINGLE_AGENT,
 })
 
 #: The closed set of role names ``--role-model``/``--role-effort`` and the

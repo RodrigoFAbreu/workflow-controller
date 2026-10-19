@@ -212,6 +212,9 @@ class RoundCaps(NamedTuple):
     external: int
 
 
+DEFAULT_ROUND_CAPS = RoundCaps(DEFAULT_LOCAL_ROUND_CAP, DEFAULT_EXTERNAL_ROUND_CAP)
+
+
 def split_rounds(snapshot: Mapping | None, stage: str) -> SplitRounds | None:
     """The Workflow's ``review_round[<stage>_local]`` and ``[<stage>_external]``
     (protocol 1.5) when both are non-negative integers, else ``None``

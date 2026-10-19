@@ -23,7 +23,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, decision, job, managed_repo, protocol, protocol_decision, routing, target_state, worker  # noqa: E402
+from controller import cli, decision, job, managed_repo, protocol, protocol_decision, review_rounds, routing, target_state, worker  # noqa: E402
 from controller.errors import WorkflowProtocolFailedError  # noqa: E402
 from controller.identity import SOURCE_KIND_COMMIT, ControllerIdentity  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -925,7 +925,7 @@ class JobWiringTest(unittest.TestCase):
                 code = cli.cmd_explain(_Args(str(root), workflow_manager=str(stub), json_out=True), runtime, IDENTITY)
             self.assertEqual(code, cli.EXIT_OK)
             self.assertEqual(cap_gate.call_count, 1)
-            self.assertEqual(cap_gate.call_args.args[4], 4)
+            self.assertEqual(cap_gate.call_args.args[4], review_rounds.RoundCaps(6, 4))
 
     def test_a_legacy_explain_has_no_protocol_key(self) -> None:
         from tests.test_cli import _Args

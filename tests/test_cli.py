@@ -43,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, notify, observe, routing, runtime, settings,
+    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, notify, observe, review_rounds, routing, runtime, settings,
     worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
@@ -3059,14 +3059,20 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         """workflow-controller-review-convergence D4: ``review.round_cap``
         reaches every ``step`` and ``run`` step; ``--review-round-cap`` wins."""
         calls = self._spy()
-        for flag, file, expected in ((None, None, 4), (None, {"review": {"round_cap": 7}}, 7),
-                                     (9, {"review": {"round_cap": 7}}, 9)):
+        caps = review_rounds.RoundCaps
+        for flag, file, expected in (
+                (None, None, caps(6, 4)),
+                (None, {"review": {"round_cap": 7}}, caps(7, 7)),
+                (9, {"review": {"round_cap": 7}}, caps(9, 9)),
+                (None, {"review": {"round_cap": 4}}, caps(6, 4)),
+                (None, {"review": {"round_cap": 7, "local_round_cap": 2}}, caps(2, 7)),
+                (None, {"review": {"local_round_cap": 8, "external_round_cap": 3}}, caps(8, 3))):
             with self.subTest(flag=flag, file=file):
                 args = self._args(file, review_round_cap=flag, max_steps=1)
                 cli.cmd_step(args, self.runtime_root, self.ident)
-                self.assertEqual(calls[-1]["review_round_cap"], expected)
+                self.assertEqual(calls[-1]["review_round_caps"], expected)
                 cli.cmd_run(args, self.runtime_root, self.ident)
-                self.assertEqual(calls[-1]["review_round_cap"], expected)
+                self.assertEqual(calls[-1]["review_round_caps"], expected)
 
     def test_the_local_and_external_caps_reach_the_effective_settings(self) -> None:
         """workflow-controller-round-caps D3: both optional caps are

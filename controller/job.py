@@ -5785,7 +5785,7 @@ def _unstable_gate(managed_repo: Any, work_item: Any, decision: Decision, seen: 
 
 def _decide_protocol_current(
     managed_repo: Any, *, runtime: Path, snapshot: Any, work_item: Any, work_item_id: str | None,
-    pre_state: dict, base: str | None, review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    pre_state: dict, base: str | None, review_round_caps: review_rounds.RoundCaps = review_rounds.DEFAULT_ROUND_CAPS,
 ) -> tuple[Decision, Any, dict]:
     """The protocol path's decision, current (plan D.2.1): ``(decision,
     work_item, pre_state)``. The Workflow's ``verify`` runs first (plan A.3):
@@ -5817,7 +5817,7 @@ def _decide_protocol_current(
                     else tuple((info.document.get("snapshot") or {}).get("work_item_ids") or ()))
         if protocol_decision.check_currency(managed_repo, decision).current:
             gate = _no_progress_gate(runtime, managed_repo, work_item, decision, advisories=advisories) \
-                or _review_cap_gate(runtime, managed_repo, work_item, decision, review_round_cap,
+                or _review_cap_gate(runtime, managed_repo, work_item, decision, review_round_caps,
                                     advisories=advisories)
             return (decision if gate is None else gate), work_item, pre_state
         snapshot = target_state.read(managed_repo)
@@ -5999,36 +5999,83 @@ def _stored_job_records(runtime_root: Path) -> list[dict]:
     return records
 
 
-def _review_cap_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision, cap: int,
-                     advisories: tuple[str, ...] = ()) -> Decision | None:
+def _review_cap_gate(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,
+                     caps: review_rounds.RoundCaps, advisories: tuple[str, ...] = ()) -> Decision | None:
     """The review round cap of a protocol target (review-convergence D2, D3,
-    D4): the ``review_round_cap_reached`` gate when the decision is a capped
-    action (``plan``/``implementation`` ``apply_review`` at round >= ``cap``,
-    ``review.local`` at round > ``cap``), else ``None``. The round is the
-    Workflow's own, else the Controller's count over the stored records
-    (:mod:`controller.review_rounds`). Nothing is launched or written."""
+    D4; workflow-controller-round-caps D2, D5): the ``review_round_cap_reached``
+    gate when the decision is a capped action. With the Workflow's split
+    counts, an apply stops at either cap and a local review at the local one;
+    without them the single round is checked against the external cap as the
+    one cap was (``apply_review`` at round >= cap, ``review.local`` at round >
+    cap). That round is the Workflow's own, else the Controller's count over
+    the stored records (:mod:`controller.review_rounds`). Nothing is launched
+    or written."""
     info = decision.protocol
     if info is None or info.action_id not in review_rounds.CAPPED_ACTIONS \
             or work_item is target_state.NoWorkItemYet:
         return None
     stage = review_rounds.stage_of(info.action_id)
     snapshot = info.document.get("snapshot") if isinstance(info.document, dict) else None
+    split = review_rounds.split_rounds(snapshot, stage)
+    if split is not None:
+        fired = review_rounds.split_cap_decision(info.action_id, split, caps)
+        if fired is None:
+            return None
+        return _cap_gate(managed_repo, work_item, decision, stage, fired, caps, advisories,
+                         f"local round {split.local} and external round {split.external} "
+                         "(given by the Workflow as split counts)",
+                         split.local if fired == review_rounds.CAP_LOCAL else split.external)
     round_number, source = review_rounds.current_round(
         snapshot, stage, _stored_job_records(runtime_root),
         target_repo=str(managed_repo.root), work_item_id=work_item.work_item_id)
-    if not review_rounds.cap_decision(info.action_id, round_number, cap):
+    if not review_rounds.cap_decision(info.action_id, round_number, caps.external):
         return None
     counted = ""
     if source == review_rounds.SOURCE_WORKFLOW:
-        counted = " (given by the Workflow)"
+        counted = " (given by the Workflow"
     elif source == review_rounds.SOURCE_JOBS:
         counted = " (counted from the Controller's job records, not given by the Workflow"
-        counted += ("; the Workflow's own count may be higher)" if stage == review_rounds.STAGE_PLAN else ")")
+        counted += "; the Workflow's own count may be higher" if stage == review_rounds.STAGE_PLAN else ""
+    counted += ("; " if counted else " (") + "the Workflow gave no split counts, so this single number is checked against the external cap)"
+    return _cap_gate(managed_repo, work_item, decision, stage, review_rounds.CAP_EXTERNAL, caps, advisories,
+                     f"round {round_number}{counted}", round_number)
+
+
+def external_review_cap_gate(managed_repo: Any, work_item: Any, decision: Decision,
+                             caps: review_rounds.RoundCaps, advisories: tuple[str, ...] = ()) -> Decision | None:
+    """The external cap at an external review gate a review job would courier
+    (workflow-controller-round-caps D2): the ``review_round_cap_reached`` gate
+    when the Workflow gave split counts and the external count has reached its
+    cap, else ``None`` (no split counts means no external cap, as before).
+    ``step`` calls it once it has chosen to run a review and ``explain`` where
+    it reports that choice, so both answer the same gate."""
+    info = decision.protocol
+    if info is None or info.action_id not in review_rounds.EXTERNAL_REVIEW_ACTIONS \
+            or work_item is target_state.NoWorkItemYet:
+        return None
+    stage = review_rounds.stage_of(info.action_id)
+    snapshot = info.document.get("snapshot") if isinstance(info.document, dict) else None
+    split = review_rounds.split_rounds(snapshot, stage)
+    if split is None or review_rounds.split_cap_decision(info.action_id, split, caps) is None:
+        return None
+    return _cap_gate(managed_repo, work_item, decision, stage, review_rounds.CAP_EXTERNAL, caps, advisories,
+                     f"local round {split.local} and external round {split.external} "
+                     "(given by the Workflow as split counts)", split.external)
+
+
+def _cap_gate(managed_repo: Any, work_item: Any, decision: Decision, stage: str, fired: str,
+              caps: review_rounds.RoundCaps, advisories: tuple[str, ...], where: str, count: int) -> Decision:
+    """The ``review_round_cap_reached`` gate (D5): the stage, which cap fired,
+    the count and the cap, and the three ways on."""
+    info = decision.protocol
+    cap = caps.local if fired == review_rounds.CAP_LOCAL else caps.external
+    setting = f"review.{fired}_round_cap"
+    option = f"--review-{fired}-round-cap"
     return protocol_decision.gate_for(
         managed_repo, work_item, decision, protocol_decision.REVIEW_ROUND_CAP_REACHED,
-        f"{work_item.work_item_id} is at {stage} review round {round_number}{counted}, at the round cap of "
-        f"{cap} (review.round_cap), so {info.action_id} is not launched. The Controller never accepts at the "
-        f"cap itself; you can (1) raise the cap and re-run (`--review-round-cap N`, or the review.round_cap "
+        f"{work_item.work_item_id} is at {stage} review {where}; the {fired} count {count} has reached the "
+        f"{fired} round cap of {cap} ({setting}), so {info.action_id} is not launched. The Controller never "
+        f"accepts at the cap itself; you can (1) raise the cap and re-run (`{option} N`, or the {setting} "
         f"setting; the cap applies to one command, so the next plain run stops again at the next capped "
         f"action, and `explain` shows the setting's cap, not a flag's); (2) accept at the cap with "
         f"/approve-review, where the Workflow's gate is reachable (after a REVISE, with the confirmation it asks for); or "
@@ -7166,7 +7213,7 @@ def execute_step(
     on_wait: Callable[[str, str], None] | None = None,
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
-    review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    review_round_caps: review_rounds.RoundCaps = review_rounds.DEFAULT_ROUND_CAPS,
     review_mode_options: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
@@ -7244,7 +7291,7 @@ def execute_step(
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
             usage_gate=usage_gate, reviewer=reviewer,
-            review_round_cap=review_round_cap, review_mode_options=review_mode_options,
+            review_round_caps=review_round_caps, review_mode_options=review_mode_options,
         )
 
 
@@ -7323,7 +7370,7 @@ def _execute_step_locked(
     on_wait: Callable[[str, str], None] | None = None,
     usage_gate: Callable[..., Any] | None = None,
     reviewer: Mapping | None = None,
-    review_round_cap: int = review_rounds.DEFAULT_REVIEW_ROUND_CAP,
+    review_round_caps: review_rounds.RoundCaps = review_rounds.DEFAULT_ROUND_CAPS,
     review_mode_options: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
@@ -7432,7 +7479,7 @@ def _execute_step_locked(
     if managed_repo.target_protocol is not None:
         decision, work_item, pre_state = _decide_protocol_current(
             managed_repo, runtime=runtime, snapshot=snapshot, work_item=work_item, work_item_id=work_item_id,
-            pre_state=pre_state, base=preflight.base, review_round_cap=review_round_cap)
+            pre_state=pre_state, base=preflight.base, review_round_caps=review_round_caps)
         is_bootstrap = work_item is target_state.NoWorkItemYet
         resolved_work_item_id = None if is_bootstrap else work_item.work_item_id
         governing_workflow_version = None if is_bootstrap else work_item.governing_workflow_version
@@ -7484,6 +7531,13 @@ def _execute_step_locked(
                     pre_state, refusal, status=STATUS_GATE_BLOCKED, run_id=run_id,
                 )
         if review_target is not None:
+            # Round-caps D2: the external cap, checked once a review would run.
+            capped = external_review_cap_gate(managed_repo, work_item, decision, review_round_caps)
+            if capped is not None:
+                return _no_launch_record(
+                    runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase,
+                    pre_state, capped, status=STATUS_GATE_BLOCKED, run_id=run_id,
+                )
             # Codex-reviewer D2: a configured harness couriers the external
             # review of rows 14 and 28 instead of stopping at the gate; a
             # same-provider choice (review-modes D3) runs the Claude harness

@@ -30,7 +30,7 @@ from typing import Any
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
-    review, review_mode, routing, runtime, settings, target_state, telemetry, usage, worker,
+    review, review_mode, review_rounds, routing, runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -1080,7 +1080,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             decision = job._no_progress_gate(runtime_root, target, work_item, decision,
                                              advisories=advisories) \
                 or job._review_cap_gate(runtime_root, target, work_item, decision,
-                                        _effective(args)["review.round_cap"], advisories=advisories) \
+                                        _round_caps(_effective(args)), advisories=advisories) \
                 or decision
     elif work_item is target_state.NoWorkItemYet:
         decision = decide_no_work_item(target, base=base)
@@ -1098,6 +1098,11 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         mode_report = job.review_mode_report(
             runtime_root, target, None if work_item is target_state.NoWorkItemYet else work_item.work_item_id,
             decision, _reviewer_options(effective_settings), _review_mode_options(effective_settings))
+    if mode_report is not None and mode_report["choice"] == "review":
+        # Round-caps D2: the step stops at the external cap instead of launching this review.
+        capped = job.external_review_cap_gate(target, work_item, decision, _round_caps(_effective(args)))
+        if capped is not None:
+            decision, mode_report = capped, None
     mode_block = {} if mode_report is None else {"review_mode": mode_report}
     # pr-defect-loop D4-D6: at a pull-request external gate the next step reports the pull request itself.
     report_forecast = None
@@ -1953,7 +1958,7 @@ def _run_one_step(
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
         usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
         reviewer=_reviewer_options(effective),
-        review_round_cap=effective["review.round_cap"],
+        review_round_caps=_round_caps(effective),
         review_mode_options=_review_mode_options(effective),
     )
 
@@ -2402,6 +2407,18 @@ def _apply_settings(args: argparse.Namespace, *, write: bool,
     if runtime_root is not None:
         _install_notifier(effective, runtime_root)
     return effective
+
+
+def _round_caps(effective: settings.EffectiveSettings) -> review_rounds.RoundCaps:
+    """The local and external review round caps in force
+    (workflow-controller-round-caps D3): each cap's own setting or option,
+    else the deprecated ``review.round_cap`` when it is set away from its
+    default 4 or given on the command line, else the built-in 6 and 4."""
+    deprecated = effective["review.round_cap"]
+    return review_rounds.effective_caps(
+        effective["review.local_round_cap"], effective["review.external_round_cap"], deprecated,
+        deprecated_given=effective.sources["review.round_cap"] == settings.SOURCE_CLI
+        or deprecated != review_rounds.DEFAULT_REVIEW_ROUND_CAP)
 
 
 def _effective(args: argparse.Namespace) -> settings.EffectiveSettings:

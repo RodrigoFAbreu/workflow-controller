@@ -227,6 +227,59 @@ class UnconfiguredAndRefusalTest(_ReviewCase):
         self.assertEqual(self.records(), [])
 
 
+class ExternalCapTest(_ReviewCase):
+    """``workflow-controller-round-caps`` D2: the external cap, checked where
+    the step has already chosen to run a review. The real 2.9.0 Workflow gives
+    no split counts, so ``split_rounds`` is patched to give them."""
+
+    def counts(self, local: int, external: int):
+        return mock.patch.object(job.review_rounds, "split_rounds",
+                                 return_value=job.review_rounds.SplitRounds(local, external))
+
+    def assert_capped(self, record: dict) -> None:
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
+        self.assertTrue(record["human_gate_pending"]["what_is_required"].startswith("review_round_cap_reached: "))
+        self.assertIn("the external count 4 has reached the external round cap of 4",
+                      record["human_gate_pending"]["what_is_required"])
+        self.assertEqual(self.double.calls, [])
+        self.assertEqual(self.records(), [], "no review job record")
+
+    def test_the_external_count_at_the_cap_launches_no_review(self) -> None:
+        calls: list = []
+        with self.counts(1, 4):
+            record = self.step(usage_gate=self.gate(calls=calls))
+        self.assert_capped(record)
+        self.assertEqual(calls, [], "no usage reservation")
+
+    def test_below_the_cap_and_without_split_counts_the_review_launches(self) -> None:
+        with self.counts(1, 3):
+            self.assertEqual(self.step()["status"], job.STATUS_FINISHED)
+
+    def test_without_split_counts_the_review_launches_as_before(self) -> None:
+        self.assertEqual(self.step()["status"], job.STATUS_FINISHED)
+
+    def test_a_manual_mode_or_no_reviewer_keeps_the_ordinary_external_gate(self) -> None:
+        with self.counts(1, 4):
+            unset = self.step(reviewer_options=None)
+            manual = job.execute_step(
+                self.life.inspect(), identity=IDENTITY, runtime=self.runtime_root, reviewer=self.reviewer,
+                review_mode_options={"mode": "manual", "source": "file"})
+        for record in (unset, manual):
+            self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+            self.assertNotIn("review_round_cap_reached", record["human_gate_pending"]["what_is_required"])
+
+    def test_explain_prints_the_same_gate(self) -> None:
+        from tests.test_cli import _Args
+        args = _Args(str(self.life.root), workflow_manager=str(self.life.stub))
+        args.effective_settings = settings.resolve(
+            settings.empty(self.life.td / "settings.toml"), cli={"reviewer.harness": "codex"})
+        out = io.StringIO()
+        with self.counts(1, 4), contextlib.redirect_stdout(out):
+            cli.cmd_explain(args, self.runtime_root, IDENTITY)
+        self.assertIn("review_round_cap_reached: ", out.getvalue())
+        self.assertNotIn("review mode", out.getvalue().lower().replace("review_mode", ""))
+
+
 class HappyPathTest(_ReviewCase):
     def test_an_exact_verdict_is_ingested_and_the_phase_advances_with_no_claude_worker(self) -> None:
         real = protocol.record_external_result

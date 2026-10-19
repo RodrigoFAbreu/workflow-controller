@@ -12,7 +12,7 @@ ground-truth record of the phase and of each checkpoint.
 | --- | --- |
 | CP1 The two settings and the options | complete: `review.local_round_cap` and `review.external_round_cap` (table generation 12), `--review-local-round-cap` and `--review-external-round-cap` on `run` and `step`; the no-policy golden regenerated for the two rows. Checked with `tests.test_settings`, `tests.test_trunk_preflight`, `tests.test_cli`, `tests.test_docs` and `tools/check_docs.py`. |
 | CP2 The cap rule over split counts | complete: `split_rounds`, `effective_caps`, `split_cap_decision` and `EXTERNAL_REVIEW_ACTIONS` in `controller/review_rounds.py`; the fallback functions are untouched. Checked with `tests.test_review_rounds` and `tests.test_write_containment`. |
-| CP3 The gate reads the rule | pending |
+| CP3 The gate reads the rule | complete: `_review_cap_gate` takes `RoundCaps` and words the stop per D5 (stage, which cap fired, count, cap, where the counts came from); `external_review_cap_gate` is checked in `execute_step` before a review job and by `explain` at the same point; `cli._round_caps` builds the caps from the settings. Checked with the cli, review-rounds, evidence, protocol, review-job, scenario and lifecycle suites, the no-policy golden `--check` and `tools/check_docs.py`. |
 | CP4 Documentation, roadmap and the whole suite | pending |
 
 ## Next action

@@ -7372,8 +7372,13 @@ def functional_forecast(runtime_root: Path, managed_repo: Any, work_item: Any, d
         return None
     plan = _functional_plan(runtime_root, managed_repo, work_item_id, decision)
     previous = plan.previous.get("functional") if plan.previous is not None else None
+    refused: list[dict] = []
+    if plan.candidate is not None:
+        _writable, refused_patterns = functional_review.derive_writable_locations(
+            plan.candidate.root_gitignore, plan.candidate.manifest)
+        refused = [{"pattern": item.pattern, "reason": item.reason} for item in refused_patterns]
     return {
-        "row": functional_review.ROW, "head": plan.head,
+        "row": functional_review.ROW, "head": plan.head, "refused": refused,
         "checklist_blob": None if plan.candidate is None else plan.candidate.checklist_blob,
         "flows": [flow.flow_id for flow in plan.flows],
         "next": plan.stop or "run", "detail": plan.detail or None, "rounds": plan.rounds,
@@ -7621,7 +7626,8 @@ def _conclude_functional(
                 "code": FUNCTIONAL_FAILED_CODE, "message": result.get("detail") or exc.message})
         return stop(functional_review.GATE_RESULTS_INVALID, functional_review.OUTCOME_INVALID, fields=common,
                     detail=exc.message, sandbox=kept)
-    entries = functional_review.complete_entries(output_dir, flows, entries, timed_out=outcome == "timeout",
+    not_run_dir = runtime_root / "jobs" / job_id / "functional-not-run"  # the tester cannot write here
+    entries = functional_review.complete_entries(not_run_dir, flows, entries, timed_out=outcome == "timeout",
                                                  job_id=job_id, timeout_seconds=timeout_seconds)
     for entry in entries:
         if entry.log_content is not None:

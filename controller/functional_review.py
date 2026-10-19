@@ -562,14 +562,16 @@ def not_run_log(flow: Flow, *, cause: str, job_id: str, timeout_seconds: int | N
 
 
 def complete_entries(
-    output_dir: Path, flows: Sequence[Flow], entries: Sequence[Entry], *, timed_out: bool, job_id: str,
+    log_dir: Path, flows: Sequence[Flow], entries: Sequence[Entry], *, timed_out: bool, job_id: str,
     timeout_seconds: int | None = None,
 ) -> list[Entry]:
     """One entry per flow, in checklist order. A flow the tester left out is
     a ``failed`` ``environment`` entry (not a product defect, O1) with a
     Controller-written summary naming the cause and a Controller-written log
     whose sha256 is a valid ``log_digest``, so it is recorded rather than
-    refused as ``evidence_malformed``."""
+    refused as ``evidence_malformed``. ``log_dir`` is where the Controller
+    writes those logs: a folder the tester cannot write (never the output
+    folder, where a planted symlink would steer the write, D2/O2)."""
     by_id = {entry.flow_id: entry for entry in entries}
     cause = CAUSE_TIMEOUT if timed_out else CAUSE_LEFT_OUT
     completed: list[Entry] = []
@@ -580,7 +582,7 @@ def complete_entries(
         content = not_run_log(flow, cause=cause, job_id=job_id, timeout_seconds=timeout_seconds)
         completed.append(Entry(
             flow_id=flow.flow_id, status=STATUS_FAILED, summary=not_run_summary(cause), reason=REASON_ENVIRONMENT,
-            log_path=output_dir / not_run_log_name(flow.flow_id), log_digest=sha256_bytes(content),
+            log_path=log_dir / not_run_log_name(flow.flow_id), log_digest=sha256_bytes(content),
             log_content=content,
         ))
     return completed

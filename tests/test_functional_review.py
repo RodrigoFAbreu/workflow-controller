@@ -362,7 +362,7 @@ class NotRunTest(unittest.TestCase):
         left = completed[0]
         self.assertEqual((left.status, left.reason), ("failed", "environment"))
         self.assertEqual(left.summary, "not run: the tester left this flow out of the results file")
-        self.assertEqual(left.log_path, self.out / "flow-1.not-run.log")
+        self.assertEqual(left.log_path, self.out / "flow-1.not-run.log")  # (the log folder is the caller's)
         self.assertEqual(left.log_digest, fr.sha256_bytes(left.log_content))
         self.assertRegex(left.log_digest, r"^[0-9a-f]{64}$")
         self.assertIn(JOB.encode(), left.log_content)

@@ -1209,6 +1209,10 @@ def _print_functional(forecast: dict) -> None:
     if previous is not None:
         print(f"  the previous tester job {previous['job_id']} ended {previous['outcome']} at head "
               f"{str(previous['head'])[:12]}; {forecast['rounds']} run(s) ended with findings")
+    refused = forecast.get("refused")
+    if refused:
+        print("  .gitignore patterns the sandbox does not make writable: "
+              + "; ".join(f"{item['pattern']} ({item['reason']})" for item in refused))
     if forecast["kept_sandboxes"]:
         print(f"  a sandbox kept by an earlier breach: {', '.join(forecast['kept_sandboxes'])}")
 

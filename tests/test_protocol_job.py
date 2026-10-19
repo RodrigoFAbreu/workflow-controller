@@ -11,6 +11,7 @@ stops: nothing here reads an outcome (that is ``tests/test_protocol_outcome.py``
 from __future__ import annotations
 
 import contextlib
+import subprocess
 import json
 import sys
 import tempfile
@@ -956,6 +957,34 @@ ws.state_transaction(Path.cwd(), lambda s: state)
         self.assertEqual(record["functional"]["gate"], "functional_unchanged")
         self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["lane_blocked"])
         self.assertIn("Workflow", record["human_gate_pending"]["what_is_required"])
+
+    def test_a_symlink_the_tester_plants_at_a_not_run_log_name_redirects_no_controller_write(self) -> None:
+        life = self.life(flows=2)
+        victim = life.runtime / "jobs" / "other-job.json"
+        controller_runtime.write_json(life.runtime, "jobs/other-job.json", {"keep": "me"})
+        before = victim.read_bytes()
+
+        def plan(kwargs, outdir):
+            (outdir / "flow-1.log").write_text("log of flow-1\n")
+            (outdir / "flow-2.not-run.log").symlink_to(victim)
+            (outdir / functional_review.RESULTS_FILE).write_text(json.dumps([
+                {"flow_id": "flow-1", "status": "passed", "summary": "ok", "log": "flow-1.log"}]))
+
+        life.plan = plan
+        record = life.step()
+        self.assertEqual(record["functional"]["outcome"], "environment_limited")  # flow-2 was left out
+        self.assertEqual(victim.read_bytes(), before)
+        self.assertTrue((life.runtime / "jobs" / record["job_id"] / "functional-not-run" / "flow-2.not-run.log").is_file())
+
+    def test_explain_lists_the_gitignore_patterns_the_derivation_refused(self) -> None:
+        life = self.life()
+        ignore = life.root / ".gitignore"
+        ignore.write_text(ignore.read_text() + "*.egg-info/\n")
+        subprocess.run(["git", "-C", str(life.root), "commit", "-qam", "ignore egg-info"], check=True)
+        refused = life.explain()["functional"]["refused"]
+        self.assertIn("*.egg-info/", [item["pattern"] for item in refused])
+        self.assertIn("*.egg-info/", life.explain_text())
+        self.assertIn("does not make writable", life.explain_text())
 
     def test_the_round_bound_stops_the_fourth_tester_run_and_names_the_remedy(self) -> None:
         life = self.life()

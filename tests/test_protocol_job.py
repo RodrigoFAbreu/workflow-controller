@@ -1060,6 +1060,21 @@ class TheFaultStopsTest(_TesterCase):
         self.assertEqual(record["reconciliation_evidence"]["code"], job.FUNCTIONAL_LIMIT_CODE)
         self.assertEqual((life.evidence(), life.reservations()), ({}, {}))
 
+    def test_a_fault_after_the_run_ends_the_record_failed_and_releases_the_reservation(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "failed", "defect")]
+
+        def refused(*args, **kwargs):
+            raise job.ControllerError("the functional_review artifact cannot be resolved")
+
+        with mock.patch.object(protocol, "resolve_artifact", refused), self.assertRaises(job.ControllerError):
+            life.step(gate=life.usage_gate())
+        [record] = life.tester_records()
+        self.assertEqual((record["status"], record["functional"]["outcome"]), (job.STATUS_FAILED, "error"))
+        self.assertEqual(record["reconciliation_evidence"]["code"], "ControllerError")
+        self.assertEqual(life.reservations(), {})
+        self.assertEqual(job.pending_reconciliation_jobs(life.runtime, life.inspect(), IDENTITY), [])
+
     def test_the_reservation_is_released_on_a_fault_and_on_a_clean_run(self) -> None:
         life = self.life()
         life.plan = [("flow-1", "passed", None)]

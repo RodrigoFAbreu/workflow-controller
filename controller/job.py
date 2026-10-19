@@ -7470,6 +7470,7 @@ def _run_functional(
 
     spawned: dict = {}
     out: dict = {}
+    ended: dict = {}  # set once the terminal record is written, so a later fault does not write it again
 
     def finish(status: str, *, outcome: str, gate: Decision | None = None, evidence_block: dict | None = None,
                fields: Mapping | None = None, after: str | None = None, verified: bool = False,
@@ -7495,6 +7496,7 @@ def _run_functional(
             updated["usage"] = _codex_end_block(usage_block, out.get("readings") or [], out.get("first_readings") or [])
         record = _persist(runtime_root, job_id, {**record, **updated}, event=event or _final_event(status),
                           details={"functional": {key: block.get(key) for key in ("outcome", "gate", "detail")}})
+        ended["status"] = status
         if usage_block is not None:
             last = {r["window"]: r for r in (out.get("readings") or [])}
             record = _usage_account(runtime_root, record, end_readings=list(last.values()) if started else None,
@@ -7574,6 +7576,12 @@ def _run_functional(
             managed_repo, runtime_root=runtime_root, identity=identity, work_item_id=work_item_id, decision=decision,
             digests=digests, job_id=job_id, flows=flows, candidate=candidate, result=result, finish=finish, stop=stop,
             timeout_seconds=timeout_seconds)
+    except Exception as exc:  # noqa: BLE001 -- a fault after the run (writing a log, the findings) ends the record
+        if not ended:
+            finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields={
+                "detail": str(exc), "credentials": result.get("credentials")},
+                evidence_block={"code": type(exc).__name__, "message": str(exc)})
+        raise
     finally:
         review.settle_functional(result)
 

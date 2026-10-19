@@ -20,5 +20,8 @@ ground-truth record of the phase and of each checkpoint.
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-automated-functional-review` for the next checkpoint (one checkpoint per
-invocation).
+Every checkpoint is complete and the self-review is done: a fault after the tester ran (writing a "not run" log or
+the findings file) left the tester record `LAUNCHED`, which held every later step at a pending job and kept the usage
+reservation open; `_run_functional` now ends the record `FAILED` and re-raises, as the launch faults already did
+(`tests.test_protocol_job.TheFaultStopsTest`). The whole suite (`tools/run_tests.py`, 4533 tests) fails only the two
+Git 2.56 trailer tests that fail on `main` too. Implementation revision 1 goes to the local implementation review.

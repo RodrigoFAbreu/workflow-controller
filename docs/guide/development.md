@@ -12,6 +12,7 @@ python3 tools/run_tests.py                          # everything, in parallel sh
 python3 -m unittest discover -s tests -t .          # the Controller's own suite, serially (about 8 min)
 CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v  # wheel build + venv install
 CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_repo -v  # opt-in: live claude, real spend
+CONTROLLER_LIVE_CLAUDE_TESTS=1 python3 -m unittest tests.test_functional_enforcement -v  # opt-in: live sandbox probes, real spend, own HOME
 CONTROLLER_TEST_OLD_GIT=/path/to/git-2.35 python3 -m unittest tests.test_workflow_contract -k fsmonitor  # opt-in: a Git before 2.36
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```

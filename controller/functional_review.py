@@ -293,9 +293,12 @@ def _paragraph_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[s
         match = None if mask[index] else _BOLD_RE.match(line)
         if not match:
             continue
+        # A flow runs to the next flow, heading or bold paragraph: a blank line
+        # does not end it, since a table or a list of cases may follow one.
         end = index + 1
         while end < len(lines):
-            if not mask[end] and (not lines[end].strip() or _BOLD_RE.match(lines[end]) or _heading(lines[end], False)):
+            if not mask[end] and (_BOLD_RE.match(lines[end]) or _heading(lines[end], False)
+                                  or (lines[end].startswith("**") and not lines[end - 1].strip())):
                 break
             end += 1
         flows.append((match.group("label"), "\n".join(lines[index:end]).rstrip()))
@@ -890,11 +893,36 @@ def tester_flags(settings_path: Path) -> list[str]:
             "--settings", str(settings_path)]
 
 
-def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run) -> None:
+_SECCOMP_PROGRAM = (
+    "import ctypes,struct,sys\n"
+    "libc=ctypes.CDLL(None,use_errno=True)\n"
+    "libc.prctl.argtypes=[ctypes.c_int]+[ctypes.c_ulong]*4\n"
+    "if libc.prctl(38,1,0,0,0)!=0: sys.exit(2)\n"
+    "insn=ctypes.create_string_buffer(struct.pack('HBBI',6,0,0,0x7fff0000),8)\n"
+    "prog=ctypes.create_string_buffer(struct.pack('HxxxxxxP',1,ctypes.addressof(insn)),16)\n"
+    "sys.exit(0 if libc.prctl(22,2,ctypes.addressof(prog),0,0)==0 else 3)\n"
+)
+
+
+def _is_native_executable(path: str) -> bool:
+    """Whether ``path`` is an ELF binary: the native Claude build embeds the
+    seccomp helper, a script or package launcher may not."""
+    try:
+        with open(os.path.realpath(path), "rb") as handle:
+            return handle.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run,
+                 is_native: Callable[[str], bool] = _is_native_executable) -> None:
     """The part of the launch probe that needs no model: every program of
-    :data:`REQUIRED_PROGRAMS` is on ``PATH`` and ``bwrap`` can make an
-    unprivileged namespace. Raises :class:`TesterUnavailable` naming what is
-    missing."""
+    :data:`REQUIRED_PROGRAMS` is on ``PATH``, ``bwrap`` can make an
+    unprivileged namespace, the kernel accepts a seccomp filter, and ``claude``
+    is the native build. The CLI itself only warns when its seccomp helper is
+    missing and then runs without Unix-socket blocking, so ``failIfUnavailable``
+    cannot be relied on for that component (D2). Raises
+    :class:`TesterUnavailable` naming what is missing."""
     missing = [name for name in REQUIRED_PROGRAMS if which(name) is None]
     if missing:
         raise TesterUnavailable(f"the sandbox needs {', '.join(missing)} on PATH, which is not installed",
@@ -907,6 +935,17 @@ def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Call
     if result.returncode != 0:
         raise TesterUnavailable("bwrap cannot make an unprivileged namespace here: "
                                 + result.stderr.decode("utf-8", "replace").strip()[:300])
+    try:
+        result = run([sys.executable, "-I", "-c", _SECCOMP_PROGRAM], capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise TesterUnavailable(f"the seccomp filter check cannot be run: {exc}") from exc
+    if result.returncode != 0:
+        raise TesterUnavailable("the kernel does not accept a seccomp filter here, so the sandbox cannot block "
+                                "Unix sockets")
+    claude = which("claude")
+    if claude is None or not is_native(claude):
+        raise TesterUnavailable("the sandbox's Unix-socket blocking needs the native claude build, which embeds its "
+                                f"seccomp helper; {claude or 'claude'} is not one")
 
 
 def result_event_text(event: Mapping[str, Any]) -> str:

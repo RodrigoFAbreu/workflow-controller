@@ -101,22 +101,61 @@ class StaticProbeTests(unittest.TestCase):
                 self.assertIn(gone, str(caught.exception))
                 self.assertEqual(caught.exception.code, fr.GATE_TESTER_UNAVAILABLE)
 
+    @staticmethod
+    def probe(run, *, native=True, claude="/usr/bin/claude"):
+        which = lambda name: claude if name == "claude" else f"/usr/bin/{name}"  # noqa: E731
+        fr.static_probe(which=which, run=run, is_native=lambda path: native)
+
+    @staticmethod
+    def ok(code=0, err=b""):
+        return subprocess.CompletedProcess([], code, b"", err)
+
     def test_a_bwrap_that_cannot_make_a_namespace_is_unavailable(self) -> None:
-        run = mock.Mock(return_value=subprocess.CompletedProcess([], 1, b"", b"bwrap: No permissions to create"))
         with self.assertRaises(fr.TesterUnavailable) as caught:
-            fr.static_probe(which=lambda name: f"/usr/bin/{name}", run=run)
+            self.probe(mock.Mock(return_value=self.ok(1, b"bwrap: No permissions to create")))
         self.assertIn("No permissions", str(caught.exception))
 
     def test_a_bwrap_that_cannot_be_run_is_unavailable(self) -> None:
         with self.assertRaises(fr.TesterUnavailable):
-            fr.static_probe(which=lambda name: f"/usr/bin/{name}", run=mock.Mock(side_effect=OSError("denied")))
+            self.probe(mock.Mock(side_effect=OSError("denied")))
+
+    def test_a_kernel_without_seccomp_filters_is_unavailable(self) -> None:
+        run = mock.Mock(side_effect=[self.ok(), self.ok(3)])
+        with self.assertRaises(fr.TesterUnavailable) as caught:
+            self.probe(run)
+        self.assertIn("seccomp", str(caught.exception))
+        self.assertEqual(caught.exception.code, fr.GATE_TESTER_UNAVAILABLE)
+
+    def test_a_seccomp_check_that_cannot_be_run_is_unavailable(self) -> None:
+        with self.assertRaises(fr.TesterUnavailable):
+            self.probe(mock.Mock(side_effect=[self.ok(), OSError("denied")]))
+
+    def test_a_claude_that_is_not_the_native_build_is_unavailable(self) -> None:
+        with self.assertRaises(fr.TesterUnavailable) as caught:
+            self.probe(mock.Mock(return_value=self.ok()), native=False)
+        self.assertIn("native", str(caught.exception))
+
+    def test_a_missing_claude_is_unavailable(self) -> None:
+        which = lambda name: None if name == "claude" else f"/usr/bin/{name}"  # noqa: E731
+        with self.assertRaises(fr.TesterUnavailable):
+            fr.static_probe(which=which, run=mock.Mock(return_value=self.ok()), is_native=lambda path: True)
+
+    def test_the_native_check_reads_the_elf_magic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            elf, script = Path(tmp, "elf"), Path(tmp, "script")
+            elf.write_bytes(b"\x7fELF\x02")
+            script.write_text("#!/usr/bin/env node\n")
+            self.assertTrue(fr._is_native_executable(str(elf)))
+            self.assertFalse(fr._is_native_executable(str(script)))
+            self.assertFalse(fr._is_native_executable(str(Path(tmp, "absent"))))
 
     def test_a_working_host_passes(self) -> None:
-        run = mock.Mock(return_value=subprocess.CompletedProcess([], 0, b"", b""))
-        fr.static_probe(which=lambda name: f"/usr/bin/{name}", run=run)
-        self.assertEqual(run.call_args.args[0][0], "bwrap")
+        run = mock.Mock(return_value=self.ok())
+        self.probe(run)
+        self.assertEqual(run.call_args_list[0].args[0][0], "bwrap")
+        self.assertEqual(len(run.call_args_list), 2)
 
-    @unittest.skipUnless(shutil.which("bwrap") and shutil.which("socat"), "bwrap and socat are absent")
+    @unittest.skipUnless(CLAUDE and shutil.which("bwrap") and shutil.which("socat"), "claude, bwrap or socat is absent")
     def test_this_host_passes_the_static_probe(self) -> None:
         fr.static_probe()
 
@@ -171,6 +210,21 @@ class JudgeTests(unittest.TestCase):
             self.assertIn(f"\nw {name} ", command)
         self.assertIn("/w/clone/.git/config", command)
         self.assertIn("/var/tmp/m1", command)
+
+    def test_the_home_probe_writes_where_nothing_refuses_it(self) -> None:
+        """The positive control of the home probe: without a sandbox, the line writes, so only enforcement can make
+        the live probe's REFUSED."""
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp, "home")
+            (home / ".config").mkdir(parents=True)
+            targets = fr.ProbeTargets(
+                clone_dir=Path(tmp, "clone"), output_dir=Path(tmp, "out"), tracked=TRACKED, checklist=CHECKLIST,
+                writable="build", stand_in_home=home, socket_path=Path(tmp, "s"), tcp_port=9)
+            lines = fr.probe_command(targets, marker="m1").splitlines()
+            script = "\n".join([lines[0], next(line for line in lines if line.startswith("w home "))])
+            done = subprocess.run(["sh"], input=script.encode(), capture_output=True, check=True)
+            self.assertEqual(done.stdout.decode().strip(), "PROBE home WROTE")
+            self.assertTrue((home / ".config" / "probe").exists())
 
 
 class Host:
@@ -248,7 +302,13 @@ def run_claude(prompt: str, *, cwd: Path, settings: dict, env_path: str | None =
     command = [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
                "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                "--disable-slash-commands", "--model", LIVE_MODEL, "--effort", "low", *fr.tester_flags(settings_path)]
-    env = dict(os.environ)
+    # The opted-in launch gets its own home and only the authentication the operator names: never the real
+    # ~/.claude, a CLAUDE_CONFIG_DIR or the rest of the environment.
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(cwd.parent / "claude-home")}
+    for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if name in os.environ:
+            env[name] = os.environ[name]
+    Path(env["HOME"]).mkdir(exist_ok=True)
     if env_path is not None:
         env["PATH"] = env_path
     done = subprocess.run(command, input=prompt.encode(), capture_output=True, cwd=cwd, env=env, timeout=300,
@@ -269,6 +329,10 @@ def result_text(result: dict) -> str:
     return fr.result_event_text(result) or json.dumps(result)
 
 
+LIVE = os.environ.get("CONTROLLER_LIVE_CLAUDE_TESTS") == "1"
+
+
+@unittest.skipUnless(LIVE, "live model probes run only with CONTROLLER_LIVE_CLAUDE_TESTS=1 (they spend model usage)")
 @unittest.skipUnless(CLAUDE and shutil.which("bwrap") and shutil.which("socat"), "claude, bwrap or socat is absent")
 class LiveEnforcementTests(unittest.TestCase):
     """The probes of D10 on the pinned CLI, under the real sandbox settings."""
@@ -292,7 +356,7 @@ class LiveEnforcementTests(unittest.TestCase):
 
     def test_the_boundary_holds_on_the_pinned_cli(self) -> None:
         stand_in_home = self.base / "stand-in-home"
-        stand_in_home.mkdir()
+        (stand_in_home / ".config").mkdir(parents=True)  # an existing writable parent: only the sandbox can refuse
         targets = fr.ProbeTargets(
             clone_dir=self.dirs["clone"], output_dir=self.dirs["out"], tracked=TRACKED, checklist=CHECKLIST,
             writable="build", stand_in_home=stand_in_home, socket_path=Path("x"), tcp_port=0)
@@ -314,7 +378,7 @@ class LiveEnforcementTests(unittest.TestCase):
         self.assertEqual((self.dirs["clone"] / CHECKLIST).read_bytes(), ORIGINAL)
         self.assertEqual((self.dirs["clone"] / ".git" / "config").read_text(), "[core]\n")
         self.assertFalse((self.dirs["clone"] / "probe-new-file").exists())
-        self.assertFalse((stand_in_home / ".config").exists())
+        self.assertFalse((stand_in_home / ".config" / "probe").exists())
         for path in self.host_paths:  # /dev/shm is a private mount inside the sandbox: its line may say WROTE
             self.assertFalse(path.exists(), path)
         self.assertEqual(host.hits, [], "the sandbox reached a host socket")

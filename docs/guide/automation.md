@@ -412,8 +412,8 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    `GIT_ALLOW_PROTOCOL=file` and `GIT_SSH_COMMAND=false`; scratch `HOME`, `XDG_*` and `TMPDIR`; and
    no other tool on `PATH`;
 3. starts an independent tester, a `functional_test` job on the `functional-tester` role (Sonnet 5.5,
-   `medium`, one agent, `Bash` only), inside Claude Code's own shell sandbox (bubblewrap and `socat`
-   are required; the writable locations are the output folder, the scratch directories and the
+   `medium`, one agent, `Bash` only), inside Claude Code's own shell sandbox (bubblewrap, `socat`,
+   a kernel that accepts a seccomp filter and the native `claude` build are required; the writable locations are the output folder, the scratch directories and the
    locations derived from the repository's `.gitignore`; no network and no Unix socket; the
    product files, the checklist and `.git` are read-only). It writes `RESULTS.json`, one entry per
    flow, each with a log file and, for a failure, the reason `defect` (the product did not behave as

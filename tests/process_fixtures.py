@@ -320,9 +320,9 @@ LEFTOVER_INVENTORY = (
      "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
     ("test_review_mode.py", "start:run", 1, "short",
      "the captures generator's --check run: a read-only comparison that exits by itself"),
-    ("test_functional_enforcement.py", "start:run", 2, "bounded",
-     "the `sh -n` syntax check of the probe command (exits at once) and the live tester-shaped launch of the real CLI "
-     "(timeout=300, skipped without claude, bwrap and socat): both are waited by the test"),
+    ("test_functional_enforcement.py", "start:run", 3, "bounded",
+     "the `sh -n` syntax check and the unsandboxed home-probe control (each exits at once) and the live tester-shaped "
+     "launch of the real CLI (timeout=300, opt-in, skipped without claude, bwrap and socat): all waited by the test"),
     ("test_functional_sandbox.py", "start:run", 2, "short",
      "git calls and the fakes' launchers run by the test and waited for; each exits at once"),
     ("test_harness.py", "start:run", 1, "short",

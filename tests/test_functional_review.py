@@ -193,6 +193,15 @@ class CommittedChecklistsTest(unittest.TestCase):
         for word in ("Setup", "Flows", "Test data", "Known limitations"):
             self.assertFalse(any(flow.text.startswith(f"**{word}") for flow in flows))
 
+    def test_a_bold_flow_keeps_its_table_across_blank_lines(self) -> None:
+        flows = {f.label: f for f in self.numbered("bold_labelled_454ffe7.md")}
+        text = flows["E"].text
+        for case in ("| `feat: add x` | `ok: feat → minor`, exit 0 |", "| `Update stuff` |",
+                     "In the repository itself (the pre-cutover"):
+            self.assertIn(case, text)
+        self.assertNotIn("Optional, K.", flows["J"].text)
+        self.assertNotIn("Known limitations", flows["J"].text)
+
     def test_table_rows_a_to_j(self) -> None:
         flows = self.numbered("table_rows_eeeb4fa.md")
         self.assertEqual([f.label for f in flows], self.EXPECTED)

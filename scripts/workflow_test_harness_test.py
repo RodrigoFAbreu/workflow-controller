@@ -276,6 +276,7 @@ class TestSeedExistingWorkItems(unittest.TestCase):
                     state, governing_workflow_version="2.1", **self.FACTS)
                 self.assertEqual(seeded["active_work_item_id"], real["active_work_item_id"])
                 real["work_items"]["wi"]["governing_workflow_version"] = "2.1"
+                real["work_items"]["wi"]["review_round_counts"] = ws.initial_review_round_counts("2.1")
                 self.assertEqual(seeded, real)
 
     def test_seed_existing_remediation_child_equals_the_real_creator_but_for_the_version(self):
@@ -290,6 +291,7 @@ class TestSeedExistingWorkItems(unittest.TestCase):
         self.assertEqual(seeded_id, real_id)
         self.assertEqual(seeded["active_work_item_id"], "parent")
         real["work_items"][real_id]["governing_workflow_version"] = "2.1"
+        real["work_items"][real_id]["review_round_counts"] = ws.initial_review_round_counts("2.1")
         self.assertEqual(seeded, real)
         # A second child is numbered after the first, in both.
         real2, real2_id = ws.create_remediation_child_work_item(

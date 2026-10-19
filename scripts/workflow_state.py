@@ -10501,6 +10501,7 @@ def default_work_item(
         "plan_review_stages": None,
         "functional_acceptance_status": None,
         "blocking_decisions": [],
+        "review_round_counts": initial_review_round_counts(governing_workflow_version),
         "state_revision": 1,
         "last_transition": last_transition,
     }
@@ -14709,6 +14710,10 @@ ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     # recorded Optional findings sit uncommitted until its next commit,
     # exactly as its `gate_evidence` does.
     "optional_findings",
+    # workflow-2.15.0 CP1 (`D-Counter`, `review-round-counts`): this item's own
+    # per-role review-round counts sit uncommitted until its next commit,
+    # exactly as its `optional_findings` do.
+    "review_round_counts",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
@@ -14728,6 +14733,8 @@ RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS = frozenset({
     "reopenings",
     # workflow-2.14.0 CP1 (`D-Ledger`): as in the ordinary set above.
     "optional_findings",
+    # workflow-2.15.0 CP1 (`D-Counter`): as in the ordinary set above.
+    "review_round_counts",
 })
 
 # workflow-2.9.1 (`D-Helper`, step 3): the item fields a committed entry into
@@ -14739,6 +14746,8 @@ REVIEW_STAGE_WRITE_COMMIT_FIELDS = frozenset({
     "implementation_review_stages", "gate_evidence", "reopenings",
     # workflow-2.14.0 CP1 (`D-Ledger`): a REVISE carrying an Optional finding.
     "optional_findings",
+    # workflow-2.15.0 CP1 (`D-Counter`): every recorded verdict counts a round.
+    "review_round_counts",
 })
 
 RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES = (
@@ -14939,6 +14948,9 @@ TECHNICAL_APPROVAL_COMMIT_FIELDS = frozenset({
     # workflow-2.14.0 CP1 (`D-Ledger`): an APPROVE that recorded an Optional
     # finding leaves the ledger pending until this commit.
     "optional_findings",
+    # workflow-2.15.0 CP1 (`D-Counter`): an APPROVE leaves its counted round
+    # pending until this commit.
+    "review_round_counts",
 })
 
 
@@ -15846,6 +15858,83 @@ def _record_optional_findings(work_item: dict, verdict_text: str | None, *, verd
     })
 
 
+REVIEW_ROUND_COUNTS_KEY = "review_round_counts"
+_REVIEW_ROUND_COUNTS_STAGES = ("plan", "implementation")
+_REVIEW_ROUND_COUNTS_ROLES = ("local", "external")
+
+
+def initial_review_round_counts(governing_workflow_version: str) -> dict:
+    """`D-Counter`, workflow-2.15.0: the value `default_work_item` writes at
+    creation. A stage records per-role rounds only where the version has that
+    stage's two-stage protocol (plan: `TWO_STAGE_PLAN_REVIEW_VERSIONS`;
+    implementation: `2.2` only); otherwise it is `None`, for the item's whole
+    life -- a count is never started mid-history."""
+    zero = {"local": 0, "external": 0}
+    return {
+        "plan": dict(zero) if governing_workflow_version in TWO_STAGE_PLAN_REVIEW_VERSIONS else None,
+        "implementation": dict(zero) if governing_workflow_version == "2.2" else None,
+    }
+
+
+class InvalidReviewRoundCountsError(Exception):
+    """`work_items[<id>].review_round_counts` is not the shape `D-Counter` fixes."""
+
+
+def _is_count(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _stage_counts_well_formed(value: object) -> bool:
+    return (
+        isinstance(value, dict) and set(value) == set(_REVIEW_ROUND_COUNTS_ROLES)
+        and all(_is_count(value[role]) for role in _REVIEW_ROUND_COUNTS_ROLES)
+    )
+
+
+def review_round_counts_errors(value: object) -> list[str]:
+    """Every shape problem of a `review_round_counts` value (empty when valid):
+    an object with exactly `plan` and `implementation`, each `None` or an
+    object with exactly `local` and `external`, non-negative integers and not
+    booleans. Pure; never checks that a count matches the history."""
+    if not isinstance(value, dict):
+        return [f"review_round_counts must be an object, not {type(value).__name__}"]
+    problems = []
+    if set(value) != set(_REVIEW_ROUND_COUNTS_STAGES):
+        problems.append("review_round_counts must hold exactly plan and implementation")
+    for stage in _REVIEW_ROUND_COUNTS_STAGES:
+        if stage in value and value[stage] is not None and not _stage_counts_well_formed(value[stage]):
+            problems.append(
+                f"review_round_counts[{stage!r}] must be null or hold exactly local and external "
+                f"as non-negative integers")
+    return problems
+
+
+def validate_review_round_counts(state: dict) -> None:
+    """Applies `review_round_counts_errors` to every work item that carries
+    the key. Deliberately **not** called from `validate_state`: a malformed
+    counter must never refuse an operational path (INV-3); only the explicit
+    `verify` operation reports it."""
+    for work_item_id, work_item in (state.get("work_items") or {}).items():
+        if isinstance(work_item, dict) and REVIEW_ROUND_COUNTS_KEY in work_item:
+            problems = review_round_counts_errors(work_item[REVIEW_ROUND_COUNTS_KEY])
+            if problems:
+                raise InvalidReviewRoundCountsError(f"work_items[{work_item_id!r}]: " + "; ".join(problems))
+
+
+def _count_review_round(work_item: dict, stage: str, role: str) -> None:
+    """Counts one recorded verdict (`APPROVE` or `REVISE`) of `role` at `stage`
+    in place (the caller owns a deep copy). Increments an existing, well-formed
+    pair only: an absent key, a `None` stage or any malformed value is left
+    exactly as it was, and this never raises (INV-3)."""
+    counts = work_item.get(REVIEW_ROUND_COUNTS_KEY)
+    if review_round_counts_errors(counts):
+        return
+    pair = counts[stage]
+    if pair is None:
+        return
+    pair[role] += 1
+
+
 class InvalidOptionalFindingsError(Exception):
     """`work_items[<id>].optional_findings` is not the shape `D-Ledger` fixes."""
 
@@ -16094,6 +16183,7 @@ def record_local_plan_review(
     else:  # BLOCK
         return state
 
+    _count_review_round(work_item, "plan", "local")
     _record_optional_findings(
         work_item, verdict_text, verdict=verdict, stage="plan", role=LOCAL_MODEL_PLAN_REVIEW, round=round,
         review_content_id=review_content_id, now=now)
@@ -16222,6 +16312,7 @@ def record_manual_plan_review(
     else:  # BLOCK
         return state
 
+    _count_review_round(work_item, "plan", "external")
     _record_optional_findings(
         work_item, verdict_text, verdict=verdict, stage="plan", role=MANUAL_EXTERNAL_PLAN_REVIEW, round=round,
         review_content_id=current_review_content_id, now=now)
@@ -17423,6 +17514,7 @@ def record_local_implementation_review(
     else:  # BLOCK
         return state
 
+    _count_review_round(work_item, "implementation", "local")
     _record_optional_findings(
         work_item, verdict_text, verdict=verdict, stage="implementation", role=LOCAL_MODEL_IMPLEMENTATION_REVIEW, round=round,
         review_content_id=review_content_id, now=now)
@@ -17541,6 +17633,7 @@ def record_manual_implementation_review(
     else:  # BLOCK
         return state
 
+    _count_review_round(work_item, "implementation", "external")
     _record_optional_findings(
         work_item, verdict_text, verdict=verdict, stage="implementation", role=MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW, round=round,
         review_content_id=current_review_content_id, now=now)

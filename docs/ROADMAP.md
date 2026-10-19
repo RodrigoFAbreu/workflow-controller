@@ -27,7 +27,7 @@ user with one provider is never blocked at an external gate (C14, review modes,
 [11.14](#1114-review-modes)). 1.12.0 (PR #61) added the review round cap and per-round `telemetry`
 (C13, [11.13](#1113-review-convergence)). The Controller admits Workflow 2.5.1 and 2.6.0, and any
 Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow
-2.14.0 with automatic gates (since 2026-10-18). What is complete is marked in the tables below; what
+2.15.0 with automatic gates (since 2026-10-19). What is complete is marked in the tables below; what
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16 and 2026-10-18):
@@ -140,7 +140,7 @@ reviews run here too.
 | W8 | Workflow 2.12: review convergence rules (see [11.13](#1113-review-convergence)) (released as 2.12.0, 2026-10-16) | `workflow` |
 | W9 | The next Workflow release: review-loop fixes. [workflow#35](https://github.com/RodrigoFAbreu/workflow/issues/35): `CHANGES_SINCE_REVIEW.md` shows an external reviewer the last local round instead of the changes since its own last verdict; [workflow#32](https://github.com/RodrigoFAbreu/workflow/issues/32): a flaky real-process test; [workflow#30](https://github.com/RodrigoFAbreu/workflow/issues/30) part 1: the governing-version sweep runs when a plan is published, so a plan it would reject is refused before any review (placed by the Workflow Manager lane, workflow PR #36) (released as 2.13.0, 2026-10-17) | `workflow` |
 | — | After W9: a recorded disposition for every Optional review finding before acceptance; a follow-up issue is a complete disposition and acceptance never waits for a fix ([workflow#34](https://github.com/RodrigoFAbreu/workflow/issues/34)) (released in Workflow 2.14.0, 2026-10-18: acceptance refuses until `docs/ai-workflow/registry/<id>-dispositions.json` covers every Optional finding recorded under 2.14.0) | `workflow` |
-| — | Local and external review rounds counted separately, so the Controller can cap each on its own ([workflow#43](https://github.com/RodrigoFAbreu/workflow/issues/43), Workflow roadmap row 14; the Controller's two caps, [follow-up 55](#known-follow-ups-carried-forward), wait for it) | `workflow` |
+| — | Local and external review rounds counted separately, so the Controller can cap each on its own ([workflow#43](https://github.com/RodrigoFAbreu/workflow/issues/43), Workflow roadmap row 14; the Controller's two caps, [follow-up 55](#known-follow-ups-carried-forward), wait for it) (released in Workflow 2.15.0, 2026-10-18: protocol 1.5 adds the local and external plan and implementation round counts to the next-action snapshot, for items created under 2.15.0) | `workflow` |
 | M3 | Workflow Manager and `workflow` driven by the Controller's loop | both |
 
 **After C11: the orchestrator series, in order** ([11.11](#1111-the-orchestrator-a-person-only-for-escalation);
@@ -454,8 +454,8 @@ hurts now, else in a later step or the next clean-up milestone.
    2026-10-18). They are named local and external, never after a provider, because any harness can
    run either kind of review. It depends on [workflow#43](https://github.com/RodrigoFAbreu/workflow/issues/43),
    the Workflow counting local and external rounds separately (placed as Workflow roadmap row 14).
-   Planned after C10b, once a Workflow release carries workflow#43. Until then the single cap
-   (`review.round_cap`) stays at 4 and is raised for a milestone when needed, as it was for C10a.
+   Workflow 2.15.0 carries workflow#43 and this repository runs it since 2026-10-19, so #88 is next. Until it
+   ships the single cap (`review.round_cap`) stays at 4 and is raised for a milestone when needed, as it was for C10a.
 56. [#93](https://github.com/RodrigoFAbreu/workflow-controller/issues/93): `pr_report.pending_checks` finds the `ci_green` requirement by a plain substring over the stop text, not by its `ci_green: ` token (C10b review; no defect with the current Workflow wording; CU2).
    Fixed in CU2.
 57. [#94](https://github.com/RodrigoFAbreu/workflow-controller/issues/94): tighten the tests of the Controller's `gh` vetting: assert the "world-writable" message, add a world-writable executable case, fix the blank lines (C10b review; tests only; CU2).

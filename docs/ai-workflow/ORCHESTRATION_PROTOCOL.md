@@ -1,12 +1,13 @@
 # Workflow Orchestration Protocol v1
 
-The normative specification of Orchestration Protocol v1, version `1.4`
+The normative specification of Orchestration Protocol v1, version `1.5`
 (`1.0` first shipped in Workflow 2.7.0; `1.1` adds the gate-policy rows and
 actions in Workflow 2.8.0; `1.2` adds the user-only `legacy.retire`
 alternative of row 3 and `implementation.resume` alternative of row 38c in
 Workflow 2.9.0; `1.3` adds row `1b` and the advisory `default_workflow_version`
 check in Workflow 2.10.0; `1.4` adds the `review_round` snapshot field in
-Workflow 2.12.0). An orchestrator (for example the Workflow
+Workflow 2.12.0; `1.5` adds the four per-role `review_round` counts in
+Workflow 2.15.0). An orchestrator (for example the Workflow
 Controller) drives a repository's Workflow through this protocol only. It
 copies no Workflow phases, artifact paths, helper names or transition
 rules: the Workflow owns what the lifecycle means, and the orchestrator owns
@@ -40,7 +41,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0** (protocol `1.5`).
 
 ## 2. Invocation and the envelope
 
@@ -59,8 +60,8 @@ stdout is exactly one JSON document, the **envelope**
 
 ```json
 {
-  "protocol": {"name": "workflow-orchestration", "version": "1.4"},
-  "workflow_release": "2.14.0",
+  "protocol": {"name": "workflow-orchestration", "version": "1.5"},
+  "workflow_release": "2.15.0",
   "operation": "next-action",
   "ok": true,
   "result": { "...": "operation-specific" }
@@ -192,7 +193,12 @@ directory exists. Its result (`$defs.results.describe`) is
 
 1. `state_readable`: the state file and the config parse.
 2. `state_valid`: `validate_state(state, repo_root=…)` passes, including the
-   registry-to-mirror `plan_revision` check.
+   registry-to-mirror `plan_revision` check, and (protocol `1.5`)
+   `validate_review_round_counts(state)` reports no shape problem in any work
+   item's `review_round_counts`. `validate_state`, and so every operational
+   loader (`next-action`, `record-external-result`, the writers), does not apply
+   the counter check: a malformed counter is reported here and refuses nothing
+   else.
 3. `config_valid`: `validate_config` passes, or no config file exists and
    the pre-activation default applies.
 4. `active_item_resolvable`: `active_work_item_id` is null or names a
@@ -281,7 +287,10 @@ a **decision**:
               "current_checkpoint_id": null, "next_checkpoint_id": "CP2",
               "registry_complete": false, "plan_approval": "CURRENT",
               "technical_approval": null, "plan_review_publication_status": null,
-              "review_round": {"plan": 3, "implementation": null, "current": null}},
+              "review_round": {"plan": 3, "implementation": null, "current": null,
+                              "plan_local": 2, "plan_external": 2,
+                              "implementation_local": 0,
+                              "implementation_external": 0}},
  "row": "23",
  "disposition": "automatic",
  "action": {"id": "implementation.checkpoint",
@@ -335,9 +344,10 @@ a **decision**:
     ever moved back below 2.7.0, can read a number lower than its true round,
     undetectably: for cap purposes the value is advisory for such items, and
     a consumer that must enforce a hard cap counts rounds itself.
-  - `plan` is not the ledgers' per-stage `round`, which counts one stage's
-    recorded verdicts and leaves no entry for a `REVISE`; the two can differ
-    for the same item and must not be compared.
+  - `plan` is not the ledgers' per-stage `round`. A ledger's `round` is the
+    number the reviewer wrote in the verdict header, not a Workflow count; for
+    the number of verdicts a role has recorded, read the four per-role fields
+    below.
   - `implementation` is the item's `implementation_revision` (`null` until
     set). A same-content republication after a fix is a new review under the
     same number.
@@ -346,6 +356,23 @@ a **decision**:
     `implementation_local`, `implementation_external`, else `null`. A `2.2`
     item at `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` (both stages approved,
     ready for approval) reads `null`.
+  - `plan_local`, `plan_external`, `implementation_local` and
+    `implementation_external` (protocol `1.5`) are the number of verdicts the
+    local stage and the external stage have recorded at that review stage: one
+    round of a role is one `APPROVE` or `REVISE` recorded by that role's writer
+    (a `BLOCK`, a person's approval, a `USER_OVERRIDE`, a gate-policy
+    satisfaction and a refused ingest record no round). Each is read from the
+    work item's persisted `review_round_counts`, which the writer increments in
+    the same state transaction as the verdict, so the number and the verdict
+    cannot be separated. Each is an integer, or `null` when the Workflow holds
+    no count: an item created before 2.15.0 (no key), a promoted legacy item, a
+    feedback-only item (its `EXTERNAL_*` phases record no stage verdict), a
+    stage that records no per-role rounds, or a malformed key. A number never
+    resets: a fix round, a post-fix republication or a plan amendment adds to
+    it. The external counter is the second stage whichever harness produced the
+    verdict. These count verdicts, `plan` counts contents taken out of review
+    plus one in review, so `plan_local + plan_external` can be larger or
+    smaller than `plan`; do not compare them.
 
 With no work item named and none active, the result has no `basis`; its
 `snapshot` is `{"work_item_ids": [...]}`, the sorted keys of `work_items`,
@@ -1099,14 +1126,22 @@ A consumer of protocol `1.x`:
     `gh` path) leaves `state_identity` unchanged and is the case the bound is
     for. Section 8 defined no such limit in `1.0`.
 
-### 8.1 A round cap (protocol `1.4`)
+### 8.1 A round cap (protocol `1.4`, per role from `1.5`)
 
-An orchestrator with a round cap compares `review_round[<stage>]` (section
-5.4) with it before dispatching a review or an apply action and, at the cap,
-stops dispatching and hands the item to a person. When the field is `null`
-(not derivable, including a field that was a number earlier) it counts the
-rounds itself, for example by its own review-job count for the item, and
-never treats `null` as 0 or as any number. A number is exact for an item
+An orchestrator with a round cap compares the number for the stage and role it
+is about to dispatch (`review_round.plan_local`, `plan_external`,
+`implementation_local` or `implementation_external` from protocol `1.5`, else
+`review_round[<stage>]`; section 5.4) with its cap before dispatching a review
+or an apply action and, at the cap, stops dispatching and hands the item to a
+person. The stage and role to compare follow `review_round.current`. When the
+field is `null` (not derivable, including a field that was a number earlier) it
+counts the rounds itself, for example by its own review-job count for the item,
+and never treats `null` as 0 or as any number. Two ways a number can mislead:
+**missing** (`null`: an item created before 2.15.0, a promoted legacy item, a
+feedback-only item or a malformed key; the consumer counts itself) and
+**stale** (a number that reads low after a verdict was ingested while the
+repository ran an earlier release; undetectable, so a consumer holding a hard
+cap on an item that was ever moved back counts itself). A number is exact for an item
 whose plan-review rounds all ran under Workflow 2.7.0 or later and advisory
 for cap purposes otherwise: a consumer that must enforce a hard cap on an
 item that predates 2.7.0, or on any item of a repository ever moved back
@@ -1149,6 +1184,22 @@ under automatic gates). A courier is admissible when, and only when:
 
 ## 10. Compatibility notes
 
+- **Protocol `1.5`** (Workflow 2.15.0). The `review_round` object of an item's
+  `next-action` snapshot gains four additive properties after `current`:
+  `plan_local`, `plan_external`, `implementation_local` and
+  `implementation_external`, each an integer `>= 0` or `null` (section 5.4),
+  all required in the `1.5` schema. `plan`, `implementation` and `current` are
+  unchanged. No row, action, reason code, check id, envelope key or error code
+  changed; `verify`'s `state_valid` check also reports a malformed counter
+  (section 5.2). A `1.4` consumer ignores the unknown fields (obligation 2) and
+  reads `plan`, `implementation` and `current` exactly as before, but the `1.4`
+  schema's `review_round` object has `additionalProperties: false`, so a
+  consumer that validates a `1.5` response against its own copy of the `1.4`
+  schema rejects it: validate against the `1.5` schema, or drop unknown
+  `review_round` fields first. A `1.5` consumer reading a `1.4` response (an
+  older Workflow) finds the four fields absent and treats each as `null`,
+  counting the rounds itself. Section 8.1 (the round cap) is consumer guidance
+  only.
 - **Protocol `1.4`** (Workflow 2.12.0; Workflow 2.13.0 and Workflow 2.14.0 keep it: no snapshot field,
   row, action, envelope key or classification changed). The snapshot of an item's `next-action`
   decision gains the additive `review_round` field (section 5.4). No row,

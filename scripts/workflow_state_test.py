@@ -25,6 +25,7 @@ import ast
 import contextlib
 import copy
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -20659,6 +20660,279 @@ class TestOptionalFindingsLedger(unittest.TestCase):
         for name in ("review-plan.md", "review-implementation.md"):
             with self.subTest(name=name):
                 self.assertIn("verdict_text", (commands / name).read_text())
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.15.0 CP1 (`review-round-counts`): D-Counter -- local and external
+# review rounds are counted separately, in the verdict's own state write.
+# ---------------------------------------------------------------------------
+
+_RC = "c" * 64
+_ZERO_PAIR = {"local": 0, "external": 0}
+
+
+def _counts(plan=None, implementation=None) -> dict:
+    return {"plan": plan, "implementation": implementation}
+
+
+def _plan_manual_item(**overrides) -> dict:
+    stages = {
+        "review_content_id": _RC,
+        "LOCAL_MODEL_PLAN_REVIEW": {"bundle_id": "b1", "verdict": "APPROVE", "round": 1, "completed_at": "t0"},
+        "MANUAL_EXTERNAL_PLAN_REVIEW": None,
+    }
+    defaults = {"governing_workflow_version": "2.2", "phase": "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+                "plan_review_stages": stages, "state_revision": 1}
+    defaults.update(overrides)
+    return _base_work_item(**defaults)
+
+
+def _impl_manual_item(**overrides) -> dict:
+    stages = {
+        "review_content_id": _RC,
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {"bundle_id": "b1", "verdict": "APPROVE", "round": 1, "completed_at": "t0"},
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": None,
+    }
+    defaults = {"phase": "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation_review_stages": stages,
+                "state_revision": 1}
+    defaults.update(overrides)
+    return _v22_work_item(**defaults)
+
+
+def _count_writers():
+    """(name, stage, role, build_item(**kw), call(state, verdict))."""
+    def plan_local(state, verdict):
+        return ws.record_local_plan_review(state, "wi", verdict=verdict, bundle_id="b1", review_content_id=_RC,
+                                           round=1, now="t1")
+
+    def plan_manual(state, verdict):
+        return ws.record_manual_plan_review(
+            state, "wi", verdict=verdict, bundle_id="b1", round=1, now="t1", current_review_content_id=_RC,
+            feedback_role="MANUAL_EXTERNAL_PLAN_REVIEW", feedback_review_content_id=_RC)
+
+    def impl_local(state, verdict):
+        return ws.record_local_implementation_review(state, "wi", verdict=verdict, bundle_id="b1",
+                                                     review_content_id=_RC, round=1, now="t1")
+
+    def impl_manual(state, verdict):
+        return ws.record_manual_implementation_review(
+            state, "wi", verdict=verdict, bundle_id="b1", round=1, now="t1", current_review_content_id=_RC,
+            feedback_role="MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", feedback_review_content_id=_RC)
+
+    return [
+        ("plan_local", "plan", "local",
+         lambda **kw: _v21_work_item(governing_workflow_version="2.2", state_revision=1, **kw), plan_local),
+        ("plan_external", "plan", "external", _plan_manual_item, plan_manual),
+        ("implementation_local", "implementation", "local",
+         lambda **kw: _v22_work_item(state_revision=1, **kw), impl_local),
+        ("implementation_external", "implementation", "external", _impl_manual_item, impl_manual),
+    ]
+
+
+class TestReviewRoundCounts(unittest.TestCase):
+    def test_default_work_item_writes_the_initial_value_by_version(self):
+        def made(version):
+            return ws.default_work_item(
+                work_item_id="wi", work_item_type="process", work_item_kind="process", plan_path="p",
+                registry_path="r", governing_workflow_version=version, plan_revision=1,
+                last_transition="t")["review_round_counts"]
+        self.assertEqual(made("2.2"), _counts(_ZERO_PAIR, _ZERO_PAIR))
+        self.assertEqual(made("2.1"), _counts(_ZERO_PAIR, None))
+        self.assertEqual(made("1"), _counts(None, None))
+        for version in ("1", "2.1", "2.2"):
+            self.assertEqual(ws.review_round_counts_errors(made(version)), [])
+
+    def test_each_writer_counts_one_round_for_approve_and_revise_under_its_own_role(self):
+        for name, stage, role, build, call in _count_writers():
+            for verdict in ("APPROVE", "REVISE"):
+                with self.subTest(writer=name, verdict=verdict):
+                    item = build(review_round_counts=_counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR)))
+                    out = call(_base_state(wi=item), verdict)["work_items"]["wi"]["review_round_counts"]
+                    expected = _counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR))
+                    expected[stage][role] = 1
+                    self.assertEqual(out, expected)
+
+    def test_block_and_a_refused_call_change_nothing(self):
+        for name, _stage, _role, build, call in _count_writers():
+            with self.subTest(writer=name):
+                state = _base_state(wi=build(review_round_counts=_counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR))))
+                self.assertEqual(call(state, "BLOCK"), state)
+                wrong_phase = _base_state(wi=build(
+                    review_round_counts=_counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR)), phase="IMPLEMENTING"))
+                before = copy.deepcopy(wrong_phase)
+                with self.assertRaises(Exception):
+                    call(wrong_phase, "APPROVE")
+                self.assertEqual(wrong_phase, before)
+
+    def test_rounds_accumulate_across_fix_rounds_and_nothing_resets(self):
+        item = _v21_work_item(governing_workflow_version="2.2", state_revision=1,
+                              review_round_counts=_counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR)))
+        state = _base_state(wi=item)
+        call = _count_writers()[0][4]
+        for expected in (1, 2, 3):
+            state = call(state, "REVISE")
+            self.assertEqual(state["work_items"]["wi"]["review_round_counts"]["plan"]["local"], expected)
+            # the fix round / amendment / republication returns the item to a local review
+            state["work_items"]["wi"]["phase"] = "AWAITING_LOCAL_PLAN_REVIEW"
+        state = call(state, "APPROVE")
+        self.assertEqual(state["work_items"]["wi"]["review_round_counts"]["plan"], {"local": 4, "external": 0})
+        # a withdrawal before a verdict records nothing
+        withdrawn = copy.deepcopy(state)
+        withdrawn["work_items"]["wi"]["phase"] = "AWAITING_LOCAL_PLAN_REVIEW"
+        self.assertEqual(withdrawn["work_items"]["wi"]["review_round_counts"],
+                         state["work_items"]["wi"]["review_round_counts"])
+
+    def test_an_item_without_the_key_or_with_a_null_stage_is_never_written(self):
+        for name, stage, role, build, call in _count_writers():
+            with self.subTest(writer=name, case="no key"):
+                out = call(_base_state(wi=build()), "APPROVE")["work_items"]["wi"]
+                self.assertNotIn("review_round_counts", out)
+            with self.subTest(writer=name, case="null stage"):
+                out = call(_base_state(wi=build(review_round_counts=_counts())), "REVISE")["work_items"]["wi"]
+                self.assertEqual(out["review_round_counts"], _counts())
+
+    def test_a_malformed_value_is_left_exactly_as_it_was_and_the_verdict_is_recorded(self):
+        malformed = {
+            "string stage": {"plan": "x", "implementation": {"local": 0, "external": 0}},
+            "missing local": {"plan": {"external": 0}, "implementation": {"local": 0, "external": 0}},
+            "negative": {"plan": {"local": -1, "external": 0}, "implementation": {"local": 0, "external": 0}},
+            "boolean": {"plan": {"local": True, "external": 0}, "implementation": {"local": True, "external": 0}},
+            "extra key": {"plan": {"local": 0, "external": 0}, "implementation": {"local": 0, "external": 0}, "x": 1},
+            "not an object": [],
+        }
+        for name, stage, role, build, call in _count_writers():
+            clean = call(_base_state(wi=build()), "APPROVE")["work_items"]["wi"]
+            for label, value in malformed.items():
+                with self.subTest(writer=name, malformed=label):
+                    out = call(_base_state(wi=build(review_round_counts=copy.deepcopy(value))),
+                               "APPROVE")["work_items"]["wi"]
+                    self.assertEqual(out["review_round_counts"], value)
+                    self.assertIsNot(out["review_round_counts"], True)
+                    out.pop("review_round_counts")
+                    self.assertEqual(out, clean)
+
+    def test_validate_state_accepts_a_malformed_value_but_the_validator_refuses_it(self):
+        for value in ([], {"plan": "x", "implementation": None}, {"plan": {"local": True, "external": 0},
+                                                                    "implementation": None}):
+            with self.subTest(value=value):
+                state = _base_state(wi=_base_work_item(review_round_counts=value))
+                ws.validate_state(state)  # unchanged from before the key existed
+                with self.assertRaises(ws.InvalidReviewRoundCountsError):
+                    ws.validate_review_round_counts(state)
+        ws.validate_review_round_counts(_base_state(wi=_base_work_item()))
+        ws.validate_review_round_counts(_base_state(wi=_base_work_item(review_round_counts=_counts())))
+
+    def test_the_shape_validator(self):
+        ok = [_counts(), _counts(dict(_ZERO_PAIR)), _counts({"local": 6, "external": 4}, dict(_ZERO_PAIR))]
+        for value in ok:
+            with self.subTest(value=value):
+                self.assertEqual(ws.review_round_counts_errors(value), [])
+        bad = {
+            "boolean": _counts({"local": False, "external": 0}),
+            "negative": _counts({"local": 0, "external": -2}),
+            "string": _counts({"local": "1", "external": 0}),
+            "float": _counts({"local": 1.0, "external": 0}),
+            "missing key": {"plan": None},
+            "extra key": {"plan": None, "implementation": None, "x": None},
+            "extra role": _counts({"local": 0, "external": 0, "x": 0}),
+            "non-object": "counts",
+            "list stage": _counts([0, 0]),
+        }
+        for label, value in bad.items():
+            with self.subTest(case=label):
+                self.assertTrue(ws.review_round_counts_errors(value))
+
+    def test_legacy_import_and_remediation_child_start_without_or_at_zero(self):
+        imported = ws.import_legacy_work_item(
+            _base_state(), work_item_id="milestone-8", plan_path="p", registry_path=None, base_commit="b",
+            reviewed_content_commit="r", approved_review_content_id="a", legacy_evidence={"rounds": 4},
+            user_confirmation="legacy import confirmed for milestone-8 implementation", now="t1",
+        )["work_items"]["milestone-8"]
+        self.assertEqual(imported["review_round_counts"], _counts())
+        # promotion changes only the version; the null stages are never counted afterwards
+        promoted = dict(imported, governing_workflow_version="2.1", phase="AWAITING_LOCAL_PLAN_REVIEW",
+                        work_item_id="wi", state_revision=1)
+        out = ws.record_local_plan_review(
+            _base_state(wi=promoted), "wi", verdict="APPROVE", bundle_id="b1", review_content_id=_RC,
+            round=1, now="t1")["work_items"]["wi"]
+        self.assertEqual(out["review_round_counts"], _counts())
+        parent = _base_work_item(work_item_id="parent", work_item_type="product", work_item_kind="product",
+                                 review_round_counts=_counts({"local": 3, "external": 1}))
+        state, child_id = ws.create_remediation_child_work_item(
+            _base_state(parent=parent), ws.default_config(), parent_work_item_id="parent", plan_path="p",
+            registry_path="r", base_commit="feedcafe", now="t1")
+        self.assertEqual(state["work_items"]["parent"]["review_round_counts"], _counts({"local": 3, "external": 1}))
+        self.assertEqual(state["work_items"][child_id]["review_round_counts"],
+                         ws.initial_review_round_counts(ws.default_config()["default_workflow_version"]))
+
+    def test_the_key_is_outside_both_content_identities(self):
+        source = (Path(__file__).resolve().parent / "workflow_fingerprint.py").read_text()
+        self.assertNotIn("review_round_counts", source)
+
+    def test_the_four_commit_field_sets_admit_the_key(self):
+        for name in ("ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS", "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS",
+                     "REVIEW_STAGE_WRITE_COMMIT_FIELDS", "TECHNICAL_APPROVAL_COMMIT_FIELDS"):
+            with self.subTest(name=name):
+                self.assertIn("review_round_counts", getattr(ws, name))
+
+    def test_an_unrelated_closed_field_set_does_not_gain_the_key(self):
+        # CP1's audit of every other `_FIELDS = frozenset`: none concerns a verdict's write.
+        for name in ("LEGACY_RETIREMENT_FIELDS", "RESUME_IMPLEMENTATION_FIELDS", "_ACCEPTANCE_SATISFACTION_FIELDS"):
+            with self.subTest(name=name):
+                self.assertNotIn("review_round_counts", getattr(ws, name))
+
+    def test_other_unknown_fields_are_still_refused_by_the_commit_sets(self):
+        for name in ("ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS", "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS",
+                     "REVIEW_STAGE_WRITE_COMMIT_FIELDS", "TECHNICAL_APPROVAL_COMMIT_FIELDS"):
+            self.assertNotIn("review_round_unknown", getattr(ws, name))
+
+
+class TestReviewRoundCountsDowngrade(unittest.TestCase):
+    """`D-Downgrade`, consequence 2: a counter-bearing recovered generation record
+    in the provenance interval is accepted by 2.15.0's helpers and refused by
+    2.14.0's, whose closed field sets do not name the key."""
+
+    @staticmethod
+    def _release_2_14_helpers():
+        spec = importlib.util.spec_from_file_location("workflow_state_as_2_14_0", Path(ws.__file__))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for name in ("ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS", "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS",
+                     "REVIEW_STAGE_WRITE_COMMIT_FIELDS", "TECHNICAL_APPROVAL_COMMIT_FIELDS"):
+            setattr(module, name, getattr(module, name) - {"review_round_counts"})
+        return module
+
+    def _scenario(self, repo, *, tamper=None):
+        _write_test_artifacts_declaration(repo, "wi")
+        _seed_base_provenance_state(repo, "wi")
+        p = repo.commit("protected fix", filename="src/Foo.kt")
+        state = _provenance_state("wi", reviewed_implementation_head=p, implementation_revision=1)
+        s = _commit_state_only(repo, "wi", state, "record gen", trailers=_record_trailers("wi", 1))
+        repo.commit("excluded-only doc fix", filename="docs/notes.md")
+        s2_state = state | {"state_revision": 3, "review_round_counts": _counts(None, {"local": 1, "external": 0})}
+        if tamper:
+            s2_state.update(tamper)
+        s2 = _commit_state_only(repo, "wi", s2_state, "recover stale generation_head",
+                                trailers=_recovered_trailers("wi", 1, s))
+        return s2_state, s2
+
+    def test_2_15_0_accepts_and_2_14_0_refuses_the_committed_counter(self):
+        with ScratchRepo() as repo:
+            s2_state, s2 = self._scenario(repo)
+            ws.validate_bundle_generation_record_commit(repo.root, s2, "wi")
+            self.assertEqual(
+                ws.verify_implementation_provenance_interval(
+                    repo.root, s2_state | {"work_item_id": "wi"}, repo.base), s2)
+            old = self._release_2_14_helpers()
+            with self.assertRaises(old.MalformedBundleGenerationRecordCommitError):
+                old.validate_bundle_generation_record_commit(repo.root, s2, "wi")
+
+    def test_a_recovered_record_that_changes_the_head_or_revision_is_still_refused(self):
+        for tamper in ({"reviewed_implementation_head": "0" * 40}, {"implementation_revision": 2}):
+            with self.subTest(tamper=tamper), ScratchRepo() as repo:
+                _s2_state, s2 = self._scenario(repo, tamper=tamper)
+                with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError):
+                    ws.validate_bundle_generation_record_commit(repo.root, s2, "wi")
 
 
 if __name__ == "__main__":

@@ -7589,11 +7589,12 @@ def _conclude_functional(
     root = managed_repo.root
     info = decision.protocol
     outcome = result["outcome"]
+    sandbox = str(result["sandbox"]) if result.get("sandbox") is not None else None  # the real launch returns a Path
     common = {"detail": result.get("detail"), "credentials": result.get("credentials"),
-              "sandbox": result.get("sandbox"), "kept": bool(result.get("keep")),
+              "sandbox": sandbox, "kept": bool(result.get("keep")),
               "fake_calls": {name: len(calls) for name, calls in (result.get("fake_calls") or {}).items()},
               "writable": result.get("writable") or [], "refused": result.get("refused") or []}
-    kept = result.get("sandbox") if result.get("keep") else None
+    kept = sandbox if result.get("keep") else None
     if result.get("breach"):
         return stop(functional_review.GATE_ISOLATION_BREACH, functional_review.OUTCOME_BREACH, fields=common,
                     job_id=job_id, detail="; ".join(result["breach"][:5]), sandbox=kept)

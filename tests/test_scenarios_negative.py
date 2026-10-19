@@ -32,6 +32,12 @@ MUTATIONS: dict[str, tuple[str, ...]] = {
     "scenario-kill-and-resume-job-after": ("resume-true",),
     "scenario-review-round-cap-stops-and-continues": ("cap-ignored",),  # review-convergence CP2
 }
+MUTATIONS_FUNCTIONAL: dict[str, tuple[str, ...]] = {  # functional review CP5
+    "scenario-functional-review-closes-the-cycle": ("applier-noop",),
+    "scenario-functional-review-stops-for-a-person": ("no-bound",),
+    "scenario-functional-review-without-a-run": ("automated-ignored",),
+    "scenario-functional-tester-isolation": ("sandbox-off",),
+}
 MUTATIONS_CP4: dict[str, tuple[str, ...]] = {  # scenarios 6-10 (CP4)
     "scenario-squash-merge-and-release-classification": ("docs-as-feat",),
     "scenario-notifications-never-steer": ("steering-hub",),
@@ -53,7 +59,7 @@ MUTATIONS_REVIEW: dict[str, tuple[str, ...]] = {  # scenarios 11-12 (codex-revie
 
 
 def all_mutations() -> dict[str, tuple[str, ...]]:
-    return {**MUTATIONS, **MUTATIONS_CP4, **MUTATIONS_REVIEW}
+    return {**MUTATIONS, **MUTATIONS_CP4, **MUTATIONS_REVIEW, **MUTATIONS_FUNCTIONAL}
 
 
 #: mutation -> text its failure message must carry, where the claim is one the mutation is aimed at by name.

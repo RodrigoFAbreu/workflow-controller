@@ -413,7 +413,7 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    no other tool on `PATH`;
 3. starts an independent tester, a `functional_test` job on the `functional-tester` role (Sonnet 5.5,
    `medium`, one agent, `Bash` only), inside Claude Code's own shell sandbox (bubblewrap, `socat`,
-   a kernel that accepts a seccomp filter and the native `claude` build are required; the writable locations are the output folder, the scratch directories and the
+   a kernel that accepts a seccomp filter and the native `claude` build are required -- the build check is static: it finds the seccomp helper's name inside an ELF `claude`, which excludes script and launcher builds but cannot prove the helper runs, so an ELF that bundles the package CLI without the vendored helper would pass; the writable locations are the output folder, the scratch directories and the
    locations derived from the repository's `.gitignore`; no network and no Unix socket; the
    product files, the checklist and `.git` are read-only). It writes `RESULTS.json`, one entry per
    flow, each with a log file and, for a failure, the reason `defect` (the product did not behave as

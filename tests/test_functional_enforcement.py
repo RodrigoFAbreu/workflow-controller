@@ -149,6 +149,10 @@ class StaticProbeTests(unittest.TestCase):
             script.write_text("#!/usr/bin/env node\napply-seccomp\n")
             self.assertTrue(fr._is_native_executable(str(native)))
             self.assertFalse(fr._is_native_executable(str(launcher)))
+            # The static check is by name only (documented residual gap): an ELF without the name is refused.
+            bundled = Path(tmp, "bundled")
+            bundled.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"package cli, no helper")
+            self.assertFalse(fr._is_native_executable(str(bundled)))
             self.assertFalse(fr._is_native_executable(str(script)))
             self.assertFalse(fr._is_native_executable(str(Path(tmp, "absent"))))
 

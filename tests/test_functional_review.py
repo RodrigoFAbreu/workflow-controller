@@ -130,6 +130,18 @@ class FlowShapesTest(unittest.TestCase):
             refused=(), timeout_seconds=60)
         self.assertIn("**Expected:** output must be workflow-controller 1.18.0 and exit 0.", prompt)
 
+    def test_any_bold_label_after_a_blank_line_stays_in_its_flow_until_a_section(self) -> None:
+        for label in ("Expectation:", "Check:", "Verify:", "Success:", "Then:", "Expected result:"):
+            with self.subTest(label=label):
+                text = checklist(f"**A. Local version.** Run it.\n\n**{label}** exit 0.\n\n**B. Other.** go\n")
+                flows = fr.read_flows(text)
+                self.assertIn(f"**{label}** exit 0.", flows[0].text)
+                self.assertNotIn("exit 0", flows[1].text)
+        for section in ("Known limitations", "Setup", "Test data", "Out of scope"):
+            with self.subTest(section=section):
+                text = checklist(f"**A. One.** go\n\n**{section}**\nnote\n")
+                self.assertNotIn(section, fr.read_flows(text)[0].text)
+
     def test_a_label_is_one_letter_or_one_or_two_digits(self) -> None:
         text = checklist("**AB. no.** x\n\n**123. no.** x\n\n**12. yes.** x\n")
         self.assertEqual([f.label for f in fr.read_flows(text)], ["12"])

@@ -198,8 +198,13 @@ _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
 _LABEL = r"(?:[A-Za-z]|\d{1,2})"
 _LABEL_CELL_RE = re.compile(rf"^{_LABEL}$")
 _BOLD_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):]")
-#: A bold paragraph that states what a flow must show belongs to that flow.
-_EXPECTATION_RE = re.compile(r"^\*\*(?:expect(?:ed|s)?|result|outcome|pass(?:es)?)\b", re.IGNORECASE)
+#: A bold paragraph after a blank line ends a flow only when it opens one of the
+#: checklist's own non-flow sections; any other label (``Expected``, ``Verify``,
+#: ``Check``...) belongs to the flow, so nothing is dropped silently.
+_SECTION_END_RE = re.compile(
+    r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope")) + r")\b"
+    # or a flow header with a qualifier before its label (``**Optional, K. Title.**``)
+    rf"|^\*\*[^*:]{{0,40}}[ ,]{_LABEL}[.)][ \t]", re.IGNORECASE)
 _HEADING_FLOW_RE = re.compile(rf"^(?:(?P<label>{_LABEL})[.):]|Flow\b[ \t]*(?P<rest>[^ \t.:)]*))")
 _NUMBERED_RE = re.compile(r"^(?P<label>\d{1,3})[.)][ \t]+\S")
 _SEPARATOR_RE = re.compile(r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$")
@@ -297,12 +302,12 @@ def _paragraph_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[s
             continue
         # A flow runs to the next flow, heading or bold paragraph: a blank line
         # does not end it, since a table or a list of cases may follow one. A
-        # bold paragraph that states the expected result stays in the flow.
+        # bold paragraph stays in the flow unless it opens a non-flow section.
         end = index + 1
         while end < len(lines):
             if not mask[end] and (_BOLD_RE.match(lines[end]) or _heading(lines[end], False)
                                   or (lines[end].startswith("**") and not lines[end - 1].strip()
-                                      and not _EXPECTATION_RE.match(lines[end]))):
+                                      and _SECTION_END_RE.match(lines[end]))):
                 break
             end += 1
         flows.append((match.group("label"), "\n".join(lines[index:end]).rstrip()))
@@ -917,7 +922,10 @@ def _is_native_executable(path: str) -> bool:
     the seccomp helper. ELF magic alone admits a compiled launcher that
     delegates to the script or package CLI, which warns about a missing helper
     and then runs without Unix-socket blocking, so the helper's name must be
-    in the file itself."""
+    in the file itself. This is a static check: it shows the helper is named in
+    the binary, not that the helper runs. A build that bundles the package CLI
+    without the vendored helper would still pass; the residual gap is stated in
+    the plan's boundary text and the functional-review guide."""
     try:
         with open(os.path.realpath(path), "rb") as handle:
             if handle.read(4) != b"\x7fELF":

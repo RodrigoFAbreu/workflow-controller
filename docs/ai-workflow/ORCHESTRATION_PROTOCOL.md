@@ -41,7 +41,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0** (protocol `1.5`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0** and **Workflow 2.16.0** (both protocol `1.5`).
 
 ## 2. Invocation and the envelope
 
@@ -61,7 +61,7 @@ stdout is exactly one JSON document, the **envelope**
 ```json
 {
   "protocol": {"name": "workflow-orchestration", "version": "1.5"},
-  "workflow_release": "2.15.0",
+  "workflow_release": "2.16.0",
   "operation": "next-action",
   "ok": true,
   "result": { "...": "operation-specific" }
@@ -1184,7 +1184,8 @@ under automatic gates). A courier is admissible when, and only when:
 
 ## 10. Compatibility notes
 
-- **Protocol `1.5`** (Workflow 2.15.0). The `review_round` object of an item's
+- **Protocol `1.5`** (Workflow 2.15.0; Workflow 2.16.0 keeps it: no snapshot field,
+  row, action, envelope key or classification changed). The `review_round` object of an item's
   `next-action` snapshot gains four additive properties after `current`:
   `plan_local`, `plan_external`, `implementation_local` and
   `implementation_external`, each an integer `>= 0` or `null` (section 5.4),

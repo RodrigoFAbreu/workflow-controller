@@ -18857,7 +18857,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-round-caps-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-round-caps-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -18974,7 +18974,216 @@
           "workflow_release": "2.15.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "72ceca95c049bde10a6bd1bcb27dc7d2e260bf28f6e77b03454e07a4b1f02f89",
+        "approved_review_content_id": "2743246cc152035d894faa7a82e38b5c45f8735a334c8320071eaba5b9642449",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8990abbce7940ffce8f7c64307d94221306d423e"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "449cce65e64f34e0872cefc65f8cd5aa6b0e36e3"
+          },
+          {
+            "path": "controller/review_rounds.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2aaf46ef00bd575344b1034381e9aaffdd6d9473"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "29203a3fa8485507a2eb8985c48585973c5f996c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-round-caps-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b75f524ba38d5406d768384070e6fa61c8032af9"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "45cbb56c147793b914e1fadf3c21da248b002d00"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6d7a0a04eca232decf8ce1419a247aa30709fc47"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c0b6a8f1d579009a27868df59adcf4cd67d6e15e"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "689c130f3c1d446dbb530773a6f5c57bc9e32862"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3c321805fc16a5ec9d063e23bcbc23fac1db2088"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cb07289ed6cc28fd75b709929b3153e930448ef8"
+          },
+          {
+            "path": "tests/golden/generate_no_policy_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "601efa3f1f405d5f00d0c0558416627a00919ad7"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a59ff424a9e8140d704f8d85541e8dfe5b7e0a9f"
+          },
+          {
+            "path": "tests/scenarios/lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3332ef6daf87900028dcd2b0f6b4b2fc415e41da"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f2236348d165cdb90900e7f12dac5f0b3f5ed63a"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2cd26396d99d1332f79452d5c7ae323151ad93ed"
+          },
+          {
+            "path": "tests/test_protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5cfc935ae90511c04b35798b0d0c883b6f2a8c43"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e25af29aba68dcd3b810cd885f7ca15ba52a5266"
+          },
+          {
+            "path": "tests/test_review_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b4053f057cdb959d403e0d39c77f8b5c2149e78a"
+          },
+          {
+            "path": "tests/test_review_round_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5eba3f7ffa02a678b3fae61c4c76de04990f0797"
+          },
+          {
+            "path": "tests/test_review_rounds.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b2ba40a2166ff64dce6126f2de9f57955acd0aea"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "61ca91141845463be4da3f8d7b94dc66cb84aa7a"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "572ccc7a70b91a3304119fec6c3b299c70744a7f"
+          }
+        ],
+        "reviewed_content_commit": "61f5b58b9befcd1f4561e0325c9a7d3b3e10dd42",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-19T06:53:56Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2743246cc152035d894faa7a82e38b5c45f8735a334c8320071eaba5b9642449",
+            "ledger": {
+              "local": {
+                "bundle_id": "72ceca95c049bde10a6bd1bcb27dc7d2e260bf28f6e77b03454e07a4b1f02f89",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "adcea309f0c39db9d6077b52c9fee2129f4ee92aa58563e7b5e09b3179df8b57",
+                "ledger_entry_sha256": "59644953452ddab51560569b05f09332a39307aeba72d288a8c072ddf746a41b",
+                "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "72ceca95c049bde10a6bd1bcb27dc7d2e260bf28f6e77b03454e07a4b1f02f89",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "02f600bfc81848ca1d90403dc013eff4c6b59a3cb69c896e0397cc8bcf1aa087",
+                "ledger_entry_sha256": "13bd0767b88bb1c0c5b30835ec01bf9bd676de5e0ef88dfb6258b5ae21e3d384",
+                "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-19T06:53:56Z",
+          "workflow_release": "2.15.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
@@ -19005,12 +19214,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-10-19T06:26:27Z",
+      "state_revision": 24,
+      "last_transition": "2026-10-19T06:53:56Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -19146,6 +19355,55 @@
               "at": "2026-10-19T05:36:35.069446+00:00"
             }
           ]
+        },
+        "F-cefa0b11c77e": {
+          "digest": "cefa0b11c77e590fdccaee894249408ea66a32aa0f9c77c9a6ae44ff36f3e8ed",
+          "text": "In the fallback, the gate text says \"the external count N has reached the external round cap\" (`controller/job.py`, `_cap_gate` reached from `_review_cap_gate`'s fallback branch). There N is the single combined round (or the Controller's job count), not an external count. The same text says \"this single number is checked against the external cap\", so nothing is wrong, but calling a combined number the \"external count\" could mislead an operator. Consider \"round N has reached the external round cap\" in the fallback wording.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2743246cc152035d894faa7a82e38b5c45f8735a334c8320071eaba5b9642449",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T06:43:24Z"
+            }
+          ]
+        },
+        "F-26784dee2f5a": {
+          "digest": "26784dee2f5a19e5f89da20e010371ee64d4f9ac924c5a10aeacbb0733cf378e",
+          "text": "**O1 — `controller/job.py:6076`:** In fallback mode, the shared stop text calls the combined round number “the external count.” Prefer “the single round count” there. The surrounding explanation identifies the fallback correctly; behavior is unaffected.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2743246cc152035d894faa7a82e38b5c45f8735a334c8320071eaba5b9642449",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T06:52:34Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "2743246cc152035d894faa7a82e38b5c45f8735a334c8320071eaba5b9642449",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "72ceca95c049bde10a6bd1bcb27dc7d2e260bf28f6e77b03454e07a4b1f02f89",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-19T06:43:24Z",
+          "verdict_sha256": "adcea309f0c39db9d6077b52c9fee2129f4ee92aa58563e7b5e09b3179df8b57",
+          "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "72ceca95c049bde10a6bd1bcb27dc7d2e260bf28f6e77b03454e07a4b1f02f89",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-19T06:52:34Z",
+          "verdict_sha256": "02f600bfc81848ca1d90403dc013eff4c6b59a3cb69c896e0397cc8bcf1aa087",
+          "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

@@ -297,6 +297,7 @@ each role has a built-in model and effort:
 | `satisfy-gate-acceptance` | `/satisfy-gate acceptance` (protocol mode only: the `acceptance.satisfy` action, which also writes the milestone narrative, roadmap and findings table) | `claude-sonnet-5-5` | `medium` | yes |
 | `apply-pr-review` | `/apply-pr-review` (protocol mode only: the Workflow's `pr.apply_review` action, row 38d) | `claude-opus-5-5` | `xhigh` | no |
 | `milestone-plan`, `record-manual-plan-review`, `record-manual-implementation-review` | those commands | inherit | inherit | no |
+| `functional-tester` | the Controller-run functional tester at row 38e (protocol mode only, 1.18.0 and later; not a Workflow command: a sandboxed `claude -p` job that runs the checklist's flows with `Bash` only) | `claude-sonnet-5-5` | `medium` | yes |
 | `apply-functional-review` | `/apply-functional-review` (protocol mode only, 1.7.0 and later) | `claude-opus-5-5` | `xhigh` | no |
 | `prepare-functional-review` | `/prepare-functional-review` (protocol mode only, 1.7.0 and later) | inherit | inherit | no |
 
@@ -304,11 +305,11 @@ In protocol mode the role comes from the Workflow's action id rather than
 from the command: `implementation.self_review` is
 `milestone-implement-self-review`, `acceptance.satisfy` is
 `satisfy-gate-acceptance`, and each other action takes its
-command's role. Five roles exist only there, since legacy mode never
-launches their commands: the two functional-review roles, `satisfy-gate`,
+command's role. Six roles exist only there, since legacy mode never
+launches their commands: the two functional-review roles, `functional-tester`, `satisfy-gate`,
 `satisfy-gate-acceptance` and `apply-pr-review`
 ([Protocol mode](automation.md#protocol-mode-workflow-27-and-later)). All
-five are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
+six are accepted by `--role-model`/`--role-effort`, a `--routing-config` file
 and the settings file's `routing` section, and `telemetry --by role`
 groups their jobs under these names. A Controller before 1.7.0 rejects
 the functional-review roles in a `--routing-config` file and ignores them, with a warning, in the

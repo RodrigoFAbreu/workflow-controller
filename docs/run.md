@@ -48,9 +48,15 @@ Global options go before the subcommand and the repository goes last, as in `wor
      them), then run again.
    - **Acceptance may ask for evidence first:** `explain` can instead report
      `functional_evidence_needed`, `pr_evidence_needed` or `pr_approval_needed`.
-     - `functional_evidence_needed`: have one functional result recorded per required flow, for
-       example `python3 scripts/workflow_protocol.py record-external-result --work-item <id> --kind functional_evidence --input result.json`.
-       The Controller does not collect it yet (the automated functional review is a later step).
+     - `functional_evidence_needed`: from Controller 1.18.0 the Controller runs the functional
+       review itself under an automatic acceptance gate: an independent tester runs the checklist's
+       flows in a sandbox and the Controller records one result per flow (see "The automated functional review" in the
+       [automation guide](guide/automation.md#protocol-mode-workflow-27-and-later)). It stops for a
+       person only for a fault (`flows_not_runnable`, `functional_tester_unavailable`,
+       `isolation_breach` and the others listed there); then test the head by hand and record one
+       result per required flow, for example `python3 scripts/workflow_protocol.py record-external-result --work-item <id> --kind functional_evidence --input result.json`,
+       or set `functional.automated` to `false` to keep this stop for the repository. Controllers
+       before 1.18.0, and a human acceptance gate, always stop here.
        The input fields are in "Evidence kinds" in the Workflow's [gate policy reference](https://github.com/RodrigoFAbreu/workflow/blob/main/payload/docs/ai-workflow/GATE_POLICY.md).
      - `pr_evidence_needed`, `pr_approval_needed`: the Controller handles these itself under an
        automatic acceptance gate. It queries GitHub for the pull request, reports the result to the
@@ -63,8 +69,8 @@ Global options go before the subcommand and the repository goes last, as in `wor
        open, pushed pull request. A repository without milestone branches has no pull request at
        acceptance, so it must make acceptance a person's (next item).
      - Or make acceptance a person's: set `gates.acceptance.human: true`, commit the file and run
-       `/adopt-gate-policy` (see Human gates below), then accept with `/accept-milestone`. The external reviews and, unless functional evidence is recorded,
-       the functional review stay yours.
+       `/adopt-gate-policy` (see Human gates below), then accept with `/accept-milestone`. The external reviews and the functional review stay yours
+       (with `functional.automated` true the Controller still runs the functional review when the acceptance gate is automatic; under a human gate it does not).
    - **Human gates:** to switch a repository to human gates, see the same gates page. Commit
      the policy file (`docs/ai-workflow/GATE_POLICY.json`), then run `/adopt-gate-policy` in a
      Claude session, best before a review bundle is generated, for example between milestones

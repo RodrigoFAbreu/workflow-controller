@@ -35,7 +35,7 @@ each release changed is in the [release history](release-history.md).
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16 and 2026-10-18):
 1. A2, the backlog file and the generated roadmap, once workflow#48 is released (owner decision, 2026-10-18: right
    after A1, before C10c; it never starts while a milestone is active);
-2. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
+2. C10c, implemented and awaiting review and acceptance (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
 3. C12, then C11;
 4. the orchestrator series O1-O7.
 
@@ -121,7 +121,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | A1 | Harness and git-host adapters: one interface for the Claude and Codex seams and one for the git host (GitHub first), and the usage record, one format whatever the harness reports. A refactor with no change in behaviour: the existing contract tests pass unchanged (owner decision, 2026-10-18: right after CU2, before C10c) (complete, accepted 2026-10-19 by gate policy; released as 1.16.1 from PR #102, squash `70016a4`; follow-ups #103, fill the price table, and #104, small usage-record points, are planned before A3) | CU2 | Adapters and backlog (above) |
 | C13b | Two review round caps per stage, local (default 6) and external (default 4), on the Workflow's separate round counts (protocol 1.5, Workflow 2.15.0); `review.round_cap` keeps working for one release (complete, accepted 2026-10-19 by gate policy; released as 1.17.0 from PR #107, squash `a76daff`; follow-up [#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108), `settings show` prints the stored caps; [#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88), [follow-up 55](#known-follow-ups-carried-forward); this repository runs Workflow 2.15.0 since 2026-10-19) | C13, A1 | [follow-up 55](#known-follow-ups-carried-forward) |
 | A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It waits for [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released, because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it (owner decision, 2026-10-18: right after A1, before C10c) | A1, workflow#48 | Adapters and backlog (above) |
-| C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
+| C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e; implemented 2026-10-19 on `milestone/workflow-controller-automated-functional-review`, review and acceptance pending; planned as 1.18.0) | C10b | [11.9](#119-automated-functional-review) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
@@ -376,8 +376,11 @@ hurts now, else in a later step or the next clean-up milestone.
    `lane_blocked`, not `user_gate`. **Done in C10b** for the pull request rows: 38f is cleared by
    the reporter or waits, 38d is launched, and what remains sends `user_gate` only where a person
    is needed (row 38g unapproved, a human gate, the Controller's own `pr_report_*` gates; pending
-   checks send nothing, or `lane_blocked` once a wait budget is spent). Only
-   row 38e (functional evidence, C10c) still sends `user_gate` under an automatic gate.
+   checks send nothing, or `lane_blocked` once a wait budget is spent).
+   **Done in C10c** for row 38e: under an automatic acceptance gate the Controller runs the
+   functional tester itself and sends `user_gate` only for a fault (`flows_not_runnable`,
+   `functional_tester_unavailable`, `isolation_breach` and the other named stops), and `lane_blocked`
+   for `functional_unchanged`; with `functional.automated` false it still sends `user_gate`.
 27. Flaky test: `tests.test_cli.ResumeWorkerHoldExitTest.test_an_unverifiable_worker_exits_45_naming_no_group_and_abandon_clears_it`
    asserts `str(pid) not in out`; on CI the pid matched inside another number. Match on word
    boundaries.
@@ -472,6 +475,21 @@ hurts now, else in a later step or the next clean-up milestone.
     per-release inventories, goldens and migration tests, and the `docs/guide/development.md` paragraph on
     which release each lifecycle test runs on) so the split-count case runs in the lifecycle tests; until then
     only `tests/test_protocol_job.py` covers it, with an injected snapshot (C13b).
+61. A Codex functional tester: `harness.CODEX` declares only the reviewer role, so the tester runs on Claude
+    Code only (C10c). Needs a Codex sandbox whose enforcement is proved the way CP2 proved Claude Code's.
+62. Support a policy's `required_flows` at row 38e: the Controller reads no `GATE_POLICY.json`, so a checklist
+    that does not cover them ends at `functional_unchanged`. Needs a Workflow query that returns the gate
+    evaluation, then the Controller can run the missing flows (C10c).
+63. A cap setting for tester failures: the bound of three `findings` runs per work item is a constant
+    (`functional_review.ROUND_BOUND`), unlike the review caps (C10c).
+64. A sandbox-side forge model, so pull-request flows can run in the functional sandbox: it must reach the
+    production forge boundaries (`controller/forge.py` `vet_gh`, `scripts/workflow_forge.py`
+    `origin_repository`) without relaxing them. Today such a flow is `environment` and ends at
+    `flows_not_runnable` (C10c).
+65. Allow named extra tools on the functional sandbox's `PATH` (a pipx binary such as `workflow-manager` lives
+    under the real home and reads real state, so none is allowed today) (C10c).
+66. Vendor a Workflow tree newer than 2.12.0 under `tests/workflow_releases/` so row 38e is tested on the
+    release this repository runs (C10c, as item 60 for C13b).
 
 ---
 
@@ -1846,6 +1864,13 @@ accepts on that evidence (first done for C9d, 2026-10-10). The Controller takes 
 - checklist flows state exact expected output (C9c and C9d showed wording that did not match the
   tools);
 - the tester runs on a cheaper model than the implementation (user rule, 2026-10-09: Sonnet).
+
+**Status.** Implemented as C10c ([ADR 0017](adr/0017-automated-functional-review.md)); the operator's view is
+"The automated functional review" in the [automation guide](guide/automation.md#protocol-mode-workflow-27-and-later).
+The Controller launches the prepare and apply workers as before and now runs the tester and records the evidence
+itself, in the sandbox described there. The tester runs on Sonnet 5.5 at `medium` effort (role `functional-tester`).
+Follow-ups 61-66 list what is left: a Codex tester, `required_flows`, a cap setting, a sandbox-side forge model,
+extra sandbox tools and a newer vendored Workflow.
 
 ## 11.10 Self-recovery
 

@@ -125,6 +125,13 @@ automatic gates, which it cannot yet satisfy. See [exit codes](exit-codes.md).
 One fresh `claude` session that runs one Workflow command. It never continues an
 earlier session.
 
+### Functional tester
+
+An independent `claude` session the Controller starts at row 38e of a protocol-mode work item under an
+automatic acceptance gate. It runs the checklist's flows inside a [sandbox](guide/automation.md#protocol-mode-workflow-27-and-later)
+(a clone with a scratch origin, fake `gh`/`claude`/`codex`/`ssh`, no network) and writes one result per flow, which the
+Controller records as `functional_evidence`. It is a [job](#job) of kind `functional_test` on the `functional-tester` role.
+
 ### Job
 
 The Controller's record of one worker: what was launched, why, the outcome it

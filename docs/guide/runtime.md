@@ -232,6 +232,8 @@ file is never an error: every setting then takes its built-in default.
 | `reviewer.effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
 | `reviewer.timeout_seconds` | integer | `3600` | 60 to 86400 | none |
 | `reviewer.binary` | string or `null` | `null` (built-in `codex`) | a name or path, 1 to 1024 characters | none |
+| `functional.automated` | boolean | `true` | `true` or `false` | none |
+| `functional.timeout_seconds` | integer | `3600` | 60 to 86400 | none |
 | `review.mode` | string | `auto` | `auto`, `cross-model`, `single-provider`, `manual` | `--review-mode` |
 | `reviewer.same_provider_model` | string or `null` | `null` (built-in `claude-opus-5-5`) | 1 to 128 characters | none |
 | `reviewer.same_provider_effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
@@ -257,6 +259,13 @@ opts in to auto-merge (see
 - `merge.poll_seconds` is how often that wait re-reads GitHub. Each poll
   makes a few `gh` calls, so the 10-second lower bound keeps a waiting
   `run` to at most 360 polls an hour, inside GitHub's API limits.
+
+The two `functional` rows (1.18.0) matter only for a protocol-mode repository under an automatic
+acceptance gate. `functional.automated: false` keeps the stop at row 38e for every repository on the
+machine, as before 1.18.0 (a person tests and records the evidence); `true` lets the Controller run
+the functional tester ([The automated functional review](automation.md#protocol-mode-workflow-27-and-later)).
+`functional.timeout_seconds` bounds one tester run; flows left unfinished at the bound are recorded as
+not run (`timeout`).
 
 The sixteen `usage` rows (1.8.0) are the usage budget. The Controller
 reads the Claude five-hour and weekly windows from its own workers'
@@ -541,6 +550,11 @@ The release that adds the two round cap rows is table generation 12: it adds the
 (`null`), and moves nothing else. An older Controller sharing the file
 afterwards warns about the two unknown keys, ignores them, and its
 `settings clean` refuses.
+
+The release that adds the `functional` rows is table generation 13: it adds `functional.automated` and
+`functional.timeout_seconds` to a file filled by an earlier release, and the routing role
+`functional-tester`, and moves nothing else. An older Controller sharing the file afterwards warns
+about the two unknown keys, ignores them, and its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

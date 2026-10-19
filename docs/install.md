@@ -10,6 +10,7 @@ Goal: a verified `workflow-controller` on your `PATH`, installed from a release 
 - `git` 2.31 or newer. An older Git refuses a Workflow 2.6.0 or protocol-mode target.
 - The `claude` CLI: every [worker](glossary.md#worker) is a `claude` session.
 - `workflow-manager`, from the [Workflow Manager repository](https://github.com/RodrigoFAbreu/workflow-manager#readme). The Controller asks it whether a [target](glossary.md#target)'s Workflow installation is sound before it does anything.
+- `bubblewrap` (`bwrap`) and `socat`, only for the automated functional review (Controller 1.18.0 and later, protocol mode under an automatic acceptance gate): the tester runs inside Claude Code's shell sandbox, and without them the step stops at `functional_tester_unavailable`. Set `functional.automated` to `false` to keep a person's functional test instead.
 - `gh`, authenticated, only for a repository that commits a `.workflow-controller/policy.json` (milestone branches, pull requests and releases).
 
 The Controller finds Workflow Manager through `--workflow-manager`, then the `WORKFLOW_CONTROLLER_WORKFLOW_MANAGER` environment variable, then `workflow-manager` on `PATH`. The first one that is set is final: if it does not resolve to an executable, the Controller refuses instead of trying the next.

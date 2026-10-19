@@ -1567,7 +1567,7 @@ OUTCOME_STALE = "stale"
 #: The setting that switches the step off and the remedy the gates name.
 SETTING_AUTOMATED = "functional.automated"
 MANUAL_REMEDY = (
-    "test the head by hand and record the evidence with `record-external-result --kind functional_evidence`; "
+    "test the head by hand and record one `functional_evidence` result per flow with the Workflow's protocol script; "
     f"`settings set {SETTING_AUTOMATED} false` keeps the stop for a person so this step does not run the tester again"
 )
 

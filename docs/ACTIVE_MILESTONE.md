@@ -41,3 +41,58 @@ on a failed build) and CP5 (the guides and the roadmap; the no-policy golden gai
 host adapter builds `GhForge` at call time, so a patched `forge.GhForge` still reaches `Context.forge`) are complete.
 Every registry checkpoint is `COMPLETE`; the next `/milestone-implement` invocation enters self-review.
 `docs/ai-workflow/WORKFLOW_STATE.json` is the ground truth.
+
+## Functional review checklist
+
+Findings go to `.ai-review/workflow-controller-adapters-1/feedback/FUNCTIONAL_REVIEW.md`. This milestone is a refactor
+plus one additive record: nothing the Controller decides, prints or launches may change. The only output change is the new
+`usage_record` key in `resume --json` (plan D6).
+
+### Setup
+
+- Branch `milestone/workflow-controller-adapters-1`, clean tree. Run the tests from the checkout; do not set
+  `PYTHONPATH=.` (it breaks the decoy test).
+- Test data: none to seed. All flows use the unit suite and the checkout.
+
+### Flows
+
+1. **Harness adapter registry (R1).** `python3 -m unittest tests.test_harness`. Expected: pass. `claude-code` and `claude`
+   resolve to one adapter; asking `codex` for the worker role raises `HarnessRoleError` naming the harness, the role and the
+   declared roles; an unknown name raises `UnknownHarnessError` with the registered names; the derived tables
+   (`review_mode.HARNESS_FAMILY`, `telemetry.HARNESS`) equal the old literals.
+2. **Git host registry (R2).** `python3 -m unittest tests.test_forge_adapter tests.test_forge`. Expected: pass;
+   `set(FORGES) == repo_policy.FORGE_KINDS`; an unregistered `forge_kind` raises `ForgeKindUnregisteredError`; a
+   `forge_factory` still wins.
+3. **Usage record and converters (R3).** `python3 -m unittest tests.test_usage_record`. Expected: pass. Claude figures equal
+   the telemetry block's for every captured stream; a Codex rollout gives `derived` figures; nothing is invented for a
+   stream with no result; `controller/prices.json` ships with no model prices, so a Codex cost is `null`/`unknown`.
+4. **Record written at job end (R4).** `python3 -m unittest tests.test_usage_record_job`. Expected: pass. A completed worker
+   and every review end in which an attempt ran carry `usage_record`; a FAILED worker and a review that ended before any
+   attempt carry none; an injected converter failure leaves the job identical to a control run except for
+   `usage_record_failed`.
+5. **Nothing else changed (D1).** `git diff 859eda5 HEAD --stat -- tests/` lists new test files and only registration edits
+   to existing ones (`test_package_structure.py` and the small fixture additions); read each edited existing test and
+   confirm no expectation changed. Run `python3 -m unittest tests.test_review tests.test_review_claude tests.test_review_mode
+   tests.test_telemetry tests.test_worker_stream tests.test_fake_codex_contract tests.test_no_rewrite_invariants`.
+   Expected: pass.
+6. **`resume --json` (D6).** In `tests/test_usage_record_job.py`, find the `resume --json` cases. Expected: a terminal record
+   with `usage_record` / `usage_record_failed` prints the key; one without it prints the pre-milestone object; exit codes
+   identical.
+7. **Package data.** Build or inspect the wheel layout (`python3 -m unittest tests.test_package_structure`). Expected:
+   `controller/prices.json` is in the package data and loads from an installed layout; the new modules sit at the positions
+   in D1a.
+8. **Documents (R5).** `python3 tools/check_docs.py` passes. Read the adapter and usage-record sections of
+   `docs/guide/workers.md`, `docs/guide/how-it-works.md` and `docs/guide/development.md` (how to add a harness and a git
+   host; price-table maintenance). Expected: each matches the code; `docs/ROADMAP.md` does **not** yet mark A1 complete
+   (that happens at acceptance).
+9. **Whole suite and goldens.** Run the full suite and each `tests/golden/generate_*.py --check` (never without `--check`).
+   Expected: green except the two known Git 2.56 trailer tests (`test_release_notes`, `test_pull_request_lifecycle`);
+   the no-policy golden differs from base only by the `usage_record` key.
+
+### Known limitations
+
+- No model prices are in the table yet, so a derived cost is `null`; a Claude cost is the harness-reported one.
+- No consumer reads the usage record (A3 and the router do later); `telemetry`, `inspect`, `status` and `follow` still read
+  the telemetry block.
+- Codex as a worker, a second git host and routing are out of scope (A5, later adapters).
+- The merge of the `refactor:` title releases 1.16.1 after acceptance; release and notes are post-merge steps.

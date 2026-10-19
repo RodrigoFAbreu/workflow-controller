@@ -140,14 +140,32 @@ class StaticProbeTests(unittest.TestCase):
         with self.assertRaises(fr.TesterUnavailable):
             fr.static_probe(which=which, run=mock.Mock(return_value=self.ok()), is_native=lambda path: True)
 
-    def test_the_native_check_reads_the_elf_magic(self) -> None:
+    def test_the_native_check_needs_an_elf_that_embeds_the_seccomp_helper(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            elf, script = Path(tmp, "elf"), Path(tmp, "script")
-            elf.write_bytes(b"\x7fELF\x02")
-            script.write_text("#!/usr/bin/env node\n")
-            self.assertTrue(fr._is_native_executable(str(elf)))
+            native, launcher, script = Path(tmp, "native"), Path(tmp, "launcher"), Path(tmp, "script")
+            native.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"apply-seccomp" + b"y" * 10)
+            # A compiled launcher that forwards to the script CLI has the magic but not the helper.
+            launcher.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"exec node cli.js")
+            script.write_text("#!/usr/bin/env node\napply-seccomp\n")
+            self.assertTrue(fr._is_native_executable(str(native)))
+            self.assertFalse(fr._is_native_executable(str(launcher)))
             self.assertFalse(fr._is_native_executable(str(script)))
             self.assertFalse(fr._is_native_executable(str(Path(tmp, "absent"))))
+
+    def test_the_helper_name_is_found_across_a_read_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            split = Path(tmp, "split")
+            split.write_bytes(b"\x7fELF" + b"x" * ((1 << 22) - 4 - 5) + b"apply-seccomp" + b"z")
+            self.assertTrue(fr._is_native_executable(str(split)))
+
+    def test_a_forwarding_elf_launcher_is_refused_by_the_probe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp, "claude")
+            launcher.write_bytes(b"\x7fELF\x02" + b"exec node cli.js")
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                fr.static_probe(which=lambda name: str(launcher) if name == "claude" else f"/usr/bin/{name}",
+                                run=mock.Mock(return_value=self.ok()))
+            self.assertIn("native", str(caught.exception))
 
     def test_a_working_host_passes(self) -> None:
         run = mock.Mock(return_value=self.ok())

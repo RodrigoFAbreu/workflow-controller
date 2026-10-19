@@ -22,6 +22,11 @@ The packaging tests skip when a build prerequisite is missing, unless
 build refuses a stale `build/` directory left by an earlier build that
 held files this one does not; delete `build/` and rebuild.
 
+The live sandbox probes run in their own empty home, so they see no
+credentials stored in your real Claude home: export `ANTHROPIC_API_KEY` or
+`CLAUDE_CODE_OAUTH_TOKEN` for them. Without one, the model probes skip and the
+run can still report `OK`; only a run with no skips proves the enforcement.
+
 `CONTROLLER_TEST_OLD_GIT` names a Git older than 2.36, built from source
 if need be. It runs the live check that such a Git runs a boolean
 `core.fsmonitor` as a program, which the Controller refuses. The rest of

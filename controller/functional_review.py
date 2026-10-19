@@ -198,6 +198,8 @@ _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
 _LABEL = r"(?:[A-Za-z]|\d{1,2})"
 _LABEL_CELL_RE = re.compile(rf"^{_LABEL}$")
 _BOLD_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):]")
+#: A bold paragraph that states what a flow must show belongs to that flow.
+_EXPECTATION_RE = re.compile(r"^\*\*(?:expect(?:ed|s)?|result|outcome|pass(?:es)?)\b", re.IGNORECASE)
 _HEADING_FLOW_RE = re.compile(rf"^(?:(?P<label>{_LABEL})[.):]|Flow\b[ \t]*(?P<rest>[^ \t.:)]*))")
 _NUMBERED_RE = re.compile(r"^(?P<label>\d{1,3})[.)][ \t]+\S")
 _SEPARATOR_RE = re.compile(r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$")
@@ -294,11 +296,13 @@ def _paragraph_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[s
         if not match:
             continue
         # A flow runs to the next flow, heading or bold paragraph: a blank line
-        # does not end it, since a table or a list of cases may follow one.
+        # does not end it, since a table or a list of cases may follow one. A
+        # bold paragraph that states the expected result stays in the flow.
         end = index + 1
         while end < len(lines):
             if not mask[end] and (_BOLD_RE.match(lines[end]) or _heading(lines[end], False)
-                                  or (lines[end].startswith("**") and not lines[end - 1].strip())):
+                                  or (lines[end].startswith("**") and not lines[end - 1].strip()
+                                      and not _EXPECTATION_RE.match(lines[end]))):
                 break
             end += 1
         flows.append((match.group("label"), "\n".join(lines[index:end]).rstrip()))
@@ -904,14 +908,29 @@ _SECCOMP_PROGRAM = (
 )
 
 
+#: The name the native build embeds its seccomp helper under.
+_SECCOMP_HELPER_MARKER = b"apply-seccomp"
+
+
 def _is_native_executable(path: str) -> bool:
-    """Whether ``path`` is an ELF binary: the native Claude build embeds the
-    seccomp helper, a script or package launcher may not."""
+    """Whether ``path`` is the native Claude build: an ELF binary that embeds
+    the seccomp helper. ELF magic alone admits a compiled launcher that
+    delegates to the script or package CLI, which warns about a missing helper
+    and then runs without Unix-socket blocking, so the helper's name must be
+    in the file itself."""
     try:
         with open(os.path.realpath(path), "rb") as handle:
-            return handle.read(4) == b"\x7fELF"
+            if handle.read(4) != b"\x7fELF":
+                return False
+            handle.seek(0)
+            tail = b""
+            while chunk := handle.read(1 << 22):
+                if _SECCOMP_HELPER_MARKER in tail + chunk:
+                    return True
+                tail = chunk[-len(_SECCOMP_HELPER_MARKER):]
     except OSError:
         return False
+    return False
 
 
 def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run,

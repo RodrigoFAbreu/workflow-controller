@@ -116,6 +116,20 @@ class FlowShapesTest(unittest.TestCase):
         flows = fr.read_flows(text)
         self.assertIn("y\n```\nthen", flows[0].text)
 
+    def test_a_bold_expected_paragraph_after_a_blank_line_stays_in_its_flow(self) -> None:
+        text = checklist("**A. Local version.** Run the version command.\n\n"
+                         "**Expected:** output must be workflow-controller 1.18.0 and exit 0.\n\n"
+                         "**B. Other.** go\n\n**Known limitations**\nnone\n")
+        flows = fr.read_flows(text)
+        self.assertEqual([f.label for f in flows], ["A", "B"])
+        self.assertIn("**Expected:** output must be workflow-controller 1.18.0 and exit 0.", flows[0].text)
+        self.assertNotIn("Expected", flows[1].text)
+        self.assertNotIn("Known limitations", flows[1].text)
+        prompt = fr.tester_prompt(
+            flows, clone_dir=Path("/c"), output_dir=Path("/o"), head="h", checklist_blob="b", writable=(),
+            refused=(), timeout_seconds=60)
+        self.assertIn("**Expected:** output must be workflow-controller 1.18.0 and exit 0.", prompt)
+
     def test_a_label_is_one_letter_or_one_or_two_digits(self) -> None:
         text = checklist("**AB. no.** x\n\n**123. no.** x\n\n**12. yes.** x\n")
         self.assertEqual([f.label for f in fr.read_flows(text)], ["12"])

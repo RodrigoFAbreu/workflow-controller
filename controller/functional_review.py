@@ -15,7 +15,10 @@ needs no process and no sandbox:
   ``.gitignore`` (:func:`derive_writable_locations`, D5 R7-001);
 - the findings text of D6 (:func:`findings_text`), the tester's prompt
   (:func:`tester_prompt`), the outcome and gate constants of D7 and the digest
-  helpers.
+  helpers;
+- the run settings the tester is launched with and the enforcement probe
+  (``CP2``, D2: :func:`tester_settings`, :func:`static_probe`,
+  :func:`probe_command`, :func:`judge_probe`).
 
 It writes nothing: the Controller-written logs of a "not run" entry are
 returned as bytes for the caller to publish through ``controller.runtime``.
@@ -31,7 +34,10 @@ import json
 import os
 import posixpath
 import re
+import shlex
+import shutil
 import stat
+import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -812,3 +818,189 @@ def as_mapping(entry: Entry) -> Mapping[str, Any]:
         "flow_id": entry.flow_id, "status": entry.status, "reason": entry.reason, "summary": entry.summary,
         "log": entry.log_path.name, "log_digest": entry.log_digest,
     }
+
+
+# ---------------------------------------------------------------------------
+# The enforcement the tester is launched under (CP2, D2, D5 I2).
+# ---------------------------------------------------------------------------
+
+#: The tester's whole tool set (D2): the shell only. Claude's sandbox covers
+#: shell commands, so a file tool would run outside it.
+TESTER_TOOLS: tuple[str, ...] = ("Bash",)
+
+#: The system programs the Claude sandbox needs on Linux; one missing ends the
+#: launch at ``functional_tester_unavailable`` (``sandbox.failIfUnavailable``
+#: makes the CLI itself refuse, with :data:`UNAVAILABLE_MARKER` in its result).
+REQUIRED_PROGRAMS: tuple[str, ...] = ("bwrap", "socat")
+UNAVAILABLE_MARKER = "sandbox required but unavailable"  # matched case-insensitively
+
+
+class TesterUnavailable(ControllerError):
+    """The enforcement the tester needs is missing or does not enforce (D2,
+    D7): the launch ends here, never at a weaker run."""
+
+    code = GATE_TESTER_UNAVAILABLE
+
+
+def tester_settings(
+    *, clone_dir: Path, output_dir: Path, scratch_dirs: Sequence[Path], writable: Sequence[str],
+) -> dict[str, Any]:
+    """The ``--settings`` document of the tester's launch.
+
+    The sandbox is required (``failIfUnavailable``), has no unsandboxed retry
+    and no excluded command, no allowed domain and no allowed Unix socket. The
+    write allowlist is the output folder, the scratch directories and the
+    derived writable locations (D5), and the deny list covers the **clone root
+    recursively** and, by name, its ``.git`` (I2): on the pinned CLI a more
+    specific allow below the denied root wins, so a writable location stays
+    writable while every tracked path, every new file beside one, the checklist
+    and ``.git`` are refused (proved live in CP2). The run's working directory
+    must be ``output_dir``: with a working directory above the clone, the
+    CLI's own working-directory grant outranks the allow and the writable
+    locations become unwritable too."""
+    allow = [str(output_dir), *(str(path) for path in scratch_dirs), *(str(clone_dir / name) for name in writable)]
+    return {
+        "sandbox": {
+            "enabled": True,
+            "failIfUnavailable": True,
+            "allowUnsandboxedCommands": False,
+            "autoAllowBashIfSandboxed": True,
+            "excludedCommands": [],
+            "filesystem": {"allowWrite": allow, "denyWrite": [str(clone_dir), str(clone_dir / ".git")]},
+            "network": {"allowedDomains": [], "allowUnixSockets": []},
+        },
+    }
+
+
+def tester_flags(settings_path: Path) -> list[str]:
+    """The launch flags that carry the closed tool set and the settings: only
+    ``Bash`` exists and only ``Bash`` is allowed; a prompt is never answered."""
+    tools = ",".join(TESTER_TOOLS)
+    return ["--tools", tools, "--allowedTools", tools, "--permission-mode", "dontAsk", "--permission-prompts", "none",
+            "--settings", str(settings_path)]
+
+
+def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run) -> None:
+    """The part of the launch probe that needs no model: every program of
+    :data:`REQUIRED_PROGRAMS` is on ``PATH`` and ``bwrap`` can make an
+    unprivileged namespace. Raises :class:`TesterUnavailable` naming what is
+    missing."""
+    missing = [name for name in REQUIRED_PROGRAMS if which(name) is None]
+    if missing:
+        raise TesterUnavailable(f"the sandbox needs {', '.join(missing)} on PATH, which is not installed",
+                                evidence={"missing": missing})
+    try:
+        result = run(["bwrap", "--ro-bind", "/", "/", "--unshare-net", "true"], capture_output=True, timeout=30,
+                     check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise TesterUnavailable(f"bwrap cannot be run: {exc}") from exc
+    if result.returncode != 0:
+        raise TesterUnavailable("bwrap cannot make an unprivileged namespace here: "
+                                + result.stderr.decode("utf-8", "replace").strip()[:300])
+
+
+def result_event_text(event: Mapping[str, Any]) -> str:
+    """Everything a Claude ``result`` event says: its ``result`` text and its
+    ``errors`` list (a refusal to start is reported only in the latter)."""
+    errors = event.get("errors")
+    parts = [str(event.get("result") or "")]
+    if isinstance(errors, list):
+        parts += [item for item in errors if isinstance(item, str)]
+    return "\n".join(part for part in parts if part)
+
+
+def launch_refusal(result_text: str) -> TesterUnavailable | None:
+    """The refusal for a Claude result whose text says the required sandbox is
+    unavailable (the CLI refused to start without it), else ``None``."""
+    if UNAVAILABLE_MARKER in result_text.lower():
+        return TesterUnavailable("Claude refused to start the tester without its sandbox: "
+                                 + result_text.strip().splitlines()[0][:300])
+    return None
+
+
+@dataclasses.dataclass(frozen=True)
+class ProbeTargets:
+    """The locations the probe command touches. ``tracked`` and ``checklist``
+    are existing files of the clone, ``writable`` a pre-created writable
+    directory below the clone root, ``stand_in_home`` a path in a stand-in home
+    or config location, ``socket_path`` a Unix socket the host listens on and
+    ``tcp_port`` a TCP port the host listens on."""
+
+    clone_dir: Path
+    output_dir: Path
+    tracked: str
+    checklist: str
+    writable: str
+    stand_in_home: Path
+    socket_path: Path
+    tcp_port: int
+
+
+#: What each probe line must say. ``shm`` is not listed: a write to ``/dev/shm``
+#: lands in the sandbox's private mount, so its line is informational and the
+#: caller asserts the host path stays absent.
+PROBE_EXPECTED: Mapping[str, str] = {
+    "tracked": "REFUSED", "checklist": "REFUSED", "git": "REFUSED", "newfile": "REFUSED", "rename": "REFUSED",
+    "delete": "REFUSED", "writable": "WROTE", "output": "WROTE", "home": "REFUSED", "tmp": "REFUSED",
+    "vartmp": "REFUSED", "tcp": "BLOCKED", "unix": "BLOCKED",
+}
+_PROBE_LINE_RE = re.compile(r"^PROBE (?P<name>[a-z]+) (?P<result>[A-Z]+)$", re.MULTILINE)
+
+
+def probe_command(targets: ProbeTargets, *, marker: str) -> str:
+    """The one shell command the probe turn runs (D10): by absolute path, a
+    write to a tracked file, the checklist, a file in ``.git``, a new file
+    beside a tracked one, a rename over and a deletion of a tracked file, a
+    write to the writable location and to the output folder, a write to a
+    stand-in home and to ``/tmp`` and ``/var/tmp``, a TCP connection and a
+    connection to a host Unix socket. Every line is ``PROBE <name> <result>``."""
+    clone, out = targets.clone_dir, targets.output_dir
+    q = shlex.quote
+    py_tcp = f"import socket;s=socket.create_connection(('127.0.0.1',{targets.tcp_port}),3)"
+    py_unix = f"import socket;s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect({str(targets.socket_path)!r})"
+    return "\n".join([
+        'w() { if ( : > "$2" ) 2>/dev/null; then echo "PROBE $1 WROTE"; else echo "PROBE $1 REFUSED"; fi; }',
+        f"w tracked {q(str(clone / targets.tracked))}",
+        f"w checklist {q(str(clone / targets.checklist))}",
+        f"w git {q(str(clone / '.git' / 'config'))}",
+        f"w newfile {q(str(clone / 'probe-new-file'))}",
+        f"w writable {q(str(clone / targets.writable / 'probe'))}",
+        f"w output {q(str(out / 'probe'))}",
+        f"w home {q(str(targets.stand_in_home / '.config' / 'probe'))}",
+        f"w tmp {q('/tmp/' + marker)}",
+        f"w vartmp {q('/var/tmp/' + marker)}",
+        f"w shm {q('/dev/shm/' + marker)}",
+        f"echo x > {q(str(out / 'rename-src'))}",
+        f"if mv {q(str(out / 'rename-src'))} {q(str(clone / targets.tracked))} 2>/dev/null; "
+        f'then echo "PROBE rename WROTE"; else echo "PROBE rename REFUSED"; fi',
+        f"if rm -f {q(str(clone / targets.tracked))} 2>/dev/null && [ ! -e {q(str(clone / targets.tracked))} ]; "
+        f'then echo "PROBE delete WROTE"; else echo "PROBE delete REFUSED"; fi',
+        f'if python3 -c {q(py_tcp)} 2>/dev/null; then echo "PROBE tcp CONNECTED"; else echo "PROBE tcp BLOCKED"; fi',
+        f'if python3 -c {q(py_unix)} 2>/dev/null; then echo "PROBE unix CONNECTED"; else echo "PROBE unix BLOCKED"; fi',
+    ])
+
+
+def probe_prompt(command: str) -> str:
+    return ("Run exactly the following shell command once with the Bash tool, then reply with its complete output and "
+            "nothing else. Do not change the command, do not retry it, and do not run anything else.\n\n"
+            f"```sh\n{command}\n```\n")
+
+
+def judge_probe(output: str) -> list[str]:
+    """The failures of a probe's output: a line missing, repeated or not the
+    expected result. Empty means the boundary held. Anything unreadable is a
+    failure (fail closed)."""
+    seen: dict[str, str] = {}
+    failures: list[str] = []
+    for match in _PROBE_LINE_RE.finditer(output):
+        name, result = match["name"], match["result"]
+        if name in seen and seen[name] != result:
+            failures.append(f"{name}: reported both {seen[name]} and {result}")
+        seen[name] = result
+    for name, want in PROBE_EXPECTED.items():
+        got = seen.get(name)
+        if got is None:
+            failures.append(f"{name}: no result line")
+        elif got != want:
+            failures.append(f"{name}: {got}, expected {want}")
+    return failures

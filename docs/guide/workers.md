@@ -751,6 +751,9 @@ cost with its source, the price-table version and currency, the record's own
 total, which is kept out of the token figures. A figure the
 harness does not give is `null` and `unknown`; none is invented. It is advisory
 like `telemetry`: if building it fails the job is unchanged and the record has a
-`usage_record_failed` key instead. Nothing reads it yet; `telemetry`, `status`
+`usage_record_failed` key instead. A worker record carries `usage_record` exactly
+when it carries the `telemetry` block, which includes a job reconciled `FAILED`
+after the worker's result was read (the run was paid for); a worker that fails
+before any result has neither. Nothing reads it yet; `telemetry`, `status`
 and `inspect` still read the `telemetry` block. See
 [the usage record](how-it-works.md#the-usage-record).

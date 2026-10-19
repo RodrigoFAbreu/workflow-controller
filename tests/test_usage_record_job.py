@@ -347,6 +347,17 @@ class WorkerRecordTest(test_job._StreamingCase):
         record = self._completed([[{"step": "text"}, _telemetry_end_turn(0, 3)]])
         self.assertEqual("usage_record" in record, "telemetry" in record)
 
+    def test_a_job_reconciled_failed_after_its_result_keeps_both_keys(self) -> None:
+        """The record goes where the telemetry block is built: the run was paid for (plan D9a)."""
+        turns = [[{"step": "text"}, _telemetry_end_turn(0, 3)]]
+        record, _writes = self._spied_step(
+            env={"FAKE_CLAUDE_TURNS": json.dumps(turns), "FAKE_CLAUDE_EXIT": "7"}, timeout=60)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["worker"]["exit_code"], 7)
+        self.assertIn("telemetry", record)
+        self.assertIn("usage_record", record)
+        self.assertEqual(record["usage_record"]["output"], record["telemetry"]["tokens"]["output"])
+
 
 class ReattachRecordTest(test_job.ReattachTelemetryTest):  # inherits the existing tests too
     """The re-attach completion path builds the record beside its telemetry block."""

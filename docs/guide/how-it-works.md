@@ -88,7 +88,10 @@ token groups (input, cache-read, cache-write, output) times their prices in
 `controller/prices.json`, never the reasoning count, which is inside output. The
 price table is versioned and ships with no model prices until one is taken from
 a provider's published list; with no reported cost, a model absent from the table
-gives cost `null` and quality `unknown`. A built record
+gives cost `null` and quality `unknown`. A worker record
+carries it exactly when it carries `telemetry`, so a job reconciled `FAILED` after
+its result was read still has both; a worker that fails before any result has
+neither. A built record
 keeps the table version it was computed under and is never rewritten.
 
 The `--json` output of `resume` prints each job record as stored, so a job

@@ -66,9 +66,10 @@ plus one additive record: nothing the Controller decides, prints or launches may
 3. **Usage record and converters (R3).** `python3 -m unittest tests.test_usage_record`. Expected: pass. Claude figures equal
    the telemetry block's for every captured stream; a Codex rollout gives `derived` figures; nothing is invented for a
    stream with no result; `controller/prices.json` ships with no model prices, so a Codex cost is `null`/`unknown`.
-4. **Record written at job end (R4).** `python3 -m unittest tests.test_usage_record_job`. Expected: pass. A completed worker
-   and every review end in which an attempt ran carry `usage_record`; a FAILED worker and a review that ended before any
-   attempt carry none; an injected converter failure leaves the job identical to a control run except for
+4. **Record written at job end (R4).** `python3 -m unittest tests.test_usage_record_job`. Expected: pass. A worker record
+   carries `usage_record` exactly when it carries the `telemetry` block (this includes a job reconciled FAILED after the
+   worker's result was read, e.g. exit 7; a worker that fails before any result has neither), and every review end in
+   which an attempt ran carries it; a review that ended before any attempt carries none; an injected converter failure leaves the job identical to a control run except for
    `usage_record_failed`.
 5. **Nothing else changed (D1).** `git diff 859eda5 HEAD --stat -- tests/` lists new test files and only registration edits
    to existing ones (`test_package_structure.py` and the small fixture additions); read each edited existing test and
@@ -96,3 +97,7 @@ plus one additive record: nothing the Controller decides, prints or launches may
   the telemetry block.
 - Codex as a worker, a second git host and routing are out of scope (A5, later adapters).
 - The merge of the `refactor:` title releases 1.16.1 after acceptance; release and notes are post-merge steps.
+
+### Functional review round 1
+
+- Finding 1 (documentation and test, bounded): the rule for a FAILED worker is now stated in the guides and in flow 4; a test covers a non-zero exit after a result. Re-test flow 4 and flow 8.

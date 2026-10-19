@@ -1544,3 +1544,92 @@ def check_bound(sandbox: Sandbox) -> list[str]:
                  if not any(d.startswith(f".git/{name}:") for name in moved)]
     problems += walk_differences(clone, sandbox.candidate, sandbox.check_dir)
     return problems[:MAX_DIFFERENCES]
+
+
+# ---------------------------------------------------------------------------
+# The step's records and stops (D7, D9).
+# ---------------------------------------------------------------------------
+
+#: ``selected_action.command`` of a tester job record (a Controller step, not a slash command).
+JOB_COMMAND = "functional.test"
+#: The ``outcome`` a tester job record's ``functional`` block carries besides :data:`OUTCOMES`.
+OUTCOME_UNAVAILABLE = "unavailable"
+OUTCOME_BREACH = "isolation_breach"
+OUTCOME_UNBOUND = "tested_bytes_unbound"
+OUTCOME_INVALID = "results_invalid"
+OUTCOME_REFUSED = "recording_refused"
+OUTCOME_LIMIT = "limit"
+OUTCOME_TIMEOUT = "timeout"
+OUTCOME_ERROR = "error"
+OUTCOME_INTERRUPTED = "interrupted"
+OUTCOME_STALE = "stale"
+
+#: The setting that switches the step off and the remedy the gates name.
+SETTING_AUTOMATED = "functional.automated"
+MANUAL_REMEDY = (
+    "test the head by hand and record the evidence with `record-external-result --kind functional_evidence`; "
+    f"`settings set {SETTING_AUTOMATED} false` keeps the stop for a person so this step does not run the tester again"
+)
+
+
+def step_applies(document: Mapping[str, Any]) -> bool:
+    """Whether the Workflow's answer is the gate this step acts at (D1): an
+    ``external_gate`` for :data:`ACTION_ID` satisfied by :data:`SATISFIED_BY`
+    whose policy object names an **automatic** acceptance gate. ``document``
+    is the answer (``ProtocolInfo.document``)."""
+    policy = document.get("policy")
+    return (document.get("satisfied_by") == SATISFIED_BY and isinstance(policy, Mapping)
+            and policy.get("gate") == "acceptance" and policy.get("mode") == "automatic")
+
+
+def refused_text(refused: Iterable[Mapping[str, Any]]) -> str:
+    """The writable-location patterns the derivation refused, for a gate message."""
+    listed = [f"{item['pattern']} ({item['reason']})" for item in refused]
+    if not listed:
+        return ""
+    return " The patterns of the repository's .gitignore that the sandbox does not make writable: " + "; ".join(listed) + "."
+
+
+def gate_text(code: str, **facts: Any) -> str:
+    """The words of the stop ``code`` (D7): what the step did, why it stopped
+    and the remedy. ``facts`` holds what the code names (``detail``, ``head``,
+    ``flows``, ``job_id``, ``sandbox``, ``refused``, ``rounds``, ``recorded``)."""
+    detail = str(facts.get("detail") or "")
+    flows = ", ".join(facts.get("flows") or ())
+    sandbox = facts.get("sandbox")
+    kept = (f" The sandbox is kept at {sandbox} for inspection and is removed when the next functional run starts."
+            if sandbox else "")
+    if code == GATE_CHECKLIST_UNRECOGNISED:
+        return ("the functional review checklist has no flow the Controller can recognise "
+                f"({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
+                f"'{SECTION_TITLE}' of docs/ACTIVE_MILESTONE.md must carry its flows as table rows whose first cell is a "
+                "short label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
+                f"or as a numbered list; or set `{SETTING_AUTOMATED}` false to keep the stop for a person")
+    if code == GATE_TESTER_UNAVAILABLE:
+        return (f"the functional tester cannot run here ({detail}): nothing was started and nothing was recorded. "
+                f"Install what is missing, or {MANUAL_REMEDY}")
+    if code == GATE_RESULTS_INVALID:
+        return (f"the tester's results cannot be used ({detail}): nothing was recorded.{kept} Run again, or "
+                f"{MANUAL_REMEDY}")
+    if code == GATE_ISOLATION_BREACH:
+        return (f"the tester run {facts.get('job_id')} reached beyond its sandbox ({detail}): nothing was recorded."
+                f"{kept} A person must look at what changed before anything is tested again")
+    if code == GATE_TESTED_BYTES_UNBOUND:
+        return (f"the tested clone no longer matches the candidate at {facts.get('head')} ({detail}): nothing was "
+                f"recorded, because the evidence would not be about the candidate.{kept} Run again, or {MANUAL_REMEDY}")
+    if code == GATE_RECORDING_REFUSED:
+        return (f"the Workflow refused a flow's result ({detail}); results accepted before it stand "
+                f"({facts.get('recorded') or 'none'}). Run again, or {MANUAL_REMEDY}")
+    if code == GATE_FLOWS_NOT_RUNNABLE:
+        return (f"the flows {flows} cannot run in the sandbox (no network, no real GitHub, no real model, no tool "
+                "outside the sandbox PATH): their results are recorded as failed with the reason `environment`, no "
+                f"findings were written and the applier was not started ({detail}).{refused_text(facts.get('refused') or ())} "
+                "Run those flows by hand and record them, or change the checklist so they run offline")
+    if code == GATE_ROUNDS_EXHAUSTED:
+        return (f"the tester has failed {facts.get('rounds')} times for this work item (the bound is {ROUND_BOUND}): "
+                f"no further tester run is started. To go on, {MANUAL_REMEDY}")
+    if code == GATE_UNCHANGED:
+        return ("the tester already ran at this head and recorded every flow, yet the Workflow still needs functional "
+                f"evidence ({detail}). That is a requirement the checklist cannot satisfy (for example required flows "
+                "this release does not read); no tester run is repeated")
+    raise ValueError(f"no stop is named {code!r}")

@@ -40,7 +40,7 @@ import dataclasses
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from controller import evidence, protocol, target_state
+from controller import evidence, functional_review, protocol, target_state
 from controller.decision import (
     NO_PHASE,
     Action,
@@ -349,8 +349,12 @@ def _automatic(context: "_Context", base: str | None) -> Decision:
                 resume=explain_gate_command(context.managed_repo.root, context.work_item_id or ""),
                 route=None, artifact_path=str(context.managed_repo.root / _STATE_PATH))
     command = rendered_command(action.id, expected_item, base=base)
+    # The checklist writer is told the tester's sandbox limits (automated-functional-review D4), so a new
+    # checklist prefers flows that run offline.
+    addendum = functional_review.sandbox_limits_note() if action.id == "functional.prepare" else None
     return Decision(
-        observed_phase=context.phase, evidence=context.evidence(entry.disposition, action.id), action=Action(command=command),
+        observed_phase=context.phase, evidence=context.evidence(entry.disposition, action.id),
+        action=Action(command=command, task_addendum=addendum),
         automatic=True, gate=None, declined=False, reason=answer.reason.text, protocol=context.info(entry.route),
     )
 

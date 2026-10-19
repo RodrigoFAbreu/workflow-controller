@@ -22,10 +22,19 @@ so that count is a lower bound. ``None`` is never read as 0.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, NamedTuple
 
-#: ``review.round_cap``'s default (D4).
+#: ``review.round_cap``'s default (D4); also the built-in external cap
+#: (``workflow-controller-round-caps`` D3).
 DEFAULT_REVIEW_ROUND_CAP = 4
+
+#: The built-in local and external caps, used when neither the setting, the
+#: option nor the deprecated cap gives one (``workflow-controller-round-caps`` D3).
+DEFAULT_LOCAL_ROUND_CAP = 6
+DEFAULT_EXTERNAL_ROUND_CAP = DEFAULT_REVIEW_ROUND_CAP
+
+CAP_LOCAL = "local"
+CAP_EXTERNAL = "external"
 
 STAGE_PLAN = "plan"
 STAGE_IMPLEMENTATION = "implementation"
@@ -62,6 +71,12 @@ STAGE_OF_ACTION: Mapping[str, str] = {
 APPLY_ACTIONS = frozenset({"plan.apply_review", "implementation.apply_review"})
 LOCAL_REVIEW_ACTIONS = frozenset({"plan.review.local", "implementation.review.local"})
 CAPPED_ACTIONS = APPLY_ACTIONS | LOCAL_REVIEW_ACTIONS
+
+#: The external review, capped in split mode only (``workflow-controller-round-caps``
+#: D2). It is not in :data:`CAPPED_ACTIONS`: its decision is an ``external_gate``
+#: one the cap gate never sees, so the step checks it where it chooses to
+#: run a review.
+EXTERNAL_REVIEW_ACTIONS = frozenset({"plan.review.external", "implementation.review.external"})
 
 #: Plan-review ready phases (``workflow_state.PLAN_REVIEW_READY_PHASES``): a
 #: revision seen at one was published and bound.
@@ -181,3 +196,60 @@ def cap_decision(action_id: str | None, round_number: int, cap: int) -> bool:
     if action_id in LOCAL_REVIEW_ACTIONS:
         return round_number > cap
     return False
+
+
+class SplitRounds(NamedTuple):
+    """The Workflow's per-role counts of one stage: recorded local and external verdicts."""
+
+    local: int
+    external: int
+
+
+class RoundCaps(NamedTuple):
+    """The effective local and external caps."""
+
+    local: int
+    external: int
+
+
+DEFAULT_ROUND_CAPS = RoundCaps(DEFAULT_LOCAL_ROUND_CAP, DEFAULT_EXTERNAL_ROUND_CAP)
+
+
+def split_rounds(snapshot: Mapping | None, stage: str) -> SplitRounds | None:
+    """The Workflow's ``review_round[<stage>_local]`` and ``[<stage>_external]``
+    (protocol 1.5) when both are non-negative integers, else ``None``
+    (D1): one given and the other null or malformed is no split counts, never 0."""
+    rounds = snapshot.get("review_round") if isinstance(snapshot, Mapping) else None
+    if not isinstance(rounds, Mapping):
+        return None
+    local, external = rounds.get(f"{stage}_local"), rounds.get(f"{stage}_external")
+    if _is_int(local) and local >= 0 and _is_int(external) and external >= 0:
+        return SplitRounds(local, external)
+    return None
+
+
+def effective_caps(local: int | None, external: int | None, deprecated: int, *,
+                   deprecated_given: bool) -> RoundCaps:
+    """The two caps (D3): a cap's own setting or option, else the deprecated
+    ``review.round_cap`` when ``deprecated_given`` (set away from its default 4,
+    or given on the command line), else the built-in 6 and 4."""
+    fallback_local = deprecated if deprecated_given else DEFAULT_LOCAL_ROUND_CAP
+    fallback_external = deprecated if deprecated_given else DEFAULT_EXTERNAL_ROUND_CAP
+    return RoundCaps(local if local is not None else fallback_local,
+                     external if external is not None else fallback_external)
+
+
+def split_cap_decision(action_id: str | None, rounds: SplitRounds, caps: RoundCaps) -> str | None:
+    """Which cap D2 says stops ``action_id`` over the split counts: ``local`` or
+    ``external``, else ``None``. An apply stops at either cap (local checked
+    first), a local review at the local cap, an external review at the
+    external cap; a count equal to its cap means the next round would exceed it."""
+    if action_id in APPLY_ACTIONS:
+        if rounds.local >= caps.local:
+            return CAP_LOCAL
+        return CAP_EXTERNAL if rounds.external >= caps.external else None
+    if action_id in LOCAL_REVIEW_ACTIONS:
+        return CAP_LOCAL if rounds.local >= caps.local else None
+    if action_id in EXTERNAL_REVIEW_ACTIONS:
+        return CAP_EXTERNAL if rounds.external >= caps.external else None
+    return None

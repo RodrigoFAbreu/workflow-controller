@@ -91,6 +91,11 @@ And once by ``workflow-controller-review-modes`` CP1, whose three settings rows
 table generation 8) appear in each launched job's ``controller_settings``
 ``values`` and ``sources``. Nothing else moved.
 
+And once by ``workflow-controller-round-caps`` CP1, whose two optional settings
+rows (``review.local_round_cap``, ``review.external_round_cap``; table generation
+12) appear in each launched job's ``controller_settings`` ``values`` and
+``sources``. Nothing else moved.
+
 **Scenarios** (:data:`SCENARIOS`), each over its own temporary target, run
 through the real ``cli.main`` with the pinned test identity, the offline
 stub Workflow Manager and ``tests/fake_claude.py``:

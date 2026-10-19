@@ -20,7 +20,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, managed_repo, protocol, protocol_decision, target_state, worker  # noqa: E402
+from controller import job, managed_repo, protocol, protocol_decision, review_rounds, target_state, worker  # noqa: E402
 from controller.errors import WorkflowProtocolRefusedError, WorkflowReleaseChangedError  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
@@ -394,13 +394,14 @@ class ReviewCapGateTest(unittest.TestCase):
     """``job._review_cap_gate`` (review-convergence CP2, D2-D4): the gate over
     the capped actions, from the Workflow's round or the stored records."""
 
-    def _gate(self, target: _Target, action: str, snapshot: dict, cap: int = 4, work_item: str | None = "demo"):
+    def _gate(self, target: _Target, action: str, snapshot: dict, cap=4, work_item: str | None = "demo"):
         repo = target.inspect()
         item = target_state.NoWorkItemYet if work_item is None else type("W", (), {"work_item_id": work_item})()
         info = type("P", (), {"action_id": action, "document": {"snapshot": snapshot}})()
         decision = type("D", (), {"protocol": info})()
         with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a, **k: a[3:]):
-            return job._review_cap_gate(target.runtime, repo, item, decision, cap)
+            return job._review_cap_gate(target.runtime, repo, item, decision,
+                                        cap if isinstance(cap, review_rounds.RoundCaps) else review_rounds.RoundCaps(6, cap))
 
     def test_the_boundary_for_each_stage_and_action(self) -> None:
         target = _Target(self)
@@ -417,7 +418,8 @@ class ReviewCapGateTest(unittest.TestCase):
     def test_the_text_names_the_three_options_in_order_and_that_the_cap_is_per_command(self) -> None:
         target = _Target(self)
         _code, text = self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}})
-        self.assertIn("round 4 (given by the Workflow), at the round cap of 4", text)
+        self.assertIn("round 4 (given by the Workflow; the Workflow gave no split counts, so this single number is checked against the external cap)", text)
+        self.assertIn("reached the external round cap of 4 (review.external_round_cap)", text)
         self.assertNotIn("counted from the Controller's job records", text)
         self.assertIn("cap of 4", text)
         positions = [text.index(part) for part in ("(1) raise the cap", "(2) accept at the cap with /approve-review",
@@ -434,11 +436,59 @@ class ReviewCapGateTest(unittest.TestCase):
         self.assertIsNone(self._gate(target, "plan.apply_review", snapshot, work_item=None))
         self.assertIsNone(self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}}, cap=6))
 
+    def _split(self, action: str, local, external, caps=review_rounds.RoundCaps(6, 4), stage: str = "plan"):
+        snapshot = {"review_round": {f"{stage}_local": local, f"{stage}_external": external}}
+        return self._gate(_Target(self), action, snapshot, caps)
+
+    def test_split_counts_stop_an_apply_at_either_cap_and_name_the_one_that_fired(self) -> None:
+        local = self._split("plan.apply_review", 6, 1)
+        self.assertEqual(local[0], protocol_decision.REVIEW_ROUND_CAP_REACHED)
+        self.assertIn("local round 6 and external round 1 (given by the Workflow as split counts)", local[1])
+        self.assertIn("the local count 6 has reached the local round cap of 6 (review.local_round_cap)", local[1])
+        self.assertIn("--review-local-round-cap N", local[1])
+        external = self._split("plan.apply_review", 2, 4)
+        self.assertIn("the external count 4 has reached the external round cap of 4 (review.external_round_cap)",
+                      external[1])
+        self.assertIn("--review-external-round-cap N", external[1])
+        self.assertIsNone(self._split("plan.apply_review", 5, 3))
+
+    def test_split_counts_stop_a_local_review_at_the_local_cap_only(self) -> None:
+        for stage in ("plan", "implementation"):
+            self.assertIsNotNone(self._split(f"{stage}.review.local", 6, 0, stage=stage))
+            self.assertIsNone(self._split(f"{stage}.review.local", 5, 9, stage=stage))
+
+    def test_one_null_count_is_the_fallback_with_the_single_number_named(self) -> None:
+        target = _Target(self)
+        snapshot = {"review_round": {"plan": 4, "plan_local": 1, "plan_external": None}}
+        _code, text = self._gate(target, "plan.apply_review", snapshot)
+        self.assertIn("the Workflow gave no split counts, so this single number is checked against the external cap",
+                      text)
+        self.assertIn("round 4", text)
+
+    def test_the_external_review_cap_gate_needs_split_counts_and_an_external_review(self) -> None:
+        target = _Target(self)
+        repo, item = target.inspect(), type("W", (), {"work_item_id": "demo"})()
+
+        def gate(action, snapshot, work_item=item):
+            info = type("P", (), {"action_id": action, "document": {"snapshot": snapshot}})()
+            with mock.patch.object(protocol_decision, "gate_for", side_effect=lambda *a, **k: a[3:]):
+                return job.external_review_cap_gate(repo, work_item, type("D", (), {"protocol": info})(),
+                                                    review_rounds.RoundCaps(6, 4))
+
+        counts = lambda n: {"review_round": {"plan_local": 1, "plan_external": n}}  # noqa: E731
+        code, text = gate("plan.review.external", counts(4))
+        self.assertEqual(code, protocol_decision.REVIEW_ROUND_CAP_REACHED)
+        self.assertIn("external round cap of 4", text)
+        self.assertIsNone(gate("plan.review.external", counts(3)))
+        self.assertIsNone(gate("plan.review.external", {"review_round": {"plan": 9}}))
+        self.assertIsNone(gate("plan.apply_review", counts(9)))
+        self.assertIsNone(gate("plan.review.external", counts(9), work_item=target_state.NoWorkItemYet))
+
     def test_a_legacy_decision_is_not_capped(self) -> None:
         target = _Target(self)
         legacy = type("D", (), {"protocol": None})()
         self.assertIsNone(job._review_cap_gate(target.runtime, target.inspect(),
-                                               type("W", (), {"work_item_id": "demo"})(), legacy, 1))
+                                               type("W", (), {"work_item_id": "demo"})(), legacy, review_rounds.RoundCaps(1, 1)))
 
     def test_an_absent_round_counts_from_the_records_and_says_so(self) -> None:
         target = _Target(self)
@@ -490,10 +540,10 @@ class ReviewCapGateTest(unittest.TestCase):
                     mock.patch.object(job, "_review_cap_gate", return_value=cap) as cap_gate:
                 got, _item, _pre = job._decide_protocol_current(
                     target.inspect(), runtime=target.runtime, snapshot=None, work_item=item, work_item_id="demo",
-                    pre_state={}, base=None, review_round_cap=6)
+                    pre_state={}, base=None, review_round_caps=review_rounds.RoundCaps(6, 6))
             self.assertIs(got, expected)
             if guard_result is None:
-                self.assertEqual(cap_gate.call_args.args[4], 6)
+                self.assertEqual(cap_gate.call_args.args[4], review_rounds.RoundCaps(6, 6))
             else:
                 cap_gate.assert_not_called()
 

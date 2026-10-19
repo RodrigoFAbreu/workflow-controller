@@ -627,7 +627,7 @@ def review_round_cap_stops_and_continues(kit) -> None:
         first = gate_text()
         kit.check(first.startswith("review_round_cap_reached: demo is at plan review round 1 (counted from the "
                                    "Controller's job records"), f"the first stop's gate text: {first!r}")
-        kit.check("at the round cap of 1" in first and "(1) raise the cap" in first, "the cap and the options")
+        kit.check("external round cap of 1" in first and "(1) raise the cap" in first, "the cap and the options")
         kit.equal(loop.item()["phase"], "REVISING_PLAN", "the phase at the cap")
         kit.observe("first-run", {"exit": code, "workers": list(tasks), "phase": loop.item()["phase"],
                                   "records": len(list((loop.runtime / "jobs").glob("*.json")))})
@@ -643,7 +643,7 @@ def review_round_cap_stops_and_continues(kit) -> None:
         kit.equal((code, tasks), (cli.EXIT_GATE, ["/review-plan", "/apply-plan-review", "/review-plan"]),
                   "the raised run: exit status and workers")
         second = gate_text()
-        kit.check("at plan review round 2" in second and "at the round cap of 2" in second,
+        kit.check("at plan review round 2" in second and "external round cap of 2" in second,
                   f"the second stop's gate text: {second!r}")
         kit.equal((loop.item()["phase"], loop.item()["plan_revision"]), ("REVISING_PLAN", 2), "the item at the cap")
         kit.observe("raised-run", {"exit": code, "workers": list(tasks), "plan_revision": loop.item()["plan_revision"],

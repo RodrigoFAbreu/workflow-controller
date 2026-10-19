@@ -142,18 +142,26 @@ A run that stops because it used all its steps with work outstanding exits 16; r
 ## The review round cap
 
 A protocol run does not review a stage for ever. The plan stage and the
-implementation stage each have a round count, and at the cap (the
-`review.round_cap` setting, default 4) the step stops with the
-`review_round_cap_reached` gate and launches nothing: `<stage>.apply_review`
-at round 4, `<stage>.review.local` above round 4. The run exits `10`.
-`workflow-controller explain <repo>` names the stage, the round, the cap and
-the three ways on. To continue the loop, raise the cap for one command:
+implementation stage each have a local and an external round count (given by
+the Workflow from 2.15.0), and each count has a cap: `review.local_round_cap`
+(default 6) and `review.external_round_cap` (default 4). When a count reaches
+its cap the step stops with the `review_round_cap_reached` gate and launches
+nothing: `<stage>.apply_review` at either cap, `<stage>.review.local` at the
+local cap, and the external review the Controller would run at the external
+cap. The run exits `10`. `workflow-controller explain <repo>` names the stage,
+which cap fired, the count, the cap and the three ways on. To continue the
+loop, raise that cap for one command:
 
 ```bash
-workflow-controller run --review-round-cap 6 .
+workflow-controller run --review-external-round-cap 6 .
 ```
 
-The cap applies to that command only; the next plain `run` stops again.
+`--review-local-round-cap N` does the same for the local cap. The cap applies
+to that command only; the next plain `run` stops again. Against a Workflow
+that gives no split counts, one round number is checked against the external
+cap, as the single cap was. `review.round_cap` and `--review-round-cap` still
+work, deprecated, for one more release: they set every cap you have not set
+yourself.
 See [a run stopped at the review round cap](common-problems.md#a-run-stopped-at-the-review-round-cap).
 
 ## Letting the Controller run the external review

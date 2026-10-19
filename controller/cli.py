@@ -30,7 +30,7 @@ from typing import Any
 
 from controller import (
     evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
-    review, review_mode, routing, runtime, settings, target_state, telemetry, usage, worker,
+    review, review_mode, review_rounds, routing, runtime, settings, target_state, telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -242,8 +242,8 @@ def _usage_percent(text: str) -> int:
 
 
 def _review_round_cap(text: str) -> int:
-    """``--review-round-cap``'s ``type=``: an integer from 1 to 100, the
-    bounds of the ``review.round_cap`` row; anything else is a usage error
+    """``--review-round-cap``'s (and the local and external options') ``type=``:
+    an integer from 1 to 100, the bounds of the ``review.*round_cap`` rows; anything else is a usage error
     (exit 2)."""
     try:
         value = int(text)
@@ -368,8 +368,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="cap this run's Claude usage at PERCENT of the account window "
                              "(default: the usage.run_cap_percent setting, none)")
     step_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
-                        help="stop a protocol review loop at round N of a stage for this command "
-                             "(default: the review.round_cap setting, 4)")
+                        help="deprecated: use the local and external caps; retired after 1.17.0. "
+                             "Sets both caps for this command unless its own option is given")
+    step_p.add_argument("--review-local-round-cap", type=_review_round_cap, default=None, metavar="N",
+                        help="stop a protocol review loop at N local review rounds of a stage for this command "
+                             "(default: the review.local_round_cap setting, 6)")
+    step_p.add_argument("--review-external-round-cap", type=_review_round_cap, default=None, metavar="N",
+                        help="stop a protocol review loop at N external review rounds of a stage for this command "
+                             "(default: the review.external_round_cap setting, 4)")
     step_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
                         help="how the external review of a protocol target runs for this command: "
                              "auto, cross-model, single-provider or manual "
@@ -385,8 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="cap this run's Claude usage at PERCENT of the account window "
                             "(default: the usage.run_cap_percent setting, none)")
     run_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
-                       help="stop a protocol review loop at round N of a stage for this command "
-                            "(default: the review.round_cap setting, 4)")
+                       help="deprecated: use the local and external caps; retired after 1.17.0. "
+                            "Sets both caps for this command unless its own option is given")
+    run_p.add_argument("--review-local-round-cap", type=_review_round_cap, default=None, metavar="N",
+                       help="stop a protocol review loop at N local review rounds of a stage for this command "
+                            "(default: the review.local_round_cap setting, 6)")
+    run_p.add_argument("--review-external-round-cap", type=_review_round_cap, default=None, metavar="N",
+                       help="stop a protocol review loop at N external review rounds of a stage for this command "
+                            "(default: the review.external_round_cap setting, 4)")
     run_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
                        help="how the external review of a protocol target runs for this command: "
                             "auto, cross-model, single-provider or manual "
@@ -1068,7 +1080,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
             decision = job._no_progress_gate(runtime_root, target, work_item, decision,
                                              advisories=advisories) \
                 or job._review_cap_gate(runtime_root, target, work_item, decision,
-                                        _effective(args)["review.round_cap"], advisories=advisories) \
+                                        _round_caps(_effective(args)), advisories=advisories) \
                 or decision
     elif work_item is target_state.NoWorkItemYet:
         decision = decide_no_work_item(target, base=base)
@@ -1086,6 +1098,11 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         mode_report = job.review_mode_report(
             runtime_root, target, None if work_item is target_state.NoWorkItemYet else work_item.work_item_id,
             decision, _reviewer_options(effective_settings), _review_mode_options(effective_settings))
+    if mode_report is not None and mode_report["choice"] == "review":
+        # Round-caps D2: the step stops at the external cap instead of launching this review.
+        capped = job.external_review_cap_gate(target, work_item, decision, _round_caps(_effective(args)))
+        if capped is not None:
+            decision, mode_report = capped, None
     mode_block = {} if mode_report is None else {"review_mode": mode_report}
     # pr-defect-loop D4-D6: at a pull-request external gate the next step reports the pull request itself.
     report_forecast = None
@@ -1941,7 +1958,7 @@ def _run_one_step(
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
         usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
         reviewer=_reviewer_options(effective),
-        review_round_cap=effective["review.round_cap"],
+        review_round_caps=_round_caps(effective),
         review_mode_options=_review_mode_options(effective),
     )
 
@@ -2335,6 +2352,8 @@ def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.Rou
         "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
         "usage.run_cap_percent": getattr(args, "usage_cap", None),
         "review.round_cap": getattr(args, "review_round_cap", None),
+        "review.local_round_cap": getattr(args, "review_local_round_cap", None),
+        "review.external_round_cap": getattr(args, "review_external_round_cap", None),
         "review.mode": getattr(args, "review_mode", None),
         "usage.codex_run_cap_percent": getattr(args, "usage_codex_cap", None),
     }, cli_routing
@@ -2388,6 +2407,18 @@ def _apply_settings(args: argparse.Namespace, *, write: bool,
     if runtime_root is not None:
         _install_notifier(effective, runtime_root)
     return effective
+
+
+def _round_caps(effective: settings.EffectiveSettings) -> review_rounds.RoundCaps:
+    """The local and external review round caps in force
+    (workflow-controller-round-caps D3): each cap's own setting or option,
+    else the deprecated ``review.round_cap`` when it is set away from its
+    default 4 or given on the command line, else the built-in 6 and 4."""
+    deprecated = effective["review.round_cap"]
+    return review_rounds.effective_caps(
+        effective["review.local_round_cap"], effective["review.external_round_cap"], deprecated,
+        deprecated_given=effective.sources["review.round_cap"] == settings.SOURCE_CLI
+        or deprecated != review_rounds.DEFAULT_REVIEW_ROUND_CAP)
 
 
 def _effective(args: argparse.Namespace) -> settings.EffectiveSettings:

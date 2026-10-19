@@ -117,7 +117,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C10b | The pull request defect loop: `pr.apply_review` and the `pr_review_result` reporter at the pull-request external gates before acceptance (rows 38d, 38f, 38g; complete, accepted 2026-10-18 by gate policy; released as 1.15.0 from PR #92, squash `3b7aa7a`) | C10a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (complete, accepted 2026-10-18 by gate policy; #82 fixed by disarming the fake workers' timers at exit; released as 1.16.0 from PR #99, squash `6b3c54b`; owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
 | A1 | Harness and git-host adapters: one interface for the Claude and Codex seams and one for the git host (GitHub first), and the usage record, one format whatever the harness reports. A refactor with no change in behaviour: the existing contract tests pass unchanged (owner decision, 2026-10-18: right after CU2, before C10c) (complete, accepted 2026-10-19 by gate policy; released as 1.16.1 from PR #102, squash `70016a4`; follow-ups #103, fill the price table, and #104, small usage-record points, are planned before A3) | CU2 | Adapters and backlog (above) |
-| C13b | Two review round caps per stage, local (default 6) and external (default 4), on the Workflow's separate round counts (protocol 1.5, Workflow 2.15.0); `review.round_cap` keeps working for one release ([#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88), [follow-up 55](#known-follow-ups-carried-forward); this repository runs Workflow 2.15.0 since 2026-10-19) | C13, A1 | [follow-up 55](#known-follow-ups-carried-forward) |
+| C13b | Two review round caps per stage, local (default 6) and external (default 4), on the Workflow's separate round counts (protocol 1.5, Workflow 2.15.0); `review.round_cap` keeps working for one release (complete, accepted 2026-10-19 by gate policy; pull request #107, released as 1.17.0 once merged; [#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88), [follow-up 55](#known-follow-ups-carried-forward); this repository runs Workflow 2.15.0 since 2026-10-19) | C13, A1 | [follow-up 55](#known-follow-ups-carried-forward) |
 | A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It waits for [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released, because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it (owner decision, 2026-10-18: right after A1, before C10c) | A1, workflow#48 | Adapters and backlog (above) |
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
@@ -455,14 +455,21 @@ hurts now, else in a later step or the next clean-up milestone.
    2026-10-18). They are named local and external, never after a provider, because any harness can
    run either kind of review. It depends on [workflow#43](https://github.com/RodrigoFAbreu/workflow/issues/43),
    the Workflow counting local and external rounds separately (placed as Workflow roadmap row 14).
-   Workflow 2.15.0 carries workflow#43 and this repository runs it since 2026-10-19, so #88 is next. Until it
-   ships the single cap (`review.round_cap`) stays at 4 and is raised for a milestone when needed, as it was for C10a.
+   Workflow 2.15.0 carries workflow#43 and this repository runs it since 2026-10-19.
+   Fixed in C13b (`review.local_round_cap` and `review.external_round_cap`, protocol 1.5 split counts).
 56. [#93](https://github.com/RodrigoFAbreu/workflow-controller/issues/93): `pr_report.pending_checks` finds the `ci_green` requirement by a plain substring over the stop text, not by its `ci_green: ` token (C10b review; no defect with the current Workflow wording; CU2).
    Fixed in CU2.
 57. [#94](https://github.com/RodrigoFAbreu/workflow-controller/issues/94): tighten the tests of the Controller's `gh` vetting: assert the "world-writable" message, add a world-writable executable case, fix the blank lines (C10b review; tests only; CU2).
    Fixed in CU2.
 58. [#95](https://github.com/RodrigoFAbreu/workflow-controller/issues/95): `Context.forge` tests for the real forge with an always-true `getattr(forge, "vet_root", False) is None`; set `vet_root` directly (C10b review; clarity only; CU2).
    Fixed in CU2.
+59. Retire `review.round_cap` and `--review-round-cap`: C13b keeps them for one release as a deprecated
+    fallback for every cap still unset; remove the setting row, the option and the fallback after 1.17.0
+    (C13b).
+60. Vendor Workflow 2.15.0 under `tests/workflow_releases/` (its tree, `tools/workflow_releases.py`, the
+    per-release inventories, goldens and migration tests, and the `docs/guide/development.md` paragraph on
+    which release each lifecycle test runs on) so the split-count case runs in the lifecycle tests; until then
+    only `tests/test_protocol_job.py` covers it, with an injected snapshot (C13b).
 
 ---
 

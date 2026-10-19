@@ -31,7 +31,9 @@ protocol (1.4) and is admitted the same way; Controllers 1.13.1, 1.14.0 and 1.15
 `review_round`, null for an item created before 2.15.0), and is admitted the same way; Controllers 1.16.0 and 1.16.1
 were checked against it (protocol mode, protocol 1.5). Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
-job records instead. Controller 1.14.0 and later no longer refuse a value a protocol 1.x minor release adds to a closed enum of an answer: it is
+job records instead. The release that adds the local and external round caps reads the four per-role counts
+(protocol 1.5) and applies each cap to its own count; without them (a Workflow before 2.15.0, or an item with
+null counts) it falls back to that single round, checked against the external cap. Controller 1.14.0 and later no longer refuse a value a protocol 1.x minor release adds to a closed enum of an answer: it is
 advisory, ignored or a stop, by a rule per enum location (a blocked gate before any launch for an action id, worker role or disposition; a `FAILED` job with the evidence reason `workflow_unknown_value` for a reconcile class or record stage) (see
 [automation](guide/automation.md#protocol-mode-workflow-27-and-later)); only a protocol major change is refused.
 Controller 1.7.1

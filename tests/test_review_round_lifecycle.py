@@ -301,7 +301,7 @@ class CapLoop:
             return _result()
 
         with mock.patch.object(worker, "launch", launch):
-            record = job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime, review_round_cap=cap)
+            record = job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime, review_round_caps=review_rounds.RoundCaps(6, cap))
         self.tasks += launched
         return record, launched
 
@@ -336,7 +336,7 @@ class _CapCase(unittest.TestCase):
         text = record["human_gate_pending"]["what_is_required"]
         self.assertTrue(text.startswith(f"{protocol_decision.REVIEW_ROUND_CAP_REACHED}: "), text)
         self.assertIn(f"at {stage} review round {round_number} (counted from the Controller's job records", text)
-        self.assertIn(f"at the round cap of {cap}", text)
+        self.assertIn(f"external round cap of {cap}", text)
         self.assertEqual((loop.root / STATE_REL).read_bytes(), state_before)
         self.assertEqual(fixtures.current_head(loop.root), head_before)
         self.assertEqual(len(loop.records()), records_before + 1)
@@ -564,7 +564,8 @@ class WorkflowGivenRoundTest(_CapCase):
         self.assertEqual(launched, [], record)
         text = record["human_gate_pending"]["what_is_required"]
         self.assertTrue(text.startswith(f"{protocol_decision.REVIEW_ROUND_CAP_REACHED}: "), text)
-        self.assertIn(f"at plan review round {given} (given by the Workflow), at the round cap of 2", text)
+        self.assertIn(f"at plan review round {given} (given by the Workflow; the Workflow gave no split counts", text)
+        self.assertIn("external round cap of 2", text)
         self.assertNotIn("counted from the Controller's job records", text)
         # The blocked record is not a job's round; the last review's row shows the same number, from the same field.
         rows = telemetry.rows(loop.records())

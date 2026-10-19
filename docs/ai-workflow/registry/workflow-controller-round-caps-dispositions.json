@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-round-caps",
+  "dispositions": {
+    "F-01c70559be7b": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 3) names tests/test_trunk_preflight.py in CP1's Files and tests/test_evidence.py and tests/test_protocol_decision.py in CP3's Files."
+    },
+    "F-0f188cc11c6c": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 3, D5) says the text names no reason; the fallback text reads 'the Workflow gave no split counts'."
+    },
+    "F-26784dee2f5a": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#108"
+    },
+    "F-2de9456fecae": {
+      "disposition": "fixed",
+      "note": "controller/job.py _review_cap_gate keeps today's source qualifier in the fallback ('given by the Workflow', or 'counted from the Controller's job records, not given by the Workflow; the Workflow's own count may be higher' at the plan stage); the functional review checked it (flow 7)."
+    },
+    "F-39da9c8c2048": {
+      "disposition": "fixed",
+      "note": "controller/job.py _review_cap_gate keeps today's source qualifier in the fallback ('given by the Workflow', or 'counted from the Controller's job records, not given by the Workflow; the Workflow's own count may be higher' at the plan stage); the functional review checked it (flow 7)."
+    },
+    "F-64d8b2cc8d88": {
+      "disposition": "fixed",
+      "note": "controller/job.py _cap_gate names the fired cap's own option and setting in way (1) (--review-<local|external>-round-cap, review.<local|external>_round_cap); the deprecated pair is not named there."
+    },
+    "F-97db6ec0b094": {
+      "disposition": "fixed",
+      "note": "The external cap is checked once the step has chosen to run a review (external_review_cap_gate, after _choose_review returns a review), so a same-provider review selected under a lowered policy is capped and only choice.kind gate is exempt; Codex implementation round 1 confirmed it and the functional review checked manual and no-reviewer cases (flow 6)."
+    },
+    "F-a042da65876f": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 3, D3) states the wording; docs/guide/runtime.md's settings table and --review-round-cap's help say 'deprecated: use the local and external caps; retired after 1.17.0', and the ROADMAP records the retirement as follow-up 59."
+    },
+    "F-cefa0b11c77e": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#108"
+    },
+    "F-efe67cbba72b": {
+      "disposition": "fixed",
+      "note": "controller/job.py _cap_gate names the fired cap's own option and setting in way (1) (--review-<local|external>-round-cap, review.<local|external>_round_cap); the deprecated pair is not named there."
+    }
+  }
+}

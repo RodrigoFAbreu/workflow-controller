@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -19879,12 +19879,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 48,
-      "last_transition": "2026-10-19T20:12:08.414123+00:00",
+      "state_revision": 50,
+      "last_transition": "2026-10-19T20:37:32.182780+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20445,16 +20445,100 @@
               "at": "2026-10-19T18:34:07Z"
             }
           ]
+        },
+        "F-51b535c5531a": {
+          "digest": "51b535c5531a906356c7080c3e23d73c11e19f70d138344d630ca52e9d49af2d",
+          "text": "**O1 — A bold paragraph after a blank line still ends a flow, even when it belongs to it.** `controller/functional_review.py:300-301` breaks on any line that starts with `**` after a blank line. A checklist written as `**A. Build.** Run make.` / blank / `**Expected:** exit 0 ...` therefore yields flow A as just `**A. Build.** Run make.`, and the expectation is silently dropped from the tester prompt. I reproduced this with a three-line checklist. Neither of this repository's committed shapes has such a paragraph, so the I4 fixture case is fixed. Cheap options: end a flow only at a `**` paragraph whose label is a `NEVER_FLOWS` word or an `Optional`-style marker, or give the tester the checklist path in the prompt (D4 already says the prompt gives the checklist).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T20:30:00Z"
+            }
+          ]
+        },
+        "F-72a0e1817fdf": {
+          "digest": "72a0e1817fdf74e20dc576a854e630e0c5d3726f9f68f9d2d4a177e426d9d76f",
+          "text": "**O2 — The documented live-probe opt-in skips for an operator who logs in with OAuth.** `tests/test_functional_enforcement.py:307-310` passes only `ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`. An operator whose credential is the login in `~/.claude` (this lane's case) gets \"not logged in\" skips, and the run reports `OK`, so the CP2 proof can look re-run when it never reached a model. Suggestions: copy the credential into the private home the way `review.build_claude_home` does for real launches, or fail rather than skip an authentication error when the opt-in variable is set. Also mention the token requirement in `docs/guide/development.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T20:30:00Z"
+            }
+          ]
+        },
+        "F-0be7ea47bed6": {
+          "digest": "0be7ea47bed6e93f0f9369cf0bf36be70c8621ed621ec8fea139bdb086afae1a",
+          "text": "**O3 — `docs/common-problems.md:149` lists stale causes for `functional_tester_unavailable`.** It still says \"(no `claude`, or `bubblewrap`/`socat` missing)\". From this revision, a script-launched `claude` or a kernel without seccomp filters also stops the step, and an npm-installed `claude` is probably the most common case. `docs/install.md` and `docs/guide/automation.md` were updated, but this page was not.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T20:30:00Z"
+            }
+          ]
+        },
+        "F-d45f6e213e29": {
+          "digest": "d45f6e213e29ebef1976191efe5402f6ed4c6e2eecdd2cff0c8c0752bacdcc8e",
+          "text": "**O4 — The native-build check probes `which(\"claude\")`, not the binary actually launched.** `static_probe` resolves `claude` on `PATH` itself, while `launch_functional` launches `resolve_binary(binary_name)`. Today both are `claude` on the same `PATH` (`cli.py` fixes `binary` to `review.CLAUDE.default_binary`), so the outcome is the same. Passing the resolved binary into the probe would keep the check and the launch tied together if `functional.binary` ever becomes configurable.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T20:30:00Z"
+            }
+          ]
+        },
+        "F-4577cf89d2bb": {
+          "digest": "4577cf89d2bb63df1ad0dc0f9610ec767f18eed080d52a84731e4ff0492b4a7b",
+          "text": "**O5 — The bundle's summary and test evidence omit the round-2 fixes.** `IMPLEMENTATION_SUMMARY.md` ends at \"Round 1 review fixes (`14d02fc`)\" and does not describe `c671a04`. `TEST_RESULTS.md` has no section after round 2 (it was not regenerated), so revision 3 carries no recorded test or live-probe evidence of its own. This round's evidence is above. Add a \"Round 2 review fixes\" section and a round-3 test table when the bundle is next regenerated.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T20:30:00Z"
+            }
+          ]
+        },
+        "F-3f6bae4a655a": {
+          "digest": "3f6bae4a655ac13cc8490ad3c60ef01db27d1e1df7cea42733acb2d9f9b6463b",
+          "text": "The documented live opt-in can report `OK` with authentication-related skips for an operator using credentials stored only in their real Claude home. Document the required token environment variable and make the distinction between skipped probes and completed enforcement proof explicit.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+              "verdict": "REVISE",
+              "at": "2026-10-19T20:37:32.182780+00:00"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "cdb13f5819dc71e60a5d45e1fd7c1635007d243b47e88dfad2407bbef21dc638",
+        "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "ffc3138c37fc38838e5d4d01ef3599f86f6822725abad92408a6671448a971a5",
+          "bundle_id": "1e0dd7cc1788b192550cb7eb4289a77c3e3d74b161ac840f3a1136ef23083a4b",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-19T18:34:07Z",
-          "verdict_sha256": "3f3124838e375a2535c49bb6c5047f5bc3f09e5fa80975ffea73c4a61047f911",
+          "round": 3,
+          "completed_at": "2026-10-19T20:30:00Z",
+          "verdict_sha256": "f7c605bfe12920affe29b0629b6cfd3c318effdc0157710bae0ad23c7a1f3ed5",
           "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },

@@ -1,6 +1,6 @@
 # Compatibility
 
-> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.16.1; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0 and 2.15.0.
+> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.17.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0 and 2.15.0.
 
 This page is the one place that says which Controller release admits which
 Workflow release. Other pages and other repositories link here instead of
@@ -28,10 +28,10 @@ admitted the same way; Controllers 1.11.0, 1.12.0, 1.13.0, 1.13.1, 1.14.0 and 1.
 protocol (1.4) and is admitted the same way; Controllers 1.13.1, 1.14.0 and 1.15.0 were checked against it. Workflow
 2.14.0 also speaks protocol 1.4 and is admitted the same way; Controllers 1.15.0, 1.16.0 and 1.16.1 were checked against it (1.16.0 and 1.16.1 speak the same protocol, 1.4; CU2 and A1 were accepted on it, and the conformance tests pass). Workflow
 2.15.0 speaks protocol 1.5, a minor addition (the four per-role round counts in the next-action snapshot's
-`review_round`, null for an item created before 2.15.0), and is admitted the same way; Controllers 1.16.0 and 1.16.1
-were checked against it (protocol mode, protocol 1.5). Controller 1.12.0
+`review_round`, null for an item created before 2.15.0), and is admitted the same way; Controllers 1.16.0, 1.16.1 and 1.17.0
+were checked against it (protocol mode, protocol 1.5); this repository runs 2.15.0. Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
-job records instead. The release that adds the local and external round caps reads the four per-role counts
+job records instead. Controller 1.17.0, which adds the local and external round caps, reads the four per-role counts
 (protocol 1.5) and applies each cap to its own count; without them (a Workflow before 2.15.0, or an item with
 null counts) it falls back to that single round, checked against the external cap. Controller 1.14.0 and later no longer refuse a value a protocol 1.x minor release adds to a closed enum of an answer: it is
 advisory, ignored or a stop, by a rule per enum location (a blocked gate before any launch for an action id, worker role or disposition; a `FAILED` job with the evidence reason `workflow_unknown_value` for a reconcile class or record stage) (see

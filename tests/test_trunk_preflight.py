@@ -181,6 +181,9 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 self.assertEqual(block[part].pop("review.mode"), "auto" if part == "values" else "file")
                 # review-convergence CP1: the one ``review.round_cap`` row (table generation 7).
                 self.assertEqual(block[part].pop("review.round_cap"), 4 if part == "values" else "file")
+                # round-caps CP1: the two optional cap rows (table generation 12), unset.
+                for key in ("review.local_round_cap", "review.external_round_cap"):
+                    self.assertEqual(block[part].pop(key), None if part == "values" else "file")
         # usage-limit-mid-job CP1/CP2 added one member to each launched job's
         # stream diagnosis (``usage_limit``, null: the fake's stream has no
         # rejected rate-limit event) and one to its pre-state

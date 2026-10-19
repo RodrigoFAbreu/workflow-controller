@@ -178,6 +178,9 @@ TABLE: tuple[Setting, ...] = (
     Setting("reviewer.binary", TYPE_OPTIONAL_STRING, None, 1, 1024, None, 6),
     # The review round cap (workflow-controller-review-convergence D4): a
     # protocol target's review loop stops at this round per stage.
+    # Deprecated (workflow-controller-round-caps D3): use the local and
+    # external caps below; retired after 1.17.0. Set away from 4 (or given
+    # on the command line), it is the value of every cap still unset.
     Setting("review.round_cap", TYPE_INT, 4, 1, 100, "run/step --review-round-cap", 7),
     # workflow-controller-review-modes D1: how the external review runs, and
     # the same-provider reviewer's model and effort (the string rows' bounds
@@ -185,6 +188,10 @@ TABLE: tuple[Setting, ...] = (
     Setting("review.mode", TYPE_CHOICE, "auto", None, None, "run/step --review-mode", 8, REVIEW_MODES),
     Setting("reviewer.same_provider_model", TYPE_OPTIONAL_STRING, None, 1, 128, None, 8),
     Setting("reviewer.same_provider_effort", TYPE_OPTIONAL_STRING, None, 1, 32, None, 8),
+    # workflow-controller-round-caps D3: the local and the external review
+    # round caps. Unset means the built-in 6 and 4.
+    Setting("review.local_round_cap", TYPE_OPTIONAL_INT, None, 1, 100, "run/step --review-local-round-cap", 12),
+    Setting("review.external_round_cap", TYPE_OPTIONAL_INT, None, 1, 100, "run/step --review-external-round-cap", 12),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -200,8 +207,10 @@ TABLE: tuple[Setting, ...] = (
 #: ``reviewer.same_provider_*`` rows (workflow-controller-review-modes D1). 9: the role
 #: ``satisfy-gate`` (workflow-controller-gate-policy D4). 10: the role
 #: ``apply-pr-review`` (workflow-controller-pr-defect-loop D3). 11: the role
-#: ``satisfy-gate-acceptance`` (workflow-controller-cleanup-2 D4).
-TABLE_GENERATION = 11
+#: ``satisfy-gate-acceptance`` (workflow-controller-cleanup-2 D4). 12: the
+#: rows ``review.local_round_cap`` and ``review.external_round_cap``
+#: (workflow-controller-round-caps D4).
+TABLE_GENERATION = 12
 
 
 def _table() -> dict[str, Setting]:

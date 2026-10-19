@@ -3068,6 +3068,41 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 cli.cmd_run(args, self.runtime_root, self.ident)
                 self.assertEqual(calls[-1]["review_round_cap"], expected)
 
+    def test_the_local_and_external_caps_reach_the_effective_settings(self) -> None:
+        """workflow-controller-round-caps D3: both optional caps are
+        settings and options; the option beats the file and the deprecated
+        option stays."""
+        for flags, file, expected in (
+                ({}, None, (None, None, "file")),
+                ({}, {"review": {"local_round_cap": 8, "external_round_cap": 2}}, (8, 2, "file")),
+                ({"review_local_round_cap": 3, "review_external_round_cap": 5},
+                 {"review": {"local_round_cap": 8, "external_round_cap": 2}}, (3, 5, "cli"))):
+            with self.subTest(flags=flags, file=file):
+                effective = cli._effective(self._args(file, max_steps=1, **flags))
+                self.assertEqual((effective["review.local_round_cap"], effective["review.external_round_cap"]),
+                                 expected[:2])
+                self.assertEqual(effective.sources["review.local_round_cap"], expected[2])
+        deprecated = cli._effective(self._args(None, max_steps=1, review_round_cap=9))
+        self.assertEqual((deprecated["review.round_cap"], deprecated.sources["review.round_cap"]), (9, "cli"))
+
+    def test_the_local_and_external_options_are_bounded_and_deprecation_is_stated(self) -> None:
+        parser = cli.build_parser()
+        for option in ("--review-local-round-cap", "--review-external-round-cap"):
+            for command in ("step", "run"):
+                for bad in ("0", "101", "x", "-1"):
+                    with self.subTest(option=option, command=command, bad=bad), \
+                            contextlib.redirect_stderr(io.StringIO()):
+                        with self.assertRaises(SystemExit) as caught:
+                            parser.parse_args([command, option, bad, "/r"])
+                        self.assertEqual(caught.exception.code, 2)
+                attr = option[2:].replace("-", "_")
+                self.assertEqual(getattr(parser.parse_args([command, option, "100", "/r"]), attr), 100)
+                self.assertEqual(getattr(parser.parse_args([command, "/r"]), attr), None)
+        for command in ("step", "run"):
+            with contextlib.redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit):
+                parser.parse_args([command, "--help"])
+            self.assertIn("deprecated: use the local and external caps", " ".join(out.getvalue().split()))
+
     def test_a_bad_review_round_cap_is_a_usage_error(self) -> None:
         parser = cli.build_parser()
         for argv in (["step", "--review-round-cap", "0", "/r"], ["run", "--review-round-cap", "101", "/r"],

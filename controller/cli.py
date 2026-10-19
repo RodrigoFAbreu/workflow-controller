@@ -242,8 +242,8 @@ def _usage_percent(text: str) -> int:
 
 
 def _review_round_cap(text: str) -> int:
-    """``--review-round-cap``'s ``type=``: an integer from 1 to 100, the
-    bounds of the ``review.round_cap`` row; anything else is a usage error
+    """``--review-round-cap``'s (and the local and external options') ``type=``:
+    an integer from 1 to 100, the bounds of the ``review.*round_cap`` rows; anything else is a usage error
     (exit 2)."""
     try:
         value = int(text)
@@ -368,8 +368,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="cap this run's Claude usage at PERCENT of the account window "
                              "(default: the usage.run_cap_percent setting, none)")
     step_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
-                        help="stop a protocol review loop at round N of a stage for this command "
-                             "(default: the review.round_cap setting, 4)")
+                        help="deprecated: use the local and external caps; retired after 1.17.0. "
+                             "Sets both caps for this command unless its own option is given")
+    step_p.add_argument("--review-local-round-cap", type=_review_round_cap, default=None, metavar="N",
+                        help="stop a protocol review loop at N local review rounds of a stage for this command "
+                             "(default: the review.local_round_cap setting, 6)")
+    step_p.add_argument("--review-external-round-cap", type=_review_round_cap, default=None, metavar="N",
+                        help="stop a protocol review loop at N external review rounds of a stage for this command "
+                             "(default: the review.external_round_cap setting, 4)")
     step_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
                         help="how the external review of a protocol target runs for this command: "
                              "auto, cross-model, single-provider or manual "
@@ -385,8 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="cap this run's Claude usage at PERCENT of the account window "
                             "(default: the usage.run_cap_percent setting, none)")
     run_p.add_argument("--review-round-cap", type=_review_round_cap, default=None, metavar="N",
-                       help="stop a protocol review loop at round N of a stage for this command "
-                            "(default: the review.round_cap setting, 4)")
+                       help="deprecated: use the local and external caps; retired after 1.17.0. "
+                            "Sets both caps for this command unless its own option is given")
+    run_p.add_argument("--review-local-round-cap", type=_review_round_cap, default=None, metavar="N",
+                       help="stop a protocol review loop at N local review rounds of a stage for this command "
+                            "(default: the review.local_round_cap setting, 6)")
+    run_p.add_argument("--review-external-round-cap", type=_review_round_cap, default=None, metavar="N",
+                       help="stop a protocol review loop at N external review rounds of a stage for this command "
+                            "(default: the review.external_round_cap setting, 4)")
     run_p.add_argument("--review-mode", choices=settings.REVIEW_MODES, default=None, metavar="MODE",
                        help="how the external review of a protocol target runs for this command: "
                             "auto, cross-model, single-provider or manual "
@@ -2335,6 +2347,8 @@ def _settings_cli_overrides(args: argparse.Namespace) -> tuple[dict, routing.Rou
         "worker.drain_detach_seconds": getattr(args, "drain_timeout", None),
         "usage.run_cap_percent": getattr(args, "usage_cap", None),
         "review.round_cap": getattr(args, "review_round_cap", None),
+        "review.local_round_cap": getattr(args, "review_local_round_cap", None),
+        "review.external_round_cap": getattr(args, "review_external_round_cap", None),
         "review.mode": getattr(args, "review_mode", None),
         "usage.codex_run_cap_percent": getattr(args, "usage_codex_cap", None),
     }, cli_routing

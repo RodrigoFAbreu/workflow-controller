@@ -45,9 +45,9 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
-from . import gitrepo, runtime, usage, usage_record, worker_stream
+from . import functional_review, gitrepo, harness as harness_registry, runtime, usage, usage_record, worker_stream
 from .anchor import OWNERSHIP_VAR
-from .errors import ReviewLaunchRefusedError
+from .errors import ControllerError, ReviewLaunchRefusedError
 
 # ---------------------------------------------------------------------------
 # The pinned boundary
@@ -591,10 +591,12 @@ class JobLayout:
 
     runtime_root: Path
     job_id: str
+    #: ``reviews`` for a review job, ``functional`` for the functional tester's sandbox.
+    area: str = "reviews"
 
     @property
     def base(self) -> Path:
-        return self.runtime_root / job_dir(self.job_id)
+        return self.runtime_root / self.area / self.job_id
 
     @property
     def tree(self) -> Path:
@@ -621,7 +623,7 @@ class JobLayout:
         return self.base / "verdict.md"
 
     def rel(self, *parts: str) -> str:
-        return "/".join([job_dir(self.job_id), *parts])
+        return "/".join([self.area, self.job_id, *parts])
 
 
 def _overrides(kind: str, *, model: str, effort: str, tmpdir: Path | None, tree: Path | None) -> list[str]:
@@ -1596,12 +1598,12 @@ def parse_claude_stream(stdout: bytes) -> ClaudeStream:
     return ClaudeStream(init, result, limits)
 
 
-def check_claude_init(init: Mapping, *, model: str) -> None:
+def check_claude_init(init: Mapping, *, model: str, tools: Sequence[str] = CLAUDE_TOOLS) -> None:
     """The boundary the CLI does not fail closed on (``README.md``): the
     session's own ``init`` event must show the tools offered, no MCP server, the
     ``dontAsk`` mode, no skill or slash command, the requested model and no
     memory path. Anything else voids the review."""
-    wanted = {"tools": sorted(CLAUDE_TOOLS), "mcp_servers": [], "permissionMode": "dontAsk", "skills": [],
+    wanted = {"tools": sorted(tools), "mcp_servers": [], "permissionMode": "dontAsk", "skills": [],
               "slash_commands": [], "model": model, "memory_paths": None}
     for key, want in wanted.items():
         have = init.get(key)
@@ -1620,11 +1622,22 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
     check_claude_outside_layers(ctx.system_dir)
     command = claude_argv(binary=binary, model=ctx.model, effort=ctx.effort)
     check_claude_argv(command, model=ctx.model, effort=ctx.effort)
-    run = run_bounded(command, cwd=layout.tree, env=ctx.env, timeout=ctx.timeout, stdin_text=prompt, on_spawn=on_spawn)
+    return _claude_run(ctx, command, prompt, on_spawn, cwd=layout.tree)
+
+
+def _claude_run(ctx: AttemptContext, command: Sequence[str], prompt: str,
+                on_spawn: Callable[[int, int], None] | None, *, cwd: Path, tools: Sequence[str] = CLAUDE_TOOLS,
+                keep_verdict: bool = True) -> Attempt:
+    """Run the already-checked ``command`` and read the stream: the ``init``
+    event is checked against the boundary (``tools``), and the verdict is the
+    ``result`` event's text (written to the job's ``verdict.md`` when
+    ``keep_verdict``)."""
+    layout = ctx.layout
+    run = run_bounded(command, cwd=cwd, env=ctx.env, timeout=ctx.timeout, stdin_text=prompt, on_spawn=on_spawn)
     stream = parse_claude_stream(run.stdout)
     if stream.init is not None:
         try:
-            check_claude_init(stream.init, model=ctx.model)
+            check_claude_init(stream.init, model=ctx.model, tools=tools)
         except ReviewLaunchRefusedError as exc:
             exc.figures = result_figures(stream.result)  # the run was paid for even though its verdict is void
             exc.reasoning = result_reasoning(stream.result)
@@ -1646,11 +1659,12 @@ def _claude_attempt(ctx: AttemptContext, prompt: str, on_spawn: Callable[[int, i
         rejected = [info for info in stream.rate_limits if info.get("status") == "rejected"]
         detail = (f"{rejected[-1].get('rateLimitType')}, resets at {rejected[-1].get('resetsAt')}" if rejected
                   else "api_error_status 429")
-    if verdict.strip():
+    if keep_verdict and verdict.strip():
         runtime.write_bytes(layout.runtime_root, layout.rel("verdict.md"), verdict.encode("utf-8"))
     first, last = usage.read_claude_stream_span(run.stdout)
+    failure = functional_review.result_event_text(result) if failed else ""
     return Attempt(run, verdict, limited, detail, [], [last[w] for w in usage.WINDOWS if w in last],
-                   text if failed and text else None, [first[w] for w in usage.WINDOWS if w in first],
+                   failure or None, [first[w] for w in usage.WINDOWS if w in first],
                    result_figures(stream.result), result_reasoning(stream.result))
 
 
@@ -2025,3 +2039,253 @@ def sweep_retained(runtime_root: Path, *, now: float) -> list[str]:
         runtime.remove_tree(runtime_root, job_dir(path.name))
         removed.append(path.name)
     return removed
+
+
+# ---------------------------------------------------------------------------
+# The functional tester's run kind (automated-functional-review CP3, D2, D3, D5)
+# ---------------------------------------------------------------------------
+
+def functional_argv(*, binary: Path, model: str, effort: str, flags: Sequence[str]) -> list[str]:
+    """The only constructor of the tester's command line: the review run's
+    isolation flags (no settings source, no MCP server, no slash command, no
+    session persistence), the model and effort, and ``flags`` (the closed tool
+    set and the run settings, ``functional_review.tester_flags``). The effort
+    and the model are validated as for a review."""
+    if effort not in CLAUDE_EFFORTS:
+        raise _refuse(f"functional.effort {effort!r} is not one of {', '.join(CLAUDE_EFFORTS)}", check="effort",
+                      entry=effort)
+    if not CLAUDE_MODEL_ID_RE.fullmatch(model):
+        raise _refuse(f"the functional tester's model {model!r} is not a full Claude model id", check="model",
+                      entry=model)
+    return [str(binary), "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+            "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            "--disable-slash-commands", "--model", model, "--effort", effort, *flags]
+
+
+def check_functional_argv(command: Sequence[str], *, model: str, effort: str, flags: Sequence[str]) -> None:
+    """Refuse a launch whose command line is not exactly :func:`functional_argv`'s
+    (the tool set and the settings file are among its elements), naming the
+    first element that differs."""
+    expected = functional_argv(binary=Path(command[0]) if command else Path("claude"), model=model, effort=effort,
+                               flags=flags)
+    for index, want in enumerate(expected):
+        have = command[index] if index < len(command) else None
+        if have != want:
+            raise _refuse(f"the functional command line differs from the pinned one at element {index}: "
+                          f"{have!r}, expected {want!r}", check="argv", entry=want)
+    if len(command) != len(expected):
+        raise _refuse(f"the functional command line carries the extra element {command[len(expected)]!r}",
+                      check="argv", entry=command[len(expected)])
+
+
+def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
+    """The run settings on disk are exactly the document the sandbox derives,
+    and every writable root lies in the sandbox's own scratch locations or is a
+    derived writable location below the clone (never the clone root, its
+    ``.git`` or a path outside the sandbox); the deny list holds the clone root
+    and ``.git``."""
+    try:
+        on_disk = json.loads(sandbox.settings_path.read_text())
+    except (OSError, ValueError) as exc:
+        raise _refuse(f"the tester's settings file cannot be read: {exc}", check="settings",
+                      source=str(sandbox.settings_path)) from None
+    wanted = sandbox.settings()
+    if on_disk != wanted:
+        raise _refuse("the tester's settings file is not the one the sandbox derives", check="settings",
+                      source=str(sandbox.settings_path))
+    filesystem = on_disk["sandbox"]["filesystem"]
+    base = sandbox.base.resolve()
+    for root in filesystem["allowWrite"]:
+        path = Path(root)
+        try:
+            path.resolve().relative_to(base)
+        except ValueError:
+            raise _refuse(f"the tester may write {root}, which is outside its sandbox", check="settings",
+                          entry=root) from None
+        if path in (sandbox.clone, sandbox.clone / ".git") or sandbox.clone / ".git" in path.parents:
+            raise _refuse(f"the tester may write {root}, which is the candidate", check="settings", entry=root)
+    if [str(sandbox.clone), str(sandbox.clone / ".git")] != filesystem["denyWrite"]:
+        raise _refuse("the tester's deny list is not the clone root and its .git", check="settings")
+
+
+def _local_origin_refs(repo_root: Path) -> str | None:
+    """The refs of the real ``origin`` read with a local ``git for-each-ref``
+    **only when it is a local path**; ``None`` for a URL or no origin (the
+    Controller makes no network call). An unreadable path origin raises
+    :class:`OSError`."""
+    probe = subprocess.run(["git", "-C", str(repo_root), "--no-optional-locks", "config", "--get", "remote.origin.url"],
+                           capture_output=True, stdin=subprocess.DEVNULL, check=False, env=_git_env(repo_root))
+    url = probe.stdout.decode("utf-8", "replace").strip() if probe.returncode == 0 else ""
+    if not url or "://" in url or (":" in url and not url.startswith("/")):
+        return None
+    path = (repo_root / url).resolve() if not url.startswith("/") else Path(url)
+    listing = subprocess.run(["git", "--no-optional-locks", "-C", str(path), "for-each-ref",
+                              "--format=%(refname) %(objectname)"], capture_output=True, stdin=subprocess.DEVNULL,
+                             check=False, env=_git_env(path))
+    if listing.returncode != 0:
+        raise OSError(f"the origin {path} cannot be read: {listing.stderr.decode('utf-8', 'replace').strip()[:200]}")
+    return listing.stdout.decode("utf-8", "replace")
+
+
+def _sessions_in(home: Path) -> list[str]:
+    """Transcripts a Claude session left in the job's private home. The tester
+    runs with ``--no-session-persistence`` and its home is private, so any
+    ``projects/**/*.jsonl`` belongs to a nested real ``claude``."""
+    try:
+        return sorted(str(p.relative_to(home)) for p in (home / "projects").rglob("*.jsonl"))
+    except OSError:
+        return []
+
+
+def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequence["functional_review.Flow"],
+                      runtime_root: Path, job_id: str, work_item_id: str, operator_home: Path, model: str,
+                      effort: str, timeout: float, binary_name: str = "claude", system_dir: Path | None = None,
+                      inherited_env: Mapping[str, str] | None = None,
+                      on_spawn: Callable[[int, int], None] | None = None, out: dict | None = None,
+                      probe: Callable[[], None] = functional_review.static_probe) -> dict:
+    """Run the functional tester end to end in a fresh sandbox and return what
+    was observed; it records, validates and decides nothing (``functional_review``
+    and the step do). The tester is ``claude`` under the closed boundary of
+    D2 (``Bash`` only, the run settings and the enforcement probe), in a sandbox
+    built from ``candidate`` (D3), and afterwards:
+
+    - the real repository is compared before and after (:func:`snapshot_repository`:
+      worktree digest, ``HEAD``, refs, reflogs, status, the state identity is the
+      caller's to add), as is the real origin's ref list when it is a local path,
+      and the job's private Claude home is searched for a session: any
+      difference is a ``breach`` entry;
+    - the clone is bound to the candidate (:func:`functional_review.check_bound`):
+      any difference is an ``unbound`` entry.
+
+    The result holds ``outcome`` (``ran``, ``timeout``, ``limit`` or ``failed``),
+    ``breach`` and ``unbound`` (lists), ``fake_calls``, ``output_dir``,
+    ``sandbox`` (the folder) and ``keep`` (true after a breach or an unbound
+    clone: the sandbox stays at ``<runtime root>/functional/<job id>/``);
+    usage fields as :func:`launch_review` leaves them. On a clean run the
+    sandbox is **not** removed: the caller reads the output folder and then
+    calls :func:`settle_functional`. A missing ``claude``, a refused role, a
+    missing enforcement component or a clone that does not match the manifest
+    raises :class:`functional_review.TesterUnavailable`; the sandbox is removed
+    on every exception."""
+    result: dict = out if out is not None else {}
+    result.update({"outcome": "failed", "breach": [], "unbound": [], "fake_calls": {}, "output_dir": None,
+                   "sandbox": None, "keep": False, "credentials": None, "detail": None, "readings": [],
+                   "first_readings": []})
+    try:
+        harness_registry.for_role("claude-code", harness_registry.FUNCTIONAL_TESTER)
+    except ControllerError as exc:
+        raise functional_review.unavailable(functional_review.UNAVAILABLE_ROLE_REFUSED, str(exc)) from exc
+    try:
+        binary = resolve_binary(binary_name)
+    except ReviewLaunchRefusedError as exc:
+        raise functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc)) from exc
+    probe()
+    functional_review.sweep_kept(runtime_root, work_item_id)
+    layout = JobLayout(runtime_root, job_id, area=functional_review.SANDBOX_AREA)
+    system_dir = system_dir or CLAUDE_SYSTEM_LAYER_DIR
+    repo_root = candidate.repo_root
+    try:
+        own = [str(runtime_root.resolve().relative_to(repo_root.resolve()))]
+    except ValueError:
+        own = []  # the sandbox is not part of the worktree being guarded
+    before = snapshot_repository(repo_root, exclude=own)
+    try:
+        origin_before = _local_origin_refs(repo_root)
+        origin_error = None
+    except OSError as exc:
+        origin_before, origin_error = None, str(exc)
+    sandbox = functional_review.build_sandbox(candidate, runtime_root=runtime_root, job_id=job_id,
+                                              work_item_id=work_item_id)
+    result.update(sandbox=sandbox.base, output_dir=sandbox.out, head=candidate.head,
+                  checklist_blob=candidate.checklist_blob, writable=list(sandbox.writable),
+                  refused=[{"pattern": item.pattern, "reason": item.reason} for item in sandbox.refused])
+    captured = None
+    try:
+        captured = build_claude_home(layout, operator_home)
+        env = {**claude_environment(layout, binary, job_id, inherited_env), **sandbox.environment()}
+        ctx = AttemptContext(layout, binary, env, model, effort, timeout, system_dir, None)
+        flags = functional_review.tester_flags(sandbox.settings_path)
+        prompt = functional_review.tester_prompt(
+            flows, clone_dir=sandbox.clone, output_dir=sandbox.out, head=candidate.head,
+            checklist_blob=candidate.checklist_blob, writable=sandbox.writable, refused=sandbox.refused,
+            timeout_seconds=int(timeout))
+        check_claude_home(layout)
+        check_claude_outside_layers(system_dir)
+        check_functional_settings(sandbox)
+        command = functional_argv(binary=binary, model=model, effort=effort, flags=flags)
+        check_functional_argv(command, model=model, effort=effort, flags=flags)
+        try:
+            made = _claude_run(ctx, command, prompt, on_spawn, cwd=sandbox.out, tools=functional_review.TESTER_TOOLS,
+                               keep_verdict=False)
+        except ReviewLaunchRefusedError as exc:
+            paid = getattr(exc, "figures", None)  # a refused run's reported cost and tokens are kept
+            if paid is not None:
+                result["telemetry"] = add_figures(result.get("telemetry"), paid)
+            _add_reasoning(result, getattr(exc, "reasoning", None))
+            raise
+        if made.figures is not None:
+            result["telemetry"] = add_figures(result.get("telemetry"), made.figures)
+        _add_reasoning(result, made.reasoning)
+        if made.readings is not None:
+            result["stream_readings"] = list(made.readings)
+        for reading in made.first_readings or []:
+            result.setdefault("stream_first", {}).setdefault(reading["window"], reading)
+        run = made.run
+        refusal = functional_review.launch_refusal(made.failure or "")
+        if refusal is not None:
+            refusal.evidence["cause"] = functional_review.UNAVAILABLE_ENFORCEMENT
+            raise refusal
+        if run.timed_out:
+            result.update(outcome="timeout", detail="the tester passed its deadline")
+        elif made.limit_error:
+            result.update(outcome="limit", detail=f"Claude reported a limit ({made.limit_detail})")
+        elif run.exit_code != 0:
+            text = made.failure or (run.stdout.decode("utf-8", "replace") + run.stderr.decode("utf-8", "replace"))
+            result.update(outcome="failed", detail=text.strip()[-400:])
+        else:
+            result.update(outcome="ran", detail=None)
+        breach = compare_snapshots(before, snapshot_repository(repo_root, exclude=own))
+        if origin_error is not None:
+            breach.append(f"origin: {origin_error}")
+        else:
+            try:
+                if _local_origin_refs(repo_root) != origin_before:
+                    breach.append("origin refs")
+            except OSError as exc:
+                breach.append(f"origin: {exc}")
+        breach += [f"session: {name}" for name in _sessions_in(layout.claude_home)]
+        result["breach"] = breach
+        result["unbound"] = functional_review.check_bound(sandbox)
+        result["fake_calls"] = functional_review.read_fake_calls(sandbox.fake_logs)
+        result["keep"] = bool(breach or result["unbound"])
+    finally:
+        failures: list[Exception] = []
+        steps: list[Callable[[], None]] = []
+        if captured is not None:
+            steps.append(lambda: result.__setitem__("credentials",
+                                                    copy_back_credentials(layout, operator_home, captured, CLAUDE)))
+        steps.append(lambda: result.__setitem__("readings", result.get("stream_readings") or []))
+        steps.append(lambda: result.__setitem__("first_readings", list((result.get("stream_first") or {}).values())))
+        steps.append(lambda: result.pop("stream_first", None))
+        steps.append(lambda: result.pop("stream_readings", None))
+        steps.append(lambda: runtime.remove_tree(runtime_root, layout.rel(CLAUDE_HOME_NAME)))  # the credential copy
+        if sys.exc_info()[0] is not None:
+            steps.append(lambda: runtime.remove_tree(runtime_root, layout.rel()))
+        for step in steps:
+            try:
+                step()
+            except Exception as exc:  # noqa: BLE001 -- recorded; raised below only when nothing else is in flight
+                failures.append(exc)
+        if failures and sys.exc_info()[0] is None:
+            raise failures[0]
+    return result
+
+
+def settle_functional(result: Mapping) -> None:
+    """Remove the sandbox of a finished functional run unless it is kept (a
+    breach or an unbound clone). Safe to call more than once."""
+    sandbox = result.get("sandbox")
+    if sandbox is None or result.get("keep"):
+        return
+    root = Path(sandbox).parent.parent
+    runtime.remove_tree(root, f"{functional_review.SANDBOX_AREA}/{Path(sandbox).name}")

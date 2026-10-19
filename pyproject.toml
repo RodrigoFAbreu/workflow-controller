@@ -13,7 +13,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["controller"]
+packages = ["controller", "controller.sandbox_fakes"]
 
 [tool.setuptools.package-data]
 controller = ["GENERATION.json", "protocol_schema.json", "prices.json"]

@@ -299,5 +299,22 @@ class RaisedByInvariantTest(unittest.TestCase):
         self.assertEqual(scan_raised_by_violations(tree), [])
 
 
+class SubpackageListedTest(unittest.TestCase):
+    """setuptools' explicit ``packages`` list does not extend to subpackages,
+    so a directory with an ``__init__.py`` that is not listed would be missing
+    from the wheel (the functional tester's ``controller.sandbox_fakes`` ships
+    inside the package)."""
+
+    def test_pyproject_lists_every_package_directory_under_controller(self) -> None:
+        import tomllib
+
+        listed = set(tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["tool"]["setuptools"]["packages"])
+        present = {"controller"} | {
+            ".".join(init.parent.relative_to(REPO_ROOT).parts) for init in CONTROLLER_DIR.rglob("__init__.py")
+            if "__pycache__" not in init.parts}
+        self.assertEqual(listed, present)
+        self.assertIn("controller.sandbox_fakes", listed)
+
+
 if __name__ == "__main__":
     unittest.main()

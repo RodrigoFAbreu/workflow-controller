@@ -17,6 +17,9 @@ from controller.errors import HarnessRoleError, UnknownHarnessError
 
 WORKER = "worker"
 REVIEWER = "reviewer"
+#: The Controller-run functional tester (automated-functional-review D2): a
+#: shell-only, sandboxed ``claude -p`` job. Only Claude Code declares it.
+FUNCTIONAL_TESTER = "functional-tester"
 
 #: How a harness reports usage: exactly, computed from its output, or not.
 USAGE_REPORTED = "reported"
@@ -51,7 +54,7 @@ class HarnessAdapter:
 
 CLAUDE_CODE = HarnessAdapter(
     name="claude-code", reviewer_name="claude", family="anthropic",
-    roles=(WORKER, REVIEWER), can_restrict_agents=True, can_restrict_tools=True,
+    roles=(WORKER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_REPORTED, pinned_version="2.1.296 (Claude Code)",
     fails_closed_on_unknown_version=True,
 )

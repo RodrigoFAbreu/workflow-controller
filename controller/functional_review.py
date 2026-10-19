@@ -18,10 +18,16 @@ needs no process and no sandbox:
   helpers;
 - the run settings the tester is launched with and the enforcement probe
   (``CP2``, D2: :func:`tester_settings`, :func:`static_probe`,
-  :func:`probe_command`, :func:`judge_probe`).
+  :func:`probe_command`, :func:`judge_probe`);
+- the sandbox of D3 and the binding of D5 (``CP3``): the candidate captured
+  from the real repository (:func:`capture_candidate`), the sandbox built from
+  it (:func:`build_sandbox`), the walk that binds the clone to the candidate
+  after a run (:func:`check_bound`) and the fakes' logs
+  (:func:`read_fake_calls`). The run itself is ``review.launch_functional``.
 
-It writes nothing: the Controller-written logs of a "not run" entry are
-returned as bytes for the caller to publish through ``controller.runtime``.
+Apart from the sandbox it builds under the runtime root (through
+``controller.runtime``), it writes nothing: the Controller-written logs of a
+"not run" entry are returned as bytes for the caller to publish.
 Files are read with ``lstat`` and ``O_NOFOLLOW``, so a path the tester could
 have turned into a symlink is never opened.
 """
@@ -38,10 +44,12 @@ import shlex
 import shutil
 import stat
 import subprocess
+import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from controller import runtime, workflow_contract
 from controller.errors import ControllerError
 
 # ---------------------------------------------------------------------------
@@ -1004,3 +1012,535 @@ def judge_probe(output: str) -> list[str]:
         elif got != want:
             failures.append(f"{name}: {got}, expected {want}")
     return failures
+
+
+# ---------------------------------------------------------------------------
+# The sandbox and the binding of the tested bytes (CP3, D3, D5).
+# ---------------------------------------------------------------------------
+
+#: The sandbox lives at ``<runtime root>/functional/<job id>/``.
+SANDBOX_AREA = "functional"
+#: The checklist's file, relative to the repository root.
+CHECKLIST_PATH = "docs/ACTIVE_MILESTONE.md"
+#: The system directories after the sandbox's ``bin/`` on the tester's ``PATH``.
+SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin"
+#: The stand-ins in ``bin/`` (``controller.sandbox_fakes``).
+FAKE_PROGRAMS: tuple[str, ...] = ("gh", "claude", "codex", "ssh")
+#: Files that steer Git; an unlisted one is an extra file wherever it is (D5).
+_STEERING_NAMES = frozenset({".gitignore", ".gitattributes"})
+#: The cause of each ``functional_tester_unavailable`` (D7).
+UNAVAILABLE_NO_BINARY = "no_binary"
+UNAVAILABLE_ROLE_REFUSED = "role_refused"
+UNAVAILABLE_ENFORCEMENT = "enforcement"
+UNAVAILABLE_CLONE_MISMATCH = "clone_mismatch"
+#: A walk reports at most this many differences.
+MAX_DIFFERENCES = 50
+_LOOSE_OBJECT_RE = re.compile(r"^objects/[0-9a-f]{2}/[0-9a-f]{38,62}$")
+
+
+def unavailable(cause: str, message: str, **evidence: Any) -> TesterUnavailable:
+    return TesterUnavailable(message, evidence={"cause": cause, **evidence})
+
+
+@dataclasses.dataclass(frozen=True)
+class ManifestEntry:
+    """One tracked path of the candidate: ``mode`` as Git states it, the
+    ``size`` and ``digest`` (sha256) of the blob, for a symlink its ``target``
+    (and the digest of the target text), and the Git ``blob`` id."""
+
+    mode: str
+    size: int
+    digest: str
+    blob: str
+    target: str | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class Candidate:
+    """What the tester is handed (D5): the head, the manifest of every tracked
+    path read from the **real** repository's tree, the root ``.gitignore`` and
+    the checklist's blob id. Built before the run; nothing in the clone is
+    consulted for it."""
+
+    repo_root: Path
+    head: str
+    branch: str
+    manifest: Mapping[str, ManifestEntry]
+    root_gitignore: str
+    checklist_path: str
+    checklist_blob: str
+
+    def read_text(self, rel: str) -> str | None:
+        """The text of the tracked file ``rel`` at the head (``None`` for no
+        such file or one that is not UTF-8)."""
+        entry = self.manifest.get(rel)
+        if entry is None or entry.target is not None:
+            return None
+        data = _git(self.repo_root, ["cat-file", "blob", entry.blob])
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+
+def _git_environment() -> dict[str, str]:
+    """The environment of every Git command the Controller runs for the
+    sandbox: no system or global configuration, no prompt, only local
+    transport, and the command-scope entries of the query's Git (hooks and
+    fsmonitor off, ``workflow_contract._GIT_PINNED_CONFIG``, not a second
+    list)."""
+    base = {"PATH": SYSTEM_PATH, "HOME": "/nonexistent", "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "file",
+            "GIT_OPTIONAL_LOCKS": "0"}
+    return workflow_contract._with_git_config(base, workflow_contract._GIT_PINNED_CONFIG, {})
+
+
+def _git(cwd: Path, args: Sequence[str], *, stdin: bytes | None = None, env: Mapping[str, str] | None = None) -> bytes:
+    argv = ["git", *args]
+    try:
+        done = subprocess.run(argv, cwd=cwd, env=dict(env or _git_environment()), input=stdin,
+                              capture_output=True, check=False, timeout=600)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise unavailable(UNAVAILABLE_ENFORCEMENT, f"git could not be run for the sandbox: {exc}") from exc
+    if done.returncode != 0:
+        raise unavailable(UNAVAILABLE_ENFORCEMENT,
+                          f"`git {' '.join(args[:3])}` failed for the sandbox: "
+                          + done.stderr.decode("utf-8", "replace").strip()[:300])
+    return done.stdout
+
+
+def _read_batch(raw: bytes, count: int) -> list[bytes]:
+    """The contents ``git cat-file --batch`` printed, in request order."""
+    out: list[bytes] = []
+    position = 0
+    for _ in range(count):
+        newline = raw.index(b"\n", position)
+        header = raw[position:newline].split()
+        size = int(header[2])
+        out.append(raw[newline + 1:newline + 1 + size])
+        position = newline + 1 + size + 1
+    return out
+
+
+def capture_candidate(repo_root: Path, head: str, *, branch: str | None = None,
+                      checklist_path: str = CHECKLIST_PATH) -> Candidate:
+    """Capture the candidate from the real repository's tree at ``head``: a
+    ``git ls-tree -r`` and a ``cat-file --batch`` under the hardened
+    environment, the sha256 of every blob (of the target text for a symlink),
+    the root ``.gitignore`` and the checklist blob, which is compared with the
+    blob ``git rev-parse <head>:<checklist>`` names. A submodule (a gitlink)
+    is not supported."""
+    listing = _git(repo_root, ["ls-tree", "-r", "-z", "--full-tree", head])
+    rows: list[tuple[str, str, str]] = []
+    for record in filter(None, listing.split(b"\0")):
+        meta, _, name = record.partition(b"\t")
+        mode, kind, blob = meta.decode().split()
+        if kind != "blob":
+            raise unavailable(UNAVAILABLE_ENFORCEMENT, f"the tree holds {kind} entry {name.decode('utf-8', 'replace')!r}"
+                              ", which the sandbox does not support (a submodule)")
+        rows.append((mode, blob, os.fsdecode(name)))
+    contents = _read_batch(_git(repo_root, ["cat-file", "--batch"],
+                                stdin="".join(f"{blob}\n" for _, blob, _ in rows).encode()), len(rows)) if rows else []
+    manifest: dict[str, ManifestEntry] = {}
+    for (mode, blob, name), data in zip(rows, contents):
+        target = os.fsdecode(data) if mode == "120000" else None
+        manifest[name] = ManifestEntry(mode, len(data), sha256_bytes(data), blob, target)
+    entry = manifest.get(checklist_path)
+    if entry is None:
+        raise unavailable(UNAVAILABLE_ENFORCEMENT, f"{checklist_path} is not tracked at {head}")
+    named = _git(repo_root, ["rev-parse", f"{head}:{checklist_path}"]).decode().strip()
+    if named != entry.blob:
+        raise unavailable(UNAVAILABLE_ENFORCEMENT, f"the manifest's checklist blob {entry.blob} is not {named}")
+    gitignore = ""
+    if ".gitignore" in manifest:
+        gitignore = _read_batch(_git(repo_root, ["cat-file", "--batch"], stdin=f"{manifest['.gitignore'].blob}\n".encode()),
+                                1)[0].decode("utf-8", "replace")
+    return Candidate(repo_root, head, branch or "functional-test", manifest, gitignore, checklist_path, entry.blob)
+
+
+def candidate_flows(candidate: Candidate) -> list[Flow]:
+    """The flows of the candidate's checklist (D4), read from the real
+    repository's blob; a link inside the section is followed to a tracked file
+    below the repository root only."""
+    text = candidate.read_text(candidate.checklist_path)
+    if text is None:
+        raise ChecklistUnrecognised(f"{candidate.checklist_path} cannot be read at {candidate.head}",
+                                    evidence={"section": SECTION_TITLE, "reason": "unreadable"})
+
+    def read_file(link: str) -> str | None:
+        joined = posixpath.normpath(posixpath.join(posixpath.dirname(candidate.checklist_path), link.partition("#")[0]))
+        if posixpath.isabs(joined) or joined == ".." or joined.startswith("../"):
+            return None
+        return candidate.read_text(joined)
+
+    return read_flows(text, read_file=read_file)
+
+
+# --- walking a tree without trusting it ---------------------------------------
+
+
+def _scan(root: Path, *, skip_top: str | None = None) -> dict[str, tuple]:
+    """Every entry below ``root`` as ``path -> descriptor``, by ``lstat`` and
+    without following a symlink: ``("file", executable, size, sha256)``,
+    ``("link", target)`` or ``("special",)`` (a socket, FIFO or device).
+    Directories are traversed and not listed. ``skip_top`` names a top-level
+    entry that is left out."""
+    found: dict[str, tuple] = {}
+    stack: list[tuple[Path, str]] = [(root, "")]
+    while stack:
+        directory, rel = stack.pop()
+        try:
+            with os.scandir(directory) as scanned:
+                listing = sorted(scanned, key=lambda e: e.name)
+        except OSError as exc:
+            found[rel or "."] = ("unreadable", str(exc))
+            continue
+        for item in listing:
+            if not rel and item.name == skip_top:
+                continue
+            child = f"{rel}/{item.name}" if rel else item.name
+            mode = item.stat(follow_symlinks=False).st_mode
+            if stat.S_ISLNK(mode):
+                found[child] = ("link", os.readlink(item.path))
+            elif stat.S_ISDIR(mode):
+                stack.append((Path(item.path), child))
+            elif stat.S_ISREG(mode):
+                try:
+                    digest = sha256_file(Path(item.path))
+                except (OSError, ValueError):
+                    found[child] = ("special",)
+                    continue
+                found[child] = ("file", bool(mode & 0o111), item.stat(follow_symlinks=False).st_size, digest)
+            else:
+                found[child] = ("special",)
+    return found
+
+
+def _describe(entry: ManifestEntry) -> tuple:
+    if entry.target is not None:
+        return ("link", entry.target)
+    return ("file", entry.mode == "100755", entry.size, entry.digest)
+
+
+def _ignored_paths(clone: Path, git_dir: Path, paths: Sequence[str]) -> set[str]:
+    """Which of ``paths`` the clone's tracked ``.gitignore`` files ignore,
+    asked of Git run on the Controller-owned ``git_dir`` (a scratch bare
+    repository, never the clone's) with the clone as the work tree and a
+    private index: none of the clone's own configuration, index, exclude file
+    or attributes is read."""
+    if not paths:
+        return set()
+    env = {**_git_environment(), "GIT_INDEX_FILE": str(git_dir / "private-index")}
+    argv = ["git", f"--git-dir={git_dir}", f"--work-tree={clone}", "-c", f"core.excludesFile={os.devnull}",
+            "check-ignore", "--no-index", "-z", "--stdin"]
+    done = subprocess.run(argv, cwd=git_dir, env=env, input=b"\0".join(os.fsencode(p) for p in paths) + b"\0",
+                          capture_output=True, check=False, timeout=600)
+    if done.returncode not in (0, 1):
+        raise unavailable(UNAVAILABLE_ENFORCEMENT, "git check-ignore failed on the Controller's own git dir: "
+                          + done.stderr.decode("utf-8", "replace").strip()[:300])
+    return {os.fsdecode(item) for item in done.stdout.split(b"\0") if item}
+
+
+def walk_differences(clone: Path, candidate: Candidate, git_dir: Path) -> list[str]:
+    """How the clone's worktree differs from the candidate (D5): a tracked
+    path missing or different in mode, size or sha256 (a symlink by its
+    target), a socket, FIFO or device anywhere, an unlisted ``.gitignore`` or
+    ``.gitattributes`` file, and any extra file the candidate's ignore rules do
+    not ignore. The clone's ``.git`` is not part of this walk. Nothing in the
+    clone is opened but regular files for hashing, and no Git runs in it."""
+    seen = _scan(clone, skip_top=".git")
+    differences: list[str] = []
+    for path, entry in sorted(candidate.manifest.items()):
+        have = seen.pop(path, None)
+        if have is None:
+            differences.append(f"missing: {path}")
+        elif have != _describe(entry):
+            differences.append(f"differs: {path}")
+    extras: list[str] = []
+    for path, have in sorted(seen.items()):
+        if have[0] in ("special", "unreadable"):
+            differences.append(f"{'special file' if have[0] == 'special' else 'unreadable'}: {path}")
+        elif posixpath.basename(path) in _STEERING_NAMES:
+            differences.append(f"unlisted {posixpath.basename(path)}: {path}")
+        else:
+            extras.append(path)
+    ignored = _ignored_paths(clone, git_dir, extras)
+    differences += [f"extra file: {path}" for path in extras if path not in ignored]
+    return differences[:MAX_DIFFERENCES]
+
+
+def _git_dir_state(git_dir: Path) -> dict[str, tuple]:
+    try:
+        if not stat.S_ISDIR(os.lstat(git_dir).st_mode):
+            return {".": ("not-a-directory",)}
+    except OSError as exc:
+        return {".": ("unreadable", str(exc))}
+    return _scan(git_dir)
+
+
+def refs_of(git_dir: Path) -> dict[str, str]:
+    """The clone's ``HEAD``, ``packed-refs`` and every file under ``refs/`` as
+    plain text (no Git command, D5)."""
+    found: dict[str, str] = {}
+    for name in ("HEAD", "packed-refs"):
+        try:
+            found[name] = sha256_file(git_dir / name)
+        except (OSError, ValueError):
+            pass
+    for path, entry in _scan(git_dir / "refs").items():
+        found[f"refs/{path}"] = entry[3] if entry[0] == "file" else repr(entry)
+    return found
+
+
+def _git_dir_allowed(path: str, before: tuple | None, after: tuple | None) -> bool:
+    if path == "index" or path == "FETCH_HEAD" or path.startswith("logs/"):
+        return after is None or after[0] == "file"
+    return before is None and after is not None and after[0] == "file" and bool(_LOOSE_OBJECT_RE.match(path))
+
+
+def git_dir_differences(before: Mapping[str, tuple], after: Mapping[str, tuple]) -> list[str]:
+    """Changes under the clone's ``.git`` beyond the expected ones: the only
+    allowed are the ``index``, files under ``logs/``, ``FETCH_HEAD`` and new
+    loose objects (existing object files byte-identical). A changed
+    ``config``, ``hooks/``, ``info/``, ``HEAD``, ``packed-refs``, ``refs/``
+    entry, ``shallow`` or any other file shows the tester tried to steer
+    Git (D5, I1)."""
+    out = []
+    for path in sorted(set(before) | set(after)):
+        old, new = before.get(path), after.get(path)
+        if old != new and not _git_dir_allowed(path, old, new):
+            out.append(f".git/{path}: " + ("added" if old is None else "removed" if new is None else "changed"))
+    return out[:MAX_DIFFERENCES]
+
+
+# --- the sandbox ---------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class Sandbox:
+    """The folder ``<runtime root>/functional/<job id>/`` and what was
+    recorded about it before the tester started."""
+
+    runtime_root: Path
+    job_id: str
+    work_item_id: str
+    base: Path
+    candidate: Candidate
+    writable: tuple[str, ...]
+    refused: tuple[RefusedPattern, ...]
+    git_state: dict[str, tuple]
+    refs: dict[str, str]
+
+    @property
+    def clone(self) -> Path:
+        return self.base / "clone"
+
+    @property
+    def origin(self) -> Path:
+        return self.base / "origin.git"
+
+    @property
+    def check_dir(self) -> Path:
+        return self.base / "check.git"
+
+    @property
+    def bin_dir(self) -> Path:
+        return self.base / "bin"
+
+    @property
+    def out(self) -> Path:
+        return self.base / "out"
+
+    @property
+    def home(self) -> Path:
+        return self.base / "home"
+
+    @property
+    def tmp(self) -> Path:
+        return self.base / "tmp"
+
+    @property
+    def fake_logs(self) -> Path:
+        return self.base / "fake-logs"
+
+    @property
+    def settings_path(self) -> Path:
+        return self.base / "settings.json"
+
+    @property
+    def scratch_dirs(self) -> list[Path]:
+        """The scratch locations the tester may write (D3): ``HOME`` (which
+        holds every ``XDG_*`` directory), ``TMPDIR``, the fakes' logs and the
+        scratch origin, so a push from a copy of the clone reaches nothing real."""
+        return [self.home, self.tmp, self.fake_logs, self.origin]
+
+    def settings(self) -> dict[str, Any]:
+        return tester_settings(clone_dir=self.clone, output_dir=self.out, scratch_dirs=self.scratch_dirs,
+                               writable=self.writable)
+
+    def environment(self) -> dict[str, str]:
+        """The sandbox's part of the tester's environment (D3): a ``PATH`` of
+        ``bin/`` and the system directories, the scratch directories, no
+        bytecode, only local Git transport and no SSH."""
+        home = self.home
+        return {
+            "PATH": f"{self.bin_dir}:{SYSTEM_PATH}", "HOME": str(home), "TMPDIR": str(self.tmp),
+            "XDG_CONFIG_HOME": str(home / ".config"), "XDG_DATA_HOME": str(home / ".local/share"),
+            "XDG_STATE_HOME": str(home / ".local/state"), "XDG_CACHE_HOME": str(home / ".cache"),
+            "PYTHONDONTWRITEBYTECODE": "1", "GIT_ALLOW_PROTOCOL": "file", "GIT_SSH_COMMAND": "false",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+
+    def rel(self, *parts: str) -> str:
+        return "/".join([SANDBOX_AREA, self.job_id, *parts])
+
+
+def launcher_script(name: str, *, python: str, package_parent: Path, log: Path) -> bytes:
+    """The ``bin/<name>`` launcher the Controller writes: ``#!/bin/sh`` then
+    ``exec <python> -P -m controller.sandbox_fakes.<name> "$@"`` with
+    ``PYTHONPATH`` at the directory that holds the running ``controller``
+    package (``-P``, so the clone the tester runs in is never put on the path)."""
+    return (f"#!/bin/sh\nFUNCTIONAL_FAKE_LOG={shlex.quote(str(log))} PYTHONPATH={shlex.quote(str(package_parent))} "
+            f"PYTHONDONTWRITEBYTECODE=1 exec {shlex.quote(python)} -P -m controller.sandbox_fakes.{name} \"$@\"\n"
+            ).encode()
+
+
+def write_launchers(runtime_root: Path, sandbox_rel: str, fake_logs: Path, *,
+                    python: str | None = None, package_parent: Path | None = None) -> None:
+    """Write the four launchers through the runtime's write API and set mode
+    0755 ourselves (a wheel may not keep the mode of a file)."""
+    python = python or sys.executable
+    package_parent = package_parent or Path(__file__).resolve().parent.parent
+    for name in FAKE_PROGRAMS:
+        script = launcher_script(name, python=python, package_parent=package_parent, log=fake_logs / f"{name}.jsonl")
+        path = runtime.write_bytes(runtime_root, f"{sandbox_rel}/bin/{name}", script)
+        os.chmod(path, 0o755)
+
+
+def read_fake_calls(fake_logs: Path) -> dict[str, list[dict]]:
+    """The calls the fakes logged, by program. Each log is read without
+    following a symlink and only if it is a regular file; a line that is not a
+    JSON object is skipped. The logs are for the gate message only."""
+    calls: dict[str, list[dict]] = {}
+    for name in FAKE_PROGRAMS:
+        path = fake_logs / f"{name}.jsonl"
+        try:
+            descriptor = _open_regular(path)
+        except (OSError, ValueError):
+            continue
+        try:
+            data = os.read(descriptor, MAX_RESULTS_BYTES)
+        finally:
+            os.close(descriptor)
+        records = []
+        for line in data.decode("utf-8", "replace").splitlines():
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+        if records:
+            calls[name] = records
+    return calls
+
+
+def kept_sandboxes(runtime_root: Path, work_item_id: str) -> list[str]:
+    """The job ids of the sandboxes kept for ``work_item_id`` after a breach."""
+    base = runtime_root / SANDBOX_AREA
+    try:
+        listing = sorted(item for item in base.iterdir() if item.is_dir())
+    except OSError:
+        return []
+    kept = []
+    for item in listing:
+        try:
+            if (item / "ITEM").read_text() == work_item_id:
+                kept.append(item.name)
+        except OSError:
+            continue
+    return kept
+
+
+def remove_sandbox(runtime_root: Path, job_id: str) -> None:
+    runtime.remove_tree(runtime_root, f"{SANDBOX_AREA}/{job_id}")
+
+
+def sweep_kept(runtime_root: Path, work_item_id: str) -> list[str]:
+    """Remove every sandbox kept for the item (the step does this when the
+    item's next functional job starts, so at most one is kept per item)."""
+    removed = kept_sandboxes(runtime_root, work_item_id)
+    for job_id in removed:
+        remove_sandbox(runtime_root, job_id)
+    return removed
+
+
+def _plain(cwd: Path, *args: str) -> None:
+    _git(cwd, list(args))
+
+
+def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work_item_id: str,
+                  python: str | None = None, package_parent: Path | None = None) -> Sandbox:
+    """Build the sandbox of D3 and verify the fresh clone against the
+    manifest: a ``git clone --no-hardlinks`` of the real repository at the
+    head (no autocrlf, no filter driver), a scratch bare origin the branch is
+    pushed to, the launchers, the scratch directories, the writable locations
+    D5 derives from the root ``.gitignore``, the run settings, and a record of
+    the clone's ``.git`` and refs. A checkout conversion, or anything else the
+    manifest disagrees with, ends at ``functional_tester_unavailable`` here,
+    before any tester starts (O2). The folder is removed if building fails."""
+    base = runtime_root / SANDBOX_AREA / job_id
+    runtime.assert_contained(runtime_root, base)
+    if base.exists():
+        raise unavailable(UNAVAILABLE_ENFORCEMENT, f"the sandbox {base} already exists")
+    base.mkdir(parents=True, mode=0o700)
+    try:
+        runtime.write_bytes(runtime_root, f"{SANDBOX_AREA}/{job_id}/ITEM", work_item_id.encode())
+        for name in ("out", "home", "tmp", "fake-logs", "bin", "home/.config", "home/.local/share", "home/.local/state",
+                     "home/.cache"):
+            (base / name).mkdir(parents=True, exist_ok=True)
+        _plain(base, "init", "-q", "--bare", "origin.git")
+        _plain(base, "init", "-q", "--bare", "check.git")
+        _plain(base, "clone", "-q", "--no-hardlinks", "--no-checkout", "-c", "core.autocrlf=false",
+               str(candidate.repo_root), "clone")
+        clone = base / "clone"
+        _plain(clone, "checkout", "-q", "-B", candidate.branch, candidate.head)
+        _plain(clone, "remote", "remove", "origin")
+        _plain(clone, "remote", "add", "origin", str(base / "origin.git"))
+        _plain(clone, "push", "-q", "-u", "origin", candidate.branch)
+        writable, refused = derive_writable_locations(candidate.root_gitignore, candidate.manifest)
+        for name in writable:
+            (clone / name).mkdir(exist_ok=True)
+        sandbox = Sandbox(runtime_root, job_id, work_item_id, base, candidate, writable, refused,
+                          _git_dir_state(clone / ".git"), refs_of(clone / ".git"))
+        write_launchers(runtime_root, f"{SANDBOX_AREA}/{job_id}", sandbox.fake_logs,
+                        python=python, package_parent=package_parent)
+        runtime.write_bytes(runtime_root, sandbox.rel("settings.json"),
+                            json.dumps(sandbox.settings(), indent=2).encode())
+        differences = walk_differences(clone, candidate, sandbox.check_dir)
+        if differences:
+            raise unavailable(UNAVAILABLE_CLONE_MISMATCH,
+                              f"the fresh clone does not match the manifest (a checkout conversion?): {differences[0]}",
+                              differences=differences[:10])
+        return sandbox
+    except BaseException:
+        runtime.remove_tree(runtime_root, f"{SANDBOX_AREA}/{job_id}")
+        raise
+
+
+def check_bound(sandbox: Sandbox) -> list[str]:
+    """After the run: whether the clone still is the candidate (D5). Empty
+    means bound. The worktree is walked in Python against the manifest, the
+    clone's ``HEAD`` and refs are compared as plain files with those captured,
+    and ``.git`` may differ only by the index, ``logs/``, ``FETCH_HEAD`` and
+    new loose objects. No Git command runs in the clone."""
+    clone = sandbox.clone
+    refs_now = refs_of(clone / ".git")
+    problems = [f"clone ref {name} changed" for name in sorted(set(sandbox.refs) | set(refs_now))
+                if sandbox.refs.get(name) != refs_now.get(name)]
+    moved = {p.split(" ")[2] for p in problems}
+    now = _git_dir_state(clone / ".git")
+    problems += [d for d in git_dir_differences(sandbox.git_state, now)
+                 if not any(d.startswith(f".git/{name}:") for name in moved)]
+    problems += walk_differences(clone, sandbox.candidate, sandbox.check_dir)
+    return problems[:MAX_DIFFERENCES]

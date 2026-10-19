@@ -2130,7 +2130,7 @@ class ProseOverStateTest(_LifecycleCase):
                     if isinstance(node, ast.Attribute) and node.attr in ("result", "raw_json"):
                         readers.append((path.name, func.name, node.attr))
         self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result"),
-                                                ("review.py", "_claude_attempt", "result")])
+                                                ("review.py", "_claude_run", "result")])
 
 
 class UsageLimitLegacyTest(_LifecycleCase):

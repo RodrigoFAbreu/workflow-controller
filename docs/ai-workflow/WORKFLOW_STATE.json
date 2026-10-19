@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -19879,12 +19879,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 4,
+          "local": 5,
           "external": 2
         }
       },
-      "state_revision": 53,
-      "last_transition": "2026-10-19T22:52:03Z",
+      "state_revision": 54,
+      "last_transition": "2026-10-19T22:54:24Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20527,6 +20527,34 @@
               "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
               "verdict": "REVISE",
               "at": "2026-10-19T20:37:32.182780+00:00"
+            }
+          ]
+        },
+        "F-5da2f5e092f5": {
+          "digest": "5da2f5e092f5d50da270bc862f99a4c0ed13375ceb84f14e2bc7aeb6e0c46cd1",
+          "text": "The `_is_native_executable` docstring (`controller/functional_review.py:925-928`) says the residual gap \"is stated in the plan's boundary text\". It is not: the plan is unchanged since approval (`2480ee9`) and states it nowhere. Only the guide and the implementation summary state it. Change the docstring to name the guide only, or record the gap in the plan with an amendment if the external reviewer requires it there.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "e1e25bc3c28ad8d6cfb488ece8f987f8836a844a7ca876dfbcaa8460189da8ee",
+              "verdict": "REVISE",
+              "at": "2026-10-19T22:54:24Z"
+            }
+          ]
+        },
+        "F-7832a3c29461": {
+          "digest": "7832a3c29461c34e00e6a88c91da479c88665387df774555459012b1ef160609",
+          "text": "`TEST_RESULTS.md` has no entries after round 2, so the commands run for rounds 3 to 5 (for example the 83-test targeted run) are recorded only in the summary prose. Add a short section for each later round.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "e1e25bc3c28ad8d6cfb488ece8f987f8836a844a7ca876dfbcaa8460189da8ee",
+              "verdict": "REVISE",
+              "at": "2026-10-19T22:54:24Z"
             }
           ]
         }

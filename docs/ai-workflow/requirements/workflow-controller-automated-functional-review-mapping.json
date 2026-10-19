@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-automated-functional-review",
+  "requirements": {
+    "R1": {
+      "description": "At row 38e under an automatic acceptance gate the Controller runs an independent tester in an isolated sandbox and records one `functional_evidence` result per flow at the sandbox head (D1 to D5).",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R2": {
+      "description": "The real repository, its origin and GitHub are untouched: the tester's process cannot write, reach the network or connect to a host socket outside the sandbox, proved on the pinned CLI (D2), the snapshot, origin and nested-session checks verify it, the candidate's product and checklist bytes are read-only to the tester for the whole run, so the candidate cannot be changed during the run (which bytes the tester chose to execute, such as an edited copy under its scratch `TMPDIR`, is its own trust boundary and is not claimed, D5), and passing evidence is recorded only for bytes bound to the captured candidate by a Controller-owned manifest, with nothing in the clone's `.git` trusted and no Git run in the clone (D5); a breach or an unbound clone fails closed with nothing recorded (D3, D5, D7).",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP5"
+      ]
+    },
+    "R3": {
+      "description": "A failed flow reaches the applier through the findings file and the cycle closes on a new head without a person (D6, D7), bounded at three tester failures, and fresh findings stay actionable across changed heads (D6).",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R4": {
+      "description": "The settings, the role and the stops are documented and the notifications ask a person only for a fault (D7 to D9, D11).",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4",
+        "CP6"
+      ]
+    }
+  }
+}

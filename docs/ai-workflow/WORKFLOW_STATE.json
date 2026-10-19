@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-automated-functional-review",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -19712,6 +19712,645 @@
         },
         "evaluated_at": "2026-10-19T07:29:19Z",
         "workflow_release": "2.15.0"
+      }
+    },
+    "workflow-controller-automated-functional-review": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-automated-functional-review",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_AUTOMATED_FUNCTIONAL_REVIEW_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 8,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "1599a4db41bf2b67dab0a10362677fd6846e9000",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+        "approved_review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_AUTOMATED_FUNCTIONAL_REVIEW_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7bb8f24e5c673f562836b5e96e9910b1fa06fc85"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "05471e4b17ef314eaf921296642b9becf623e930"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a51a4039ee2ee2d33c1ec8a97f471ec761755408"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-19T12:06:04Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+            "ledger": {
+              "local": {
+                "bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "e1f00649a3949dcb3b83f70cbe8199c864a9299c96eefebceaf4e7bc0a064910",
+                "ledger_entry_sha256": "1aa88f4e6d097c30ecab6336d4599c6b84ca0bafe27f53be773eb5fe3779cdff",
+                "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "912267f49762164370d37aab69109a214f295783ad36c4c001752077e16d8a22",
+                "ledger_entry_sha256": "c0eb745ccf7096c470856d9f616e30952c4f326b15eadb4a34a3d34e4bf2462a",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-19T12:06:04Z",
+          "workflow_release": "2.16.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-10-19T12:00:04Z",
+          "verdict_sha256": "e1f00649a3949dcb3b83f70cbe8199c864a9299c96eefebceaf4e7bc0a064910",
+          "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-10-19T12:04:14.032014Z",
+          "verdict_sha256": "912267f49762164370d37aab69109a214f295783ad36c4c001752077e16d8a22",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 8,
+          "external": 3
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 30,
+      "last_transition": "2026-10-19T12:06:04Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-19T11:27:47Z",
+        "consumed": {
+          "review_content_id": "2598c8196b878e8b8b9edd1ace7e6a403ee53c8b9c6f1f851a6c9bad936e0d29",
+          "plan_revision": 7,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+          "plan_revision": 8
+        },
+        "bound": {
+          "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+          "bundle_id": "78628ead3da0cc66a347aaf4d90bf0753c129dcce40d81e20ec1db89a7699722",
+          "plan_revision": 8
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "2598c8196b878e8b8b9edd1ace7e6a403ee53c8b9c6f1f851a6c9bad936e0d29",
+        "4085cefcda6332b20f3b7b372511040e20785afbcd643dfc84207214d009bd87",
+        "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+        "4734a53050b15f54c8c6085feff948248e4297e2d783f5ec359254d231ab860a",
+        "630447ff913dde404f5b9ca0afeb253ca96fa88eabee499e84aea1e80e741f6f",
+        "e6e0b060cf53c54d0eb81b440d0e44b6a0e26ce001237200e18a13c613a154b5",
+        "f5b34d0ee9f603232a66dde1140b3356e2073694efc6f80673e7e014d09d8cf1"
+      ],
+      "optional_findings": {
+        "F-d175bdb444df": {
+          "digest": "d175bdb444dfa7e3608f3a63cc73a73ff267150d4bb82d9aedff529334c867af",
+          "text": "**OPUS-C10C-R1-005 D4: a missing flow is described two ways.** D4 says a flow the tester left out \"is a `failed` entry with the summary 'not run'\", and the validator also refuses a file without \"every required id present\" (`results_invalid`). Say which one applies to a missing required flow and which to a missing checklist flow, and test both.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4085cefcda6332b20f3b7b372511040e20785afbcd643dfc84207214d009bd87",
+              "verdict": "REVISE",
+              "at": "2026-10-19T09:51:30Z"
+            }
+          ]
+        },
+        "F-6c74b7173259": {
+          "digest": "6c74b71732595f46fb0350a1a1196d2666c0db2fcfaf41eb252d3c9e7d34f3d3",
+          "text": "**OPUS-C10C-R1-006 D7: `functional_tester_unavailable` has no stated disposition.** D7 names four gates, says the last three send `user_gate`, and that the first is \"handled like every job by the existing usage-limit rules\". A missing `claude` binary or a refused role is not a usage limit. State what the step returns and which notification it sends in each of the three causes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4085cefcda6332b20f3b7b372511040e20785afbcd643dfc84207214d009bd87",
+              "verdict": "REVISE",
+              "at": "2026-10-19T09:51:30Z"
+            }
+          ]
+        },
+        "F-b01889bf137e": {
+          "digest": "b01889bf137ea8df32c3009122c9b16099a602fe76402aff358a9f59906a0fa4",
+          "text": "**OPUS-C10C-R1-007 [apparatus] Artifact justification strings are stale.** The implementation-stage `controller/` prefix rationale lists only routing, settings, review, job and functional_review, but CP2/CP3 also edit `harness.py`, `cli.py`, `protocol.py`, `protocol_decision.py` and `review_rounds.py`. The plan-stage exclusions of `docs/common-problems.md`, `docs/compatibility.md`, `docs/run.md` and `docs/exit-codes.md` say \"this milestone does not edit\", but CP5 edits them. The implementation-stage protected paths carry `workflow-controller-round-caps-artifacts.json` over from C13b. The classification itself is correct.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4085cefcda6332b20f3b7b372511040e20785afbcd643dfc84207214d009bd87",
+              "verdict": "REVISE",
+              "at": "2026-10-19T09:51:30Z"
+            }
+          ]
+        },
+        "F-b2906895f8d7": {
+          "digest": "b2906895f8d79a5c5f6b0c83153ab709d1e10ba04db38a5e323df399678d3f0b",
+          "text": "**OPUS-C10C-R1-008 D3: harden the clone and the snapshot.** Clone with `--no-hardlinks` (a local clone shares object files with the real repository by default), and consider adding the real repository's reflogs to the before/after comparison, as the manual tester checklist did (refs, reflog, status).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4085cefcda6332b20f3b7b372511040e20785afbcd643dfc84207214d009bd87",
+              "verdict": "REVISE",
+              "at": "2026-10-19T09:51:30Z"
+            }
+          ]
+        },
+        "F-b1e41cd2384d": {
+          "digest": "b1e41cd2384db536071f761e34750577f793b96cf13d3d37f56f99fae7519a50",
+          "text": "**OPUS-C10C-R2-003 D3: two breach signals have no detection or contradict the principle.** \"A Git attempt at a non-`file` transport\" is refused inside Git by `GIT_ALLOW_PROTOCOL`, and that refusal goes only to the tester's own stderr. D3 does not say how the Controller sees it, for example a `GIT_TRACE` file in the sandbox. \"A logged `ssh` call\" reached nothing, because the `ssh` is a fake, yet D3 also says a call of a fake \"is **not** a breach: it reached nothing\". Either name the detection and say why an attempt that was prevented still counts as a breach, or drop both and rely on the enforcement plus the snapshot and origin checks.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "630447ff913dde404f5b9ca0afeb253ca96fa88eabee499e84aea1e80e741f6f",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:27:00Z"
+            }
+          ]
+        },
+        "F-a30679da59b7": {
+          "digest": "a30679da59b7b942b278c5fef1c3353ae26b6f58643cc230ddf1493f4521965a",
+          "text": "**OPUS-C10C-R2-004 D7: `functional_rounds_exhausted` has no remedy.** The count is the item's `functional_test` jobs that ended `findings`, over the item's whole life, and nothing resets it. Say what a person does after the gate: test by hand and record, raise the cap through a setting or option like the review caps, or reset the count. Also say whether pruned job records lower the count.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "630447ff913dde404f5b9ca0afeb253ca96fa88eabee499e84aea1e80e741f6f",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:27:00Z"
+            }
+          ]
+        },
+        "F-d4b3eed092c0": {
+          "digest": "d4b3eed092c0a232e9f27502d4dea7f6f411c50c48dce543cc0983f0a7965dce",
+          "text": "**OPUS-C10C-R3-002 D3: how the real origin's refs are read is not stated.** D3 counts \"a change to the real origin's refs\" as a breach. For a real repository, origin is a GitHub URL, so a before/after `git ls-remote` is a network call made by the Controller, two per run. Its failure mode (offline, rate-limited) is not given a gate. Say how it is read: `ls-remote` with a stated failure gate, or only a local path origin, with the remote-tracking refs already covered by `snapshot_repository`'s `for-each-ref`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "4734a53050b15f54c8c6085feff948248e4297e2d783f5ec359254d231ab860a",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:31:55Z"
+            }
+          ]
+        },
+        "F-383fbdd15ee5": {
+          "digest": "383fbdd15ee57903d64f1d2a8870568670980b8c7bab0af5612df107c38c8eed",
+          "text": "**OPUS-C10C-R3-003 D4: fenced code blocks are not excluded from the heading and list rules.** The section ends at \"the next heading of the same or a higher level\". Rule 3 reads headings, and rule 4 reads a top-level numbered list. Checklists carry fenced `bash` setup blocks (both fixtures do), and a `# comment` line or a numbered line inside one would end the section early or be numbered as a flow. Say that lines inside fenced code blocks are not headings, rows, paragraphs or items, and add a CP1 case.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "4734a53050b15f54c8c6085feff948248e4297e2d783f5ec359254d231ab860a",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:31:55Z"
+            }
+          ]
+        },
+        "F-579bbdad5c6b": {
+          "digest": "579bbdad5c6b05a94cdfdcf5f724d266716de755dce6cab05cd25573639dcd68",
+          "text": "**OPUS-C10C-R3-004 D3: `snapshot_repository` lists only non-ignored files** (`ls-files --others --exclude-standard`). A write into an ignored path of the real repository, such as `.ai-review/` or `.controller/`, does not show there. D2's enforcement is the primary layer, so this is not a hole. Still, the breach tests in CP2 should include a write to an ignored path and assert that the sandbox refuses it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "4734a53050b15f54c8c6085feff948248e4297e2d783f5ec359254d231ab860a",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:31:55Z"
+            }
+          ]
+        },
+        "F-f328b7d16909": {
+          "digest": "f328b7d16909a867453f895ec6a1727a279f22dbb10c46a27d810d8cc377c714",
+          "text": "**OPUS-C10C-R4-001 D4/D7: a flow the tester left out is sent to the applier as a `defect`.** A tester that hits `functional.timeout_seconds` after writing a partial but valid `RESULTS.json` gets \"not run\" `defect` entries for the flows it did not reach. D6 then writes them as findings, and the next step pays for an applier run against a product that may be fine. The applier most likely disposes of them with no code change, which ends at 38i. R3-001 kept limits of the sandbox away from the applier, and the same reasoning applies to a fault of the tester. Consider routing \"not run\" flows like `environment` ones: record them `failed` and write no finding, so a run with only such failures ends at `flows_not_runnable` with `user_gate`. Keep the \"not run\" summary so the gate message says what happened.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "f5b34d0ee9f603232a66dde1140b3356e2073694efc6f80673e7e014d09d8cf1",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T10:38:17Z"
+            }
+          ]
+        },
+        "F-de3e7818be1e": {
+          "digest": "de3e7818be1e725975e87bd912494485c8f2aafdb8c9595382ec0c7f3fe8b70f",
+          "text": "**OPUS-C10C-R4-002 D5: the recorded `summary` object does not carry `reason`.** D5 says the summary holds \"the tester's text and the flow's exit evidence\". The Workflow's own record of an `environment` failure then looks like a defect to a person reading it at 38i or at the `flows_not_runnable` stop. Include `reason` in the `summary` object, which the Workflow stores as given.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "f5b34d0ee9f603232a66dde1140b3356e2073694efc6f80673e7e014d09d8cf1",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T10:38:17Z"
+            }
+          ]
+        },
+        "F-e295c7dea1b4": {
+          "digest": "e295c7dea1b4455fe9600c1019f867fda16604f4a551f519b151262cdac4a6bf",
+          "text": "**O1 — D4:** omitted flows become product defects even when a timeout prevented their execution. This can spend an applier round on work that produced no defect evidence. Prefer an explicit incomplete/environment disposition with a Controller-generated log.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "f5b34d0ee9f603232a66dde1140b3356e2073694efc6f80673e7e014d09d8cf1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:45:33Z"
+            }
+          ]
+        },
+        "F-60f4c917f2e6": {
+          "digest": "60f4c917f2e6157e62300ebbbd788b2c9e6c243839a1ac9c8bdcf7fba479e195",
+          "text": "**O2 — D5:** preserve the structured `reason` in the recorded `summary`, so later inspection distinguishes an environment limitation from a product failure.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "f5b34d0ee9f603232a66dde1140b3356e2073694efc6f80673e7e014d09d8cf1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:45:33Z"
+            }
+          ]
+        },
+        "F-2cdb3c25e4a3": {
+          "digest": "2cdb3c25e4a389c290ad3be5139bbf8f59052fcaf293917606aba5f3c7015918",
+          "text": "**O3 — Checkpoint size:** CP2 combines the security spike, sandbox construction, harness changes, fake tools, packaging and cleanup. Give the spike its own reviewable checkpoint before the remaining integration.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "f5b34d0ee9f603232a66dde1140b3356e2073694efc6f80673e7e014d09d8cf1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:45:33Z"
+            }
+          ]
+        },
+        "F-a7e98529c685": {
+          "digest": "a7e98529c6850948da28d3910b50666f77feccd398b9beb8a9db47e0e4079812",
+          "text": "**O1 -- D4/D5: a \"not run\" entry the Controller adds has no log, but the Workflow requires `log_digest` (64 hex).** D5 also says the Controller \"never records a flow whose log it did not read and digest\". `scripts/workflow_gate_policy.py:1568` refuses a record without a valid `log_digest` (`evidence_malformed`). As written, the timeout and left-out entries would end in `recording_refused` instead of `flows_not_runnable`. State that the Controller writes a short log of its own into the output folder for each such entry (cause, timeout, job id) and digests it, as round-4 O1 suggested. CP1 and CP4 can then assert that the entry is recorded.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "e6e0b060cf53c54d0eb81b440d0e44b6a0e26ce001237200e18a13c613a154b5",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:51:40Z"
+            }
+          ]
+        },
+        "F-2be48c54b6d4": {
+          "digest": "2be48c54b6d4452a31912cb579cb64998940f1877c0651df2f58aebbc010bf73",
+          "text": "**O2 -- D4: resolve symlinks when checking that a log lies inside the output folder.** A tester can make `log` a symlink inside the output folder that points at a host file the Controller can read but the sandbox cannot. The Controller would then digest that file and quote its excerpt in the findings file (D6). Refuse a log that is a symlink, or whose resolved path leaves the output folder, as `results_invalid`. Do the same for `RESULTS.json` itself.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "e6e0b060cf53c54d0eb81b440d0e44b6a0e26ce001237200e18a13c613a154b5",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:51:40Z"
+            }
+          ]
+        },
+        "F-77c198b508a0": {
+          "digest": "77c198b508a0308ca9f1f882e592e0f2d45d325e377247e9569f28e4f793c0eb",
+          "text": "**O3 -- CP3:** `tests/test_packaging.py` is new, but `tests/test_package_structure.py` and `tests/test_packaged_runtime.py` already cover packaging. Consider extending one of them so packaging checks do not end up in three places.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "e6e0b060cf53c54d0eb81b440d0e44b6a0e26ce001237200e18a13c613a154b5",
+              "verdict": "REVISE",
+              "at": "2026-10-19T10:51:40Z"
+            }
+          ]
+        },
+        "F-1bfd27bd4a4e": {
+          "digest": "1bfd27bd4a4e047308b3d2d53b52d35c8f03f2f84599f825e2fe83ea866e404e",
+          "text": "**OPUS-C10C-R6-001 D5/CP3: the worktree walk should lstat and never open a non-regular file.** The tester can swap a tracked file for a FIFO, a device node or a symlinked directory. If the walk hashes before it compares the file type, a FIFO blocks the Controller's read forever, and a followed directory symlink makes the walk hash host files. State that the walk uses `lstat`, never follows symlinks, and compares the type and mode with the manifest before opening anything. Any non-regular, non-symlink entry is `tested_bytes_unbound`. In CP3, add a FIFO test that must finish within the test timeout.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T10:57:15Z"
+            }
+          ]
+        },
+        "F-7ef0de9ef08b": {
+          "digest": "7ef0de9ef08b2cb74023e3dd45a4a84eae499142ece207b8bb74fbb74a5b9058",
+          "text": "**OPUS-C10C-R6-002 D5: checkout conversions make every clean run unbound.** The manifest hashes raw blobs from the real repository, but `git clone` writes worktree bytes through `.gitattributes` `eol`/`text` conversion and any configured smudge filter (Git LFS, for example). In a repository that uses either, every honest run would end at `tested_bytes_unbound`. This is fail-closed, so it is safe, but it would be a confusing stop. Say what happens: either the gate message names the converted paths as the cause, or the comparison uses the bytes the Controller's own checkout produced, captured before the tester starts. This repository has no `.gitattributes`, so its own lane is not affected.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T10:57:15Z"
+            }
+          ]
+        },
+        "F-5215097ba6b1": {
+          "digest": "5215097ba6b12bca9d854bdb58845df2661ed4fd724133d0a23b353a61014345",
+          "text": "**OPUS-C10C-R6-003 D5: the ignore-rule Git run lists its own overrides.** The ignore-rule run lists `core.fsmonitor=false`, `core.hooksPath=/dev/null` and diff-only options (`--no-ext-diff --no-textconv`, which `check-ignore` does not take). Meanwhile the manifest read reuses `_GIT_PINNED_CONFIG` \"not a third list\". That helper sets `core.fsmonitor` to the empty value on purpose: before Git 2.36, Git runs `false` as an fsmonitor program. Because the git dir is the Controller's, this is harmless, but it is still a third list. Build the ignore run from the same helper as well.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T10:57:15Z"
+            }
+          ]
+        },
+        "F-58e1ef16dd33": {
+          "digest": "58e1ef16dd33466297181993384fe454c677c28d5b679c11f9f039d8e4210bf0",
+          "text": "**OPUS-C10C-R6-004 mapping: the R2 description lags the plan.** The plan's R2 now adds \"by a Controller-owned manifest, with nothing in the clone's `.git` trusted and no Git run in the clone\". The mapping's R2 `description` still has the revision-5 text. The checkpoint ids agree, so this is only drift in the summary. Update it at the next plan edit.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T10:57:15Z"
+            }
+          ]
+        },
+        "F-f08af1439d04": {
+          "digest": "f08af1439d045d49f6966a2ac02258403ac297b7c963cfe2f71475ca3aa45739",
+          "text": "**O1 — D5:** specify `lstat`/no-follow traversal, symlink-target handling and rejection of unexpected special files for both worktree and metadata inspection.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T11:19:59.879275+00:00"
+            }
+          ]
+        },
+        "F-c79832375033": {
+          "digest": "c7983237503368aee3625f30d67191c9f8199e5576b47a666a12a5d0436a147a",
+          "text": "**O2 — D5/CP3:** define checkout conversions explicitly. Raw blob manifests can disagree with clean checkouts under CRLF, smudge-filter or symlink-emulation settings; verify the initial checkout before launching the tester.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T11:19:59.879275+00:00"
+            }
+          ]
+        },
+        "F-4d7208c76b38": {
+          "digest": "4d7208c76b38f8aeab8e045e8bd30b0fefe10f9a7cb13ecd51324e35a3a9b12e",
+          "text": "**O3 — D5:** apply the shared Git-hardening helpers to ignore evaluation too. Its separately enumerated configuration differs from `_GIT_PINNED_CONFIG`, including `core.fsmonitor=false` versus the compatibility-preserving empty value.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T11:19:59.879275+00:00"
+            }
+          ]
+        },
+        "F-0ce4aae542da": {
+          "digest": "0ce4aae542daa7059f6c7f3259707cca58b81ebd764030d3d1c988db9f6fb96e",
+          "text": "**O4 — Requirements mapping:** align R2’s description with the plan’s explicit Controller-owned manifest and no-trust-in-clone-`.git` requirements.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "43adefc787550c433f19d3df3f3e440ad4917eed7e338f8f19f2eee5d871a8c1",
+              "verdict": "REVISE",
+              "at": "2026-10-19T11:19:59.879275+00:00"
+            }
+          ]
+        },
+        "F-51947d92b1f4": {
+          "digest": "51947d92b1f4d319bd0341a8ab50004a65271c7d696f177eb2d9d365b4f7418e",
+          "text": "**OPUS-C10C-R7-003 D7/CP4: the cause count of `functional_tester_unavailable` disagrees with itself.** D7 says \"five causes\" and lists four gate causes plus the usage limit, which it then says is not a gate. A separate sentence repeats \"a launch whose sandbox enforcement probe fails\", which is the same cause as \"the sandbox enforcement is missing\". CP4 tests \"each of the four causes\". Merge the duplicate sentence and say \"four causes; a usage limit is not one of them\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "2598c8196b878e8b8b9edd1ace7e6a403ee53c8b9c6f1f851a6c9bad936e0d29",
+              "verdict": "REVISE",
+              "at": "2026-10-19T11:24:35Z"
+            }
+          ]
+        },
+        "F-97021f1eb84c": {
+          "digest": "97021f1eb84c4f5bfe3a4406af4ee3dec6b6d5ccc4ff614c454a5b6d69baa78f",
+          "text": "**OPUS-C10C-R7-004 D5: listing \"every manifest path and every directory that contains one\" in the deny list scales with the tree.** A deny on each directory that holds a tracked file already covers its files. For a tree of thousands of files, per-file entries become thousands of sandbox arguments. Consider denying the clone root and `.git` and allowing only the derived writable locations, which CP2 then proves. This depends on how R7-001(b) is resolved.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "2598c8196b878e8b8b9edd1ace7e6a403ee53c8b9c6f1f851a6c9bad936e0d29",
+              "verdict": "REVISE",
+              "at": "2026-10-19T11:24:35Z"
+            }
+          ]
+        },
+        "F-fc9be5a39ec7": {
+          "digest": "fc9be5a39ec75b41d9318937c6e3d19db346330fa0d9ce12acfdffc19b65bfa1",
+          "text": "**OPUS-C10C-R8-001 D5: the lead sentence of the binding paragraph still overclaims.** It reads \"Passing evidence is recorded only when the bytes the tester exercised are bound to the captured candidate (I2)\". The R7-002 paragraph later in D5 says the Controller \"cannot bind which bytes the tester chose to execute\". Reword the lead to \"only when the candidate handed to the tester is bound to the captured candidate and unchanged\" so D5 does not contradict itself.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T12:00:04Z"
+            }
+          ]
+        },
+        "F-cee5bf6bbdf4": {
+          "digest": "cee5bf6bbdf4b5d42b7c6894b8d2884e14cf9d503ca3c9466d0bbbcf1cadef6c",
+          "text": "**OPUS-C10C-R8-002 D5/CP2: prepare the likely shape of the precedence amendment.** The pinned CLI (2.1.303) uses sandbox setting names such as `write.allowOnly`, `read.denyOnly` and `read.allowWithinDeny`. That suggests writes follow an allow-only model, with denies carved out inside allowed paths. Under that model, \"a more specific allow beats an enclosing deny\" may not hold. CP2's stop-and-amend already catches this. To keep the amendment small, D5 could name the equivalent fallback now:\n  - no deny on the clone root;\n  - the tester's working directory outside the clone, so the clone is not writable by default;\n  - only the derived locations in the write allowlist;\n  - a deny on `.git` inside the clone.\n\n  CP2's restore probe proves either form.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T12:00:04Z"
+            }
+          ]
+        },
+        "F-f0f9b46e1b9d": {
+          "digest": "f0f9b46e1b9d8b86bf94c7aaa69950100502654fa5c1d669cb13a6455a58a95a",
+          "text": "**OPUS-C10C-R8-003 D3: stale checkpoint reference.** D3 says \"so CP2 lists `controller.sandbox_fakes` there\" (in `pyproject.toml`). CP2's **Files:** list holds no `pyproject.toml`. CP3 owns both `pyproject.toml` and `controller/sandbox_fakes/`. It should say CP3.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T12:00:04Z"
+            }
+          ]
+        },
+        "F-09a1d36fe8ad": {
+          "digest": "09a1d36fe8ada8660072e99edf5a214ceb422a6db4daee01b0bbf34cf461d7b8",
+          "text": "**O1 — D5/R2/CP6: align the remaining overclaims with the stated boundary.** D5 still says the bytes exercised are bound to the candidate, contradicting its explicit edited-copy limitation. Describe candidate integrity instead. Owner-facing documentation should state that `passed` is a trusted tester report that can feed automatic acceptance without verified execution provenance, and name `functional.automated=false` as the manual alternative. Gate text needs no additional approval step, but should avoid claiming verified executed bytes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T12:04:14.032014Z"
+            }
+          ]
+        },
+        "F-5100adb3319d": {
+          "digest": "5100adb3319da9e75fcef4bcb7087ab9c76da180919ff8c5f14e522f5d214d35",
+          "text": "**O2 — D5/CP2: retain the precedence assumption as unproved.** CP2 adequately contains this risk through stop-and-amend. The local review’s alternative—working outside the clone and allowing only derived directories—can preserve the boundary if neither the clone nor any enclosing directory is otherwise writable. Adopt it only through the stated amendment process and repeat the enforcement probes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T12:04:14.032014Z"
+            }
+          ]
+        },
+        "F-6deb8a3be878": {
+          "digest": "6deb8a3be878482da656fb95b859920aac22e7ca5c174609c161a71ef6688f5e",
+          "text": "**O3 — D3: correct the packaging checkpoint reference.** Adding `controller.sandbox_fakes` to `pyproject.toml` belongs to CP3, rather than CP2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T12:04:14.032014Z"
+            }
+          ]
+        }
       }
     }
   }

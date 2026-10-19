@@ -332,11 +332,14 @@ class WorkerRecordTest(test_job._StreamingCase):
         self.assertNotIn("usage_record", record)
         self.assertEqual(record["usage_record_failed"], "RuntimeError: injected")
         keep = lambda r: {k: v for k, v in r.items() if k not in (  # noqa: E731
-            "usage_record", "usage_record_failed", "updated_at", "created_at", "job_id", "worker", "worker_process",
+            "usage_record", "usage_record_failed", "updated_at", "created_at", "job_id", "worker_process",
             "worker_anchor", "worker_streams", "ownership_tag", "worker_state", "event_seq", "ending_offset",
             "lifecycle_lock", "run_id")}
-        wall = lambda r: {**keep(r), "telemetry": {**r["telemetry"], "job_seconds": None, "worker_seconds": None}}  # noqa: E731
-        self.assertEqual(wall(record), wall(baseline))  # only the two wall-clock leaves are normalised
+        volatile = ("session_id", "duration_ms", "stdout_path", "stderr_path")  # per-run values, not outcomes
+        wall = lambda r: {**keep(r), "telemetry": {**r["telemetry"], "job_seconds": None, "worker_seconds": None},  # noqa: E731
+                          "worker": {k: v for k, v in r["worker"].items() if k not in volatile}}
+        self.assertEqual(wall(record), wall(baseline))  # only the wall-clock and per-run leaves are normalised
+        self.assertEqual(record["worker"]["exit_code"], baseline["worker"]["exit_code"])
         self.assertTrue(baseline["telemetry"]["tokens"]["output"])  # the rest of the telemetry block is compared above
         self.assertEqual(record["status"], baseline["status"])
 

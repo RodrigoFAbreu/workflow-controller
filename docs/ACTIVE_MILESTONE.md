@@ -32,7 +32,8 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-No milestone is active. The next incomplete step is **A2** (the backlog, `docs/ROADMAP.md`), which waits for
-[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), the Workflow lane's next milestone after W12. In
-the meantime this repository moves to Workflow 2.15.0, and then controller issue #88 is taken. If workflow#48 is not
-released by then, **C10c** follows. Run `/milestone-plan` for the next milestone.
+No milestone is active. This repository runs Workflow 2.15.0 since 2026-10-19, so the next milestone is **C13b**
+(`docs/ROADMAP.md`): the two review round caps of controller issue
+[#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88). **A2** (the backlog) waits for
+[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), the Workflow lane's next milestone after W12; if it
+is not released when C13b is done, **C10c** follows. Run `/milestone-plan` for C13b.

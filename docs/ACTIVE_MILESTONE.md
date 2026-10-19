@@ -2,34 +2,35 @@
 
 ## Status
 
-**Complete.** `workflow-controller-cleanup-2` (CU2, `docs/ROADMAP.md`) reached `MILESTONE_COMPLETE` on 2026-10-18. It
-fixes the twelve follow-up issues #78, #79, #82-#87, #91 and #93-#95 in one pull request (#99, squash `6b3c54b`,
-merged 2026-10-18), released as the minor release **1.16.0**, the latest release. `/satisfy-gate` is now routed by
-stage: Haiku 5.5 `high` for plan and technical approval, Sonnet 5.5 `medium` for acceptance (#91). The release notes
-are `docs/releases/1.16.0.md`.
+**Complete.** `workflow-controller-adapters-1` (A1, `docs/ROADMAP.md`) reached `MILESTONE_COMPLETE` on 2026-10-19. It
+puts the harness and the git host behind adapter registries (`controller/harness.py`, `controller/forge.py` `FORGES`)
+and adds the usage record (`controller/usage_record.py`, with the versioned `controller/prices.json`), written beside
+`telemetry` at the end of every worker and review job. It changes no behaviour except the new `usage_record` key in
+`resume --json`. Its pull request is #102 (title `refactor:`, so it releases the patch release 1.16.1 once merged).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every acceptance
 requirement met (policy source `default`, digest `bae758b4f4ce`).
-- Plan revision 8 was approved by policy at `b4f3a07` after eight local and four Codex plan rounds. The base commit is
-  `4f1e127`.
-- Technical approval `260b07d` (implementation revision 2) was recorded by policy and is `CURRENT`, after two local and
-  two Codex implementation rounds.
-- Functional review round 1 (an independent Codex tester, an operator re-test and a real-model run of flow 10) passed
-  all ten flows. Checklist evidence commit `a3a7da7`.
-- The Workflow's own GitHub query found pull request #99 at head `a3a7da7` with every check passing and no standing
+- Plan revision 5 was approved by policy at `b3d5f08`. The base commit is `859eda5`.
+- Technical approval `2761ec0` (implementation revision 6) was recorded by policy and is `CURRENT`.
+- Functional review (an independent Codex tester and an operator re-test) passed all nine flows. Checklist evidence
+  commit `4e8d287`.
+- The Workflow's own GitHub query found pull request #102 at head `4e8d287` with every check passing and no standing
   objection.
 
 All registry checkpoints (CP1-CP5) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
-of this transition, and `active_work_item_id` is now `null`. `docs/ROADMAP.md` marks step CU2 complete. The full
-narrative is archived at `docs/milestones/completed/workflow-controller-cleanup-2.md`; the Optional findings are in
-`docs/milestones/completed/workflow-controller-cleanup-2-findings.md`.
+of this transition. `docs/ROADMAP.md` marks step A1 complete. The full narrative is archived at
+`docs/milestones/completed/workflow-controller-adapters-1.md`; the Optional findings are in
+`docs/milestones/completed/workflow-controller-adapters-1-findings.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Minor review findings:** of eleven Optional review items, eight were fixed, two dropped and one kept as a follow-up,
-  GitHub issue #100 (label `review-follow-up`), for a later clean-up milestone.
+- **Minor review findings:** of twenty-three Optional items, thirteen were fixed, four dropped and six kept as
+  follow-ups, GitHub issue #104 (label `review-follow-up`), for a later clean-up milestone.
+- **#103** (fill the price table from a published price list).
 - **#88** (the two review round caps) waits for a Workflow release that counts local and external rounds separately
   (workflow#43).
 
 ## Next action
 
-No milestone is active. Plan the adapters step (A1, `docs/ROADMAP.md`): run `/milestone-plan`.
+The next incomplete milestone in `docs/ROADMAP.md` is **A2** (the backlog), which waits for
+[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released; **C10c** follows. After the owner
+merges pull request #102 (squash) and 1.16.1 is released, run `/milestone-plan` for the next milestone.

@@ -902,3 +902,37 @@ class ReviewLaunchRefusedError(ControllerError):
     """
 
     code = "REVIEW_LAUNCH_REFUSED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-adapters-1 CP1 -- the harness adapter registry
+# (``controller.harness``).
+# ---------------------------------------------------------------------------
+
+
+class HarnessRoleError(ControllerError):
+    """A harness was asked for a role its adapter does not declare (Codex as
+    a worker). ``evidence`` names the ``harness``, the ``role`` and the
+    ``declared_roles``."""
+
+    code = "HARNESS_ROLE_UNSUPPORTED"
+
+
+class UnknownHarnessError(ControllerError):
+    """A harness name the adapter registry does not hold. ``evidence`` names
+    the ``harness`` and the ``registered`` names."""
+
+    code = "HARNESS_UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-adapters-1 CP2 -- the git host adapter registry
+# (``controller.forge.FORGES``).
+# ---------------------------------------------------------------------------
+
+
+class ForgeKindUnregisteredError(ControllerError):
+    """A forge kind the git host adapter registry does not hold. ``evidence``
+    names the ``kind`` and the ``registered`` kinds."""
+
+    code = "FORGE_KIND_UNREGISTERED"

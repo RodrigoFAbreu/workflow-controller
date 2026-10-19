@@ -285,11 +285,12 @@ class Context:
     auto_merge: bool = True
     wait_seconds: int = 0
     poll_seconds: int = 30
+    forge_kind: str = "github"
 
     def forge(self, repository: str) -> forge_mod.Forge:
         if self.forge_factory is not None:
             return self.forge_factory(repository)
-        return forge_mod.GhForge(repository, vet_root=self.repo_root)
+        return forge_mod.adapter_for(self.forge_kind).implementation(repository, vet_root=self.repo_root)
 
 
 @dataclasses.dataclass(frozen=True)

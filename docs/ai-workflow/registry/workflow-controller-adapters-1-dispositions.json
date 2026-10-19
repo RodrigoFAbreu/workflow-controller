@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-adapters-1",
+  "dispositions": {
+    "F-01ce72a7e2b4": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#104"
+    },
+    "F-11f57d17ce3d": {
+      "disposition": "dropped",
+      "reason": "The plan is a historical record and is not edited after approval. The three changed expectations (LaunchPathTest's key set, the trunk preflight comparison, the regenerated no-policy golden) each admit only the one additive key D6 plans, no value assertion changed, and every change was disclosed and checked by the reviews and the functional tester (flow 5). The lesson for later plans: name exact-key-set tests in D1's allowed edits when a record key is added."
+    },
+    "F-164855c6018b": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#104"
+    },
+    "F-2f88710d53af": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#104"
+    },
+    "F-31ac695d1db2": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a generated review-bundle file, not a repository file. The runs it lacked are recorded elsewhere: the local review rounds 5 and 6 and Codex round 5 ran the new tests and the suite, and the operator re-test at revision 6 ran the full suite and goldens (functional evidence, functional-review-round2-operator.md)."
+    },
+    "F-3a70a546654d": {
+      "disposition": "fixed",
+      "note": "tests/test_usage_record.py test_the_table_loads_from_a_copied_package_layout imports the copied module in isolated mode, and test_the_table_is_package_data checks pyproject; the functional tester also loaded the table from a built wheel (flow 7)."
+    },
+    "F-3ee782a786f3": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5, D3) pins WORKER_FAMILY, SAME_PROVIDER_HARNESS, PINNED_VERSION and CLAUDE_PINNED_VERSION; tests/test_harness.py asserts them."
+    },
+    "F-4896ed6b7686": {
+      "disposition": "dropped",
+      "reason": "The plan is a historical record and is not edited after approval. The three changed expectations (LaunchPathTest's key set, the trunk preflight comparison, the regenerated no-policy golden) each admit only the one additive key D6 plans, no value assertion changed, and every change was disclosed and checked by the reviews and the functional tester (flow 5). The lesson for later plans: name exact-key-set tests in D1's allowed edits when a record key is added."
+    },
+    "F-57eca807e209": {
+      "disposition": "fixed",
+      "note": "97af5e1: the roadmap no longer marks A1 complete before acceptance; acceptance adds the accepted and released facts."
+    },
+    "F-7d7591256c28": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a generated review-bundle file, not a repository file. The runs it lacked are recorded elsewhere: the local review rounds 5 and 6 and Codex round 5 ran the new tests and the suite, and the operator re-test at revision 6 ran the full suite and goldens (functional evidence, functional-review-round2-operator.md)."
+    },
+    "F-85009a38acc3": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5): harness.py holds plain declarations and imports only controller.errors, so telemetry stays light and review.py is not imported."
+    },
+    "F-a278fa4162ca": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5, D5): the forge_kind check runs on the default branch only, a forge_factory still wins outright; its tests cover both cases."
+    },
+    "F-ac2b4ad08122": {
+      "disposition": "fixed",
+      "note": "The plan-stage exclusion reasons in workflow-controller-adapters-1-artifacts.json were corrected before plan approval; no CU2 text remains."
+    },
+    "F-ad7b425da07a": {
+      "disposition": "fixed",
+      "note": "97af5e1: the roadmap no longer marks A1 complete before acceptance."
+    },
+    "F-b4f8d68aa62d": {
+      "disposition": "fixed",
+      "note": "docs/guide/development.md 'Maintaining the price table' gives the procedure: version, source, date, units, model ids, converter version, and records are never rewritten. Filling the table is #103."
+    },
+    "F-b818f62438c9": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#104"
+    },
+    "F-ba38941fcdc2": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5, D9): the record is identical except the absent usage_record key, with the problem in a separate top-level usage_record_failed key; documented in docs/guide/workers.md."
+    },
+    "F-ba6c51d6dc79": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5, CP3) names the module-level PRICES_PATH pattern; controller/usage_record.py uses PRICES_PATH = Path(__file__).with_name('prices.json') and load(path=PRICES_PATH), so NoLateResourceReadTest passes unchanged."
+    },
+    "F-bfcb299cd376": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#104"
+    },
+    "F-ce42bc840d71": {
+      "disposition": "follow-up",
+      "link": "RodrigoFAbreu/workflow-controller#104"
+    },
+    "F-e1e0478e0e42": {
+      "disposition": "fixed",
+      "note": "docs/guide/how-it-works.md 'The usage record' now says a cost the harness reports (Claude's total_cost_usd) is kept with source reported, and the table prices only what is not reported."
+    },
+    "F-fb9d85d77fe9": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5, D3) pins the Codex adapter's version; tests/test_harness.py asserts review.PINNED_VERSION == harness.get('codex').pinned_version."
+    },
+    "F-fe9a2fcbc0d1": {
+      "disposition": "fixed",
+      "note": "The approved plan (revision 5, D8): a positive Codex cache-write figure keeps the figure with input and cost unknown, and CP3 tests it."
+    }
+  }
+}

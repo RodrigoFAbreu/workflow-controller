@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "unit": "price per token, in the table's currency",
+  "date": "2026-10-18",
+  "source": "none yet: no price is entered until it is taken from the provider's published price list; a model absent from the table gives cost null and quality unknown",
+  "models": {}
+}

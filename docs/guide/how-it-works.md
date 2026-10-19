@@ -74,3 +74,27 @@ if asked. At a Workflow 2.8 automatic gate the Workflow answers with the
 disposition `validation`, and the Controller launches its `/satisfy-gate` as a
 worker (Controller 1.7.0 to 1.13.1 did not know the disposition: `explain` reported
 `workflow_unknown_disposition` and nothing was launched).
+
+## The usage record
+
+Every worker job that completes, and every review job in which a harness attempt
+ran, records what it used in a `usage_record` key of its job record, in one
+format for every harness ([workers](workers.md#telemetry) lists the fields).
+One converter per harness builds it from the harness's own output: the Claude
+converter from the stream's `result` events, the Codex converter from the
+rollouts of the job. A cost the harness reports (Claude's `total_cost_usd`) is
+kept as it is, with source `reported`. Otherwise the cost is the four priced
+token groups (input, cache-read, cache-write, output) times their prices in
+`controller/prices.json`, never the reasoning count, which is inside output. The
+price table is versioned and ships with no model prices until one is taken from
+a provider's published list; with no reported cost, a model absent from the table
+gives cost `null` and quality `unknown`. A worker record
+carries it exactly when it carries `telemetry`, so a job reconciled `FAILED` after
+its result was read still has both, and so does a worker that launched but exited
+without emitting a result (its figures are `null` and `unknown`). A job that
+fails outside the completion path, such as a failure to launch, has neither. A built record
+keeps the table version it was computed under and is never rewritten.
+
+The `--json` output of `resume` prints each job record as stored, so a job
+that has `usage_record` (or `usage_record_failed`) shows that key there; a record
+without it prints exactly as before. No other output changes.

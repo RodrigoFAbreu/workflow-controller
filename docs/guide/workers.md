@@ -423,6 +423,28 @@ stays `FAILED` and carries the fact in its evidence. `run` then waits and
 repeats an interrupted one; see
 [pausing for usage limits](../run.md#pausing-for-usage-limits).
 
+## Harness adapters
+
+The agent harnesses the Controller can reach are declared in one registry,
+`controller/harness.py` (`ADAPTERS`). An adapter holds plain declarations and
+launches nothing:
+
+| Harness | Reviewer name | Family | Roles | Usage | Pinned version |
+|---|---|---|---|---|---|
+| `claude-code` | `claude` | `anthropic` | worker, reviewer | `reported` | `2.1.296 (Claude Code)` |
+| `codex` | `codex` | `openai` | reviewer | `derived` | `codex-cli 0.162.1` |
+
+Each adapter also declares whether it can restrict sub-agents and tools, and
+that it fails closed on a version other than its pin. A role an adapter does not
+declare is refused with `HarnessRoleError` (`codex` cannot be a worker), and a
+name that is not registered with `UnknownHarnessError`, both naming what is
+declared. `claude-code` and `claude` resolve to the same adapter. The family
+table of the review modes and the harness name `telemetry` prints derive from
+the registry, and tests pin the objects that launch a harness
+(`review.CODEX`, `review.CLAUDE`) to its declarations, so a drifted
+declaration fails a test by name. To add a harness, see
+[Adding a harness or a git host](development.md#adding-a-harness-or-a-git-host).
+
 ## The same-provider reviewer
 
 With `review.mode` `auto` (under a lowered gate policy) or `single-provider`
@@ -717,3 +739,23 @@ the `sha256` of the bytes read (`null` with no file), and each effective
 value with its source (`cli`, `file` or `default`). Its `worker_route`
 gains `config_source`: `settings`, `routing-config` or `none`. Both are
 optional, and older records lack them.
+
+**The usage record.** Beside `telemetry`, a completed worker job, and every
+review job in which an attempt ran (whatever its terminal status), carries a
+`usage_record` block: one format whatever the harness reports. It holds the
+harness, provider and model, the input, cache-read, cache-write, output and
+reasoning tokens (input excludes cached tokens, output includes reasoning), wall
+time, turns, a quality flag per figure (`reported`, `derived` or `unknown`), the
+cost with its source, the price-table version and currency, the record's own
+`version`, and for a Codex review `subagent_total_tokens`, the sub-agents' summed
+total, which is kept out of the token figures. A figure the
+harness does not give is `null` and `unknown`; none is invented. It is advisory
+like `telemetry`: if building it fails the job is unchanged and the record has a
+`usage_record_failed` key instead. A worker record carries `usage_record` exactly
+when it carries the `telemetry` block, which includes a job reconciled `FAILED`
+after the worker's result was read (the run was paid for), and a worker that
+launched but exited without emitting a result (its figures are `null` and
+`unknown`, and telemetry shows `results: 0`). A job that fails outside the
+completion path, such as a failure to launch, has neither. Nothing reads it yet; `telemetry`, `status`
+and `inspect` still read the `telemetry` block. See
+[the usage record](how-it-works.md#the-usage-record).

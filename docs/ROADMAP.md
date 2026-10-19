@@ -29,12 +29,11 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16 and 2026-10-18):
-1. A1, the harness and git-host adapters and the usage record (owner decision, 2026-10-18: steps A1 and A2 come right
-   after CU2 and before C10c; they never start while a milestone is active);
-2. A2, the backlog file and the generated roadmap, once workflow#48 is released;
-3. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
-4. C12, then C11;
-5. the orchestrator series O1-O7.
+1. A2, the backlog file and the generated roadmap, once workflow#48 is released (owner decision, 2026-10-18: right
+   after A1, before C10c; it never starts while a milestone is active);
+2. C10c (C10a and C10b are released; C10 is three steps, each released on its own, and C10d follows C10c);
+3. C12, then C11;
+4. the orchestrator series O1-O7.
 
 A3, A4 and A5 follow their dependencies in the table below.
 
@@ -115,7 +114,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C10a | Gate-policy validations: the Controller launches the Workflow's `/satisfy-gate` for the three automatic approvals, a refused validation stops, a value a protocol 1.x minor adds is advisory or blocked (never refused), and a stop the Workflow calls blocked sends a blocker, not a request (follow-ups 17 and 26 in part) (complete, accepted 2026-10-17 by gate policy, released as 1.14.0 from PR #81, squash `8a38a85`) | W2, C6 | [1.8](#18-policy-driven-gates-and-automated-validation), [follow-up 17](#known-follow-ups-carried-forward) |
 | C10b | The pull request defect loop: `pr.apply_review` and the `pr_review_result` reporter at the pull-request external gates before acceptance (rows 38d, 38f, 38g; complete, accepted 2026-10-18 by gate policy; released as 1.15.0 from PR #92, squash `3b7aa7a`) | C10a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (complete, accepted 2026-10-18 by gate policy; #82 fixed by disarming the fake workers' timers at exit; released as 1.16.0 from PR #99, squash `6b3c54b`; owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
-| A1 | Harness and git-host adapters: one interface for the Claude and Codex seams and one for the git host (GitHub first), and the usage record, one format whatever the harness reports. A refactor with no change in behaviour: the existing contract tests pass unchanged (owner decision, 2026-10-18: right after CU2, before C10c) | CU2 | Adapters and backlog (above) |
+| A1 | Harness and git-host adapters: one interface for the Claude and Codex seams and one for the git host (GitHub first), and the usage record, one format whatever the harness reports. A refactor with no change in behaviour: the existing contract tests pass unchanged (owner decision, 2026-10-18: right after CU2, before C10c) (complete, accepted 2026-10-19 by gate policy; pull request #102, title `refactor:`, so patch release 1.16.1 once merged) | CU2 | Adapters and backlog (above) |
 | A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It waits for [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released, because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it (owner decision, 2026-10-18: right after A1, before C10c) | A1, workflow#48 | Adapters and backlog (above) |
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e) | C10b | [11.9](#119-automated-functional-review) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |

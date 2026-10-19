@@ -1,0 +1,99 @@
+"""The harness adapter registry (workflow-controller-adapters-1, D2-D4).
+
+One declaration of what each agent harness is called, which model family it
+belongs to, which roles it can take, what it can enforce and how it reports
+usage. The module holds plain declarations and imports only
+``controller.errors``; the objects that launch a harness (``review.CODEX``,
+``review.CLAUDE``, the worker launch) stay where they are, and tests pin
+their literals to this registry.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from collections.abc import Mapping
+
+from controller.errors import HarnessRoleError, UnknownHarnessError
+
+WORKER = "worker"
+REVIEWER = "reviewer"
+
+#: How a harness reports usage: exactly, computed from its output, or not.
+USAGE_REPORTED = "reported"
+USAGE_DERIVED = "derived"
+USAGE_NONE = "none"
+
+
+@dataclasses.dataclass(frozen=True)
+class HarnessAdapter:
+    """What a harness declares. ``name`` is what the worker records and
+    ``telemetry`` prints; ``reviewer_name`` is the key of
+    ``review.HARNESSES``, the ``reviewer.harness`` setting and the verdict's
+    harness (``None`` for an adapter that cannot review)."""
+
+    name: str
+    reviewer_name: str | None
+    family: str
+    roles: tuple[str, ...]
+    can_restrict_agents: bool
+    can_restrict_tools: bool
+    usage: str
+    pinned_version: str
+    fails_closed_on_unknown_version: bool
+
+    def require_role(self, role: str) -> None:
+        if role not in self.roles:
+            raise HarnessRoleError(
+                f"harness {self.name!r} cannot take the {role!r} role; it declares {list(self.roles)}",
+                evidence={"harness": self.name, "role": role, "declared_roles": list(self.roles)},
+            )
+
+
+CLAUDE_CODE = HarnessAdapter(
+    name="claude-code", reviewer_name="claude", family="anthropic",
+    roles=(WORKER, REVIEWER), can_restrict_agents=True, can_restrict_tools=True,
+    usage=USAGE_REPORTED, pinned_version="2.1.296 (Claude Code)",
+    fails_closed_on_unknown_version=True,
+)
+CODEX = HarnessAdapter(
+    name="codex", reviewer_name="codex", family="openai",
+    roles=(REVIEWER,), can_restrict_agents=True, can_restrict_tools=True,
+    usage=USAGE_DERIVED, pinned_version="codex-cli 0.162.1",
+    fails_closed_on_unknown_version=True,
+)
+
+#: The closed registry, keyed by ``name``.
+ADAPTERS: Mapping[str, HarnessAdapter] = {a.name: a for a in (CLAUDE_CODE, CODEX)}
+
+
+def get(name: str) -> HarnessAdapter:
+    """The adapter registered under ``name`` or, for a reviewer, under its
+    ``reviewer_name`` (``claude-code`` and ``claude`` are one adapter)."""
+    adapter = ADAPTERS.get(name)
+    if adapter is None:
+        adapter = next((a for a in ADAPTERS.values() if a.reviewer_name == name), None)
+    if adapter is None:
+        raise UnknownHarnessError(
+            f"no harness named {name!r}; registered: {sorted(ADAPTERS)}",
+            evidence={"harness": name, "registered": sorted(ADAPTERS)},
+        )
+    return adapter
+
+
+def for_role(name: str, role: str) -> HarnessAdapter:
+    """``get(name)``, refusing a role the adapter lacks."""
+    adapter = get(name)
+    adapter.require_role(role)
+    return adapter
+
+
+def worker_adapter() -> HarnessAdapter:
+    """The registry's one worker-role adapter."""
+    workers = [a for a in ADAPTERS.values() if WORKER in a.roles]
+    return workers[0]
+
+
+#: ``reviewer_name`` -> family, over the reviewer-role adapters.
+REVIEWER_FAMILY: Mapping[str, str] = {
+    a.reviewer_name: a.family for a in ADAPTERS.values() if a.reviewer_name is not None
+}

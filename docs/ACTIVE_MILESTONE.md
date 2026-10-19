@@ -68,7 +68,8 @@ plus one additive record: nothing the Controller decides, prints or launches may
    stream with no result; `controller/prices.json` ships with no model prices, so a Codex cost is `null`/`unknown`.
 4. **Record written at job end (R4).** `python3 -m unittest tests.test_usage_record_job`. Expected: pass. A worker record
    carries `usage_record` exactly when it carries the `telemetry` block (this includes a job reconciled FAILED after the
-   worker's result was read, e.g. exit 7; a worker that fails before any result has neither), and every review end in
+   worker's result was read, e.g. exit 7, and a worker that launched but exited without emitting a result; a job that fails
+   outside the completion path, such as a failure to launch, has neither), and every review end in
    which an attempt ran carries it; a review that ended before any attempt carries none; an injected converter failure leaves the job identical to a control run except for
    `usage_record_failed`.
 5. **Nothing else changed (D1).** `git diff 859eda5 HEAD --stat -- tests/` lists new test files and only registration edits

@@ -753,7 +753,9 @@ harness does not give is `null` and `unknown`; none is invented. It is advisory
 like `telemetry`: if building it fails the job is unchanged and the record has a
 `usage_record_failed` key instead. A worker record carries `usage_record` exactly
 when it carries the `telemetry` block, which includes a job reconciled `FAILED`
-after the worker's result was read (the run was paid for); a worker that fails
-before any result has neither. Nothing reads it yet; `telemetry`, `status`
+after the worker's result was read (the run was paid for), and a worker that
+launched but exited without emitting a result (its figures are `null` and
+`unknown`, and telemetry shows `results: 0`). A job that fails outside the
+completion path, such as a failure to launch, has neither. Nothing reads it yet; `telemetry`, `status`
 and `inspect` still read the `telemetry` block. See
 [the usage record](how-it-works.md#the-usage-record).

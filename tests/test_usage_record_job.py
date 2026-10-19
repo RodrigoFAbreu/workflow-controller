@@ -358,6 +358,14 @@ class WorkerRecordTest(test_job._StreamingCase):
         self.assertIn("usage_record", record)
         self.assertEqual(record["usage_record"]["output"], record["telemetry"]["tokens"]["output"])
 
+    def test_a_worker_that_exits_without_a_result_still_has_both_keys(self) -> None:
+        """Launched, then exit 7 with an empty stream: reconciled FAILED, both blocks, nothing invented."""
+        record, _writes = self._spied_step(env={"FAKE_CLAUDE_STDOUT": "", "FAKE_CLAUDE_EXIT": "7"}, timeout=60)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertIn("telemetry", record)
+        self.assertIn("usage_record", record)
+        self.assertEqual(record["telemetry"]["results"], 0)
+
 
 class ReattachRecordTest(test_job.ReattachTelemetryTest):  # inherits the existing tests too
     """The re-attach completion path builds the record beside its telemetry block."""

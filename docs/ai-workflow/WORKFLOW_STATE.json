@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-round-caps",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -18846,6 +18846,290 @@
         },
         "evaluated_at": "2026-10-19T02:51:06Z",
         "workflow_release": "2.14.0"
+      }
+    },
+    "workflow-controller-round-caps": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-round-caps",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ROUND_CAPS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-round-caps-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-round-caps-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "d6b9dfcff3ac96686cb9d67feb44377f8b0bf7cd",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+        "approved_review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ROUND_CAPS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e5424c2efff50c335de745248d6216c4a0b5832a"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-round-caps-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a41efb7830fd1b1b269e74a73818c0d3981d84fa"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-round-caps-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1efd92454ac4068f633d91f58ef84e1a47367432"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-19T05:38:17Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+            "ledger": {
+              "local": {
+                "bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "2cb3fa3f88a65c901ceed7244b5353e59855df416e3ab8210bfcb8bbc7fdcb38",
+                "ledger_entry_sha256": "011569f996f251d6d0e389159a692f8fe909d9cd34d63b52a12e581dc1a3e86d",
+                "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "d1087ce6f5500476459130b3cfe98b99373a0b7657aa53355369a67ebaeb28c8",
+                "ledger_entry_sha256": "a38c8023651b6557bdae65f4e097eed600d7ecad6c7a5388ff6ea7269f005568",
+                "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-19T05:38:17Z",
+          "workflow_release": "2.15.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-19T05:32:24Z",
+          "verdict_sha256": "2cb3fa3f88a65c901ceed7244b5353e59855df416e3ab8210bfcb8bbc7fdcb38",
+          "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-19T05:36:35.069446+00:00",
+          "verdict_sha256": "d1087ce6f5500476459130b3cfe98b99373a0b7657aa53355369a67ebaeb28c8",
+          "run_ref": "session:local .ai-review/workflow-controller-round-caps/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-10-19T05:38:17Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-19T05:31:13Z",
+        "consumed": {
+          "review_content_id": "c965c131c159a7656d4e9d182607f8e81cd05fca7524d7f175bd4107930899b4",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+          "bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "33d70c716d83df084562ea1dbcdefa81b087f0f2722d7b61fbbfd87d5967e268",
+        "c965c131c159a7656d4e9d182607f8e81cd05fca7524d7f175bd4107930899b4"
+      ],
+      "optional_findings": {
+        "F-01c70559be7b": {
+          "digest": "01c70559be7b560de8c30ffb5be16b528820c82b7fdee5986ca383e4a4085431",
+          "text": "**O1.** Tests outside the declared Files paragraphs also pin today's surface and will need edits: `tests/test_trunk_preflight.py:182` pops exactly the `review.round_cap` row from the recorded settings block (two new rows will appear there), `tests/test_evidence.py:3637` lists `execute_step`'s keyword names including `review_round_cap`, and `tests/test_protocol_decision.py:914` tests `explain` with the settings cap. Naming them in CP1/CP3 keeps the checkpoint scope honest.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "33d70c716d83df084562ea1dbcdefa81b087f0f2722d7b61fbbfd87d5967e268",
+              "verdict": "REVISE",
+              "at": "2026-10-19T05:26:14Z"
+            }
+          ]
+        },
+        "F-a042da65876f": {
+          "digest": "a042da65876f7e714fa40dd655179ae326c8f068ca9db592ed25ec1832da5f18",
+          "text": "**O2.** D3 says the deprecated cap \"works for one more release\" but neither D3 nor CP4 says what the settings table row and `--review-round-cap` help text say about the deprecation, or where the retirement is recorded (ROADMAP follow-up). One sentence would make the retirement trackable.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "33d70c716d83df084562ea1dbcdefa81b087f0f2722d7b61fbbfd87d5967e268",
+              "verdict": "REVISE",
+              "at": "2026-10-19T05:26:14Z"
+            }
+          ]
+        },
+        "F-0f188cc11c6c": {
+          "digest": "0f188cc11c6c5cb9a508c045a0f4e59651fd8707e561e104e6a74d78dab40261",
+          "text": "**O1.** D5 says the fallback text gives \"the single number and why\", but the Controller only sees `null` per-role fields: an older Workflow, an item created before the counts, a promoted item and a malformed counter all look the same in the snapshot. Saying the text reads \"the Workflow gave no split counts\" (rather than a reason it cannot know) would keep CP3's wording test exact.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "c965c131c159a7656d4e9d182607f8e81cd05fca7524d7f175bd4107930899b4",
+              "verdict": "REVISE",
+              "at": "2026-10-19T05:29:43Z"
+            }
+          ]
+        },
+        "F-efe67cbba72b": {
+          "digest": "efe67cbba72b3ee19b39caa69c1b11a12c3d5251102ecfac3c99e6eb8f7ad3d8",
+          "text": "**O1.** The stop's way (1) today names `--review-round-cap` and `review.round_cap` (controller/job.py:6030-6033), both deprecated by D3. D5 says the text keeps its three ways on but not which option way (1) names; naming the option and setting of the cap that fired (`--review-local-round-cap`/`review.local_round_cap` or the external pair), and the deprecated pair only in the fallback, would keep the stop from pointing operators at a deprecated knob.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T05:32:24Z"
+            }
+          ]
+        },
+        "F-2de9456fecae": {
+          "digest": "2de9456fecaea858eeb2fe8cb6534554b02381f965fc2e418ee90d191eb769bf",
+          "text": "**O2.** D5's fallback wording (\"the Workflow gave no split counts\" followed by the single number used) does not say whether the single number keeps today's source qualifier (\"given by the Workflow\" vs \"counted from the Controller's job records ..., the Workflow's own count may be higher\"). `WorkflowGivenRoundTest` (tests/test_review_round_lifecycle.py:567-568) and the lifecycle scenario (tests/scenarios/lifecycle.py:628) assert on that qualifier; stating that it is kept would make CP3's text updates mechanical.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T05:32:24Z"
+            }
+          ]
+        },
+        "F-97db6ec0b094": {
+          "digest": "97db6ec0b094ae338976c2d13530bd783e16ab5c21b3de7f83d146162f2ac8bf",
+          "text": "**O1 — D2/CP3:** An unset `reviewer.harness` does not always retain the ordinary gate. With lowered policy, `auto` can select a same-provider review; `cross-model` can refuse. Describe the exemption by `choice.kind == \"gate\"` and retain the cap whenever a review is actually selected.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T05:36:35.069446+00:00"
+            }
+          ]
+        },
+        "F-64d8b2cc8d88": {
+          "digest": "64d8b2cc8d885907a861c650783a663854c99f85ef30c1c2cf1328bdf4bdccf0",
+          "text": "**O2 — D5:** Make way (1) recommend the fired cap’s own option. Under D3, `--review-round-cap` cannot raise a cap already explicitly set through its own setting, so retaining only the deprecated remedy can leave the operator stopped.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T05:36:35.069446+00:00"
+            }
+          ]
+        },
+        "F-39da9c8c2048": {
+          "digest": "39da9c8c2048150f92400bae3bce3ae7edc91b4a249f8e1d68db26f42faa5fe7",
+          "text": "**O3 — D5:** Explicitly preserve the fallback’s job-record source qualifier, including the warning that the Workflow’s plan count may be higher. “No split counts” alone does not identify the source of the single number.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5c1c062ef8ff6eb107ce38c4a8defea357a965065b3204c96ca6c39b814c062d",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T05:36:35.069446+00:00"
+            }
+          ]
+        }
       }
     }
   }

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-round-caps",
+  "requirements": {
+    "R1": {
+      "description": "Two settings and two options set the local and the external cap; unset they are 6 and 4; the deprecated round cap still sets both when given (D3, D4)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "With both per-role counts given, the capped actions stop per D2 and the stop names the cap, the stage, the count and the cap (D2, D5)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R3": {
+      "description": "Without split counts the behaviour is today's, with the single number against the external cap, and the text says so (D1)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The documentation, the roadmap and the settings generation notes describe what the code does, and the whole suite and the docs check pass (D6)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

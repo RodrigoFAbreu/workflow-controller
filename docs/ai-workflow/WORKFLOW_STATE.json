@@ -18857,14 +18857,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-round-caps-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-round-caps-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 3,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "d6b9dfcff3ac96686cb9d67feb44377f8b0bf7cd",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP3",
+      "last_completed_checkpoint_id": "CP4",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -18877,6 +18877,10 @@
         "CP3": {
           "status": "COMPLETE",
           "start_commit": "d52001146bc3fa6a6b90a96a7a799963dabbf3f1"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "787c57e3f4e374d5d2a6f197b8c14c815ecf5240"
         }
       },
       "current_bundle_id": "7bf7e15e691aa86705a337f374a79c3f57ca822433a143ad86077eb49c035eff",
@@ -19005,8 +19009,8 @@
           "external": 0
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-10-19T06:06:14.425349+00:00",
+      "state_revision": 20,
+      "last_transition": "2026-10-19T06:23:27Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

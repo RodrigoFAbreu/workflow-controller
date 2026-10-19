@@ -10,8 +10,8 @@
 |---|---|
 | `workflow-controller inspect <repo>` | managed-repo verification + Workflow state summary, and the lifecycle lock's state; read-only. For a protocol target (Workflow 2.7.0 and later) it also shows `workflow_mode`, the protocol version, the managed-script digest map and, as an advisory, any action id `describe` lists that this release cannot launch (`unknown_action_ids`): an invented id, or one of the four catalogue ids it has no command for |
 | `workflow-controller explain [--review-mode MODE] <repo>` | the pending job files (each with the command that clears it), the lifecycle lock's state, then the next-action decision with full evidence, and, at a gate, exactly what a human must do; for a protocol-mode target also the Workflow's row, disposition and action (a `protocol` block with `--json`); at an external review gate it also prints the review mode, its source and what the next step does (a `review_mode` block with `--json`); read-only; exits 0, but refuses (exit `20`) like every other command when the repository is not admitted |
-| `workflow-controller step [--follow] [--review-round-cap N] [--review-mode MODE] <repo>` | execute exactly one automatic action, validate the transition, stop. With `reviewer.harness` set, the two external review gates (rows 14 and 28) run a Codex review job instead of stopping (see [the reviewer settings](runtime.md#what-it-holds)). `--review-mode auto\|cross-model\|single-provider\|manual` chooses the external review for that command (see [the mode table](runtime.md#what-it-holds)) |
-| `workflow-controller run [--follow] [--max-steps N] [--review-round-cap N] [--review-mode MODE] <repo>` | (with `reviewer.harness` set, the external review gates are `step`s too) repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
+| `workflow-controller step [--follow] [--review-round-cap N] [--review-local-round-cap N] [--review-external-round-cap N] [--review-mode MODE] <repo>` | execute exactly one automatic action, validate the transition, stop. With `reviewer.harness` set, the two external review gates (rows 14 and 28) run a Codex review job instead of stopping (see [the reviewer settings](runtime.md#what-it-holds)). `--review-mode auto\|cross-model\|single-provider\|manual` chooses the external review for that command (see [the mode table](runtime.md#what-it-holds)) |
+| `workflow-controller run [--follow] [--max-steps N] [--review-round-cap N] [--review-local-round-cap N] [--review-external-round-cap N] [--review-mode MODE] <repo>` | (with `reviewer.harness` set, the external review gates are `step`s too) repeat `step` until a gate (every implementation-stage human gate included), a declined action, a no-action phase, a failure, an incomplete step, a refusal, or a pending handoff |
 | `workflow-controller resume [--drain-timeout SECONDS] <repo>` | re-attach to a job whose worker still runs with no Controller supervising it and supervise it to its end, then reconcile this target's non-terminal job records and report; never launches a worker. `--drain-timeout` bounds this re-attach's drain (see [the drain bound](workers.md#owned-processes-the-daemon-list-and-the-drain-bound)) |
 | `workflow-controller resume --abandon JOB_ID [--acknowledge-unverifiable-worker] <repo>` | mark one pending job file terminal instead of reconciling it (see [Job dispositions](workers.md#job-dispositions)) |
 | `workflow-controller status` | Controller-owned view: the running Controller, pinned identity, job records, pending handoff, active runs and jobs, the last job's telemetry, milestone bindings; writes only `identity.json` (see [`status`](#status)) |
@@ -45,10 +45,14 @@ positive integer. `0`, a negative number or a non-integer is a usage
 error (exit `2`). Without the flag, each takes its value from the
 settings file, else its built-in default.
 
-`step` and `run` also take `--review-round-cap N` (1 to 100; else the
-`review.round_cap` setting, 4): the protocol review loop of a stage stops at
-that round with the `review_round_cap_reached` gate (see
+`step` and `run` also take `--review-local-round-cap N` and
+`--review-external-round-cap N` (1 to 100 each; else the
+`review.local_round_cap` and `review.external_round_cap` settings, else 6 and 4):
+the protocol review loop of a stage stops when a round count reaches its cap
+with the `review_round_cap_reached` gate (see
 [a run stopped at the review round cap](../common-problems.md#a-run-stopped-at-the-review-round-cap)).
+`--review-round-cap N` still sets both caps below an option of its own; it and
+the `review.round_cap` setting are deprecated and retired after 1.17.0.
 A bad value is a usage error (exit `2`).
 
 A gate's safe resume command that names `explain` with `--work-item`

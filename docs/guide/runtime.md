@@ -217,7 +217,9 @@ file is never an error: every setting then takes its built-in default.
 | `usage.repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
 | `usage.codex_run_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | `usage --usage-codex-cap` |
 | `usage.codex_repository_cap_percent` | integer or `null` | `null` (no cap) | 1 to 100 | none |
-| `review.round_cap` | integer | `4` | 1 to 100 | `--review-round-cap` |
+| `review.round_cap` | integer | `4` | 1 to 100 | `--review-round-cap` (deprecated: use the local and external caps; retired after 1.17.0) |
+| `review.local_round_cap` | integer or `null` | `null` (built-in 6) | 1 to 100 | `--review-local-round-cap` |
+| `review.external_round_cap` | integer or `null` | `null` (built-in 4) | 1 to 100 | `--review-external-round-cap` |
 | `notifications.enabled` | boolean | `true` | -- | none |
 | `notifications.url` | string or `null` | `null` | an `http` or `https` URL, 1 to 2048 characters | none |
 | `notifications.api_key_file` | string or `null` | `null` | a path, 1 to 1024 characters; never the key | none |
@@ -291,21 +293,39 @@ the shared record holds is in
 `17` ([exit codes](../exit-codes.md)), and the operator's view is
 [`usage`](commands.md#usage).
 
-The `review.round_cap` row is the review round cap. A protocol run counts
+The `review.local_round_cap` and `review.external_round_cap` rows are the
+two review round caps (unset means the built-in 6 and 4). A protocol run counts
 the review rounds of the plan stage and of the implementation stage
-separately: the Workflow's own `review_round` when its answer carries one
-(Workflow 2.12.0 and later), else the Controller's count over its job
-records of this repository and work item (a plan round counted that way is
-a lower bound: the Workflow counts published contents, which can exceed
-`plan_revision`; a plan of a work item the Workflow governs as `"1"` is
-counted at its own review phase, `AWAITING_EXTERNAL_PLAN_REVIEW`).
-`<stage>.apply_review` is not launched at round `cap` or
-above, and `<stage>.review.local` is not launched above round `cap`; the
-step returns the `review_round_cap_reached` gate instead (see
+separately. With Workflow 2.15.0 and later (protocol 1.5) the Workflow gives
+each stage a local and an external round count, and the caps apply to them
+as follows: `<stage>.apply_review` is not launched when either count has
+reached its cap, `<stage>.review.local` is not launched when the local count
+has reached the local cap, and the external review the Controller would
+courier (`reviewer.harness` set, a mode that runs it) is not launched when the
+external count has reached the external cap; the step returns the
+`review_round_cap_reached` gate instead (see
 [a run stopped at the review round cap](../common-problems.md#a-run-stopped-at-the-review-round-cap)).
-No other action is stopped, and a legacy-path target is unaffected.
-`--review-round-cap N` on `step` and `run` replaces the setting for that
-command; there is no "off" value, a long loop is a cap of 100.
+When the Workflow gives no split counts (an older Workflow, an item created
+before the counts, a promoted item or a malformed counter) the Controller
+falls back to the single round it used before: the Workflow's own
+`review_round` when its answer carries one (Workflow 2.12.0 and later), else
+the Controller's count over its job records of this repository and work item
+(a plan round counted that way is a lower bound: the Workflow counts
+published contents, which can exceed `plan_revision`; a plan of a work item
+the Workflow governs as `"1"` is counted at its own review phase,
+`AWAITING_EXTERNAL_PLAN_REVIEW`). That single number is checked against the
+external cap: `apply_review` stops at round `cap` or above, `review.local`
+above round `cap`, and the external review is not capped. No other action is
+stopped, and a legacy-path target is unaffected.
+
+`review.round_cap` is deprecated and works for one more release (it is
+retired after 1.17.0). When it is set in the file to anything but its default
+4, or given as `--review-round-cap`, it is the value of every cap that is still
+unset; a file value of exactly 4 is the default and does not override. A cap
+given by its own setting or option always wins over it. `--review-local-round-cap N`
+and `--review-external-round-cap N` on `step` and `run` replace the setting
+for that command; `--review-round-cap N` sets both caps below an option of its
+own. There is no "off" value, a long loop is a cap of 100.
 
 To compare review rounds before and after a change, group the jobs by stage
 and round: `workflow-controller telemetry --by stage,round --since
@@ -515,6 +535,12 @@ The release that adds the `satisfy-gate-acceptance` routing role is table genera
 an older Controller refuses the role in a `--routing-config` file, ignores a `routing.roles` entry for it with a warning and its
 `settings clean` refuses. The same release gives `satisfy-gate` the route Haiku 5.5 `high`; a value you pinned for `satisfy-gate`
 now covers plan and implementation approval only, and acceptance takes its own route (Sonnet 5.5 `medium`) until you name it.
+
+The release that adds the two round cap rows is table generation 12: it adds the `review.local_round_cap` and
+`review.external_round_cap` rows to a file filled by an earlier release, unset
+(`null`), and moves nothing else. An older Controller sharing the file
+afterwards warns about the two unknown keys, ignores them, and its
+`settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

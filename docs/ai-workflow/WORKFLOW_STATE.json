@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -19879,12 +19879,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 45,
-      "last_transition": "2026-10-19T18:15:08Z",
+      "state_revision": 47,
+      "last_transition": "2026-10-19T18:45:57.515979+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20417,7 +20417,48 @@
               "at": "2026-10-19T16:23:06Z"
             }
           ]
+        },
+        "F-51aceacf91db": {
+          "digest": "51aceacf91db100e4889c6893299a40ce6d997f6bb0fdb8ad8d51df5a19652b2",
+          "text": "`docs/guide/automation.md` (the paragraph ending \"`explain` at row 38e shows, read-only, the head, the checklist blob, the flow ids, the previous functional job and any sandbox kept by an earlier breach\") does not yet say that `explain` now also lists the `.gitignore` patterns the writable-location derivation refused (the round-1 Important 2 fix, `controller/cli.py` `_print_functional`). A one-clause addition keeps the guide current with the behaviour.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "cdb13f5819dc71e60a5d45e1fd7c1635007d243b47e88dfad2407bbef21dc638",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T18:34:07Z"
+            }
+          ]
+        },
+        "F-8fcc19c643c8": {
+          "digest": "8fcc19c643c8ab879d17ce300938c802feaa705768c384e719cbcc979922bce4",
+          "text": "Small tidy-ups in the round-2 tests: `import subprocess` sits before `import json` in `tests/test_protocol_job.py` (the module's imports are otherwise alphabetical), and the edited assertion in `tests/test_functional_review.py` `NotRunTest` only gained a comment; a line asserting that `complete_entries` places the log under the `log_dir` it is given (not the output folder) would state the new contract directly.\n\nThe three Optional findings of round 1 (tester reads outside the sandbox, `../` checklist links, `file://` origins) are unchanged and remain recorded from that round.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "cdb13f5819dc71e60a5d45e1fd7c1635007d243b47e88dfad2407bbef21dc638",
+              "verdict": "APPROVE",
+              "at": "2026-10-19T18:34:07Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "cdb13f5819dc71e60a5d45e1fd7c1635007d243b47e88dfad2407bbef21dc638",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "ffc3138c37fc38838e5d4d01ef3599f86f6822725abad92408a6671448a971a5",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-19T18:34:07Z",
+          "verdict_sha256": "3f3124838e375a2535c49bb6c5047f5bc3f09e5fa80975ffea73c4a61047f911",
+          "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

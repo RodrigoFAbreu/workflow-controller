@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -19879,12 +19879,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 5,
-          "external": 2
+          "local": 6,
+          "external": 3
         }
       },
-      "state_revision": 55,
-      "last_transition": "2026-10-20T00:47:57Z",
+      "state_revision": 57,
+      "last_transition": "2026-10-20T07:55:33+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20557,16 +20557,58 @@
               "at": "2026-10-19T22:54:24Z"
             }
           ]
+        },
+        "F-8a8f6c913d38": {
+          "digest": "8a8f6c913d38aca72a7e2dda944e3876d33f99f2e1a03170e325b79198e070e8",
+          "text": "A few shapes still end a flow silently. Each is a bare section label or matches the qualifier-header rule, so it is inside what round 5 accepted. Examples: a flow-owned `**Setup** for this flow: reuse A's clone` or `**Setup: none needed.**` after a blank line, and a sentence such as `**Then, 2. Run it again.**`. Each is dropped together with the rest of its flow up to the next flow. The robust fix round 4 suggested is still open: refuse the checklist (`checklist_unrecognised`) when text after a section end and before the next flow would be dropped, or otherwise name it. Record this as a follow-up issue.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 6,
+              "review_content_id": "657adaad32b7217946da4245993a011bab559903ebfcdb0e7db67aa99f5ccee1",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T01:04:00Z"
+            }
+          ]
+        },
+        "F-c9c2c9c09c6a": {
+          "digest": "c9c2c9c09c6ad51b5e8e1bc2cf16934751623b912505eae75c0d3aea16339fd5",
+          "text": "Over-inclusion in the other direction: a qualifier header without the comma (`**Optional K. Title.**`) or with more than one word (`**Optional (manual), K. Title.**`) does not end the previous flow. Its steps are folded into that flow's prompt, so the tester runs the optional flow as part of the required one. Nothing is dropped, but a result can mix the two flows. This belongs in the same follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 6,
+              "review_content_id": "657adaad32b7217946da4245993a011bab559903ebfcdb0e7db67aa99f5ccee1",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T01:04:00Z"
+            }
+          ]
+        },
+        "F-a5a0d13926a8": {
+          "digest": "a5a0d13926a89ffe64703203aa18be372606d480ff6df8ad82b52e3fdaf90f22",
+          "text": "`IMPLEMENTATION_SUMMARY.md` is stale for rounds 4 and 5. Its \"Round 3 review fixes (`f3dfa0a`)\" section still describes the superseded I4 rule (keep paragraphs starting `Expected`/`Result`/`Outcome`/`Pass`). `abde14c` has no section at all. Only the \"Round 6\" section describes the current rule. Add a short entry for `abde14c` and mark the round-3 description as superseded, so the external reviewer reads the current rule.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 6,
+              "review_content_id": "657adaad32b7217946da4245993a011bab559903ebfcdb0e7db67aa99f5ccee1",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T01:04:00Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "463c333b229146287d9d6bfc14f198673d3eb5f460184bab5dc039f16864f8e5",
+        "review_content_id": "657adaad32b7217946da4245993a011bab559903ebfcdb0e7db67aa99f5ccee1",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "1e0dd7cc1788b192550cb7eb4289a77c3e3d74b161ac840f3a1136ef23083a4b",
+          "bundle_id": "1e291ad4e2db551e675579293d9a19fcd2b2caa0af0ba69926dc4776d96ea0a0",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-19T20:30:00Z",
-          "verdict_sha256": "f7c605bfe12920affe29b0629b6cfd3c318effdc0157710bae0ad23c7a1f3ed5",
+          "round": 6,
+          "completed_at": "2026-10-20T01:04:00Z",
+          "verdict_sha256": "05181bfeb169c6bb690618f9f575e4d45c255372b2bdc4914be854953bb06161",
           "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },

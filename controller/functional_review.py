@@ -915,32 +915,34 @@ _SECCOMP_PROGRAM = (
 )
 
 
-#: The name the native build embeds its seccomp helper under.
-_SECCOMP_HELPER_MARKER = b"apply-seccomp"
+#: SHA-256 digests of the native Claude builds on which the enforcement spike
+#: (CP2) proved the vendored seccomp helper blocks Unix sockets, by version. A
+#: build is admitted only by identity: a name found inside the file does not
+#: show the helper is bundled (a package CLI can carry the text without the
+#: executable), so an unknown build ends the launch before it starts.
+VERIFIED_NATIVE_BUILDS: dict[str, str] = {
+    "2.1.303": "375988f457756524234695cf2d8f64ace99c5f68682e47ea24862a843c191450",
+}
 
 
-def _is_native_executable(path: str) -> bool:
-    """Whether ``path`` is the native Claude build: an ELF binary that embeds
-    the seccomp helper. ELF magic alone admits a compiled launcher that
-    delegates to the script or package CLI, which warns about a missing helper
-    and then runs without Unix-socket blocking, so the helper's name must be
-    in the file itself. This is a static check: it shows the helper is named in
-    the binary, not that the helper runs. A build that bundles the package CLI
-    without the vendored helper would still pass; the residual gap is stated in
-    the automation guide (``docs/guide/automation.md``)."""
+def _is_native_executable(path: str, *, verified: Mapping[str, str] | None = None) -> bool:
+    """Whether the file ``path`` resolves to is a verified native Claude build:
+    an ELF binary whose SHA-256 digest is one of :data:`VERIFIED_NATIVE_BUILDS`
+    (or ``verified``). The digest is taken from the file itself, the one the
+    launch will execute, so a launcher, a script, a package CLI bundle or a
+    newer unverified build is refused (I1)."""
+    digests = set((VERIFIED_NATIVE_BUILDS if verified is None else verified).values())
+    digest = hashlib.sha256()
     try:
         with open(os.path.realpath(path), "rb") as handle:
             if handle.read(4) != b"\x7fELF":
                 return False
             handle.seek(0)
-            tail = b""
             while chunk := handle.read(1 << 22):
-                if _SECCOMP_HELPER_MARKER in tail + chunk:
-                    return True
-                tail = chunk[-len(_SECCOMP_HELPER_MARKER):]
+                digest.update(chunk)
     except OSError:
         return False
-    return False
+    return digest.hexdigest() in digests
 
 
 def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run,
@@ -973,8 +975,8 @@ def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Call
                                 "Unix sockets")
     claude = which("claude")
     if claude is None or not is_native(claude):
-        raise TesterUnavailable("the sandbox's Unix-socket blocking needs the native claude build, which embeds its "
-                                f"seccomp helper; {claude or 'claude'} is not one")
+        raise TesterUnavailable("the sandbox's Unix-socket blocking needs a verified native claude build (one of "
+                                f"{', '.join(VERIFIED_NATIVE_BUILDS)}); {claude or 'claude'} is not one")
 
 
 def result_event_text(event: Mapping[str, Any]) -> str:

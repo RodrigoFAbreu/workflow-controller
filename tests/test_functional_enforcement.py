@@ -14,6 +14,7 @@ CLI refuses before any model call.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import socket
@@ -140,27 +141,44 @@ class StaticProbeTests(unittest.TestCase):
         with self.assertRaises(fr.TesterUnavailable):
             fr.static_probe(which=which, run=mock.Mock(return_value=self.ok()), is_native=lambda path: True)
 
-    def test_the_native_check_needs_an_elf_that_embeds_the_seccomp_helper(self) -> None:
+    def test_the_native_check_admits_only_a_verified_digest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             native, launcher, script = Path(tmp, "native"), Path(tmp, "launcher"), Path(tmp, "script")
-            native.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"apply-seccomp" + b"y" * 10)
-            # A compiled launcher that forwards to the script CLI has the magic but not the helper.
+            native.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"verified build")
+            verified = {"9.9.9": hashlib.sha256(native.read_bytes()).hexdigest()}
+            # A compiled launcher that forwards to the script CLI has the magic but another digest.
             launcher.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"exec node cli.js")
             script.write_text("#!/usr/bin/env node\napply-seccomp\n")
-            self.assertTrue(fr._is_native_executable(str(native)))
-            self.assertFalse(fr._is_native_executable(str(launcher)))
-            # The static check is by name only (documented residual gap): an ELF without the name is refused.
-            bundled = Path(tmp, "bundled")
-            bundled.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"package cli, no helper")
-            self.assertFalse(fr._is_native_executable(str(bundled)))
-            self.assertFalse(fr._is_native_executable(str(script)))
-            self.assertFalse(fr._is_native_executable(str(Path(tmp, "absent"))))
+            self.assertTrue(fr._is_native_executable(str(native), verified=verified))
+            self.assertFalse(fr._is_native_executable(str(launcher), verified=verified))
+            self.assertFalse(fr._is_native_executable(str(script), verified=verified))
+            self.assertFalse(fr._is_native_executable(str(Path(tmp, "absent")), verified=verified))
+            # A newer build is refused until its digest is added.
+            self.assertFalse(fr._is_native_executable(str(native), verified={}))
+            # A symlink resolves to the file that would be executed.
+            link = Path(tmp, "link")
+            link.symlink_to(native)
+            self.assertTrue(fr._is_native_executable(str(link), verified=verified))
 
-    def test_the_helper_name_is_found_across_a_read_boundary(self) -> None:
+    def test_a_helperless_elf_that_names_the_helper_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            split = Path(tmp, "split")
-            split.write_bytes(b"\x7fELF" + b"x" * ((1 << 22) - 4 - 5) + b"apply-seccomp" + b"z")
-            self.assertTrue(fr._is_native_executable(str(split)))
+            bundled = Path(tmp, "claude")
+            # A forwarding ELF whose diagnostic text names the helper (I1): the name proves nothing.
+            bundled.write_bytes(b"\x7fELF\x02" + b"x" * 5000 + b"warning: apply-seccomp not found; exec node cli.js")
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                fr.static_probe(which=lambda name: str(bundled) if name == "claude" else f"/usr/bin/{name}",
+                                run=mock.Mock(return_value=self.ok()))
+            self.assertIn("verified native", str(caught.exception))
+            self.assertEqual(caught.exception.code, fr.GATE_TESTER_UNAVAILABLE)
+
+    def test_a_verified_build_passes_the_probe_by_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            native = Path(tmp, "claude")
+            native.write_bytes(b"\x7fELF\x02" + b"verified build")
+            digest = hashlib.sha256(native.read_bytes()).hexdigest()
+            with mock.patch.dict(fr.VERIFIED_NATIVE_BUILDS, {"9.9.9": digest}):
+                fr.static_probe(which=lambda name: str(native) if name == "claude" else f"/usr/bin/{name}",
+                                run=mock.Mock(return_value=self.ok()))
 
     def test_a_forwarding_elf_launcher_is_refused_by_the_probe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -179,6 +197,8 @@ class StaticProbeTests(unittest.TestCase):
 
     @unittest.skipUnless(CLAUDE and shutil.which("bwrap") and shutil.which("socat"), "claude, bwrap or socat is absent")
     def test_this_host_passes_the_static_probe(self) -> None:
+        if not fr._is_native_executable(CLAUDE):
+            self.skipTest("the installed claude is not a verified native build (VERIFIED_NATIVE_BUILDS)")
         fr.static_probe()
 
     def test_the_cli_refusal_is_recognised_and_other_results_are_not(self) -> None:

@@ -193,7 +193,7 @@ def main() -> int:
         event["errors"] = ["Error: sandbox required but unavailable: dependencies are missing: bubblewrap"]
         out.append(event)
     else:
-        out.append(fcr._result_event("done", scenario, model, error=False, status=None))
+        out.append(fcr._result_event(scenario.get("final_text", "done"), scenario, model, error=False, status=None))
     sys.stdout.write("".join(json.dumps(e) + "\n" for e in out))
     sys.stdout.flush()
     fcr._log(scenario, record)

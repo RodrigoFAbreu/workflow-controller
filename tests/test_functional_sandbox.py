@@ -90,6 +90,7 @@ class Fixture(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="wfr-cp3-"))
         self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)], check=False)
+        self.addCleanup(self.remove_short_folders)
         self.origin = self.tmp / "origin.git"
         self.repo = self.tmp / "repo"
         self.head = make_repo(self.repo, origin=self.origin)
@@ -103,6 +104,12 @@ class Fixture(unittest.TestCase):
         self.candidate = fr.capture_candidate(self.repo, self.head, branch="main")
         self.flows = fr.candidate_flows(self.candidate)
         self.count = 0
+
+    def remove_short_folders(self) -> None:
+        """Remove the short ``TMPDIR`` of every sandbox the test built (they live outside the fixture tree);
+        runs before the fixture tree is deleted, as cleanups run last-in first-out."""
+        for record in self.tmp.rglob(f"{fr.SANDBOX_AREA}/*/{fr.TMP_RECORD}"):
+            fr.remove_short_tmp(record.parent)
 
     def launch(self, scenario: dict, *, timeout: float = 60, job_id: str | None = None, item: str = "item-1",
                probe=lambda: None, candidate: fr.Candidate | None = None) -> dict:
@@ -250,6 +257,52 @@ class SandboxBuildTest(Fixture):
         self.assertIn("107", caught.exception.message)
         self.assertEqual(list(long_root.iterdir()), [])
         self.assertEqual(list((self.runtime / fr.SANDBOX_AREA).iterdir()), [])
+
+    def test_removal_does_not_depend_on_the_later_environment(self) -> None:
+        root_a = self.tmp / "root-a"
+        root_a.mkdir()
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(root_a)}):
+            box = self.build()
+        self.assertEqual(box.tmp.parent, root_a)
+        env = {k: v for k, v in os.environ.items() if k != "XDG_RUNTIME_DIR"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            fr.remove_sandbox(self.runtime, box.job_id)
+        self.assertFalse(box.tmp.exists())
+        self.assertFalse(box.base.exists())
+
+    def test_a_record_naming_something_else_removes_nothing(self) -> None:
+        keep = self.tmp / "precious"
+        keep.mkdir()
+        (self.runtime / fr.SANDBOX_AREA / "j").mkdir(parents=True)
+        (self.runtime / fr.SANDBOX_AREA / "j" / fr.TMP_RECORD).write_text(str(keep))
+        fr.remove_short_tmp(self.runtime / fr.SANDBOX_AREA / "j")
+        self.assertTrue(keep.exists())
+
+    def test_a_failed_tracking_record_removes_the_new_folder(self) -> None:
+        before = {p for root in fr.short_tmp_roots() for p in root.glob(fr.TMP_PREFIX + "*")}
+        real = fr.runtime.write_bytes
+
+        def fail_on_record(root, rel, data, *a, **k):
+            if rel.endswith("/" + fr.TMP_RECORD):
+                raise OSError(28, "No space left on device")
+            return real(root, rel, data, *a, **k)
+
+        with mock.patch.object(fr.runtime, "write_bytes", side_effect=fail_on_record):
+            with self.assertRaises(OSError):
+                self.build()
+        after = {p for root in fr.short_tmp_roots() for p in root.glob(fr.TMP_PREFIX + "*")}
+        self.assertEqual(after - before, set())
+
+    def test_the_socket_limit_counts_encoded_bytes(self) -> None:
+        wide = Path("/tmp/" + "é" * 30)
+        self.assertEqual(fr.longest_socket_path(wide), len(os.fsencode(wide)) + 1 + fr.SOCKET_NAME_LENGTH)
+        self.assertGreater(fr.longest_socket_path(wide), len(str(wide)) + 1 + fr.SOCKET_NAME_LENGTH)
+        root = self.tmp / ("é" * 30)  # 60 bytes but only 30 characters
+        root.mkdir()
+        with mock.patch.object(fr, "short_tmp_roots", return_value=[root]):
+            with self.assertRaises(fr.TesterUnavailable):
+                self.build()
+        self.assertEqual(list(root.iterdir()), [])
 
     def test_a_failed_build_removes_its_short_tmpdir(self) -> None:
         before = {p for root in fr.short_tmp_roots() for p in root.glob(fr.TMP_PREFIX + "*")}
@@ -409,6 +462,21 @@ class RunTest(Fixture):
         self.settle(result)
         self.assertFalse(sandbox.exists())
         self.settle(result)  # more than once is safe
+
+    def test_the_final_message_is_captured_flattened_and_bounded(self) -> None:
+        said = "I could not start:\n\n  the   bridge failed " + "x" * 900
+        result = self.launch({"actions": [], "final_text": said})
+        message = result["tester_message"]
+        self.assertTrue(message.startswith("I could not start: the bridge failed x"))
+        self.assertNotIn("\n", message)
+        self.assertEqual(len(message), fr.MAX_TESTER_MESSAGE)
+        self.assertTrue(message.endswith("..."))
+        self.settle(result)
+
+    def test_a_short_final_message_is_kept_whole(self) -> None:
+        result = self.launch({"actions": [], "final_text": "  nothing  to\nreport "})
+        self.assertEqual(result["tester_message"], "nothing to report")
+        self.settle(result)
 
     def test_the_tester_is_launched_under_the_closed_boundary(self) -> None:
         result = self.launch({"actions": [results()]})

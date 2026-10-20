@@ -1549,15 +1549,17 @@ def kept_sandboxes(runtime_root: Path, work_item_id: str) -> list[str]:
 
 def remove_short_tmp(base: Path) -> None:
     """Remove the short scratch ``TMPDIR`` recorded in ``base / TMP_RECORD``
-    (a sandbox folder), if it names a ``wcf-`` folder directly under one of
-    the :func:`short_tmp_roots`. Nothing else is ever removed through it."""
+    (a sandbox folder), if it names a ``wcf-`` folder directly under an
+    absolute directory. The record was written by :func:`make_short_tmp`
+    inside the contained sandbox folder, so removal does not depend on the
+    environment of the process that removes it (``XDG_RUNTIME_DIR`` may have
+    changed since the allocation). Nothing else is ever removed through it."""
     try:
-        recorded = Path((base / TMP_RECORD).read_text().strip())
+        recorded = Path(os.fsdecode((base / TMP_RECORD).read_bytes()).strip())
     except (OSError, ValueError):
         return
-    for root in short_tmp_roots():
-        if recorded.parent == root and recorded.name.startswith(TMP_PREFIX):
-            runtime.remove_tree(root, recorded.name)
+    if recorded.is_absolute() and recorded.name.startswith(TMP_PREFIX) and recorded.parent != recorded:
+        runtime.remove_tree(recorded.parent, recorded.name)
 
 
 def remove_sandbox(runtime_root: Path, job_id: str) -> None:
@@ -1576,7 +1578,7 @@ def sweep_kept(runtime_root: Path, work_item_id: str) -> list[str]:
 
 #: Claude Code's sandbox puts two bridge sockets in the tester's ``TMPDIR``:
 #: ``claude-socks-<16 hex>.sock`` is the longer name. A Unix socket path is
-#: limited to 107 characters plus the terminating NUL.
+#: limited to 107 bytes plus the terminating NUL.
 SOCKET_NAME_LENGTH = len("claude-socks-") + 16 + len(".sock")
 SOCKET_PATH_LIMIT = 107
 TMP_PREFIX = "wcf-"
@@ -1595,8 +1597,9 @@ def short_tmp_roots() -> list[Path]:
 
 
 def longest_socket_path(tmp: Path) -> int:
-    """The length of the longest bridge-socket path Claude creates in ``tmp``."""
-    return len(str(tmp)) + 1 + SOCKET_NAME_LENGTH
+    """The length in bytes (as the kernel counts it, filesystem-encoded) of the
+    longest bridge-socket path Claude creates in ``tmp``."""
+    return len(os.fsencode(tmp)) + 1 + SOCKET_NAME_LENGTH
 
 
 def make_short_tmp(runtime_root: Path, job_id: str) -> Path:
@@ -1615,13 +1618,17 @@ def make_short_tmp(runtime_root: Path, job_id: str) -> Path:
             continue
         if longest_socket_path(tmp) > SOCKET_PATH_LIMIT:
             runtime.remove_tree(root, tmp.name)
-            problems.append(f"{root}: a socket path would be {longest_socket_path(tmp)} characters")
+            problems.append(f"{root}: a socket path would be {longest_socket_path(tmp)} bytes")
             continue
-        runtime.write_bytes(runtime_root, f"{SANDBOX_AREA}/{job_id}/{TMP_RECORD}", str(tmp).encode())
+        try:
+            runtime.write_bytes(runtime_root, f"{SANDBOX_AREA}/{job_id}/{TMP_RECORD}", os.fsencode(tmp))
+        except BaseException:
+            runtime.remove_tree(root, tmp.name)
+            raise
         return tmp
     raise unavailable(UNAVAILABLE_ENFORCEMENT,
                       f"no short folder for the tester's TMPDIR: Claude's bridge sockets need a path of at most "
-                      f"{SOCKET_PATH_LIMIT} characters ({'; '.join(problems)})")
+                      f"{SOCKET_PATH_LIMIT} bytes ({'; '.join(problems)})")
 
 
 def _plain(cwd: Path, *args: str) -> None:

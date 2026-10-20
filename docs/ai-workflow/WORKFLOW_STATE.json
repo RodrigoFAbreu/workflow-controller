@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 10,
       "functional_review_round": null,
@@ -20298,12 +20298,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 9,
+          "local": 10,
           "external": 5
         }
       },
-      "state_revision": 68,
-      "last_transition": "2026-10-20T20:01:01Z",
+      "state_revision": 69,
+      "last_transition": "2026-10-20T20:20:30Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -21156,6 +21156,20 @@
               "review_content_id": "6218d3f7749cdcd5ea686893bcbbe7a2075a011931d791e891b0c79d9ea07df8",
               "verdict": "REVISE",
               "at": "2026-10-20T19:02:33Z"
+            }
+          ]
+        },
+        "F-f92d450c7008": {
+          "digest": "f92d450c7008f9c4881dca4c4e7f92de3ea4b7821dda85cc5a15be26a31bf1b7",
+          "text": "**O1 — `TEST_RESULTS.md` has no table for revision 9/10.** The round-9 commands and results appear only as prose\n  in `IMPLEMENTATION_SUMMARY.md`. Add a \"Round 9 (revision 10)\" table like the round-8 one.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 10,
+              "review_content_id": "458cbef5490d6603cd846592329f5359b8ed064890f796aedf35a88b87725db2",
+              "verdict": "REVISE",
+              "at": "2026-10-20T20:20:30Z"
             }
           ]
         }

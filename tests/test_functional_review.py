@@ -228,6 +228,19 @@ class CommittedChecklistsTest(unittest.TestCase):
         self.assertNotIn("Optional, K.", flows["J"].text)
         self.assertNotIn("Known limitations", flows["J"].text)
 
+    def test_a_bold_expectation_paragraph_is_never_dropped(self) -> None:
+        text = ("## Functional review checklist\n\n**A. Local version.** Run it.\n\n"
+                "**Verify exit code 0. Output is empty.**\n\n**Check step 2. It prints the version.**\n\n"
+                "**Then run it with option b. Nothing changes.**\n\n**Setup is unchanged afterwards.**\n\n"
+                "**B. Other.** go\n\n**Optional, K. Title.** extra\n\n**Setup**\nnotes\n")
+        flows = fr.read_flows(text)
+        by_label = {f.label: f.text for f in flows}
+        for kept in ("Verify exit code 0. Output is empty.", "Check step 2. It prints the version.",
+                     "Then run it with option b. Nothing changes.", "Setup is unchanged afterwards."):
+            self.assertIn(kept, by_label["A"])
+        self.assertNotIn("Optional, K.", by_label["B"])
+        self.assertNotIn("Setup", by_label["B"])
+
     def test_table_rows_a_to_j(self) -> None:
         flows = self.numbered("table_rows_eeeb4fa.md")
         self.assertEqual([f.label for f in flows], self.EXPECTED)

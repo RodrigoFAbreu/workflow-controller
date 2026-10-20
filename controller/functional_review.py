@@ -202,9 +202,11 @@ _BOLD_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):]")
 #: checklist's own non-flow sections; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
 _SECTION_END_RE = re.compile(
-    r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope")) + r")\b"
-    # or a flow header with a qualifier before its label (``**Optional, K. Title.**``)
-    rf"|^\*\*[^*:]{{0,40}}[ ,]{_LABEL}[.)][ \t]", re.IGNORECASE)
+    r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
+    # the section word is the whole bold label (``**Setup**``, ``**Out of scope.**``), not a sentence prefix
+    + r")[ \t]*(?:[:.]|\*\*)"
+    # or a flow header: one qualifier word, a comma, then the label (``**Optional, K. Title.**``)
+    rf"|^\*\*[ \t]*[A-Za-z]+,[ \t]*{_LABEL}[.)][ \t]", re.IGNORECASE)
 _HEADING_FLOW_RE = re.compile(rf"^(?:(?P<label>{_LABEL})[.):]|Flow\b[ \t]*(?P<rest>[^ \t.:)]*))")
 _NUMBERED_RE = re.compile(r"^(?P<label>\d{1,3})[.)][ \t]+\S")
 _SEPARATOR_RE = re.compile(r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$")
@@ -925,7 +927,7 @@ def _is_native_executable(path: str) -> bool:
     in the file itself. This is a static check: it shows the helper is named in
     the binary, not that the helper runs. A build that bundles the package CLI
     without the vendored helper would still pass; the residual gap is stated in
-    the plan's boundary text and the functional-review guide."""
+    the automation guide (``docs/guide/automation.md``)."""
     try:
         with open(os.path.realpath(path), "rb") as handle:
             if handle.read(4) != b"\x7fELF":

@@ -20,8 +20,51 @@ ground-truth record of the phase and of each checkpoint.
 
 ## Next action
 
-Every checkpoint is complete and the self-review is done: a fault after the tester ran (writing a "not run" log or
-the findings file) left the tester record `LAUNCHED`, which held every later step at a pending job and kept the usage
-reservation open; `_run_functional` now ends the record `FAILED` and re-raises, as the launch faults already did
-(`tests.test_protocol_job.TheFaultStopsTest`). The whole suite (`tools/run_tests.py`, 4533 tests) fails only the two
-Git 2.56 trailer tests that fail on `main` too. Implementation revision 1 goes to the local implementation review.
+Every checkpoint is complete; implementation revision 8 passed both implementation-review stages and the technical
+approval. The manual functional review is the open gate: run the checklist below, then place findings in the
+feedback folder's `FUNCTIONAL_REVIEW.md`, or run `/accept-milestone` when testing is clean.
+
+## Functional review checklist
+
+**Setup.** Work in a fresh clone of the milestone branch at the committed head. Install nothing global; run the
+Controller as `PYTHONPATH=<clone> python3 -P -m controller`. `bubblewrap` (`bwrap`) and `socat` must be on `PATH`
+and a pinned `claude` CLI must be installed. Every flow below runs offline against throwaway repositories under a
+`mktemp -d` directory; none needs a network, a real remote or a real `gh`.
+
+**Test data.** A scratch repository managed by the vendored Workflow with a work item at the functional-review gate
+and a short committed checklist of two flows, one that passes and one that fails (for example a command that exits
+non-zero).
+
+**A. The unit tests for the feature pass.** Run
+`python3 -m unittest tests.test_functional_review tests.test_functional_sandbox tests.test_functional_lifecycle tests.test_protocol_job`
+from the clone root. Expect `OK` with nothing skipped for the sandbox tests when `bwrap` and `socat` are present.
+
+**B. The checklist is read as flows.** Run `python3 -P -m controller explain` in the scratch repository at the gate.
+Expect a forecast that names the tester, the flow ids (`flow-1`, `flow-2`), the checklist blob and the timeout, and
+no job or reservation created.
+
+**C. A passing run reaches acceptance.** With a checklist whose flows all pass, run one step at row 38e. Expect one
+`functional_evidence` result per flow, the work item accepted by policy, and a tester job record of kind
+`functional_test` ending `ran`.
+
+**D. A failing flow produces findings.** With the failing flow, run one step. Expect `FUNCTIONAL_REVIEW.md` in the
+feedback folder, headed with the tested head, checklist blob and run, quoting the failing flow's log; the next step
+goes to `/apply-functional-review`, not to acceptance.
+
+**E. The sandbox refuses writes.** Read `RESULTS.json` and the fake `gh`/`git push` logs of the run in C or D.
+Expect the clone's tracked files, the checklist and `.git` byte-identical to the tested head, and the fake remote
+calls recorded, not performed.
+
+**F. Settings switch it off.** Set `functional.automated` to `false` in the settings file and run a step. Expect a
+stop for the manual gate with no tester job, sandbox or usage reservation.
+
+**G. No sandbox tools means a clean refusal.** Run a step with `bwrap` hidden from `PATH`. Expect the stop
+`functional_tester_unavailable` before any model call, and no job left `LAUNCHED`.
+
+**H. An unreadable checklist stops early.** Replace the checklist section with prose that has no flows. Expect
+`checklist_unrecognised` naming the four accepted flow shapes, before any job, sandbox or reservation exists.
+
+**Known limitations.** Pull-request flows are unsupported in the sandbox; a copy edited under the tester's own
+`TMPDIR` is not detected (stated limit of D5); a Codex tester, `required_flows` coverage tooling, a tester-failure
+cap setting and a sandbox-side forge model are roadmap follow-ups 61-66. Two Git 2.56 trailer tests fail on `main`
+too and are out of scope. Out of scope: the real forge, releases and the installed pipx copy.

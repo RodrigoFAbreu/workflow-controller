@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 7,
       "functional_review_round": null,
@@ -19879,12 +19879,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 6,
+          "local": 7,
           "external": 3
         }
       },
-      "state_revision": 58,
-      "last_transition": "2026-10-20T08:11:59.717039+00:00",
+      "state_revision": 59,
+      "last_transition": "2026-10-20T08:38:27Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20597,6 +20597,34 @@
               "review_content_id": "657adaad32b7217946da4245993a011bab559903ebfcdb0e7db67aa99f5ccee1",
               "verdict": "APPROVE",
               "at": "2026-10-20T01:04:00Z"
+            }
+          ]
+        },
+        "F-30f3fb89c44f": {
+          "digest": "30f3fb89c44ffe3bcdff1b2502594bd35526bcee57b4140c5cb6903a199b1e6a",
+          "text": "**OPUS-C10C-IMPL-R7-002: the probe resolves `claude` itself instead of receiving the binary the launch runs.** `static_probe` hashes `which(\"claude\")`, while `launch_functional` runs `resolve_binary(binary_name)`. Today they are always the same file, because the functional binary is fixed to `claude` and both resolve it on the same `PATH`. But identity is only guaranteed by that coincidence: a future configurable `binary` would launch a file that was never hashed. The native installer's symlink can also flip between the probe and `exec`. Passing the resolved `binary` to the probe, and launching `os.path.realpath(binary)` (the native ELF needs no neighbouring `node`), would make the hashed file the launched file by construction.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 7,
+              "review_content_id": "909954f10ee19da1324579ce630bb30b014351e52ff158cf092fe238e94fd877",
+              "verdict": "REVISE",
+              "at": "2026-10-20T08:38:27Z"
+            }
+          ]
+        },
+        "F-96cf2075e613": {
+          "digest": "96cf2075e613fed10f55959371a93881e88458fb7c9e2664133ea09fa841a898",
+          "text": "**OPUS-C10C-IMPL-R7-003: `TEST_RESULTS.md` has no table for round 7.** The round-7 full-suite result appears only in the prose of `IMPLEMENTATION_SUMMARY.md`. The file's title still reads \"implementation revision 1\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 7,
+              "review_content_id": "909954f10ee19da1324579ce630bb30b014351e52ff158cf092fe238e94fd877",
+              "verdict": "REVISE",
+              "at": "2026-10-20T08:38:27Z"
             }
           ]
         }

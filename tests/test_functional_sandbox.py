@@ -215,8 +215,49 @@ class SandboxBuildTest(Fixture):
         self.assertEqual(env["GIT_ALLOW_PROTOCOL"], "file")
         self.assertEqual(env["GIT_SSH_COMMAND"], "false")
         self.assertEqual(env["PYTHONDONTWRITEBYTECODE"], "1")
-        for key in ("HOME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+        for key in ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
             self.assertIn("/functional/", env[key])
+
+    def test_tmpdir_is_a_short_private_folder_removed_with_the_sandbox(self) -> None:
+        box = self.build()
+        tmp = Path(box.environment()["TMPDIR"])
+        self.assertEqual(tmp, box.tmp)
+        self.assertNotIn("/functional/", str(tmp))
+        self.assertTrue(tmp.name.startswith(fr.TMP_PREFIX))
+        self.assertEqual(tmp.stat().st_mode & 0o777, 0o700)
+        self.assertIn(str(tmp), box.settings()["sandbox"]["filesystem"]["allowWrite"])
+        fr.remove_sandbox(self.runtime, box.job_id)
+        self.assertFalse(tmp.exists())
+        self.assertFalse(box.base.exists())
+
+    def test_the_bridge_socket_paths_fit_the_limit_at_any_runtime_depth(self) -> None:
+        deep = self.runtime / ("d" * 60) / ("e" * 60) / "state" / "workflow-controller"
+        deep.mkdir(parents=True)
+        self.assertGreater(len(str(deep / "functional" / "job-id-20260101-000000-abcdef" / "tmp")) + 34, 107)
+        box = fr.build_sandbox(self.candidate, runtime_root=deep, job_id="deep", work_item_id="item-1")
+        longest = max(len(str(box.tmp / f"{kind}-{'0' * 16}.sock")) for kind in ("claude-http", "claude-socks"))
+        self.assertLessEqual(longest, fr.SOCKET_PATH_LIMIT)
+        self.assertEqual(longest, fr.longest_socket_path(box.tmp))
+        fr.remove_sandbox(deep, "deep")
+
+    def test_no_short_enough_folder_ends_at_unavailable_and_leaves_nothing(self) -> None:
+        long_root = self.tmp / ("r" * 90)
+        long_root.mkdir()
+        with mock.patch.object(fr, "short_tmp_roots", return_value=[long_root]):
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                self.build()
+        self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("107", caught.exception.message)
+        self.assertEqual(list(long_root.iterdir()), [])
+        self.assertEqual(list((self.runtime / fr.SANDBOX_AREA).iterdir()), [])
+
+    def test_a_failed_build_removes_its_short_tmpdir(self) -> None:
+        before = {p for root in fr.short_tmp_roots() for p in root.glob(fr.TMP_PREFIX + "*")}
+        with mock.patch.object(fr, "write_launchers", side_effect=OSError("boom")):
+            with self.assertRaises(OSError):
+                self.build()
+        after = {p for root in fr.short_tmp_roots() for p in root.glob(fr.TMP_PREFIX + "*")}
+        self.assertEqual(after - before, set())
 
     def test_a_crlf_eol_rule_ends_at_unavailable_before_launch(self) -> None:
         repo = self.tmp / "crlf"

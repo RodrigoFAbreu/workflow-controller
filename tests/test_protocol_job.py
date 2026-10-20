@@ -1060,6 +1060,17 @@ class TheFaultStopsTest(_TesterCase):
         self.assertEqual(self.gate_of(record), "results_invalid")
         self.assertEqual((life.evidence(), life.reservations()), ({}, {}))
 
+    def test_unreadable_results_show_the_testers_final_message(self) -> None:
+        life = self.life()
+        life.plan = lambda kwargs, outdir: None  # no RESULTS.json
+        life.extra = {"tester_message": "Sandbox is required but failed to initialize: no bridge sockets"}
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(self.gate_of(record), "results_invalid")
+        required = record["human_gate_pending"]["what_is_required"]
+        self.assertIn("RESULTS.json was not written", required)
+        self.assertIn("Sandbox is required but failed to initialize", required)
+        self.assertIn("failed to initialize", record["functional"]["tester_message"])
+
     def test_a_refusal_after_two_entries_keeps_those_two_and_names_the_workflow_code(self) -> None:
         life = self.life(flows=3)
         life.plan = [("flow-1", "passed", None), ("flow-2", "passed", None), ("flow-3", "passed", None)]

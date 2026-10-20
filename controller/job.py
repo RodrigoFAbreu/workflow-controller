@@ -7606,7 +7606,8 @@ def _conclude_functional(
     common = {"detail": result.get("detail"), "credentials": result.get("credentials"),
               "sandbox": sandbox, "kept": bool(result.get("keep")),
               "fake_calls": {name: len(calls) for name, calls in (result.get("fake_calls") or {}).items()},
-              "writable": result.get("writable") or [], "refused": result.get("refused") or []}
+              "writable": result.get("writable") or [], "refused": result.get("refused") or [],
+              "tester_message": result.get("tester_message")}
     kept = sandbox if result.get("keep") else None
     if result.get("breach"):
         return stop(functional_review.GATE_ISOLATION_BREACH, functional_review.OUTCOME_BREACH, fields=common,
@@ -7624,8 +7625,9 @@ def _conclude_functional(
         if outcome == "failed":
             return finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields=common, evidence_block={
                 "code": FUNCTIONAL_FAILED_CODE, "message": result.get("detail") or exc.message})
+        said = result.get("tester_message")
         return stop(functional_review.GATE_RESULTS_INVALID, functional_review.OUTCOME_INVALID, fields=common,
-                    detail=exc.message, sandbox=kept)
+                    detail=exc.message + (f"; the tester's final message: {said}" if said else ""), sandbox=kept)
     not_run_dir = runtime_root / "jobs" / job_id / "functional-not-run"  # the tester cannot write here
     entries = functional_review.complete_entries(not_run_dir, flows, entries, timed_out=outcome == "timeout",
                                                  job_id=job_id, timeout_seconds=timeout_seconds)

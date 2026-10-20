@@ -2080,7 +2080,8 @@ def check_functional_argv(command: Sequence[str], *, model: str, effort: str, fl
 
 def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
     """The run settings on disk are exactly the document the sandbox derives,
-    and every writable root lies in the sandbox's own scratch locations or is a
+    and every writable root lies in the sandbox's own scratch locations (``TMPDIR`` is the short folder
+    outside it) or is a
     derived writable location below the clone (never the clone root, its
     ``.git`` or a path outside the sandbox); the deny list holds the clone root
     and ``.git``."""
@@ -2097,6 +2098,8 @@ def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
     base = sandbox.base.resolve()
     for root in filesystem["allowWrite"]:
         path = Path(root)
+        if sandbox.tmp_dir is not None and path == sandbox.tmp_dir:
+            continue  # the short scratch TMPDIR, the one place outside the sandbox folder (D3)
         try:
             path.resolve().relative_to(base)
         except ValueError:
@@ -2231,6 +2234,9 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
         for reading in made.first_readings or []:
             result.setdefault("stream_first", {}).setdefault(reading["window"], reading)
         run = made.run
+        message = functional_review.tester_message_excerpt(made.verdict or made.failure or "")
+        if message:
+            result["tester_message"] = message  # for the stop text when the results cannot be used
         refusal = functional_review.launch_refusal(made.failure or "")
         if refusal is not None:
             refusal.evidence["cause"] = functional_review.UNAVAILABLE_ENFORCEMENT
@@ -2270,7 +2276,7 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
         steps.append(lambda: result.pop("stream_readings", None))
         steps.append(lambda: runtime.remove_tree(runtime_root, layout.rel(CLAUDE_HOME_NAME)))  # the credential copy
         if sys.exc_info()[0] is not None:
-            steps.append(lambda: runtime.remove_tree(runtime_root, layout.rel()))
+            steps.append(lambda: functional_review.remove_sandbox(runtime_root, job_id))
         for step in steps:
             try:
                 step()
@@ -2288,4 +2294,4 @@ def settle_functional(result: Mapping) -> None:
     if sandbox is None or result.get("keep"):
         return
     root = Path(sandbox).parent.parent
-    runtime.remove_tree(root, f"{functional_review.SANDBOX_AREA}/{Path(sandbox).name}")
+    functional_review.remove_sandbox(root, Path(sandbox).name)

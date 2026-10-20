@@ -45,6 +45,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -989,6 +990,17 @@ def result_event_text(event: Mapping[str, Any]) -> str:
     return "\n".join(part for part in parts if part)
 
 
+#: The most of the tester's final message kept in the job record and the stop text.
+MAX_TESTER_MESSAGE = 600
+
+
+def tester_message_excerpt(text: str) -> str:
+    """A bounded excerpt of the tester's final message (its ``result`` text):
+    whitespace collapsed, cut to :data:`MAX_TESTER_MESSAGE` characters."""
+    flat = " ".join(text.split())
+    return flat if len(flat) <= MAX_TESTER_MESSAGE else flat[:MAX_TESTER_MESSAGE - 3] + "..."
+
+
 def launch_refusal(result_text: str) -> TesterUnavailable | None:
     """The refusal for a Claude result whose text says the required sandbox is
     unavailable (the CLI refused to start without it), else ``None``."""
@@ -1402,6 +1414,7 @@ class Sandbox:
     refused: tuple[RefusedPattern, ...]
     git_state: dict[str, tuple]
     refs: dict[str, str]
+    tmp_dir: Path | None = None  # the short scratch ``TMPDIR`` (see :func:`make_short_tmp`)
 
     @property
     def clone(self) -> Path:
@@ -1429,7 +1442,7 @@ class Sandbox:
 
     @property
     def tmp(self) -> Path:
-        return self.base / "tmp"
+        return self.tmp_dir if self.tmp_dir is not None else self.base / "tmp"
 
     @property
     def fake_logs(self) -> Path:
@@ -1534,7 +1547,21 @@ def kept_sandboxes(runtime_root: Path, work_item_id: str) -> list[str]:
     return kept
 
 
+def remove_short_tmp(base: Path) -> None:
+    """Remove the short scratch ``TMPDIR`` recorded in ``base / TMP_RECORD``
+    (a sandbox folder), if it names a ``wcf-`` folder directly under one of
+    the :func:`short_tmp_roots`. Nothing else is ever removed through it."""
+    try:
+        recorded = Path((base / TMP_RECORD).read_text().strip())
+    except (OSError, ValueError):
+        return
+    for root in short_tmp_roots():
+        if recorded.parent == root and recorded.name.startswith(TMP_PREFIX):
+            runtime.remove_tree(root, recorded.name)
+
+
 def remove_sandbox(runtime_root: Path, job_id: str) -> None:
+    remove_short_tmp(runtime_root / SANDBOX_AREA / job_id)
     runtime.remove_tree(runtime_root, f"{SANDBOX_AREA}/{job_id}")
 
 
@@ -1545,6 +1572,56 @@ def sweep_kept(runtime_root: Path, work_item_id: str) -> list[str]:
     for job_id in removed:
         remove_sandbox(runtime_root, job_id)
     return removed
+
+
+#: Claude Code's sandbox puts two bridge sockets in the tester's ``TMPDIR``:
+#: ``claude-socks-<16 hex>.sock`` is the longer name. A Unix socket path is
+#: limited to 107 characters plus the terminating NUL.
+SOCKET_NAME_LENGTH = len("claude-socks-") + 16 + len(".sock")
+SOCKET_PATH_LIMIT = 107
+TMP_PREFIX = "wcf-"
+TMP_RECORD = "TMPDIR"
+
+
+def short_tmp_roots() -> list[Path]:
+    """Where a tester's short scratch ``TMPDIR`` may live: ``$XDG_RUNTIME_DIR``
+    (when set to an absolute directory), then ``/tmp``."""
+    roots = []
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir and os.path.isabs(runtime_dir) and os.path.isdir(runtime_dir):
+        roots.append(Path(runtime_dir))
+    roots.append(Path("/tmp"))
+    return roots
+
+
+def longest_socket_path(tmp: Path) -> int:
+    """The length of the longest bridge-socket path Claude creates in ``tmp``."""
+    return len(str(tmp)) + 1 + SOCKET_NAME_LENGTH
+
+
+def make_short_tmp(runtime_root: Path, job_id: str) -> Path:
+    """Create the tester's private scratch ``TMPDIR`` (mode 0700) under the
+    first of :func:`short_tmp_roots` where Claude's bridge sockets fit the
+    Unix-socket path limit, and record it in the sandbox's ``TMP_RECORD`` file so removing
+    the sandbox removes it. The runtime folder is too deep for that limit at
+    its default place, so the scratch folder does not live inside it. Raises
+    ``functional_tester_unavailable`` when no root is short enough."""
+    problems = []
+    for root in short_tmp_roots():
+        try:
+            tmp = Path(tempfile.mkdtemp(prefix=TMP_PREFIX, dir=root))
+        except OSError as exc:
+            problems.append(f"{root}: {exc.strerror or exc}")
+            continue
+        if longest_socket_path(tmp) > SOCKET_PATH_LIMIT:
+            runtime.remove_tree(root, tmp.name)
+            problems.append(f"{root}: a socket path would be {longest_socket_path(tmp)} characters")
+            continue
+        runtime.write_bytes(runtime_root, f"{SANDBOX_AREA}/{job_id}/{TMP_RECORD}", str(tmp).encode())
+        return tmp
+    raise unavailable(UNAVAILABLE_ENFORCEMENT,
+                      f"no short folder for the tester's TMPDIR: Claude's bridge sockets need a path of at most "
+                      f"{SOCKET_PATH_LIMIT} characters ({'; '.join(problems)})")
 
 
 def _plain(cwd: Path, *args: str) -> None:
@@ -1568,7 +1645,8 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
     base.mkdir(parents=True, mode=0o700)
     try:
         runtime.write_bytes(runtime_root, f"{SANDBOX_AREA}/{job_id}/ITEM", work_item_id.encode())
-        for name in ("out", "home", "tmp", "fake-logs", "bin", "home/.config", "home/.local/share", "home/.local/state",
+        tmp_dir = make_short_tmp(runtime_root, job_id)
+        for name in ("out", "home", "fake-logs", "bin", "home/.config", "home/.local/share", "home/.local/state",
                      "home/.cache"):
             (base / name).mkdir(parents=True, exist_ok=True)
         _plain(base, "init", "-q", "--bare", "origin.git")
@@ -1584,7 +1662,7 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
         for name in writable:
             (clone / name).mkdir(exist_ok=True)
         sandbox = Sandbox(runtime_root, job_id, work_item_id, base, candidate, writable, refused,
-                          _git_dir_state(clone / ".git"), refs_of(clone / ".git"))
+                          _git_dir_state(clone / ".git"), refs_of(clone / ".git"), tmp_dir)
         write_launchers(runtime_root, f"{SANDBOX_AREA}/{job_id}", sandbox.fake_logs,
                         python=python, package_parent=package_parent)
         runtime.write_bytes(runtime_root, sandbox.rel("settings.json"),
@@ -1596,7 +1674,7 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
                               differences=differences[:10])
         return sandbox
     except BaseException:
-        runtime.remove_tree(runtime_root, f"{SANDBOX_AREA}/{job_id}")
+        remove_sandbox(runtime_root, job_id)
         raise
 
 

@@ -409,8 +409,12 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
 2. builds a **sandbox** under `<runtime root>/functional/<job_id>/`: a `git clone --no-hardlinks`
    of the item's branch at its head, whose `origin` is a scratch bare repository; a `bin/` first on
    `PATH` with a fake `gh`, `claude`, `codex` and `ssh` (each logs its arguments and refuses);
-   `GIT_ALLOW_PROTOCOL=file` and `GIT_SSH_COMMAND=false`; scratch `HOME`, `XDG_*` and `TMPDIR`; and
-   no other tool on `PATH`;
+   `GIT_ALLOW_PROTOCOL=file` and `GIT_SSH_COMMAND=false`; scratch `HOME` and `XDG_*`; a private `TMPDIR`
+   (mode 0700, named `wcf-*`) under `$XDG_RUNTIME_DIR` or `/tmp` rather than inside the sandbox folder,
+   because Claude's sandbox puts its bridge sockets there and a Unix socket path may not exceed 107
+   characters, which the default runtime folder does (the Controller removes it with the sandbox, and
+   stops at `functional_tester_unavailable` before launch if no folder is short enough); and no other
+   tool on `PATH`;
 3. starts an independent tester, a `functional_test` job on the `functional-tester` role (Sonnet 5.5,
    `medium`, one agent, `Bash` only), inside Claude Code's own shell sandbox (bubblewrap, `socat`,
    a kernel that accepts a seccomp filter and the native `claude` build are required -- the build check is by identity: the `claude` that would run must be an ELF whose SHA-256 digest is in `VERIFIED_NATIVE_BUILDS` (`controller/functional_review.py`), the builds on which the enforcement spike proved the seccomp helper blocks Unix sockets, so a launcher, script, package-CLI bundle or newer unverified build ends at `functional_tester_unavailable` before any launch (a new build is added after the live enforcement tests pass on it); the writable locations are the output folder, the scratch directories and the
@@ -438,7 +442,8 @@ The stops, each with its remedy in the message: `flows_not_runnable` (the `envir
 case: run those flows by hand and record them, or change the checklist so they run offline),
 `checklist_unrecognised`, `functional_tester_unavailable` (no `claude` binary, the role refused, the
 sandbox components missing or the launch probe failing, or the fresh clone not matching the
-manifest), `results_invalid`, `isolation_breach` (a difference in the real repository, its path
+manifest), `results_invalid` (the stop text carries a bounded excerpt of the tester's final message,
+which usually names the cause when `RESULTS.json` was not written), `isolation_breach` (a difference in the real repository, its path
 origin or the private Claude home; the sandbox is kept for inspection and nothing is recorded; a
 person must look before anything is tested again), `tested_bytes_unbound` (the clone no longer
 matches the candidate after the run; nothing is recorded), `recording_refused` (the Workflow

@@ -412,7 +412,9 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    `GIT_ALLOW_PROTOCOL=file` and `GIT_SSH_COMMAND=false`; scratch `HOME` and `XDG_*`; a private `TMPDIR`
    (mode 0700, named `wcf-*`) under `$XDG_RUNTIME_DIR` or `/tmp` rather than inside the sandbox folder,
    because Claude's sandbox puts its bridge sockets there and a Unix socket path may not exceed 107
-   characters, which the default runtime folder does (the Controller removes it with the sandbox, and
+   bytes (counted as the filesystem encodes the path), which the default runtime folder does (the
+   Controller records the folder's path in the sandbox, so it removes it with the sandbox whatever
+   `XDG_RUNTIME_DIR` is later, and removes it at once if recording it fails, and
    stops at `functional_tester_unavailable` before launch if no folder is short enough); and no other
    tool on `PATH`;
 3. starts an independent tester, a `functional_test` job on the `functional-tester` role (Sonnet 5.5,

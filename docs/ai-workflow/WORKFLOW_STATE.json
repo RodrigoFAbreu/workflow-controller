@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 9,
       "functional_review_round": null,
@@ -20298,12 +20298,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 8,
-          "external": 4
+          "local": 9,
+          "external": 5
         }
       },
-      "state_revision": 65,
-      "last_transition": "2026-10-20T18:22:27Z",
+      "state_revision": 67,
+      "last_transition": "2026-10-20T19:02:33Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -21102,28 +21102,76 @@
               "at": "2026-10-20T17:26:35Z"
             }
           ]
+        },
+        "F-cd3421cea639": {
+          "digest": "cd3421cea639e0b83ad0d4e2d8d3e65d5eabef3505f408352c4660fbab693cb2",
+          "text": "OPUS-C10C-IMPL-R9-001: `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md` and `REVIEW_REQUEST.md` have no\n  revision-9 entry for the functional-round-1 fix. The last sections are rounds 8, 8 and 7. The summary's \"Known\n  limitations\" still calls the native-build check \"a static marker test\", but revision 7 replaced it with a digest\n  check. Add a revision-9 section to each file and correct that line.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 9,
+              "review_content_id": "6218d3f7749cdcd5ea686893bcbbe7a2075a011931d791e891b0c79d9ea07df8",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T18:49:32Z"
+            }
+          ]
+        },
+        "F-bd860506b69e": {
+          "digest": "bd860506b69e099daf2f4686543ea117934748f22bb264b0f123b63b093f5f21",
+          "text": "OPUS-C10C-IMPL-R9-002: `remove_short_tmp` matches the recorded path against `short_tmp_roots()` as they are at\n  removal time. A sandbox built with `XDG_RUNTIME_DIR` set but removed by a process without it (for example a\n  `resume` from cron) leaves its `wcf-*` folder behind. Matching on the recorded parent being a `wcf-`-named child\n  of either `/tmp` or any absolute runtime directory, or recording the root next to the path, would close this.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 9,
+              "review_content_id": "6218d3f7749cdcd5ea686893bcbbe7a2075a011931d791e891b0c79d9ea07df8",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T18:49:32Z"
+            }
+          ]
+        },
+        "F-1e25216f50e3": {
+          "digest": "1e25216f50e376d42ff096a397e1b9acb0019be5bf47e6a8e94bbd75c8443b43",
+          "text": "OPUS-C10C-IMPL-R9-003: `docs/common-problems.md` lists the causes of `functional_tester_unavailable` but not the\n  new one: no short enough folder for the tester's TMPDIR. One clause would cover it. The stop message already names\n  the cause.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 9,
+              "review_content_id": "6218d3f7749cdcd5ea686893bcbbe7a2075a011931d791e891b0c79d9ea07df8",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T18:49:32Z"
+            }
+          ]
+        },
+        "F-a33a61ecfa75": {
+          "digest": "a33a61ecfa752f170e358ea939ceeae6a21bf037b1516f4ff340206046e86cfa",
+          "text": "**O1 — Extend final-message coverage.** The new protocol test injects `tester_message` directly, bypassing extraction and truncation. Add model-free coverage through the fake CLI for capture, whitespace normalization and the 600-character bound. Independent checks passed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 9,
+              "review_content_id": "6218d3f7749cdcd5ea686893bcbbe7a2075a011931d791e891b0c79d9ea07df8",
+              "verdict": "REVISE",
+              "at": "2026-10-20T19:02:33Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+        "review_content_id": "6218d3f7749cdcd5ea686893bcbbe7a2075a011931d791e891b0c79d9ea07df8",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
+          "bundle_id": "09314f3fc8d72f93e951837a31db49e5d3d0183197f23a0dc025e0ebc0be49c8",
           "verdict": "APPROVE",
-          "round": 8,
-          "completed_at": "2026-10-20T09:34:41Z",
-          "verdict_sha256": "a76ed31ef218160a26be0c5cfcbf8c52e188db1067ee5e262a2db311a573a4e5",
+          "round": 9,
+          "completed_at": "2026-10-20T18:49:32Z",
+          "verdict_sha256": "47c626a18e4f9efa4a9677e6d135958f4a9fef96e4b1dea1a0bbbc14b26573b5",
           "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
-          "verdict": "APPROVE",
-          "round": 8,
-          "completed_at": "2026-10-20T17:26:35Z",
-          "verdict_sha256": "9993e8a18223916abb20bc528166cb922525ae6c07eb480818753b44d5a21d2f",
-          "run_ref": "session:local.ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
-          "reviewer_model": "openai/gpt-6.1-sol"
-        }
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

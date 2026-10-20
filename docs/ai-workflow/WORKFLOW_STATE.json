@@ -19723,12 +19723,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 8,
-      "implementation_revision": 9,
+      "implementation_revision": 10,
       "functional_review_round": null,
       "base_commit": "1599a4db41bf2b67dab0a10362677fd6846e9000",
-      "reviewed_implementation_head": "28ec51d18a6ed0e7b261560d8fee902e5b3cf68e",
+      "reviewed_implementation_head": "81323826eabc44371c2f70d24e7a34ddfa248e13",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP6",
       "checkpoints": {
@@ -20302,8 +20302,8 @@
           "external": 5
         }
       },
-      "state_revision": 67,
-      "last_transition": "2026-10-20T19:02:33Z",
+      "state_revision": 68,
+      "last_transition": "2026-10-20T20:01:01Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

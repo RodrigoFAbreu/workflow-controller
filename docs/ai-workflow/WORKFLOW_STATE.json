@@ -19723,7 +19723,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-automated-functional-review-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 8,
       "implementation_revision": 8,
       "functional_review_round": null,
@@ -19848,7 +19848,426 @@
           "workflow_release": "2.16.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
+        "approved_review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2a09e16e5239e0535aeded003e2bdd45f965ad00"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "86c91d8cf2b7b4161f74c100dbd27a0b100d919f"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2a2ef9dff0004637e4b337e1e22e030276d108b0"
+          },
+          {
+            "path": "controller/harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "afd08f6d253b52f0b8bd361ab4026b08dd7571b8"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3e392747a9f1d4c0dc8d77de3d921f20ce595f7c"
+          },
+          {
+            "path": "controller/protocol.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "003acdf76a9b481ea0c4a5511f213c2671755c04"
+          },
+          {
+            "path": "controller/protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3c42707321792282e3d62480728feb216db8e980"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0e5797b8d0d0c0a7f2e270ef960e324f4759e258"
+          },
+          {
+            "path": "controller/review_rounds.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "17c4c265a0dccad172d198277134508134eb6e19"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b3734c896aa675f525194462788879413d349823"
+          },
+          {
+            "path": "controller/sandbox_fakes/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d40e3c5e6eed1ed186bfb8e1466b1ac130de5c04"
+          },
+          {
+            "path": "controller/sandbox_fakes/claude.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dc29f3748614686569a7c582bb5ad10dbf12b8ee"
+          },
+          {
+            "path": "controller/sandbox_fakes/codex.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8536650044b0ae4856320d359db43d24d89215ac"
+          },
+          {
+            "path": "controller/sandbox_fakes/gh.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4ab6f418762d1c1fd83c32321f6882091bda6199"
+          },
+          {
+            "path": "controller/sandbox_fakes/ssh.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d52cfc7c7da9970dfc40de94c9acab756b7a61ca"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3cc661e6be3469f838cc579118e898cb88327395"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9af2c9e4d97ad3bc085c2ae3e907fe71f66988cc"
+          },
+          {
+            "path": "docs/adr/0017-automated-functional-review.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b6cc67abb35d27d296c654df2eb6add8df85b00e"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-automated-functional-review-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "698e3915841d210d18942c7fc1c7afdd41815453"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e02ed71e7c055065c7dc42875a84439c3c427174"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7bd5409147c23c57652208072139297c917b52da"
+          },
+          {
+            "path": "docs/glossary.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5650b1faf29399383b808fdee344b2189cf627d1"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "513dcb9b071d733693672262e6699a15613e3673"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d558a4cadfc4f8399ce0131aa0b34f72488fff52"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c04c7b45daaa664e4f4ab61b23cbd7badda9f06b"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fc0fff400131b94a3ab3996cedfbdba8d43bfc1c"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c0d588e063745ca3ffb8c34e8cec00bf0ac37a58"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8e5a5e2f84800f8535f0611fcc52ae4b2208f05"
+          },
+          {
+            "path": "docs/install.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1466e57f4c75993ec3780a851bfcea2d3723f5f0"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8de1774318cc190dbe09106091a6590054d3765"
+          },
+          {
+            "path": "pyproject.toml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5e5ce1540fec98f84fa424fb897c0ac7f3bad405"
+          },
+          {
+            "path": "tests/fake_functional_tester.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1e004b4b2d23ac7ba0d5f9f37d4d2c1e84b15198"
+          },
+          {
+            "path": "tests/fixtures/functional_checklists/bold_labelled_454ffe7.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d3e554655573b6f73cec780bc4f49b574c3ffdb6"
+          },
+          {
+            "path": "tests/fixtures/functional_checklists/table_rows_eeeb4fa.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "81c7d6bf128ea07b206ad57da705a5e7cc6c5f5a"
+          },
+          {
+            "path": "tests/golden/generate_no_policy_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "af06928d5f51c04c79fe1d4bed0e7f1cd8915482"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bd7da0c81473de4b833baf90b4a4296b58fb049e"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f2fbb8759549759d9d4e7cf9aa1e095b01d0b141"
+          },
+          {
+            "path": "tests/scenarios/catalogue.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9dfe24a66d39e29f197d518c30e9b18d81617518"
+          },
+          {
+            "path": "tests/scenarios/kit.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1e1515a7032d6efe8f4ed91da9950b640a77b0c3"
+          },
+          {
+            "path": "tests/scenarios/lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9cbae070656b7f7cfe238d915fbddf430fba2882"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1369c68ee883d5b472454b274938ecef1b1cf9b0"
+          },
+          {
+            "path": "tests/test_evidence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1188437a09360410a6bbef29380b987770b61b52"
+          },
+          {
+            "path": "tests/test_functional_enforcement.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e4654458b2e73a036173fdc0df03081b0adb1ad0"
+          },
+          {
+            "path": "tests/test_functional_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ecadc49bd63f6832f29d77c8572c997be9e07df2"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3d93898a5579a3c889d1eb32174b2665ac0165e1"
+          },
+          {
+            "path": "tests/test_functional_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d2be0f1766200f56ebeb3562a00561d9fe90aa94"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "871ca31ea1f7462acbc886a216cb41bc4e18b462"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "91d680b0882aeadf515277af643f45250077e177"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c2140d0003867f9e555880230ec9974b2467ad07"
+          },
+          {
+            "path": "tests/test_packaged_runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "91aaa71de2b62b372aa692b3436470eb58f6e310"
+          },
+          {
+            "path": "tests/test_protocol.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b11043890034ef52d2e322ab3193e506a5ddd504"
+          },
+          {
+            "path": "tests/test_protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2fcb4daeea9193e580536ef672a7c2849524e68a"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bd0697fb3facb787227094459bae5dcf099605b0"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "006c91d5629e321460408a4be5417ee93f4a22b6"
+          },
+          {
+            "path": "tests/test_scenarios.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ba42b7f0b21d3dbb0144032a471e0fcb619909bb"
+          },
+          {
+            "path": "tests/test_scenarios_negative.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4d464f6dcc59d08be11d29325f5bb0ab0b81fafc"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "334da61c5c0c58976b89c783f3045b00c7055401"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c8f600da83245bba6d7e3f85d9c061184a9cdfc"
+          }
+        ],
+        "reviewed_content_commit": "f1678d05a673aaf41994fc95d585504594079853",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-20T17:27:55Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+            "ledger": {
+              "local": {
+                "bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "a76ed31ef218160a26be0c5cfcbf8c52e188db1067ee5e262a2db311a573a4e5",
+                "ledger_entry_sha256": "01820b129d07eb85cdf865d5cc527c646018b8477ee45ec8ad5c57742fd386d2",
+                "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "9993e8a18223916abb20bc528166cb922525ae6c07eb480818753b44d5a21d2f",
+                "ledger_entry_sha256": "fdde7e893a64b2cdd289f3ef2567a607d80c671bc2e243f0c81b933728e6d923",
+                "run_ref": "session:local.ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-20T17:27:55Z",
+          "workflow_release": "2.16.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "a5cd8d04e75dce9b3cf5bed2b2d064be28ab3f3b67d19cd2a16baf2714a8138b",
@@ -19879,12 +20298,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 7,
-          "external": 3
+          "local": 8,
+          "external": 4
         }
       },
-      "state_revision": 60,
-      "last_transition": "2026-10-20T08:53:38Z",
+      "state_revision": 63,
+      "last_transition": "2026-10-20T17:27:55Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -20627,20 +21046,84 @@
               "at": "2026-10-20T08:38:27Z"
             }
           ]
+        },
+        "F-06770911fc29": {
+          "digest": "06770911fc297b2ae0ac21e2476c541d6f80099f7e62d35bccc7e40320c3cb46",
+          "text": "**OPUS-C10C-IMPL-R7-002 (carried): the probe resolves `claude` itself instead of receiving the binary the launch runs.** `static_probe` hashes `which(\"claude\")`, while `launch_functional` runs `resolve_binary(binary_name)`. Today both resolve the fixed name `claude` on the same `PATH`, so they are the same file. Passing the resolved binary to the probe, and launching its `realpath`, would make the hashed file the launched file by construction. That would also close the window in which the native installer could switch the symlink between the probe and `exec`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T09:34:41Z"
+            }
+          ]
+        },
+        "F-ac9e54d6101b": {
+          "digest": "ac9e54d6101b54ade3531bc71ddac89f18b99044b5f93ec5b927ee392ad799c8",
+          "text": "**OPUS-C10C-IMPL-R7-003 (carried): `TEST_RESULTS.md` has no table for round 7, and its title still reads \"implementation revision 1\".** Round 8 now has a table, so only the round-7 row and the title are left.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T09:34:41Z"
+            }
+          ]
+        },
+        "F-09942929e082": {
+          "digest": "09942929e082428b3a4a875bda2dc125b1630dfc715fd0643fcb4e687c0a9a61",
+          "text": "**OPUS-C10C-IMPL-R8-001: a missing comma in `docs/compatibility.md:38`.** \"(without them, or with an unverified build the step stops at ...)\" needs a comma after \"build\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T09:34:41Z"
+            }
+          ]
+        },
+        "F-135e01de2f6f": {
+          "digest": "135e01de2f6f734dc23aebfbfebc550b8642fdc594506c488e138d7b065ac7e3",
+          "text": "**O1 — Bind probe and launch to one resolved path.** `static_probe` uses `which(\"claude\")`; `launch_functional` uses `resolve_binary(\"claude\")`. Both resolve the same file in the supported setup with the fixed name and same `PATH`; controlled verification confirmed this. Passing the resolved path between them and launching its realpath would make that relationship explicit and reduce symlink-update races. This is hardening, not a demonstrated correctness defect.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
+              "verdict": "APPROVE",
+              "at": "2026-10-20T17:26:35Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "657adaad32b7217946da4245993a011bab559903ebfcdb0e7db67aa99f5ccee1",
+        "review_content_id": "262cf5c0acabecb692c8458f11ec2ff9864cbe4255636d4317160d7e0aff714f",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "1e291ad4e2db551e675579293d9a19fcd2b2caa0af0ba69926dc4776d96ea0a0",
+          "bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
           "verdict": "APPROVE",
-          "round": 6,
-          "completed_at": "2026-10-20T01:04:00Z",
-          "verdict_sha256": "05181bfeb169c6bb690618f9f575e4d45c255372b2bdc4914be854953bb06161",
+          "round": 8,
+          "completed_at": "2026-10-20T09:34:41Z",
+          "verdict_sha256": "a76ed31ef218160a26be0c5cfcbf8c52e188db1067ee5e262a2db311a573a4e5",
           "run_ref": "session:local .ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "95ed34e32c9d161ecd2751215fead6b1073b8650c549100567da801ffed9ce7a",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-10-20T17:26:35Z",
+          "verdict_sha256": "9993e8a18223916abb20bc528166cb922525ae6c07eb480818753b44d5a21d2f",
+          "run_ref": "session:local.ai-review/workflow-controller-automated-functional-review/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

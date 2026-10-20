@@ -20,9 +20,14 @@ ground-truth record of the phase and of each checkpoint.
 
 ## Next action
 
-Every checkpoint is complete; implementation revision 8 passed both implementation-review stages and the technical
-approval. The manual functional review is the open gate: run the checklist below, then place findings in the
-feedback folder's `FUNCTIONAL_REVIEW.md`, or run `/accept-milestone` when testing is clean.
+Every checkpoint is complete. Functional round 1 found that the tester's Claude sandbox could not start at the default
+runtime layout (finding 1, blocking) and that a missing `RESULTS.json` hid the tester's reason (finding 2); both are
+fixed in a bounded round (a short private `TMPDIR` under `$XDG_RUNTIME_DIR` or `/tmp`, refused before launch when
+still too long; an excerpt of the tester's final message in the `results_invalid` stop and the job record), with
+tests and the automation guide updated. Finding 3 was checklist wording only, corrected below. The fix needs a fresh
+implementation review round (`/apply-implementation-review` drives it), then the technical approval, then the
+functional review again with the checklist below; findings go in the feedback folder's `FUNCTIONAL_REVIEW.md`, or run
+`/accept-milestone` when testing is clean.
 
 ## Functional review checklist
 
@@ -40,12 +45,12 @@ non-zero).
 from the clone root. Expect `OK` with nothing skipped for the sandbox tests when `bwrap` and `socat` are present.
 
 **B. The checklist is read as flows.** Run `python3 -P -m controller explain` in the scratch repository at the gate.
-Expect a forecast that names the tester, the flow ids (`flow-1`, `flow-2`), the checklist blob and the timeout, and
-no job or reservation created.
+Expect exit 0 and a forecast that names the head, the checklist blob, the flow ids (`flow-1`, `flow-2`), the previous
+job and any kept sandbox (no timeout or tester identity: plan D9), and no job, sandbox or reservation created.
 
-**C. A passing run reaches acceptance.** With a checklist whose flows all pass, run one step at row 38e. Expect one
-`functional_evidence` result per flow, the work item accepted by policy, and a tester job record of kind
-`functional_test` ending `ran`.
+**C. A passing run is recorded.** With a checklist whose flows all pass, run one step at row 38e. Expect one
+`functional_evidence` result per flow and a tester job record of kind `functional_test` that is `FINISHED` with
+outcome `recorded`. Acceptance by policy follows on a later step (the Workflow's rows 38f-38h), not on this one.
 
 **D. A failing flow produces findings.** With the failing flow, run one step. Expect `FUNCTIONAL_REVIEW.md` in the
 feedback folder, headed with the tested head, checklist blob and run, quoting the failing flow's log; the next step
@@ -62,7 +67,15 @@ stop for the manual gate with no tester job, sandbox or usage reservation.
 `functional_tester_unavailable` before any model call, and no job left `LAUNCHED`.
 
 **H. An unreadable checklist stops early.** Replace the checklist section with prose that has no flows. Expect
-`checklist_unrecognised` naming the four accepted flow shapes, before any job, sandbox or reservation exists.
+`checklist_unrecognised` naming the four accepted flow shapes, before any tester job, sandbox or reservation exists
+(the ordinary stop record is still written, as at every stop).
+
+**I. The live tester runs at the default runtime layout.** In the scratch worlds of C and D with the verified native
+`claude` build and a runtime folder at the default depth (not a short `/tmp` path), run one step. Expect the tester's
+Bash calls to run, `RESULTS.json` written, and the same outcomes as C and D; during the run the tester's `TMPDIR` is a
+`wcf-*` folder (mode 0700) under `$XDG_RUNTIME_DIR` or `/tmp`, removed with the sandbox. With the tester's message
+unusable (for example `RESULTS.json` removed by a stub), the `results_invalid` stop text quotes the tester's final
+message.
 
 **Known limitations.** Pull-request flows are unsupported in the sandbox; a copy edited under the tester's own
 `TMPDIR` is not detected (stated limit of D5); a Codex tester, `required_flows` coverage tooling, a tester-failure

@@ -259,8 +259,8 @@ class SandboxBuildTest(Fixture):
         self.assertEqual(list((self.runtime / fr.SANDBOX_AREA).iterdir()), [])
 
     def test_removal_does_not_depend_on_the_later_environment(self) -> None:
-        root_a = self.tmp / "root-a"
-        root_a.mkdir()
+        root_a = Path(tempfile.mkdtemp(prefix="wfa-", dir="/tmp"))  # short: the socket limit applies to it
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(root_a)], check=False)
         with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(root_a)}):
             box = self.build()
         self.assertEqual(box.tmp.parent, root_a)

@@ -437,12 +437,31 @@ class NoRunTest(unittest.TestCase):
         flow_stops_before_or_without_a_run(SuiteJudge(self), self)
 
 
+@contextlib.contextmanager
+def short_folders_made():
+    """The short ``TMPDIR`` folders created while the block runs (only this process's, so a parallel shard's do not count)."""
+    made: list[Path] = []
+    real = functional_review.make_short_tmp
+
+    def recording(*args, **kwargs):
+        path = real(*args, **kwargs)
+        made.append(path)
+        return path
+
+    with mock.patch.object(functional_review, "make_short_tmp", recording):
+        yield made
+
+
 class IsolationTest(unittest.TestCase):
     def test_the_real_launch_keeps_the_candidate_unchanged_and_fails_closed(self) -> None:
         import tempfile
         tools = Path(tempfile.mkdtemp(prefix="wfr-cp5-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(tools, ignore_errors=True))
-        flow_isolation_holds(SuiteJudge(self), self, tools)
+        with short_folders_made() as made:
+            flow_isolation_holds(SuiteJudge(self), self, tools)
+            self.doCleanups()  # the cycles' cleanups remove their kept sandboxes' short TMPDIR folders
+        self.assertTrue(made, "the run built no sandbox")
+        self.assertEqual([p for p in made if p.exists()], [], "the run left a short TMPDIR folder behind")
 
 
 if __name__ == "__main__":

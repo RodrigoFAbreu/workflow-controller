@@ -700,6 +700,7 @@ class TesterLifecycle(lifecycle.GateLifecycle):
         self.functional = {"automated": True, "timeout_seconds": 600, "operator_home": str(self.td / "claude-home"),
                            "binary": "claude"}
         (self.td / "claude-home").mkdir()
+        test.addCleanup(self.remove_short_folders)  # registered after the tree's own cleanup, so it runs first
         #: What the fake tester writes: a list of ``(flow_id, status, reason)``, or a callable ``(kwargs, outdir)``.
         self.plan: object = []
         self.outcome = "ran"
@@ -709,6 +710,11 @@ class TesterLifecycle(lifecycle.GateLifecycle):
         self.raises: Exception | None = None
         self.numbered = checklist if checklist is not None else "".join(
             f"{n}. Exercise flow {n}.\\n" for n in range(1, flows + 1))
+
+    def remove_short_folders(self) -> None:
+        """Remove the short ``TMPDIR`` of every sandbox the cycle kept (they live outside the runtime tree)."""
+        for record in self.runtime.glob(f"{functional_review.SANDBOX_AREA}/*/{functional_review.TMP_RECORD}"):
+            functional_review.remove_short_tmp(record.parent)
 
     def effect(self, task: str) -> None:
         self.task_texts.append(task)

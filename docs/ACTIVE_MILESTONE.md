@@ -31,6 +31,8 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-Pull request #111 is merged and 1.18.0 is released. The next milestone in `docs/ROADMAP.md` is **A2** (the backlog).
-[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) shipped in Workflow 2.17.0, so this repository
-first moves to Workflow 2.18.2 in a chore pull request. Then run `/milestone-plan` for A2; **C10d** follows.
+Pull request #111 is merged and 1.18.0 is released. The next milestone in `docs/ROADMAP.md` is **C2b** (CI time
+and flakiness: a pull request's CI back to 15-20 minutes, and the flaky `FollowCommandTest` fixed; #119, #121). This
+repository first moves to Workflow 2.18.2 in a chore pull request. Then run `/milestone-plan` for C2b; **A2** (the
+backlog; [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) shipped in Workflow 2.17.0) and **C10d**
+follow.

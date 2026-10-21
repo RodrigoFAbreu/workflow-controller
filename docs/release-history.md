@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.17.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.18.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.18.0 | Under an automatic acceptance gate the Controller runs the functional review itself at row 38e: the committed checklist in an isolated Claude tester (job kind `functional_test`, bubblewrap sandbox, fake `gh`, `claude`, `codex` and `ssh`, scratch origin), one `functional_evidence` per flow, acceptance by policy when all pass, findings for `/apply-functional-review` on a `defect`; needs `bwrap`, `socat` and a verified `claude` build (Claude Code 2.1.303); `functional.automated` and `functional.timeout_seconds` (settings generation 13) | [1.18.0](releases/1.18.0.md) |
 | 1.17.0 | Two review round caps per stage, `review.local_round_cap` (default 6) and `review.external_round_cap` (default 4), on the Workflow's split counts (protocol 1.5, Workflow 2.15.0 and later); the external review is capped too; `review.round_cap` and `--review-round-cap` are deprecated (settings generation 12) | [1.17.0](releases/1.17.0.md) |
 | 1.16.1 | A patch release (a refactor): the Claude and Codex seams and the git host sit behind adapter registries, and every worker and review job record gets a `usage_record` key in one format beside `telemetry`; the price table ships empty, so a cost is `unknown` unless the harness reports one (no new setting) | [1.16.1](releases/1.16.1.md) |
 | 1.16.0 | `/satisfy-gate` is routed by stage: Haiku 5.5 `high` for plan and technical approval, Sonnet 5.5 `medium` for acceptance (new `satisfy-gate-acceptance` role; settings generation 11), and twelve follow-up issues are fixed (no new setting) | [1.16.0](releases/1.16.0.md) |

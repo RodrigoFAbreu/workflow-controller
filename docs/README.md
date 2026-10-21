@@ -49,6 +49,7 @@ These pages are maintained by hand in this repository, and
 
 | Release notes | Read it for |
 |---|---|
+| [1.18.0](releases/1.18.0.md) | the automated functional review: at row 38e under an automatic acceptance gate the Controller runs the committed checklist in an isolated Claude tester (bubblewrap sandbox, fake `gh`/`claude`/`codex`/`ssh`), records one `functional_evidence` per flow and acceptance follows; needs `bwrap`, `socat` and a verified `claude` build; `functional.automated` and `functional.timeout_seconds`, settings generation 13 |
 | [1.17.0](releases/1.17.0.md) | two review round caps per stage, local (6) and external (4), on the Workflow's split counts (`--review-local-round-cap`, `--review-external-round-cap`, settings generation 12); the external review is capped too; `review.round_cap` is deprecated |
 | [1.16.1](releases/1.16.1.md) | adapter registries for the harness and the git host, and the `usage_record` key on worker and review job records; no behaviour change |
 | [1.16.0](releases/1.16.0.md) | `/satisfy-gate` routed by stage (Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance; the `satisfy-gate-acceptance` role, settings generation 11) and twelve clean-up fixes |

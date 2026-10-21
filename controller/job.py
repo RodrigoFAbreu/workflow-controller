@@ -106,7 +106,7 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from controller import (
-    evidence, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -2334,7 +2334,7 @@ def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> V
     """
     # Case 1: uninterpretable record.
     schema_version = record.get("schema_version")
-    if schema_version != SCHEMA_VERSION and not is_review_record(record):
+    if schema_version != SCHEMA_VERSION and not is_review_record(record) and not is_functional_record(record):
         return _invalid(
             record, case=1, code="StaleJobRecordError", reason="unknown_schema_version",
             message=(
@@ -2517,6 +2517,27 @@ def validate_record(record: JobRecord, *, managed_repo: Any, identity: Any) -> V
             return _invalid(
                 record, case=3, code="StaleJobRecordError", reason="review_record_malformed",
                 message=f"job {record.get('job_id')!r} is a review record but {problem}",
+                evidence={"job_id": record.get("job_id"), "status": status},
+            )
+
+    # The tester-kind case (automated-functional-review D2): a tester record carries its `functional`
+    # block and the harness route, and no worker session.
+    if record.get("kind") == FUNCTIONAL_KIND:
+        functional_block = record.get("functional")
+        route_block = record.get("worker_route")
+        problem = None
+        if schema_version != REVIEW_SCHEMA_VERSION:
+            problem = f"a tester record carries schema_version {schema_version!r}, not {REVIEW_SCHEMA_VERSION}"
+        elif not isinstance(functional_block, Mapping) or not isinstance(functional_block.get("launched"), bool):
+            problem = "its functional block is absent or says nothing about a launch"
+        elif not isinstance(route_block, Mapping) or not isinstance(route_block.get("harness"), str):
+            problem = "its worker_route names no harness"
+        elif "worker_state" in record:
+            problem = "it carries worker_state, which a tester job never has"
+        if problem is not None:
+            return _invalid(
+                record, case=3, code="StaleJobRecordError", reason="functional_record_malformed",
+                message=f"job {record.get('job_id')!r} is a tester record but {problem}",
                 evidence={"job_id": record.get("job_id"), "status": status},
             )
 
@@ -3234,6 +3255,57 @@ def _abandon_review(managed_repo: Any, *, runtime_root: Path, job_id: str, recor
     return _reconcile_review(record, runtime_root=runtime_root)
 
 
+def _reconcile_functional(record: JobRecord, *, runtime_root: Path) -> JobRecord:
+    """The `resume` branch of a tester job (the review's, D9, for the tester): end its process group or verify
+    it dead, copy the credentials back, remove the sandbox, and write the record terminal -- `INTERRUPTED`, or
+    `INCOMPLETE` when its deadline had passed -- without calling `reconcile`. Nothing the tester wrote is
+    recorded: the next step runs a fresh tester."""
+    job_id = record["job_id"]
+    block = record.get("functional") if isinstance(record.get("functional"), Mapping) else {}
+    _end_review_group(record, Path(record.get("target_repo") or "."))
+    layout = review.JobLayout(runtime_root, job_id, area=functional_review.SANDBOX_AREA)
+    credentials = None
+    digest, operator_home = block.get("captured_digest"), block.get("operator_home")
+    if (isinstance(digest, str) and isinstance(operator_home, str)
+            and (layout.base / review.CLAUDE.home_name / review.CLAUDE.credential_file).is_file()):
+        with contextlib.suppress(Exception):
+            credentials = review.copy_back_credentials(layout, Path(operator_home), digest, review.CLAUDE)
+    with contextlib.suppress(Exception):
+        functional_review.remove_sandbox(runtime_root, job_id)
+    timed_out = False
+    started, limit = block.get("launched_at"), block.get("timeout_seconds")
+    if block.get("launched") is True and isinstance(started, str) and isinstance(limit, (int, float)):
+        with contextlib.suppress(ValueError):
+            begun = calendar.timegm(time.strptime(started, "%Y-%m-%dT%H:%M:%SZ"))
+            timed_out = time.time() - begun > limit
+    now = _now()
+    reconciled: JobRecord = {
+        **record, "status": STATUS_INCOMPLETE if timed_out else STATUS_INTERRUPTED, "transition_verified": False,
+        "functional": {**block, "outcome": functional_review.OUTCOME_INTERRUPTED, "credentials": credentials},
+        "reconciliation_evidence": {"code": FUNCTIONAL_INTERRUPTED_CODE, "abandoned_status": record.get("status"),
+                                    "message": "the Controller that ran this tester ended before it finished; its "
+                                               "process group was ended, its sandbox removed and the next step "
+                                               "runs a fresh tester"},
+        "reconciled_at": now, "updated_at": now,
+    }
+    return _persist(runtime_root, job_id, reconciled, event="reconciled", details=_reconciled_details(reconciled))
+
+
+def _abandon_functional(managed_repo: Any, *, runtime_root: Path, job_id: str, record: dict) -> JobRecord:
+    """`resume --abandon` of a tester record: the `resume` branch, after the target and terminality checks."""
+    if record.get("target_repo") != str(managed_repo.root):
+        raise JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: job {job_id} belongs to target "
+            f"{record.get('target_repo')!r}, not {managed_repo.root}",
+            evidence={"job_id": job_id, "target_repo": record.get("target_repo")})
+    status = record.get("status")
+    if isinstance(status, str) and status in TERMINAL_STATUSES:
+        raise JobAbandonRefusedError(
+            f"`resume --abandon {job_id!r}` refused: job {job_id} is already terminal ({status}) -- "
+            f"it is history, not a pending job", evidence={"job_id": job_id, "status": status})
+    return _reconcile_functional(record, runtime_root=runtime_root)
+
+
 def _reconcile_completed(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
     """Row 2 (verifying) / row 5 (failing): ``COMPLETED``. Mirrors CP6B
     step 8/9's own verification rule exactly -- "exactly as CP6B step 8
@@ -3426,7 +3498,8 @@ def _refuse_drift_unless_decided(managed_repo: Any, runtime_root: Path) -> None:
         except (OSError, UnicodeDecodeError, ValueError, RecursionError):
             continue
         if (isinstance(record, dict) and record.get("target_repo") == str(managed_repo.root)
-                and record.get("status") in NON_TERMINAL_STATUSES and not is_review_record(record)):
+                and record.get("status") in NON_TERMINAL_STATUSES and not is_review_record(record)
+                and not is_functional_record(record)):
             pending.append(record)
     if not pending or not all(_drift_decides(record, managed_repo) for record in pending):
         raise managed_repo.drift
@@ -3493,6 +3566,8 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             # record's kind before any reconcile (which accepts `automatic`
             # protocol decisions only and would fail the record).
             results.append({**_reconcile_review(record, runtime_root=runtime), "reconciled_this_call": True})
+        elif is_functional_record(record) and status in NON_TERMINAL_STATUSES:
+            results.append({**_reconcile_functional(record, runtime_root=runtime), "reconciled_this_call": True})
         elif drifted and status in NON_TERMINAL_STATUSES:
             marked = _owned_work_hold(record, root) if status != STATUS_PLANNED else None
             if marked is not None:
@@ -4688,6 +4763,8 @@ def _abandon_locked(managed_repo: Any, *, identity: Any, runtime_root: Path, pat
             )
         if is_review_record(record):
             return _abandon_review(managed_repo, runtime_root=runtime_root, job_id=job_id, record=record)
+        if is_functional_record(record):
+            return _abandon_functional(managed_repo, runtime_root=runtime_root, job_id=job_id, record=record)
         if record.get("schema_version") == SCHEMA_VERSION:
             return _abandon_mark_failed(managed_repo, identity=identity, runtime_root=runtime_root,
                                         job_id=job_id, record=record, acknowledge=acknowledge)
@@ -5126,7 +5203,7 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
                 # Pending checks are a normal end of a step that did not wait, as for a branch gate
                 # (pull-request-defect-loop D8): nothing asks a person for anything.
                 pass
-            elif waits is True or _protocol_disposition(record) == "blocked":
+            elif waits is True or _protocol_disposition(record) == "blocked" or _functional_blocker(record):
                 # The Workflow itself calls the stop a blocker, so no person's decision is asked for
                 # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
                 out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
@@ -5659,9 +5736,11 @@ def _announce_group_drain(pid: int, remaining_pids: list[int]) -> None:
 def _no_launch_record(
     runtime_root: Path, managed_repo: Any, ident: Any, work_item_id: str | None, observed_phase: Any,
     pre_state: dict, decision: Decision, *, status: str, run_id: str | None = None,
+    extra: Mapping | None = None,
 ) -> JobRecord:
     """The single-flush record for every outcome that never reaches a
     worker launch: ``GATE_BLOCKED``, ``DECLINED``, ``HANDOFF_PENDING``.
+    ``extra`` adds additive fields (the tester step's ``functional`` block).
     Its one event is the status itself, carrying the decision's reason;
     a run mirrors it as a job that started and ended at once."""
     job_id = _new_job_id()
@@ -5680,6 +5759,8 @@ def _no_launch_record(
     }
     if run_id is not None:
         record["run_id"] = run_id
+    if extra:
+        record.update(extra)
     details: dict = {"reason": decision.reason}
     if status == STATUS_GATE_BLOCKED:
         details["what_is_required"] = decision.gate.what_is_required
@@ -6165,6 +6246,8 @@ def never_launched(record: Mapping) -> bool:
     is not released and falls to the conservative ``unknown`` charge."""
     if record.get("kind") == REVIEW_KIND:
         return _review_never_launched(record)
+    if record.get("kind") == FUNCTIONAL_KIND:
+        return _functional_never_launched(record)
     status = record.get("status")
     if status == STATUS_INTERRUPTED and "expected_transition" not in record:
         return True
@@ -6173,6 +6256,14 @@ def never_launched(record: Mapping) -> bool:
         code = evidence_block.get("code") if isinstance(evidence_block, Mapping) else None
         return code in (WORKER_NOT_STARTED_CODE, protocol_decision.DECISION_STALE_AT_LAUNCH)
     return False
+
+
+def _functional_never_launched(record: Mapping) -> bool:
+    """:func:`never_launched` for a tester record: launch intent decides, as for a review."""
+    block = record.get("functional")
+    if not isinstance(block, Mapping):
+        return False
+    return block.get("launched") is not True or block.get("not_started") is True
 
 
 def _review_never_launched(record: Mapping) -> bool:
@@ -6642,6 +6733,8 @@ def _review_message(record: Mapping) -> str:
 def _review_display(record: Mapping) -> str:
     """The name of the harness that ran a review record (``Codex`` for a record
     written before the Claude harness existed)."""
+    if record.get("kind") == FUNCTIONAL_KIND:
+        return review.CLAUDE.display
     block = record.get("review") if isinstance(record.get("review"), Mapping) else {}
     registered = review.HARNESSES.get(block.get("harness"))
     return registered.display if registered is not None else "Codex"
@@ -7190,6 +7283,412 @@ def _run_pr_report(managed_repo: Any, *, runtime_root: Path, identity: Any, run_
 
 
 # ---------------------------------------------------------------------------
+# The functional tester (`workflow-controller-automated-functional-review`
+# CP4, D1-D9): at row 38e under an automatic acceptance gate the Controller
+# runs the checklist in an isolated sandbox itself, records one
+# `functional_evidence` result per flow, and writes the defect flows as
+# findings for the applier.
+# ---------------------------------------------------------------------------
+
+FUNCTIONAL_KIND = functional_review.JOB_KIND
+#: Outcome codes of a tester record's `reconciliation_evidence.code`.
+FUNCTIONAL_REFUSED_CODE = "FunctionalLaunchRefused"
+FUNCTIONAL_LIMIT_CODE = "FunctionalLimit"
+FUNCTIONAL_FAILED_CODE = "FunctionalFailed"
+FUNCTIONAL_INTERRUPTED_CODE = "FunctionalInterrupted"
+FUNCTIONAL_STATE_CHANGED_CODE = "FunctionalStateIdentityChanged"
+
+
+def is_functional_record(record: Any) -> bool:
+    """Whether ``record`` is a tester job's: kind ``functional_test`` at schema 2 (so a reader that does
+    not know the kind refuses it as ``unknown_schema_version``)."""
+    return (isinstance(record, Mapping) and record.get("kind") == FUNCTIONAL_KIND
+            and record.get("schema_version") == REVIEW_SCHEMA_VERSION)
+
+
+def _functional_applies(decision: Decision, functional: Mapping | None) -> bool:
+    """Whether the tester acts at ``decision`` (D1): the step is on, and the Workflow's answer is row 38e under
+    an automatic acceptance gate. With ``functional.automated`` false the ordinary gate stands."""
+    info = decision.protocol
+    return (functional is not None and bool(functional.get("automated")) and info is not None
+            and info.disposition == "external_gate" and info.action_id == functional_review.ACTION_ID
+            and info.row == functional_review.ROW and functional_review.step_applies(info.document))
+
+
+@dataclasses.dataclass(frozen=True)
+class _FunctionalPlan:
+    """What the step will do at the current head, read without a side effect: the head, the candidate and its
+    flows, and the stop (a gate code and its detail) that comes before any tester run."""
+
+    head: str | None
+    branch: str | None
+    candidate: Any = None
+    flows: tuple = ()
+    stop: str | None = None
+    detail: str = ""
+    rounds: int = 0
+    previous: Mapping | None = None
+
+
+def _functional_plan(runtime_root: Path, managed_repo: Any, work_item_id: str | None, decision: Decision) -> _FunctionalPlan:
+    root = managed_repo.root
+    state = gitrepo.head_state(root)
+    head = state.commit
+    records = _stored_job_records(runtime_root)
+    rounds = review_rounds.functional_rounds(records, str(root), work_item_id)
+    previous = review_rounds.last_functional_run(records, str(root), work_item_id)
+    base = dict(head=head, branch=state.branch, rounds=rounds, previous=previous)
+    try:
+        candidate = functional_review.capture_candidate(root, head, branch=state.branch)
+        flows = tuple(functional_review.candidate_flows(candidate))
+    except functional_review.TesterUnavailable as exc:
+        return _FunctionalPlan(**base, stop=functional_review.GATE_TESTER_UNAVAILABLE, detail=exc.message)
+    except functional_review.ChecklistUnrecognised as exc:
+        return _FunctionalPlan(**base, stop=functional_review.GATE_CHECKLIST_UNRECOGNISED, detail=exc.message)
+    base.update(candidate=candidate, flows=flows)
+    block = previous.get("functional") if previous is not None else None
+    if (isinstance(block, Mapping) and block.get("head") == head and block.get("checklist_blob") == candidate.checklist_blob
+            and block.get("all_recorded") is True):
+        reason = decision.protocol.document.get("reason")
+        text = reason.get("text") if isinstance(reason, Mapping) else None
+        return _FunctionalPlan(**base, stop=functional_review.GATE_UNCHANGED, detail=str(text or decision.reason))
+    if rounds >= functional_review.ROUND_BOUND:
+        return _FunctionalPlan(**base, stop=functional_review.GATE_ROUNDS_EXHAUSTED)
+    return _FunctionalPlan(**base)
+
+
+def _plan_gate_text(plan: _FunctionalPlan) -> str:
+    return functional_review.gate_text(plan.stop, detail=plan.detail, rounds=plan.rounds)
+
+
+def functional_forecast(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,
+                        functional: Mapping | None) -> dict | None:
+    """What the next ``step`` does at row 38e (D9), for ``explain``: ``None`` unless the tester acts here, else
+    the head, the checklist blob, the flow ids, the previous tester job, any sandbox kept by an earlier breach,
+    and ``next`` -- the stop code the step would return before any run, or ``run``. Read-only: no sandbox, no
+    usage reservation, no model call."""
+    work_item_id = getattr(work_item, "work_item_id", None)
+    if work_item_id is None or not _functional_applies(decision, functional):
+        return None
+    plan = _functional_plan(runtime_root, managed_repo, work_item_id, decision)
+    previous = plan.previous.get("functional") if plan.previous is not None else None
+    refused: list[dict] = []
+    if plan.candidate is not None:
+        _writable, refused_patterns = functional_review.derive_writable_locations(
+            plan.candidate.root_gitignore, plan.candidate.manifest)
+        refused = [{"pattern": item.pattern, "reason": item.reason} for item in refused_patterns]
+    return {
+        "row": functional_review.ROW, "head": plan.head, "refused": refused,
+        "checklist_blob": None if plan.candidate is None else plan.candidate.checklist_blob,
+        "flows": [flow.flow_id for flow in plan.flows],
+        "next": plan.stop or "run", "detail": plan.detail or None, "rounds": plan.rounds,
+        "previous": None if previous is None else {
+            "job_id": plan.previous.get("job_id"), "outcome": previous.get("outcome"), "head": previous.get("head")},
+        "kept_sandboxes": functional_review.kept_sandboxes(runtime_root, work_item_id),
+    }
+
+
+def _functional_blocker(record: Mapping) -> bool:
+    """Whether a tester gate record is a blocker the Controller itself calls (D7): ``functional_unchanged``
+    asks a person for no decision, it is a requirement the checklist cannot satisfy."""
+    block = record.get("functional")
+    return isinstance(block, Mapping) and block.get("gate") == functional_review.GATE_UNCHANGED
+
+
+def _functional_gate_decision(managed_repo: Any, work_item: Any, decision: Decision, code: str, text: str) -> Decision:
+    return protocol_decision.gate_for(managed_repo, work_item, decision, code, text)
+
+
+def _run_functional(
+    managed_repo: Any, *, runtime_root: Path, identity: Any, run_id: str | None, work_item: Any,
+    work_item_id: str | None, decision: Decision, pre_state: dict, usage_gate: Callable[..., Any] | None,
+    preflight_events: list[str], controller_settings: Mapping | None, lifecycle_lock: lock.LifecycleLock,
+    config_source: str, route_options: routing.RoutingOptions, functional: Mapping,
+) -> "JobRecord | UsageHold":
+    """Run the tester for the row-38e gate ``decision`` (D1-D7) instead of recording it ``GATE_BLOCKED``:
+    the stops that come before a run (the checklist, ``unchanged``, the round bound), the usage admission, the
+    sandbox and the tester, then validate, record each flow, and write the findings."""
+    info = decision.protocol
+    root = managed_repo.root
+    digests = _admitted_digests(managed_repo)
+    plan = _functional_plan(runtime_root, managed_repo, work_item_id, decision)
+    if plan.stop is not None:
+        gate = _functional_gate_decision(managed_repo, work_item, decision, plan.stop, _plan_gate_text(plan))
+        return _no_launch_record(
+            runtime_root, managed_repo, identity, work_item_id, decision.observed_phase, pre_state, gate,
+            status=STATUS_GATE_BLOCKED, run_id=run_id, extra={"functional": {"gate": plan.stop, "head": plan.head}})
+    candidate, flows, head = plan.candidate, list(plan.flows), plan.head
+
+    route = route_options.resolve(routing.FUNCTIONAL_TESTER)
+    token: str | None = None
+    if usage_gate is not None:
+        admitted = usage_gate(route, provider=usage.PROVIDER_CLAUDE)
+        if isinstance(admitted, (UsageHold, usage.Hold)):
+            return _as_usage_hold(admitted, preflight_events)
+        token = admitted
+
+    job_id = _new_job_id()
+    now = _now()
+    operator_home = Path(functional["operator_home"])
+    timeout_seconds = int(functional["timeout_seconds"])
+    record: JobRecord = {
+        **_identity_block(managed_repo, identity, work_item_id, decision.observed_phase, job_id),
+        "schema_version": REVIEW_SCHEMA_VERSION,
+        "kind": FUNCTIONAL_KIND,
+        "pre_state": _durable_pre_state(pre_state),
+        "selected_action": {
+            "kind": FUNCTIONAL_KIND, "command": functional_review.JOB_COMMAND, "task_addendum": None,
+            "automatic": False, "declined": False, "reason": decision.reason, "evidence": list(decision.evidence),
+        },
+        "status": STATUS_PLANNED,
+        "human_gate_pending": None,
+        "handoff_pending": False,
+        "lifecycle_lock": {"path": str(lifecycle_lock.path)},
+        "worker_route": {**route.to_record(), "harness": review.CLAUDE.name, "config_source": config_source},
+        "protocol": _protocol_block(decision),
+        "functional": {
+            "row": info.row, "action_id": info.action_id, "state_identity": info.state_identity, "head": head,
+            "checklist_blob": candidate.checklist_blob, "flows": [flow.flow_id for flow in flows],
+            "harness": review.CLAUDE.name, "launched": False, "timeout_seconds": timeout_seconds,
+            "operator_home": str(operator_home),
+            "captured_digest": review._sha256_file(operator_home / review.CLAUDE.credential_file),
+            "outcome": None, "recorded": [], "all_recorded": False,
+        },
+        "created_at": now,
+        "updated_at": now,
+    }
+    if run_id is not None:
+        record["run_id"] = run_id
+    if controller_settings is not None:
+        record["controller_settings"] = dict(controller_settings)
+    try:
+        if token is not None:
+            usage.bind_job(runtime_root, token, job_id, now=usage_now())
+            record["usage"] = _usage_start_block(runtime_root, token)
+        _run_job_started(run_id, job_id)
+        record = _persist(runtime_root, job_id, record, event="planned", details={"command": functional_review.JOB_COMMAND})
+    except BaseException:
+        if token is not None and not os.path.lexists(runtime_root / "jobs" / f"{job_id}.json"):
+            with contextlib.suppress(Exception):
+                usage.complete(runtime_root, token, None, usage.OUTCOME_NOT_STARTED, now=usage_now())
+        raise
+
+    spawned: dict = {}
+    out: dict = {}
+    ended: dict = {}  # set once the terminal record is written, so a later fault does not write it again
+
+    def finish(status: str, *, outcome: str, gate: Decision | None = None, evidence_block: dict | None = None,
+               fields: Mapping | None = None, after: str | None = None, verified: bool = False,
+               event: str | None = None) -> JobRecord:
+        """The one terminal write: the status, the tester block's outcome, the gate, the evidence, and (for a
+        started job) the `usage` end figures; then the usage accounting and the run mirror."""
+        nonlocal record
+        block = {**record["functional"], "outcome": outcome, **(fields or {})}
+        started = block.get("launched") is True and block.get("not_started") is not True
+        updated: dict = {"status": status, "transition_verified": verified, "observed_phase_after": after,
+                         "functional": block, "updated_at": _now(),
+                         "human_gate_pending": None if gate is None else _human_gate_dict(gate.gate)}
+        if evidence_block is not None:
+            updated["reconciliation_evidence"] = evidence_block
+        if isinstance(out.get("telemetry"), Mapping):
+            updated["telemetry"] = dict(out["telemetry"])
+        usage_block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
+        if started:  # the run was paid for on every terminal status
+            seconds = telemetry.seconds_between(block.get("launched_at"), updated["updated_at"])
+            updated.update(_review_usage_fields(review.CLAUDE, out, model=route.model,
+                                                wall_ms=None if seconds is None else seconds * 1000))
+        if usage_block is not None and started:
+            updated["usage"] = _codex_end_block(usage_block, out.get("readings") or [], out.get("first_readings") or [])
+        record = _persist(runtime_root, job_id, {**record, **updated}, event=event or _final_event(status),
+                          details={"functional": {key: block.get(key) for key in ("outcome", "gate", "detail")}})
+        ended["status"] = status
+        if usage_block is not None:
+            last = {r["window"]: r for r in (out.get("readings") or [])}
+            record = _usage_account(runtime_root, record, end_readings=list(last.values()) if started else None,
+                                    stream_start=({r["window"]: r for r in out.get("first_readings") or []}) if started else None)
+        _run_job_ended(run_id, job_id, status, record)
+        return record
+
+    def stop(code: str, outcome: str, *, fields: Mapping | None = None, **facts: Any) -> JobRecord:
+        text = functional_review.gate_text(code, **facts)
+        gate = _functional_gate_decision(managed_repo, work_item, decision, code, text)
+        return finish(STATUS_GATE_BLOCKED, outcome=outcome, gate=gate, fields={**(fields or {}), "gate": code,
+                                                                              "detail": facts.get("detail")})
+
+    def stale_before_launch(reason: str, evidence_block: Mapping | None = None) -> JobRecord:
+        return finish(STATUS_FAILED, outcome=functional_review.OUTCOME_STALE, fields={"not_started": True}, evidence_block={
+            "code": protocol_decision.DECISION_STALE_AT_LAUNCH, "gate": protocol_decision.DECISION_UNSTABLE,
+            "message": f"the gate was no longer the Workflow's answer immediately before the tester ({reason}); "
+                       "nothing was started, and the next run re-decides", "evidence": dict(evidence_block or {})},
+            event="worker_not_started")
+
+    try:
+        currency = protocol_decision.check_currency(managed_repo, decision)
+    except ControllerError:
+        finish(STATUS_FAILED, outcome=functional_review.OUTCOME_STALE, fields={"not_started": True}, event="worker_not_started",
+               evidence_block={"code": WORKER_NOT_STARTED_CODE, "message": "the currency check could not run"})
+        raise
+    if not currency.current:
+        return stale_before_launch(str(currency.reason), currency.evidence())
+
+    record = _persist(runtime_root, job_id, {
+        **record, "status": STATUS_LAUNCHED, "ownership_tag": job_id, "updated_at": _now(),
+        "functional": {**record["functional"], "launched": True, "launched_at": _now()},
+    }, event="launched")
+    ticker = (_usage_ticker(runtime_root, token, _usage_reservation_seconds(record)) if token is not None else None)
+
+    def on_spawn(pid: int, pgid: int) -> None:
+        nonlocal record
+        spawned["pid"] = pid
+        record = _persist(runtime_root, job_id, {**record, "worker_process": worker.capture_worker_process(pid).to_dict(),
+                                                 "updated_at": _now()},
+                          event="worker_spawned", details={"pid": pid, "pgid": pgid})
+        if ticker is not None:
+            ticker.start()
+
+    try:
+        result = review.launch_functional(
+            candidate=candidate, flows=flows, runtime_root=runtime_root, job_id=job_id,
+            work_item_id=str(work_item_id), operator_home=operator_home, model=route.model, effort=route.effort,
+            timeout=float(timeout_seconds), binary_name=functional.get("binary") or "claude", on_spawn=on_spawn,
+            out=out)
+    except functional_review.TesterUnavailable as exc:
+        not_started = "pid" not in spawned
+        return stop(functional_review.GATE_TESTER_UNAVAILABLE, functional_review.OUTCOME_UNAVAILABLE,
+                    fields={"not_started": not_started, "credentials": out.get("credentials")}, detail=exc.message)
+    except ReviewLaunchRefusedError as exc:
+        return finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields={
+            "not_started": "pid" not in spawned, "detail": exc.message, "credentials": out.get("credentials")},
+            evidence_block={"code": FUNCTIONAL_REFUSED_CODE, "message": exc.message, "evidence": exc.evidence})
+    except KeyboardInterrupt:
+        finish(STATUS_INCOMPLETE, outcome=functional_review.OUTCOME_INTERRUPTED, fields={
+            "credentials": out.get("credentials"), **({"not_started": True} if "pid" not in spawned else {})},
+            evidence_block={"code": FUNCTIONAL_INTERRUPTED_CODE,
+                            "message": "the functional tester was interrupted (Ctrl-C); its process group was killed"})
+        raise
+    except Exception as exc:  # noqa: BLE001 -- any other fault ends the record; the first run's spend is kept
+        finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields={
+            "not_started": "pid" not in spawned, "detail": str(exc), "credentials": out.get("credentials")},
+            evidence_block={"code": type(exc).__name__, "message": str(exc)})
+        raise
+    finally:
+        if ticker is not None:
+            ticker.stop()
+
+    out.update(result)
+    try:
+        return _conclude_functional(
+            managed_repo, runtime_root=runtime_root, identity=identity, work_item_id=work_item_id, decision=decision,
+            digests=digests, job_id=job_id, flows=flows, candidate=candidate, result=result, finish=finish, stop=stop,
+            timeout_seconds=timeout_seconds)
+    except Exception as exc:  # noqa: BLE001 -- a fault after the run (writing a log, the findings) ends the record
+        if not ended:
+            finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields={
+                "detail": str(exc), "credentials": result.get("credentials")},
+                evidence_block={"code": type(exc).__name__, "message": str(exc)})
+        raise
+    finally:
+        review.settle_functional(result)
+
+
+def _conclude_functional(
+    managed_repo: Any, *, runtime_root: Path, identity: Any, work_item_id: str | None, decision: Decision,
+    digests: Mapping | None, job_id: str, flows: list, candidate: Any, result: Mapping, finish: Callable[..., JobRecord],
+    stop: Callable[..., JobRecord], timeout_seconds: int,
+) -> JobRecord:
+    """What a finished tester run means (D4-D7): the breach and binding stops, the usage limit, the validated
+    results, one `functional_evidence` record per flow, and the findings. Nothing is recorded for a breach, an
+    unbound clone or results the Controller cannot read."""
+    root = managed_repo.root
+    info = decision.protocol
+    outcome = result["outcome"]
+    sandbox = str(result["sandbox"]) if result.get("sandbox") is not None else None  # the real launch returns a Path
+    common = {"detail": result.get("detail"), "credentials": result.get("credentials"),
+              "sandbox": sandbox, "kept": bool(result.get("keep")),
+              "fake_calls": {name: len(calls) for name, calls in (result.get("fake_calls") or {}).items()},
+              "writable": result.get("writable") or [], "refused": result.get("refused") or [],
+              "tester_message": result.get("tester_message")}
+    kept = sandbox if result.get("keep") else None
+    if result.get("breach"):
+        return stop(functional_review.GATE_ISOLATION_BREACH, functional_review.OUTCOME_BREACH, fields=common,
+                    job_id=job_id, detail="; ".join(result["breach"][:5]), sandbox=kept)
+    if result.get("unbound"):
+        return stop(functional_review.GATE_TESTED_BYTES_UNBOUND, functional_review.OUTCOME_UNBOUND, fields=common,
+                    head=candidate.head, detail="; ".join(result["unbound"][:5]), sandbox=kept)
+    if outcome == "limit":
+        return finish(STATUS_INCOMPLETE, outcome=functional_review.OUTCOME_LIMIT, fields=common, evidence_block={
+            "code": FUNCTIONAL_LIMIT_CODE, "message": result.get("detail") or "the tester reported a usage limit"})
+    output_dir = Path(result["output_dir"])
+    try:
+        entries = functional_review.validate_results(output_dir, flows)
+    except functional_review.ResultsInvalid as exc:
+        if outcome == "failed":
+            return finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields=common, evidence_block={
+                "code": FUNCTIONAL_FAILED_CODE, "message": result.get("detail") or exc.message})
+        said = result.get("tester_message")
+        return stop(functional_review.GATE_RESULTS_INVALID, functional_review.OUTCOME_INVALID, fields=common,
+                    detail=exc.message + (f"; the tester's final message: {said}" if said else ""), sandbox=kept)
+    not_run_dir = runtime_root / "jobs" / job_id / "functional-not-run"  # the tester cannot write here
+    entries = functional_review.complete_entries(not_run_dir, flows, entries, timed_out=outcome == "timeout",
+                                                 job_id=job_id, timeout_seconds=timeout_seconds)
+    for entry in entries:
+        if entry.log_content is not None:
+            runtime.write_bytes(runtime_root, os.path.relpath(entry.log_path, runtime_root), entry.log_content)
+    try:
+        if info.state_identity is not None:
+            protocol.next_action(root, work_item_id, expect_state_identity=info.state_identity, expected_digests=digests)
+    except ControllerError as exc:
+        refusal = getattr(exc, "evidence", {}).get("refusal") or {}
+        if refusal.get("code") == "stale_decision":
+            return finish(STATUS_INCOMPLETE, outcome=functional_review.OUTCOME_STALE, fields=common, evidence_block={
+                "code": FUNCTIONAL_STATE_CHANGED_CODE,
+                "message": "the Workflow state changed while the tester ran; its results were discarded and the "
+                           "next step re-decides"})
+        return finish(STATUS_FAILED, outcome=functional_review.OUTCOME_ERROR, fields=common, evidence_block={
+            "code": type(exc).__name__, "message": exc.message, "evidence": exc.evidence})
+    recorded: list[str] = []
+    phase_after = None
+    for entry in entries:
+        document = functional_review.evidence_input(
+            entry, head=candidate.head, ran_at=_now(), job_id=job_id, version=identity.version,
+            checklist_blob=candidate.checklist_blob)
+        try:
+            path = runtime.write_bytes(runtime_root, f"jobs/{job_id}/functional-evidence-{entry.flow_id}.json",
+                                       json.dumps(document, sort_keys=True, indent=2).encode("utf-8"))
+            ingested = protocol.record_external_result(
+                root, work_item_id, protocol.FUNCTIONAL_EVIDENCE_KIND, path,
+                run_ref=functional_review.run_ref(job_id), expected_digests=digests)
+        except ControllerError as exc:
+            return stop(functional_review.GATE_RECORDING_REFUSED, functional_review.OUTCOME_REFUSED,
+                        fields={**common, "recorded": recorded}, detail=f"{type(exc).__name__}: {exc.message}",
+                        recorded=", ".join(recorded))
+        if ingested.outcome != "recorded":
+            refusal = ingested.refusal
+            return stop(functional_review.GATE_RECORDING_REFUSED, functional_review.OUTCOME_REFUSED,
+                        fields={**common, "recorded": recorded}, detail=f"{refusal.code}: {refusal.message}",
+                        recorded=", ".join(recorded))
+        recorded.append(entry.flow_id)
+        phase_after = None if ingested.basis is None else ingested.basis.phase
+    verdict = functional_review.outcome_of(entries)
+    fields = {**common, "recorded": recorded, "all_recorded": True}
+    if verdict == functional_review.FINDINGS:
+        text = functional_review.findings_text(entries, flows, head=candidate.head,
+                                               checklist_blob=candidate.checklist_blob, job_id=job_id)
+        artifact = protocol.resolve_artifact(root, work_item_id, "functional_review", expected_digests=digests)
+        if artifact.path:
+            runtime.write_bytes(root, artifact.path, text.encode("utf-8"))
+            fields["findings_path"] = artifact.path
+    if verdict == functional_review.ENVIRONMENT_LIMITED:
+        names = [entry.flow_id for entry in functional_review.environment_entries(entries)]
+        return stop(functional_review.GATE_FLOWS_NOT_RUNNABLE, functional_review.ENVIRONMENT_LIMITED,
+                    fields={**fields, "environment_flows": names}, flows=names,
+                    detail="; ".join(f"{entry.flow_id}: {entry.summary}" for entry in
+                                     functional_review.environment_entries(entries))[:600],
+                    refused=result.get("refused") or [])
+    return finish(STATUS_FINISHED, outcome=verdict, fields=fields, after=phase_after, verified=True)
+
+
+# ---------------------------------------------------------------------------
 # execute_step -- CP6 owns steps 1-6, CP6B extends it with steps 7-9.
 # ---------------------------------------------------------------------------
 
@@ -7215,6 +7714,7 @@ def execute_step(
     reviewer: Mapping | None = None,
     review_round_caps: review_rounds.RoundCaps = review_rounds.DEFAULT_ROUND_CAPS,
     review_mode_options: Mapping | None = None,
+    functional: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """Execute (at most) one Controller job against ``managed_repo``, under
     the target worktree's lifecycle lock (automatic-lifecycle-orchestration
@@ -7275,6 +7775,12 @@ def execute_step(
     ``GATE_BLOCKED`` but run as a review job (:func:`_run_review_job`); every
     other gate is unchanged, and an unknown harness refuses.
 
+    ``functional`` (workflow-controller-automated-functional-review D8) is the
+    ``functional.*`` settings as :func:`cli._functional_options` builds them
+    (``automated``, ``timeout_seconds``, ``operator_home``, ``binary``);
+    ``None`` or ``automated`` false keeps row 38e an ordinary gate. Set, the
+    Controller runs the tester itself there (:func:`_run_functional`).
+
     ``review_mode_options`` (workflow-controller-review-modes D1) is
     ``{"mode", "source", "same_provider"}`` as :func:`cli._review_mode_options`
     builds it; ``None`` is ``auto``, the mode that changes nothing for a
@@ -7291,7 +7797,7 @@ def execute_step(
             drain_detach_seconds=drain_detach_seconds, controller_settings=controller_settings,
             auto_merge=auto_merge, wait_seconds=wait_seconds, poll_seconds=poll_seconds, on_wait=on_wait,
             usage_gate=usage_gate, reviewer=reviewer,
-            review_round_caps=review_round_caps, review_mode_options=review_mode_options,
+            review_round_caps=review_round_caps, review_mode_options=review_mode_options, functional=functional,
         )
 
 
@@ -7372,6 +7878,7 @@ def _execute_step_locked(
     reviewer: Mapping | None = None,
     review_round_caps: review_rounds.RoundCaps = review_rounds.DEFAULT_ROUND_CAPS,
     review_mode_options: Mapping | None = None,
+    functional: Mapping | None = None,
 ) -> JobRecord | Decision | UsageHold:
     """:func:`execute_step`'s nine steps, run under ``lifecycle_lock``.
 
@@ -7502,6 +8009,15 @@ def _execute_step_locked(
                 ctx=branch_ctx, on_wait=on_wait)
             if reported is not None:
                 return reported
+        if _functional_applies(decision, functional):
+            # Automated-functional-review D1: run the checklist in an isolated sandbox instead of
+            # stopping at the external gate.
+            return _run_functional(
+                managed_repo, runtime_root=runtime, identity=identity, run_id=run_id, work_item=work_item,
+                work_item_id=resolved_work_item_id, decision=decision, pre_state=pre_state, usage_gate=usage_gate,
+                preflight_events=preflight_events, controller_settings=controller_settings,
+                lifecycle_lock=lifecycle_lock, config_source=routing.config_source, route_options=routing,
+                functional=functional)
         chosen = _choose_review(managed_repo, decision, reviewer, review_mode_options)
         review_target = None
         if chosen is not None:

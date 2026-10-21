@@ -1109,6 +1109,12 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     if decision.gate is not None and decision.protocol is not None:
         report_forecast = job.pr_report_forecast(runtime_root, target, work_item, decision)
     mode_block.update({} if report_forecast is None else {"pr_report": report_forecast})
+    # automated-functional-review D9: at row 38e the next step runs the tester (or stops before it).
+    functional_forecast = None
+    if decision.gate is not None and decision.protocol is not None:
+        functional_forecast = job.functional_forecast(runtime_root, target, work_item, decision,
+                                                      _functional_options(_effective(args)))
+    mode_block.update({} if functional_forecast is None else {"functional": functional_forecast})
 
     refusal = ""
     if target.target_protocol is not None and decision.automatic and decision.protocol is not None:
@@ -1156,6 +1162,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         _print_review_mode(mode_report)
     if report_forecast is not None:
         _print_pr_report(report_forecast)
+    if functional_forecast is not None:
+        _print_functional(functional_forecast)
     if decision.gate is not None:
         gate = decision.gate
         print(f"human gate -- what is required: {gate.what_is_required}")
@@ -1187,6 +1195,26 @@ def _print_review_mode(report: dict) -> None:
         print("  the next step stops at the ordinary gate for an external verdict")
     else:
         print(f"  the next step stops at review_mode_unavailable: {report['reason']}")
+
+
+def _print_functional(forecast: dict) -> None:
+    """``explain``'s tester lines (automated-functional-review D9): what the next step does at row 38e."""
+    if forecast["next"] == "run":
+        print(f"functional review: the next step runs the tester on head {str(forecast['head'])[:12]} "
+              f"(checklist blob {str(forecast['checklist_blob'])[:12]}), flows {', '.join(forecast['flows'])}")
+    else:
+        print(f"functional review: the next step stops at {forecast['next']} without running the tester"
+              + (f" ({forecast['detail']})" if forecast["detail"] else ""))
+    previous = forecast["previous"]
+    if previous is not None:
+        print(f"  the previous tester job {previous['job_id']} ended {previous['outcome']} at head "
+              f"{str(previous['head'])[:12]}; {forecast['rounds']} run(s) ended with findings")
+    refused = forecast.get("refused")
+    if refused:
+        print("  .gitignore patterns the sandbox does not make writable: "
+              + "; ".join(f"{item['pattern']} ({item['reason']})" for item in refused))
+    if forecast["kept_sandboxes"]:
+        print(f"  a sandbox kept by an earlier breach: {', '.join(forecast['kept_sandboxes'])}")
 
 
 def _print_pr_report(forecast: dict) -> None:
@@ -1402,6 +1430,18 @@ def _reviewer_options(effective: settings.EffectiveSettings) -> dict | None:
         "timeout_seconds": effective["reviewer.timeout_seconds"],
         "binary": effective["reviewer.binary"] or "codex",
         "operator_home": str(_codex_home()),
+    }
+
+
+def _functional_options(effective: settings.EffectiveSettings) -> dict:
+    """The ``functional.*`` settings as ``execute_step``'s ``functional`` argument
+    (automated-functional-review D8): whether the Controller runs the tester at
+    row 38e, its deadline, and the Claude home its credential is copied from."""
+    return {
+        "automated": effective["functional.automated"],
+        "timeout_seconds": effective["functional.timeout_seconds"],
+        "operator_home": str(_claude_home()),
+        "binary": review.CLAUDE.default_binary,
     }
 
 
@@ -1960,6 +2000,7 @@ def _run_one_step(
         reviewer=_reviewer_options(effective),
         review_round_caps=_round_caps(effective),
         review_mode_options=_review_mode_options(effective),
+        functional=_functional_options(effective),
     )
 
     if isinstance(result, job.UsageHold):

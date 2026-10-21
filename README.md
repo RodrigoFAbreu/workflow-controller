@@ -100,9 +100,10 @@ The Controller launches a Workflow command only when it can verify that
 command's outcome from committed state: planning, local plan review and
 revision, recording an already-pasted external verdict, implementation
 checkpoint by checkpoint, and local implementation review and remediation. In
-protocol mode it also prepares the functional-review checklist and applies its findings.
+protocol mode it also prepares the functional-review checklist, applies its findings and, under an
+automatic acceptance gate, runs the functional testing itself in a sandbox.
 Everything else stops for a person: the external reviews themselves,
-functional review and merging, and, up to Workflow 2.7, plan and implementation
+merging, and, up to Workflow 2.7, plan and implementation
 approval and acceptance. From Workflow 2.8 those three approval gates follow the
 repository's gate policy and by default the Workflow satisfies them itself from
 complete evidence (all three for a version 2.2 item; a version 2.1 item, the

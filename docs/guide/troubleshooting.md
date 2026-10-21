@@ -411,7 +411,14 @@ disposition and action beside it.
 - `functional_evidence_needed`, `pr_evidence_needed`, `pr_approval_needed`: at a Workflow 2.8
   automatic acceptance gate, `explain` may report one of these first. Each is an `external_gate`,
   not the unknown disposition; see [run](../run.md#steps) step 3. For the two pull request
-  ones the Controller acts itself; the stops it ends in (`pr_checks_pending`,
+  ones, and for `functional_evidence_needed` from 1.18.0 (unless `functional.automated` is
+  `false`), the Controller acts itself. The functional review ends in `flows_not_runnable`,
+  `checklist_unrecognised`, `functional_tester_unavailable`, `results_invalid`,
+  `isolation_breach`, `tested_bytes_unbound`, `recording_refused`, `functional_rounds_exhausted`
+  or `functional_unchanged`; each message names its remedy, and the kept sandbox of a breach or an
+  unbound clone is under `<runtime root>/functional/<job_id>/` until the next functional run
+  starts (see "The automated functional review" in the
+  [automation guide](automation.md#protocol-mode-workflow-27-and-later)). The pull request stops it ends in (`pr_checks_pending`,
   `pr_report_unchanged`, `pr_report_no_pull_request`, `pr_report_forge_unavailable`,
   `pr_report_refused`, `pr_report_stale`) are described in the
   [automation guide](automation.md#protocol-mode-workflow-27-and-later).

@@ -648,3 +648,67 @@ def review_round_cap_stops_and_continues(kit) -> None:
         kit.equal((loop.item()["phase"], loop.item()["plan_revision"]), ("REVISING_PLAN", 2), "the item at the cap")
         kit.observe("raised-run", {"exit": code, "workers": list(tasks), "plan_revision": loop.item()["plan_revision"],
                                    "records": len(list((loop.runtime / "jobs").glob("*.json")))})
+
+
+# ---------------------------------------------------------------------------
+# The functional review (workflow-controller-automated-functional-review CP5): the same flows as
+# ``tests/test_functional_lifecycle.py``, run in the kit's sandbox with the kit's assertions.
+# ---------------------------------------------------------------------------
+
+@contextlib.contextmanager
+def functional_world(kit):
+    """A throwaway ``TestCase`` (the lifecycle models take one for cleanups) and the scratch bin/ for the fake CLI, with
+    the audit hook installed so a launch outside the scratch tree would be seen."""
+    from tests import test_functional_lifecycle as tfl
+
+    class Holder(unittest.TestCase):
+        def runTest(self) -> None:  # pragma: no cover
+            pass
+
+    holder = Holder()
+    holder.stub_dir = kit.bin_dir
+    tools = kit.bin_dir  # the fake CLI wrappers are executables, so they live where the audit hook allows them
+    kit.install_audit_hook()
+    try:
+        yield tfl, holder, tfl.KitJudge(kit), tools
+        kit.assert_inside_scratch(tools)
+    finally:
+        holder.doCleanups()
+
+
+@scenario("scenario-functional-review-closes-the-cycle", covers=("C10c",))
+def functional_review_closes_the_cycle(kit) -> None:
+    """Row 38e answered by the Controller's tester: every flow passing is accepted by policy; a failing flow reaches
+    the applier through the findings file, the fix runs both review stages and the technical approval again, and the
+    retest at the new head passes and is accepted; a retest that fails with identical text reaches the applier a
+    second time."""
+    with functional_world(kit) as (tfl, holder, judge, _tools):
+        tfl.flow_cycle_closes(judge, holder, mutation=mutation(kit))
+
+
+@scenario("scenario-functional-review-stops-for-a-person", covers=("C10c",))
+def functional_review_stops_for_a_person(kit) -> None:
+    """A failed flow the applier disposes of with no code change meets the Workflow's row 38i and no tester runs again;
+    ``required_flows`` the checklist does not cover is ``unchanged`` with one ``lane_blocked``; a moving-head cycle
+    that fails three times ends at ``functional_rounds_exhausted``."""
+    with functional_world(kit) as (tfl, holder, judge, _tools):
+        tfl.flow_stops_for_a_person(judge, holder, mutation=mutation(kit))
+
+
+@scenario("scenario-functional-review-without-a-run", covers=("C10c",))
+def functional_review_without_a_run(kit) -> None:
+    """``functional.automated`` false keeps the old stop with ``user_gate``; flows the sandbox cannot run end at
+    ``flows_not_runnable`` with the results recorded, no findings and no applier; a checklist with no recognised flow
+    gives ``checklist_unrecognised`` before any tester job, sandbox or usage reservation exists."""
+    with functional_world(kit) as (tfl, holder, judge, _tools):
+        tfl.flow_stops_before_or_without_a_run(judge, holder, mutation=mutation(kit))
+
+
+@scenario("scenario-functional-tester-isolation", covers=("C10c",))
+def functional_tester_isolation(kit) -> None:
+    """The real launch over the fake CLI: an honest run is recorded and leaves the real repository as it was; an edit
+    of product source or the checklist that is restored before reporting is refused at the first write; an unbound
+    copy under the tester's ``TMPDIR`` is recorded with the clone unchanged (the stated limit); a clone that differs
+    after a run records nothing; a session in the job's private home is a breach and records nothing."""
+    with functional_world(kit) as (tfl, holder, judge, tools):
+        tfl.flow_isolation_holds(judge, holder, tools, mutation=mutation(kit))

@@ -23,7 +23,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, decision, job, managed_repo, protocol, protocol_decision, review_rounds, routing, target_state, worker  # noqa: E402
+from controller import cli, decision, functional_review, job, managed_repo, protocol, protocol_decision, review_rounds, routing, target_state, worker  # noqa: E402
 from controller.errors import WorkflowProtocolFailedError  # noqa: E402
 from controller.identity import SOURCE_KIND_COMMIT, ControllerIdentity  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -492,6 +492,16 @@ class InvocationRenderingTest(_Case):
         got = self.decide(_result(action=_action("plan.author")))
         self.assertEqual(got.action.command, protocol_decision.rendered_command("plan.author", "wi-1"))
 
+    def test_only_the_checklist_writer_is_told_the_sandbox_limits(self) -> None:
+        """automated-functional-review D4: row 37's launch carries the note; no other action does."""
+        writer = self.decide(_result(action=_action("functional.prepare")))
+        self.assertEqual(writer.action.command, "/prepare-functional-review wi-1")
+        self.assertEqual(writer.action.task_addendum, functional_review.sandbox_limits_note())
+        self.assertIn("no network access", writer.action.task_addendum)
+        for action_id in ("plan.author", "functional.apply_findings"):
+            with self.subTest(action=action_id):
+                self.assertIsNone(self.decide(_result(action=_action(action_id))).action.task_addendum)
+
     def test_plan_start_has_no_work_item_and_the_controller_appends_its_base(self) -> None:
         start = _result(row="1", phase=None, action=_action("plan.start", None), code="plan_start")
         bare = self.decide(start, item=target_state.NoWorkItemYet)
@@ -609,7 +619,7 @@ class StaticTest(unittest.TestCase):
         self.assertEqual(evidence_calls, self.ALLOWED_EVIDENCE_CALLS)
         imported = {alias.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "controller"
                     for alias in n.names}
-        self.assertEqual(imported, {"evidence", "protocol", "target_state"})
+        self.assertEqual(imported, {"evidence", "functional_review", "protocol", "target_state"})
 
 
 def _verify(healthy: bool, *checks: tuple[str, str, str]) -> protocol.Verify:

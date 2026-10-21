@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-automated-functional-review",
+  "plan_revision": 8,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The role, the settings and the pure parts",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The enforcement spike on the pinned Claude CLI",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The sandbox and the tester run",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The step at row 38e",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    },
+    {
+      "id": "CP5",
+      "name": "Lifecycle scenarios and the isolation tests",
+      "depends_on": [
+        "CP4"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP6",
+      "name": "Documentation, roadmap and the whole suite",
+      "depends_on": [
+        "CP5"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

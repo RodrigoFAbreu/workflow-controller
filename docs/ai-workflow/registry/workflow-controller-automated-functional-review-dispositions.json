@@ -1,0 +1,250 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-automated-functional-review",
+ "dispositions": {
+  "F-06770911fc29": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#114"
+  },
+  "F-09942929e082": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#117"
+  },
+  "F-09a1d36fe8ad": {
+   "disposition": "fixed",
+   "note": "docs/guide/automation.md:461 states that the Controller cannot bind which copy of the product the tester ran; docs/common-problems.md names functional.automated=false as the manual alternative."
+  },
+  "F-0be7ea47bed6": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#117"
+  },
+  "F-0ce4aae542da": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), requirement R2 names the Controller-owned manifest and no trust in the clone's .git."
+  },
+  "F-135e01de2f6f": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#114"
+  },
+  "F-143a8cce3fc5": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#115"
+  },
+  "F-1bfd27bd4a4e": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py worktree walk uses lstat and O_NOFOLLOW|O_NONBLOCK with an S_ISREG check; approved plan (revision 8) D5/CP3 add the FIFO case."
+  },
+  "F-1e25216f50e3": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#117"
+  },
+  "F-26e760c08b86": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#115"
+  },
+  "F-2be48c54b6d4": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py output-file path check does an lstat of every component and requires a regular file (RESULTS.json and the log)."
+  },
+  "F-2cdb3c25e4a3": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8) has CP2 as the enforcement spike on its own."
+  },
+  "F-30f3fb89c44f": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#114"
+  },
+  "F-383fbdd15ee5": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D4: lines inside fenced code blocks are never headings, rows or items; controller/functional_review.py masks them."
+  },
+  "F-3f6bae4a655a": {
+   "disposition": "fixed",
+   "note": "docs/guide/development.md (live sandbox probes) names ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN and says a run with skips does not prove enforcement."
+  },
+  "F-4577cf89d2bb": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-4d7208c76b38": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py check-ignore run uses _git_environment(), built on workflow_contract._GIT_PINNED_CONFIG; no separate list."
+  },
+  "F-5100adb3319d": {
+   "disposition": "dropped",
+   "reason": "Moot: the precedence assumption was proved on the pinned CLI in CP2 (tests/test_functional_enforcement.py) and the implementation stands; the plan is historical."
+  },
+  "F-51947d92b1f4": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D7: functional_tester_unavailable has four causes."
+  },
+  "F-51aceacf91db": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#117"
+  },
+  "F-51b535c5531a": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py _paragraph_flows: a bold paragraph stays in the flow unless it opens a non-flow section (round-5 fix)."
+  },
+  "F-5215097ba6b1": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py check-ignore run uses _git_environment(), built on workflow_contract._GIT_PINNED_CONFIG; no separate list."
+  },
+  "F-579bbdad5c6b": {
+   "disposition": "fixed",
+   "note": "tests/test_functional_sandbox.py test_a_write_into_an_ignored_path_of_the_real_repository_is_refused_by_the_sandbox."
+  },
+  "F-58e1ef16dd33": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), requirement R2 carries the Controller-owned manifest text."
+  },
+  "F-5da2f5e092f5": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py _is_native_executable docstring no longer cites the plan."
+  },
+  "F-60f4c917f2e6": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py builds the recorded summary with the reason (environment_entries, ENVIRONMENT_LIMITED); approved plan (revision 8) D5."
+  },
+  "F-6c74b7173259": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D7: each unavailable cause returns the gate at once and sends user_gate."
+  },
+  "F-6deb8a3be878": {
+   "disposition": "dropped",
+   "reason": "The approved plan is a historical record and is not edited; pyproject.toml lists controller.sandbox_fakes and CP3 owns it in the plan's file list."
+  },
+  "F-72a0e1817fdf": {
+   "disposition": "fixed",
+   "note": "docs/guide/development.md now documents the token requirement and that skipped model probes can still report OK."
+  },
+  "F-77c198b508a0": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), CP3: packaging tests go into the existing tests/test_package_structure.py."
+  },
+  "F-7832a3c29461": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-7ef0de9ef08b": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D5 (O2): the fresh clone is verified against the manifest before launch; a mismatch is functional_tester_unavailable."
+  },
+  "F-8a8f6c913d38": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#116"
+  },
+  "F-8fcc19c643c8": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#118"
+  },
+  "F-96cf2075e613": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-97021f1eb84c": {
+   "disposition": "dropped",
+   "reason": "Superseded: the implementation denies the clone root and .git (controller/functional_review.py, denyWrite) and allows derived locations, so the deny list does not scale with the tree."
+  },
+  "F-a30679da59b7": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D7: functional_rounds_exhausted names its remedy (test by hand and record, or functional.automated=false)."
+  },
+  "F-a33a61ecfa75": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#118"
+  },
+  "F-a5a0d13926a8": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-a7e98529c685": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py writes a Controller log for each not-run entry and digests it (valid log_digest); approved plan (revision 8) D4/D5."
+  },
+  "F-ac9e54d6101b": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-b01889bf137e": {
+   "disposition": "dropped",
+   "reason": "Workflow apparatus justification strings; the classification is correct, and the approved plan is not edited."
+  },
+  "F-b1e41cd2384d": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D3: a fake call and a prevented network Git attempt are logged and not a breach."
+  },
+  "F-b2906895f8d7": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py clones with --no-hardlinks; controller/review.py snapshot includes reflogs."
+  },
+  "F-bd860506b69e": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py remove_short_tmp removes the recorded wcf- folder under any absolute parent, independent of the removing process's environment."
+  },
+  "F-c79832375033": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D5 (O2): checkout conversion handled by verifying the initial checkout against the manifest; tested with an eol rule."
+  },
+  "F-c9c2c9c09c6a": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#116"
+  },
+  "F-cd3421cea639": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-cee5bf6bbdf4": {
+   "disposition": "dropped",
+   "reason": "Moot: CP2 probes proved the deny and allow precedence, so no fallback amendment was needed; the plan is historical."
+  },
+  "F-d175bdb444df": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py not-run entries for flows the tester left out; approved plan (revision 8) D4."
+  },
+  "F-d44c85877536": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-d45f6e213e29": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#114"
+  },
+  "F-d4b3eed092c0": {
+   "disposition": "fixed",
+   "note": "controller/review.py _local_origin_refs reads a path origin only, never the network; approved plan (revision 8) D3."
+  },
+  "F-de3e7818be1e": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8), D5: the recorded summary carries the reason; implemented in controller/functional_review.py."
+  },
+  "F-de5e810df362": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#116"
+  },
+  "F-e295c7dea1b4": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py: not-run flows are failed with reason environment and write no finding."
+  },
+  "F-f08af1439d04": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py worktree walk (lstat, no-follow, special files refused); approved plan (revision 8) D5."
+  },
+  "F-f0f9b46e1b9d": {
+   "disposition": "dropped",
+   "reason": "The approved plan is a historical record and is not edited; CP3 owns pyproject.toml and controller/sandbox_fakes/ in its file list."
+  },
+  "F-f328b7d16909": {
+   "disposition": "fixed",
+   "note": "controller/functional_review.py: not-run flows are failed with reason environment and write no finding."
+  },
+  "F-f92d450c7008": {
+   "disposition": "dropped",
+   "reason": "Reviewer-bundle housekeeping (review aid, not shipped); later bundles carry the sections."
+  },
+  "F-fc9be5a39ec7": {
+   "disposition": "dropped",
+   "reason": "The approved plan is a historical record and is not edited; the boundary is stated correctly in docs/guide/automation.md:461 and in the plan's R7-002 paragraph."
+  }
+ }
+}

@@ -19,7 +19,7 @@ class DeclaredFactsTest(unittest.TestCase):
         a = harness.ADAPTERS["claude-code"]
         self.assertEqual(
             (a.name, a.reviewer_name, a.family, a.roles, a.can_restrict_agents, a.can_restrict_tools, a.usage, a.pinned_version, a.fails_closed_on_unknown_version),
-            ("claude-code", "claude", "anthropic", ("worker", "reviewer"), True, True, "reported", "2.1.296 (Claude Code)", True),
+            ("claude-code", "claude", "anthropic", ("worker", "reviewer", "functional-tester"), True, True, "reported", "2.1.296 (Claude Code)", True),
         )
 
     def test_codex(self) -> None:

@@ -3074,6 +3074,24 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 cli.cmd_run(args, self.runtime_root, self.ident)
                 self.assertEqual(calls[-1]["review_round_caps"], expected)
 
+    def test_the_functional_settings_reach_every_step(self) -> None:
+        """automated-functional-review D8: ``functional.automated`` and ``functional.timeout_seconds`` reach
+        ``execute_step`` for ``step`` and ``run``, with the Claude home the tester's credential is copied from."""
+        calls = self._spy()
+        for file, automated, timeout in (
+                (None, True, 3600),
+                ({"functional": {"automated": False}}, False, 3600),
+                ({"functional": {"timeout_seconds": 900}}, True, 900)):
+            with self.subTest(file=file):
+                args = self._args(file, max_steps=1)
+                cli.cmd_step(args, self.runtime_root, self.ident)
+                for received in (calls[-1],):
+                    self.assertEqual((received["functional"]["automated"], received["functional"]["timeout_seconds"],
+                                      received["functional"]["binary"]), (automated, timeout, "claude"))
+                self.assertTrue(received["functional"]["operator_home"])
+                cli.cmd_run(args, self.runtime_root, self.ident)
+                self.assertEqual(calls[-1]["functional"]["timeout_seconds"], timeout)
+
     def test_the_local_and_external_caps_reach_the_effective_settings(self) -> None:
         """workflow-controller-round-caps D3: both optional caps are
         settings and options; the option beats the file and the deprecated

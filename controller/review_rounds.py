@@ -253,3 +253,36 @@ def split_cap_decision(action_id: str | None, rounds: SplitRounds, caps: RoundCa
     if action_id in EXTERNAL_REVIEW_ACTIONS:
         return CAP_EXTERNAL if rounds.external >= caps.external else None
     return None
+
+
+def functional_rounds(records: Iterable[Mapping[str, Any]], target_repo: str, work_item_id: str | None) -> int:
+    """The tester runs of this work item that ended ``findings`` (automated-
+    functional-review D7): the count over its ``functional_test`` job records
+    that the round bound compares with. Job records only; a pruned record
+    lowers it. A record that cannot be read as such counts nothing."""
+    count = 0
+    for record in records:
+        block = record.get("functional") if isinstance(record, Mapping) else None
+        if (isinstance(record, Mapping) and record.get("kind") == "functional_test"
+                and record.get("target_repo") == target_repo and record.get("work_item_id") == work_item_id
+                and isinstance(block, Mapping) and block.get("outcome") == "findings"):
+            count += 1
+    return count
+
+
+def last_functional_run(records: Iterable[Mapping[str, Any]], target_repo: str,
+                        work_item_id: str | None) -> Mapping[str, Any] | None:
+    """The newest tester job record of this work item that ran a tester (its
+    ``functional`` block says ``launched``), else ``None``; ``explain`` and the
+    ``unchanged`` stop read it (D7, D9)."""
+    best: tuple[tuple[str, str], Mapping[str, Any]] | None = None
+    for record in records:
+        block = record.get("functional") if isinstance(record, Mapping) else None
+        if (not isinstance(record, Mapping) or record.get("kind") != "functional_test"
+                or record.get("target_repo") != target_repo or record.get("work_item_id") != work_item_id
+                or not isinstance(block, Mapping) or block.get("launched") is not True):
+            continue
+        key = (str(record.get("created_at")), str(record.get("job_id")))
+        if best is None or key > best[0]:
+            best = (key, record)
+    return None if best is None else best[1]

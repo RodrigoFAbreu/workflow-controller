@@ -458,11 +458,29 @@ class RecordExternalResultTest(_TargetCase):
         with self.assertRaises(WorkflowProtocolFailedError):
             self.answer(envelope("record-external-result", functional))
 
-    def test_only_the_verdict_kinds_are_accepted(self) -> None:
-        for kind in ("functional_evidence", "anything"):
+    def test_only_the_known_kinds_are_accepted(self) -> None:
+        for kind in ("anything", "functional"):
             with self.subTest(kind=kind):
                 with self.assertRaises(ValueError):
                     protocol.record_external_result(self.root, "wi", kind, Path("/x/v"))
+
+    def test_a_functional_result_is_a_typed_result_and_the_argv_is_exact(self) -> None:
+        functional = {"stage": "functional", "flow_id": "flow-2", "identity": "i" * 64, "basis": BASIS_FOR_RECORD}
+        seen: list = []
+        with self.fake(completed(envelope("record-external-result", functional)), seen):
+            got = protocol.record_external_result(self.root, "wi", protocol.FUNCTIONAL_EVIDENCE_KIND,
+                                                  Path("/x/e.json"), run_ref="controller:job-1")
+        self.assertEqual(seen[0]["argv"][-9:], [
+            "record-external-result", "--work-item", "wi", "--kind", "functional_evidence",
+            "--input", "/x/e.json", "--run-ref", "controller:job-1"])
+        self.assertEqual((got.outcome, got.stage, got.flow_id, got.identity), ("recorded", "functional", "flow-2", "i" * 64))
+        self.assertEqual(got.basis.phase, "PLANNING")
+
+    def test_a_functional_kind_answered_with_another_stage_is_a_protocol_failure(self) -> None:
+        with self.fake(completed(envelope("record-external-result", self.RECORDED))):
+            with self.assertRaises(WorkflowProtocolFailedError) as raised:
+                protocol.record_external_result(self.root, "wi", protocol.FUNCTIONAL_EVIDENCE_KIND, Path("/x/e.json"))
+        self.assertEqual(raised.exception.evidence["reason"], protocol.UNKNOWN_VALUE)
 
 
 class RealScriptsTest(unittest.TestCase):

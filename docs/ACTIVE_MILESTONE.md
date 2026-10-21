@@ -2,36 +2,35 @@
 
 ## Status
 
-**Complete.** `workflow-controller-round-caps` (C13b, `docs/ROADMAP.md`; controller issue
-[#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88)) reached `MILESTONE_COMPLETE` on 2026-10-19. It
-caps local and external review rounds separately (`review.local_round_cap` 6, `review.external_round_cap` 4, on the
-Workflow's split counts of protocol 1.5); `review.round_cap` and `--review-round-cap` keep working as deprecated
-aliases, retired after 1.17.0. Its pull request is #107 (squash `a76daff`, merged 2026-10-19), released as the minor release **1.17.0**, the
-latest release. The release notes are `docs/releases/1.17.0.md`.
+**Complete.** `workflow-controller-automated-functional-review` (C10c, `docs/ROADMAP.md`) reached
+`MILESTONE_COMPLETE` on 2026-10-21. The Controller now runs the functional review itself at row 38e: an isolated
+sandbox, an independent tester, one `functional_evidence` result per checklist flow, and findings for the applier when
+a flow fails. Its pull request is #111 (title `feat:`, so it releases the minor release 1.18.0 once merged).
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every acceptance
 requirement met (policy source `default`, digest `bae758b4f4ce`).
-- Plan revision 3 was approved by policy at `513c873`. The base commit is `d6b9dfc`.
-- Technical approval `6e08dd8` (implementation revision 1) was recorded by policy and is `CURRENT`.
-- Functional review (an independent Codex tester and an operator re-run) passed all ten flows. Checklist evidence
-  commit `7449d1e`.
-- The Workflow's own GitHub query found pull request #107 at head `7449d1e` with every check passing and no standing
+- Plan revision 8 was approved by policy at `2480ee9`. The base commit is `1599a4d`.
+- Technical approval `6eb86c3` (implementation revision 11) was recorded by policy and is `CURRENT`.
+- Functional review (an independent Codex tester and an operator live run) passed all nine flows. Checklist evidence
+  commit `df1acdd`.
+- The Workflow's own GitHub query found pull request #111 at head `df1acdd` with every check passing and no standing
   objection.
 
-All registry checkpoints (CP1-CP4) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
-of this transition. `docs/ROADMAP.md` marks step C13b complete. The full narrative is archived at
-`docs/milestones/completed/workflow-controller-round-caps.md`; the Optional findings are in
-`docs/milestones/completed/workflow-controller-round-caps-findings.md`.
+All registry checkpoints (CP1-CP6) are `COMPLETE`. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-truth record
+of this transition. `docs/ROADMAP.md` marks step C10c complete. The full narrative is archived at
+`docs/milestones/completed/workflow-controller-automated-functional-review.md`; the Optional findings are in
+`docs/milestones/completed/workflow-controller-automated-functional-review-findings.md`.
 
 Deferred follow-ups, not conditions of acceptance:
-- **Minor review findings:** of ten Optional items, eight were fixed and two kept as a follow-up, GitHub issue #108
-  (label `review-follow-up`: `settings show` prints the stored, not the effective, caps).
-- **Follow-up 59:** retire `review.round_cap` and `--review-round-cap` after 1.17.0.
-- **Follow-up 60:** vendor Workflow 2.15.0 so the lifecycle tests exercise the split counts end to end.
+- **Minor review findings:** of sixty-one Optional items, thirty-one were fixed, fifteen dropped with a reason and
+  fifteen kept as follow-ups, GitHub issues #114 to #118 (label `review-follow-up`).
+- **Roadmap follow-ups 61-66:** a Codex tester, `required_flows` coverage tooling, a tester-failure cap setting, a
+  sandbox-side forge model, extra sandbox tools and a newer vendored Workflow.
+- **Known limitations:** pull-request flows are unsupported in the sandbox; a copy edited under the tester's own
+  `TMPDIR` is not detected (stated limit of D5). Two Git 2.56 trailer tests fail on `main` too and are out of scope.
 
 ## Next action
 
-No milestone is active. This repository runs Workflow 2.16.0 since 2026-10-19. The next milestone is **C10c** (the
-automated functional review, `docs/ROADMAP.md`): **A2** (the backlog) waits for
-[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), the Workflow lane's current milestone, which is not
-released yet, so A2 follows once it is. Run `/milestone-plan` for C10c.
+The next incomplete milestone in `docs/ROADMAP.md` is **A2** (the backlog), which waits for
+[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released; **C10d** follows C10c. After the
+owner merges pull request #111 (squash) and 1.18.0 is released, run `/milestone-plan` for the next milestone.

@@ -144,6 +144,10 @@ A work item whose state names a registry file that does not exist is refused bef
 
 The message names the file and the key. Fix that key by hand and run again, or move the file aside and the next `step`, `run`, `resume` or `milestone-binding` creates a fresh one. `workflow-controller settings path` prints the file in use. See [troubleshooting](guide/troubleshooting.md#the-settings-file-is-refused-settingserror).
 
+## The run stopped at the functional review (row 38e)
+
+From Controller 1.18.0, under an automatic acceptance gate, the Controller runs the functional tester itself and stops for a person only for a fault: `flows_not_runnable` (flows that need the network, a pull request or a tool outside the sandbox), `functional_tester_unavailable` (no `claude`, an unverified `claude` build such as a newer release or a script-launched one, or `bubblewrap`/`socat` missing; for an unverified build run a verified one, run the flows by hand, or set `functional.automated` to `false`), `checklist_unrecognised`, `results_invalid`, `isolation_breach`, `tested_bytes_unbound`, `recording_refused` or `functional_rounds_exhausted` (three failed tester runs). Each message names its remedy: run the head's flows by hand and record one `functional_evidence` result per flow, or set `functional.automated` to `false`. See [the automated functional review](guide/automation.md#protocol-mode-workflow-27-and-later) and [troubleshooting](guide/troubleshooting.md#common-situations).
+
 ## The milestone stopped at a pull request or release gate
 
 `checks_pending`, `checks_failing`, `integration_required`, `pr_title_invalid`, `merge_pending`, `release_pending` and the others are named gates with their own fixes. See [milestone branches](guide/milestone-branches.md) and [troubleshooting](guide/troubleshooting.md#common-situations).

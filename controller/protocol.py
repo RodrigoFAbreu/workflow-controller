@@ -606,7 +606,12 @@ VERDICT_KINDS = ("plan_review_verdict", "implementation_review_verdict")
 #: names the stored ``slot`` and ``fact_id``, not a verdict.
 PR_REVIEW_RESULT_KIND = "pr_review_result"
 PR_REVIEW_STAGE = "pr_review"
-RESULT_KINDS = VERDICT_KINDS + (PR_REVIEW_RESULT_KIND,)
+#: The functional tester's per-flow result kind (`functional_evidence`): its input is the JSON object of
+#: :func:`controller.functional_review.evidence_input`, and its answer names the flow and the implementation identity
+#: the Workflow recomputed at the reported head.
+FUNCTIONAL_EVIDENCE_KIND = "functional_evidence"
+FUNCTIONAL_EVIDENCE_STAGE = "functional"
+RESULT_KINDS = VERDICT_KINDS + (PR_REVIEW_RESULT_KIND, FUNCTIONAL_EVIDENCE_KIND)
 #: The refusals of ``record-external-result`` that are answers, not faults:
 #: "no row accepts this verdict here" and every other Workflow refusal.
 EXTERNAL_RESULT_OUTCOMES = ("recorded", "not_applicable", "refused")
@@ -637,6 +642,11 @@ class ExternalResult:
     #: for a verdict.
     slot: str | None = None
     fact_id: str | None = None
+    #: The functional result's answer (kind ``functional_evidence``): the flow
+    #: recorded and the implementation identity the Workflow computed at its
+    #: head; ``None`` for any other kind.
+    flow_id: str | None = None
+    identity: str | None = None
 
 
 def record_external_result(root: Path, work_item: str, kind: str, input_file: Path, *,
@@ -645,7 +655,8 @@ def record_external_result(root: Path, work_item: str, kind: str, input_file: Pa
     """Hand the external reviewer's verdict text in ``input_file`` to the
     Workflow (protocol section 5.6). ``kind`` must be a verdict kind, or
     ``pr_review_result`` (``input_file`` is then the JSON object of
-    :func:`controller.pr_report.input_document`).
+    :func:`controller.pr_report.input_document`) or ``functional_evidence``
+    (the JSON object of :func:`controller.functional_review.evidence_input`).
     ``not_applicable`` and ``refused`` are returned, not raised: the caller
     decides what each means. Any other refusal (``invalid_request``, a stale
     or unreadable state, ...) raises :class:`WorkflowProtocolRefusedError`,
@@ -662,6 +673,16 @@ def record_external_result(root: Path, work_item: str, kind: str, input_file: Pa
             return ExternalResult(error.code, None, None, None, None, None, None, None, error, envelope.document)
         return _answer_refused(envelope)
     result = envelope.result
+    if kind == FUNCTIONAL_EVIDENCE_KIND:
+        if result.get("stage") != FUNCTIONAL_EVIDENCE_STAGE or not isinstance(result.get("flow_id"), str):
+            raise _failed(f"protocol record-external-result answered a {kind} with a result outside it: "
+                          f"stage {result.get('stage')!r}", reason=UNKNOWN_VALUE,
+                          field="record-external-result.stage", value=result.get("stage"),
+                          problem="not a functional result", operation="record-external-result")
+        identity = result.get("identity")
+        return ExternalResult("recorded", FUNCTIONAL_EVIDENCE_STAGE, None, None, None, None, None,
+                              _basis(result["basis"]), None, envelope.document, flow_id=result["flow_id"],
+                              identity=identity if isinstance(identity, str) else None)
     if kind == PR_REVIEW_RESULT_KIND:
         if result.get("stage") != PR_REVIEW_STAGE or not isinstance(result.get("slot"), str) \
                 or not isinstance(result.get("fact_id"), str):

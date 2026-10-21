@@ -633,6 +633,57 @@ class EditableSourceRetainedTest(_PackagedRuntimeCase):
         self.assertEqual(dirty_record["controller_runtime"]["source_kind"], identity.SOURCE_KIND_WORKTREE)
 
 
+class SandboxFakesPackagingTest(unittest.TestCase):
+    """The functional tester's stand-ins ship in the wheel and their launchers
+    run from a copy of the wheel's contents, never the source tree
+    (``workflow-controller-automated-functional-review`` CP3, D3)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        missing = fixtures.wheel_build_prerequisite()
+        if missing is not None:
+            if os.environ.get(fixtures.REQUIRE_PACKAGING_TESTS_ENV) == "1":
+                raise AssertionError(f"wheel-build prerequisite missing: {missing}")
+            raise unittest.SkipTest(f"wheel-build prerequisite missing: {missing}")
+        cls.tmp = Path(tempfile.mkdtemp(prefix="wfr-pkg-"))
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, ignore_errors=True)
+        checkout = fixtures.build_checkout(cls.tmp / "checkout", committed=False)
+        out = cls.tmp / "wheel"
+        out.mkdir()
+        fixtures.build_wheel(checkout, out)
+        cls.wheel = _only_wheel(out)
+        cls.contents = cls.tmp / "contents"
+        with zipfile.ZipFile(cls.wheel) as archive:
+            cls.names = set(archive.namelist())
+            archive.extractall(cls.contents)
+
+    def test_the_wheel_contains_every_stand_in(self) -> None:
+        for name in ("__init__", "gh", "claude", "codex", "ssh"):
+            self.assertIn(f"controller/sandbox_fakes/{name}.py", self.names)
+
+    def test_the_launchers_run_and_answer_from_a_copy_of_the_wheels_contents(self) -> None:
+        from controller import functional_review as fr
+
+        scratch = self.tmp / "scratch"
+        (scratch / "fake-logs").mkdir(parents=True)
+        fr.write_launchers(scratch, "sbx", scratch / "fake-logs", package_parent=self.contents)
+        for name in fr.FAKE_PROGRAMS:
+            launcher = scratch / "sbx" / "bin" / name
+            self.assertEqual(launcher.stat().st_mode & 0o777, 0o755, "the Controller sets the mode itself")
+            env = {"PATH": "/usr/bin:/bin"}  # no PYTHONPATH: only the launcher's own points at the wheel's contents
+            done = subprocess.run([str(launcher), "pr", "list"], cwd=scratch, env=env, capture_output=True, check=False)
+            self.assertEqual(done.returncode, 127, done.stderr.decode())
+            self.assertIn(b"stand-in", done.stderr)
+        log = json.loads((scratch / "fake-logs" / "gh.jsonl").read_text().splitlines()[0])
+        self.assertEqual(log["argv"], ["pr", "list"])
+        # and it really imported the wheel's copy, not this source tree
+        probe = subprocess.run(
+            [sys.executable, "-P", "-c", "import controller.sandbox_fakes as m; print(m.__file__)"],
+            cwd=scratch, env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(self.contents)}, capture_output=True,
+            text=True, check=True)
+        self.assertTrue(probe.stdout.strip().startswith(str(self.contents)), probe.stdout)
+
+
 del _PackagedRuntimeCase, _CheckoutGoneCase
 
 

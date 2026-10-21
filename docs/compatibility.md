@@ -35,7 +35,7 @@ the same way; Controller 1.17.0 was checked against it. Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
 job records instead. Controller 1.17.0, which adds the local and external round caps, reads the four per-role counts
 (protocol 1.5) and applies each cap to its own count; without them (a Workflow before 2.15.0, or an item with
-null counts) it falls back to that single round, checked against the external cap. Controller 1.14.0 and later no longer refuse a value a protocol 1.x minor release adds to a closed enum of an answer: it is
+null counts) it falls back to that single round, checked against the external cap. Controller 1.18.0 and later run the functional review themselves at row 38e (`functional.evidence.external`) under an automatic acceptance gate; they were checked against the vendored Workflow 2.12.0 tree's row 38e answers and need `bubblewrap`, `socat` and a verified native `claude` build (1.18.0: Claude Code 2.1.303) on the host for the tester's sandbox (without them, or with an unverified build the step stops at `functional_tester_unavailable`). Earlier Controllers stop at row 38e. Controller 1.14.0 and later no longer refuse a value a protocol 1.x minor release adds to a closed enum of an answer: it is
 advisory, ignored or a stop, by a rule per enum location (a blocked gate before any launch for an action id, worker role or disposition; a `FAILED` job with the evidence reason `workflow_unknown_value` for a reconcile class or record stage) (see
 [automation](guide/automation.md#protocol-mode-workflow-27-and-later)); only a protocol major change is refused.
 Controller 1.7.1

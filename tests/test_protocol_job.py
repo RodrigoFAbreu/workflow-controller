@@ -11,16 +11,18 @@ stops: nothing here reads an outcome (that is ``tests/test_protocol_outcome.py``
 from __future__ import annotations
 
 import contextlib
+import subprocess
 import json
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, managed_repo, protocol, protocol_decision, review_rounds, target_state, worker  # noqa: E402
+from controller import gitrepo, job, managed_repo, protocol, protocol_decision, review_rounds, target_state, worker  # noqa: E402
 from controller.errors import WorkflowProtocolRefusedError, WorkflowReleaseChangedError  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
@@ -673,3 +675,488 @@ class LoopGuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# The functional tester step (workflow-controller-automated-functional-review CP4): row 38e answered by the
+# vendored Workflow 2.12.0 itself, the sandbox and the model replaced by a fake tester that writes a chosen
+# ``RESULTS.json`` (the sandbox is CP3's, the enforcement CP2's).
+# ---------------------------------------------------------------------------
+
+import io  # noqa: E402
+
+from controller import functional_review, review, usage  # noqa: E402
+from controller import runtime as controller_runtime  # noqa: E402
+from tests import test_protocol_lifecycle as lifecycle  # noqa: E402
+
+
+class TesterLifecycle(lifecycle.GateLifecycle):
+    """A ``GateLifecycle`` stopped at row 38e, whose ``review.launch_functional`` is a fake tester."""
+
+    FLOW = "1. Exercise the feature.\\n"
+
+    def __init__(self, test: unittest.TestCase, flows: int = 1, checklist: str | None = None) -> None:
+        super().__init__(test)
+        self.functional = {"automated": True, "timeout_seconds": 600, "operator_home": str(self.td / "claude-home"),
+                           "binary": "claude"}
+        (self.td / "claude-home").mkdir()
+        test.addCleanup(self.remove_short_folders)  # registered after the tree's own cleanup, so it runs first
+        #: What the fake tester writes: a list of ``(flow_id, status, reason)``, or a callable ``(kwargs, outdir)``.
+        self.plan: object = []
+        self.outcome = "ran"
+        self.extra: dict = {}
+        self.launches: list[dict] = []
+        self.task_texts: list[str] = []
+        self.raises: Exception | None = None
+        self.numbered = checklist if checklist is not None else "".join(
+            f"{n}. Exercise flow {n}.\\n" for n in range(1, flows + 1))
+
+    def remove_short_folders(self) -> None:
+        """Remove the short ``TMPDIR`` of every sandbox the cycle kept (they live outside the runtime tree)."""
+        for record in self.runtime.glob(f"{functional_review.SANDBOX_AREA}/*/{functional_review.TMP_RECORD}"):
+            functional_review.remove_short_tmp(record.parent)
+
+    def effect(self, task: str) -> None:
+        self.task_texts.append(task)
+        words = task.lstrip("/").split()
+        if words[0] == "prepare-functional-review":
+            self.tasks.append(words[0])
+            self.workflow(lifecycle._FUNCTIONAL_CHECKLIST.replace(self.FLOW, self.numbered), lifecycle.WID)
+            return
+        if words[0] == "apply-functional-review":
+            self.tasks.append(words[0])  # the applier's own effect is the lifecycle scenarios' (CP5)
+            return
+        super().effect(task)
+
+    def to_38e(self) -> None:
+        self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
+        self.run_until("IMPLEMENTING")
+        self.manual_gate("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation")
+        self.run_until("AWAITING_FUNCTIONAL_REVIEW")
+        self.test.assertEqual(self.step()["status"], job.STATUS_FINISHED)  # functional.prepare
+        self.test.assertEqual(protocol.next_action(self.root, lifecycle.WID).raw["row"], "38e")
+
+    def fake_tester(self, **kwargs) -> dict:
+        self.launches.append(kwargs)
+        if self.raises is not None:
+            raise self.raises
+        job_id = kwargs["job_id"]
+        sandbox = kwargs["runtime_root"] / functional_review.SANDBOX_AREA / job_id
+        outdir = sandbox / "out"
+        outdir.mkdir(parents=True)
+        if callable(self.plan):
+            self.plan(kwargs, outdir)
+        else:
+            entries = []
+            for flow_id, status, reason in self.plan:
+                (outdir / f"{flow_id}.log").write_text(f"log of {flow_id}\n")
+                entry = {"flow_id": flow_id, "status": status, "summary": f"{flow_id} {status}", "log": f"{flow_id}.log"}
+                if reason is not None:
+                    entry["reason"] = reason
+                entries.append(entry)
+            (outdir / functional_review.RESULTS_FILE).write_text(json.dumps(entries))
+        result = {"outcome": self.outcome, "breach": [], "unbound": [], "fake_calls": {}, "output_dir": str(outdir),
+                  "sandbox": str(sandbox), "keep": False, "credentials": None, "detail": None, "readings": [],
+                  "first_readings": [], "head": kwargs["candidate"].head, "writable": ["__pycache__/"],
+                  "refused": [{"pattern": "*.egg-info/", "reason": "a glob"}], **self.extra}
+        kwargs["out"].update(result)
+        return result
+
+    def step(self, *, gate=None, functional="default") -> dict:
+        self.rows.append(protocol.next_action(self.root, lifecycle.WID).raw["row"])
+
+        def launch(task, *, cwd, **kwargs):
+            self.effect(task)
+            return lifecycle._result(self.report)
+
+        with mock.patch.object(worker, "launch", launch), mock.patch.object(review, "launch_functional", self.fake_tester):
+            return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime, usage_gate=gate,
+                                    functional=self.functional if functional == "default" else functional)
+
+    def tester_records(self) -> list[dict]:
+        return [r for r in self.job_records() if r.get("kind") == functional_review.JOB_KIND]
+
+    def job_records(self) -> list[dict]:
+        return [json.loads(p.read_text()) for p in sorted((self.runtime / "jobs").glob("*.json"))]
+
+    def row(self) -> str:
+        return protocol.next_action(self.root, lifecycle.WID).raw["row"]
+
+    def evidence(self) -> dict:
+        return fixtures.state_entry(self.root, lifecycle.WID).get("gate_evidence", {}).get("functional", {})
+
+    def findings_path(self) -> Path:
+        return self.root / protocol.resolve_artifact(self.root, lifecycle.WID, "functional_review").path
+
+    def head(self) -> str:
+        return gitrepo.head_state(self.root).commit
+
+    def usage_gate(self):
+        def gate(route, provider=usage.PROVIDER_CLAUDE):
+            admission = usage.admit(self.runtime, provider=provider, role=route.role, model=route.model,
+                                    repository=str(self.root), run_id="run-1", limits=usage.Limits(provider=provider),
+                                    now=time.time())
+            return admission.hold if admission.hold is not None else admission.token
+
+        return gate
+
+    def reservations(self) -> dict:
+        return usage.load_record(self.runtime)["reservations"]
+
+
+class _TesterCase(unittest.TestCase):
+    def life(self, **kwargs) -> TesterLifecycle:
+        life = TesterLifecycle(self, **kwargs)
+        life.to_38e()
+        return life
+
+
+class OutcomesTest(_TesterCase):
+    def test_every_flow_passing_records_the_evidence_and_the_workflow_moves_on(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        record = life.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertEqual((record["kind"], record["functional"]["outcome"], record["functional"]["recorded"]),
+                         ("functional_test", "recorded", ["flow-1"]))
+        self.assertTrue(record["transition_verified"])
+        stored = life.evidence()["flow-1"]
+        self.assertEqual((stored["status"], stored["head"], stored["run_ref"]),
+                         ("passed", life.head(), f"controller:{record['job_id']}"))
+        self.assertEqual(stored["summary"]["checklist_blob"], record["functional"]["checklist_blob"])
+        self.assertTrue(stored["reporter"].startswith("workflow-controller "))
+        self.assertEqual(life.row(), "38h")
+        self.assertFalse(life.findings_path().exists())
+        # The tester ran in a sandbox the step settled, with the closed settings of the role.
+        [call] = life.launches
+        self.assertEqual((call["model"], call["effort"], call["timeout"]), ("claude-sonnet-5-5", "medium", 600.0))
+        self.assertEqual(record["worker_route"]["role"], "functional-tester")
+        events = [e.event_type for e in job.derive_job_event(record)]
+        self.assertEqual(events, ["step_done"])
+
+    def test_a_defect_is_written_as_findings_and_the_next_decision_is_the_applier(self) -> None:
+        life = self.life(flows=2)
+        life.plan = [("flow-1", "passed", None), ("flow-2", "failed", "defect")]
+        record = life.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertEqual(record["functional"]["outcome"], "findings")
+        text = life.findings_path().read_text()
+        self.assertIn(f"Tested head: {life.head()}", text)
+        self.assertIn(f"Checklist blob: {record['functional']['checklist_blob']}", text)
+        self.assertIn(f"Run: controller:{record['job_id']}", text)
+        self.assertIn("flow-2", text)
+        self.assertNotIn("flow-1 (", text)
+        self.assertEqual(set(life.evidence()), {"flow-1", "flow-2"})
+        self.assertEqual(life.row(), "38")
+        launched = len(life.tasks)
+        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
+        self.assertEqual(life.tasks[launched:], ["apply-functional-review"])
+
+    def test_identical_failure_text_at_a_new_head_is_new_findings_the_workflow_does_not_skip(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "failed", "defect")]
+        record = life.step()
+        entries = [functional_review.Entry("flow-1", "failed", "flow-1 failed", "defect", Path("flow-1.log"),
+                                           "0" * 64, log_content=b"log of flow-1\n")]
+        fixtures.run(["git", "commit", "-q", "--allow-empty", "-m", "a fix"], cwd=life.root)
+        flows = functional_review.candidate_flows(functional_review.capture_candidate(life.root, life.head()))
+        later = functional_review.findings_text(entries, flows, head=life.head(), checklist_blob="b" * 40, job_id="job-9")
+        life.workflow("fingerprint.mark_functional_review_consumed(Path.cwd(), sys.argv[1])", lifecycle.WID)
+        check = "fingerprint.assert_functional_review_not_already_consumed(Path.cwd(), sys.argv[1])"
+        self.assertNotEqual(life.findings_path().read_text(), later)
+        with self.assertRaises(Exception):  # the same bytes are refused as already applied ...
+            life.workflow(check, lifecycle.WID)
+        life.findings_path().write_text(later)  # ... the same failure under the new head's header is not
+        life.workflow(check, lifecycle.WID)
+
+    def test_an_environment_limit_is_recorded_failed_without_findings_and_stops_for_a_person(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "failed", "environment")]
+        record = life.step()
+        self.assertEqual((record["status"], record["functional"]["outcome"]),
+                         (job.STATUS_GATE_BLOCKED, "environment_limited"))
+        self.assertEqual(record["functional"]["gate"], "flows_not_runnable")
+        stored = life.evidence()["flow-1"]
+        self.assertEqual((stored["status"], stored["summary"]["reason"]), ("failed", "environment"))
+        self.assertFalse(life.findings_path().exists())
+        gate = record["human_gate_pending"]["what_is_required"]
+        self.assertIn("flow-1", gate)
+        self.assertIn("*.egg-info/", gate)  # the writable-location patterns the sandbox refused
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+        # Nothing is launched next, and the run does not count towards the bound.
+        self.assertEqual(life.row(), "38i")
+        self.assertEqual(review_rounds.functional_rounds(life.tester_records(), str(life.root), lifecycle.WID), 0)
+
+    def test_a_flow_the_tester_left_out_is_an_environment_limit_with_a_valid_log_digest(self) -> None:
+        life = self.life(flows=2)
+        life.plan = [("flow-1", "passed", None)]
+        record = life.step()
+        self.assertEqual(record["functional"]["outcome"], "environment_limited")
+        left = life.evidence()["flow-2"]
+        self.assertEqual((left["status"], left["summary"]["reason"]), ("failed", "environment"))
+        self.assertIn("left this flow out", left["summary"]["text"])
+        self.assertEqual(len(left["log_digest"]), 64)
+
+    def test_a_tester_cut_at_the_timeout_leaves_the_unrun_flows_as_environment(self) -> None:
+        life = self.life(flows=2)
+        life.plan = [("flow-1", "passed", None)]
+        life.outcome = "timeout"
+        record = life.step()
+        self.assertEqual(record["functional"]["outcome"], "environment_limited")
+        self.assertIn("ended at the timeout", life.evidence()["flow-2"]["summary"]["text"])
+        self.assertEqual(life.row(), "38i")
+
+    def test_a_mixed_run_writes_findings_for_the_defect_flows_only(self) -> None:
+        life = self.life(flows=3)
+        life.plan = [("flow-1", "failed", "defect"), ("flow-2", "failed", "environment"), ("flow-3", "passed", None)]
+        record = life.step()
+        self.assertEqual(record["functional"]["outcome"], "findings")
+        text = life.findings_path().read_text()
+        self.assertIn("## flow-1", text)
+        self.assertNotIn("flow-2 (", text)
+        self.assertEqual(set(life.evidence()), {"flow-1", "flow-2", "flow-3"})
+        self.assertEqual(review_rounds.functional_rounds(life.tester_records(), str(life.root), lifecycle.WID), 1)
+
+    def test_functional_automated_false_keeps_the_old_stop(self) -> None:
+        life = self.life()
+        for functional in (dict(life.functional, automated=False), None):
+            with self.subTest(functional=functional):
+                record = life.step(functional=functional)
+                self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+                self.assertNotIn("kind", record)
+        self.assertEqual(life.launches, [])
+
+
+class ThePreLaunchStopsTest(_TesterCase):
+    def test_a_checklist_with_no_recognised_flow_stops_before_any_job_sandbox_or_reservation(self) -> None:
+        life = self.life(checklist="Check it works somehow.\\n")
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual(record["functional"]["gate"], "checklist_unrecognised")
+        self.assertIn("no flow", record["human_gate_pending"]["what_is_required"])
+        self.assertEqual((life.launches, life.tester_records(), life.reservations()), ([], [], {}))
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+
+    def test_a_repeat_at_the_tested_head_is_unchanged_and_one_blocker_not_a_second_run(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        real = protocol.record_external_result
+
+        def swallow(*args, **kwargs):  # the Workflow still answers 38e, as it would for a policy the checklist cannot meet
+            return real(*args, **kwargs).__class__(
+                "recorded", "functional", None, None, None, None, None, None, None, {}, flow_id="flow-1")
+
+        with mock.patch.object(protocol, "record_external_result", swallow):
+            first = life.step()
+        self.assertEqual(first["functional"]["outcome"], "recorded")
+        self.assertEqual(life.row(), "38h")  # (the swallowed call still reached the Workflow)
+        # Put the Workflow back at row 38e by dropping the stored evidence, as an unmet requirement would.
+        life.workflow("""
+state = json.loads((Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())
+state["work_items"][sys.argv[1]]["gate_evidence"]["functional"] = {}
+ws.state_transaction(Path.cwd(), lambda s: state)
+""", lifecycle.WID)
+        self.assertEqual(life.row(), "38e")
+        record = life.step()
+        self.assertEqual(len(life.launches), 1)
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual(record["functional"]["gate"], "functional_unchanged")
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["lane_blocked"])
+        self.assertIn("Workflow", record["human_gate_pending"]["what_is_required"])
+
+    def test_a_symlink_the_tester_plants_at_a_not_run_log_name_redirects_no_controller_write(self) -> None:
+        life = self.life(flows=2)
+        victim = life.runtime / "jobs" / "other-job.json"
+        controller_runtime.write_json(life.runtime, "jobs/other-job.json", {"keep": "me"})
+        before = victim.read_bytes()
+
+        def plan(kwargs, outdir):
+            (outdir / "flow-1.log").write_text("log of flow-1\n")
+            (outdir / "flow-2.not-run.log").symlink_to(victim)
+            (outdir / functional_review.RESULTS_FILE).write_text(json.dumps([
+                {"flow_id": "flow-1", "status": "passed", "summary": "ok", "log": "flow-1.log"}]))
+
+        life.plan = plan
+        record = life.step()
+        self.assertEqual(record["functional"]["outcome"], "environment_limited")  # flow-2 was left out
+        self.assertEqual(victim.read_bytes(), before)
+        self.assertTrue((life.runtime / "jobs" / record["job_id"] / "functional-not-run" / "flow-2.not-run.log").is_file())
+
+    def test_explain_lists_the_gitignore_patterns_the_derivation_refused(self) -> None:
+        life = self.life()
+        ignore = life.root / ".gitignore"
+        ignore.write_text(ignore.read_text() + "*.egg-info/\n")
+        subprocess.run(["git", "-C", str(life.root), "commit", "-qam", "ignore egg-info"], check=True)
+        refused = life.explain()["functional"]["refused"]
+        self.assertIn("*.egg-info/", [item["pattern"] for item in refused])
+        self.assertIn("*.egg-info/", life.explain_text())
+        self.assertIn("does not make writable", life.explain_text())
+
+    def test_the_round_bound_stops_the_fourth_tester_run_and_names_the_remedy(self) -> None:
+        life = self.life()
+        for n in range(functional_review.ROUND_BOUND):
+            runtime_record = {
+                "job_id": f"old-{n}", "kind": "functional_test", "target_repo": str(life.root),
+                "work_item_id": lifecycle.WID, "created_at": f"2026-10-0{n + 1}T00:00:00Z", "status": "FINISHED",
+                "functional": {"outcome": "findings", "launched": True, "head": f"{n}" * 40, "checklist_blob": "x"}}
+            controller_runtime.write_json(life.runtime, f"jobs/old-{n}.json", runtime_record)
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(record["functional"]["gate"], "functional_rounds_exhausted")
+        text = record["human_gate_pending"]["what_is_required"]
+        self.assertIn("functional.automated", text)
+        self.assertIn("by hand", text)
+        self.assertEqual((life.launches, life.reservations()), ([], {}))
+
+    def test_explain_equals_what_the_step_then_does(self) -> None:
+        life = self.life(flows=2)
+        before = life.explain()["functional"]
+        self.assertEqual((before["next"], before["flows"], before["head"]), ("run", ["flow-1", "flow-2"], life.head()))
+        self.assertIn("functional review: the next step runs the tester", life.explain_text())
+        life.plan = [("flow-1", "passed", None), ("flow-2", "failed", "defect")]
+        record = life.step()
+        after = life.explain()
+        self.assertEqual(record["functional"]["outcome"], "findings")
+        self.assertNotIn("functional", after)  # row 38 now: the applier, not the tester
+        bad = self.life(checklist="No flows.\\n")
+        self.assertEqual(bad.explain()["functional"]["next"], "checklist_unrecognised")
+        self.assertEqual(bad.step()["functional"]["gate"], "checklist_unrecognised")
+
+
+class TheFaultStopsTest(_TesterCase):
+    def gate_of(self, record: dict) -> str:
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
+        return record["functional"]["gate"]
+
+    def test_each_cause_of_an_unavailable_tester_is_a_user_gate_with_nothing_recorded(self) -> None:
+        for cause in (functional_review.UNAVAILABLE_NO_BINARY, functional_review.UNAVAILABLE_ROLE_REFUSED,
+                      functional_review.UNAVAILABLE_ENFORCEMENT, functional_review.UNAVAILABLE_CLONE_MISMATCH):
+            with self.subTest(cause=cause):
+                life = self.life()
+                life.raises = functional_review.unavailable(cause, f"cause {cause}")
+                record = life.step(gate=life.usage_gate())
+                self.assertEqual(self.gate_of(record), "functional_tester_unavailable")
+                self.assertIn(f"cause {cause}", record["human_gate_pending"]["what_is_required"])
+                self.assertEqual(life.evidence(), {})
+                self.assertEqual(life.reservations(), {})  # released: nothing started
+                self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+
+    def test_a_breach_records_nothing_and_keeps_the_sandbox(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        life.extra = {"breach": ["worktree digest"], "keep": True}
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(self.gate_of(record), "isolation_breach")
+        self.assertIn("kept at", record["human_gate_pending"]["what_is_required"])
+        self.assertEqual((life.evidence(), life.reservations()), ({}, {}))
+        self.assertTrue(Path(record["functional"]["sandbox"]).is_dir())
+
+    def test_an_unbound_clone_records_nothing_even_for_a_passed_flow(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        life.extra = {"unbound": ["app/a.py: sha256 differs"], "keep": True}
+        record = life.step()
+        self.assertEqual(self.gate_of(record), "tested_bytes_unbound")
+        self.assertEqual(life.evidence(), {})
+        self.assertEqual(life.row(), "38e")
+
+    def test_unreadable_results_record_nothing(self) -> None:
+        life = self.life()
+        life.plan = lambda kwargs, outdir: None  # no RESULTS.json
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(self.gate_of(record), "results_invalid")
+        self.assertEqual((life.evidence(), life.reservations()), ({}, {}))
+
+    def test_unreadable_results_show_the_testers_final_message(self) -> None:
+        life = self.life()
+        life.plan = lambda kwargs, outdir: None  # no RESULTS.json
+        life.extra = {"tester_message": "Sandbox is required but failed to initialize: no bridge sockets"}
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(self.gate_of(record), "results_invalid")
+        required = record["human_gate_pending"]["what_is_required"]
+        self.assertIn("RESULTS.json was not written", required)
+        self.assertIn("Sandbox is required but failed to initialize", required)
+        self.assertIn("failed to initialize", record["functional"]["tester_message"])
+
+    def test_a_refusal_after_two_entries_keeps_those_two_and_names_the_workflow_code(self) -> None:
+        life = self.life(flows=3)
+        life.plan = [("flow-1", "passed", None), ("flow-2", "passed", None), ("flow-3", "passed", None)]
+        real = protocol.record_external_result
+        calls: list = []
+
+        def third_refused(*args, **kwargs):
+            calls.append(args)
+            if len(calls) == 3:
+                raise job.ControllerError("evidence_malformed: log_digest must be 64 hex")
+            return real(*args, **kwargs)
+
+        with mock.patch.object(protocol, "record_external_result", third_refused):
+            record = life.step()
+        self.assertEqual(self.gate_of(record), "recording_refused")
+        self.assertEqual(record["functional"]["recorded"], ["flow-1", "flow-2"])
+        self.assertIn("evidence_malformed", record["human_gate_pending"]["what_is_required"])
+        self.assertEqual(set(life.evidence()), {"flow-1", "flow-2"})
+
+    def test_a_usage_limit_is_the_ordinary_incomplete_outcome_and_the_run_is_charged(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        life.outcome = "limit"
+        life.extra = {"detail": "rejected"}
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(record["status"], job.STATUS_INCOMPLETE)
+        self.assertEqual(record["reconciliation_evidence"]["code"], job.FUNCTIONAL_LIMIT_CODE)
+        self.assertEqual((life.evidence(), life.reservations()), ({}, {}))
+
+    def test_a_fault_after_the_run_ends_the_record_failed_and_releases_the_reservation(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "failed", "defect")]
+
+        def refused(*args, **kwargs):
+            raise job.ControllerError("the functional_review artifact cannot be resolved")
+
+        with mock.patch.object(protocol, "resolve_artifact", refused), self.assertRaises(job.ControllerError):
+            life.step(gate=life.usage_gate())
+        [record] = life.tester_records()
+        self.assertEqual((record["status"], record["functional"]["outcome"]), (job.STATUS_FAILED, "error"))
+        self.assertEqual(record["reconciliation_evidence"]["code"], "ControllerError")
+        self.assertEqual(life.reservations(), {})
+        self.assertEqual(job.pending_reconciliation_jobs(life.runtime, life.inspect(), IDENTITY), [])
+
+    def test_the_reservation_is_released_on_a_fault_and_on_a_clean_run(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        record = life.step(gate=life.usage_gate())
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertEqual(life.reservations(), {})
+        self.assertEqual(record["usage"]["accounting"], "done")
+
+
+class TheRowThirtySevenNoteTest(unittest.TestCase):
+    def test_the_checklist_writer_is_told_the_sandbox_limits(self) -> None:
+        life = TesterLifecycle(self)
+        life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
+        life.run_until("IMPLEMENTING")
+        life.manual_gate("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation")
+        life.run_until("AWAITING_FUNCTIONAL_REVIEW")
+        life.step()
+        [task] = [t for t in life.task_texts if t.startswith("/prepare-functional-review")]
+        self.assertIn(functional_review.sandbox_limits_note(), task)
+
+
+class AFunctionalRecordIsResumableTest(_TesterCase):
+    def test_a_tester_record_left_launched_by_a_dead_controller_is_reconciled_interrupted(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+
+        class Dies(BaseException):
+            pass
+
+        life.raises = Dies()
+        with self.assertRaises(Dies):
+            life.step()
+        [record] = life.tester_records()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)  # a crash: nothing ended the record
+        self.assertTrue(job.validate_record(record, managed_repo=life.inspect(), identity=IDENTITY).valid)
+        results = job.resume(life.inspect(), identity=IDENTITY, runtime=life.runtime)
+        [reconciled] = [r for r in results if r.get("kind") == "functional_test"]
+        self.assertIn(reconciled["status"], (job.STATUS_INTERRUPTED, job.STATUS_INCOMPLETE))
+        self.assertEqual(reconciled["reconciliation_evidence"]["code"], job.FUNCTIONAL_INTERRUPTED_CODE)

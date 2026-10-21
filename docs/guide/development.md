@@ -12,6 +12,7 @@ python3 tools/run_tests.py                          # everything, in parallel sh
 python3 -m unittest discover -s tests -t .          # the Controller's own suite, serially (about 8 min)
 CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_runtime -v  # wheel build + venv install
 CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_repo -v  # opt-in: live claude, real spend
+CONTROLLER_LIVE_CLAUDE_TESTS=1 python3 -m unittest tests.test_functional_enforcement -v  # opt-in: live sandbox probes, real spend, own HOME
 CONTROLLER_TEST_OLD_GIT=/path/to/git-2.35 python3 -m unittest tests.test_workflow_contract -k fsmonitor  # opt-in: a Git before 2.36
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```
@@ -20,6 +21,11 @@ The packaging tests skip when a build prerequisite is missing, unless
 `CONTROLLER_REQUIRE_PACKAGING_TESTS=1` makes that a failure. A local wheel
 build refuses a stale `build/` directory left by an earlier build that
 held files this one does not; delete `build/` and rebuild.
+
+The live sandbox probes run in their own empty home, so they see no
+credentials stored in your real Claude home: export `ANTHROPIC_API_KEY` or
+`CLAUDE_CODE_OAUTH_TOKEN` for them. Without one, the model probes skip and the
+run can still report `OK`; only a run with no skips proves the enforcement.
 
 `CONTROLLER_TEST_OLD_GIT` names a Git older than 2.36, built from source
 if need be. It runs the live check that such a Git runs a boolean

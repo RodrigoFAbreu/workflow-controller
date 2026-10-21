@@ -184,6 +184,10 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 # round-caps CP1: the two optional cap rows (table generation 12), unset.
                 for key in ("review.local_round_cap", "review.external_round_cap"):
                     self.assertEqual(block[part].pop(key), None if part == "values" else "file")
+                # automated-functional-review CP1: ``functional.automated`` and ``functional.timeout_seconds``
+                # (table generation 13).
+                self.assertEqual(block[part].pop("functional.automated"), True if part == "values" else "file")
+                self.assertEqual(block[part].pop("functional.timeout_seconds"), 3600 if part == "values" else "file")
         # usage-limit-mid-job CP1/CP2 added one member to each launched job's
         # stream diagnosis (``usage_limit``, null: the fake's stream has no
         # rejected rate-limit event) and one to its pre-state

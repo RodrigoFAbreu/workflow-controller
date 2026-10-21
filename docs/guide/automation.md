@@ -299,8 +299,10 @@ as described above. The design record is
 
 In protocol mode the Controller itself launches `/prepare-functional-review`
 (which writes and commits the checklist) and `/apply-functional-review`
-(which applies the operator's findings) without a prompt; the functional
-testing itself stays with a person.
+(which applies findings) without a prompt. Under an automatic acceptance gate it also
+runs the functional testing itself (see
+"The automated functional review" in [Protocol mode](#protocol-mode-workflow-27-and-later)); under a human gate,
+or with `functional.automated` false, the testing stays with a person.
 
 **How an operation runs.** `describe`, `next-action` and `reconcile` run
 the way the queries above do: from a private copy of the Workflow's
@@ -355,8 +357,9 @@ only because the phase moved. When a requirement is unmet nothing is written
 and the phase is unchanged: the step ends with no progress and sends only
 `step_done`, `explain` shows the unmet requirement from the worker's report,
 and the loop guard (`no_progress_repeated`) lets two such steps run and blocks
-the third. A gate that still needs evidence the Controller cannot yet produce
-stays a stop: the functional evidence of row 38e (the automated functional review).
+the third. A gate that needs evidence the Controller cannot produce stays a stop. The
+functional evidence of row 38e is produced by the Controller itself under an automatic acceptance
+gate (next section); it stays a stop under a human gate and with `functional.automated` false.
 
 **The pull request defect loop.** Under an automatic acceptance gate the Controller
 closes the pull request rows itself:
@@ -386,10 +389,86 @@ closes the pull request rows itself:
 A person is asked only where one is needed: row 38g with the approval still missing, row 38g under
 a human acceptance gate (`/accept-milestone`; the Controller reports nothing there), a stop the
 Controller itself ends in (`pr_report_no_pull_request`, `pr_report_forge_unavailable`,
-`pr_report_refused`, `pr_report_stale`), and row 38e. Pending checks are never a decision for a
+`pr_report_refused`, `pr_report_stale`), and the functional review's own faults (below). Pending checks are never a decision for a
 person: a step that did not wait ends on `pr_checks_pending` with no notification, and a `run` whose
 `merge.wait_seconds` budget ran out with only the checks pending sends `lane_blocked`. A red pull request found after acceptance, in
 the merge flow, still ends at that flow's `checks_failing` stop, with a person (roadmap step C10d).
+
+**The automated functional review.** At row 38e (`functional.evidence.external`, the Workflow
+wants `functional_evidence` for the head) under an **automatic** acceptance gate, and with
+`functional.automated` true (the default), the Controller runs the functional testing itself instead
+of stopping. Rows 37 (no current checklist) and 38 (unconsumed findings) come first, as before: the
+Workflow answers them first and the Controller launches `/prepare-functional-review` and
+`/apply-functional-review`. At row 38e the step:
+
+1. reads the checklist (the "Functional review checklist" section of `docs/ACTIVE_MILESTONE.md` at
+   the head) and the flows it lists. The recognised shapes are table rows whose first cell is a
+   short label, bold labelled paragraphs (`**A. ...`), headings that start with a label or `Flow`,
+   and a numbered list; flow ids are the Controller's (`flow-1`, ...). A checklist with none stops
+   at `checklist_unrecognised` before any job, sandbox or usage reservation exists;
+2. builds a **sandbox** under `<runtime root>/functional/<job_id>/`: a `git clone --no-hardlinks`
+   of the item's branch at its head, whose `origin` is a scratch bare repository; a `bin/` first on
+   `PATH` with a fake `gh`, `claude`, `codex` and `ssh` (each logs its arguments and refuses);
+   `GIT_ALLOW_PROTOCOL=file` and `GIT_SSH_COMMAND=false`; scratch `HOME` and `XDG_*`; a private `TMPDIR`
+   (mode 0700, named `wcf-*`) under `$XDG_RUNTIME_DIR` or `/tmp` rather than inside the sandbox folder,
+   because Claude's sandbox puts its bridge sockets there and a Unix socket path may not exceed 107
+   bytes (counted as the filesystem encodes the path), which the default runtime folder does (the
+   Controller records the folder's path in the sandbox, so it removes it with the sandbox whatever
+   `XDG_RUNTIME_DIR` is later, and removes it at once if recording it fails, and
+   stops at `functional_tester_unavailable` before launch if no folder is short enough); and no other
+   tool on `PATH`;
+3. starts an independent tester, a `functional_test` job on the `functional-tester` role (Sonnet 5.5,
+   `medium`, one agent, `Bash` only), inside Claude Code's own shell sandbox (bubblewrap, `socat`,
+   a kernel that accepts a seccomp filter and the native `claude` build are required -- the build check is by identity: the `claude` that would run must be an ELF whose SHA-256 digest is in `VERIFIED_NATIVE_BUILDS` (`controller/functional_review.py`), the builds on which the enforcement spike proved the seccomp helper blocks Unix sockets, so a launcher, script, package-CLI bundle or newer unverified build ends at `functional_tester_unavailable` before any launch (a new build is added after the live enforcement tests pass on it); the writable locations are the output folder, the scratch directories and the
+   locations derived from the repository's `.gitignore`; no network and no Unix socket; the
+   product files, the checklist and `.git` are read-only). It writes `RESULTS.json`, one entry per
+   flow, each with a log file and, for a failure, the reason `defect` (the product did not behave as
+   the flow expects) or `environment` (the flow could not run in the sandbox);
+4. checks that the real repository, its origin and the job's private Claude home are unchanged and
+   that the clone still matches the candidate the Controller captured, then records **one
+   `functional_evidence` result per flow** at the sandbox head with `record-external-result`
+   (`reporter` `workflow-controller <version>`, `run_ref` `controller:<job_id>`).
+
+The outcomes: `recorded` (every flow passed; the next decision is the Workflow's, normally
+acceptance), `findings` (a `defect` flow failed: the Controller writes the findings file at the path
+the Workflow names, under a header that names the tested head, checklist and run, so a retest with the
+identical failure text is not skipped as already applied; the next decision is row 38 and the
+`/apply-functional-review` worker, then a new technical approval and a fresh tester run at the new
+head), `environment_limited` (every failed flow is `environment`: the results are recorded, no
+findings are written and the applier is not started) and `unchanged` (the Controller already tested
+this head and recorded every flow, yet the Workflow still needs evidence, for example a policy's
+`required_flows` the checklist does not cover: one `functional_unchanged` stop naming the Workflow's
+detail, no repeated run).
+
+The stops, each with its remedy in the message: `flows_not_runnable` (the `environment_limited`
+case: run those flows by hand and record them, or change the checklist so they run offline),
+`checklist_unrecognised`, `functional_tester_unavailable` (no `claude` binary, the role refused, the
+sandbox components missing or the launch probe failing, or the fresh clone not matching the
+manifest), `results_invalid` (the stop text carries a bounded excerpt of the tester's final message,
+which usually names the cause when `RESULTS.json` was not written), `isolation_breach` (a difference in the real repository, its path
+origin or the private Claude home; the sandbox is kept for inspection and nothing is recorded; a
+person must look before anything is tested again), `tested_bytes_unbound` (the clone no longer
+matches the candidate after the run; nothing is recorded), `recording_refused` (the Workflow
+refused a flow's result; results accepted before it stand) and `functional_rounds_exhausted` (the
+tester has ended in `findings` three times for the work item; the count is read from job records
+and nothing resets it). Every one of these except `functional_unchanged` sends `user_gate`;
+`functional_unchanged` sends `lane_blocked`. The remedy of the others is to test the head by hand
+and record the evidence as before, or to set `functional.automated` false, which restores the old
+stop at row 38e for the repository so the tester is not launched again. A usage limit is handled
+like any job's.
+
+**What the sandbox does not claim.** The Controller binds the candidate it handed over and keeps it
+read-only to the tester, but it cannot bind which copy of the product the tester ran: a copy edited
+under the tester's own scratch `TMPDIR` that passes is not detected (the prompt forbids it, and the
+record names the digest, reporter and run reference for an audit). The tester is a model, and the
+Workflow trusts reported evidence, as it does a person's. The sandbox has no network, no real GitHub,
+no real model and no tool outside `PATH`; a pull-request flow therefore **cannot run in the sandbox**
+(the Controller's `controller/forge.py` and the Workflow's `scripts/workflow_forge.py` keep
+refusing a scratch `gh` and a scratch origin, and neither is relaxed): such a flow is `environment`
+and ends at `flows_not_runnable` until a person runs it. A Codex tester does not exist yet (the Codex
+adapter declares only the reviewer role). `explain` at row 38e shows, read-only, the head, the
+checklist blob, the flow ids, the previous functional job and any sandbox kept by an earlier breach.
+The design record is [ADR 0017](../adr/0017-automated-functional-review.md).
 
 **A protocol minor release.** A value a 1.x minor release adds to a closed enum
 of the answer is never refused as outside the protocol. `protocol_schema.ENUM_RULES`

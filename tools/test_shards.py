@@ -191,8 +191,9 @@ MAX_UPDATED_FROM = 20
 #: "Adaptive shard planning" section: the local target keeps the measured
 #: 8-shard win, the local maximum is one shard per CPU, and the CI target is
 #: about the unavoidable conformance floor. The CI maximum is a runner
-#: budget: 4 shards + ``package`` + the managed ``workflow-conformance`` job
-#: hold 6 Linux runners per pull request, on an account limit of 20 jobs.
+#: budget: 6 shards + ``package`` + the managed ``workflow-conformance`` job
+#: hold about 8 concurrent Linux runners per pull request, on an account
+#: limit of 20 jobs.
 #: The managed conformance job (10-14 minutes with Workflow 2.10.0) and
 #: ``validate`` now end at about the same time, so a shard's wall time counts
 #: (amendment 2026-10-13: the conformance lane).
@@ -208,7 +209,7 @@ CI = "ci"
 LOCAL_TARGET_SHARD_SECONDS = 60
 LOCAL_MAX_SHARDS = 8
 CI_TARGET_SHARD_SECONDS = 180
-CI_MAX_SHARDS = 4
+CI_MAX_SHARDS = 6
 DEFAULT_MIN_SHARDS = 2
 DEFAULTS_SOURCE = "defaults"
 LOCAL_PROFILE_SOURCE = "local-profile"

@@ -923,7 +923,8 @@ class ProfileParametersTest(unittest.TestCase):
         self.assertEqual(shards.profile_parameters("local", cpu_count=4).max_shards, 4)
         self.assertEqual(shards.profile_parameters("local", cpu_count=1).max_shards, 1)
         ci = shards.profile_parameters("ci", cpu_count=1)
-        self.assertEqual((ci.target_shard_seconds, ci.min_shards, ci.max_shards), (180, 2, 4))
+        self.assertEqual((ci.target_shard_seconds, ci.min_shards, ci.max_shards), (180, 2, 6))
+        self.assertEqual(shards.CI_MAX_SHARDS, 6)
         with unittest.mock.patch.object(shards.os, "cpu_count", return_value=None):
             self.assertEqual(shards.profile_parameters("local").max_shards, 1)
 

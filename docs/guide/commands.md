@@ -188,7 +188,9 @@ one on `PATH`), prints its resolved path and SHA-256 digest, and then:
   model turns at low effort with your Claude credentials; the usage budget gate is not consulted;
 - only when every probe holds and the build's bytes are unchanged by the run, it records the digest, version and
   probe results in `verified-claude-builds.json` in the runtime root (see [runtime](runtime.md)) and exits `0`;
-- a failing probe exits `20`, names the probe and records nothing; the scratch folder is removed either way.
+- a failing probe exits `20`, names the probe and records nothing; the scratch folder is removed either way. The
+  probes run with a private `TMPDIR` (a `wcf-*` folder, mode `0700`) under an eligible `$XDG_RUNTIME_DIR`, otherwise
+  `/tmp`, because Claude's sockets need a short path; it is removed with the run.
 
 The settings file is never created, filled or updated by this command. The record is per runtime root: a source
 checkout and the shared install each need their own run. The record defends against the sandboxed tester and

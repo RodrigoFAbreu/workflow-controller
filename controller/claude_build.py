@@ -333,10 +333,15 @@ class _Run:
         self.stand_in_home = base / "stand-in-home"
         # Claude's bridge sockets live in TMPDIR: a runtime root of normal depth makes `layout.tmp` too long.
         self.tmp = short_tmp()
-        self.settings = fr.tester_settings(
-            clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.tmp],
-            writable=["build"])
-        self.sock_dir = Path(tempfile.mkdtemp(prefix="wcv-"))  # short: a Unix socket path is limited to 107 bytes
+        try:
+            self.settings = fr.tester_settings(
+                clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.tmp],
+                writable=["build"])
+            self.sock_dir = Path(tempfile.mkdtemp(prefix="wcv-"))  # short: a Unix socket path is limited to 107 bytes
+        except BaseException:
+            # construction failed before `verify_build` could clean up: release the TMPDIR just allocated.
+            runtime.remove_tree(self.tmp.parent, self.tmp.name)
+            raise
         self.host: Host | None = None
 
     def prepare(self, operator_home: Path) -> None:

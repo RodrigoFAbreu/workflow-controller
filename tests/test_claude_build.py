@@ -4,6 +4,7 @@ model: the launch runs over ``tests/fake_functional_tester.py``."""
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -410,6 +411,25 @@ class VerifyBuildTests(unittest.TestCase):
             self.assertLessEqual(fr.longest_socket_path(Path(tmpdir)), fr.SOCKET_PATH_LIMIT, tmpdir)
             self.assertFalse(Path(tmpdir).exists())  # removed with the run
         self.assertFalse(Path(tmpdir).is_relative_to(deep))
+
+    def test_a_failure_after_the_tmpdir_is_allocated_releases_it_and_records_nothing(self) -> None:
+        shorts = self.root / "short"
+        shorts.mkdir()
+        fake = FakeClaude()
+        real_mkdtemp = tempfile.mkdtemp
+
+        def failing(prefix=None, **kw):
+            if prefix == "wcv-":
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_mkdtemp(prefix=prefix, **kw)
+
+        with mock.patch.object(fr, "short_tmp_roots", lambda: [shorts]), \
+                mock.patch.object(tempfile, "mkdtemp", failing):
+            with self.assertRaises(OSError):
+                self.verify(fake)
+        self.assertEqual(list(shorts.iterdir()), [])  # the wcf-* TMPDIR was released
+        self.assertEqual(fake.launches, 0)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
 
     def test_no_short_root_refuses_before_any_launch(self) -> None:
         fake = FakeClaude()

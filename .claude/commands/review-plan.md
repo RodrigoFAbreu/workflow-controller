@@ -13,7 +13,7 @@ Enter the `AWAITING_LOCAL_PLAN_REVIEW` state of
 not a specific model: nothing in this contract, the written feedback
 schema, or the state transition it produces names a model, except the
 `Reviewer model:` line when the gate policy requires distinct reviewer models
-(step 7, workflow-2.8.0). Running it from any capable Claude model produces the
+(step 7, workflow-2.8.0). Running it from any capable model produces the
 same schema and the same transition.
 Recommended in a **fresh session** for genuine independence from the
 session that wrote the plan — strongly recommended operational guidance,

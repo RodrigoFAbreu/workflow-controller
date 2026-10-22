@@ -191,6 +191,25 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
 1. Inspect Git state (`git status --short`, `git log --oneline -10`) and read
    `docs/ACTIVE_MILESTONE.md` and `docs/ROADMAP.md` to identify the next
    incomplete milestone/checkpoint.
+   - **Backlog declared** (workflow-2.17.0, `D-Select`; the no-argument and
+     the base-commit forms only -- an explicit work-item-id form never reads
+     the backlog). Run `python3 scripts/workflow_backlog.py next` first. Its
+     output is `{"declared": false}` for a repository whose
+     `WORKFLOW_CONFIG.json` has no `backlog` key: then this step is exactly
+     the sentence above, unchanged. When it answers `declared: true`, do not
+     read `docs/ROADMAP.md`: the backlog file is the roadmap. On a refusal
+     (exit 2: `declaration_invalid`, `backlog_missing`, `backlog_invalid` or
+     `no_ready_item`), report stderr verbatim (every diagnostic and the next step) and **stop**,
+     having written nothing. On success use `item.id` as the work item id
+     (the slug rule below still applies to it), read the page `item.detail`
+     names as the milestone's description (when `detail` is absent, use
+     `item.title` alone and say so), and list `also_in_progress` and
+     `warnings` as an aid. This command never writes the backlog file
+     (`D-Start`). When `active_work_item_id` names a different non-terminal
+     work item, print one advisory line naming both ids and the explicit
+     form that continues the active one (`/milestone-plan <active id>`),
+     then proceed with the backlog's choice; the line is an aid, never a
+     stop.
    - **[2.1]** Derive a `work_item_id` slug from the milestone (matching
      `^[a-z0-9][a-z0-9_-]{0,63}$`, e.g. `milestone-9`), or reuse the
      existing entry's id if resuming a milestone already present in
@@ -199,6 +218,19 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      `docs/ai-workflow/WORKFLOW_V2_PLAN.md`-equivalent, `docs/ai-workflow/registry/<work_item_id>-registry.json`,
      `docs/ai-workflow/requirements/<work_item_id>-mapping.json`, and the
      resolved base commit respectively (`D-Fingerprint-Generalization`).
+     **Declared-backlog collision check** (workflow-2.18.2, `60e`), before
+     the `route_work_item` call below: call
+     `workflow_state.generate_artifacts_declarations(<work_item_id>,
+     <plan_path>, <registry_path>, <mapping_path>,
+     work_item_type=<this item's own work_item_type>,
+     repo_root=<repo_root>)` with the four facts just derived, and discard
+     the result. It writes nothing, and for an undeclared repository it
+     returns the plain template and does nothing. A refusal
+     (`workflow_backlog.BacklogError` with code `declaration_conflict`, or
+     `workflow_state.BacklogScriptUnavailableError`, code
+     `declaration_invalid`) is reported verbatim, with its next step, and the
+     run **stops with nothing written**: no work item, no registry, no
+     mapping. Step 3's generation stays, because it produces the file.
      Call `workflow_state.route_work_item(...)`, passing all four **and
      `repo_root`**, (D1's create-or-resume routing: creates a fresh
      `work_items[id]` entry fixing `governing_workflow_version` from the
@@ -266,7 +298,7 @@ until that final rename (`REVIEW_PROTOCOL.md`'s "Bundle location").
      never hand-edited, never itself hashed. In the same pass, call
      `workflow_state.generate_artifacts_declarations(work_item_id, plan_path,
      registry_path, mapping_path, work_item_type=<this item's own
-     work_item_type>)` and write its result to
+     work_item_type>, repo_root=<repo_root>)` and write its result to
      `docs/ai-workflow/registry/<work_item_id>-artifacts.json` — the
      default `plan_stage` **and** `implementation_stage` classification
      template (`D-Fingerprint-Generalization`), never left for a later

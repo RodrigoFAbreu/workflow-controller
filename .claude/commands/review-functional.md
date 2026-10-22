@@ -10,7 +10,7 @@ while the resolved item's `phase` is exactly `AWAITING_FUNCTIONAL_REVIEW`
 (`docs/ai-workflow/MILESTONE_WORKFLOW.md`). Implements a model-independent
 **review role**, not a specific model: nothing in this contract, in the
 report it produces, or in any check it performs names a model — running it
-from any capable Claude model produces the same behavior.
+from any capable model produces the same behavior.
 
 Only the user can actually exercise the manual flows the checklist names —
 an Android-app walkthrough for product/UI work, or command/process checks

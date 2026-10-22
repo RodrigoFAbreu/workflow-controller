@@ -1,12 +1,23 @@
 ---
-description: Approve the plan or implementation stage for the active (or named) work item. User-only -- never invoked by Claude autonomously.
+description: Approve the plan or implementation stage for the active (or named) work item. User-only -- never invoked by the agent autonomously.
 argument-hint: <plan|implementation> [work-item-id]
 disable-model-invocation: true
 state_writer: true
 review-subject: bundle
 ---
 
-**State-writer discipline (D1, item 354):** every `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs -- everywhere a step below says "persist the returned state" -- is performed by calling `workflow_state.state_transaction(repo_root, mutator)`, never by a separate read-then-write: `state_transaction` holds `.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`, `fcntl.flock(LOCK_EX)`) across the complete re-read -> apply-the-named-function -> canonical-serialize -> atomic-publish sequence in one process invocation, so `mutator` is the exact transition function each step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`), applied to freshly re-read state rather than to a snapshot taken before the lock was acquired.
+**State-writer discipline (D1, item 354):** every
+`docs/ai-workflow/WORKFLOW_STATE.json` write this command performs --
+everywhere a step below says "persist the returned state" -- is performed by
+calling `workflow_state.state_transaction(repo_root, mutator)`, never by a
+separate read-then-write: `state_transaction` holds
+`.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`,
+`fcntl.flock(LOCK_EX)`) across the complete re-read ->
+apply-the-named-function -> canonical-serialize -> atomic-publish sequence in
+one process invocation, so `mutator` is the exact transition function each
+step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`),
+applied to freshly re-read state rather than to a snapshot taken before the
+lock was acquired.
 
 Enter `AWAITING_PLAN_APPROVAL` or `AWAITING_TECHNICAL_APPROVAL`
 (`docs/ai-workflow/MILESTONE_WORKFLOW.md`) for the stage named in
@@ -37,10 +48,12 @@ command's steps by number. This command stays the human path for every gate in
 either mode, unchanged, and records `EXTERNAL_APPROVE` or `USER_OVERRIDE`
 exactly as before; it never writes `POLICY_SATISFIED`.
 
-**This command is user-only by construction.** `disable-model-invocation:
-true` is the primary, harness-enforced control (blocks the SlashCommand
-tool). Claude must never invoke it on the user's own behalf, including as a
-step of another command's execution, independent of that flag.
+**This command is user-only by construction.** The literal-confirmation check
+below is the control this command carries itself, under every harness;
+`disable-model-invocation: true` is an additional layer where the harness
+enforces it, and it does not replace the check. The agent must never invoke
+this command on the user's behalf, including as a step of another command's
+execution, whatever the flag says.
 
 **User-only guard, mechanism (2)**: refuse to write anything unless the
 user's own current-turn message supplies literal confirmation text naming
@@ -48,23 +61,9 @@ the exact `work_item_id` and the exact stage (`plan`/`implementation`)
 being approved (`workflow_state.validate_user_confirmation`). Never
 fabricate, infer, or carry over this text from a prior turn.
 
-**Verified coverage of mechanism (1)** (`docs/ai-workflow/WORKFLOW_V2_PLAN.md`
-D2, resolves `OPUS-R6-010`): this installation's own bundled frontmatter
-reference documents `disable-model-invocation: true` as blocking only "the
-SlashCommand tool" -- it does not name the Skill exposure path at all. The
-installed Claude Code changelog separately confirms skill-aware handling of
-`disable-model-invocation: true` (a fix for skills with that flag failing
-when invoked via `/<skill>` mid-message), suggesting real coverage there
-too. A same-session empirical test was inconclusive: this harness's model
-tool surface exposes commands to Claude exclusively through the `Skill`
-tool (no distinct `SlashCommand` tool is present in the available tool
-set), but the skill-routing table is fixed at session start, so a
-newly-flagged command reliably returns "Unknown skill" whether or not the
-flag actually gates it -- a decisive test requires invoking a flagged
-command via `Skill` from a **fresh session** after this file lands. Until
-that fresh-session result is recorded, treat mechanism (2) above as the
-actually load-bearing control for the Skill exposure path, not mechanism
-(1) alone.
+How the `disable-model-invocation` flag is enforced differs by harness; the
+harness notes in
+`docs/ai-workflow/COMMAND_FILES.md` record what is known per harness.
 
 0. **Dual-mode branch** (Workflow v2.1, `WF4a-ii`; widened workflow-2.5.0 to
    a third `governing_workflow_version` branch): resolve the target work
@@ -222,7 +221,8 @@ actually load-bearing control for the Skill exposure path, not mechanism
    `Workflow-Supersedes` set, and its own `Workflow-Supersedes` trailer
    names exactly the immediately preceding generation-record commit in the
    chain). On the `implementation_provenance_stale` cause, call
-   `verify_implementation_provenance_interval` directly and report its raised exception's message — it names the
+   `verify_implementation_provenance_interval` directly and report its raised
+   exception's message — it names the
    concrete reason (no record commit found, a further unrecorded commit
    landed past `T`, `reviewed_implementation_head` not an ancestor, a
    merge/non-first-parent interval, a protected path inside the interval,
@@ -353,7 +353,8 @@ actually load-bearing control for the Skill exposure path, not mechanism
     durable mutation** (`D-Approval-Commits`' "Conditional fifth commit
     member", `GPT-R67-001`; generalized beyond `workflow-v2-1-core`'s own
     case; widened to the declared protected set plus removals by
-    `D-Plan-Approval-Closure`, workflow-2.6.0). **Interim scope guard, `workflow-v2-1-core` only** (`WF8c`
+    `D-Plan-Approval-Closure`, workflow-2.6.0). **Interim scope guard,
+    `workflow-v2-1-core` only** (`WF8c`
     items 347/352's own retirement condition, stated as a condition
     rather than an open question): before anything else, if
     `work_item_id == "workflow-v2-1-core"` and `stage == "plan"`, read
@@ -375,7 +376,8 @@ actually load-bearing control for the Skill exposure path, not mechanism
     `D-Plan-Approval-Closure`, workflow-2.6.0). It runs, read-only and in
     order:
     - **the empty-index precondition** — `git diff --no-renames
-      --name-only -z --cached HEAD` must be empty. `DirtyIndexBeforeStagingError` names the staged
+      --name-only -z --cached HEAD` must be empty.
+      `DirtyIndexBeforeStagingError` names the staged
       paths and the usual cause, a staged `git mv` of a protected path:
       unstage both sides (`git --literal-pathspecs restore --staged -- <old>
       <new>`, with `GIT_GLOB_PATHSPECS`/`GIT_NOGLOB_PATHSPECS`/
@@ -679,7 +681,9 @@ actually load-bearing control for the Skill exposure path, not mechanism
      trailer; it never needs to search for one itself. The exact scoped
      trailer *lookup* later durability/freshness checks use is
      `workflow_state.discover_plan_approval_commit` (`WF4a-iii`). **These
-     two lines must be the commit message's own final paragraph** and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
+     two lines must be the commit message's own final paragraph** and nothing
+     else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their
+     own paragraph before it, separated by a blank line
      (`OPUS-R129-001`): Git's `git interpret-trailers --parse`, the exact
      mechanism `discover_plan_approval_commit` uses, treats only the
      message's last paragraph as trailers, so a blank line after these
@@ -692,7 +696,9 @@ actually load-bearing control for the Skill exposure path, not mechanism
    direct `apply_technical_approval`/`state_transaction` write and plain
    `git commit` this stage has always used; none of 4b/4c/5/6.2-6.4/
    6a/6b/6c/6d below apply to it. **These two trailer lines must also be
-   the commit message's own final paragraph** and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
+   the commit message's own final paragraph** and nothing else is in it: any
+   `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before
+   it, separated by a blank line
    (`OPUS-R129-001`, the same rule `milestone-implement.md` step 1f,
    `bootstrap-workflow-v2.md` step 6, step 6.4 above, and
    `accept-milestone.md` step 6 already state): Git's `git

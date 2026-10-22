@@ -562,6 +562,15 @@ class TestVerify(unittest.TestCase):
             body = self.verify(repo)
         self.assertEqual(checks_by_id(body)["state_readable"]["status"], "fail")
 
+    def test_a_healthy_state_names_both_checks_in_the_pass_detail(self):
+        """workflow-2.18.1, 52b."""
+        with h.ScratchRepo() as repo:
+            write_state(repo, empty_state())
+            body = self.verify(repo)
+        check = checks_by_id(body)["state_valid"]
+        self.assertEqual(check["status"], "pass")
+        self.assertEqual(check["detail"], "validate_state and validate_review_round_counts accept the state")
+
     def test_unknown_phase(self):
         with h.ScratchRepo() as repo:
             write_state(repo, h.base_state(wi=item(phase="NOT_A_PHASE")))
@@ -3792,6 +3801,22 @@ def catalogue_table_mismatches() -> list[str]:
     return mismatches
 
 
+class TestSpecificationWording(unittest.TestCase):
+    """31c and 31d: the wording and example of `ORCHESTRATION_PROTOCOL.md`."""
+
+    def test_courier_condition_5_names_owner_configuration(self):
+        text = " ".join(SPEC_PATH.read_text().split())
+        self.assertIn("it is enabled by the repository owner's configuration or by an explicit "
+                      "Controller default the owner accepted at setup; unset, the gate stops as today.", text)
+        self.assertNotIn("it is opt-in", text)
+
+    def test_next_action_example_is_a_reachable_history(self):
+        text = " ".join(SPEC_PATH.read_text().split())
+        self.assertIn('"plan_revision": 2, "implementation_revision": null', text)
+        self.assertIn('"review_round": {"plan": 2, "implementation": null, "current": null, '
+                      '"plan_local": 2, "plan_external": 2,', text)
+
+
 class TestSpecificationTablesEqualTheCode(unittest.TestCase):
     """`ORCHESTRATION_PROTOCOL.md` is normative, and its mirrored tables are
     parsed and compared with the module's own, row for row and in order:
@@ -3936,7 +3961,7 @@ class TestOperatorDocuments(unittest.TestCase):
     def test_milestone_workflow_says_the_protocol_adds_no_gate(self):
         text = (Path(__file__).resolve().parent.parent / "docs" / "ai-workflow" / "MILESTONE_WORKFLOW.md").read_text()
         summary = text.split("## Hard gates summary", 1)[1].split("\n## ", 1)[0]
-        self.assertIn("Claude must stop and wait for a human/external input at exactly six points", summary)
+        self.assertIn("The agent must stop and wait for a human/external input at exactly six points", summary)
         self.assertIn("reports these same gates and\nadds none", summary)
 
 
@@ -5509,7 +5534,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         body, code = call("describe")
         self.assertEqual(code, wp.EXIT_OK)
         result = body["result"]
-        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.5", "2.16.0"))
+        self.assertEqual((result["protocol_version"], result["workflow_release"]), ("1.5", "2.18.2"))
         caps = result["capabilities"]
         self.assertEqual(sorted(set(NEW_ACTION_IDS + NEW_1_2_ACTION_IDS) - set(caps["action_ids"])), [])
         self.assertEqual(caps["reserved_result_kinds"], [])
@@ -5519,7 +5544,7 @@ class TestProtocolSchemaAndDescribe(unittest.TestCase):
         self.assertIn("validation", caps["dispositions"])
 
     def test_the_release_constant_and_the_protocol_version(self):
-        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.16.0", "1.5", 1))
+        self.assertEqual((wp.WORKFLOW_RELEASE, wp.PROTOCOL_VERSION, wp.PROTOCOL_MAJOR), ("2.18.2", "1.5", 1))
         self.assertIn("validator", wp.WORKER_ROLES)
         self.assertEqual(wp.ACTIONS["acceptance.satisfy"]["role"], "validator")
         self.assertEqual(wp.ACTIONS["pr.apply_review"]["role"], "applier")

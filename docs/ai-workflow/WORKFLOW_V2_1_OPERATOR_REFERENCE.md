@@ -33,9 +33,14 @@ Where they disagree, see [Known discrepancies](#known-discrepancies).
   `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` sections below.
 - **User-only commands** (`/approve-review`, `/accept-milestone`) carry
   `disable-model-invocation: true`.
-  Claude cannot run them, and they refuse to write anything unless *your
+  The control each of them carries itself, under every harness, is the
+  literal-confirmation check: they refuse to write anything unless *your
   current-turn message* contains literal confirmation text naming the exact
-  work item and stage. They also do not appear in Claude's skill list.
+  work item and stage. The flag is an additional layer where the harness
+  enforces it; it does not replace the check. The agent must never run them;
+  where the harness enforces the flag they cannot be launched for it and do
+  not appear in its command list. To run the commands from
+  another harness, see `docs/ai-workflow/COMMAND_FILES.md`.
 - **Every command stops.** None of them chain into the next command, even
   when the next step is obvious.
 
@@ -94,7 +99,7 @@ They are not interchangeable and neither one approves the plan.
 
 | Step | Who | Command | Records |
 |---|---|---|---|
-| 1. Local model review | Claude, ideally a fresh session | `/review-plan` | Writes `REVIEW_FEEDBACK.md` itself; on `APPROVE` records the `LOCAL_MODEL_PLAN_REVIEW` ledger stage |
+| 1. Local model review | The agent, ideally a fresh session | `/review-plan` | Writes `REVIEW_FEEDBACK.md` itself; on `APPROVE` records the `LOCAL_MODEL_PLAN_REVIEW` ledger stage |
 | 2. Manual external review | **You** — upload the bundle to an external reviewer, paste its verdict into `REVIEW_FEEDBACK.md` | `/record-manual-plan-review` | Ingests and binds the verdict you already pasted; on `APPROVE` records the `MANUAL_EXTERNAL_PLAN_REVIEW` ledger stage |
 | 3. Approval | **You**, or the Workflow where the gate is automatic (`/satisfy-gate plan`, `GATE_POLICY.md`) | `/approve-review plan` | The only approval gate; requires **both** ledger stages recorded against the *current* `review_content_id` |
 
@@ -243,7 +248,7 @@ mode.
 
 ## Command reference
 
-`.claude/commands/` holds 16 files today, and all 16 are sectioned below
+`.claude/commands/` holds 22 files today, and all 22 are sectioned below
 — including `/review-implementation` and `/review-functional`
 (`workflow-v2-3`) and `/request-plan-amendment` (`workflow-2.4.0`),
 previously undocumented here. `[work-item-id]` defaults
@@ -258,8 +263,8 @@ What is actually guaranteed about that inventory, precisely:
 set of `### /<name>` sections in this document and the set of
 `.claude/commands/*.md` stems on disk and asserts the two are **equal** —
 that part is derived, so a command added or removed without a section here
-fails. The number 16 itself is *not* derived: it is a hardcoded tripwire
-in that same test (`assertEqual(len(on_disk), 16)`) whose job is to make a
+fails. The number 22 itself is *not* derived: it is a hardcoded tripwire
+in that same test (`assertEqual(len(on_disk), 22)`) whose job is to make a
 change in the roster size a deliberate, reviewed edit. So the set equality
 is mechanical; the count in this paragraph and in the test is a
 hand-maintained pair that must be updated together. If they disagree, the
@@ -270,7 +275,9 @@ test fails and is authoritative about which one moved.
   existing work item — including a remediation child, which is never the
   active item.
 - **Arguments**: none → derive the milestone from
-  `docs/ACTIVE_MILESTONE.md`/`docs/ROADMAP.md`. One argument → a
+  `docs/ACTIVE_MILESTONE.md`/`docs/ROADMAP.md`, or, when `WORKFLOW_CONFIG.json`
+  declares a `backlog` (workflow-2.17.0), the next ready item of that file
+  (`python3 scripts/workflow_backlog.py next`; the id forms never read it). One argument → a
   `work_items` key selects that work item, anything else is a base SHA
   (so the old `/milestone-plan <base-sha>` form is unchanged). Two →
   `<work-item-id> <base-sha>`. Nothing is guessed; the id selects an
@@ -996,7 +1003,7 @@ committed"); if a round was refused with "must always transition phase", see
   file says it is "retired — deleted — only at this work item's own
   `MILESTONE_COMPLETE`". That condition is now met — `workflow-v2-1-core`
   is `MILESTONE_COMPLETE` — but the file has not been deleted, so the
-  command is still on disk and still in this reference's roster of 16.
+  command is still on disk and still in this reference's roster of 22.
   Retiring it is a scoped act of its own (the way
   `/accept-scoped-remediation`'s retirement was); until then, treat it as
   live-but-unreachable: its target is terminal, so every invocation refuses

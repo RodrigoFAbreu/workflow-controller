@@ -13,7 +13,7 @@ owned by `docs/ai-workflow/REVIEW_PROTOCOL.md` and
 ## State reference
 
 For every state: entry condition, allowed actions, required artifacts, exit
-condition, and whether Claude stops.
+condition, and whether the agent stops.
 
 **Vocabulary states.** Four of the sections below describe a *phase of the
 work* that no writer ever persists as a `phase` value in
@@ -38,7 +38,10 @@ system audit, convergence pass 12, ledger row `O34`).
   or the user asks to start the next one.
 - **Allowed actions**: read `docs/ACTIVE_MILESTONE.md`, `docs/ROADMAP.md`, and
   only the milestone/reference/ADR docs relevant to the target checkpoint;
-  draft or update the execution/reference plan.
+  draft or update the execution/reference plan. A repository that declares a
+  `backlog` in `WORKFLOW_CONFIG.json` (workflow-2.17.0) takes the next ready
+  item from that file (`python3 scripts/workflow_backlog.py next`) in place of
+  reading `docs/ROADMAP.md`.
 - **Artifacts**: draft execution plan (and reference plan, if new decisions
   are introduced).
 - **Exit**: a concrete, checkpointed plan exists.
@@ -140,9 +143,9 @@ branches on governing version, unchanged.
   second, independently-maintained grammar.
 - **Stop for user/reviewer?** No. `/request-plan-amendment` itself carries
   the same mechanism-independent user-only guard `/approve-review` and
-  `/accept-milestone` use (Claude cannot invoke it), but once a human has
-  invoked it, work continues autonomously from here exactly as it would
-  from `PLANNING`.
+  `/accept-milestone` use (the agent must never invoke it; its confirmation
+  check refuses without the user's own text), but once a human has invoked it,
+  work continues autonomously from here exactly as it would from `PLANNING`.
 
 ### SELF_REVIEWING_PLAN
 
@@ -180,7 +183,7 @@ content.
 - **Exit**: external reviewer places feedback at
   `<feedback_dir>/REVIEW_FEEDBACK.md` (stage-agnostic; see "Feedback file
   locations" below for what `<feedback_dir>` resolves to).
-- **Stop for user/reviewer?** Yes — hard gate. Claude must stop here.
+- **Stop for user/reviewer?** Yes — hard gate. The agent must stop here.
 
 ### REVISING_PLAN
 
@@ -367,12 +370,12 @@ bytes from `current/files/<path>`, or withdraw.
 - **Artifacts**: source/test changes; updated `docs/ACTIVE_MILESTONE.md`; commits.
 - **Exit**: all plan checkpoints implemented, **or** (`workflow-2.4.0`,
   `D-Plan-Amendment-1`) an authorized `/request-plan-amendment
-  [work-item-id]` re-enters `AMENDING_PLAN` above -- never Claude's own
+  [work-item-id]` re-enters `AMENDING_PLAN` above -- never the agent's own
   choice to make.
 - **Entry from the functional gate** (`workflow-2.9.0`, `v2.6.0-003`): the
   user-only `/resume-implementation <work-item-id>` returns a `2.1`/`2.2`
   item with an outstanding checkpoint from `AWAITING_FUNCTIONAL_REVIEW` to
-  this state, marking its technical approval `STALE`; it is never Claude's
+  this state, marking its technical approval `STALE`; it is never the agent's
   own choice to make.
 - **Stop for user/reviewer?** No — continue across checkpoints without
   stopping, subject to the stop conditions in `AGENTS.md`.
@@ -514,7 +517,7 @@ mirror is not exact.
   diff, changed files, tests run, decisions; `.ai-review/review-bundle.tar.gz`.
 - **Exit**: external reviewer places feedback at
   `<feedback_dir>/REVIEW_FEEDBACK.md`.
-- **Stop for user/reviewer?** Yes — hard gate. Claude must stop here. Do not
+- **Stop for user/reviewer?** Yes — hard gate. The agent must stop here. Do not
   mark the milestone accepted.
 
 ### APPLYING_REVIEW_FEEDBACK
@@ -578,7 +581,7 @@ whether the gate is open.
   file it links to).
 - **Exit**: user performs functional testing and places findings at
   `<feedback_dir>/FUNCTIONAL_REVIEW.md`.
-- **Stop for user/reviewer?** Yes — hard gate. Claude must stop here.
+- **Stop for user/reviewer?** Yes — hard gate. The agent must stop here.
 - **Checkpoint outstanding** (`workflow-2.9.0`, `v2.6.0-003`): a `2.1`/`2.2`
   item whose own registry is not terminal is returned to `IMPLEMENTING` by the
   user-only `/resume-implementation`; a governing-`1` item with a registry
@@ -660,7 +663,7 @@ for a `"2.2"` item, `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a
     `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW` for a `"1"`/`"2.1"` item: a fresh implementation-
     review round and a fresh `/approve-review implementation` are
     required before `AWAITING_FUNCTIONAL_REVIEW` is reachable again for
-    this item — Claude stops here, it does not loop back into functional
+    this item — the agent stops here, it does not loop back into functional
     review directly.
   - **Broad/multi-finding remediation, as a child work item**: findings
     whose fix spans substantially more work than a single contained
@@ -707,7 +710,7 @@ this value is still honoured — nothing writes it.
   finding has a disposition (`fixed`, `dropped` with a reason, or `follow-up`
   with a link; a follow-up is complete), and acceptance writes the findings
   record `docs/milestones/completed/<id>-findings.md`.
-- **Stop for user/reviewer?** Yes — hard gate. Claude must stop here.
+- **Stop for user/reviewer?** Yes — hard gate. The agent must stop here.
 
 ### MILESTONE_COMPLETE
 
@@ -748,7 +751,9 @@ this value is still honoured — nothing writes it.
   block itself stays, and the `AWAITING_FUNCTIONAL_REVIEW` section above
   lists the supported ways forward when it fires.
 - **Allowed actions**: final verification confirmation; update
-  `docs/ROADMAP.md` and `docs/ACTIVE_MILESTONE.md`; archive the milestone's
+  `docs/ROADMAP.md` and `docs/ACTIVE_MILESTONE.md` (with a declared `backlog`,
+  `python3 scripts/workflow_backlog.py accept <id>` sets the item `done` and
+  regenerates the page instead of a hand edit of the roadmap); archive the milestone's
   plans to `docs/milestones/completed/`; create the final completion commit
   if one is still needed; prepare `docs/ACTIVE_MILESTONE.md` for the next
   milestone's `PLANNING` state.
@@ -760,7 +765,7 @@ this value is still honoured — nothing writes it.
 
 ## Hard gates summary
 
-Claude must stop and wait for a human/external input at exactly six points:
+The agent must stop and wait for a human/external input at exactly six points:
 
 1. `AWAITING_EXTERNAL_PLAN_REVIEW`
 2. `AWAITING_PLAN_APPROVAL`
@@ -772,13 +777,13 @@ Claude must stop and wait for a human/external input at exactly six points:
 `AWAITING_PLAN_APPROVAL` and `AWAITING_TECHNICAL_APPROVAL` are each enforced
 by `/approve-review`'s mechanism-independent user-only guard
 (`disable-model-invocation: true`, plus a literal, specificity-checked
-`user_confirmation`) — only the user can exit either gate, never Claude
+`user_confirmation`) — only the user can exit either gate, never the agent
 autonomously. `/accept-milestone` carries the same guard for
 `AWAITING_USER_ACCEPTANCE`.
 
 Two of the six — `AWAITING_TECHNICAL_APPROVAL` and
 `AWAITING_USER_ACCEPTANCE` — are **vocabulary states** ("Vocabulary
-states" above): a gate is a point where Claude must stop, not a value a
+states" above): a gate is a point where the agent must stop, not a value a
 writer persists. Both are enforced by the guards named in the paragraph
 above and by `technical_approval_gate_reachable` /
 `milestone_complete_gate_reachable`, which read the phase the item is
@@ -857,7 +862,7 @@ two review stages and the same phases apply, and turning human approval on is
 the stronger mode. A pull request found red after acceptance reopens the same
 work item into remediation (`GATE_POLICY.md`, "Reopening the same work item").
 
-Between gates, Claude may work autonomously, subject to the stop conditions
+Between gates, the agent may work autonomously, subject to the stop conditions
 already defined in `AGENTS.md` (ambiguous product behavior, architecture
 changes, new dependency categories, schema migrations, destructive data
 operations, repeated verification failures, unrelated working-tree changes).
@@ -883,7 +888,7 @@ such field, no state entry, or no state file) keeps the pre-`2.6.0` rule —
 `REVIEW_FEEDBACK.md` is written by `/review-plan` (the
 `LOCAL_MODEL_PLAN_REVIEW` stage) and, since `workflow-v2-3-followups`, also
 by `/review-implementation` once its own pre-write guards pass — otherwise
-read, never written, by Claude. `FUNCTIONAL_REVIEW.md` stays read-only:
+read, never written, by the agent. `FUNCTIONAL_REVIEW.md` stays read-only:
 nothing this repository's commands write it, including
 `/review-functional`. See `docs/ai-workflow/REVIEW_PROTOCOL.md` for the
 required feedback structure.

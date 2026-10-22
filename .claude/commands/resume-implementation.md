@@ -1,12 +1,19 @@
 ---
-description: Resume implementation of an outstanding checkpoint from the functional gate. User-only -- never invoked by Claude autonomously.
+description: Resume implementation of an outstanding checkpoint from the functional gate. User-only -- never invoked by the agent autonomously.
 argument-hint: "<work-item-id>"
 disable-model-invocation: true
 state_writer: true
 review-subject: none
 ---
 
-**State-writer discipline (D1, item 354):** the one `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs is made by `workflow_state.resume_implementation(repo_root, <work_item_id>, <now>, <user_confirmation>)`, which holds `workflow_state.lifecycle_lock` and calls `workflow_state.state_transaction(repo_root, mutator)` for the write, never a separate read-then-write: `mutator` applies the pure `workflow_state.resume_implementation_state` to freshly re-read state under `.ai-review/runtime/WORKFLOW_STATE.lock`.
+**State-writer discipline (D1, item 354):** the one
+`docs/ai-workflow/WORKFLOW_STATE.json` write this command performs is made by
+`workflow_state.resume_implementation(repo_root, <work_item_id>, <now>,
+<user_confirmation>)`, which holds `workflow_state.lifecycle_lock` and calls
+`workflow_state.state_transaction(repo_root, mutator)` for the write, never a
+separate read-then-write: `mutator` applies the pure
+`workflow_state.resume_implementation_state` to freshly re-read state under
+`.ai-review/runtime/WORKFLOW_STATE.lock`.
 
 Returns a `2.1`/`2.2` work item that sits at `AWAITING_FUNCTIONAL_REVIEW` with a
 registry checkpoint still outstanding to `IMPLEMENTING`, and marks its technical
@@ -21,12 +28,16 @@ has no plan approval (the writer refuses it).
 
 **This command is user-only by construction**, the same two mechanisms as
 `/accept-milestone` and `/retire-legacy-work-item`: (1)
-`disable-model-invocation: true`; (2) refuse to write anything unless the
+`disable-model-invocation: true`, an additional layer where the harness
+enforces it; (2) refuse to write anything unless the
 user's own current-turn message supplies literal confirmation text naming the
-exact resolved `work_item_id` and the word `resumption`. Claude must never
-invoke this command on the user's behalf, including as a step of another
-command's execution. The writer validates the confirmation itself with
-`workflow_state.validate_user_only_confirmation(text, work_item_id=..., stage="resumption")`,
+exact resolved `work_item_id` and the word `resumption`. Mechanism (2) is the
+control this command carries itself, under every harness; the flag does not
+replace it. The agent must never invoke this command on the user's behalf,
+including as a step of another command's execution, whatever the flag says.
+The writer validates the confirmation itself with
+`workflow_state.validate_user_only_confirmation(text, work_item_id=...,
+stage="resumption")`,
 which requires the id as an exact token (a confirmation naming only
 `milestone-80` or `milestone-8-b` never authorizes `milestone-8`) and the
 stage word as a whole word. Never fabricate, infer or carry over this text
@@ -60,14 +71,16 @@ it, naming the exact `work_item_id`, and stop.
    earlier evidence is bound to the content identity it reviewed and cannot
    satisfy a gate for the new content.
 4. **Commit alone**: stage exactly `docs/ai-workflow/WORKFLOW_STATE.json`, never
-   a broader `git add`, with `workflow_state.stage_scoped_state(repo_root, <work_item_id>)`
+   a broader `git add`, with `workflow_state.stage_scoped_state(repo_root,
+   <work_item_id>)`
    in place of the bare `git add` of that path (it returns `False`, and the
    ordinary single-path `git add` runs, unless another work item holds
    uncommitted residue in the state file). The message body carries one line
    `Resume-Confirmation: <the user's confirmation text, on one line>`, then the
    single trailer `Workflow-Work-Item: <work_item_id>` as the message's **final
    paragraph** with nothing else in it: any `Co-Authored-By:`/`Claude-Session:`
-   lines go in their own paragraph before it, separated by a blank line (`OPUS-R129-001`: Git's
+   lines go in their own paragraph before it, separated by a blank line
+   (`OPUS-R129-001`: Git's
    `git interpret-trailers --parse` treats only the last paragraph as trailers,
    so a blank line after it discards it). **Gate-policy content check**: right
    after the commit, call

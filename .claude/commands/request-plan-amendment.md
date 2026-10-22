@@ -1,12 +1,23 @@
 ---
-description: Request an amendment to an already-approved plan, mid-implementation. User-only -- never invoked by Claude autonomously.
+description: Request an amendment to an already-approved plan, mid-implementation. User-only -- never invoked by the agent autonomously.
 argument-hint: "[work-item-id]"
 disable-model-invocation: true
 state_writer: true
 review-subject: none
 ---
 
-**State-writer discipline (D1, item 354):** every `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs -- everywhere a step below says "persist the returned state" -- is performed by calling `workflow_state.state_transaction(repo_root, mutator)`, never by a separate read-then-write: `state_transaction` holds `.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`, `fcntl.flock(LOCK_EX)`) across the complete re-read -> apply-the-named-function -> canonical-serialize -> atomic-publish sequence in one process invocation, so `mutator` is the exact transition function each step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`), applied to freshly re-read state rather than to a snapshot taken before the lock was acquired.
+**State-writer discipline (D1, item 354):** every
+`docs/ai-workflow/WORKFLOW_STATE.json` write this command performs --
+everywhere a step below says "persist the returned state" -- is performed by
+calling `workflow_state.state_transaction(repo_root, mutator)`, never by a
+separate read-then-write: `state_transaction` holds
+`.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`,
+`fcntl.flock(LOCK_EX)`) across the complete re-read ->
+apply-the-named-function -> canonical-serialize -> atomic-publish sequence in
+one process invocation, so `mutator` is the exact transition function each
+step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`),
+applied to freshly re-read state rather than to a snapshot taken before the
+lock was acquired.
 
 Enter the `AMENDING_PLAN` state of `docs/ai-workflow/MILESTONE_WORKFLOW.md`
 (`workflow-2.4.0`, `D-Plan-Amendment-1`/`-2`/`-3`).
@@ -28,11 +39,13 @@ Enter the `AMENDING_PLAN` state of `docs/ai-workflow/MILESTONE_WORKFLOW.md`
 
 **This command is user-only by construction**, the same authority shape
 `/approve-review` and `/accept-milestone` already use, and deliberately
-distinct from `USER_OVERRIDE` (`D-Plan-Amendment-2`). `disable-model-
-invocation: true` is the primary, harness-enforced control (blocks the
-SlashCommand tool). Claude must never invoke it on the user's own behalf,
-including as a step of another command's execution, independent of that
-flag. It never reads, writes, or compares against the literal string
+distinct from `USER_OVERRIDE` (`D-Plan-Amendment-2`). The literal-confirmation
+check below is the control this command carries itself, under every harness;
+`disable-model-invocation: true` is an additional layer where the harness
+enforces it, and it does not replace the check. The agent must never invoke
+this command on the user's behalf, including as a step of another command's
+execution, whatever the flag says. It never reads, writes, or compares against
+the literal string
 `USER_OVERRIDE` -- that sentinel stays reserved for `/approve-review`'s
 existing approval-basis fallback and is not reused, generalized, or
 aliased here.
@@ -87,7 +100,8 @@ and wait.
      (`XMODEL-R9-B1`). Since `2.6.0`, step 2's entry point and every claim
      publisher (`claim_checkpoint`, `adopt_claim`, an absent-claim
      `take_over_claim`) take the **repository-global lifecycle lock**
-     (primitive 9, `<git-common-dir>/ai-workflow/checkpoint-claims/<token>.lifecycle.lock`)
+     (primitive 9,
+     `<git-common-dir>/ai-workflow/checkpoint-claims/<token>.lifecycle.lock`)
      first, so this command's quiescence read and its publication are
      serialized with every claim publication in every worktree. The
      **amendment witness** it publishes (`<token>.amendment.json` beside
@@ -197,12 +211,18 @@ and wait.
 3. **Commit the state write, alone**: stage exactly
    `docs/ai-workflow/WORKFLOW_STATE.json` (never a broader `git add`) and
    create one commit carrying a single `Workflow-Work-Item: <work_item_id>`
-   trailer as the message's own final paragraph and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
+   trailer as the message's own final paragraph and nothing else is in it: any
+   `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before
+   it, separated by a blank line
    (`OPUS-R129-001`, the same rule `milestone-implement.md` step 1f and
    `approve-review.md` step 6.4 already state). No
    `Workflow-Bundle-Generation-Record`, `Workflow-Supersedes`,
    `Workflow-Checkpoint` or `Workflow-Plan-Approval` trailer -- this is
-   none of those. This commit keeps whole-file staging. **Gate-policy content check** (workflow-2.8.0, D-GP-Policy): right after this commit, call `workflow_state.assert_gate_policy_fields_unchanged_or_tightened(repo_root, <commit>)`; it refuses a commit that changed `gate_policy_adoption` without a valid, chained record or loosened `gate_policy_floor`.
+   none of those. This commit keeps whole-file staging. **Gate-policy content
+   check** (workflow-2.8.0, D-GP-Policy): right after this commit, call
+   `workflow_state.assert_gate_policy_fields_unchanged_or_tightened(repo_root,
+   <commit>)`; it refuses a commit that changed `gate_policy_adoption` without
+   a valid, chained record or loosened `gate_policy_floor`.
 
 4. **What happens next.** The work item now sits at `AMENDING_PLAN`; the
    very next `/milestone-plan [work-item-id]` invocation resumes it through

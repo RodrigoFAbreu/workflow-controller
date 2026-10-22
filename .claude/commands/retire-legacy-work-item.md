@@ -6,7 +6,13 @@ state_writer: true
 review-subject: none
 ---
 
-**State-writer discipline (D1, item 354):** the one `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs is made by calling `workflow_state.state_transaction(repo_root, mutator)`, never by a separate read-then-write: `mutator` is `lambda state: workflow_state.retire_legacy_work_item(state, <work_item_id>, <now>, <user_confirmation>)`, applied to freshly re-read state under `.ai-review/runtime/WORKFLOW_STATE.lock`.
+**State-writer discipline (D1, item 354):** the one
+`docs/ai-workflow/WORKFLOW_STATE.json` write this command performs is made by
+calling `workflow_state.state_transaction(repo_root, mutator)`, never by a
+separate read-then-write: `mutator` is `lambda state:
+workflow_state.retire_legacy_work_item(state, <work_item_id>, <now>,
+<user_confirmation>)`, applied to freshly re-read state under
+`.ai-review/runtime/WORKFLOW_STATE.lock`.
 
 Moves a dormant `LEGACY_READY` work item (imported with `import_legacy_work_item`,
 governing version `1`, technical approval basis `LEGACY_V1`) to
@@ -17,15 +23,20 @@ has since changed, so `/prepare-functional-review` would refuse to promote it
 (`LegacyAdoptionStaleApprovalError`).
 
 **This command is user-only by construction**, the same two mechanisms as
-`/accept-milestone`: (1) `disable-model-invocation: true`; (2) refuse to write
+`/accept-milestone`: (1) `disable-model-invocation: true`, an additional layer
+where the harness enforces it; (2) refuse to write
 anything unless the user's own current-turn message supplies literal
 confirmation text naming the exact `work_item_id` and the word `retirement`.
 The writer validates it itself with
-`workflow_state.validate_user_only_confirmation(text, work_item_id=..., stage="retirement")`,
+`workflow_state.validate_user_only_confirmation(text, work_item_id=...,
+stage="retirement")`,
 which requires the id as an exact token (a confirmation naming only
 `milestone-80` or `milestone-8-b` never authorizes `milestone-8`). Never
 fabricate, infer or carry over this text from a prior turn. If it is missing,
-ask for it and stop.
+ask for it and stop. Mechanism (2) is the control this command carries itself,
+under every harness; the flag does not replace it. The agent must never invoke
+this command on the user's behalf, including as a step of another command's
+execution, whatever the flag says.
 
 1. **Resolve the id** from `$ARGUMENTS` only, never from the confirmation text
    (the confirmation is checked *against* the resolved id). Refuse with a named
@@ -44,7 +55,8 @@ ask for it and stop.
    lock (a `LEGACY_READY` item has no checkpoint, claim or amendment; a
    sibling's lifecycle is covered by the unfinished-children refusal).
 4. **Commit alone**: stage exactly `docs/ai-workflow/WORKFLOW_STATE.json`, never
-   a broader `git add`, with `workflow_state.stage_scoped_state(repo_root, <work_item_id>)`
+   a broader `git add`, with `workflow_state.stage_scoped_state(repo_root,
+   <work_item_id>)`
    in place of the bare `git add` of that path (it returns `False`, and the
    ordinary single-path `git add` runs, unless another work item holds
    uncommitted residue in the state file). The message body carries one line

@@ -13,6 +13,8 @@ content correctly for each state in `docs/ai-workflow/MILESTONE_WORKFLOW.md`.
 Use this command only for a one-off review of work that isn't part of a
 tracked milestone checkpoint.
 
+The argument string is `$ARGUMENTS`: `<base-sha> <stage> [work-item-id]`.
+
 `<bundle_dir>` below is `.ai-review/<work_item_id>/current/` if a work
 item ID applies and that layout already exists, else the flat
 compatibility path `.ai-review/current/`

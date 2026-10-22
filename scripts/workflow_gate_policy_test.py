@@ -4864,6 +4864,29 @@ class TestFindingDispositions(unittest.TestCase):
                            f"{WI}-dispositions.json", "--finding-dispositions"):
                 self.assertIn(needle, message)
 
+    def test_the_refusal_shows_the_first_line_cut_to_240_and_the_listing_keeps_the_stored_text(self):
+        """workflow-2.18.1, 45a: a bounded label in the refusal; the ledger and the CLI listing are unchanged."""
+        first = "O1: " + "w" * 300
+        second = "second line of the entry"
+        long_entry = f"{first}\n  {second}\n  " + "x" * 1000
+        with AcceptanceRepo() as ev:
+            (key,) = self.record(ev, WI, long_entry)
+            stored = ev.state()["work_items"][WI]["optional_findings"][key]["text"]
+            self.assertEqual(len(stored), 1200)
+            with self.assertRaises(ws.UndispositionedFindingsError) as caught:
+                ws.assert_finding_dispositions_recorded(ev.root, ev.state(), WI)
+            message = str(caught.exception)
+            self.assertIn(f"{key} (plan LOCAL_MODEL_PLAN_REVIEW round 2): {first[:239]}\u2026. Record a disposition", message)
+            self.assertNotIn(first[:240], message)
+            self.assertNotIn(second, message)
+            report = ws.finding_dispositions_report(ev.root, ev.state(), WI)
+            self.assertEqual(report[0]["text"], stored)
+            short = ws._finding_label({"key": "F-1", "raised": report[0]["raised"], "text": "O1: a\nmore"})
+            self.assertTrue(short.endswith(": O1: a"))
+            exact = "y" * 240
+            self.assertTrue(ws._finding_label(
+                {"key": "F-1", "raised": report[0]["raised"], "text": exact}).endswith(": " + exact))
+
     def test_each_valid_disposition_satisfies(self):
         with AcceptanceRepo() as ev:
             keys = self.record(ev, WI, "O1: a", "O2: b", "O3: c")

@@ -21537,7 +21537,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-time-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-time-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 8,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -21663,10 +21663,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
-        "approved_review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+        "reviewed_bundle_id": "08a61818a153e8d16e466125d2b6114ada848bff2d7fe30ac9ad74bc9c9ac42c",
+        "approved_review_content_id": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
         "review_content_manifest": [
           {
             "path": ".github/workflows/main.yml",
@@ -21684,7 +21684,7 @@
             "path": "docs/guide/ci-and-releases.md",
             "exists": true,
             "mode": "100644",
-            "blob": "a3b73ef1b378a9a4fc05b501dcd2fd42b8c25d21"
+            "blob": "fa91d44b0014eff425d6b2d335ce321983d5abd0"
           },
           {
             "path": "docs/guide/development.md",
@@ -21738,7 +21738,7 @@
             "path": "tests/test_run_scenarios.py",
             "exists": true,
             "mode": "100644",
-            "blob": "88585799757955b8658824427f185ead86683bfd"
+            "blob": "1d72a158dcad224e8b58f8702c8e456b48942490"
           },
           {
             "path": "tests/test_run_tests.py",
@@ -21789,11 +21789,11 @@
             "blob": "b2b844e86d583b239868a4d87609657027b85895"
           }
         ],
-        "reviewed_content_commit": "d581542ea2d991f545e32af5bba8717df02fc7b7",
+        "reviewed_content_commit": "50fc0ea366137f431ade6918ea3913a856159eff",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-22T13:01:16Z",
+        "recorded_at": "2026-10-22T14:03:00Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -21823,23 +21823,23 @@
             }
           ],
           "inputs": {
-            "review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+            "review_content_id": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
             "ledger": {
               "local": {
-                "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+                "bundle_id": "08a61818a153e8d16e466125d2b6114ada848bff2d7fe30ac9ad74bc9c9ac42c",
                 "verdict": "APPROVE",
-                "round": 2,
-                "verdict_sha256": "1b92de9554df3d2c5e0e2d214062b901c39627bd5cb9dce029ad9a24ffbdaebd",
-                "ledger_entry_sha256": "4d1000175ba2a2fdfb91529fa5f0b9b325361d3fc047ab2d3a0407439ae81721",
+                "round": 4,
+                "verdict_sha256": "aea0f729a007e34b48844e9ae955e2ef641a57f38561d3226b2e0b4836b73760",
+                "ledger_entry_sha256": "0a173b423d5b58810b7a51c4666af607e98e119027624b1f76658d6058d8fdf5",
                 "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+                "bundle_id": "08a61818a153e8d16e466125d2b6114ada848bff2d7fe30ac9ad74bc9c9ac42c",
                 "verdict": "APPROVE",
-                "round": 2,
-                "verdict_sha256": "975be2b4dec5ba4bd1755bbc6c17c9c3eb03baeb85440dd40956c1ef19a135e8",
-                "ledger_entry_sha256": "8f06ce9026f0dac80a8c5eca0c8dd505a9b199d3ca5840250d6194bce8339468",
+                "round": 4,
+                "verdict_sha256": "4f6ccdccc0a53115ebc39f2c71fc5a2594c1404b271d4e87afb3bc0323dc0bf6",
+                "ledger_entry_sha256": "641b30b7cddde7cfb44fba5384448bf26cb02e349f25ca5fe992c1d9d664805e",
                 "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
@@ -21850,7 +21850,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-10-22T13:01:16Z",
+          "evaluated_at": "2026-10-22T14:03:00Z",
           "workflow_release": "2.18.2"
         }
       },
@@ -21884,12 +21884,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 3,
-          "external": 1
+          "local": 4,
+          "external": 2
         }
       },
-      "state_revision": 51,
-      "last_transition": "2026-10-22T13:48:57Z",
+      "state_revision": 54,
+      "last_transition": "2026-10-22T14:03:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -22254,25 +22254,39 @@
               "at": "2026-10-22T12:49:27Z"
             }
           ]
+        },
+        "F-a0f150bae732": {
+          "digest": "a0f150bae732897940d31d9f5fee9fcc6b21feae0146f274afce1066fb33ff19",
+          "text": "**`docs/ROADMAP.md` line 130 (C2b row) keeps the pre-milestone \"46 after the timings refresh of 2026-10-22\" next\n   to the new \"20.9 after it\".** Both refreshes are dated 2026-10-22, so a reader can take the 46 minutes and the\n   20.9 minutes as measurements of the same refresh. The 46-minute text predates this milestone (present at base\n   `cfe51e8`). Fix when convenient: name the earlier one, for example \"46 after the first timings refresh of\n   2026-10-22\", in the post-C2b docs pull request.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T13:58:20Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+        "review_content_id": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+          "bundle_id": "08a61818a153e8d16e466125d2b6114ada848bff2d7fe30ac9ad74bc9c9ac42c",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-22T12:49:27Z",
-          "verdict_sha256": "1b92de9554df3d2c5e0e2d214062b901c39627bd5cb9dce029ad9a24ffbdaebd",
+          "round": 4,
+          "completed_at": "2026-10-22T13:58:20Z",
+          "verdict_sha256": "aea0f729a007e34b48844e9ae955e2ef641a57f38561d3226b2e0b4836b73760",
           "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+          "bundle_id": "08a61818a153e8d16e466125d2b6114ada848bff2d7fe30ac9ad74bc9c9ac42c",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-22T12:59:38.088245+00:00",
-          "verdict_sha256": "975be2b4dec5ba4bd1755bbc6c17c9c3eb03baeb85440dd40956c1ef19a135e8",
+          "round": 4,
+          "completed_at": "2026-10-22T14:01:35Z",
+          "verdict_sha256": "4f6ccdccc0a53115ebc39f2c71fc5a2594c1404b271d4e87afb3bc0323dc0bf6",
           "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }

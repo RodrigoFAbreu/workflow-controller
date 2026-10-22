@@ -21663,7 +21663,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
         "approved_review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
@@ -21888,8 +21888,8 @@
           "external": 1
         }
       },
-      "state_revision": 47,
-      "last_transition": "2026-10-22T13:01:16Z",
+      "state_revision": 48,
+      "last_transition": "2026-10-22T13:44:26Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

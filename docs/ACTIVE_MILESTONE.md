@@ -5,7 +5,7 @@
 **In progress.** `workflow-controller-claude-build-verify` (C10e, `docs/ROADMAP.md`; issues
 [#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113) and
 [#114](https://github.com/RodrigoFAbreu/workflow-controller/issues/114)) has implemented all four checkpoints
-(CP1-CP4) and awaits implementation review.
+(CP1-CP4); functional round 1 found one blocking defect (F1), fixed here, and awaits implementation review again.
 
 - `workflow-controller verify-claude [--force]` runs the live sandbox enforcement probes against the `claude` a
   launch would run and records its digest in `verified-claude-builds.json` in the runtime root only when every probe
@@ -24,7 +24,7 @@ Implementation review of C10e, then acceptance and the 1.19.0 release. Then A2, 
 
 ## Functional review checklist
 
-Work item `workflow-controller-claude-build-verify` (C10e), implementation revision 3. The flows below run offline
+Work item `workflow-controller-claude-build-verify` (C10e), implementation revision 4 (functional round 1 fix). The flows below run offline
 from a read-only clone: the sandbox has no network, a refusing `gh`, `claude`, `codex` and `ssh`, and writes only go
 to the output folder and the scratch `HOME`, `XDG_*` and `TMPDIR`. The live probes need a real `claude` and a model,
 so they are out of the tester's reach (see the limitations); the flows exercise the command's contract around them.
@@ -43,8 +43,19 @@ so they are out of the tester's reach (see the limitations); the flows exercise 
 | 5 | Put a symlink `$S/bin/claude2 -> $S/bin/claude` and run `--claude-binary $S/bin/claude2 verify-claude` (the global option goes before the subcommand) | Exit 20; the resolved path printed is the real file, not the link. If it differs from the `claude` on `PATH`, the output notes that a launch runs the `PATH` one. |
 | 6 | Create `$S/rt/verified-claude-builds.json` as a symlink to a file in `$S`, as a group/world-writable file, and as malformed JSON; rerun flow 2 each time | Each is ignored (never admits a build), exit 20 as in flow 2; the record's target is never written. |
 | 7 | `python3 -P -m controller --help` | `verify-claude` is listed; it is not among the read-only commands. |
-| 8 | `python3 -m unittest tests.test_claude_build` and `tests.test_cli` (from `$C`, `PYTHONPATH` unset, `-P`) | Pass: the fake-`claude` cases cover record/admit, every broken probe failing closed, `build_changed`, symlink re-pointing, the trust boundary and the settings file untouched. |
+| 8 | `python3 -m unittest tests.test_claude_build tests.test_cli` (from `$C`, `PYTHONPATH` unset; no `-P`, which hides `tests`) | Pass: the fake-`claude` cases cover record/admit, every broken probe failing closed, `build_changed`, symlink re-pointing, the trust boundary and the settings file untouched. |
 | 9 | `python3 tools/check_docs.py` | Passes; `docs/guide/commands.md#verify-claude`, `install.md`, `compatibility.md`, `common-problems.md`, `exit-codes.md`, `guide/runtime.md` and `guide/automation.md` describe the command, exit 20 and the record consistently. |
+
+**Functional round 1 (resolved).**
+- F1 (blocking, defect, fixed in `controller/claude_build.py`): the probes ran with `TMPDIR` inside the runtime root, so
+  at a normal root depth Claude's bridge sockets exceeded the 107-byte limit and every probe line was missing. The
+  probes now use a short private `wcf-*` `TMPDIR` (as the functional launch does), removed with the run; no short root
+  refuses as `host`. A tool result of `Sandbox is required but failed to initialize` is now one inconclusive cause.
+  Regression tests: deep runtime root keeps the longest socket path in the limit; no short root refuses before any
+  launch; a failed sandbox is inconclusive. **Re-test:** `verify-claude --force` against 2.1.303 at a normal-depth root
+  records it; 2.1.308 should fail for its own reason (#129).
+- F2 (optional, fixed): the flow 8 command above no longer uses `-P`.
+- F3 (optional, fixed): the empty `verify-claude/` area folder is removed after a run when no other run uses it.
 
 **Known limitations / out of scope.**
 - Recording a digest needs a real `claude` and a model; the sandbox cannot do it. A person (or the opt-in

@@ -13,6 +13,7 @@ import fcntl
 import json
 import os
 import secrets
+import stat
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -511,6 +512,73 @@ def write_private_bytes(root: Path, rel_path: str | os.PathLike, data: bytes) ->
     finally:
         tmp_path.unlink(missing_ok=True)
     return full_path
+
+
+#: The verified-Claude-builds record's lock file: ``<runtime_root>/
+#: verified-claude-builds.lock`` guards ``verified-claude-builds.json``.
+BUILDS_LOCK_NAME = "verified-claude-builds.lock"
+
+
+@contextlib.contextmanager
+def builds_lock(runtime_root: Path) -> Iterator[Path]:
+    """Hold the exclusive ``flock`` on the verified-builds lock for the whole
+    read-merge-write of that record (as :func:`usage_lock` does for the usage
+    record), so two concurrent verifications cannot lose an entry."""
+    fd = open_lock_file(runtime_root, BUILDS_LOCK_NAME)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield Path(runtime_root) / BUILDS_LOCK_NAME
+    finally:
+        os.close(fd)
+
+
+def read_owned_file(path: Path) -> bytes:
+    """Read ``path`` through one ``O_NOFOLLOW`` descriptor and return its bytes,
+    after checking on that descriptor (``fstat``) that it is a regular file owned
+    by the effective user with no group or world write bit. A symlink, a
+    replaced or foreign-owned file, or one writable by others raises
+    ``OSError``; a swap between the check and the read cannot matter because
+    both use the same descriptor."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError(f"{path} is not a regular file")
+        if info.st_uid != os.geteuid():
+            raise OSError(f"{path} is owned by another user")
+        if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            raise OSError(f"{path} is writable by group or others")
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            return handle.read()
+    finally:
+        os.close(fd)
+
+
+def write_private_json_nofollow(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
+    """Atomically write ``obj`` as canonical JSON to ``<runtime_root>/<rel_path>``
+    with mode ``0o600``, never through a symlink: when the final component is a
+    symlink the write is refused (``OSError``) and its target is left untouched.
+    The parent directory is containment-checked and resolved; the file itself is
+    replaced by name, not followed."""
+    data = json.dumps(obj, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    full_path = Path(runtime_root) / rel_path
+    _assert_contained(runtime_root, full_path.parent)
+    parent = full_path.parent.resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    target = parent / full_path.name
+    if os.path.islink(target):
+        raise OSError(f"refusing to write through the symlink {target}")
+    tmp_path = parent / f".{target.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, target)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return target
 
 
 def replace_external_file(target: Path, data: bytes, *, mode: int) -> None:

@@ -926,13 +926,15 @@ VERIFIED_NATIVE_BUILDS: dict[str, str] = {
 }
 
 
-def _is_native_executable(path: str, *, verified: Mapping[str, str] | None = None) -> bool:
+def _is_native_executable(path: str, *, verified: Mapping[str, str] | None = None,
+                          recorded: Iterable[str] = ()) -> bool:
     """Whether the file ``path`` resolves to is a verified native Claude build:
     an ELF binary whose SHA-256 digest is one of :data:`VERIFIED_NATIVE_BUILDS`
-    (or ``verified``). The digest is taken from the file itself, the one the
-    launch will execute, so a launcher, a script, a package CLI bundle or a
-    newer unverified build is refused (I1)."""
-    digests = set((VERIFIED_NATIVE_BUILDS if verified is None else verified).values())
+    (or ``verified``) or one of the ``recorded`` digests of the Controller's
+    runtime root (``claude_build``). The digest is taken from the file itself,
+    the one the launch will execute, so a launcher, a script, a package CLI
+    bundle or a newer unverified build is refused (I1)."""
+    digests = set((VERIFIED_NATIVE_BUILDS if verified is None else verified).values()) | set(recorded)
     digest = hashlib.sha256()
     try:
         with open(os.path.realpath(path), "rb") as handle:
@@ -946,15 +948,14 @@ def _is_native_executable(path: str, *, verified: Mapping[str, str] | None = Non
     return digest.hexdigest() in digests
 
 
-def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run,
-                 is_native: Callable[[str], bool] = _is_native_executable) -> None:
-    """The part of the launch probe that needs no model: every program of
-    :data:`REQUIRED_PROGRAMS` is on ``PATH``, ``bwrap`` can make an
-    unprivileged namespace, the kernel accepts a seccomp filter, and ``claude``
-    is the native build. The CLI itself only warns when its seccomp helper is
-    missing and then runs without Unix-socket blocking, so ``failIfUnavailable``
-    cannot be relied on for that component (D2). Raises
-    :class:`TesterUnavailable` naming what is missing."""
+def host_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run) -> None:
+    """The host part of the launch probe, which needs no model and does not look
+    at ``claude``: every program of :data:`REQUIRED_PROGRAMS` is on ``PATH``,
+    ``bwrap`` can make an unprivileged namespace and the kernel accepts a
+    seccomp filter. The CLI itself only warns when its seccomp helper is missing
+    and then runs without Unix-socket blocking, so ``failIfUnavailable`` cannot
+    be relied on for that component (D2). Raises :class:`TesterUnavailable`
+    naming what is missing."""
     missing = [name for name in REQUIRED_PROGRAMS if which(name) is None]
     if missing:
         raise TesterUnavailable(f"the sandbox needs {', '.join(missing)} on PATH, which is not installed",
@@ -974,10 +975,45 @@ def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Call
     if result.returncode != 0:
         raise TesterUnavailable("the kernel does not accept a seccomp filter here, so the sandbox cannot block "
                                 "Unix sockets")
-    claude = which("claude")
-    if claude is None or not is_native(claude):
-        raise TesterUnavailable("the sandbox's Unix-socket blocking needs a verified native claude build (one of "
-                                f"{', '.join(VERIFIED_NATIVE_BUILDS)}); {claude or 'claude'} is not one")
+
+
+def identity_check(claude: str | None, *, is_native: Callable[[str], bool] | None = None,
+                   recorded: Iterable[str] = (), record_note: str | None = None) -> None:
+    """The identity part of the launch probe: ``claude`` is an ELF whose digest is
+    built in or recorded. The refusal names the remedy (``verify-claude``), the
+    digest of the file and, when a record exists that could not be trusted, that
+    it was ignored (D6)."""
+    admitted = is_native if is_native is not None else (lambda path: _is_native_executable(path, recorded=recorded))
+    if claude is not None and admitted(claude):
+        return
+    digest = None
+    if claude is not None:
+        try:
+            hasher = hashlib.sha256()
+            with open(os.path.realpath(claude), "rb") as handle:
+                while chunk := handle.read(1 << 22):
+                    hasher.update(chunk)
+            digest = hasher.hexdigest()
+        except OSError:
+            digest = None
+    text = ("the sandbox's Unix-socket blocking needs a verified native claude build (built in: "
+            f"{', '.join(VERIFIED_NATIVE_BUILDS)}); {claude or 'claude'}"
+            + (f" (sha256 {digest})" if digest else "")
+            + " is not one. Run `workflow-controller verify-claude` to check this build and admit it")
+    if record_note:
+        text += f". Note: {record_note}"
+    raise TesterUnavailable(text, evidence={"claude": claude, "sha256": digest})
+
+
+def static_probe(*, which: Callable[[str], str | None] = shutil.which, run: Callable[..., Any] = subprocess.run,
+                 is_native: Callable[[str], bool] | None = None, recorded: Iterable[str] = (),
+                 record_note: str | None = None, claude: str | None = None) -> None:
+    """The part of the launch probe that needs no model: :func:`host_probe`, then
+    :func:`identity_check` of ``claude`` (the binary the launch will execute;
+    ``which("claude")`` when not given)."""
+    host_probe(which=which, run=run)
+    identity_check(claude if claude is not None else which("claude"), is_native=is_native, recorded=recorded,
+                   record_note=record_note)
 
 
 def result_event_text(event: Mapping[str, Any]) -> str:

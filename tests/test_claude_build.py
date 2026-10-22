@@ -1,0 +1,248 @@
+"""The record of verified Claude builds and the launch that admits them
+(``workflow-controller-claude-build-verify`` CP1, D3, D4, D6). No test reaches a
+model: the launch runs over ``tests/fake_functional_tester.py``."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import sys
+import tempfile
+import types
+import unittest
+from pathlib import Path
+from unittest import mock
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from controller import claude_build as cb  # noqa: E402
+from controller import functional_review as fr  # noqa: E402
+from controller import review  # noqa: E402
+from tests import fake_functional_tester as fake  # noqa: E402
+from tests import test_functional_sandbox as sandbox_tests  # noqa: E402
+
+DIGEST = "ab" * 32
+
+
+def elf(tag: str) -> bytes:
+    return b"\x7fELF\x02" + b"x" * 4000 + tag.encode()
+
+
+def ok(code=0, err=b""):
+    return subprocess.CompletedProcess([], code, b"", err)
+
+
+class RecordTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name, "rt")
+        self.root.mkdir()
+
+    def write(self, obj, mode=0o600) -> Path:
+        path = self.root / cb.RECORD_NAME
+        path.write_text(obj if isinstance(obj, str) else json.dumps(obj))
+        path.chmod(mode)
+        return path
+
+    def test_a_missing_record_is_empty_without_a_reason(self) -> None:
+        self.assertEqual(cb.read_verified(self.root), ({}, None))
+
+    def test_a_recorded_build_reads_back_and_the_file_is_private(self) -> None:
+        path = cb.record_verified(self.root, DIGEST, {"version": "9.9.9"})
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertEqual(cb.read_verified(self.root), ({DIGEST: {"version": "9.9.9"}}, None))
+
+    def test_recording_merges_with_what_is_there(self) -> None:
+        cb.record_verified(self.root, DIGEST, {"version": "1"})
+        cb.record_verified(self.root, "cd" * 32, {"version": "2"})
+        self.assertEqual(sorted(cb.read_verified(self.root)[0]), sorted([DIGEST, "cd" * 32]))
+
+    def test_a_damaged_record_admits_nothing_and_says_why(self) -> None:
+        cases = {"not json": "{{", "wrong schema": {"schema_version": 2, "builds": {}},
+                 "builds not a map": {"schema_version": 1, "builds": []},
+                 "bad digest": {"schema_version": 1, "builds": {"nope": {}}},
+                 "entry not an object": {"schema_version": 1, "builds": {DIGEST: 1}}}
+        for name, content in cases.items():
+            with self.subTest(name):
+                self.write(content)
+                builds, note = cb.read_verified(self.root)
+                self.assertEqual(builds, {})
+                self.assertIn("was ignored", note)
+
+    def test_a_record_writable_by_others_is_ignored(self) -> None:
+        for mode in (0o620, 0o602):
+            with self.subTest(mode=oct(mode)):
+                self.write({"schema_version": 1, "builds": {DIGEST: {}}}, mode=mode)
+                builds, note = cb.read_verified(self.root)
+                self.assertEqual(builds, {})
+                self.assertIn("was ignored", note)
+
+    def test_a_record_owned_by_another_user_is_ignored(self) -> None:
+        self.write({"schema_version": 1, "builds": {DIGEST: {}}})
+        with mock.patch("os.geteuid", return_value=os.geteuid() + 1):
+            builds, note = cb.read_verified(self.root)
+        self.assertEqual(builds, {})
+        self.assertIn("was ignored", note)
+
+    def test_a_symlinked_record_is_ignored_and_never_written_through(self) -> None:
+        elsewhere = Path(self.tmp.name, "tester-output")
+        elsewhere.mkdir()
+        target = elsewhere / "record.json"
+        target.write_text(json.dumps({"schema_version": 1, "builds": {DIGEST: {}}}))
+        target.chmod(0o600)
+        (self.root / cb.RECORD_NAME).symlink_to(target)
+        builds, note = cb.read_verified(self.root)
+        self.assertEqual(builds, {})
+        self.assertIn("was ignored", note)
+        before = target.read_bytes()
+        with self.assertRaises(OSError):
+            cb.record_verified(self.root, "cd" * 32, {})
+        self.assertEqual(target.read_bytes(), before)
+
+    def test_a_record_swapped_for_a_symlink_after_the_check_is_not_read(self) -> None:
+        path = self.write({"schema_version": 1, "builds": {DIGEST: {}}})
+        other = Path(self.tmp.name, "other.json")
+        other.write_text(json.dumps({"schema_version": 1, "builds": {"cd" * 32: {}}}))
+        real_open = os.open
+
+        def swapping_open(name, flags, *args, **kwargs):
+            if Path(name) == path:
+                path.unlink()
+                path.symlink_to(other)
+            return real_open(name, flags, *args, **kwargs)
+
+        with mock.patch("os.open", swapping_open):
+            builds, note = cb.read_verified(self.root)
+        self.assertEqual(builds, {})
+        self.assertIn("was ignored", note)
+
+
+class IdentityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.claude = Path(self.tmp.name, "claude")
+        self.claude.write_bytes(elf("recorded build"))
+        self.digest = hashlib.sha256(self.claude.read_bytes()).hexdigest()
+
+    def probe(self, **kwargs) -> None:
+        fr.static_probe(which=lambda name: f"/usr/bin/{name}", run=mock.Mock(return_value=ok()),
+                        claude=str(self.claude), **kwargs)
+
+    def test_a_recorded_digest_passes_and_the_same_build_is_refused_without_it(self) -> None:
+        self.probe(recorded={self.digest})
+        with self.assertRaises(fr.TesterUnavailable) as caught:
+            self.probe()
+        text = str(caught.exception)
+        self.assertIn("verify-claude", text)
+        self.assertIn(self.digest, text)
+        self.assertEqual(caught.exception.code, fr.GATE_TESTER_UNAVAILABLE)
+
+    def test_the_stop_text_says_when_a_record_was_ignored(self) -> None:
+        with self.assertRaises(fr.TesterUnavailable) as caught:
+            self.probe(recorded=(), record_note="verified-claude-builds.json was ignored: boom")
+        self.assertIn("was ignored: boom", str(caught.exception))
+
+    def test_a_recorded_digest_never_admits_a_non_elf(self) -> None:
+        script = Path(self.tmp.name, "script")
+        script.write_text("#!/bin/sh\n")
+        digest = hashlib.sha256(script.read_bytes()).hexdigest()
+        self.assertFalse(fr._is_native_executable(str(script), recorded={digest}))
+
+    def test_the_host_probe_and_identity_check_compose_into_the_static_probe(self) -> None:
+        fr.host_probe(which=lambda name: f"/usr/bin/{name}", run=mock.Mock(return_value=ok()))
+        with self.assertRaises(fr.TesterUnavailable):
+            fr.host_probe(which=lambda name: None, run=mock.Mock())
+        fr.identity_check(str(self.claude), recorded={self.digest})
+
+
+class LaunchTests(sandbox_tests.Fixture):
+    """``review.launch_functional`` over two different ``claude`` files."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.logs = {}
+        self.wrappers = {}
+        for name in ("a", "b"):
+            self.logs[name] = self.tmp / f"{name}.log"
+            self.wrappers[name] = fake.write_binary(self.tools, {"log": str(self.logs[name])}, name=f"claude-{name}")
+        self.link = self.bin / "claude"
+        self.link.symlink_to(self.wrappers["a"])
+
+    def launch_default(self, *, probe=None, job="job-1", runtime=None):
+        env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(fr, "host_probe"):
+            return review.launch_functional(
+                candidate=self.candidate, flows=self.flows, runtime_root=runtime or self.runtime, job_id=job,
+                work_item_id="item-1", operator_home=self.home, model=sandbox_tests.MODEL, effort="medium",
+                timeout=60, probe=probe, inherited_env={})
+
+    def test_the_build_whose_digest_is_recorded_is_launched_and_the_same_build_unrecorded_is_not(self) -> None:
+        digest = hashlib.sha256(self.wrappers["a"].read_bytes()).hexdigest()
+        with mock.patch.object(fr, "_is_native_executable", wraps=fr._is_native_executable) as native:
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                self.launch_default()
+            self.assertIn(digest, str(caught.exception))
+            native.assert_called()
+        self.assertFalse(self.logs["a"].exists())
+        # The wrapper is a script: the identity check wants an ELF, so admit it through the digest check seam.
+        cb.record_verified(self.runtime, digest, {"version": "t"})
+        with mock.patch.object(fr, "_is_native_executable",
+                               side_effect=lambda path, **kw: hashlib.sha256(Path(os.path.realpath(path)).read_bytes()
+                                                                              ).hexdigest() in kw["recorded"]):
+            result = self.launch_default()
+        self.settle(result)
+        self.assertTrue(self.logs["a"].exists())
+
+    def test_a_malformed_record_does_not_admit_and_the_stop_text_says_it_was_ignored(self) -> None:
+        (self.runtime / cb.RECORD_NAME).write_text("{{")
+        (self.runtime / cb.RECORD_NAME).chmod(0o600)
+        with self.assertRaises(fr.TesterUnavailable) as caught:
+            self.launch_default()
+        self.assertIn("was ignored", str(caught.exception))
+
+    def test_the_probe_gets_the_resolved_binary_and_a_symlink_re_pointed_after_it_still_runs_that_file(self) -> None:
+        seen = {}
+
+        def static(**kwargs):
+            seen.update(kwargs)
+            self.link.unlink()
+            self.link.symlink_to(self.wrappers["b"])  # an installer re-points the link after the probe
+
+        with mock.patch.object(fr, "static_probe", static):
+            result = self.launch_default()
+        self.settle(result)
+        self.assertEqual(seen["claude"], os.path.realpath(self.wrappers["a"]))
+        self.assertTrue(self.logs["a"].exists())
+        self.assertFalse(self.logs["b"].exists())
+
+    def test_the_launch_resolves_claude_on_path_and_ignores_the_binary_name_of_the_worker(self) -> None:
+        with mock.patch.object(fr, "static_probe") as static:
+            result = self.launch_default()
+        self.settle(result)
+        self.assertEqual(static.call_args.kwargs["claude"], os.path.realpath(self.wrappers["a"]))
+
+    def test_a_runtime_root_inside_the_tester_s_folders_refuses_the_launch(self) -> None:
+        real = fr.build_sandbox
+
+        def widened(*args, **kwargs):
+            box = real(*args, **kwargs)  # an output folder that contains the runtime root
+            return types.SimpleNamespace(base=box.base, clone=box.clone, out=self.tmp, writable=box.writable,
+                                         refused=box.refused)
+
+        with mock.patch.object(fr, "static_probe"), mock.patch.object(fr, "build_sandbox", widened):
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                self.launch_default()
+        self.assertIn("runtime root", str(caught.exception))
+        self.assertFalse((self.runtime / fr.SANDBOX_AREA / "job-1").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

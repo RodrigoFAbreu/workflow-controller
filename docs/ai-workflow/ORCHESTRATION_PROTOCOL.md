@@ -41,7 +41,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0** and **Workflow 2.16.0** (both protocol `1.5`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0**, **Workflow 2.16.0**, **Workflow 2.17.0**, **Workflow 2.18.0**, **Workflow 2.18.1** and **Workflow 2.18.2** (all protocol `1.5`).
 
 ## 2. Invocation and the envelope
 
@@ -61,7 +61,7 @@ stdout is exactly one JSON document, the **envelope**
 ```json
 {
   "protocol": {"name": "workflow-orchestration", "version": "1.5"},
-  "workflow_release": "2.16.0",
+  "workflow_release": "2.18.2",
   "operation": "next-action",
   "ok": true,
   "result": { "...": "operation-specific" }
@@ -283,11 +283,11 @@ a **decision**:
 ```json
 {"basis": { "...": "section 4" },
  "snapshot": {"phase": "…", "governing_workflow_version": "…", "work_item_type": "…",
-              "plan_revision": 1, "implementation_revision": null,
+              "plan_revision": 2, "implementation_revision": null,
               "current_checkpoint_id": null, "next_checkpoint_id": "CP2",
               "registry_complete": false, "plan_approval": "CURRENT",
               "technical_approval": null, "plan_review_publication_status": null,
-              "review_round": {"plan": 3, "implementation": null, "current": null,
+              "review_round": {"plan": 2, "implementation": null, "current": null,
                               "plan_local": 2, "plan_external": 2,
                               "implementation_local": 0,
                               "implementation_external": 0}},
@@ -1174,7 +1174,8 @@ under automatic gates). A courier is admissible when, and only when:
 4. it couriers only the two verdict kinds at rows 14 and 28, never resolves a
    `user_only` action, and under a human gate policy the approval stays a
    person's (recording a verdict is not an approval);
-5. it is opt-in; unset, the gate stops as today.
+5. it is enabled by the repository owner's configuration or by an explicit Controller
+   default the owner accepted at setup; unset, the gate stops as today.
 
 ## 9. Reserved for a later protocol version
 
@@ -1184,7 +1185,7 @@ under automatic gates). A courier is admissible when, and only when:
 
 ## 10. Compatibility notes
 
-- **Protocol `1.5`** (Workflow 2.15.0; Workflow 2.16.0 keeps it: no snapshot field,
+- **Protocol `1.5`** (Workflow 2.15.0; Workflow 2.16.0, 2.17.0, 2.18.0, 2.18.1 and 2.18.2 keep it: no snapshot field,
   row, action, envelope key or classification changed). The `review_round` object of an item's
   `next-action` snapshot gains four additive properties after `current`:
   `plan_local`, `plan_external`, `implementation_local` and

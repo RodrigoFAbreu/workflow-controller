@@ -162,6 +162,15 @@ precondition (INV-5). Read `accept-milestone.md` beside this section: it runs
 that command's steps 0, 2, 2a, 2b and 3 to 8 **unchanged, cited by number**,
 and this stage states only what differs.
 
+0. **Backlog pre-flight, before the first step** (workflow-2.17.0, `D-Accept`).
+   Step 1 below stores the pull-request fact, so run `python3
+   scripts/workflow_backlog.py preflight-accept <work-item-id>` first (it
+   writes nothing; `{"declared": false}` means nothing more to do, and a
+   remediation child skips the roadmap step as `/accept-milestone` does). On
+   a refusal report stderr verbatim (every diagnostic and the next step) and stop: nothing is
+   stored, not even the pull-request fact, and `WORKFLOW_STATE.json` is
+   byte-identical. The same pre-flight is `/accept-milestone` step 2a's
+   **Backlog pre-flight** bullet.
 1. **Open with the Workflow's own query.** The step every acceptance opens
    with: `workflow_state.satisfy_acceptance_gate(repo_root, work_item_id,
    now=<now>)` runs, inside its one `state_transaction`, the fixed GitHub query
@@ -216,6 +225,22 @@ and this stage states only what differs.
    (`workflow_state.acceptance_satisfied_by_trailer(record)`) and nothing else;
    any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph
    before it, separated by a blank line (`OPUS-R129-001`).
+   For a declared backlog, `/accept-milestone` steps 3 to 7 carry the backlog
+   branch: step 3 runs `python3 scripts/workflow_backlog.py accept <id>`
+   (never a hand edit of the page) and the completion commit stages the two
+   paths it printed with step 5a's. **When `accept` refuses** at this step the
+   state is already complete (step 3 above) and this stage cannot be re-run.
+   Report the refusal and write nothing else. The recovery: fix the cause (the
+   file and the page are restored), run `python3 scripts/workflow_backlog.py
+   accept <id>` by hand, then continue **this stage** at step 4 (which re-runs
+   `accept`, an idempotent regeneration, then `/accept-milestone` steps 4 to 8
+   with the printed paths staged by the completion commit, which carries
+   `Workflow-Gate-Satisfied-By: policy:<first 12 characters of the policy
+   digest>` as well as `Workflow-Work-Item: <id>`), then step 5 (the floor,
+   in its own commit, when the observed setting is stricter than
+   `gate_policy_floor`) and step 6 (report the milestone as accepted **by
+   policy**). `/accept-milestone`'s human-path recovery is not a substitute:
+   it produces a commit without the policy trailer and records no floor.
 5. **Record the floor, after the satisfying commit**, exactly as step 5 of "The
    policy evaluation, then the stage's transaction" says (`LPR-R23-003`:
    evaluate against the virtual floor, perform the satisfying commit, and only

@@ -55,11 +55,13 @@ from pathlib import Path
 from unittest import mock
 
 import workflow_fingerprint as fingerprint
+import workflow_backlog as wb
 import workflow_state as ws
 import workflow_test_harness as harness
 
 SCRIPT_FILES = (
     "workflow_state.py",
+    "workflow_backlog.py",
     "workflow_fingerprint.py",
     "workflow_gate_policy.py",
     "workflow_forge.py",
@@ -9896,6 +9898,644 @@ class CheckpointAnchorsEarlyProduct(CheckpointAnchorsEarlyProcess):
 
     def test_standin_text_refuses_a_script_without_exactly_one_block(self):
         raise unittest.SkipTest("the stand-in pin is type-independent; run once, on the process item")
+
+
+# ===========================================================================
+# W. The structured backlog file (workflow-2.17.0, backlog-file, CP3)
+# ===========================================================================
+
+BACKLOG_FILE = "docs/backlog.yaml"
+BACKLOG_TEXT = """\
+version: 1
+items:
+  - id: proc-item
+    title: The process item
+    status: next
+    order: 1
+  - id: later-item
+    title: A later item
+    status: next
+    order: 2
+    depends_on: [proc-item]
+"""
+BACKLOG_GENERATOR = ["python3", "scripts/gen_roadmap.py"]
+BACKLOG_GENERATOR_SCRIPT = """\
+import os
+import sys
+
+mode = os.environ.get("GEN_MODE", "")
+if mode == "fail":
+    sys.exit(3)
+if mode == "nopage":
+    sys.exit(0)
+if mode == "rmfile":
+    os.remove("docs/backlog.yaml")
+    sys.exit(0)
+if mode == "dirfile":
+    os.remove("docs/backlog.yaml")
+    os.mkdir("docs/backlog.yaml")
+    sys.exit(0)
+if mode == "chmodpage":
+    os.chmod("docs/ROADMAP.md", 0o600)
+    sys.exit(3)
+if mode == "chmodfile":
+    os.chmod("docs/backlog.yaml", 0o600)
+    sys.exit(3)
+digest = os.environ["WORKFLOW_BACKLOG_SHA256"]
+rows = [line for line in open("docs/backlog.yaml") if line.lstrip().startswith(("- id:", "title:", "status:"))]
+with open("docs/ROADMAP.md", "w") as page:
+    page.write("# Roadmap\\n<!-- backlog-sha256: " + digest + " -->\\n" + "".join(rows))
+"""
+
+
+def _no_query(argv, timeout):
+    raise AssertionError("the Workflow's own GitHub query must not run")
+
+
+class BacklogLifecycle(MatrixCase):
+    """The declared-backlog lifecycle, driven the way `/milestone-plan`,
+    `/accept-milestone` and `/satisfy-gate acceptance` say (D-Select,
+    D-Accept): the script's real command line, the real state writers, a real
+    completion commit. An undeclared repository is `BacklogUndeclared`."""
+
+    work_item_type = "process"
+    generator = None
+    #: Environment for the script's generator child process (`GEN_MODE`).
+    env = None
+
+    def setUp(self):
+        self.env = {}
+        self.scratch = Scratch()
+        self.addCleanup(self.scratch.cleanup)
+        self.item = Item(self.scratch, self.work_item_type)
+        self.seed_declared()
+
+    # ---------------- the repository ----------------
+
+    def declaration(self, **extra):
+        declaration = {"file": BACKLOG_FILE, **extra}
+        if self.generator:
+            declaration["generator"] = self.generator
+        return declaration
+
+    def seed_declared(self, text=BACKLOG_TEXT):
+        config = {"schema_version": 1, "default_workflow_version": "2.1",
+                  "supported_versions": ["1", "2.1"], "backlog": self.declaration()}
+        files = {"docs/ai-workflow/WORKFLOW_CONFIG.json": json.dumps(config, indent=2) + "\n",
+                 BACKLOG_FILE: text, "scripts/gen_roadmap.py": BACKLOG_GENERATOR_SCRIPT}
+        self.item.seed(extra_files=files)
+        self.run_backlog("generate", "--replace")
+        self.scratch.commit("chore: generate the roadmap page")
+
+    def run_backlog(self, *args, check=True):
+        done = subprocess.run(["python3", "-I", "scripts/workflow_backlog.py", *args],
+                              cwd=self.scratch.root, capture_output=True, text=True,
+                              env={**os.environ, **self.env})
+        if check and done.returncode != 0:
+            raise AssertionError(f"{args}: {done.returncode}\n{done.stdout}\n{done.stderr}")
+        return done
+
+    def refusal_code(self, done):
+        self.assertEqual(done.returncode, 2, done.stderr)
+        lines = done.stderr.strip().split("\n")
+        self.assertTrue(lines[0].startswith("error: ") and lines[1].startswith("next step: "), done.stderr)
+        return lines[0].split(": ", 2)[1]
+
+    def tree(self):
+        out = {}
+        for path in sorted(self.scratch.root.rglob("*")):
+            rel = path.relative_to(self.scratch.root)
+            if rel.parts[0] in (".git", ".ai-review", "__pycache__") or "__pycache__" in rel.parts:
+                continue
+            if path.is_symlink():
+                out[str(rel)] = ("link", os.readlink(path))
+            elif path.is_file():
+                out[str(rel)] = path.read_bytes()
+        return out
+
+    def state_bytes(self):
+        return (self.scratch.root / "docs/ai-workflow/WORKFLOW_STATE.json").read_bytes()
+
+    def declarations(self):
+        return ws.generate_artifacts_declarations(
+            self.item.wid, self.item.plan_path, self.item.registry_path, self.item.mapping_path,
+            work_item_type=self.item.wtype, repo_root=self.scratch.root,
+        )
+
+    def reach_plan_approved(self):
+        item = self.item
+        item.milestone_plan(artifacts=self.declarations())
+        item.generate_plan_bundle()
+        item.write_feedback("APPROVE")
+        item.record_plan_reviews()
+        commit = item.approve_plan()
+        self.assertEqual(item.entry()["phase"], "IMPLEMENTING")
+        return commit
+
+    def reach_acceptance(self):
+        self.reach_technical_approved()
+        self.item.prepare_functional_review()
+        self.assertEqual(self.run_backlog("status").returncode, 0)
+
+    def set_requires_pr_approved(self):
+        self.scratch.write("docs/ai-workflow/GATE_POLICY.json", json.dumps(
+            {"schema_version": 1, "gates": {"acceptance": {"human": True, "requires_pr_approved": True}}}))
+        self.scratch.commit("chore: require an approved pull request at acceptance",
+                            paths=["docs/ai-workflow/GATE_POLICY.json"])
+
+    # ---------------- the commands ----------------
+
+    def plan_choice(self):
+        """`/milestone-plan` step 1, declared: `next`, then the advisory line."""
+        chosen = json.loads(self.run_backlog("next").stdout)
+        active = self.item.state()["active_work_item_id"]
+        advisory = None
+        if active and active != chosen["item"]["id"]:
+            advisory = (f"the active work item is {active}; the backlog chose {chosen['item']['id']}; "
+                        f"/milestone-plan {active} continues the active one")
+        return chosen, advisory
+
+    def accept_human(self, release=None, finish=True):
+        """`/accept-milestone` steps 2a (pre-flight), the state completion, 3
+        (`accept`), 6 (the completion commit). Returns `(stage, done)` with
+        `stage` the step that refused, or `None`."""
+        item = self.item
+        child = bool(item.entry().get("parent_work_item_id"))
+        if not child:
+            done = self.run_backlog("preflight-accept", item.wid, check=False)
+            if done.returncode != 0:
+                return "preflight", done
+        ws.assert_human_acceptance_pr_approved(item.root, item.wid, now=item.now(), run=_no_query,
+                                               resolve=lambda r: dict(FAKE_GH))
+        item.tx(lambda state: ws.complete_work_item(state, item.wid, item.now(), repo_root=item.root))
+        paths = []
+        if not child:
+            args = ["accept", item.wid] + (["--release", release] if release else [])
+            done = self.run_backlog(*args, check=False)
+            if done.returncode != 0:
+                return "accept", done
+            paths = json.loads(done.stdout)["paths"]
+        if finish:
+            self.completion_commit(paths)
+        return None, paths
+
+    def completion_commit(self, paths, trailers=None):
+        item = self.item
+        self.scratch.commit(
+            f"docs({item.wid}): accept milestone",
+            {"Workflow-Work-Item": item.wid, **(trailers or {})},
+            paths=["docs/ai-workflow/WORKFLOW_STATE.json", *paths])
+
+    def satisfy_policy(self, finish=True):
+        """`/satisfy-gate acceptance`: step 0 (the pre-flight), the query and
+        the evaluation, then the remaining `/accept-milestone` steps."""
+        item = self.item
+        done = self.run_backlog("preflight-accept", item.wid, check=False)
+        if done.returncode != 0:
+            return "preflight", done
+        anchor = item.entry()["reviewed_implementation_head"]
+        ws.record_functional_evidence(item.root, item.wid, {
+            "flow_id": "flow-1", "status": "passed", "head": anchor, "ran_at": "2026-10-03T12:00:00Z",
+            "summary": {"passed": 1, "failed": 0, "skipped": 0}, "log_digest": "b" * 64,
+            "run_ref": "run-3", "reporter": "controller"}, now=item.now())
+        body = json.dumps([{
+            "number": 7, "url": "https://github.com/o/r/pull/7", "state": "OPEN", "headRefOid": anchor,
+            "reviewDecision": "", "reviews": [],
+            "statusCheckRollup": [{"name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS"}]}])
+        result = ws.satisfy_acceptance_gate(item.root, item.wid, now=item.now(),
+                                            run=lambda a, t: body, resolve=lambda r: dict(FAKE_GH))
+        done = self.run_backlog("accept", item.wid, check=False)
+        if done.returncode != 0:
+            return "accept", done, result
+        paths = json.loads(done.stdout)["paths"]
+        if finish:
+            self.completion_commit(paths, {"Workflow-Gate-Satisfied-By": result["trailer"].split(": ")[-1]})
+        return None, paths, result
+
+    def committed(self, rev="HEAD"):
+        return self.scratch.git("show", "--name-only", "--format=", rev).stdout.split()
+
+    def assert_declared_acceptance(self, paths):
+        self.assertEqual(paths, [BACKLOG_FILE, "docs/ROADMAP.md"])
+        self.assertEqual(sorted(self.committed()),
+                         sorted(["docs/ai-workflow/WORKFLOW_STATE.json", BACKLOG_FILE, "docs/ROADMAP.md"]))
+        self.assertEqual(self.scratch.git("status", "--short").stdout.strip(), "")
+        self.assertEqual(self.run_backlog("check").returncode, 0)
+        self.assertIn("    status: done", self.scratch.read(BACKLOG_FILE))
+        self.assertEqual(self.item.entry()["phase"], "MILESTONE_COMPLETE")
+
+    # ---------------- planning to acceptance ----------------
+
+    def test_next_picks_the_item_and_the_work_item_is_created_with_its_id(self):
+        chosen, advisory = self.plan_choice()
+        self.assertEqual(chosen["item"]["id"], self.item.wid)
+        self.assertEqual(chosen["file"], BACKLOG_FILE)
+        self.assertIsNone(advisory)
+        self.reach_plan_approved()
+        self.assertEqual(self.item.entry()["work_item_id"], chosen["item"]["id"])
+        # `/milestone-plan` never writes the backlog (D-Start).
+        self.assertEqual(self.scratch.read(BACKLOG_FILE), BACKLOG_TEXT)
+
+    def test_a_planned_item_carries_the_backlog_paths_as_excluded(self):
+        self.reach_plan_approved()
+        declaration = json.loads(self.scratch.read(self.item.artifacts_path))
+        for stage in ("plan_stage", "implementation_stage"):
+            for path in (BACKLOG_FILE, "docs/ROADMAP.md"):
+                self.assertIn(path, declaration[stage]["excluded_paths"], (stage, path))
+
+    def test_acceptance_leaves_exactly_the_file_and_the_page_modified(self):
+        self.reach_acceptance()
+        stage, paths = self.accept_human(finish=False)
+        self.assertIsNone(stage)
+        status = {line[3:] for line in self.scratch.git("status", "--short").stdout.splitlines()}
+        self.assertEqual(status, {"docs/ai-workflow/WORKFLOW_STATE.json", BACKLOG_FILE, "docs/ROADMAP.md"})
+        self.completion_commit(paths)
+        self.assert_declared_acceptance(paths)
+        page = self.scratch.read("docs/ROADMAP.md")
+        self.assertIn("The process item", page)
+
+    def test_acceptance_records_a_release_when_the_milestone_names_one(self):
+        self.reach_acceptance()
+        stage, paths = self.accept_human(release="2.17.0")
+        self.assertIsNone(stage)
+        self.assertIn('    release: "2.17.0"', self.scratch.read(BACKLOG_FILE))
+        self.assert_declared_acceptance(paths)
+
+    def test_a_reaccepted_item_regenerates_the_page(self):
+        self.reach_acceptance()
+        stage, paths = self.accept_human()
+        self.assertIsNone(stage)
+        # The file is the source: a normal edit leaves the page stale, and re-accepting repairs it.
+        self.scratch.write(BACKLOG_FILE, self.scratch.read(BACKLOG_FILE).replace("A later item", "Renamed"))
+        self.assertEqual(self.run_backlog("check", check=False).returncode, 1)
+        done = self.run_backlog("accept", self.item.wid)
+        self.assertEqual(json.loads(done.stdout)["paths"], paths)
+        self.assertEqual(self.run_backlog("check").returncode, 0)
+        self.assertIn("Renamed", self.scratch.read("docs/ROADMAP.md"))
+
+    def test_next_after_acceptance_names_the_following_item(self):
+        self.reach_acceptance()
+        self.accept_human()
+        self.assertEqual(json.loads(self.run_backlog("next").stdout)["item"]["id"], "later-item")
+
+    def test_the_policy_path_completes_with_the_trailer_and_both_files(self):
+        self.scratch.git("remote", "add", "origin", "https://github.com/o/r.git")
+        self.reach_acceptance()
+        stage, paths, result = self.satisfy_policy()
+        self.assertIsNone(stage)
+        self.assert_declared_acceptance(paths)
+        trailers = self.scratch.git("log", "-1", "--format=%(trailers:key=Workflow-Gate-Satisfied-By,valueonly)").stdout
+        self.assertEqual(trailers.strip(), result["trailer"].split(": ")[-1])
+        self.assertRegex(trailers.strip(), r"^policy:[0-9a-f]{12}$")
+
+    def test_an_advisory_line_names_both_ids_when_the_active_item_differs(self):
+        other = "active-other"
+        item = self.item
+        item.tx(lambda state: {**harness.seed_existing_work_item(
+            state, work_item_id=other, governing_workflow_version="2.1", work_item_type="process",
+            work_item_kind="process", plan_path="docs/ai-workflow/other-plan.md",
+            registry_path=f"docs/ai-workflow/registry/{other}-registry.json", plan_revision=1,
+            now=item.now(), mapping_path=f"docs/ai-workflow/requirements/{other}-mapping.json",
+            base_commit=item.base_commit), "active_work_item_id": other})
+        chosen, advisory = self.plan_choice()
+        self.assertEqual(chosen["item"]["id"], item.wid)
+        self.assertIn(other, advisory)
+        self.assertIn(item.wid, advisory)
+        self.assertIn(f"/milestone-plan {other}", advisory)
+
+    # ---------------- the pre-flight refusals ----------------
+
+    def corruptions(self):
+        """`(code, mutate)`: each leaves the repository so the pre-flight refuses."""
+        root = self.scratch.root
+
+        def config(declaration):
+            path = "docs/ai-workflow/WORKFLOW_CONFIG.json"
+            value = json.loads(self.scratch.read(path))
+            value["backlog"] = declaration
+            self.scratch.write(path, json.dumps(value, indent=2) + "\n")
+
+        def protected():
+            declaration = json.loads(self.scratch.read(self.item.artifacts_path))
+            declaration["implementation_stage"].setdefault("protected_paths", {})
+            declaration["implementation_stage"]["protected_paths"][BACKLOG_FILE] = "hand-edited"
+            self.scratch.write(self.item.artifacts_path, json.dumps(declaration, indent=2) + "\n")
+
+        return [
+            ("declaration_invalid", lambda: config({"file": BACKLOG_FILE, "bogus": 1})),
+            ("backlog_missing", lambda: (root / BACKLOG_FILE).unlink()),
+            ("backlog_invalid", lambda: self.scratch.write(BACKLOG_FILE, "version: 2\nitems: []\n")),
+            ("item_unknown", lambda: self.scratch.write(
+                BACKLOG_FILE, BACKLOG_TEXT.replace("id: proc-item", "id: elsewhere").replace(
+                    "[proc-item]", "[elsewhere]"))),
+            ("status_not_acceptable", lambda: self.scratch.write(
+                BACKLOG_FILE, BACKLOG_TEXT.replace("status: next", "status: idea", 1))),
+            ("roadmap_not_generated", lambda: self.scratch.write("docs/ROADMAP.md", "# by hand\n")),
+            ("declaration_conflict", protected),
+        ]
+
+    def test_each_preflight_refusal_leaves_the_tree_and_the_state_untouched(self):
+        self.reach_acceptance()
+        self.scratch.git("remote", "add", "origin", "https://github.com/o/r.git")
+        for pr_policy in (False, True):
+            if pr_policy:
+                self.set_requires_pr_approved()
+            for code, corrupt in self.corruptions():
+                with self.subTest(code=code, requires_pr_approved=pr_policy):
+                    self.scratch.git("reset", "--hard", "-q", "HEAD")
+                    self.scratch.git("clean", "-fdq")
+                    corrupt()
+                    tree, state = self.tree(), self.state_bytes()
+                    done = self.run_backlog("preflight-accept", self.item.wid, check=False)
+                    self.assertEqual(self.refusal_code(done), code)
+                    self.assertEqual(self.tree(), tree)
+                    stage, _ = self.accept_human()
+                    self.assertEqual(stage, "preflight")
+                    self.assertEqual(self.tree(), tree)
+                    self.assertEqual(self.state_bytes(), state)
+                    self.assertNotIn("gate_evidence", self.item.entry())
+                    policy = self.satisfy_policy()
+                    self.assertEqual(policy[0], "preflight")
+                    self.assertEqual(self.state_bytes(), state)
+                    self.assertEqual(self.tree(), tree)
+
+    def test_a_declared_generator_that_cannot_run_is_refused_at_the_preflight(self):
+        self.reach_acceptance()
+        path = "docs/ai-workflow/WORKFLOW_CONFIG.json"
+        value = json.loads(self.scratch.read(path))
+        value["backlog"]["generator"] = ["scripts/no-such-generator"]
+        self.scratch.write(path, json.dumps(value, indent=2) + "\n")
+        tree, state = self.tree(), self.state_bytes()
+        self.assertEqual(self.refusal_code(self.run_backlog("preflight-accept", self.item.wid, check=False)),
+                         "generator_failed")
+        self.assertEqual((self.tree(), self.state_bytes()), (tree, state))
+
+    def test_a_remediation_child_skips_the_roadmap_step(self):
+        self.reach_acceptance()
+        item = self.item
+        parent = "parent-item"
+        item.tx(lambda state: {**harness.seed_existing_work_item(
+            state, work_item_id=parent, governing_workflow_version="2.1", work_item_type="process",
+            work_item_kind="process", plan_path="docs/ai-workflow/parent-plan.md",
+            registry_path=f"docs/ai-workflow/registry/{parent}-registry.json", plan_revision=1,
+            now=item.now(), mapping_path=f"docs/ai-workflow/requirements/{parent}-mapping.json",
+            base_commit=item.base_commit)})
+        item.tx(lambda state: {**state, "work_items": {**state["work_items"], item.wid: {
+            **state["work_items"][item.wid], "parent_work_item_id": parent}}})
+        before = {BACKLOG_FILE: self.scratch.read(BACKLOG_FILE), "page": self.scratch.read("docs/ROADMAP.md")}
+        stage, paths = self.accept_human()
+        self.assertIsNone(stage)
+        self.assertEqual(paths, [])
+        self.assertEqual(before, {BACKLOG_FILE: self.scratch.read(BACKLOG_FILE),
+                                  "page": self.scratch.read("docs/ROADMAP.md")})
+        self.assertNotIn(BACKLOG_FILE, self.committed())
+
+    def test_a_malformed_chain_at_the_line_cap_is_reported_without_a_traceback(self):
+        # `version:`, `items:` and 999 two-line items: 2,000 lines, the longest chain the cap
+        # allows. Every item lacks its required fields; a recursive cycle check would run out
+        # of stack on the 999-deep chain.
+        chain = "".join(f"  - id: n{i}\n    depends_on: [n{i + 1}]\n" for i in range(998))
+        chain += "  - id: n998\n    depends_on: []\n"
+        text = "version: 1\nitems:\n" + chain
+        self.assertEqual(text.count("\n"), 2000)
+        self.scratch.write(BACKLOG_FILE, text)
+        done = self.run_backlog("status", check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        report = json.loads(done.stdout)
+        self.assertIs(report["valid"], False)
+        self.assertEqual(report["error"]["code"], "backlog_invalid")
+        self.assertIn("the item has no `title`", report["error"]["message"])
+
+    # ---------------- an `accept` refusal after the state completion ----------------
+
+    def break_the_generator(self):
+        """A declared page generator that exits non-zero: `accept` refuses
+        after the state completion and restores both files. (Through the
+        environment, so no tracked file changes: `scripts/` is the process
+        item's protected deliverable tree.)"""
+        self.env["GEN_MODE"] = "fail"
+
+    def fix_the_generator(self):
+        self.env.pop("GEN_MODE", None)
+
+    def test_a_directory_at_the_roadmap_path_is_refused_and_survives(self):
+        self.reach_acceptance()
+        page = self.scratch.root / "docs/ROADMAP.md"
+        page.unlink()
+        page.mkdir()
+        (page / "precious.txt").write_text("keep me\n")
+        before = self.tree()
+        for args in (("generate",), ("generate", "--replace"), ("accept", self.item.wid)):
+            with self.subTest(args=args):
+                done = self.run_backlog(*args, check=False)
+                self.assertEqual(self.refusal_code(done), "declaration_invalid")
+                self.assertEqual(self.tree(), before)
+                self.assertEqual((page / "precious.txt").read_text(), "keep me\n")
+
+    def test_status_reports_an_invalid_declaration_and_exits_zero(self):
+        config = self.scratch.root / "docs/ai-workflow/WORKFLOW_CONFIG.json"
+        data = json.loads(config.read_text())
+        data["backlog"] = {"file": "../x.yaml"}
+        config.write_text(json.dumps(data))
+        done = self.run_backlog("status", check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        report = json.loads(done.stdout)
+        self.assertIs(report["valid"], False)
+        self.assertEqual(report["error"]["code"], "declaration_invalid")
+
+
+class BacklogLifecycleDeclaredGenerator(BacklogLifecycle):
+    """The same lifecycle with a declared generator, plus its failure modes."""
+
+    generator = BACKLOG_GENERATOR
+
+    def corruptions(self):
+        # A declared generator rewrites the page, so a hand-written one is not an obstacle.
+        return [(code, mutate) for code, mutate in super().corruptions() if code != "roadmap_not_generated"]
+
+    def test_the_page_carries_the_workflows_stamp(self):
+        self.reach_acceptance()
+        stage, paths = self.accept_human()
+        self.assertIsNone(stage)
+        page = self.scratch.read("docs/ROADMAP.md")
+        self.assertRegex(page, r"<!-- backlog-sha256: [0-9a-f]{64} page-sha256: [0-9a-f]{64} -->")
+        self.assert_declared_acceptance(paths)
+
+    def test_a_failed_accept_after_the_state_completion_is_recovered_by_hand(self):
+        self.reach_acceptance()
+        self.break_the_generator()
+        backlog, page = self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")
+        stage, done = self.accept_human()
+        self.assertEqual(stage, "accept")
+        self.assertEqual(self.refusal_code(done), "generator_failed")
+        self.assertIn("continue the acceptance at step 4", done.stderr)
+        # The item is complete and nothing else was written: the file and the page are restored.
+        self.assertEqual(self.item.entry()["phase"], "MILESTONE_COMPLETE")
+        self.assertEqual((self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")), (backlog, page))
+        # `/accept-milestone` cannot be run again for the terminal item (steps 0 and 2a).
+        self.assertFalse(ws.milestone_complete_gate_reachable(
+            phase=self.item.entry()["phase"], is_terminal=True))
+        # The recovery: fix the cause, run `accept` by hand, continue at step 4 to 6.
+        self.fix_the_generator()
+        done = self.run_backlog("accept", self.item.wid)
+        paths = json.loads(done.stdout)["paths"]
+        self.completion_commit(paths)
+        self.assert_declared_acceptance(paths)
+
+    def test_the_policy_path_recovery_keeps_the_trailer(self):
+        self.scratch.git("remote", "add", "origin", "https://github.com/o/r.git")
+        self.reach_acceptance()
+        self.break_the_generator()
+        stage, done, result = self.satisfy_policy()
+        self.assertEqual(stage, "accept")
+        self.assertEqual(self.refusal_code(done), "generator_failed")
+        self.assertEqual(self.item.entry()["phase"], "MILESTONE_COMPLETE")
+        self.assertIn("acceptance_satisfaction", self.item.entry())
+        self.fix_the_generator()
+        # Step 4 re-runs `accept` (an idempotent regeneration); the commit carries the policy trailer.
+        paths = json.loads(self.run_backlog("accept", self.item.wid).stdout)["paths"]
+        value = result["trailer"].split(": ")[-1]
+        self.completion_commit(paths, {"Workflow-Gate-Satisfied-By": value})
+        self.assert_declared_acceptance(paths)
+        trailers = self.scratch.git("log", "-1", "--format=%(trailers:key=Workflow-Gate-Satisfied-By,valueonly)").stdout
+        self.assertEqual(trailers.strip(), value)
+
+    def test_a_generator_that_writes_no_page_fails_with_everything_restored(self):
+        self.reach_acceptance()
+        self.env["GEN_MODE"] = "nopage"
+        for hand_edited in (False, True):
+            with self.subTest(hand_edited_stamped_page=hand_edited):
+                if hand_edited:
+                    self.scratch.write("docs/ROADMAP.md", "# R\n<!-- backlog-sha256: " + "a" * 64
+                                       + " page-sha256: " + "b" * 64 + " -->\n")
+                    self.scratch.commit("chore: hand-edit the page")
+                backlog, page = self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")
+                done = self.run_backlog("accept", self.item.wid, check=False)
+                self.assertEqual(self.refusal_code(done), "generator_failed")
+                self.assertEqual((self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")),
+                                 (backlog, page))
+
+
+    def test_a_failed_generator_leaves_the_original_modes_of_the_page_and_the_file(self):
+        self.reach_acceptance()
+        for mode, touched in (("chmodpage", "docs/ROADMAP.md"), ("chmodfile", BACKLOG_FILE)):
+            with self.subTest(generator_changes_the_mode_of=touched):
+                self.env["GEN_MODE"] = mode
+                for rel in (BACKLOG_FILE, "docs/ROADMAP.md"):
+                    (self.scratch.root / rel).chmod(0o640)
+                backlog, page = self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")
+                done = self.run_backlog("accept", self.item.wid, check=False)
+                self.assertEqual(self.refusal_code(done), "generator_failed")
+                self.assertEqual((self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")),
+                                 (backlog, page))
+                for rel in (BACKLOG_FILE, "docs/ROADMAP.md"):
+                    self.assertEqual((self.scratch.root / rel).stat().st_mode & 0o777, 0o640, rel)
+
+    def test_a_generator_that_deletes_or_replaces_the_backlog_file_is_generator_failed(self):
+        self.reach_acceptance()
+        for mode in ("rmfile", "dirfile"):
+            with self.subTest(mode=mode):
+                self.env["GEN_MODE"] = mode
+                backlog, page = self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")
+                done = self.run_backlog("accept", self.item.wid, check=False)
+                self.assertEqual(self.refusal_code(done), "generator_failed")
+                self.assertIn("continue the acceptance at step 4", done.stderr)
+                self.assertNotIn("Traceback", done.stderr)
+                self.assertEqual((self.scratch.read(BACKLOG_FILE), self.scratch.read("docs/ROADMAP.md")),
+                                 (backlog, page))
+                self.assertTrue((self.scratch.root / BACKLOG_FILE).is_file())
+
+
+class BacklogProtectedDeclaredPath(unittest.TestCase):
+    """A declared path the item's own artifact declaration protects is refused (D-Classify):
+    at the pre-flight for a declaration that already exists, and when a new one is generated."""
+
+    def setUp(self):
+        self.scratch = Scratch()
+        self.addCleanup(self.scratch.cleanup)
+
+    def declared(self, item, file):
+        config = {"schema_version": 1, "default_workflow_version": "2.1",
+                  "supported_versions": ["1", "2.1"], "backlog": {"file": file}}
+        item.seed(extra_files={"docs/ai-workflow/WORKFLOW_CONFIG.json": json.dumps(config, indent=2) + "\n",
+                               file: BACKLOG_TEXT.replace("proc-item", item.wid)})
+
+    def script(self, *args):
+        return subprocess.run(["python3", "-I", "scripts/workflow_backlog.py", *args],
+                              cwd=self.scratch.root, capture_output=True, text=True)
+
+    def generate(self, item):
+        return ws.generate_artifacts_declarations(
+            item.wid, item.plan_path, item.registry_path, item.mapping_path,
+            work_item_type=item.wtype, repo_root=self.scratch.root)
+
+    def test_a_product_item_cannot_declare_a_path_under_config(self):
+        item = Item(self.scratch, "product")
+        self.declared(item, "config/backlog.yaml")
+        with self.assertRaises(wb.BacklogError) as caught:
+            self.generate(item)
+        self.assertEqual(caught.exception.code, "declaration_conflict")
+        # A declaration generated before 2.17.0 is checked from the file, at the pre-flight.
+        legacy = ws.generate_artifacts_declarations(
+            item.wid, item.plan_path, item.registry_path, item.mapping_path, work_item_type="product")
+        self.scratch.write(item.artifacts_path, json.dumps(legacy, indent=2) + "\n")
+        state = self.scratch.read("docs/ai-workflow/WORKFLOW_STATE.json")
+        done = self.script("preflight-accept", item.wid)
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertTrue(done.stderr.startswith("error: declaration_conflict:"), done.stderr)
+        self.assertEqual(state, self.scratch.read("docs/ai-workflow/WORKFLOW_STATE.json"))
+
+    def test_accept_names_the_recovery_when_the_declaration_fails_to_load(self):
+        item = Item(self.scratch, "process")
+        self.declared(item, "docs/backlog.yaml")
+        # The declaration became invalid after the pre-flight passed.
+        config = self.scratch.root / "docs/ai-workflow/WORKFLOW_CONFIG.json"
+        config.write_text(json.dumps({"schema_version": 1, "default_workflow_version": "2.1",
+                                      "supported_versions": ["1", "2.1"],
+                                      "backlog": {"file": "/abs.yaml"}}))
+        done = self.script("accept", item.wid)
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertTrue(done.stderr.startswith("error: declaration_invalid:"), done.stderr)
+        self.assertIn("continue the acceptance at step 4", done.stderr)
+        self.assertIn(f"workflow_backlog.py accept {item.wid}", done.stderr)
+
+    def test_a_process_item_cannot_declare_a_path_through_a_link_into_scripts(self):
+        item = Item(self.scratch, "process")
+        (self.scratch.root / "docs").mkdir(exist_ok=True)
+        os.symlink("../scripts", self.scratch.root / "docs" / "via")
+        self.declared(item, "docs/via/backlog.yaml")
+        done = self.script("preflight-accept", item.wid)
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertTrue(done.stderr.startswith("error: declaration_invalid:"), done.stderr)
+        # Nothing is classified from a declaration that is not valid.
+        self.assertNotIn("docs/via/backlog.yaml", self.generate(item)["implementation_stage"]["excluded_paths"])
+
+
+class BacklogUndeclared(MatrixCase):
+    """No `backlog` key: the same lifecycle changes no file other than today's."""
+
+    work_item_type = "process"
+
+    def run_backlog(self, *args):
+        done = subprocess.run(["python3", "-I", "scripts/workflow_backlog.py", *args],
+                              cwd=self.scratch.root, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def test_the_three_subcommands_answer_undeclared_and_the_lifecycle_is_unchanged(self):
+        self.reach_technical_approved()
+        self.item.prepare_functional_review()
+        before = self.scratch.git("status", "--short").stdout
+        self.assertEqual(self.run_backlog("next"), {"declared": False})
+        self.assertEqual(self.run_backlog("preflight-accept", self.item.wid), {"declared": False})
+        self.assertEqual(self.run_backlog("accept", self.item.wid), {"declared": False})
+        self.assertEqual(self.scratch.git("status", "--short").stdout, before)
+        self.item.accept_milestone()
+        self.assertEqual(self.item.entry()["phase"], "MILESTONE_COMPLETE")
+        self.assertEqual(self.scratch.git("show", "--name-only", "--format=", "HEAD").stdout.split(),
+                         ["docs/ai-workflow/WORKFLOW_STATE.json"])
+        self.assertEqual(self.scratch.git("status", "--short").stdout, "")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Compatibility
 
-> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.18.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0 and 2.16.0.
+> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.18.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0 and 2.18.2.
 
 This page is the one place that says which Controller release admits which
 Workflow release. Other pages and other repositories link here instead of
@@ -10,7 +10,7 @@ repeating the table.
 
 | Controller | Workflow releases admitted | How |
 |---|---|---|
-| 1.7.0 and later | 2.5.1 and 2.6.0; 2.7.0 and any later release that ships the protocol (2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0 and 2.16.0 are checked; 1.7.1 is the first release that accepts a `warn` check) | 2.5.1 and 2.6.0 by exact release, in legacy mode; every other release by capability, in protocol mode |
+| 1.7.0 and later | 2.5.1 and 2.6.0; 2.7.0 and any later release that ships the protocol (2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0 and 2.18.2 are checked; 1.7.1 is the first release that accepts a `warn` check) | 2.5.1 and 2.6.0 by exact release, in legacy mode; every other release by capability, in protocol mode |
 | 1.3.0 to 1.6.x | 2.5.1 and 2.6.0 | by exact release |
 | 1.2.1 and earlier | 2.5.1 | by exact release |
 
@@ -31,7 +31,9 @@ protocol (1.4) and is admitted the same way; Controllers 1.13.1, 1.14.0 and 1.15
 `review_round`, null for an item created before 2.15.0), and is admitted the same way; Controllers 1.16.0, 1.16.1 and 1.17.0
 were checked against it (protocol mode, protocol 1.5). Workflow 2.16.0 keeps protocol 1.5 (it changes only the managed
 `workflow-conformance` job, which now runs the acceptance suite in four shards with a coverage check) and is admitted
-the same way; Controller 1.17.0 was checked against it. Controller 1.12.0
+the same way; Controller 1.17.0 was checked against it. Workflow 2.18.2 also keeps protocol 1.5 (2.17.0 adds the
+optional backlog file, 2.18.0 the harness-neutral command files, 2.18.1 and 2.18.2 are fixes) and is admitted the
+same way; Controller 1.18.0 was checked against it (protocol mode, protocol 1.5). Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
 job records instead. Controller 1.17.0, which adds the local and external round caps, reads the four per-role counts
 (protocol 1.5) and applies each cap to its own count; without them (a Workflow before 2.15.0, or an item with
@@ -51,8 +53,8 @@ line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as
 `unsupported_protocol_major`.
 
-This repository itself runs Workflow 2.16.0, with automatic gates, since a `chore:` update pull
-request (2026-10-19). It ran 2.15.0 earlier that day, 2.14.0 from 2026-10-18, 2.13.0 earlier that day, 2.12.0 from 2026-10-16, 2.11.0 from 2026-10-15, 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
+This repository itself runs Workflow 2.18.2, with automatic gates, since a `chore:` update pull
+request (2026-10-22). It ran 2.16.0 from 2026-10-19, 2.15.0 earlier that day, 2.14.0 from 2026-10-18, 2.13.0 earlier that day, 2.12.0 from 2026-10-16, 2.11.0 from 2026-10-15, 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
 that vendored that release's test tree, and skipped 2.9.1.
 
 ## What admitted means

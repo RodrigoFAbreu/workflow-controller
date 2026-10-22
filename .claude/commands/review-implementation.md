@@ -70,7 +70,7 @@ action available while the resolved item's `phase` is exactly
 (`docs/ai-workflow/MILESTONE_WORKFLOW.md`). Implements a model-independent
 **review role**, not a specific model: nothing in this contract, in the
 report it produces, or in any check it performs names a model — running it
-from any capable Claude model produces the same behavior. (For a `"2.2"`
+from any capable model produces the same behavior. (For a `"2.2"`
 item at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`, see the authoritative branch
 at the end of this file instead — it does enter/exit real state.)
 (That authoritative branch alone writes one model-bearing header line,
@@ -358,7 +358,7 @@ mirroring `/review-plan`'s own `"2.1"` authoritative role exactly,
 substituted for the implementation stage. Implements the
 `LOCAL_MODEL_IMPLEMENTATION_REVIEW` **role**, not a specific model: nothing
 in this contract, the written feedback schema, or the state transition it
-produces names a model. Running it from any capable Claude model produces
+produces names a model. Running it from any capable model produces
 the same schema and the same transition. Recommended in a **fresh session**
 for genuine independence from the session that wrote the implementation —
 strongly recommended operational guidance, not a verified precondition; no

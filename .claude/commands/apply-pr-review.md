@@ -15,6 +15,8 @@ action behind the protocol's `pr.apply_review`, run by a worker like any
 the `post-fix` generation, and the remediation child. It adds nothing a human
 could not do by hand.
 
+The argument string is `$ARGUMENTS`: the id of the work item to remediate.
+
 **The work item id is required** (`LPR-R4-007`). A reopen does not set
 `active_work_item_id`, and a completed item's pointer was reset when it
 completed, so a bare call would resolve to another item or to none. Refuse a

@@ -265,14 +265,14 @@ jobs:
           fi
           run_suite() {
             d="$base/$1"; mkdir -p "$d/tmp" "$d/home"
-            cp -a "$GITHUB_WORKSPACE/." "$d/repo"
+            cp -a "$GITHUB_WORKSPACE/." "$d/repo" >>"$d/log" 2>&1
             start=$SECONDS
             status=0
             case "$1" in
               acceptance-*of*) cmd=(python3 "$base/shards.py" run --plan "$base/plan.json" --unit "$1" --out "$d/shard.json") ;;
               *) cmd=(python3 "$1") ;;
             esac
-            (cd "$d/repo/scripts" && TMPDIR="$d/tmp" HOME="$d/home" "${cmd[@]}" >"$d/log" 2>&1) || status=$?
+            (cd "$d/repo/scripts" && TMPDIR="$d/tmp" HOME="$d/home" "${cmd[@]}" >>"$d/log" 2>&1) || status=$?
             echo "$status $((SECONDS - start))" >"$d/result"
             echo "done  $1 exit $status in $((SECONDS - start))s"
           }
@@ -308,8 +308,14 @@ jobs:
               failed=$((failed + 1)); echo "::error title=acceptance check failed::the shard check did not run"; cat "$base/check.err"
               row "$acceptance" "FAILED (the shard check did not run)" 0
             elif [ "$failed" -eq "$before" ] && { [ "$rc" -ne 0 ] || [ "$total_bad" -eq 1 ]; }; then
-              failed=$((failed + 1)); echo "::error title=acceptance check failed::the shard check exited $rc without a failing shard row"; cat "$base/check.err"
-              row "$acceptance" "FAILED (the shard check exited $rc)" 0
+              failed=$((failed + 1))
+              if [ "$rc" -ne 0 ]; then
+                msg="the shard check exited $rc without a failing shard row"; why="the shard check exited $rc"
+              else
+                msg="the acceptance coverage total is not ok, though the shard check exited 0"; why="the coverage total is not ok"
+              fi
+              echo "::error title=acceptance check failed::$msg"; cat "$base/check.err"
+              row "$acceptance" "FAILED ($why)" 0
             fi
           }
           { echo "| suite | result | seconds |"; echo "| --- | --- | --- |"; } >>"$GITHUB_STEP_SUMMARY"

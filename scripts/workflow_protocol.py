@@ -46,7 +46,7 @@ import workflow_state  # noqa: E402
 #: The Workflow release these bytes are. A build refuses when it differs
 #: from the manifest's `workflow_version` (CP7); it never reads the
 #: installation record.
-WORKFLOW_RELEASE = "2.16.0"
+WORKFLOW_RELEASE = "2.18.2"
 
 PROTOCOL_NAME = "workflow-orchestration"
 PROTOCOL_MAJOR = 1
@@ -515,7 +515,7 @@ def op_verify(repo_root: Path, args: argparse.Namespace) -> dict:
         try:
             workflow_state.validate_state(state, repo_root=repo_root)
             workflow_state.validate_review_round_counts(state)
-            checks.append(_check("state_valid", "pass", "validate_state accepts the state"))
+            checks.append(_check("state_valid", "pass", "validate_state and validate_review_round_counts accept the state"))
         except Exception as exc:
             if not _is_check_refusal(exc):
                 raise

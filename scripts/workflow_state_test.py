@@ -39,6 +39,7 @@ from unittest import mock
 from pathlib import Path
 
 import workflow_fingerprint as fingerprint
+import workflow_backlog
 import workflow_state as ws
 import workflow_test_harness as h
 
@@ -7191,6 +7192,11 @@ class TestSameContentRepublicationEndToEnd(unittest.TestCase):
             # satisfying this assertion for the wrong reason.
             self.assertIn(s2, str(ctx.exception))
             self.assertIn("reviewed_implementation_head", str(ctx.exception))
+            # workflow-2.18.1, 52f: the refusal ends with the next step.
+            message = str(ctx.exception)
+            self.assertIn("its own commit", message)
+            self.assertIn("update to that release or later", message)
+            self.assertTrue(message.endswith("and run the command again"), message)
 
     def test_terminal_commit_with_wrong_target_phase_refuses(self):
         """Item 276 (`WF8c`): an otherwise well-formed ordinary `T` that
@@ -18841,6 +18847,82 @@ class TestManualVerdictIngestCrashWindow(unittest.TestCase):
                 self.assertEqual(_harness.read_state(repo)["work_items"][_CP4_WI]["state_revision"], revision)
 
 
+class TestStateTransactionOnFailure(unittest.TestCase):
+    """workflow-2.18.1, 39a: `on_failure` runs inside the lock, on any failure, never on success."""
+
+    def _seed(self, repo):
+        path = repo.root / ws.DEFAULT_STATE_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(_base_state(wi=_base_work_item())))
+        return path
+
+    @staticmethod
+    def _pin(state):
+        return ws.record_technical_review_block_pin(state, "wi", bundle_id="b1", review_content_id="c1", now="t1")
+
+    def _run(self, repo, mutator, **kwargs):
+        calls = []
+
+        def on_failure():
+            calls.append(ws.held_primitives())
+
+        try:
+            ws.state_transaction(repo.root, mutator, on_failure=on_failure, **kwargs)
+        except BaseException as exc:  # noqa: BLE001 - the test inspects what propagates
+            return calls, exc
+        return calls, None
+
+    def test_each_failure_point_runs_it_inside_the_lock_and_the_original_exception_propagates(self):
+        def raising(exc):
+            def hook(*_args):
+                raise exc
+            return hook
+
+        cases = {
+            "mutator": (raising(RuntimeError("m")), {}, mock.patch.object(ws, "_publish_state_file")),
+            "before_publish": (self._pin, {"before_publish": raising(RuntimeError("m"))},
+                               mock.patch.object(ws, "_publish_state_file")),
+            "interrupt in before_publish": (self._pin, {"before_publish": raising(KeyboardInterrupt())},
+                                            mock.patch.object(ws, "_publish_state_file")),
+            "publish": (self._pin, {}, mock.patch.object(ws, "_publish_state_file", side_effect=RuntimeError("m"))),
+            "monotonicity": (self._pin, {}, mock.patch.object(
+                ws, "_assert_technical_review_block_pins_monotonic", side_effect=RuntimeError("m"))),
+        }
+        for name, (mutator, kwargs, patch) in cases.items():
+            with self.subTest(failure=name), ScratchRepo() as repo:
+                self._seed(repo)
+                with patch:
+                    calls, exc = self._run(repo, mutator, **kwargs)
+                self.assertEqual(len(calls), 1)
+                self.assertIn("2", [held for held, _key in calls[0]])
+                self.assertIsInstance(exc, (RuntimeError, KeyboardInterrupt))
+                self.assertEqual(ws.held_primitives(), ())
+
+    def test_a_failing_on_failure_is_suppressed_and_a_success_never_calls_it(self):
+        with ScratchRepo() as repo:
+            self._seed(repo)
+            with self.assertRaisesRegex(RuntimeError, "original"):
+                ws.state_transaction(
+                    repo.root, lambda state: (_ for _ in ()).throw(RuntimeError("original")),
+                    on_failure=lambda: (_ for _ in ()).throw(ValueError("undo")))
+            calls, exc = self._run(repo, self._pin)
+            self.assertEqual((calls, exc), ([], None))
+
+    def test_the_docstring_says_an_exception_not_a_base_exception_is_suppressed(self):
+        doc = ws.state_transaction.__doc__
+        self.assertIn("an `Exception` raised by `on_failure` is suppressed", doc)
+        self.assertNotIn("one raised by\n    `on_failure` is suppressed", doc)
+
+    def test_an_interrupt_raised_by_on_failure_propagates_and_replaces_the_original(self):
+        with ScratchRepo() as repo:
+            self._seed(repo)
+            with self.assertRaises(KeyboardInterrupt):
+                ws.state_transaction(
+                    repo.root, lambda state: (_ for _ in ()).throw(RuntimeError("original")),
+                    on_failure=lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+            self.assertEqual(ws.held_primitives(), ())
+
+
 class TestStateTransactionBeforePublish(unittest.TestCase):
     def _seed(self, repo, **item):
         path = repo.root / ws.DEFAULT_STATE_PATH
@@ -19831,7 +19913,7 @@ class TestResumeImplementationCommandFile(unittest.TestCase):
                          "assert_gate_policy_fields_unchanged_or_tightened", "AmendmentInFlightError",
                          "StalePlanApprovalRegistryReadError", "the word `resumption`",
                          "Never fabricate, infer or carry over this text from a previous turn",
-                         "Claude must never invoke this command on the user's behalf",
+                         "The agent must never invoke this command on the user's behalf",
                          "never from the confirmation text"):
             self.assertIn(sentence, text)
 
@@ -20060,7 +20142,13 @@ class TestCommitPendingApplyingReviewFeedbackEntry(unittest.TestCase):
             # D-Downgrade: the item's own pending state, once committed, leaves no hunk
             # for it; only the other item's still-pending ledger remains in the diff.
             diff = _git_out(repo, ["diff", "HEAD", "--", STATE_REL_PATH])
-            self.assertNotIn(self.WID, diff)
+            # Exactly the other item's ledger hunk: its `plan_review_stages` line gains a
+            # comma and the ledger block follows; no changed line names the committed item.
+            ledger_block = json.dumps({"optional_findings": ledger}, indent=2).splitlines()[1:-1]
+            self.assertEqual(
+                [line for line in diff.splitlines() if line[:1] in "+-" and line[:3] not in ("+++", "---")],
+                ['-      "plan_review_stages": null', '+      "plan_review_stages": null,']
+                + ["+    " + line for line in ledger_block])
             self.assertIn('"phase": "IMPLEMENTING"', diff)  # the other item's context
         with ScratchRepo() as repo:
             self._setup(repo, self.LOCAL, self.APPLYING, working_extra={"optional_findings": ledger})
@@ -20468,6 +20556,28 @@ class TestStageBaselineRecording(unittest.TestCase):
             _harness.write_state(repo, state)
             self.assertIsNone(fingerprint.read_stage_baseline(repo.root, _CP4_WI, _CP5_PLAN_ROLE))
 
+    def test_a_manual_revise_ingest_gives_the_next_bundle_a_manual_basis(self):
+        """End to end: a real manual `REVISE` ingest, an edit of the plan, and the real
+        generator. The ingest's baseline is what gives `CHANGES_SINCE_REVIEW.md`'s manual
+        section a basis; without it the section is the "not available" fallback."""
+        def manual_section(repo):
+            text = (repo.root / ".ai-review" / _CP4_WI / "CHANGES_SINCE_REVIEW.md").read_text()
+            head = f"## {_CP5_PLAN_ROLE}\n"
+            self.assertIn(head, text)
+            return text.split(head, 1)[1].split("\n## LOCAL_MODEL_PLAN_REVIEW\n", 1)[0]
+
+        with _harness.ScratchRepo() as repo:
+            content_id, bundle_id = _cp5_plan_at_manual(repo)
+            self._ingest(repo, "plan", "REVISE", content_id, bundle_id, _CP5_PLAN_ROLE)
+            self.assertTrue((self._role_dir(repo, _CP5_PLAN_ROLE) / "BASELINE.json").is_file())
+            plan_path = repo.root / "docs" / "ai-workflow" / "WORKFLOW_V2_PLAN.md"
+            plan_path.write_text(plan_path.read_text() + "line added after the manual review\n")
+            _harness.generate_plan_bundle(repo)
+            section = manual_section(repo)
+            self.assertIn(f"previous_review_content_id: {content_id}", section)
+            self.assertIn("+line added after the manual review", section)
+            self.assertNotIn("not available", section)
+
     def test_a_plan_baseline_survives_a_plan_revision_bump(self):
         with _harness.ScratchRepo() as repo:
             content_id, bundle_id = _cp5_plan_at_manual(repo)
@@ -20526,6 +20636,28 @@ class TestStageBaselineRecording(unittest.TestCase):
                     with self.assertRaises(OSError):
                         _cp5_ingest(repo, stage, text)
                 self.assertFalse(self._role_dir(repo, role).exists())
+
+    def test_the_undo_of_a_failed_ingest_runs_inside_the_state_lock(self):
+        """workflow-2.18.1, 39a: nothing can write a same-revision baseline between the failure and the undo."""
+        for stage, (build, role, _writer) in _CP5_STAGES.items():
+            for failure in (OSError("boom"), KeyboardInterrupt()):
+                with self.subTest(stage=stage, failure=type(failure).__name__), _harness.ScratchRepo() as repo:
+                    content_id, bundle_id = build(repo)
+                    text = _cp4_verdict("REVISE", rcid=content_id, bundle=bundle_id, base=repo.base, role=role)
+                    held, real_remove = [], fingerprint.remove_stage_baseline
+
+                    def remove(*args, **kwargs):
+                        if "only_state_revision" in kwargs:  # the undo, not the recorder's own replace
+                            held.append(ws.held_primitives())
+                        return real_remove(*args, **kwargs)
+
+                    with mock.patch.object(ws, "_store_manual_verdict", side_effect=failure), \
+                            mock.patch.object(fingerprint, "remove_stage_baseline", side_effect=remove), \
+                            self.assertRaises(type(failure)):
+                        _cp5_ingest(repo, stage, text)
+                    self.assertEqual(len(held), 1)
+                    self.assertIn("2", [name for name, _key in held[0]])
+                    self.assertFalse(self._role_dir(repo, role).exists())
 
     def test_the_directory_changes_no_identifier(self):
         with _harness.ScratchRepo() as repo:
@@ -20764,6 +20896,38 @@ class TestReviewRoundCounts(unittest.TestCase):
                     call(wrong_phase, "APPROVE")
                 self.assertEqual(wrong_phase, before)
 
+    def test_a_duplicate_ingest_and_a_stale_content_id_change_nothing(self):
+        manual = {
+            "plan_external": (ws.record_manual_plan_review, "MANUAL_EXTERNAL_PLAN_REVIEW"),
+            "implementation_external": (ws.record_manual_implementation_review,
+                                        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"),
+        }
+        for name, stage, role, build, call in _count_writers():
+            if name not in manual:
+                continue
+            writer, feedback_role = manual[name]
+
+            def ingest(state, feedback_id=_RC):
+                return writer(state, "wi", verdict="APPROVE", bundle_id="b1", round=1, now="t1",
+                              current_review_content_id=_RC, feedback_role=feedback_role,
+                              feedback_review_content_id=feedback_id)
+
+            counts = _counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR))
+            with self.subTest(writer=name, case="duplicate"):
+                once = call(_base_state(wi=build(review_round_counts=counts)), "APPROVE")
+                self.assertEqual(once["work_items"]["wi"]["review_round_counts"][stage][role], 1)
+                before = copy.deepcopy(once)
+                with self.assertRaises(Exception):
+                    ingest(once)  # the same call on the post-state
+                self.assertEqual(once, before)
+            with self.subTest(writer=name, case="stale content id"):
+                state = _base_state(wi=build(review_round_counts=counts))
+                before = copy.deepcopy(state)
+                with self.assertRaises(Exception):
+                    ingest(state, feedback_id="stale-" + _RC)
+                self.assertEqual(state, before)
+                self.assertEqual(state["work_items"]["wi"]["review_round_counts"], counts)
+
     def test_rounds_accumulate_across_fix_rounds_and_nothing_resets(self):
         item = _v21_work_item(governing_workflow_version="2.2", state_revision=1,
                               review_round_counts=_counts(dict(_ZERO_PAIR), dict(_ZERO_PAIR)))
@@ -20866,8 +21030,43 @@ class TestReviewRoundCounts(unittest.TestCase):
                          ws.initial_review_round_counts(ws.default_config()["default_workflow_version"]))
 
     def test_the_key_is_outside_both_content_identities(self):
-        source = (Path(__file__).resolve().parent / "workflow_fingerprint.py").read_text()
-        self.assertNotIn("review_round_counts", source)
+        """In one repository, the plan-stage and implementation-stage `review_content_id` are
+        unchanged when the item's `review_round_counts` changes from the initial value to a
+        counted one. (One repository, because the base commit is part of the identity; and
+        `bundle_id` is not compared: the bundle ships a copy of the state file, so it covers
+        the counter by design -- the approval binds `review_content_id`.)"""
+        counted = _counts({"local": 3, "external": 1}, {"local": 2, "external": 0})
+        initial = ws.initial_review_round_counts("2.2")
+        self.assertNotEqual(initial, counted)
+
+        def set_counts(repo, counts):
+            state = _harness.read_state(repo)
+            state["work_items"][_CP4_WI]["review_round_counts"] = counts
+            _harness.write_state(repo, state)
+
+        def plan_id(repo):
+            return fingerprint.compute_review_content_id_plan_stage_for_work_item(repo.root, _CP4_WI)[0]
+
+        def implementation_id(repo):
+            item = _harness.read_state(repo)["work_items"][_CP4_WI]
+            return ws.approval_review_content_id(
+                repo.root, stage="implementation", base_commit=item["base_commit"], work_item_type="process",
+                work_item_id=_CP4_WI, head="HEAD", artifacts_path=fingerprint.artifacts_path_for_work_item(_CP4_WI))
+
+        with _harness.ScratchRepo() as repo:
+            _harness.seed_bundle_item(repo, governing_workflow_version="2.2", phase="PLANNING",
+                                      review_round_counts=initial)
+            before = plan_id(repo)
+            set_counts(repo, counted)
+            self.assertEqual(plan_id(repo), before)
+        with _harness.ScratchRepo() as repo:
+            _harness.seed_bundle_item(repo, governing_workflow_version="2.2",
+                                      phase="SELF_REVIEWING_IMPLEMENTATION", review_round_counts=initial)
+            repo.commit("implement", filename=_harness.BUNDLE_ITEM_IMPLEMENTATION_PATH)
+            _harness.generate_implementation_bundle(repo)
+            before = implementation_id(repo)
+            set_counts(repo, counted)
+            self.assertEqual(implementation_id(repo), before)
 
     def test_the_four_commit_field_sets_admit_the_key(self):
         for name in ("ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS", "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS",
@@ -20887,6 +21086,25 @@ class TestReviewRoundCounts(unittest.TestCase):
             self.assertNotIn("review_round_unknown", getattr(ws, name))
 
 
+# The four commit-field sets exactly as published in 2.14.0 (`workflow_state.py` at v2.14.0),
+# frozen as literals so the downgrade tests do not derive "2.14.0" from the current sets.
+_RELEASE_2_14_0_COMMIT_FIELDS = {
+    "ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS": frozenset({
+        "phase", "reviewed_implementation_head", "implementation_revision", "state_revision",
+        "last_transition", "implementation_review_stages", "gate_evidence", "reopenings",
+        "optional_findings"}),
+    "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS": frozenset({
+        "phase", "state_revision", "last_transition", "implementation_review_stages",
+        "gate_evidence", "reopenings", "optional_findings"}),
+    "REVIEW_STAGE_WRITE_COMMIT_FIELDS": frozenset({
+        "phase", "state_revision", "last_transition", "implementation_review_stages",
+        "gate_evidence", "reopenings", "optional_findings"}),
+    "TECHNICAL_APPROVAL_COMMIT_FIELDS": frozenset({
+        "technical_approval", "phase", "state_revision", "last_transition",
+        "implementation_review_stages", "gate_evidence", "reopenings", "optional_findings"}),
+}
+
+
 class TestReviewRoundCountsDowngrade(unittest.TestCase):
     """`D-Downgrade`, consequence 2: a counter-bearing recovered generation record
     in the provenance interval is accepted by 2.15.0's helpers and refused by
@@ -20897,10 +21115,14 @@ class TestReviewRoundCountsDowngrade(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("workflow_state_as_2_14_0", Path(ws.__file__))
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        for name in ("ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS", "RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS",
-                     "REVIEW_STAGE_WRITE_COMMIT_FIELDS", "TECHNICAL_APPROVAL_COMMIT_FIELDS"):
-            setattr(module, name, getattr(module, name) - {"review_round_counts"})
+        for name, fields in _RELEASE_2_14_0_COMMIT_FIELDS.items():
+            setattr(module, name, fields)
         return module
+
+    def test_2_14_0_field_sets_are_the_current_ones_minus_the_counter_key(self):
+        for name, frozen in _RELEASE_2_14_0_COMMIT_FIELDS.items():
+            with self.subTest(name=name):
+                self.assertEqual(getattr(ws, name), frozen | {"review_round_counts"})
 
     def _scenario(self, repo, *, tamper=None):
         _write_test_artifacts_declaration(repo, "wi")
@@ -20933,6 +21155,183 @@ class TestReviewRoundCountsDowngrade(unittest.TestCase):
                 _s2_state, s2 = self._scenario(repo, tamper=tamper)
                 with self.assertRaises(ws.MalformedBundleGenerationRecordCommitError):
                     ws.validate_bundle_generation_record_commit(repo.root, s2, "wi")
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.17.0 (`backlog-file`) CP2, D-Classify: the artifact template
+# classifies the declared backlog paths, only for a valid declaration.
+# ---------------------------------------------------------------------------
+
+# SHA-256 of the canonical JSON (`sort_keys`) of the declaration the function
+# produced before `repo_root` existed, for the ids and paths below: a literal
+# golden copy taken from 2.16.0's bytes, not derived from the function.
+_GOLDEN_UNDECLARED_DIGESTS = {
+    "process": "6ea4e01ed3e8efb93ffc48225a644c661c4b19845e97f6c8ffeea83be6f1a19d",
+    "product": "bf57b963f89bbfae242421f40df778e1080d356dd48582c0d7d0fe41959058b4",
+}
+
+
+class GeneratedDeclarationsBacklogClassificationTest(unittest.TestCase):
+    PLAN = "docs/P.md"
+    REGISTRY = "docs/ai-workflow/registry/some-item-registry.json"
+    MAPPING = "docs/ai-workflow/requirements/some-item-mapping.json"
+
+    def _generate(self, work_item_type, **kwargs):
+        return ws.generate_artifacts_declarations(
+            "some-item", self.PLAN, self.REGISTRY, self.MAPPING, work_item_type=work_item_type, **kwargs,
+        )
+
+    def _root(self, backlog=None, *, raw=None):
+        tmp = tempfile.TemporaryDirectory(prefix="wf-classify-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        config = root / "docs" / "ai-workflow" / "WORKFLOW_CONFIG.json"
+        config.parent.mkdir(parents=True)
+        if raw is not None:
+            config.write_text(raw)
+        elif backlog is not None:
+            config.write_text(json.dumps({"backlog": backlog}))
+        return root
+
+    def _plan(self, declarations, path):
+        stage = declarations["plan_stage"]
+        return fingerprint.classify_path(
+            path, frozenset(stage["protected_paths"]), stage["excluded_paths"], stage["excluded_prefixes"],
+        )
+
+    def _impl(self, declarations, path):
+        stage = declarations["implementation_stage"]
+        return fingerprint.classify_path_implementation_stage(
+            path, stage["protected_paths"], stage["protected_prefixes"],
+            stage["excluded_paths"], stage["excluded_prefixes"],
+        )
+
+    def test_undeclared_is_byte_for_byte_the_unchanged_declaration(self):
+        undeclared = {
+            "no config file": self._root(),
+            "no key": self._root(raw='{"other": 1}'),
+            "unparsable": self._root(raw="{nope"),
+            "array": self._root(raw="[1]"),
+            "invalid declaration": self._root(backlog={"file": "/abs.yaml"}),
+        }
+        for work_item_type, digest in _GOLDEN_UNDECLARED_DIGESTS.items():
+            plain = self._generate(work_item_type)
+            self.assertEqual(hashlib.sha256(json.dumps(plain, sort_keys=True).encode()).hexdigest(), digest)
+            for label, root in undeclared.items():
+                with self.subTest(f"{work_item_type} {label}"):
+                    self.assertEqual(self._generate(work_item_type, repo_root=root), plain)
+            for stage_check in (self._plan, self._impl):
+                for path in ("docs/backlog.yaml", "docs/items/a.md"):
+                    with self.assertRaises(fingerprint.UnclassifiedPathError):
+                        stage_check(plain, path)
+
+    def test_declared_paths_and_item_pages_are_excluded_at_both_stages(self):
+        for backlog in ({"file": "docs/backlog.yaml"},
+                        {"file": "roadmap/backlog.yaml", "roadmap": "ROADMAP.md"}):
+            root = self._root(backlog)
+            for work_item_type in ("process", "product"):
+                declarations = self._generate(work_item_type, repo_root=root)
+                roadmap = backlog.get("roadmap", "docs/ROADMAP.md")
+                for path in (backlog["file"], roadmap, "docs/items/anything.md"):
+                    with self.subTest(f"{work_item_type} {path}"):
+                        self.assertEqual(self._plan(declarations, path), "excluded")
+                        self.assertEqual(self._impl(declarations, path), "excluded")
+                # nothing else changed: only the new entries differ from the plain declaration
+                plain = self._generate(work_item_type)
+                for stage in ("plan_stage", "implementation_stage"):
+                    for key in ("excluded_paths", "excluded_prefixes"):
+                        extra = set(declarations[stage][key]) - set(plain[stage][key])
+                        self.assertLessEqual(extra, {backlog["file"], roadmap, "docs/items/"})
+                    self.assertEqual(declarations[stage].get("protected_paths"), plain[stage].get("protected_paths"))
+
+    def test_an_existing_entry_is_not_overwritten(self):
+        declarations = self._generate("process", repo_root=self._root({"file": "docs/backlog.yaml"}))
+        plain = self._generate("process")
+        self.assertEqual(declarations["implementation_stage"]["excluded_paths"]["docs/ROADMAP.md"],
+                         plain["implementation_stage"]["excluded_paths"]["docs/ROADMAP.md"])
+        self.assertEqual(declarations["plan_stage"]["excluded_paths"]["docs/ROADMAP.md"],
+                         plain["plan_stage"]["excluded_paths"]["docs/ROADMAP.md"])
+
+    def test_collisions_are_refused_before_anything_is_written(self):
+        cases = (
+            ("product", {"file": "config/backlog.yaml"}, "config/backlog.yaml", "implementation"),
+            ("product", {"file": "docs/backlog.yaml", "roadmap": "app/roadmap.md"}, "app/roadmap.md", "implementation"),
+            ("process", {"file": "scripts/backlog.yaml"}, "scripts/backlog.yaml", "implementation"),
+            ("process", {"file": "docs/backlog.yaml", "roadmap": ".claude/commands/ROADMAP.md"},
+             ".claude/commands/ROADMAP.md", "implementation"),
+            ("process", {"file": "docs/P.md"}, "docs/P.md", "plan"),
+            ("process", {"file": "docs/ai-workflow/registry/some-item-registry.json"},
+             "docs/ai-workflow/registry/some-item-registry.json", "plan"),
+            ("process", {"file": "docs/ai-workflow/requirements/some-item-mapping.json"},
+             "docs/ai-workflow/requirements/some-item-mapping.json", "plan"),
+        )
+        for work_item_type, backlog, path, stage in cases:
+            with self.subTest(f"{work_item_type} {path}"):
+                root = self._root(backlog)
+                with self.assertRaises(workflow_backlog.BacklogError) as cm:
+                    self._generate(work_item_type, repo_root=root)
+                self.assertEqual(cm.exception.code, "declaration_conflict")
+                self.assertIn(path, cm.exception.message)
+                self.assertIn(f"{stage} stage", cm.exception.message)
+
+    def test_the_early_dry_call_refuses_a_collision_and_writes_nothing(self):
+        # workflow-2.18.2 (review-followups-2, 60e): `/milestone-plan` step 1 makes this call before
+        # `route_work_item`; it is a pure check, so a refusal leaves no state, registry, mapping or
+        # artifacts file behind.
+        def tree(root):
+            return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+        for work_item_type in ("process", "product"):
+            with self.subTest(work_item_type):
+                root = self._root({"file": self.PLAN})
+                before = tree(root)
+                with self.assertRaises(workflow_backlog.BacklogError) as cm:
+                    self._generate(work_item_type, repo_root=root)
+                self.assertEqual(cm.exception.code, "declaration_conflict")
+                self.assertEqual(tree(root), before)
+                for rel in (self.REGISTRY, self.MAPPING, "docs/ai-workflow/WORKFLOW_STATE.json",
+                            "docs/ai-workflow/registry/some-item-artifacts.json"):
+                    self.assertFalse((root / rel).exists(), rel)
+
+    def test_the_early_dry_call_on_an_undeclared_repository_is_the_plain_template(self):
+        for work_item_type in ("process", "product"):
+            root = self._root()
+            self.assertEqual(self._generate(work_item_type, repo_root=root), self._generate(work_item_type))
+
+    def test_the_item_page_prefix_is_checked_too(self):
+        # a product item protects `docs/adr/`, not `docs/items/`, so it is fine; a hand-built
+        # declaration that protected the prefix is a conflict
+        declarations = self._generate("product")
+        declarations["implementation_stage"]["protected_prefixes"]["docs/items/"] = "x"
+        self.assertEqual(
+            workflow_backlog.protected_conflicts(["docs/items/x.md"], declarations),
+            [("implementation_stage", "docs/items/x.md")],
+        )
+
+    def test_an_unavailable_script_is_a_refusal_not_an_empty_list(self):
+        root = self._root({"file": "docs/backlog.yaml"})
+        with mock.patch.dict(sys.modules, {"workflow_backlog": None}):
+            with self.assertRaises(ws.BacklogScriptUnavailableError) as cm:
+                self._generate("process", repo_root=root)
+        self.assertEqual(cm.exception.code, "declaration_invalid")
+        self.assertIn("workflow_backlog.py", str(cm.exception))
+
+    def test_omitting_repo_root_never_imports_the_script(self):
+        with mock.patch.dict(sys.modules, {"workflow_backlog": None}):
+            self.assertEqual(self._generate("process"), self._generate("process", repo_root=None))
+
+    def test_in_flight_declaration_without_the_entries_is_unclassified_until_repaired(self):
+        declarations = self._generate("process")
+        for stage_check in (self._plan, self._impl):
+            for path in ("docs/backlog.yaml", "docs/items/a.md"):
+                with self.assertRaises(fingerprint.UnclassifiedPathError):
+                    stage_check(declarations, path)
+        for stage in ("plan_stage", "implementation_stage"):  # the shipped document's hand repair
+            declarations[stage]["excluded_paths"]["docs/backlog.yaml"] = "repair"
+            declarations[stage]["excluded_prefixes"]["docs/items/"] = "repair"
+        for stage_check in (self._plan, self._impl):
+            self.assertEqual(stage_check(declarations, "docs/backlog.yaml"), "excluded")
+            self.assertEqual(stage_check(declarations, "docs/items/a.md"), "excluded")
 
 
 if __name__ == "__main__":

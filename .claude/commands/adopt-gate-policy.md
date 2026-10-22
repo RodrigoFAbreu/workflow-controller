@@ -1,12 +1,23 @@
 ---
-description: Adopt the repository's gate policy file (docs/ai-workflow/GATE_POLICY.json) by digest -- the only way to loosen the effective policy. User-only -- never invoked by Claude autonomously.
+description: Adopt the repository's gate policy file (docs/ai-workflow/GATE_POLICY.json) by digest -- the only way to loosen the effective policy. User-only -- never invoked by the agent autonomously.
 argument-hint: ""
 disable-model-invocation: true
 state_writer: true
 review-subject: none
 ---
 
-**State-writer discipline (D1, item 354):** every `docs/ai-workflow/WORKFLOW_STATE.json` write this command performs -- everywhere a step below says "persist the returned state" -- is performed by calling `workflow_state.state_transaction(repo_root, mutator)`, never by a separate read-then-write: `state_transaction` holds `.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`, `fcntl.flock(LOCK_EX)`) across the complete re-read -> apply-the-named-function -> canonical-serialize -> atomic-publish sequence in one process invocation, so `mutator` is the exact transition function each step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`), applied to freshly re-read state rather than to a snapshot taken before the lock was acquired.
+**State-writer discipline (D1, item 354):** every
+`docs/ai-workflow/WORKFLOW_STATE.json` write this command performs --
+everywhere a step below says "persist the returned state" -- is performed by
+calling `workflow_state.state_transaction(repo_root, mutator)`, never by a
+separate read-then-write: `state_transaction` holds
+`.ai-review/runtime/WORKFLOW_STATE.lock` (`workflow_state.state_lock`,
+`fcntl.flock(LOCK_EX)`) across the complete re-read ->
+apply-the-named-function -> canonical-serialize -> atomic-publish sequence in
+one process invocation, so `mutator` is the exact transition function each
+step below names (e.g. `lambda state: workflow_state.<fn>(state, ...)`),
+applied to freshly re-read state rather than to a snapshot taken before the
+lock was acquired.
 
 Adopt the repository's gate policy (`workflow-2.8.0`, `gate-policy-and-reopening`,
 D-GP-Policy, `docs/ai-workflow/GATE_POLICY.md`). This command is **work-item-free**:
@@ -14,10 +25,12 @@ it names no work item, touches no work item's entry and no approval stage, and i
 is not a state of `MILESTONE_WORKFLOW.md`.
 
 **This command is user-only by construction**, the same authority shape
-`/approve-review` and `/request-plan-amendment` use. `disable-model-invocation:
-true` is the primary, harness-enforced control. Claude must never invoke it on the
-user's own behalf, including as a step of another command's execution,
-independent of that flag.
+`/approve-review` and `/request-plan-amendment` use. The literal-confirmation
+check (the user-only guard below) is the control this command carries itself,
+under every harness; `disable-model-invocation: true` is an additional layer
+where the harness enforces it, and it does not replace the check. The agent
+must never invoke this command on the user's behalf, including as a step of
+another command's execution, whatever the flag says.
 
 Why it exists: the effective policy is, field by field, the **stricter** of the
 last adopted policy, the recorded floor and `docs/ai-workflow/GATE_POLICY.json`.
@@ -67,7 +80,8 @@ prior turn; if it is missing, show step 1 and stop and wait.
    the adoption commit stages only the state file, so an uncommitted file would
    be reported adopted while the committed policy (and its floor) stayed in
    force, with a false gate-lowering event. Tell the user to **commit the file,
-   then run `/adopt-gate-policy`** again; never commit it on their behalf. A `provenance_ok: false` preview is
+   then run `/adopt-gate-policy`** again; never commit it on their behalf. A
+   `provenance_ok: false` preview is
    reported as well: the adoption is then the way out (it becomes the newest
    change to both fields and the lower bound of the floor range).
 2. **Adopt.** Only with the confirmation in hand, call
@@ -84,7 +98,10 @@ prior turn; if it is missing, show step 1 and stop and wait.
    another work item's uncommitted residue is neither committed nor refused
    (without such residue the ordinary single-path `git add` runs and the bytes
    are the unscoped result). It creates **one** commit carrying
-   `Workflow-Gate-Policy-Adoption: <digest>` as the message's own final paragraph and nothing else is in it: any `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before it, separated by a blank line
+   `Workflow-Gate-Policy-Adoption: <digest>` as the message's own final
+   paragraph and nothing else is in it: any
+   `Co-Authored-By:`/`Claude-Session:` lines go in their own paragraph before
+   it, separated by a blank line
    (`OPUS-R129-001`) -- and no other `Workflow-*` trailer, then runs
    `workflow_state.validate_gate_policy_adoption_commit`, whose contract is
    exactly the two top-level keys and no work-item change.

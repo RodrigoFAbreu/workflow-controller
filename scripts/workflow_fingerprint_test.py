@@ -4476,6 +4476,32 @@ class VerdictWellFormedTest(unittest.TestCase):
                 self._refused(self._verdict("REVISE", blocking=placeholder, important=placeholder,
                                             optional="- a suggestion"))
 
+    WRAPPED_PLACEHOLDERS = ("- (none)", "- [none]", '- "None"', "- \u2014 None", "- ~~none~~")
+
+    def test_a_wrapped_or_prefixed_placeholder_is_not_a_finding(self):
+        """workflow-2.18.1, 31b: leading and wrapping punctuation or symbols on `None` are ignored."""
+        for placeholder in self.WRAPPED_PLACEHOLDERS:
+            with self.subTest(placeholder=placeholder):
+                self._refused(self._verdict("REVISE", blocking=placeholder, important="None.",
+                                            optional="- a suggestion"))
+                self._refused(self._verdict("REVISE", blocking="None.", important=placeholder,
+                                            optional="- a suggestion"))
+                self.assertEqual(
+                    wf.parse_optional_findings(self._verdict("REVISE", optional=placeholder)), [])
+
+    def test_an_approve_with_only_a_wrapped_placeholder_under_blocking_is_accepted(self):
+        for placeholder in self.WRAPPED_PLACEHOLDERS:
+            with self.subTest(placeholder=placeholder):
+                wf.assert_verdict_well_formed(self._verdict("APPROVE", blocking=placeholder))
+
+    def test_a_finding_that_merely_starts_with_or_quotes_none_stays_a_finding(self):
+        for finding in ("- none of the tests were run", '- "None" handling is wrong', "- (none) of these hold"):
+            with self.subTest(finding=finding):
+                wf.assert_verdict_well_formed(self._verdict("REVISE", blocking=finding))
+                self._refused(self._verdict("APPROVE", blocking=finding))
+                self.assertEqual(
+                    len(wf.parse_optional_findings(self._verdict("REVISE", optional=finding))), 1)
+
     def test_punctuation_only_entry_is_a_placeholder(self):
         """EIR-R2-001: an entry that is nothing but punctuation or symbols names no finding."""
         for placeholder in ("- -.", "- --", "- —", "- ...", "- *", "- `-`", "- !?", "1. -"):

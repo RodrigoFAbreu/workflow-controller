@@ -291,8 +291,8 @@ class _Run:
     """One verification: the scratch folder, the host listeners, and the
     launches. Built and torn down by :func:`verify_build`."""
 
-    def __init__(self, real: str, digest: str, *, runtime_root: Path, operator_home: Path,
-                 run: Callable[..., Any], model: str, effort: str, timeout: int) -> None:
+    def __init__(self, real: str, digest: str, *, runtime_root: Path, run: Callable[..., Any], model: str,
+                 effort: str, timeout: int) -> None:
         # review imports this module at load, so the import is deferred to first use.
         review = importlib.import_module("controller.review")
 
@@ -472,8 +472,7 @@ def verify_build(binary: str | os.PathLike, *, runtime_root: Path, operator_home
         version = said.stdout.decode("utf-8", "replace").strip().split()[0] if said.stdout.strip() else version
     except (OSError, subprocess.SubprocessError, IndexError):
         pass
-    state = _Run(real, digest, runtime_root=runtime_root, operator_home=operator_home, run=run, model=model,
-                 effort=effort, timeout=timeout)
+    state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout)
     try:
         state.prepare(operator_home)
         chosen = [("boundary", state.boundary), ("retry", state.retry), ("missing_component", state.missing_component)]

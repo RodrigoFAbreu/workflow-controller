@@ -1519,12 +1519,16 @@ def cmd_verify_claude(args: argparse.Namespace, runtime_root: Path, ident: ident
     print(f"version: {result.version}")
     for probe in result.probes:
         print(probe.line())
-    claude_build.record_verified(runtime_root, result.digest, {
-        "version": result.version,
-        "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "controller_version": ident.version,
-        "probes": result.probe_results(),
-    })
+    try:
+        claude_build.record_verified(runtime_root, result.digest, {
+            "version": result.version,
+            "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            "controller_version": ident.version,
+            "probes": result.probe_results(),
+        })
+    except OSError as exc:  # a symlinked record is refused, never written through (D3): exit 20, not a traceback
+        raise ControllerError(f"the build held every probe but was not recorded: {exc}",
+                              evidence={"raised_by": "cli.cmd_verify_claude"}) from exc
     print(f"recorded: {result.digest} in {runtime_root / claude_build.RECORD_NAME}")
     return EXIT_OK
 

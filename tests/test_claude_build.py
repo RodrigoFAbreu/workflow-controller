@@ -511,6 +511,17 @@ class VerifyClaudeCommandTests(unittest.TestCase):
         self.assertEqual((code, "build_changed" in err), (20, True))
         self.assertFalse((self.root / cb.RECORD_NAME).exists())
 
+    def test_a_symlinked_record_exits_20_and_leaves_the_link_target_untouched(self) -> None:
+        self.root.mkdir()
+        target = Path(self.tmp.name) / "elsewhere.json"
+        target.write_text("untouched")
+        (self.root / cb.RECORD_NAME).symlink_to(target)
+        code, _, err = self.run_cli()
+        self.assertEqual(code, 20)
+        self.assertIn("was not recorded", err)
+        self.assertEqual(target.read_text(), "untouched")
+        self.assertTrue((self.root / cb.RECORD_NAME).is_symlink())
+
     def test_an_admitted_build_is_reported_without_a_probe_unless_forced(self) -> None:
         self.assertEqual(self.run_cli()[0], 0)
         launches = self.fake.launches

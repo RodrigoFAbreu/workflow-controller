@@ -98,7 +98,9 @@ twice, the normalised summaries compared) and `tests.test_scenarios_negative` (t
 mutation checks). They stay in a local full run. A pull request keeps a cheap
 subset determinism check (`SubsetDeterminismTest` in `tests/test_run_scenarios.py`,
 about 10 seconds, three scenarios, the exact name set and equal summaries), which
-catches a change to the runner or the normaliser.
+detects differences these three scenarios expose in the runner or the normaliser
+(a break in the normaliser's masking alone does not fail it, because none of the
+three observes a volatile value).
 
 On a push to `main`, `main.yml` runs them as `after-merge-determinism` and
 `after-merge-mutations`, each with the same setup as a shard (including
@@ -113,8 +115,9 @@ commit, or `release-target-determinism` and `release-target-mutations` when a
 `RESUME` targets an ancestor (those run on the target after `release-plan`). A
 missing, pending, failed, cancelled or skipped covering job, or a success for a
 different commit, prevents the release. **Timing:** an ordinary release publishes
-after `validate` and the slower `after-merge-*` job, about 18 minutes plus setup,
-not a few minutes after the merge; a `RESUME` of an ancestor adds the target checks
+after the slower of `validate` (about 21 minutes when it runs the full six-shard
+plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs (about 18
+minutes), plus setup and the release jobs, not a few minutes after the merge; a `RESUME` of an ancestor adds the target checks
 after `release-plan` (another 18 minutes or so) before `build`. A following merge's
 run waits behind the `main-release` slot as before. A target that predates the
 moved module blocks the release (fail-closed) for the owner to decide. A
@@ -145,13 +148,14 @@ conformance lane. The lane files are named per run (`lane-<shard>-<run id>.*` in
 
 Known residuals, both accepted. A SIGKILL of the executor cannot run any cleanup in the executor, but the guard holds a pipe from it and ends the whole lane session when the pipe closes, so only a descendant that left the session (`setsid`) can survive. A SIGKILL of the lane's own guard by an outside actor, immediately followed by a SIGINT to the executor, can leave suite descendants running; it is a double fault, and the executor's monitor normally ends the group in between. In both cases GitHub tears the job down, and a local run's supervisor marker scan reports the leftovers, the same as the serial design.
 
-Measured on the pull request of C2b (six shards, timings from before the refresh):
-the `CI` workflow took 24.3 minutes (shards 16.3 to 23.7 minutes), and the managed
-`Workflow conformance` check 15.0, so a pull request's checks finished after about
-24.3 minutes, above the 15 to 20 minute target. The refreshed timings put every
-shard at about 23.1 minutes of estimated work (before per-shard setup and
-aggregation); the vendored acceptance atom, which is placed and not shortened,
-is the floor of the longest shard. #119 stays open for the shortfall. A local run (`tools/run_tests.py`
+Measured on the pull request of C2b (six shards). Before the timings refresh (head
+09a69f1) the `CI` workflow took 24.3 minutes (shards 16.3 to 23.7 minutes) and the
+managed `Workflow conformance` check 15.0. After the refresh (head 3a0865f, CI run
+39783489416) the `CI` workflow took 20.9 minutes (shards 14.6 to 20.1 minutes, each
+with about 1.5 minutes of setup) and `Workflow conformance` 16.5, so a pull
+request's checks finished after about 20.9 minutes, just above the 15 to 20 minute
+target. The vendored acceptance atom, which is placed and not shortened, is the
+floor of the longest shard. #119 stays open for the shortfall (about 1 minute). A local run (`tools/run_tests.py`
 without `exec-shard`) uses the same executor and so the same two lanes,
 except `--serial`, which plans `conformance_lane: false`: the suites then
 run one at a time after the Controller tests, as the serial reference.

@@ -424,7 +424,7 @@ SUBSET_FLOWS = ("scenario-settings-file-effect", "scenario-human-gates-stop-and-
 
 class SubsetDeterminismTest(CloneCase):
     """D9, a fixed subset of the catalogue: two runs against one HEAD agree on every summary, and every record passes
-    the Workflow's real ingestion. A change to the normaliser or to the runner still fails before the merge."""
+    the Workflow's real ingestion. A difference these three scenarios expose in the runner or the normaliser still fails before the merge."""
 
     def subset_run(self) -> dict:
         folder = Path(tempfile.mkdtemp(prefix="run-scenarios-subset-"))

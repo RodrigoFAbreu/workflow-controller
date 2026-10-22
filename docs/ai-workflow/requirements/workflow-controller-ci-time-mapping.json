@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci-time",
+  "requirements": {
+    "R1": {
+      "description": "FollowCommandTest no longer depends on a fixed timer in either timer-dependent case, and a delayed follower is a regression case for each (#121)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The whole-catalogue determinism comparison and the negative-mutation module run on main through jobs with the shard jobs' setup (including ALLOW_USERNS) and not in the pull-request shards; a subset determinism check stays on every pull request with assert_ingested, equality of the normalised summaries and an exact expected name set; the moved checks fail closed and cannot pass on an empty or skipped selection; positive scenarios stay in the shards and both modules stay in local discovery (#119)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Release publication depends fail-closed on successful checks of the exact commit it publishes: `after-merge-*` when the target is `GITHUB_SHA`, `release-target-*` (run on the target, after `release-plan`) when a `RESUME` targets an ancestor; a missing, pending, failed, cancelled or skipped covering job, or a success for a different commit, prevents it, with `CI_MAIN_REUSE` on or off, and the supported `RESUME` path is preserved (#119)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The shard ceiling is six with the documented runner budget, and the assertions in tests/test_test_shards.py and tests/test_scenarios.py follow it (#119)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The lifecycle classes (not the scenario and mutation atoms) that rebuild the same repository per case share one snapshot copied per test, without shared writes, with a copy-isolation proof, a fresh-build proof and a fresh-build fallback (#119)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R6": {
+      "description": "The timings are refreshed, the six-shard plan is balanced on them with an estimate that includes setup, aggregation and conformance, and a pull request's complete successful CI duration, every required check included, is measured on CI and is at most 20 minutes or the shortfall is stated (#119)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R7": {
+      "description": "The guides and roadmap agree with the behaviour, including the release gate and timing; check_docs, the golden --check forms and the full suite are green, and the pull request body closes #121, and closes #119 only if CP5 measured at most 20 minutes (otherwise refs #119)",
+      "checkpoint_ids": [
+        "CP6"
+      ]
+    }
+  }
+}

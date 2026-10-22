@@ -21537,7 +21537,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-time-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-time-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -21693,12 +21693,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 42,
-      "last_transition": "2026-10-22T12:17:00Z",
+      "state_revision": 43,
+      "last_transition": "2026-10-22T12:40:10Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -21991,6 +21991,48 @@
               "review_content_id": "52f3a3c841181f03eb0f54d55378d138653efb7ff8dd9db2924decb224a796ab",
               "verdict": "APPROVE",
               "at": "2026-10-22T09:16:00Z"
+            }
+          ]
+        },
+        "F-691ab8b057b2": {
+          "digest": "691ab8b057b249f9f9c67c0711198d33d630da30d36e2b4fb93ffd67bd66599f",
+          "text": "**`Lifecycle.reach`'s snapshot key leaves out `LoopLifecycle.wait_seconds`, which `_step_with_budget` passes to `job.execute_step`.** Today no shared drive reaches a pull-request report step, so the wait cannot affect the built tree. One test sets `wait_seconds = 100` before `to_refused_acceptance()` (`test_approval_without_ci_is_reported_and_not_held_back_by_an_empty_rollup`). It would silently reuse a tree built with `wait_seconds = 0` if a future drive ran a report step. Add it to `snapshot_inputs()`, or comment why it is not needed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c98220152cbca45079d091d9e7dd14193d6ebfd1e3d6b95f5941ff5ca8ecbdab",
+              "verdict": "REVISE",
+              "at": "2026-10-22T12:40:10Z"
+            }
+          ]
+        },
+        "F-ca85b1648751": {
+          "digest": "ca85b164875187f9d01257d95777c8479e7ddc91be795d2128078645997eb992",
+          "text": "**`SatisfyGateLifecycleTest.refused_validation_run` now reaches the plan gate before it sets `life.report` and `life.refused`.** As a result, the `/review-plan` launch during the drive reports `\"ok\"` instead of the long report. `refused` only affects `/satisfy-gate` and the asserted step is after the gate, so the test's meaning holds. The reordering is not mentioned in the CP4 record, though, and a one-line comment would make it visible.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c98220152cbca45079d091d9e7dd14193d6ebfd1e3d6b95f5941ff5ca8ecbdab",
+              "verdict": "REVISE",
+              "at": "2026-10-22T12:40:10Z"
+            }
+          ]
+        },
+        "F-6cffad396324": {
+          "digest": "6cffad3963242f866645a9e541937b8e0b21dff7faf6d57b3a2f82f6e8989269",
+          "text": "The two branches in `MainWorkflowTest.test_every_job_downstream_of_reuse_states_its_condition` (CHECK_JOBS versus the others) make the same assertion. The `continue` branch only adds a comment and could be folded into the general case.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c98220152cbca45079d091d9e7dd14193d6ebfd1e3d6b95f5941ff5ca8ecbdab",
+              "verdict": "REVISE",
+              "at": "2026-10-22T12:40:10Z"
             }
           ]
         }

@@ -270,6 +270,47 @@ class Lifecycle:
         self.runtime.mkdir()
         self.tasks: list[str] = []
 
+    #: The instance attributes a snapshot carries with the tree: what the drive launched, answered or recorded.
+    SNAPSHOT_ATTRS: tuple[str, ...] = ("tasks",)
+
+    def snapshot_inputs(self) -> tuple:
+        """Everything set before a drive that the tree it builds depends on (a key part, so that two drives that
+        differ in any of it never share a snapshot)."""
+        return (self.release, self.report)
+
+    def snapshot_state(self) -> dict:
+        return {attr: getattr(self, attr) for attr in self.SNAPSHOT_ATTRS}
+
+    def restore_state(self, state: dict) -> None:
+        for attr, value in state.items():
+            setattr(self, attr, value)
+
+    def rebase(self, td: Path) -> None:
+        """Point every path this life holds at ``td``, the tree a snapshot was copied back to."""
+        self.td = td
+        self.root = td / "repo"
+        self.stub = td / "workflow-manager"
+        self.runtime = td / "runtime"
+
+    def reach(self, name: str, drive) -> None:
+        """Bring this life to the row ``name`` by ``drive()`` -- once per test process. The first life to ask for
+        ``(name, snapshot_inputs)`` drives for real and its tree is kept; every later one takes a copy of that tree,
+        at the path it was built at (a bundle records its worktree path, so the tree cannot move), instead of
+        driving again (D3). Falls back to driving when no copy can be made, and always drives under the scenario
+        kit, whose isolation boundary this does not change."""
+        key = (name, self.snapshot_inputs())
+        kit = getattr(self.test, "stub_dir", None) is not None
+        restored = None if kit else fixtures.restore_snapshot(key)
+        if restored is not None:
+            td, state = restored
+            shutil.rmtree(self.td, ignore_errors=True)  # the tree this life seeded and no longer needs
+            self.rebase(td)  # the cleanup registered at construction removes whatever ``self.td`` is then
+            self.restore_state(state)
+            return
+        drive()
+        if not kit:
+            fixtures.take_snapshot(key, self.td, self.snapshot_state())
+
     def inspect(self):
         return managed_repo.inspect(self.root, manager_bin=str(self.stub))
 
@@ -557,6 +598,15 @@ class GateLifecycle(Lifecycle):
         self.rows.append(protocol.next_action(self.root, WID).raw["row"])
         return super().step()
 
+    SNAPSHOT_ATTRS = ("tasks", "rows", "satisfied")
+
+    def snapshot_inputs(self) -> tuple:
+        return (*super().snapshot_inputs(), self.checks.read_text(), tuple(sorted(self.refused)))
+
+    def rebase(self, td: Path) -> None:
+        super().rebase(td)
+        self.checks = td / "checks"
+
     def explain(self) -> dict:
         """``explain --json`` for the repository, as an operator would read it."""
         out = io.StringIO()
@@ -607,8 +657,15 @@ class GateLifecycle(Lifecycle):
         self.test.assertEqual(len(self.tasks), launched)
         self.user_step(_AUDITED_REVIEW, stage, "APPROVE", "manual")
 
+    def to_plan_gate(self) -> None:
+        """The first manual gate passed: the plan reviewed, the next step is the validator's."""
+        self.reach("to_plan_gate", lambda: self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan"))
+
     def to_acceptance(self) -> None:
         """Plan to the functional checklist, every gate passed by the validator."""
+        self.reach("to_acceptance", self._to_acceptance)
+
+    def _to_acceptance(self) -> None:
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
         self.run_until("IMPLEMENTING")
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation")
@@ -680,11 +737,11 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
 
     def refused_validation_run(self, report: str) -> None:
         life = GateLifecycle(self)
+        life.to_plan_gate()
         life.refused = {"plan"}
         unmet = self.UNMET
         life.report = report
         self.assertGreater(life.report.index(unmet), 400)
-        life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
         first = life.step()
         # After the first refusal the gate is still automatic, and explain already names the unmet requirement.
         self.assertTrue(life.explain()["automatic"])
@@ -896,6 +953,7 @@ class LoopLifecycle(GateLifecycle):
         #: The acceptance policy adopted once the functional checklist exists: a commit at any earlier point would
         #: leave the plan bundle generated at an older HEAD.
         self.acceptance = acceptance
+        self.bound = bind
         if bind:
             self.bind()
         #: The Workflow's results for each launched ``/apply-pr-review``.
@@ -911,7 +969,26 @@ class LoopLifecycle(GateLifecycle):
                   "pr": {"number": 7, "url": "https://github.com/owner/repo/pull/7"}}
         controller_runtime.write_json(self.runtime, milestone_branch.record_rel(key, WID), record)
 
-    def to_acceptance(self) -> None:
+    SNAPSHOT_ATTRS = (*GateLifecycle.SNAPSHOT_ATTRS, "applied", "sleeps")
+
+    def snapshot_inputs(self) -> tuple:
+        # The binding is in the runtime tree and the world file is beside it: both are what a drive starts from.
+        return (*super().snapshot_inputs(), json.dumps(self.acceptance, sort_keys=True), self.world.path.read_text(),
+                self.bound)
+
+    def snapshot_state(self) -> dict:
+        return {**super().snapshot_state(), "queries": self.world.queries}
+
+    def restore_state(self, state: dict) -> None:
+        state = dict(state)
+        self.world.queries = state.pop("queries")
+        super().restore_state(state)
+
+    def rebase(self, td: Path) -> None:
+        super().rebase(td)
+        self.world.path = td / "world.json"
+
+    def _to_acceptance(self) -> None:
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
         self.run_until("IMPLEMENTING")
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation")
@@ -981,6 +1058,9 @@ class LoopLifecycle(GateLifecycle):
     def to_refused_acceptance(self) -> None:
         """Acceptance reached and ``/satisfy-gate acceptance`` launched once: it is refused by the scripted pull
         request, the Workflow's query stores the fact, and the next answer is the external gate."""
+        self.reach("to_refused_acceptance", self._to_refused_acceptance)
+
+    def _to_refused_acceptance(self) -> None:
         self.to_acceptance()
         self.test.assertEqual(self.step()["status"], job.STATUS_FINISHED)
 

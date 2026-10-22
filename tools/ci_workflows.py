@@ -117,6 +117,19 @@ GH_RELEASE_CREATE_NOTE = (
 PACKAGE_TEST_MODULES = tuple(module for module, (where, _) in test_shards.CI_PLACEMENT.items()
                              if where == test_shards.PACKAGE)
 
+#: The ``tests.*`` modules ``main.yml`` runs after the merge, one job each
+#: (``after-merge-<check>`` on the pushed commit, ``release-target-<check>`` on
+#: the commit a release publishes when that is an ancestor), keyed by the job's
+#: check name. The release waits for them; ``tools/test_shards.py``'s CI
+#: placement keeps them out of the ``tests`` matrix.
+MAIN_TEST_MODULES = {
+    "determinism": "tests.test_catalogue_determinism",
+    "mutations": "tests.test_scenarios_negative",
+}
+assert set(MAIN_TEST_MODULES.values()) == {module for module, (where, _) in
+                                           test_shards.CI_PLACEMENT.items()
+                                           if where == test_shards.MAIN}
+
 #: The ``tests`` jobs' planning inputs. ``plan`` and every shard job pass
 #: exactly these, so a digest match proves they computed the same plan.
 PLANNING_ARGS = "--profile ci --ci-placement"
@@ -486,6 +499,60 @@ def _publishing_condition() -> str:
     return f"{ON_TRUNK} && ({states})"
 
 
+#: ``release-plan`` publishes this commit, not the pushed one: a ``RESUME``
+#: targets an ancestor of ``GITHUB_SHA``.
+TARGET_IS_PUSHED = "needs.release-plan.outputs.commit == github.sha"
+TARGET_IS_ANCESTOR = "needs.release-plan.outputs.commit != github.sha"
+
+
+#: The four jobs ``build`` and ``publish`` read through ``_coverage_condition``.
+CHECK_JOBS = tuple(f"{kind}-{check}" for kind in ("after-merge", "release-target")
+                   for check in MAIN_TEST_MODULES)
+
+
+def _coverage_condition() -> str:
+    """The after-merge checks passed on the commit that is published: for each
+    check, ``after-merge-<check>`` when the target is the pushed commit and
+    ``release-target-<check>`` when it is an ancestor. Used by ``build`` and
+    ``publish`` only, because it reads the results of the ``release-target-*``
+    jobs, which a job's own ``if`` must never depend on. Each result is
+    compared to ``success``, so a missing, pending, failed, cancelled or
+    skipped covering job, or a success for another commit, is false."""
+    terms = [f"({TARGET_IS_PUSHED} && needs.after-merge-{check}.result == 'success') || "
+             f"({TARGET_IS_ANCESTOR} && needs.release-target-{check}.result == 'success')"
+             for check in MAIN_TEST_MODULES]
+    return " && ".join(f"({term})" for term in terms)
+
+
+def _main_check_job(check: str, *, release_target: bool) -> dict:
+    """``after-merge-<check>`` (the pushed commit) or ``release-target-<check>``
+    (the commit ``release-plan`` selected, only when that is an ancestor and
+    the run publishes). Both run ``run_tests.py main-check``, which fails when
+    the module's selection is empty or short, or any test was skipped. The
+    steps are the ``tests`` job's, ``ALLOW_USERNS`` included."""
+    module = MAIN_TEST_MODULES[check]
+    job: dict = {}
+    if release_target:
+        job.update({
+            "needs": ["release-plan"],
+            "if": f"{_after('release-plan')} && {_publishing_condition()} && {TARGET_IS_ANCESTOR}",
+        })
+    job.update({
+        "runs-on": RUNNER,
+        "permissions": {"contents": "read"},
+        "steps": [
+            _checkout(pinned=True, fetch_depth=0,
+                      ref="${{ needs.release-plan.outputs.commit }}") if release_target
+            else _checkout(pinned=True),
+            _setup_python(pinned=True),
+            _install_editable(),
+            {"name": "allow unprivileged user namespaces", "run": ALLOW_USERNS},
+            {"name": check, "run": f"python3 tools/run_tests.py main-check {module}"},
+        ],
+    })
+    return job
+
+
 #: ``reuse`` (in ``main.yml``) blocks ``validate`` and runs only for ``on``.
 #: ``reuse-report`` (in ``main-reuse-report.yml``, a workflow of its own so
 #: that it can never hold ``main.yml``'s serialised ``main-release`` slot)
@@ -563,6 +630,11 @@ def main_workflow() -> dict:
                 "with": {REUSE_INPUT: f"${{{{ vars.{REUSE_VARIABLE} == 'on' && "
                                       "needs.reuse.outputs.run-id || '' }}"},
             },
+            # The two whole-catalogue checks run beside validate on the pushed
+            # commit and are never reused or skipped; build and publish wait
+            # for them (_coverage_condition).
+            "after-merge-determinism": _main_check_job("determinism", release_target=False),
+            "after-merge-mutations": _main_check_job("mutations", release_target=False),
             "release-plan": {
                 "needs": ["validate"],
                 "if": f"{_after('validate')} && {ON_TRUNK}",
@@ -575,9 +647,12 @@ def main_workflow() -> dict:
                     {"name": "classify", "id": "classify", "env": dict(GIT_CREDENTIAL_ENV), "run": classify},
                 ],
             },
+            "release-target-determinism": _main_check_job("determinism", release_target=True),
+            "release-target-mutations": _main_check_job("mutations", release_target=True),
             "build": {
-                "needs": ["validate", "release-plan"],
-                "if": f"{_after('validate', 'release-plan')} && {_publishing_condition()}",
+                "needs": ["validate", "release-plan", *CHECK_JOBS],
+                "if": f"{_after('validate', 'release-plan')} && {_publishing_condition()} "
+                      f"&& {_coverage_condition()}",
                 "runs-on": RUNNER,
                 # tools/release.py build and verify read it; their command
                 # lines stay 1.3.0's, which a RESUME target's tooling accepts.
@@ -594,8 +669,9 @@ def main_workflow() -> dict:
                 ],
             },
             "publish": {
-                "needs": ["validate", "release-plan", "build"],
-                "if": f"{_after('validate', 'release-plan', 'build')} && {_publishing_condition()}",
+                "needs": ["validate", "release-plan", "build", *CHECK_JOBS],
+                "if": f"{_after('validate', 'release-plan', 'build')} && {_publishing_condition()} "
+                      f"&& {_coverage_condition()}",
                 "runs-on": RUNNER,
                 "permissions": {"contents": "write"},
                 "env": {"GH_TOKEN": "${{ github.token }}",
@@ -675,6 +751,10 @@ WORKFLOWS = {
                  "runs first and validate skips the shards when the recorded tree and plan digest\n"
                  "match. Any other value: reuse does not run and validate starts at once. The\n"
                  "report-only mode is the separate workflow main-reuse-report.yml. See docs/guide/ci-and-releases.md.\n\n"
+                 "after-merge-determinism and after-merge-mutations run the two whole-catalogue scenario\n"
+                 "checks on the pushed commit (tools/run_tests.py main-check); they are never reused or\n"
+                 "skipped, and build and publish need the checks of the commit being published: the\n"
+                 "after-merge jobs when it is the pushed commit, otherwise release-target-* run on it.\n\n"
                  + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
     "main-reuse-report.yml": (reuse_report_workflow,
                               "Report-only reuse (CI_MAIN_REUSE unset, report or an unknown value): logs, in\n"

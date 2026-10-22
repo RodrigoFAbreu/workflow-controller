@@ -728,7 +728,20 @@ class TesterLifecycle(lifecycle.GateLifecycle):
             return
         super().effect(task)
 
+    SNAPSHOT_ATTRS = (*lifecycle.GateLifecycle.SNAPSHOT_ATTRS, "task_texts")
+
+    def snapshot_inputs(self) -> tuple:
+        # The checklist the fake worker writes at ``functional.prepare`` is part of the repository the drive builds.
+        return (*super().snapshot_inputs(), self.numbered)
+
+    def rebase(self, td: Path) -> None:
+        super().rebase(td)
+        self.functional["operator_home"] = str(td / "claude-home")
+
     def to_38e(self) -> None:
+        self.reach("to_38e", self._to_38e)
+
+    def _to_38e(self) -> None:
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
         self.run_until("IMPLEMENTING")
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW", "implementation")

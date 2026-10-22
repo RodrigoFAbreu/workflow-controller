@@ -10,7 +10,9 @@ console script).
 
 from __future__ import annotations
 
+import atexit
 import contextlib
+import copy
 import json
 import os
 import re
@@ -891,6 +893,73 @@ def seed_workflow_item(root: Path, release: str, stage: str, *, work_item_id: st
     if written:
         raise AssertionError(f"seeding wrote bytecode into the target: {written}")
     return root
+
+# ---------------------------------------------------------------------------
+# One built repository per process, copied per test
+# ---------------------------------------------------------------------------
+#
+# A Workflow bundle records the absolute path of the worktree it was generated in, and its ``bundle_id`` hashes that
+# line, so a built tree cannot be moved to another path (the id, the recorded state and the archive would all
+# disagree). A copy is therefore put back at the path of the first build -- which the first test's cleanup has
+# already removed, tests of one process running one after the other -- and never anywhere else.
+
+#: Where the process keeps the snapshots it has taken (made on first use, removed at exit).
+_SNAPSHOT_AREA: Path | None = None
+#: key -> ``(directory, the path the tree was built at, saved state)``; ``None`` for a key whose snapshot could not
+#: be kept, so that every later test builds fresh and does not try again.
+_SNAPSHOTS: dict[object, tuple[Path, Path, dict] | None] = {}
+
+
+def _snapshot_area() -> Path:
+    global _SNAPSHOT_AREA
+    if _SNAPSHOT_AREA is None:
+        import tempfile
+        _SNAPSHOT_AREA = Path(tempfile.mkdtemp(prefix="wfc-snapshots-"))
+        atexit.register(shutil.rmtree, _SNAPSHOT_AREA, ignore_errors=True)
+    return _SNAPSHOT_AREA
+
+
+def has_snapshot(key: object) -> bool:
+    return _SNAPSHOTS.get(key) is not None
+
+
+def take_snapshot(key: object, built_at: Path, state: dict) -> bool:
+    """Keep a copy of the whole tree ``built_at`` and ``state`` (a deep copy) under ``key``, so that
+    :func:`restore_snapshot` can give a later test the same tree without building it again. The first taker of a
+    key wins. Never raises: a tree that cannot be copied just means every later test builds its own."""
+    if key in _SNAPSHOTS:
+        return False
+    try:
+        import tempfile
+        target = Path(tempfile.mkdtemp(dir=_snapshot_area()))
+        shutil.copytree(built_at, target, symlinks=True, dirs_exist_ok=True)
+        _SNAPSHOTS[key] = (target, built_at, copy.deepcopy(state))
+    except (OSError, shutil.Error):
+        _SNAPSHOTS[key] = None
+        return False
+    return True
+
+
+def restore_snapshot(key: object) -> tuple[Path, dict] | None:
+    """Make a fresh copy of the tree kept under ``key`` at the path it was built at and return that path with a
+    deep copy of the state saved with it. ``None`` -- with nothing left behind -- when there is no snapshot for the
+    key, when the path is taken (another copy of it is still in use, or something else holds the name) or when the
+    copy fails; the caller then builds fresh. The caller removes the returned path when its test ends."""
+    kept = _SNAPSHOTS.get(key)
+    if kept is None:
+        return None
+    source, built_at, state = kept
+    try:
+        built_at.mkdir()  # not ``exist_ok``: a path in use is never overwritten
+    except OSError:
+        return None
+    try:
+        shutil.copytree(source, built_at, symlinks=True, dirs_exist_ok=True)
+    except (OSError, shutil.Error):
+        shutil.rmtree(built_at, ignore_errors=True)
+        return None
+    return built_at, copy.deepcopy(state)
+
 
 def carry_out_plan_recovery_steps(root: Path, work_item_id: str, steps: tuple[str, ...]) -> None:
     """Carry out the Controller's plan-bundle recovery steps

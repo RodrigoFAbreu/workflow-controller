@@ -2280,14 +2280,55 @@ class _FollowCliCase(unittest.TestCase):
 
 
 class FollowCommandTest(_FollowCliCase):
-    def test_a_running_run_is_chosen(self) -> None:
+    def _after_follower_attached(self, action) -> None:
+        """Run ``action`` once, from inside the follower's first heartbeat -- after it has chosen its
+        target and read its first events -- so the end of the run never depends on when ``follow`` starts."""
+        real = observe._Follower.heartbeat
+        fired: list[bool] = []
+
+        def heartbeat(follower, record):
+            if not fired:
+                fired.append(True)
+                action()
+            return real(follower, record)
+
+        patcher = unittest.mock.patch.object(observe._Follower, "heartbeat", heartbeat)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _live_run_ending_when_followed(self) -> None:
         self._run("r-old", started_at="2026-01-01T00:00:00Z")
         self._run("r-live", state="running", exit_code=None, started_at="2026-01-02T00:00:00Z")
         self._run_event("r-live", 1, "run_started")
-        done = threading.Timer(0.3, lambda: (self._run("r-live", state="ended", exit_code=0),
-                                             self._run_event("r-live", 2, "run_ended", exit_code=0)))
-        done.start()
-        self.addCleanup(done.cancel)
+        self._after_follower_attached(lambda: (self._run("r-live", state="ended", exit_code=0),
+                                               self._run_event("r-live", 2, "run_ended", exit_code=0)))
+
+    def _orphan_job_ending_when_followed(self) -> int:
+        sleeper = process_fixtures.spawn_sleeper(self)
+        self._run("r-int", state="interrupted", exit_code=None)
+        self._job("j-orphan", worker_process=process_fixtures.worker_process_dict(sleeper.pid))
+        runtime.append_jsonl(self.runtime_root, "jobs/j-orphan/events.jsonl",
+                             {"v": 1, "seq": 1, "at": "2026-01-01T00:00:00Z", "job_id": "j-orphan",
+                              "event": "worker_spawned", "pid": sleeper.pid, "pgid": sleeper.pid})
+
+        def end_worker() -> None:
+            process_fixtures.kill_group(sleeper.pid)
+            sleeper.wait(timeout=10)
+
+        self._after_follower_attached(end_worker)
+        return sleeper.pid
+
+    def test_a_running_run_is_chosen(self) -> None:
+        self._live_run_ending_when_followed()
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("run r-live started", out)
+        self.assertTrue(out.splitlines()[-1].endswith("run ended: exit 0"))
+
+    def test_a_follower_started_late_still_sees_the_running_run(self) -> None:
+        # The old shape ended the run on a 0.3-second timer; a follower started past it found nothing active.
+        self._live_run_ending_when_followed()
+        time.sleep(0.5)
         code, out, _err = self._follow("follow", str(self.repo))
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("run r-live started", out)
@@ -2300,16 +2341,19 @@ class FollowCommandTest(_FollowCliCase):
         self.assertIn(f"nothing active for {self.repo}; last run r-dead was not closed", out)
 
     def test_with_no_run_an_orphan_job_with_an_active_worker_is_chosen(self) -> None:
-        sleeper = process_fixtures.spawn_sleeper(self)
-        self._run("r-int", state="interrupted", exit_code=None)
-        self._job("j-orphan", worker_process=process_fixtures.worker_process_dict(sleeper.pid))
-        runtime.append_jsonl(self.runtime_root, "jobs/j-orphan/events.jsonl",
-                             {"v": 1, "seq": 1, "at": "2026-01-01T00:00:00Z", "job_id": "j-orphan",
-                              "event": "worker_spawned", "pid": sleeper.pid, "pgid": sleeper.pid})
-        threading.Timer(0.3, process_fixtures.kill_group, (sleeper.pid,)).start()
+        pid = self._orphan_job_ending_when_followed()
         code, out, _err = self._follow("follow", str(self.repo))
         self.assertEqual(code, cli.EXIT_OK)
-        self.assertIn(f"job j-orphan worker spawned: pid {sleeper.pid}", out)
+        self.assertIn(f"job j-orphan worker spawned: pid {pid}", out)
+        self.assertTrue(out.splitlines()[-1].endswith("worker exited; job j-orphan awaits resume"))
+
+    def test_a_follower_started_late_still_sees_the_orphan_job(self) -> None:
+        # The old shape killed the sleeper on a 0.3-second timer; a late follower found no active worker.
+        pid = self._orphan_job_ending_when_followed()
+        time.sleep(0.5)
+        code, out, _err = self._follow("follow", str(self.repo))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn(f"job j-orphan worker spawned: pid {pid}", out)
         self.assertTrue(out.splitlines()[-1].endswith("worker exited; job j-orphan awaits resume"))
 
     def test_nothing_active(self) -> None:

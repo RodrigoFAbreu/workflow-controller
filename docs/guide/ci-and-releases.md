@@ -52,7 +52,9 @@ Two workflows call it:
   (no inputs: it classifies the current tip of `main`). After `validate`,
   its `release-plan` job classifies the commit, and its `build` and
   `publish` jobs run only when a release is due or resumable (see
-  [Releasing](#releasing)). Its runs never cancel one another (concurrency group
+  [Releasing](#releasing)). It also runs the two whole-catalogue scenario
+  checks that no longer run on a pull request (see
+  [Checks that run after the merge](#checks-that-run-after-the-merge)). Its runs never cancel one another (concurrency group
   `main-release`). GitHub keeps one running and one pending run per
   group, so a burst of merges can skip a middle commit's run; that loses
   nothing, because classification compares with the last release tag in
@@ -62,7 +64,7 @@ Two workflows call it:
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
 untouched. It still runs the nine conformance suites in one job, on every
-pull request (10 to 14 minutes in recent runs with Workflow 2.10.0).
+pull request (10 to 15 minutes in recent runs).
 `validate` runs the same suites through the planner as well; the
 acceptance-matrix suite (8 to 12 minutes on CI) is its own largest atom.
 Both are now close to the floor on when all of a pull request's checks
@@ -70,13 +72,14 @@ finish, so the wall time of a shard counts.
 `release.yml` is gone: pushing a `v*` tag by hand triggers nothing.
 
 The CI plan uses the `ci` profile: a target of 180 s of work per shard,
-at least 2 and at most 4 shards, from the committed `tools/test_timings.json`
-only. The maximum wins today, so CI runs four shards. The maximum is a
-runner budget: 4 shards, `package` and the managed `workflow-conformance`
-job hold at most 6 Linux runners for one pull request, on an account that
-shares 20 jobs. Refresh `tools/test_timings.json` (see the development
-guide) when the longest shard passes about 14 minutes; it was refreshed on
-2026-10-13 and drifts within days as the acceptance matrix and the
+at least 2 and at most 6 shards (`CI_MAX_SHARDS` in `tools/test_shards.py`),
+from the committed `tools/test_timings.json` only. The maximum wins today, so
+CI runs six shards. The maximum is a runner budget: 6 shards, `package` and the
+managed `workflow-conformance` job hold at most 8 Linux runners for one pull
+request, on an account that shares 20 jobs. Refresh `tools/test_timings.json` (see the development
+guide) when the longest shard drifts well past the about 23-minute
+estimate the committed timings give; it was refreshed on 2026-10-22 from the
+real six-shard run, and drifts within days as the acceptance matrix and the
 scenario tests grow. A stale or missing entry costs wall time
 (the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
@@ -86,6 +89,40 @@ run's summary also names each failing test, its shard, the shard's log,
 the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 `test-plan` the `plan.json` the replay command reads) and the
 reproduction commands.
+
+### Checks that run after the merge
+
+Two scenario checks cost about 12 and 16 minutes and no longer run in a pull
+request's shards: `tests.test_catalogue_determinism` (every catalogue scenario run
+twice, the normalised summaries compared) and `tests.test_scenarios_negative` (the
+mutation checks). They stay in a local full run. A pull request keeps a cheap
+subset determinism check (`SubsetDeterminismTest` in `tests/test_run_scenarios.py`,
+about 10 seconds, three scenarios, the exact name set and equal summaries), which
+detects differences these three scenarios expose in the runner or the normaliser
+(a break in the normaliser's masking alone does not fail it, because none of the
+three observes a volatile value).
+
+On a push to `main`, `main.yml` runs them as `after-merge-determinism` and
+`after-merge-mutations`, each with the same setup as a shard (including
+`ALLOW_USERNS`), through `python3 tools/run_tests.py main-check MODULE`. That
+command fails closed: it exits non-zero on an empty or short selection, any skip or
+any failure, and an older tree that lacks it refuses. They are never reused under
+`CI_MAIN_REUSE` and never skipped.
+
+Both checks gate the release. `build` and `publish` need the checks of the exact
+commit they publish: the `after-merge-*` jobs when the release target is the pushed
+commit, or `release-target-determinism` and `release-target-mutations` when a
+`RESUME` targets an ancestor (those run on the target after `release-plan`). A
+missing, pending, failed, cancelled or skipped covering job, or a success for a
+different commit, prevents the release. **Timing:** an ordinary release publishes
+after the slower of `validate` (about 21 minutes when it runs the full six-shard
+plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs (about 18
+minutes), plus setup and the release jobs, not a few minutes after the merge; a `RESUME` of an ancestor adds the target checks
+after `release-plan` (another 18 minutes or so) before `build`. A following merge's
+run waits behind the `main-release` slot as before. A target that predates the
+moved module blocks the release (fail-closed) for the owner to decide. A
+non-deterministic scenario or a flow that stops failing under its mutation is
+therefore found on `main`, before the release but after the merge.
 
 ### How a shard runs
 
@@ -111,11 +148,14 @@ conformance lane. The lane files are named per run (`lane-<shard>-<run id>.*` in
 
 Known residuals, both accepted. A SIGKILL of the executor cannot run any cleanup in the executor, but the guard holds a pipe from it and ends the whole lane session when the pipe closes, so only a descendant that left the session (`setsid`) can survive. A SIGKILL of the lane's own guard by an outside actor, immediately followed by a SIGINT to the executor, can leave suite descendants running; it is a double fault, and the executor's monitor normally ends the group in between. In both cases GitHub tears the job down, and a local run's supervisor marker scan reports the leftovers, the same as the serial design.
 
-Expected with the 2026-10-13 profile: the shard holding the
-acceptance matrix runs only that suite (about 11 minutes), the other three
-run conformance lanes of about 5.2, 3.4 and 3.0 minutes beside about 11 minutes of
-Controller tests, so the longest shard is about 12.4 minutes and a pull
-request's checks finish in about 14. A local run (`tools/run_tests.py`
+Measured on the pull request of C2b (six shards). Before the timings refresh (head
+09a69f1) the `CI` workflow took 24.3 minutes (shards 16.3 to 23.7 minutes) and the
+managed `Workflow conformance` check 15.0. After the refresh (head 3a0865f, CI run
+39783489416) the `CI` workflow took 20.9 minutes (shards 14.6 to 20.1 minutes, each
+with about 1.5 minutes of setup) and `Workflow conformance` 16.5, so a pull
+request's checks finished after about 20.9 minutes, just above the 15 to 20 minute
+target. The vendored acceptance atom, which is placed and not shortened, is the
+floor of the longest shard. #119 stays open for the shortfall (about 1 minute). A local run (`tools/run_tests.py`
 without `exec-shard`) uses the same executor and so the same two lanes,
 except `--serial`, which plans `conformance_lane: false`: the suites then
 run one at a time after the Controller tests, as the serial reference.

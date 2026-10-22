@@ -617,6 +617,7 @@ class ReportNotificationTest(unittest.TestCase):
         for wait_seconds, expected in ((0, []), (25, ["lane_blocked"])):
             with self.subTest(wait_seconds=wait_seconds):
                 case = ReportTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
+                self.addCleanup(case.doCleanups)  # ``case`` is never run, so nothing else removes its repository
                 life = case.at_38f()
                 case.bind(life)
                 record = case.report(life, [lambda commit: raw_of(commit, rollup=(RUNNING,))],

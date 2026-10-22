@@ -416,28 +416,30 @@ class DeterminismTest(CloneCase):
         self.assertNotEqual(self.summaries("selftest-unnormalised"), self.summaries("selftest-unnormalised"))
 
 
-class CatalogueDeterminismTest(CloneCase):
-    """D9, whole catalogue: two complete runs against one HEAD agree on every summary."""
+#: The determinism check every pull request keeps: two cheap catalogue flows and one kill-and-resume variant. The
+#: whole-catalogue comparison runs after the merge (``tests/test_catalogue_determinism.py``).
+SUBSET_FLOWS = ("scenario-settings-file-effect", "scenario-human-gates-stop-and-resume",
+                "scenario-kill-and-resume-run-after")
 
-    def complete_run(self) -> dict:
-        folder = Path(tempfile.mkdtemp(prefix="run-scenarios-cat-"))
+
+class SubsetDeterminismTest(CloneCase):
+    """D9, a fixed subset of the catalogue: two runs against one HEAD agree on every summary, and every record passes
+    the Workflow's real ingestion. A difference these three scenarios expose in the runner or the normaliser still fails before the merge."""
+
+    def subset_run(self) -> dict:
+        folder = Path(tempfile.mkdtemp(prefix="run-scenarios-subset-"))
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        done = self.runner("run", output=folder, module=False)
+        done = self.runner("run", *SUBSET_FLOWS, output=folder, module=False)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return self.records(folder)
 
-    def test_two_complete_runs_agree_on_every_normalised_summary(self) -> None:
-        records = self.complete_run()
-        # D4: every record of every registered flow and variant passes the Workflow's real ingestion, not only the
-        # selftest records IngestionTest feeds it.
+    def test_two_subset_runs_agree_on_every_normalised_summary(self) -> None:
+        records = self.subset_run()
+        self.assertEqual(set(records), set(SUBSET_FLOWS))
         self.assert_ingested(records)
         first = {k: v["summary"] for k, v in records.items()}
-        second = {k: v["summary"] for k, v in self.complete_run().items()}
-        self.assertGreaterEqual(len(first), 15)
-        self.assertFalse([name for name in first if name.startswith("selftest")])
+        second = {k: v["summary"] for k, v in self.subset_run().items()}
         self.assertEqual(first, second)
-
-
 
 
 class _GitCase(unittest.TestCase):

@@ -1,0 +1,106 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-ci-time",
+ "dispositions": {
+  "F-13b3d2ff18e4": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, D2(e)): the subset uses three real catalogue flows, not selftest-*, with its own assertions"
+  },
+  "F-2dd5df0ba5fc": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, Artifact declaration risk): reasons written for this item"
+  },
+  "F-48824646295e": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#124"
+  },
+  "F-4d19abd8d071": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, Wall-time estimate, D3): one-test atoms are stated as unhelped unless a cheaper drive is found"
+  },
+  "F-691ab8b057b2": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#125"
+  },
+  "F-6cffad396324": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#125"
+  },
+  "F-71368fffb871": {
+   "disposition": "dropped",
+   "reason": "Declaration wording only: the files fall under protected prefixes, so classification and behaviour are unaffected; the plan is a historical record."
+  },
+  "F-7fedf919f9b4": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, CP5 row): reads the Draft pull request's CI run, no second pull request"
+  },
+  "F-88984626fb70": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, Wall-time estimate): the 540 s from one-test atoms is stated as conditional"
+  },
+  "F-901a9a271dc1": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#124"
+  },
+  "F-979363d60339": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, R2): matches D2(e) subset wording"
+  },
+  "F-97e5bdb7181d": {
+   "disposition": "fixed",
+   "note": "tools/test_shards.py (partition dict has a MAIN bucket) and tests/test_test_shards.py partition assertions"
+  },
+  "F-a01dcd52810c": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, Artifact declaration risk): reasons written for this item"
+  },
+  "F-a0f150bae732": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#124"
+  },
+  "F-abd06eecd5cb": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, Artifact declaration risk): reasons written for this item; tests/test_ci_workflows.py check() guards the generated workflows"
+  },
+  "F-bdf631f6fd22": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, CP5 row): measurement read from the run of the pushed commit and recorded in the narrative"
+  },
+  "F-ca85b1648751": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#125"
+  },
+  "F-d12bf08c8a44": {
+   "disposition": "dropped",
+   "reason": "Estimate figures were replaced by the measured runs (24.3 and 20.9 minutes) recorded in the CP5 row and docs/ROADMAP.md."
+  },
+  "F-d65e38a97869": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#125"
+  },
+  "F-df33752dba99": {
+   "disposition": "fixed",
+   "note": "tools/test_shards.py partition dict includes MAIN; tests/test_test_shards.py asserts the main partition"
+  },
+  "F-e9102aaf54ea": {
+   "disposition": "fixed",
+   "note": "tools/ci_workflows.py _main_check_job uses _checkout(pinned=True) and _setup_python(pinned=True)"
+  },
+  "F-ecc1b33632d7": {
+   "disposition": "dropped",
+   "reason": "Superseded by the measured 24.3 and 20.9 minutes, which replaced the estimated range."
+  },
+  "F-f29db85bb3ac": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#125"
+  },
+  "F-f5596969f72b": {
+   "disposition": "dropped",
+   "reason": "Wording of D2(b) in an approved historical plan; no behaviour or current doc depends on it."
+  },
+  "F-f67db92a5806": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 8, D3, Wall-time estimate): which atoms gain and which do not is stated and reported in CP4"
+  }
+ }
+}

@@ -1515,7 +1515,7 @@ def cmd_verify_claude(args: argparse.Namespace, runtime_root: Path, ident: ident
         return EXIT_OK
     print("probing: up to two short model turns at low effort, using your Claude credentials "
           "(the usage budget is not consulted)")
-    result = claude_build.verify_build(binary, runtime_root=runtime_root, operator_home=_claude_home())
+    result = claude_build.verify_build(real, runtime_root=runtime_root, operator_home=_claude_home())
     print(f"version: {result.version}")
     for probe in result.probes:
         print(probe.line())

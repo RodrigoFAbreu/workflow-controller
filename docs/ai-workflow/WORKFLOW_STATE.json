@@ -22679,7 +22679,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -22827,12 +22827,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 24,
-      "last_transition": "2026-10-22T19:50:35Z",
+      "state_revision": 26,
+      "last_transition": "2026-10-22T20:05:41.772964+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -22996,7 +22996,76 @@
               "at": "2026-10-22T19:23:48Z"
             }
           ]
+        },
+        "F-f82798514e26": {
+          "digest": "f82798514e26f8736955a9e4d9a169300f31a5d9530dfc252c56a92a63e6265d",
+          "text": "`cmd_verify_claude` (`controller/cli.py`) resolves `claude` on `PATH` before it looks at `--claude-binary`. So\n   `verify-claude --claude-binary /path/to/claude` refuses when no `claude` is on `PATH`, even though the build to\n   verify was named. The note path could instead say \"a launch finds no claude on PATH\". This is carried from\n   round 1. The summary defers it as a follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T19:58:14Z"
+            }
+          ]
+        },
+        "F-52b1d2ff28f2": {
+          "digest": "52b1d2ff28f25ae555ece33c263803a8af7ccddd4c0c07b0cff357d6a6672f65",
+          "text": "A `build_changed` refusal is reported with the probe name `launch`, because `_Run.launch` calls\n   `check_unchanged(\"launch\")`. It is not named after the probe whose launch saw the change. Passing the probe name\n   through would follow D2's \"the failing probe named\" more literally. This is carried from round 1 and deferred.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T19:58:14Z"
+            }
+          ]
+        },
+        "F-7b92aa4dc35e": {
+          "digest": "7b92aa4dc35ea4ad5713e0bcba44bb5972bf6f8917ddc74511438267a96a428c",
+          "text": "`TEST_RESULTS.md` still says implementation revision 1, head `e5d5719`. The round-1 rerun is reported only in\n   one line of `IMPLEMENTATION_SUMMARY.md`. Updating the header and adding a line for the revision-2 rerun would keep\n   the bundle's test record matched to its head.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T19:58:14Z"
+            }
+          ]
+        },
+        "F-a11f733a05b8": {
+          "digest": "a11f733a05b80201a8f7e0e3ead7f676b5eb9d248f7a0653d64f0eef928bb4de",
+          "text": "**O1 — Live-test credential instructions are stale.** `docs/guide/development.md:29` says the probes use exported API-key/OAuth variables and see no credentials from the real Claude home. The three shared probes instead copy `.credentials.json` from the selected operator home and omit those environment variables. Document their actual credential source and failure behavior.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "REVISE",
+              "at": "2026-10-22T20:05:41.772964+00:00"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "6c0bc790d14a9ff0088f4aa22bcbcdb1af5f52542965f5d1405d329bb6a7069d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-22T19:58:14Z",
+          "verdict_sha256": "ebce9de332e8366c843160ce364cd62f8926d9a38b816a13e9616fa91502a10e",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

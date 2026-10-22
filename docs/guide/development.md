@@ -151,7 +151,15 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   shard is a separate process in its own session, with its own `TMPDIR`
   and `XDG_STATE_HOME`. The shard count is planned from recorded
   durations: about 60 s of work per shard, at least 2, at most
-  `min(8, CPUs)`. `--shards N` pins it, `--jobs J` runs at most `J` at
+  `min(8, CPUs)`. CI plans from the `ci` profile, which has a ceiling of six shards
+  (`CI_MAX_SHARDS`, the runner budget stated in
+  [Continuous integration](ci-and-releases.md#continuous-integration)).
+  Two modules stay out of the CI plan and run on `main` instead
+  (`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, see
+  [Checks that run after the merge](ci-and-releases.md#checks-that-run-after-the-merge));
+  a local full run still runs them, and
+  `python3 tools/run_tests.py main-check MODULE` runs one the way `main.yml`
+  does (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
   once, and `--target-seconds`, `--min-shards` and `--max-shards`
   override the planning parameters. A shard runs its conformance suites
   in a helper process beside its Controller tests (the same executor in
@@ -356,6 +364,22 @@ breaks its claim and requires the scenario to fail, so it cannot pass
 vacuously. `tests/test_scenarios.py` generates one `TestCase` class per
 scenario, which the shard planner treats as one atom; add its measured time
 to `tools/test_timings.json` with `tools/run_tests.py timings merge`.
+
+## Shared lifecycle snapshots
+
+The protocol lifecycle test classes (`tests/test_protocol_lifecycle.py` and the
+classes built on it) used to drive a whole repository to the same row once per
+case. `Lifecycle.reach(name, drive)` now drives to a row once per test process,
+keeps the built tree (`fixtures.take_snapshot`), and gives every later life
+with the same inputs a copy (`fixtures.restore_snapshot`) instead of driving
+again. The snapshot is never writable by a test; a write to one copy is not seen
+by the next. A copy is put back at the path of the first build, because a
+bundle's `MANIFEST.md` records `worktree_root` and its `bundle_id` hashes it, so
+a relocated copy would fail verification. If that path is in use, or the copy
+fails, the life drives fresh and nothing is overwritten. Use `reach` for a new
+lifecycle class that rebuilds the same row; the scenario kit (`stub_dir`) always
+drives. `tests/test_shared_snapshot.py` proves the isolation, the rebased paths
+and the fallbacks.
 
 ## Throwaway Git repositories
 

@@ -259,12 +259,14 @@ class FakeClaude:
 
     def __init__(self, fault: str | None = None, during=None) -> None:
         self.fault, self.during, self.launches, self.argv0 = fault, during, 0, set()
+        self.tmpdirs: list[str] = []
 
     def __call__(self, command, *, input=None, capture_output=True, cwd=None, env=None, timeout=None, check=False):
         if command[1:] == ["--version"]:
             return subprocess.CompletedProcess(command, 0, b"2.9.9 (Claude Code)\n", b"")
         self.launches += 1
         self.argv0.add(command[0])
+        self.tmpdirs.append(env["TMPDIR"])
         if self.fault == "timeout":
             raise subprocess.TimeoutExpired(command, 1)
         if self.during is not None and self.launches == 1:
@@ -315,6 +317,8 @@ class FakeClaude:
         if self.fault == "denied_write_reported":
             lines = [line.replace("home REFUSED", "home WROTE") for line in lines]
         output = "\n".join(lines)
+        if self.fault == "sandbox_failed":
+            output = "Sandbox is required but failed to initialize: bridge socket path too long"
         if self.fault == "not_executed":
             return [self.init(), {"type": "result", "is_error": False, "result": output}]
         if self.fault == "altered_command":
@@ -392,13 +396,35 @@ class VerifyBuildTests(unittest.TestCase):
         self.assertEqual([p.name for p in result.probes], ["boundary", "retry", "missing_component"])
         self.assertEqual(fake.argv0, {str(self.real)})  # every probe ran the resolved file, not the link
         self.assertFalse((self.root / cb.RECORD_NAME).exists())  # verifying records nothing by itself
-        self.assertEqual(list((self.root / cb.SCRATCH_AREA).iterdir()), [])  # the scratch folder is gone
+        self.assertFalse((self.root / cb.SCRATCH_AREA).exists())  # the scratch folder and its area are gone
+
+    def test_the_probes_get_a_short_tmpdir_whatever_the_depth_of_the_runtime_root(self) -> None:
+        deep = self.root
+        for part in ("a" * 40, "b" * 40, "c" * 40):
+            deep = deep / part
+        deep.mkdir(parents=True)
+        fake = FakeClaude()
+        cb.verify_build(self.link, runtime_root=deep, operator_home=self.home, run=fake)
+        self.assertEqual(fake.launches, 3)
+        for tmpdir in fake.tmpdirs:
+            self.assertLessEqual(fr.longest_socket_path(Path(tmpdir)), fr.SOCKET_PATH_LIMIT, tmpdir)
+            self.assertFalse(Path(tmpdir).exists())  # removed with the run
+        self.assertFalse(Path(tmpdir).is_relative_to(deep))
+
+    def test_no_short_root_refuses_before_any_launch(self) -> None:
+        fake = FakeClaude()
+        with mock.patch.object(fr, "short_tmp_roots", lambda: [self.root / ("x" * 120)]):
+            with self.assertRaises(cb.BuildNotVerified) as ctx:
+                self.verify(fake)
+        self.assertEqual((ctx.exception.probe, fake.launches), ("host", 0))
+        self.assertIn("no short folder", ctx.exception.message)
 
     def test_each_broken_probe_fails_closed_and_names_the_probe(self) -> None:
         for fault, probe, inconclusive, text in (
                 ("host_write", "boundary", False, "changed"),
                 ("socket", "boundary", False, "listener"),
                 ("missing_line", "boundary", False, "unix: no result line"),
+                ("sandbox_failed", "boundary", True, "sandbox could not start"),
                 ("denied_write_reported", "boundary", False, "home: WROTE"),
                 ("tools", "boundary", False, "tool list"),
                 ("login", "boundary", True, "cannot reach a model"),
@@ -509,7 +535,7 @@ class VerifyClaudeCommandTests(unittest.TestCase):
         fr.identity_check(str(self.bindir / "claude"), recorded=cb.recorded_digests(self.root)[0])  # admits
         with self.assertRaises(fr.TesterUnavailable):
             fr.identity_check(str(self.bindir / "claude"))  # not without the record
-        self.assertEqual(list((self.root / cb.SCRATCH_AREA).iterdir()), [])
+        self.assertFalse((self.root / cb.SCRATCH_AREA).exists())
         self.assertFalse(self.settings.exists())
 
     def test_each_broken_stub_exits_20_naming_the_probe_and_leaves_no_record_or_scratch(self) -> None:

@@ -121,6 +121,31 @@ ORIGINAL = b"original bytes\n"
 _LOGIN_WORDS = ("login", "credit", "limit", "authenticat", "api key", "overloaded")
 
 
+#: What Claude Code's tool result says when its sandbox cannot start.
+SANDBOX_FAILED = "Sandbox is required but failed to initialize"
+
+
+def short_tmp() -> Path:
+    """A private scratch ``TMPDIR`` (0700) short enough for Claude's bridge
+    sockets, like the functional launch's (``functional_review.make_short_tmp``).
+    Raises ``TesterUnavailable`` when no root is short enough."""
+    problems = []
+    for root in fr.short_tmp_roots():
+        try:
+            tmp = Path(tempfile.mkdtemp(prefix=fr.TMP_PREFIX, dir=root))
+        except OSError as exc:
+            problems.append(f"{root}: {exc.strerror or exc}")
+            continue
+        if fr.longest_socket_path(tmp) > fr.SOCKET_PATH_LIMIT:
+            runtime.remove_tree(root, tmp.name)
+            problems.append(f"{root}: a socket path would be {fr.longest_socket_path(tmp)} bytes")
+            continue
+        return tmp
+    raise fr.unavailable(fr.UNAVAILABLE_ENFORCEMENT,
+                         f"no short folder for the probes' TMPDIR: Claude's bridge sockets need a path of at most "
+                         f"{fr.SOCKET_PATH_LIMIT} bytes ({'; '.join(problems)})")
+
+
 class BuildNotVerified(ControllerError):
     """A build was not shown to hold the boundary. ``probe`` names the failing
     check; ``inconclusive`` is a probe that could not decide (run it again),
@@ -306,8 +331,10 @@ class _Run:
         base = self.layout.base
         self.clone, self.out = base / "clone", base / "out"
         self.stand_in_home = base / "stand-in-home"
+        # Claude's bridge sockets live in TMPDIR: a runtime root of normal depth makes `layout.tmp` too long.
+        self.tmp = short_tmp()
         self.settings = fr.tester_settings(
-            clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.layout.tmp],
+            clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.tmp],
             writable=["build"])
         self.sock_dir = Path(tempfile.mkdtemp(prefix="wcv-"))  # short: a Unix socket path is limited to 107 bytes
         self.host: Host | None = None
@@ -329,8 +356,13 @@ class _Run:
     def cleanup(self) -> None:
         if self.host is not None:
             self.host.close()
+        runtime.remove_tree(self.tmp.parent, self.tmp.name)
         runtime.remove_tree(self.sock_dir.parent, self.sock_dir.name)
         runtime.remove_tree(self.runtime_root, self.layout.rel())
+        try:
+            self.layout.base.parent.rmdir()  # the area folder, when no other run is using it
+        except OSError:
+            pass
         for path in self.host_paths:
             runtime.remove_tree(path.parent, path.name)
 
@@ -339,6 +371,7 @@ class _Run:
             binary=Path(self.real), model=self.model, effort=self.effort,
             flags=fr.tester_flags(self.layout.base / "settings.json"))
         env = self.review.claude_environment(self.layout, Path(self.real), SCRATCH_AREA, {})
+        env["TMPDIR"] = str(self.tmp)
         if env_path is not None:
             env["PATH"] = env_path
         try:
@@ -357,6 +390,21 @@ class _Run:
                                    + done.stderr.decode("utf-8", "replace")[:300], inconclusive=True)
         self.check_unchanged("launch")
         return results[-1], events
+
+    def need_sandbox(self, probe: str, events: Sequence[dict]) -> None:
+        """A sandbox that could not start leaves no probe line, so it is one
+        inconclusive cause, not one failure per probe target."""
+        for event in events:
+            message = event.get("message")
+            if event.get("type") != "user" or not isinstance(message, dict):
+                continue
+            for block in message.get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    content = block.get("content")
+                    text = content if isinstance(content, str) else json.dumps(content)
+                    if SANDBOX_FAILED in text:
+                        raise BuildNotVerified(probe, f"{SANDBOX_FAILED} (the build's sandbox could not start; "
+                                               f"nothing was probed): {text.strip()[:200]}", inconclusive=True)
 
     def check_unchanged(self, probe: str) -> None:
         if file_digest(self.real) != self.digest:
@@ -396,6 +444,7 @@ class _Run:
         self.need_a_model("boundary", result)
         self.need_clean("boundary", result)
         self.need_tools("boundary", events)
+        self.need_sandbox("boundary", events)
         # Evidence is the executed command and its tool result, never the model's final text.
         calls = bash_calls(events)
         if len(calls) != 1 or str(calls[0]["input"].get("command", "")).rstrip("\n") != command.rstrip("\n"):
@@ -440,6 +489,7 @@ class _Run:
         self.need_a_model("retry", result)
         self.need_clean("retry", result)
         self.need_tools("retry", events)
+        self.need_sandbox("retry", events)
         if target.exists():
             raise BuildNotVerified("retry", f"{target} was written on the host")
         wanted = f"echo hi > {target}"
@@ -491,7 +541,10 @@ def verify_build(binary: str | os.PathLike, *, runtime_root: Path, operator_home
         version = said.stdout.decode("utf-8", "replace").strip().split()[0] if said.stdout.strip() else version
     except (OSError, subprocess.SubprocessError, IndexError):
         pass
-    state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout)
+    try:
+        state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout)
+    except fr.TesterUnavailable as exc:
+        raise BuildNotVerified("host", exc.message) from exc
     try:
         state.prepare(operator_home)
         chosen = [("boundary", state.boundary), ("retry", state.retry), ("missing_component", state.missing_component)]

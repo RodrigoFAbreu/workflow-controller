@@ -21537,7 +21537,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-time-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-time-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 8,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -21662,7 +21662,198 @@
           "workflow_release": "2.18.2"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+        "approved_review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/main.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f0cc2514be53341ea98a41c30fb4e85053568a51"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci-time-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9f5a1a3e57d0fef14f928f55bb10e677602199f4"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a3b73ef1b378a9a4fc05b501dcd2fd42b8c25d21"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bb0624498a67c12462e2c9bcd78002521b5bc3e9"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "188deedf85090dfe1277787d62bc26c3df1c1202"
+          },
+          {
+            "path": "tests/test_catalogue_determinism.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "288ce1a7c17fb821ff6fa1be5e89766393c5e9ed"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9cca01debea8d2a46416f0b11bd5218dceeb3418"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "531a794fcc3e86545cc7ea1b082005f074245f80"
+          },
+          {
+            "path": "tests/test_pr_report.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "196dc6cf4a1079ab72cf812ce36a3c05719cbba0"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9889f81a6e94417f5f64ed1f26f6bc39dc6c3ad9"
+          },
+          {
+            "path": "tests/test_protocol_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e2b9279324796194943e9beafa4603d6bf6c277"
+          },
+          {
+            "path": "tests/test_run_scenarios.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88585799757955b8658824427f185ead86683bfd"
+          },
+          {
+            "path": "tests/test_run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0af821f8c68184815959c6caf59441d6ac6b52bb"
+          },
+          {
+            "path": "tests/test_scenarios.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2422ff32a3ca9041bd10df97d81217ba10df1c00"
+          },
+          {
+            "path": "tests/test_shared_snapshot.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bb26c709f3c430d4263e109845bfa479574fd5d0"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f892dd9e625549b943dc0c5f49b19b3ba119a1f"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fdc3490d9658e7ee900c6093c7b577af0ff8ef4a"
+          },
+          {
+            "path": "tools/run_tests.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fd8c3e159af613f662f8608d7880abcc096d4beb"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3da1022841ddcd006ffba11623e0b4ba2ea3f14a"
+          },
+          {
+            "path": "tools/test_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b2b844e86d583b239868a4d87609657027b85895"
+          }
+        ],
+        "reviewed_content_commit": "d581542ea2d991f545e32af5bba8717df02fc7b7",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-22T13:01:16Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+            "ledger": {
+              "local": {
+                "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "1b92de9554df3d2c5e0e2d214062b901c39627bd5cb9dce029ad9a24ffbdaebd",
+                "ledger_entry_sha256": "4d1000175ba2a2fdfb91529fa5f0b9b325361d3fc047ab2d3a0407439ae81721",
+                "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "975be2b4dec5ba4bd1755bbc6c17c9c3eb03baeb85440dd40956c1ef19a135e8",
+                "ledger_entry_sha256": "8f06ce9026f0dac80a8c5eca0c8dd505a9b199d3ca5840250d6194bce8339468",
+                "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-22T13:01:16Z",
+          "workflow_release": "2.18.2"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "52f3a3c841181f03eb0f54d55378d138653efb7ff8dd9db2924decb224a796ab",
@@ -21693,12 +21884,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 44,
-      "last_transition": "2026-10-22T12:41:58Z",
+      "state_revision": 47,
+      "last_transition": "2026-10-22T13:01:16Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -22035,6 +22226,55 @@
               "at": "2026-10-22T12:40:10Z"
             }
           ]
+        },
+        "F-f29db85bb3ac": {
+          "digest": "f29db85bb3ac8304b574d61bbef087b0f8d56a7e8316409fb5157828bbe144ba",
+          "text": "`Lifecycle.reach`'s snapshot key still leaves out `LoopLifecycle.wait_seconds`. No shared drive reaches a pull-request report step today, so it cannot affect a built tree. Either add it to `snapshot_inputs()` or add a comment saying why it is not needed (carried over from round 1).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T12:49:27Z"
+            }
+          ]
+        },
+        "F-d65e38a97869": {
+          "digest": "d65e38a978697a6125ce714ff200eb1e4742e81bdffeba1e0549b15ca7040b2f",
+          "text": "`SatisfyGateLifecycleTest.refused_validation_run` sets `life.report` and `life.refused` after reaching the plan gate. The test's meaning holds, but a one-line comment would make the reordering visible (carried over from round 1).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T12:49:27Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "5677d4eba1a30679d85e6771615d4c371d7589072df8c3a054f25db87b3e8ec6",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-22T12:49:27Z",
+          "verdict_sha256": "1b92de9554df3d2c5e0e2d214062b901c39627bd5cb9dce029ad9a24ffbdaebd",
+          "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "74a48e20f5a960152306fd129ecef275e16bad2ddf15f7e8883f93505ca2d897",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-22T12:59:38.088245+00:00",
+          "verdict_sha256": "975be2b4dec5ba4bd1755bbc6c17c9c3eb03baeb85440dd40956c1ef19a135e8",
+          "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

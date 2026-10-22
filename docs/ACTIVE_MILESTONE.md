@@ -18,3 +18,33 @@ plan is `docs/ai-workflow/CONTROLLER_CI_TIME_PLAN.md`. `docs/ai-workflow/WORKFLO
 
 The previous milestone, `workflow-controller-automated-functional-review` (C10c, released as 1.18.0), is archived at
 `docs/milestones/completed/workflow-controller-automated-functional-review.md`.
+
+## Functional review checklist
+
+Revision 2 of `workflow-controller-ci-time`. Every flow runs offline from the repository root with `python3` and the
+system tools only; none needs `gh`, `claude`, `codex`, `ssh`, the network or a write inside the clone (write to a
+scratch `TMPDIR`; pass `--results-dir "$TMPDIR/r"` where a command takes it). Pull-request CI timing cannot be
+re-exercised in the sandbox: it is judged from the recorded CP5 measurement below.
+
+**Setup.** Check out `milestone/workflow-controller-ci-time`; `export TMPDIR=$(mktemp -d)`. No data to seed.
+
+| # | Flow | Expected |
+| --- | --- | --- |
+| 1 | `python3 tools/run_tests.py plan --profile ci --ci-placement` | Prints a plan of 6 shards, digest `e1be9ec370f035198fa28dcea4ec3b3955524e1a1c72a6a7e9a8661bb9ec5524`; shard estimates equal to within 0.01 s (about 1,384.8 s). `tests.test_catalogue_determinism` and `tests.test_scenarios_negative` are not in it. |
+| 2 | `python3 tools/run_tests.py plan --profile local` | A local plan still contains the two modules above (4,584 tests locally vs 4,501 in the CI plan). |
+| 3 | `python3 -m unittest tests.test_cli.FollowCommandTest -v` (then once more under `taskset -c 0,1`, if `taskset` is on `PATH`) | All pass, including the two `test_a_follower_started_late_...` cases; no timing flake across 5 repetitions. |
+| 4 | `python3 -m unittest tests.test_shared_snapshot tests.test_test_shards tests.test_run_tests tests.test_ci_workflows` | All pass. |
+| 5 | `python3 tools/run_tests.py main-check tests.test_cli`; optionally (about 12 minutes) `python3 tools/run_tests.py main-check tests.test_catalogue_determinism` | The cheap refusal exits non-zero with a message that the module is not placed as `main`; the long run (optional) exits 0 with 3 tests, none skipped. |
+| 6 | `python3 -m unittest tests.test_run_scenarios.SubsetDeterminismTest` | Passes in about 10 s. |
+| 7 | Read `.github/workflows/main.yml` | Jobs `after-merge-determinism`, `after-merge-mutations`, `release-target-determinism`, `release-target-mutations` exist; `build` and `publish` list all four in `needs`/condition. The release-target ones run only when the selected commit is an ancestor. |
+| 8 | Read `.github/workflows/ci.yml` | The test matrix is the planner's output (6 shards); no hand-written shard count. |
+| 9 | `python3 -m unittest tests.test_protocol_lifecycle` (about 10-15 min) or a single class such as `...WaitTest` | Passes; copies of a built lifecycle are used (no `bundle_id` disagreement). |
+| 10 | `python3 tools/check_docs.py` | Passes. |
+| 11 | Read `docs/guide/ci-and-releases.md` ("Checks that run after the merge") and `docs/guide/development.md` ("Shared lifecycle snapshots") | They state the six-shard ceiling, eight-runner budget, the two out-of-plan modules, `main-check`, and the measured 24.3 minutes; no stale duration. |
+| 12 | Read the CP5 row above and `docs/ROADMAP.md` C2b | 24.3 minutes (above 20) is reported honestly; the PR will say "refs #119", #119 stays open for the shortfall, #121 fixed. |
+
+**Known limitations / out of scope.** The PR check duration is 24.3 minutes, above the 15-20 target; the owner
+decides a further step (#119 stays open). `generate_plan_stage_decisions.py --check` fails on the untouched base too.
+The full suite fails only the two Git 2.56 trailer tests (`test_a_trailer_paragraph_refuses_with_no_edit`,
+`test_a_bare_url_and_a_one_line_note_are_refused`). The scenario kit and the atoms are not snapshotted. The mutation
+check (46 tests, about 16 minutes) is not required here.

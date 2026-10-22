@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -274,10 +275,12 @@ class FakeClaude:
         if "```sh" in prompt:
             events = self.boundary(prompt, out, clone)
         elif "dangerouslyDisableSandbox" in prompt:
-            events = self.retry()
+            self.clone_dir = clone
+            events = self.retry(prompt)
         else:
             events = self.missing(env)
-        return subprocess.CompletedProcess(command, 0, "\n".join(json.dumps(e) for e in events).encode(), b"")
+        code = 1 if self.fault == "exit_nonzero" else 0
+        return subprocess.CompletedProcess(command, code, "\n".join(json.dumps(e) for e in events).encode(), b"")
 
     def init(self):
         tools = ["Bash", "Write"] if self.fault == "tools" else ["Bash"]
@@ -322,10 +325,23 @@ class FakeClaude:
         return [self.init(), *self.call({"command": command}, output),
                 {"type": "result", "is_error": False, "result": output}]
 
-    def retry(self):
-        attempted = {"command": "echo hi > /tmp/x"}
+    def retry(self, prompt):
+        target = re.search(r"`echo hi > (\S+)`", prompt)[1]
+        attempted = {"command": f"echo hi > {target}"}
+        if self.fault == "other_retry":
+            attempted = {"command": "true"}
         if self.fault != "no_retry":
             attempted["dangerouslyDisableSandbox"] = True
+        if self.fault == "retry_no_result":
+            return [self.init(), {"type": "assistant", "message": {"content": [
+                        {"type": "tool_use", "id": "t1", "name": "Bash", "input": attempted}]}},
+                    {"type": "result", "is_error": False, "result": "done"}]
+        if self.fault == "retry_host_write":
+            (Path(self.clone_dir) / "src.txt").write_bytes(b"changed\n")
+        if self.fault == "retry_error":
+            return [self.init(), *self.call(attempted, "refused"),
+                    {"type": "result", "is_error": True, "subtype": "error_during_execution",
+                     "result": "execution failed"}]
         return [self.init(), *self.call(attempted, "refused"), {"type": "result", "is_error": False, "result": "done"}]
 
     def missing(self, env):
@@ -391,6 +407,11 @@ class VerifyBuildTests(unittest.TestCase):
                 ("altered_command", "boundary", True, "exactly once"),
                 ("twice", "boundary", True, "exactly once"),
                 ("no_retry", "retry", True, "never attempted"),
+                ("other_retry", "retry", True, "never attempted"),
+                ("retry_no_result", "retry", True, "no matching tool result"),
+                ("retry_host_write", "retry", False, "changed"),
+                ("retry_error", "retry", False, "did not complete cleanly"),
+                ("exit_nonzero", "boundary", False, "did not complete cleanly"),
                 ("not_refused", "missing_component", False, "not refused")):
             with self.subTest(fault):
                 self.assertRefused(FakeClaude(fault), probe, inconclusive=inconclusive, text=text)
@@ -494,7 +515,9 @@ class VerifyClaudeCommandTests(unittest.TestCase):
     def test_each_broken_stub_exits_20_naming_the_probe_and_leaves_no_record_or_scratch(self) -> None:
         for fault, probe in (("host_write", "boundary"), ("socket", "boundary"), ("login", "boundary"),
                              ("no_retry", "retry"), ("not_refused", "missing_component"),
-                             ("timeout", "launch")):
+                             ("timeout", "launch"), ("other_retry", "retry"), ("retry_no_result", "retry"),
+                             ("retry_host_write", "retry"), ("retry_error", "retry"),
+                             ("exit_nonzero", "boundary")):
             with self.subTest(fault):
                 self.fake = FakeClaude(fault)
                 code, _, err = self.run_cli()

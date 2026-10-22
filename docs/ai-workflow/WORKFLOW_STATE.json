@@ -21537,12 +21537,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-time-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-time-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 8,
-      "implementation_revision": 2,
+      "implementation_revision": 3,
       "functional_review_round": null,
       "base_commit": "cfe51e88e0d544277c805d56b5c5c7ef8f36dde2",
-      "reviewed_implementation_head": "d581542ea2d991f545e32af5bba8717df02fc7b7",
+      "reviewed_implementation_head": "50fc0ea366137f431ade6918ea3913a856159eff",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP6",
       "checkpoints": {
@@ -21888,8 +21888,8 @@
           "external": 1
         }
       },
-      "state_revision": 48,
-      "last_transition": "2026-10-22T13:44:26Z",
+      "state_revision": 49,
+      "last_transition": "2026-10-22T13:45:24Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

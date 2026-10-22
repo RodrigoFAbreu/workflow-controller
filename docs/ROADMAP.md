@@ -35,14 +35,12 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18 and 2026-10-22):
-1. C2b, CI time and flakiness (owner decision, 2026-10-22: a pull request's CI must take 15-20 minutes; over 30
-   minutes, improving it is the next item; complete, with #119 open for the 20-minute shortfall: measured 24.3 minutes before the timings refresh, 20.9 after);
-2. #113, a command that verifies a new `claude` build for the functional tester, so a Claude update needs no
-   release (owner decision, 2026-10-22: right after C2b);
-3. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0);
-4. C10d, after A2 (C10c is released as 1.18.0, PR #111; C10a and C10b are released; C10 is three steps, each released on its own);
-5. C12, then C11;
-6. the orchestrator series O1-O7.
+1. C10e (#113), a command that verifies a new `claude` build for the functional tester, so a Claude update needs no
+   release (owner decision, 2026-10-22: right after C2b, which is complete: PR #123, no release);
+2. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0);
+3. C10d, after A2 (C10c is released as 1.18.0, PR #111; C10a and C10b are released; C10 is three steps, each released on its own);
+4. C12, then C11;
+5. the orchestrator series O1-O7.
 
 A3, A4 and A5 follow their dependencies in the table below.
 
@@ -127,8 +125,9 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C13b | Two review round caps per stage, local (default 6) and external (default 4), on the Workflow's separate round counts (protocol 1.5, Workflow 2.15.0); `review.round_cap` keeps working for one release (complete, accepted 2026-10-19 by gate policy; released as 1.17.0 from PR #107, squash `a76daff`; follow-up [#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108), `settings show` prints the stored caps; [#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88), [follow-up 55](#known-follow-ups-carried-forward); this repository runs Workflow 2.15.0 since 2026-10-19) | C13, A1 | [follow-up 55](#known-follow-ups-carried-forward) |
 | A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It needed [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it; that shipped in Workflow 2.17.0, and this repository runs Workflow 2.18.2 since 2026-10-22 (owner decisions: 2026-10-18, right after A1; 2026-10-22, after C2b and #113) | A1, workflow#48 | Adapters and backlog (above) |
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e; complete, accepted 2026-10-21 by gate policy; released as 1.18.0 from PR #111, squash `5f3f131`; follow-ups [67-74](#known-follow-ups-carried-forward), issues #112-#119) | C10b | [11.9](#119-automated-functional-review) |
-| C2b | CI time and flakiness: bring a pull request's CI back to 15-20 minutes (about 85 since C10c; 46 after the timings refresh of 2026-10-22) without more shards or runners: check catalogue determinism on `main` only, share one built sandbox across the functional test cases, make other slow tests cheaper, and fix the flaky `FollowCommandTest` ([#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119), [#121](https://github.com/RodrigoFAbreu/workflow-controller/issues/121)). Owner rule, 2026-10-22: when a pull request's CI goes over 30 minutes, improving it is the next item (complete: #121 fixed; the whole-catalogue checks run on `main` and gate the release, six shards, shared lifecycle snapshots, refreshed timings; measured 24.3 minutes for a pull request's checks before the timings refresh and 20.9 after it, just above the 20-minute target, so #119 stays open for the shortfall and the owner decides a further step) | — | [11.2](#112-ci-reliability) |
+| C2b | CI time and flakiness: bring a pull request's CI back to 15-20 minutes (about 85 since C10c; 46 after the first timings refresh of 2026-10-22): check catalogue determinism on `main` only, share one built sandbox across the functional test cases, make other slow tests cheaper, and fix the flaky `FollowCommandTest` ([#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119), [#121](https://github.com/RodrigoFAbreu/workflow-controller/issues/121)). Owner rule, 2026-10-22: when a pull request's CI goes over 30 minutes, improving it is the next item (complete, accepted 2026-10-22 by gate policy, PR #123, no release: #121 fixed; the whole-catalogue checks run on `main` and gate the release, six shards, shared lifecycle snapshots, refreshed timings; a pull request's complete check took 19.3 minutes at the acceptance head, within the target, so #119 is closed) | — | [11.2](#112-ci-reliability) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
+| C10e | A command that verifies a new `claude` build for the functional tester: it runs the live sandbox enforcement probes against that binary and, only when every probe holds, records its digest in the Controller's state (never the settings file); the launch admits the built-in list plus the recorded digests, so a Claude update needs no release ([#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113); owner decision 2026-10-22: right after C2b) | C10c | [11.9](#119-automated-functional-review) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
@@ -513,10 +512,16 @@ hurts now, else in a later step or the next clean-up milestone.
     Fixed in the documentation pull request after 1.18.0.
 73. [#118](https://github.com/RodrigoFAbreu/workflow-controller/issues/118): tests for the tester's final-message
     capture and small test tidy-ups (C10c review).
-74. [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119): a pull request's CI takes about 85
-    minutes since C10c, against about 15 before. C2b cut it to 24.3 minutes (measured on the milestone's pull
-    request before the timings refresh) and then 20.9 minutes (after it), above the 20-minute target: the issue stays open for the shortfall. The vendored acceptance atom, which
-    is placed and not shortened, is the floor of the longest shard.
+74. [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119): a pull request's CI took about 85
+    minutes since C10c, against about 15 before. Done and closed: C2b brought it to 19.3 minutes (acceptance-head
+    run), within the 15-20 minute target. The vendored acceptance atom, which is placed and not shortened, is the
+    floor of the longest shard.
+75. [#124](https://github.com/RodrigoFAbreu/workflow-controller/issues/124): documentation gaps after C2b (the
+    roadmap row's wording, a replaced `main` run skipping the `after-merge-*` checks, "every surviving `main` run").
+    Fixed in the documentation pull request after C2b.
+76. [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125): C2b test tidy-ups (later).
+77. [#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126): the after-merge determinism job takes
+    32 minutes, so an ordinary release waits about 32 minutes after the merge (later).
 
 ---
 

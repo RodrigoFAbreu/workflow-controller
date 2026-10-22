@@ -56,9 +56,13 @@ Two workflows call it:
   checks that no longer run on a pull request (see
   [Checks that run after the merge](#checks-that-run-after-the-merge)). Its runs never cancel one another (concurrency group
   `main-release`). GitHub keeps one running and one pending run per
-  group, so a burst of merges can skip a middle commit's run; that loses
-  nothing, because classification compares with the last release tag in
-  the commit's history, not with the previous push. `publish` is the
+  group, so a burst of merges can replace a pending `main` run. Then the
+  `after-merge-*` checks do not run for the replaced commit. Nothing is
+  lost for the release: classification compares with the last release tag
+  in the commit's history, not with the previous push, and the release
+  gate checks the commit it publishes (see
+  [Checks that run after the merge](#checks-that-run-after-the-merge)).
+  So `main` is checked on every surviving `main` run, not on every commit. `publish` is the
   only job with write permission, and every action outside `validate` is
   pinned to a commit SHA.
 
@@ -115,9 +119,12 @@ commit, or `release-target-determinism` and `release-target-mutations` when a
 `RESUME` targets an ancestor (those run on the target after `release-plan`). A
 missing, pending, failed, cancelled or skipped covering job, or a success for a
 different commit, prevents the release. **Timing:** an ordinary release publishes
-after the slower of `validate` (about 21 minutes when it runs the full six-shard
-plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs (about 18
-minutes), plus setup and the release jobs, not a few minutes after the merge; a `RESUME` of an ancestor adds the target checks
+after the slower of `validate` (11.8 to 22.1 minutes across the six shards when it
+runs the full plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs
+(measured on the first run with them, at 37c80b6: determinism 32.1 minutes, mutations
+17.3), plus setup and the release jobs. So a release waits about 32 minutes after the
+merge, and the determinism job is the slower one
+([#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126) tracks making it faster). A `RESUME` of an ancestor adds the target checks
 after `release-plan` (another 18 minutes or so) before `build`. A following merge's
 run waits behind the `main-release` slot as before. A target that predates the
 moved module blocks the release (fail-closed) for the owner to decide. A
@@ -148,14 +155,15 @@ conformance lane. The lane files are named per run (`lane-<shard>-<run id>.*` in
 
 Known residuals, both accepted. A SIGKILL of the executor cannot run any cleanup in the executor, but the guard holds a pipe from it and ends the whole lane session when the pipe closes, so only a descendant that left the session (`setsid`) can survive. A SIGKILL of the lane's own guard by an outside actor, immediately followed by a SIGINT to the executor, can leave suite descendants running; it is a double fault, and the executor's monitor normally ends the group in between. In both cases GitHub tears the job down, and a local run's supervisor marker scan reports the leftovers, the same as the serial design.
 
-Measured on the pull request of C2b (six shards). Before the timings refresh (head
-09a69f1) the `CI` workflow took 24.3 minutes (shards 16.3 to 23.7 minutes) and the
-managed `Workflow conformance` check 15.0. After the refresh (head 3a0865f, CI run
-39783489416) the `CI` workflow took 20.9 minutes (shards 14.6 to 20.1 minutes, each
-with about 1.5 minutes of setup) and `Workflow conformance` 16.5, so a pull
-request's checks finished after about 20.9 minutes, just above the 15 to 20 minute
-target. The vendored acceptance atom, which is placed and not shortened, is the
-floor of the longest shard. #119 stays open for the shortfall (about 1 minute). A local run (`tools/run_tests.py`
+Measured on the pull request of C2b (six shards). At its acceptance head (849a291, CI
+run 39806086354) the `CI` workflow took 19.3 minutes (shards 11.0, 19.0, 11.7, 17.2,
+18.2 and 13.9 minutes), the managed `Workflow conformance` check 17.5 and `PR title`
+0.2, all started together, so a pull request's complete check took 19.3 minutes,
+within the 15 to 20 minute target. Earlier measurements: about 85 minutes before C2b;
+24.3 at 09a69f1, before the timings refresh; 20.9 at 3a0865f, after it. The vendored
+acceptance atom, which is placed and not shortened, is the floor of the longest
+shard. [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119) is closed.
+A local run (`tools/run_tests.py`
 without `exec-shard`) uses the same executor and so the same two lanes,
 except `--serial`, which plans `conformance_lane: false`: the suites then
 run one at a time after the Controller tests, as the serial reference.

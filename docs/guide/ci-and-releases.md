@@ -64,7 +64,7 @@ Two workflows call it:
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
 untouched. It still runs the nine conformance suites in one job, on every
-pull request (10 to 14 minutes in recent runs with Workflow 2.10.0).
+pull request (10 to 15 minutes in recent runs).
 `validate` runs the same suites through the planner as well; the
 acceptance-matrix suite (8 to 12 minutes on CI) is its own largest atom.
 Both are now close to the floor on when all of a pull request's checks
@@ -77,8 +77,9 @@ from the committed `tools/test_timings.json` only. The maximum wins today, so
 CI runs six shards. The maximum is a runner budget: 6 shards, `package` and the
 managed `workflow-conformance` job hold at most 8 Linux runners for one pull
 request, on an account that shares 20 jobs. Refresh `tools/test_timings.json` (see the development
-guide) when the longest shard passes about 14 minutes; it was refreshed on
-2026-10-13 and drifts within days as the acceptance matrix and the
+guide) when the longest shard drifts well past the about 23-minute
+estimate the committed timings give; it was refreshed on 2026-10-22 from the
+real six-shard run, and drifts within days as the acceptance matrix and the
 scenario tests grow. A stale or missing entry costs wall time
 (the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a

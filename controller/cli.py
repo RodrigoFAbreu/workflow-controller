@@ -1518,12 +1518,12 @@ def cmd_verify_claude(args: argparse.Namespace, runtime_root: Path, ident: ident
     result = claude_build.verify_build(binary, runtime_root=runtime_root, operator_home=_claude_home())
     print(f"version: {result.version}")
     for probe in result.probes:
-        print(f"probe {probe.name}: {probe.result} -- {probe.detail}")
+        print(probe.line())
     claude_build.record_verified(runtime_root, result.digest, {
         "version": result.version,
         "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "controller_version": ident.version,
-        "probes": {probe.name: probe.result for probe in result.probes},
+        "probes": result.probe_results(),
     })
     print(f"recorded: {result.digest} in {runtime_root / claude_build.RECORD_NAME}")
     return EXIT_OK

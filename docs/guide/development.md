@@ -22,6 +22,10 @@ The packaging tests skip when a build prerequisite is missing, unless
 build refuses a stale `build/` directory left by an earlier build that
 held files this one does not; delete `build/` and rebuild.
 
+The live probes are one implementation, `controller/claude_build.py`, shared
+by these tests and by `workflow-controller verify-claude`; a test with a fake
+`claude` exercises it without a model.
+
 The live sandbox probes run in their own empty home, so they see no
 credentials stored in your real Claude home: export `ANTHROPIC_API_KEY` or
 `CLAUDE_CODE_OAUTH_TOKEN` for them. Without one, the model probes skip and the

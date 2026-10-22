@@ -34,6 +34,15 @@ resumes and releases (see [`usage`](commands.md#usage)). Unlike `runs/`,
 reservations and every run's and repository's spend, so a cap restarts
 from zero. Back it up with the rest of the root.
 
+`verified-claude-builds.json` is the third file kept there: the digests of
+`claude` builds that `workflow-controller verify-claude` verified (see
+[`verify-claude`](commands.md#verify-claude)). The automated functional
+review admits the built-in builds plus these. The file must be a regular file
+owned by you and not writable by group or others; one that is not, or that
+cannot be read, is ignored and the stop text says so. Deleting it only
+un-admits those builds until `verify-claude` is run again. It is per runtime
+root, so a source checkout and the shared install keep separate records.
+
 A `usage.json` this release cannot read (corrupt, or written by a newer
 release with a higher `version`) is never replaced. Deleting it is a last
 resort: repairing or restoring the original record in place lets a later

@@ -35,12 +35,11 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18 and 2026-10-22):
-1. C10e (#113), a command that verifies a new `claude` build for the functional tester, so a Claude update needs no
-   release (owner decision, 2026-10-22: right after C2b, which is complete: PR #123, no release);
-2. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0);
-3. C10d, after A2 (C10c is released as 1.18.0, PR #111; C10a and C10b are released; C10 is three steps, each released on its own);
-4. C12, then C11;
-5. the orchestrator series O1-O7.
+1. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0); C10e (#113,
+   `verify-claude`) is complete and awaits its release as 1.19.0;
+2. C10d, after A2 (C10c is released as 1.18.0, PR #111; C10a and C10b are released; C10 is three steps, each released on its own);
+3. C12, then C11;
+4. the orchestrator series O1-O7.
 
 A3, A4 and A5 follow their dependencies in the table below.
 
@@ -127,7 +126,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e; complete, accepted 2026-10-21 by gate policy; released as 1.18.0 from PR #111, squash `5f3f131`; follow-ups [67-74](#known-follow-ups-carried-forward), issues #112-#119) | C10b | [11.9](#119-automated-functional-review) |
 | C2b | CI time and flakiness: bring a pull request's CI back to 15-20 minutes (about 85 since C10c; 46 after the first timings refresh of 2026-10-22): check catalogue determinism on `main` only, share one built sandbox across the functional test cases, make other slow tests cheaper, and fix the flaky `FollowCommandTest` ([#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119), [#121](https://github.com/RodrigoFAbreu/workflow-controller/issues/121)). Owner rule, 2026-10-22: when a pull request's CI goes over 30 minutes, improving it is the next item (complete, accepted 2026-10-22 by gate policy, PR #123, no release: #121 fixed; the whole-catalogue checks run on `main` and gate the release, six shards, shared lifecycle snapshots, refreshed timings; a pull request's complete check took 19.3 minutes at the acceptance head, within the target, so #119 is closed) | — | [11.2](#112-ci-reliability) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
-| C10e | A command that verifies a new `claude` build for the functional tester: it runs the live sandbox enforcement probes against that binary and, only when every probe holds, records its digest in the Controller's state (never the settings file); the launch admits the built-in list plus the recorded digests, so a Claude update needs no release ([#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113); owner decision 2026-10-22: right after C2b) | C10c | [11.9](#119-automated-functional-review) |
+| C10e | A command that verifies a new `claude` build for the functional tester: it runs the live sandbox enforcement probes against that binary and, only when every probe holds, records its digest in the Controller's state (never the settings file); the launch admits the built-in list plus the recorded digests, so a Claude update needs no release ([#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113); owner decision 2026-10-22: right after C2b) (complete: `workflow-controller verify-claude`; the probe and the launch use one resolved binary, #114; release 1.19.0 follows acceptance) | C10c | [11.9](#119-automated-functional-review) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
@@ -498,10 +497,9 @@ hurts now, else in a later step or the next clean-up milestone.
 67. [#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112): run the tester's static probe before
     the usage admission, so a host that cannot run the tester stops before a reservation is made (C10c review).
 68. [#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113): verify a newer `claude` build and add
-    its digest, so the automated review keeps working after a CLI update; only Claude Code 2.1.303 is admitted
-    today (C10c; planned next).
+    its digest, so the automated review keeps working after a CLI update (C10c; done in C10e: `verify-claude`).
 69. [#114](https://github.com/RodrigoFAbreu/workflow-controller/issues/114): the tester's probe and launch should
-    use one resolved `claude` binary (C10c review).
+    use one resolved `claude` binary (C10c review; done in C10e).
 70. [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115): deny the tester reads of credential
     locations and detect a `file://` origin (C10c review; planned next).
 71. [#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116): checklist parsing, where a flow ends

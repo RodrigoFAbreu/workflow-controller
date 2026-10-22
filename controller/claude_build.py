@@ -19,6 +19,7 @@ wrong-schema record counts as empty and the caller is told why.
 from __future__ import annotations
 
 import dataclasses
+import importlib
 import json
 import os
 import socket
@@ -141,8 +142,11 @@ class ModelUnreachable(BuildNotVerified):
 @dataclasses.dataclass(frozen=True)
 class ProbeResult:
     name: str
-    result: str
+    outcome: str
     detail: str
+
+    def line(self) -> str:
+        return f"probe {self.name}: {self.outcome} -- {self.detail}"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -154,6 +158,9 @@ class Verification:
     digest: str
     version: str
     probes: tuple[ProbeResult, ...]
+
+    def probe_results(self) -> dict[str, str]:
+        return {probe.name: probe.outcome for probe in self.probes}
 
 
 class Host:
@@ -286,7 +293,8 @@ class _Run:
 
     def __init__(self, real: str, digest: str, *, runtime_root: Path, operator_home: Path,
                  run: Callable[..., Any], model: str, effort: str, timeout: int) -> None:
-        from . import review
+        # review imports this module at load, so the import is deferred to first use.
+        review = importlib.import_module("controller.review")
 
         self.review = review
         self.real, self.digest, self.run = real, digest, run

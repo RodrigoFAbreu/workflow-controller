@@ -21,7 +21,7 @@ The previous milestone, `workflow-controller-automated-functional-review` (C10c,
 
 ## Functional review checklist
 
-Revision 2 of `workflow-controller-ci-time`. Every flow runs offline from the repository root with `python3` and the
+Revision 3 of `workflow-controller-ci-time` (the checklist is unchanged apart from this number; round 1 findings are fixed below). Every flow runs offline from the repository root with `python3` and the
 system tools only; none needs `gh`, `claude`, `codex`, `ssh`, the network or a write inside the clone (write to a
 scratch `TMPDIR`; pass `--results-dir "$TMPDIR/r"` where a command takes it). Pull-request CI timing cannot be
 re-exercised in the sandbox: it is judged from the recorded CP5 measurement below.

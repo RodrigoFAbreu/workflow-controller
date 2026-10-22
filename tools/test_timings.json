@@ -75,6 +75,11 @@
       "seconds": 0.001,
       "tests": 4
     },
+    "tests.test_catalogue_determinism.CatalogueDeterminismTest": {
+      "samples": 10,
+      "seconds": 1075.387,
+      "tests": 1
+    },
     "tests.test_checklist_corrections.ChecklistFileExistsTest": {
       "samples": 27,
       "seconds": 0.0,
@@ -3084,11 +3089,6 @@
       "samples": 27,
       "seconds": 0.0,
       "tests": 3
-    },
-    "tests.test_run_scenarios.CatalogueDeterminismTest": {
-      "samples": 10,
-      "seconds": 1075.387,
-      "tests": 1
     },
     "tests.test_run_scenarios.CheckTest": {
       "samples": 11,

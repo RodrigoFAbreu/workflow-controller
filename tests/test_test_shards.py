@@ -401,7 +401,7 @@ class CiPlacementTest(unittest.TestCase):
 
     def test_the_real_inventory_is_partitioned_exactly(self) -> None:
         partition = shards.ci_partition(self.inventory)
-        self.assertEqual(set(partition), {"shards", "package", "excluded"})
+        self.assertEqual(set(partition), {"shards", "main", "package", "excluded"})
         placed = [i for ids in partition.values() for i in ids]
         self.assertEqual(sorted(placed), sorted(self.inventory.test_ids))
         self.assertEqual(len(placed), len(set(placed)))
@@ -409,7 +409,23 @@ class CiPlacementTest(unittest.TestCase):
                    for where, ids in partition.items()}
         self.assertEqual(modules["package"], {"tests.test_packaged_runtime"})
         self.assertEqual(modules["excluded"], {"tests.test_integration_disposable_repo"})
+        self.assertEqual(modules["main"], {"tests.test_catalogue_determinism",
+                                           "tests.test_scenarios_negative"})
         self.assertIn("conformance", modules["shards"])
+        self.assertIn("tests.test_scenarios", modules["shards"])
+        self.assertIn("tests.test_run_scenarios", modules["shards"])
+
+    def test_the_after_merge_modules_stay_in_a_local_full_run(self) -> None:
+        # D1: a check moved after the merge still runs somewhere, and a local run keeps it.
+        for module in ("tests.test_catalogue_determinism", "tests.test_scenarios_negative"):
+            with self.subTest(module=module):
+                self.assertEqual(shards.CI_PLACEMENT[module][0], "main")
+                local = self.inventory.select([module]).test_ids
+                self.assertTrue(local)
+                self.assertTrue(all(i.startswith(module + ".") for i in local))
+                self.assertEqual(self.inventory.select([module], ci_placement=True).test_ids, ())
+                self.assertFalse(set(local) & set(shards.ci_partition(self.inventory)["shards"]))
+                self.assertFalse(set(local) & set(shards.ci_partition(self.inventory)["excluded"]))
 
     def test_the_ci_selection_is_the_shard_part(self) -> None:
         self.assertEqual(self.inventory.select(ci_placement=True).test_ids,

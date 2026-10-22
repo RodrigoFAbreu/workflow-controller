@@ -301,7 +301,8 @@ class CoverageTest(unittest.TestCase):
         placed = [test_id for ids in self.partition.values() for test_id in ids]
         self.assertEqual(len(placed), len(set(placed)))
         self.assertEqual(set(placed), set(self.inventory.test_ids))
-        self.assertEqual(set(self.partition), {shards.SHARDS, shards.PACKAGE, shards.EXCLUDED})
+        self.assertEqual(set(self.partition),
+                         {shards.SHARDS, shards.MAIN, shards.PACKAGE, shards.EXCLUDED})
 
     def test_the_tests_matrix_plans_exactly_the_shards_part(self) -> None:
         selection = self.inventory.select([], ci_placement=True)
@@ -314,6 +315,8 @@ class CoverageTest(unittest.TestCase):
             with self.subTest(module=module):
                 self.assertTrue(reason.strip())
         self.assertEqual(by_place, {shards.PACKAGE: ["tests.test_packaged_runtime"],
+                                    shards.MAIN: ["tests.test_catalogue_determinism",
+                                                  "tests.test_scenarios_negative"],
                                     shards.EXCLUDED: ["tests.test_integration_disposable_repo"]})
         self.assertIn("claude", shards.CI_PLACEMENT["tests.test_integration_disposable_repo"][1])
 
@@ -594,7 +597,8 @@ class AllJobsTest(unittest.TestCase):
                 else:
                     self.assertIs(persist, False)
         # validate.yml's four jobs, reuse, reuse-report, release-plan, build and publish, then title.
-        self.assertEqual(checkouts, 10)
+        # plus main.yml's four after-merge and release-target check jobs.
+        self.assertEqual(checkouts, 14)
 
 
 class CiWorkflowTest(unittest.TestCase):
@@ -648,7 +652,10 @@ class MainWorkflowTest(unittest.TestCase):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
 
     def test_needs_chain(self) -> None:
-        self.assertEqual(list(self.jobs), ["reuse", "validate", "release-plan", "build", "publish"])
+        self.assertEqual(list(self.jobs), ["reuse", "validate", "after-merge-determinism",
+                                           "after-merge-mutations", "release-plan",
+                                           "release-target-determinism", "release-target-mutations",
+                                           "build", "publish"])
         self.assertEqual(self.jobs["validate"], {
             "needs": ["reuse"], "if": "!cancelled()",
             "permissions": {"contents": "read", "actions": "read"},
@@ -656,8 +663,10 @@ class MainWorkflowTest(unittest.TestCase):
             "with": {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
                                        "needs.reuse.outputs.run-id || '' }}"}})
         self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
-        self.assertEqual(self.jobs["build"]["needs"], ["validate", "release-plan"])
-        self.assertEqual(self.jobs["publish"]["needs"], ["validate", "release-plan", "build"])
+        checks = ["after-merge-determinism", "after-merge-mutations",
+                  "release-target-determinism", "release-target-mutations"]
+        self.assertEqual(self.jobs["build"]["needs"], ["validate", "release-plan", *checks])
+        self.assertEqual(self.jobs["publish"]["needs"], ["validate", "release-plan", "build", *checks])
 
     def test_conditions(self) -> None:
         on_trunk = "github.ref == 'refs/heads/main'"
@@ -668,13 +677,24 @@ class MainWorkflowTest(unittest.TestCase):
         # job's implicit success() looks at its whole needs ancestry. No always().
         self.assertEqual(self.jobs["release-plan"]["if"],
                          f"!cancelled() && needs.validate.result == 'success' && {on_trunk}")
+        coverage = " && ".join(
+            f"((needs.release-plan.outputs.commit == github.sha && needs.after-merge-{c}.result == 'success') || "
+            f"(needs.release-plan.outputs.commit != github.sha && needs.release-target-{c}.result == 'success'))"
+            for c in ("determinism", "mutations"))
         self.assertEqual(self.jobs["build"]["if"],
                          "!cancelled() && needs.validate.result == 'success' && "
-                         f"needs.release-plan.result == 'success' && {publishing}")
+                         f"needs.release-plan.result == 'success' && {publishing} && {coverage}")
         self.assertEqual(self.jobs["publish"]["if"],
                          "!cancelled() && needs.validate.result == 'success' && "
                          "needs.release-plan.result == 'success' && needs.build.result == 'success' "
-                         f"&& {publishing}")
+                         f"&& {publishing} && {coverage}")
+        # The target checks need only release-plan, so their own if reads nothing else.
+        for check in ("determinism", "mutations"):
+            self.assertEqual(self.jobs[f"release-target-{check}"]["needs"], ["release-plan"])
+            self.assertEqual(self.jobs[f"release-target-{check}"]["if"],
+                             "!cancelled() && needs.release-plan.result == 'success' && "
+                             f"{publishing} && needs.release-plan.outputs.commit != github.sha")
+        self.assertEqual(ci._publishing_condition(), publishing)
 
     def test_every_job_downstream_of_reuse_states_its_condition(self) -> None:
         downstream = {"validate"}
@@ -686,14 +706,30 @@ class MainWorkflowTest(unittest.TestCase):
             self.assertNotIn("always()", expression)
             self.assertIn("!cancelled()", expression)
             for needed in self.jobs[name]["needs"]:
+                if needed in ci.CHECK_JOBS:
+                    # required through the coverage term, never through _after(...)
+                    self.assertIn(f"needs.{needed}.result == 'success'", expression, (name, needed))
+                    continue
                 self.assertIn(f"needs.{needed}.result == 'success'", expression, (name, needed))
         # validate itself is the only job that tolerates reuse not succeeding.
         self.assertEqual(self.jobs["validate"]["if"], "!cancelled()")
 
-    def _would_run(self, name: str, results: dict, state: str, ref: str = "refs/heads/main") -> bool:
-        """The job's ``if`` evaluated over ``results`` (job -> result)."""
+    #: The results of the four check jobs in an ordinary release (the target is the pushed commit).
+    ORDINARY = {"after-merge-determinism": "success", "after-merge-mutations": "success",
+                "release-target-determinism": "skipped", "release-target-mutations": "skipped"}
+
+    def _would_run(self, name: str, results: dict, state: str, ref: str = "refs/heads/main",
+                   *, target_is_pushed: bool = True, checks: "dict | None" = None) -> bool:
+        """The job's ``if`` evaluated over ``results`` (job -> result), with the four check jobs at ``checks``
+        (default: an ordinary release's) and ``release-plan``'s commit equal to the pushed one or not."""
+        results = {**(self.ORDINARY if checks is None else checks), **results}
         expression = self.jobs[name]["if"]
         expression = expression.replace("!cancelled()", "True")
+        expression = re.sub(r"needs\.release-plan\.outputs\.commit (==|!=) github\.sha",
+                            lambda m: repr(target_is_pushed == (m.group(1) == "==")), expression)
+        # Only a job named in the if's own needs may be read (a GitHub Actions rule).
+        for needed in re.findall(r"needs\.([a-z-]+)\.", expression):
+            self.assertIn(needed, self.jobs[name]["needs"], (name, needed))
         expression = re.sub(r"needs\.([a-z-]+)\.result == '(\w+)'",
                             lambda m: repr(results.get(m.group(1)) == m.group(2)), expression)
         expression = re.sub(r"needs\.release-plan\.outputs\.state == '(\w+)'",
@@ -759,7 +795,7 @@ class MainWorkflowTest(unittest.TestCase):
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
         uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()["main.yml"])
         actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
-        self.assertEqual(len(actions), 11)
+        self.assertEqual(len(actions), 19)
         for ref, comment in actions:
             with self.subTest(ref=ref):
                 self.assertRegex(ref, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
@@ -839,6 +875,133 @@ class MainWorkflowTest(unittest.TestCase):
         main = ci.render()["main.yml"]
         self.assertIn("Tip commit pushed to the ref", main)
         self.assertIn("gh_release_create", main)
+
+
+class MainChecksTest(unittest.TestCase):
+    """The two whole-catalogue checks run after the merge and gate the release
+    (``workflow-controller-ci-time`` D2). Borrows ``_would_run``, which
+    evaluates a job's whole generated ``if``."""
+
+    _would_run = MainWorkflowTest._would_run
+    ORDINARY = MainWorkflowTest.ORDINARY
+
+    def setUp(self) -> None:
+        self.workflow = ci.main_workflow()
+        self.jobs = _jobs(self.workflow)
+
+    CHECKS = {"determinism": "tests.test_catalogue_determinism",
+              "mutations": "tests.test_scenarios_negative"}
+    TARGET_CHECKS = ["release-target-determinism", "release-target-mutations"]
+
+    def test_the_jobs_exist_in_main_and_in_neither_validate_nor_ci(self) -> None:
+        self.assertEqual(ci.MAIN_TEST_MODULES, self.CHECKS)
+        for check in self.CHECKS:
+            for kind in ("after-merge", "release-target"):
+                with self.subTest(job=f"{kind}-{check}"):
+                    self.assertIn(f"{kind}-{check}", self.jobs)
+                    self.assertNotIn(f"{kind}-{check}", _jobs(ci.validate_workflow()))
+                    self.assertNotIn(f"{kind}-{check}", _jobs(ci.ci_workflow()))
+        for name in ("validate.yml", "ci.yml"):
+            self.assertNotIn("main-check", ci.render()[name])
+
+    def test_each_job_has_the_shard_jobs_setup_and_the_fail_closed_command(self) -> None:
+        shard = _steps(_jobs(ci.validate_workflow())["tests"])
+        for check, module in self.CHECKS.items():
+            for kind in ("after-merge", "release-target"):
+                steps = _steps(self.jobs[f"{kind}-{check}"])
+                with self.subTest(job=f"{kind}-{check}"):
+                    self.assertTrue(_uses(steps[0]).startswith("actions/checkout@"))
+                    self.assertTrue(_uses(steps[1]).startswith("actions/setup-python@"))
+                    self.assertEqual(_run(steps[2]), "pip install -e .")
+                    self.assertEqual(_run(steps[3]), ci.ALLOW_USERNS)
+                    self.assertEqual(steps[3], shard[3])
+                    self.assertEqual(_run(steps[4]), f"python3 tools/run_tests.py main-check {module}")
+                    self.assertEqual(len(steps), 5)
+
+    def test_the_target_jobs_check_out_the_publication_target(self) -> None:
+        for check in self.CHECKS:
+            pushed = _steps(self.jobs[f"after-merge-{check}"])[0]
+            target = _steps(self.jobs[f"release-target-{check}"])[0]
+            self.assertNotIn("ref", pushed.get("with", {}))
+            self.assertEqual(target["with"]["ref"], "${{ needs.release-plan.outputs.commit }}")
+            self.assertEqual(target["with"]["fetch-depth"], 0)
+
+    def test_none_depends_on_reuse_and_the_after_merge_jobs_start_at_once(self) -> None:
+        for check in self.CHECKS:
+            self.assertNotIn("needs", self.jobs[f"after-merge-{check}"])
+            self.assertNotIn("if", self.jobs[f"after-merge-{check}"])
+            self.assertEqual(self.jobs[f"release-target-{check}"]["needs"], ["release-plan"])
+        for name, job in self.jobs.items():
+            if name.startswith(("after-merge-", "release-target-")):
+                self.assertNotIn("reuse", job.get("needs", []))
+                self.assertNotIn("reuse", job.get("if", ""))
+        self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
+
+    def test_no_if_reads_a_job_outside_its_own_needs(self) -> None:
+        for name, job in self.jobs.items():
+            with self.subTest(job=name):
+                for needed in re.findall(r"needs\.([a-z-]+)\.", job.get("if", "")):
+                    self.assertIn(needed, job["needs"])
+
+    def _publishes(self, *, target_is_pushed: bool, checks: dict, validate: str = "success") -> bool:
+        results = {"validate": validate, "release-plan": "success"}
+        build = self._would_run("build", results, "RELEASE_DUE",
+                                target_is_pushed=target_is_pushed, checks=checks)
+        return build and self._would_run("publish", {**results, "build": "success"}, "RELEASE_DUE",
+                                         target_is_pushed=target_is_pushed, checks=checks)
+
+    def test_an_ordinary_release_publishes_only_on_successful_after_merge_checks(self) -> None:
+        ok = dict(self.ORDINARY)
+        self.assertTrue(self._publishes(target_is_pushed=True, checks=ok))
+        for check in self.CHECKS:
+            for result in ("failure", "cancelled", "skipped", "pending"):
+                with self.subTest(check=check, result=result):
+                    broken = {**ok, f"after-merge-{check}": result}
+                    self.assertFalse(self._publishes(target_is_pushed=True, checks=broken))
+            # a missing job (never scheduled) is not a success either
+            missing = {k: v for k, v in ok.items() if k != f"after-merge-{check}"}
+            self.assertFalse(self._publishes(target_is_pushed=True, checks=missing))
+
+    def test_a_target_job_result_is_irrelevant_when_the_target_is_the_pushed_commit(self) -> None:
+        for result in ("success", "failure", "skipped"):
+            checks = {**self.ORDINARY, "release-target-determinism": result, "release-target-mutations": result}
+            self.assertTrue(self._publishes(target_is_pushed=True, checks=checks))
+
+    def test_an_ancestor_resume_needs_the_checks_of_the_target_not_of_the_pushed_commit(self) -> None:
+        # Wrong-commit regression: successful after-merge jobs on the pushed commit B say nothing about the ancestor A.
+        ran_on_b = dict(self.ORDINARY)
+        self.assertFalse(self._publishes(target_is_pushed=False, checks=ran_on_b))
+        for result in ("failure", "cancelled", "skipped"):
+            checks = {**ran_on_b, "release-target-determinism": "success", "release-target-mutations": result}
+            with self.subTest(result=result):
+                self.assertFalse(self._publishes(target_is_pushed=False, checks=checks))
+        both = {**ran_on_b, **{job: "success" for job in self.TARGET_CHECKS}}
+        self.assertTrue(self._publishes(target_is_pushed=False, checks=both))
+        # even with the pushed commit's checks failed: they do not decide an ancestor target
+        failed_b = {**both, "after-merge-determinism": "failure", "after-merge-mutations": "failure"}
+        self.assertTrue(self._publishes(target_is_pushed=False, checks=failed_b))
+
+    def test_the_target_jobs_run_for_an_ancestor_resume_with_reuse_off_and_only_then(self) -> None:
+        # Only release-plan is in the context when the condition is decided (reuse is skipped; validate is not read).
+        for check in self.CHECKS:
+            name = f"release-target-{check}"
+            for state, pushed, expected in (("RESUME", False, True), ("RELEASE_DUE", False, True),
+                                            ("RESUME", True, False), ("NOT_DUE", False, False)):
+                with self.subTest(job=name, state=state, pushed=pushed):
+                    self.assertEqual(self._would_run(name, {"release-plan": "success"}, state,
+                                                     target_is_pushed=pushed, checks={}), expected)
+            self.assertFalse(self._would_run(name, {"release-plan": "failure"}, "RESUME",
+                                             target_is_pushed=False, checks={}))
+            self.assertFalse(self._would_run(name, {"release-plan": "success"}, "RESUME",
+                                             "refs/heads/other", target_is_pushed=False, checks={}))
+
+    def test_a_failed_validate_still_stops_the_release_whatever_the_checks_say(self) -> None:
+        for validate in ("failure", "skipped", "cancelled"):
+            self.assertFalse(self._publishes(target_is_pushed=True, checks=dict(self.ORDINARY),
+                                             validate=validate))
+
+    def test_the_release_slot_is_unchanged(self) -> None:
+        self.assertEqual(self.workflow["concurrency"], {"group": "main-release", "cancel-in-progress": False})
 
 
 class ReuseTest(unittest.TestCase):

@@ -28,7 +28,8 @@ everything; each name is a unittest dotted name (prefix match over
 controller ids), ``conformance`` or ``conformance:<file>``; a name that
 matches nothing refuses. ``CI_PLACEMENT`` moves a few modules out of the CI
 shard matrix, and ``ci_partition`` proves the inventory is partitioned
-exactly into CI shards, ``package`` and ``excluded``.
+exactly into CI shards, ``main`` (the after-merge jobs of ``main.yml``),
+``package`` and ``excluded``.
 
 *Timing data* is advisory: it decides where an atom runs, never whether it
 runs. Each shard writes a result record (``validate_shard_result`` is its
@@ -131,6 +132,9 @@ SUBSTITUTE_TEST_TYPES = frozenset({"_FailedTest", "ModuleImportFailure", "_Error
 PACKAGE = "package"
 EXCLUDED = "excluded"
 SHARDS = "shards"
+#: Runs in ``main.yml`` after the merge, on the release candidate, and the
+#: release waits for it (``workflow-controller-ci-time`` D2).
+MAIN = "main"
 CI_PLACEMENT = {
     "tests.test_packaged_runtime": (
         PACKAGE, "needs the wheel the package job builds, and runs there under "
@@ -138,6 +142,14 @@ CI_PLACEMENT = {
     "tests.test_integration_disposable_repo": (
         EXCLUDED, "needs the live claude binary, network access and real spend "
                   "(CONTROLLER_LIVE_WORKER=1)"),
+    "tests.test_catalogue_determinism": (
+        MAIN, "runs every catalogue scenario twice, a property of the whole catalogue and "
+              "not of one flow; runs in main.yml after the merge and gates the release, while "
+              "a three-flow subset stays on every pull request (tests.test_run_scenarios)"),
+    "tests.test_scenarios_negative": (
+        MAIN, "breaks each scenario claim once per mutation, a property of the whole "
+              "catalogue and not of one flow; runs in main.yml after the merge and gates the "
+              "release (the positive scenarios stay in the shards)"),
 }
 
 
@@ -430,7 +442,7 @@ def exclusive_atoms_problems(inventory: Inventory,
 
 
 def ci_partition(inventory: Inventory) -> dict[str, tuple[str, ...]]:
-    """The inventory's ids split into ``shards``, ``package`` and
+    """The inventory's ids split into ``shards``, ``main``, ``package`` and
     ``excluded``, each in canonical order. A placed module the inventory does
     not contain refuses, so a stale placement cannot go unnoticed."""
     loaded_modules = {atom.module for atom in inventory.atoms}
@@ -438,7 +450,7 @@ def ci_partition(inventory: Inventory) -> dict[str, tuple[str, ...]]:
     if stale:
         raise InventoryError("CI_PLACEMENT names modules the inventory does not contain: "
                              + ", ".join(stale))
-    partition: dict[str, list[str]] = {SHARDS: [], PACKAGE: [], EXCLUDED: []}
+    partition: dict[str, list[str]] = {SHARDS: [], MAIN: [], PACKAGE: [], EXCLUDED: []}
     for atom in inventory.atoms:
         where = CI_PLACEMENT.get(atom.module, (SHARDS, ""))[0]
         partition[where].extend(atom.test_ids)

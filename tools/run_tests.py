@@ -31,6 +31,11 @@ Building blocks (used by the local runner and by CI):
   a failure's evidence can be downloaded from; ``--upstream-result`` fails
   a run whose current-attempt ``plan`` or ``tests`` job did not succeed;
   ``--write-selected`` copies the plan and the selected records, flat);
+- ``main-check MODULE``: run one module the CI placement moved to ``main.yml``
+  (``test_shards.MAIN``) as one shard, and exit non-zero unless every test the
+  inventory holds for it ran, none was skipped, and all passed, so an empty,
+  short or skipped run cannot establish coverage (``main.yml``'s
+  ``after-merge-*`` and ``release-target-*`` jobs);
 - ``timings merge --into FILE DIR...``: fold results into a timing profile,
   the explicit way to refresh the committed ``tools/test_timings.json``.
 
@@ -53,11 +58,12 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Mapping
 
 import test_shards as ts
 
 RUN_TESTS_PY = Path(__file__).resolve()
-SUBCOMMANDS = ("exec-shard", "plan", "aggregate", "timings")
+SUBCOMMANDS = ("exec-shard", "plan", "aggregate", "timings", "main-check")
 #: How long an interrupted shard gets between SIGTERM and SIGKILL.
 INTERRUPT_GRACE_SECONDS = 5.0
 POLL_SECONDS = 0.05
@@ -552,6 +558,59 @@ def cmd_run(args) -> int:
     return result.exit_status
 
 
+# -- main-check -----------------------------------------------------------------------------
+
+
+def executed_problems(expected: list[str], record: Mapping, status: int) -> list[str]:
+    """Why a run of ``expected`` ids cannot establish coverage: it is empty, it
+    did not pass, it ran a different set of tests than the inventory holds, or
+    it skipped a test (``unittest`` exits 0 when every test is skipped)."""
+    problems = []
+    if not expected:
+        problems.append("the selection is empty")
+    if status != ts.EXIT_PASS:
+        problems.append(f"the shard did not pass (exit {status})")
+    tests = record.get("tests") or []
+    ran = [entry.get("id") for entry in tests]
+    if sorted(ran) != sorted(expected):
+        problems.append(f"{len(ran)} tests ran, the inventory holds {len(expected)} "
+                        "(or the ids differ)")
+    skipped = [entry.get("id") for entry in tests if entry.get("outcome") == "skip"]
+    skipped += [str(entry) for entry in record.get("fixture_skips") or []]
+    if skipped:
+        problems.append("skipped: " + ", ".join(sorted(map(str, skipped))))
+    return problems
+
+
+def cmd_main_check(args) -> int:
+    repo_root = args.repo_root.resolve()
+    placed = ts.CI_PLACEMENT.get(args.module)
+    if placed is None or placed[0] != ts.MAIN:
+        return _error(f"{args.module} is not placed in main.yml (test_shards.CI_PLACEMENT)")
+    plan, inventory, _ = compute_plan(repo_root, ts.CI, [args.module], shards=1,
+                                      conformance_lane=False)
+    expected = list(inventory.select([args.module]).test_ids)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    sys.path[0] = str(repo_root)
+    os.chdir(repo_root)
+    results_dir = args.results_dir or Path(tempfile.mkdtemp(prefix="main-check-"))
+    results_dir.mkdir(parents=True, exist_ok=True)
+    _write_plan(results_dir / "plan.json", plan)
+    inherited = os.environ.get(ts.SHARD_MARKER_ENV) or f"{plan['plan_digest'][:16]}/0"
+    os.environ[ts.SHARD_MARKER_ENV] = f"{inherited}/{os.getpid()}"
+    record, status = ts.execute_shard(plan, 0, results_dir, repo_root,
+                                      argv=[sys.executable, *sys.argv])
+    if status != ts.EXIT_PASS:
+        sys.stderr.write(ts.shard_verdict(record, status, results_dir))
+    problems = executed_problems(expected, record, status)
+    if problems:
+        for problem in problems:
+            print(f"main-check {args.module}: {problem}", file=sys.stderr)
+        return status if status != ts.EXIT_PASS else ts.EXIT_FAIL
+    print(f"main-check {args.module}: {len(expected)} tests ran, none skipped, all passed")
+    return ts.EXIT_PASS
+
+
 # -- argument parsing -----------------------------------------------------------------------
 
 
@@ -588,6 +647,16 @@ def _exec_shard_parser() -> argparse.ArgumentParser:
     parser.add_argument("--results-dir", type=Path, required=True)
     parser.add_argument("--run-attempt", type=int, default=1, metavar="N",
                         help="the CI run attempt recorded in the result (default 1)")
+    _add_repo_root(parser)
+    return parser
+
+
+def _main_check_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="run_tests.py main-check",
+        description="Run a module placed in main.yml and fail unless all of it ran and passed.")
+    parser.add_argument("module", help="a module in test_shards.CI_PLACEMENT placed as 'main'")
+    parser.add_argument("--results-dir", type=Path, help="default: a fresh temporary directory")
     _add_repo_root(parser)
     return parser
 
@@ -645,6 +714,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if command == "exec-shard":
             return cmd_exec_shard(_exec_shard_parser().parse_intermixed_args(argv[1:]))
+        if command == "main-check":
+            return cmd_main_check(_main_check_parser().parse_args(argv[1:]))
         if command == "plan":
             return cmd_plan(_plan_parser().parse_intermixed_args(argv[1:]))
         if command == "aggregate":

@@ -736,3 +736,97 @@ class BuildingBlocksTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MainCheckTest(unittest.TestCase):
+    """``main-check``: the fail-closed run of a module the CI placement moved to ``main.yml``. The synthetic
+    repository carries a module named like the real placed one, so the real placement table applies."""
+
+    MODULE = "tests.test_catalogue_determinism"
+
+    def setUp(self) -> None:
+        self.repo = SyntheticRepo(self)
+        self.module_file = self.repo.root / "tests" / "test_catalogue_determinism.py"
+
+    def write(self, source: str) -> None:
+        self.module_file.write_text(textwrap.dedent(source))
+
+    def check(self, module: str | None = None) -> subprocess.CompletedProcess:
+        return self.repo.run("main-check", module or self.MODULE,
+                             "--results-dir", str(self.repo.results()))
+
+    def test_a_module_that_ran_whole_and_passed_exits_0(self) -> None:
+        self.write("""
+            import unittest
+
+            class T(unittest.TestCase):
+                def test_a(self): pass
+                def test_b(self): pass
+        """)
+        completed = self.check()
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("2 tests ran, none skipped, all passed", completed.stdout)
+
+    def test_a_skipped_test_fails_the_run(self) -> None:
+        self.write("""
+            import unittest
+
+            class T(unittest.TestCase):
+                def test_a(self): pass
+                def test_b(self): self.skipTest("no sandbox")
+        """)
+        completed = self.check()
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("skipped: tests.test_catalogue_determinism.T.test_b", completed.stderr)
+
+    def test_a_module_skipped_in_its_set_up_class_fails_the_run(self) -> None:
+        self.write("""
+            import unittest
+
+            class T(unittest.TestCase):
+                @classmethod
+                def setUpClass(cls): raise unittest.SkipTest("no sandbox")
+                def test_a(self): pass
+        """)
+        self.assertNotEqual(self.check().returncode, 0)
+
+    def test_a_failing_test_fails_the_run(self) -> None:
+        self.write("""
+            import unittest
+
+            class T(unittest.TestCase):
+                def test_a(self): self.fail("broken")
+        """)
+        self.assertEqual(self.check().returncode, 1)
+
+    def test_a_module_the_tree_does_not_have_fails_closed(self) -> None:
+        # An older target tree that predates the moved module: the selection is empty, so the run cannot pass.
+        completed = self.check()
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("no test matches", completed.stderr)
+
+    def test_a_module_not_placed_in_main_is_refused(self) -> None:
+        completed = self.check("tests.test_pass")
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("is not placed in main.yml", completed.stderr)
+
+    def test_an_older_runner_without_main_check_fails_closed(self) -> None:
+        # The release-target job runs the target tree's own tools: a tree that predates main-check reads the word as
+        # a test name and refuses, so it cannot publish unchecked.
+        completed = self.repo.run("main-check-that-an-old-runner-does-not-know", "tests.test_pass")
+        self.assertEqual(completed.returncode, 2)
+
+    def test_the_verdict_function_names_each_way_a_run_cannot_establish_coverage(self) -> None:
+        run_tests = _import_run_tests()
+        ids = ["m.T.a", "m.T.b"]
+        ran = {"tests": [{"id": i, "outcome": "pass"} for i in ids], "fixture_skips": []}
+        self.assertEqual(run_tests.executed_problems(ids, ran, 0), [])
+        self.assertIn("the selection is empty", run_tests.executed_problems([], {"tests": []}, 0))
+        short = {"tests": ran["tests"][:1], "fixture_skips": []}
+        self.assertTrue(any("1 tests ran, the inventory holds 2" in p
+                            for p in run_tests.executed_problems(ids, short, 0)))
+        skipped = {"tests": [{"id": "m.T.a", "outcome": "pass"}, {"id": "m.T.b", "outcome": "skip"}]}
+        self.assertTrue(any("skipped: m.T.b" in p for p in run_tests.executed_problems(ids, skipped, 0)))
+        fixture = {**ran, "fixture_skips": [{"id": "m.T", "reason": "x"}]}
+        self.assertTrue(any(p.startswith("skipped") for p in run_tests.executed_problems(ids, fixture, 0)))
+        self.assertTrue(any("did not pass" in p for p in run_tests.executed_problems(ids, ran, 1)))

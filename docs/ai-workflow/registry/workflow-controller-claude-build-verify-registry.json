@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-claude-build-verify",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Admit recorded digests, and probe and launch the same binary",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "One live probe implementation for the command and the release check",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The verify-claude command",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "Documentation, roadmap and the whole suite: C10e complete, the guides agree, check_docs and the full suite green",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

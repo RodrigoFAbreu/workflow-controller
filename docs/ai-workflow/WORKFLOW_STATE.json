@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-claude-build-verify",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -22668,6 +22668,276 @@
         },
         "evaluated_at": "2026-10-22T15:33:20Z",
         "workflow_release": "2.18.2"
+      }
+    },
+    "workflow-controller-claude-build-verify": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-claude-build-verify",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CLAUDE_BUILD_VERIFY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "679b34cf0fc10f8105877b15c3a221dc135dd5ba",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+        "approved_review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CLAUDE_BUILD_VERIFY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c90c94a33e8a1861e4c392545fbc81ff129a8371"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4db3307346615178a18a009f1e8eddd687e52bfc"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "56d23b2bcfe7ca59d5873ea03d47b07ec3a4dc3e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-22T17:24:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+            "ledger": {
+              "local": {
+                "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "af06d8f862cbe6ded3966f1a1de934d8d04eb95e2f50bb60efd31ad3e4ace6f8",
+                "ledger_entry_sha256": "bf838980b0adfeea721fa9e6d05b0ec0389ca9483e2f855970a97c5eddc45b56",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "2f6673d9adc6a54b4178829035aa9f07224096652254b4ddb6c2d3a70e81afed",
+                "ledger_entry_sha256": "63f5a5660865885ab0a3a603c5512cfe01b1ffcf98218a4ff8cb3a3cf5a323c6",
+                "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-22T17:24:00Z",
+          "workflow_release": "2.18.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-22T17:17:38Z",
+          "verdict_sha256": "af06d8f862cbe6ded3966f1a1de934d8d04eb95e2f50bb60efd31ad3e4ace6f8",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-22T17:22:16Z",
+          "verdict_sha256": "2f6673d9adc6a54b4178829035aa9f07224096652254b4ddb6c2d3a70e81afed",
+          "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 13,
+      "last_transition": "2026-10-22T17:24:00Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-22T17:14:42Z",
+        "consumed": {
+          "review_content_id": "dc242817b417daedc2d9c9785ac59d71073362f5ad94c49dc66eea22a90f3b15",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+          "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "61e44755cb289b66686edb55e90d27c26df2fa7f0bf0a367cfb35f00bd9ca868",
+        "dc242817b417daedc2d9c9785ac59d71073362f5ad94c49dc66eea22a90f3b15"
+      ],
+      "optional_findings": {
+        "F-07b6ecdfbd9b": {
+          "digest": "07b6ecdfbd9b8b84bd6d84b383ab138f9f3a3f06c9697c356f1db03ae7bed8df",
+          "text": "**O1 -- The record's write primitive and its mode disagree (D3, CP1).** D3 and CP1 say the record is written \"through `runtime.write_json`\", and D3(c) says the file is created mode 0600. `write_json` goes through `_atomic_write`, which creates mode 0o644 (`runtime.py:147`). The read check only forbids group or world write, so 0644 is still admitted and nothing breaks. Still, the implementer should use `runtime.write_private_bytes` (`runtime.py:495`, 0o600, the same atomic mechanics) or a new `runtime.py` helper, and make the plan's wording match whichever is used.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:17:38Z"
+            }
+          ]
+        },
+        "F-f556ece5aa28": {
+          "digest": "f556ece5aa28451399f7f5f85d636659fb9c171c670db3ff9fc61bfbc21e37b7",
+          "text": "**O2 -- D3(a)'s runtime-root check can never trigger.** The tester's sandbox is always `<runtime root>/functional/<job id>/` (`review.py` `launch_functional`), so the runtime root cannot lie inside the clone or the output folder. The invariant that matters is that the record's path lies outside every `allowWrite` entry of `tester_settings`. Asserting that directly at launch is cheap and would stay true if the sandbox layout ever moves.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:17:38Z"
+            }
+          ]
+        },
+        "F-1a73475c6ffe": {
+          "digest": "1a73475c6ffeb922d2f296677de93d5d5c733c7446eae41bfe95cf526daa602b",
+          "text": "**O3 -- An exact command match may fail on every run.** If the stream's `tool_use.input.command` routinely differs from the sent command (for example by a trailing newline), every verification comes out inconclusive and the command can never record anything. That is safe, but it makes the feature useless. CP2's live run should confirm that the real stream reproduces the probe command exactly. Counting tool-use events by `id` would also stop a repeated stream event from being read as a \"second call\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:17:38Z"
+            }
+          ]
+        },
+        "F-00308765a77c": {
+          "digest": "00308765a77c065d779fc0476865d155a304a8a439c48f29a044ae9a51747d0c",
+          "text": "**O1 — Specify the private write primitive consistently.** D3/CP1 require `runtime.write_json` and mode 0600, but `_atomic_write` creates mode 0644 under the usual umask (`controller/runtime.py:145`). An isolated check confirmed this. Specify a runtime helper that provides private atomic publication and refuses symlinks. Mode 0644 still satisfies the admission check against group/world writes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-9e109057f52f": {
+          "digest": "9e109057f52fc7263db5186e1602a72d4cda93fdecc59e3a616538b963dad97e",
+          "text": "**O2 — The runtime-root containment check is unreachable under the current layout.** The clone and output are descendants of `<runtime root>/functional/<job id>/` (`controller/functional_review.py:1648`). The runtime root therefore cannot lie inside either. Assert the record’s resolved location against the actual write allowlist instead; the current layout already keeps it outside those locations.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-47fe60b43d4c": {
+          "digest": "47fe60b43d4cfba1c36290329e8347d2d3c17cf3f6b1e91ee49d4f95724373eb",
+          "text": "**O3 — Exact command matching needs live confirmation.** D1’s byte-for-byte requirement can turn harmless model formatting changes into repeated inconclusive runs. This is a plausible usability risk, with no demonstrated failure here. CP2’s required live acceptance should establish a successful exact match and matched tool result; count distinct tool-use IDs when detecting additional calls.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-d4de289b3f56": {
+          "digest": "d4de289b3f56224bfd70bb63069e520d0aa30bde5e17b22ec682857c092681f5",
+          "text": "**O4 — Descriptor pinning prevents substitution but does not detect every replacement.** D3(b)’s claim that a swapped file always becomes empty is stronger than its mechanism. Replacement after opening leaves the descriptor reading the original trusted inode, as an isolated check confirmed. Describe that safe behavior explicitly; rejecting every pathname replacement would require additional checks.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        }
       }
     }
   }

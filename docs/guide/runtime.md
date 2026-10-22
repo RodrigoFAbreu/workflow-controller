@@ -43,6 +43,17 @@ cannot be read, is ignored and the stop text says so. Deleting it only
 un-admits those builds until `verify-claude` is run again. It is per runtime
 root, so a source checkout and the shared install keep separate records.
 
+Who the record is defended against: the sandboxed functional tester and
+redirection. The read is checked on one descriptor (no symlink, owned by you,
+not writable by others), the write refuses to go through a symlink, and a
+launch refuses a runtime root inside the clone or output folder. It is not
+defended against a lifecycle worker or any other process running as you:
+such a process already holds your authority over the settings file and over
+the Controller itself. The launch executes the resolved file it hashed, so a
+re-pointed symlink cannot change what runs, but a file rewritten in place
+between the hash and the exec is not caught. The installer never does that;
+it writes each version to its own file.
+
 A `usage.json` this release cannot read (corrupt, or written by a newer
 release with a higher `version`) is never replaced. Deleting it is a last
 resort: repairing or restoring the original record in place lets a later

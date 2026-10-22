@@ -191,7 +191,9 @@ one on `PATH`), prints its resolved path and SHA-256 digest, and then:
 - a failing probe exits `20`, names the probe and records nothing; the scratch folder is removed either way.
 
 The settings file is never created, filled or updated by this command. The record is per runtime root: a source
-checkout and the shared install each need their own run.
+checkout and the shared install each need their own run. The record defends against the sandboxed tester and
+against redirection, not against a lifecycle worker running as you, and a build file rewritten in place between the
+hash and the exec is not caught (see [runtime](runtime.md#controller-owned-runtime-state)).
 
 ## `notifications`
 

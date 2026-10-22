@@ -22679,12 +22679,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 3,
-      "implementation_revision": 4,
+      "implementation_revision": 5,
       "functional_review_round": null,
       "base_commit": "679b34cf0fc10f8105877b15c3a221dc135dd5ba",
-      "reviewed_implementation_head": "a431874b358787f5cd4e70794a7267ae09cdf84b",
+      "reviewed_implementation_head": "565f7a241144ec61575f8b0c5a11f705c0263991",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP4",
       "checkpoints": {
@@ -23010,8 +23010,8 @@
           "external": 3
         }
       },
-      "state_revision": 34,
-      "last_transition": "2026-10-22T21:26:23Z",
+      "state_revision": 35,
+      "last_transition": "2026-10-22T23:09:08.318980+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

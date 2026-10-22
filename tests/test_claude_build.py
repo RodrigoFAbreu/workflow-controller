@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -246,3 +247,177 @@ class LaunchTests(sandbox_tests.Fixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeClaude:
+    """A stand-in for the launch callable of ``verify_build``: it answers
+    ``--version`` and plays the three probes the way a build that holds the
+    boundary does, performing the permitted effects the host-side checks need.
+    ``fault`` breaks exactly one probe; ``during`` runs inside the first
+    probe's launch."""
+
+    def __init__(self, fault: str | None = None, during=None) -> None:
+        self.fault, self.during, self.launches, self.argv0 = fault, during, 0, set()
+
+    def __call__(self, command, *, input=None, capture_output=True, cwd=None, env=None, timeout=None, check=False):
+        if command[1:] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, b"2.9.9 (Claude Code)\n", b"")
+        self.launches += 1
+        self.argv0.add(command[0])
+        if self.fault == "timeout":
+            raise subprocess.TimeoutExpired(command, 1)
+        if self.during is not None and self.launches == 1:
+            self.during()
+        prompt = input.decode()
+        out = Path(cwd)
+        clone = out.parent / "clone"
+        if "```sh" in prompt:
+            events = self.boundary(prompt, out, clone)
+        elif "dangerouslyDisableSandbox" in prompt:
+            events = self.retry()
+        else:
+            events = self.missing(env)
+        return subprocess.CompletedProcess(command, 0, "\n".join(json.dumps(e) for e in events).encode(), b"")
+
+    def init(self):
+        tools = ["Bash", "Write"] if self.fault == "tools" else ["Bash"]
+        return {"type": "system", "subtype": "init", "tools": tools}
+
+    @staticmethod
+    def call(command, output, call_id="t1"):
+        return [{"type": "assistant", "message": {"content": [
+                    {"type": "tool_use", "id": call_id, "name": "Bash", "input": command}]}},
+                {"type": "user", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": call_id, "content": output}]}}]
+
+    def boundary(self, prompt, out, clone):
+        command = prompt.split("```sh\n", 1)[1].rsplit("\n```", 1)[0]
+        if self.fault == "login":
+            return [self.init(), {"type": "result", "is_error": True, "result": "Not logged in - please run /login"}]
+        (clone / "build" / "probe").write_bytes(b"")
+        (out / "probe").write_bytes(b"")
+        if self.fault == "host_write":
+            (clone / "src.txt").write_bytes(b"changed\n")
+        if self.fault == "socket":
+            import re
+            import socket
+            path = re.search(r"(/[^\s'\"]*host\.sock)", command)[1]
+            sock = socket.socket(socket.AF_UNIX)
+            sock.connect(path)
+            sock.close()
+            time.sleep(0.5)
+        lines = [f"PROBE {name} {want}" for name, want in fr.PROBE_EXPECTED.items()] + ["PROBE shm WROTE"]
+        if self.fault == "missing_line":
+            lines = [line for line in lines if "unix" not in line]
+        if self.fault == "denied_write_reported":
+            lines = [line.replace("home REFUSED", "home WROTE") for line in lines]
+        output = "\n".join(lines)
+        if self.fault == "not_executed":
+            return [self.init(), {"type": "result", "is_error": False, "result": output}]
+        if self.fault == "altered_command":
+            command = command.replace("tracked", "other", 1)
+        if self.fault == "twice":
+            return [self.init(), *self.call({"command": command}, output), *self.call({"command": command}, output, "t2"),
+                    {"type": "result", "is_error": False, "result": output}]
+        return [self.init(), *self.call({"command": command}, output),
+                {"type": "result", "is_error": False, "result": output}]
+
+    def retry(self):
+        attempted = {"command": "echo hi > /tmp/x"}
+        if self.fault != "no_retry":
+            attempted["dangerouslyDisableSandbox"] = True
+        return [self.init(), *self.call(attempted, "refused"), {"type": "result", "is_error": False, "result": "done"}]
+
+    def missing(self, env):
+        if self.fault == "not_refused":
+            return [{"type": "result", "is_error": False, "result": "ran", "num_turns": 1}]
+        return [{"type": "result", "is_error": True, "num_turns": 0,
+                 "errors": ["sandbox required but unavailable: bwrap is missing"]}]
+
+
+class VerifyBuildTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.root = base / "rt"
+        self.root.mkdir()
+        self.home = base / "claude-home"
+        self.home.mkdir()
+        (self.home / review.CLAUDE_CREDENTIAL_FILE).write_text("{}")
+        self.real = base / "versions" / "claude-9.9.9"
+        self.real.parent.mkdir()
+        self.real.write_bytes(elf("real"))
+        self.link = base / "bin-claude"
+        self.link.symlink_to(self.real)
+        patch = mock.patch.object(fr, "host_probe", lambda **kw: None)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def verify(self, fake: FakeClaude, **kw):
+        return cb.verify_build(self.link, runtime_root=self.root, operator_home=self.home, run=fake, **kw)
+
+    def assertRefused(self, fake: FakeClaude, probe: str, *, inconclusive: bool, text: str = "") -> None:
+        with self.assertRaises(cb.BuildNotVerified) as ctx:
+            self.verify(fake)
+        self.assertEqual(ctx.exception.probe, probe, ctx.exception.message)
+        self.assertEqual(ctx.exception.inconclusive, inconclusive, ctx.exception.message)
+        self.assertIn(text, ctx.exception.message)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
+        scratch = self.root / cb.SCRATCH_AREA
+        self.assertEqual(list(scratch.iterdir()) if scratch.exists() else [], [])
+
+    def test_a_build_that_holds_every_probe_passes_with_the_digest_of_the_resolved_file(self) -> None:
+        fake = FakeClaude()
+        result = self.verify(fake)
+        self.assertEqual(result.digest, hashlib.sha256(elf("real")).hexdigest())
+        self.assertEqual(result.path, str(self.real))
+        self.assertEqual(result.version, "2.9.9")
+        self.assertEqual([p.name for p in result.probes], ["boundary", "retry", "missing_component"])
+        self.assertEqual(fake.argv0, {str(self.real)})  # every probe ran the resolved file, not the link
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())  # verifying records nothing by itself
+        self.assertEqual(list((self.root / cb.SCRATCH_AREA).iterdir()), [])  # the scratch folder is gone
+
+    def test_each_broken_probe_fails_closed_and_names_the_probe(self) -> None:
+        for fault, probe, inconclusive, text in (
+                ("host_write", "boundary", False, "changed"),
+                ("socket", "boundary", False, "listener"),
+                ("missing_line", "boundary", False, "unix: no result line"),
+                ("denied_write_reported", "boundary", False, "home: WROTE"),
+                ("tools", "boundary", False, "tool list"),
+                ("login", "boundary", True, "cannot reach a model"),
+                ("timeout", "launch", True, "did not finish"),
+                ("not_executed", "boundary", True, "exactly once"),
+                ("altered_command", "boundary", True, "exactly once"),
+                ("twice", "boundary", True, "exactly once"),
+                ("no_retry", "retry", True, "never attempted"),
+                ("not_refused", "missing_component", False, "not refused")):
+            with self.subTest(fault):
+                self.assertRefused(FakeClaude(fault), probe, inconclusive=inconclusive, text=text)
+
+    def test_a_symlink_re_pointed_during_a_probe_still_passes_with_the_original_digest(self) -> None:
+        other = self.real.parent / "claude-other"
+        other.write_bytes(elf("other"))
+
+        def repoint() -> None:
+            self.link.unlink()
+            self.link.symlink_to(other)
+
+        fake = FakeClaude(during=repoint)
+        result = self.verify(fake)
+        self.assertEqual(result.digest, hashlib.sha256(elf("real")).hexdigest())
+        self.assertEqual(fake.argv0, {str(self.real)})
+
+    def test_a_resolved_file_rewritten_during_a_probe_is_build_changed(self) -> None:
+        fake = FakeClaude(during=lambda: self.real.write_bytes(elf("changed")))
+        self.assertRefused(fake, "launch", inconclusive=False, text="build_changed")
+
+    def test_a_non_elf_file_is_refused_before_any_launch(self) -> None:
+        self.real.write_bytes(b"#!/bin/sh\n")
+        fake = FakeClaude()
+        self.assertRefused(fake, "identity", inconclusive=False)
+        self.assertEqual(fake.launches, 0)
+
+    def test_an_operator_home_without_a_credential_file_is_refused(self) -> None:
+        (self.home / review.CLAUDE_CREDENTIAL_FILE).unlink()
+        self.assertRefused(FakeClaude(), "credentials", inconclusive=False)

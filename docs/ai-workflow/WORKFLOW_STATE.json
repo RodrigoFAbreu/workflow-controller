@@ -22679,7 +22679,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -22827,12 +22827,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 22,
-      "last_transition": "2026-10-22T19:04:35Z",
+      "state_revision": 23,
+      "last_transition": "2026-10-22T19:23:48Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -22952,6 +22952,48 @@
               "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
               "verdict": "APPROVE",
               "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-bfe9f980e2ba": {
+          "digest": "bfe9f980e2ba4a09af7eca9264a5c0ff383844f6da619f4670c3b7c2520350e2",
+          "text": "`cmd_verify_claude` (`controller/cli.py`) resolves `claude` on `PATH` before it looks at `--claude-binary`. So\n   `verify-claude --claude-binary /path/to/claude` refuses when no `claude` is on `PATH`, even though the build to\n   verify was named. The review request raises this too (area 5). D5 does not require it to work, but the note path\n   could treat a missing `PATH` build as \"a launch finds no claude on PATH\" instead of refusing.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34a2c320e0739f0cc77adfa5a122902662adc85d88134f12389d46affe30a9f6",
+              "verdict": "REVISE",
+              "at": "2026-10-22T19:23:48Z"
+            }
+          ]
+        },
+        "F-c032af117c06": {
+          "digest": "c032af117c0684a5623ce8cec3fd7ec18b661668c434bef0bf1f949a1f4a401e",
+          "text": "`cmd_verify_claude` prints the digest of `os.path.realpath(binary)`. It then passes the unresolved `binary` to\n   `verify_build`, which resolves it again. If the symlink is re-pointed between the two, the printed `digest:` line\n   names another file than the one probed and recorded. The record stays correct, because it uses `result.digest`.\n   Passing `real` to `verify_build` would keep the output consistent.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34a2c320e0739f0cc77adfa5a122902662adc85d88134f12389d46affe30a9f6",
+              "verdict": "REVISE",
+              "at": "2026-10-22T19:23:48Z"
+            }
+          ]
+        },
+        "F-580b818732a9": {
+          "digest": "580b818732a9c01d080b17d5f83b10ebbed858bab465d192defbbce87b67b011",
+          "text": "A `build_changed` refusal is reported with the probe name `launch` (`_Run.launch` calls\n   `check_unchanged(\"launch\")`), not the probe whose launch saw the change. Passing the probe name through would\n   follow D2's \"the failing probe named\" more literally.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34a2c320e0739f0cc77adfa5a122902662adc85d88134f12389d46affe30a9f6",
+              "verdict": "REVISE",
+              "at": "2026-10-22T19:23:48Z"
             }
           ]
         }

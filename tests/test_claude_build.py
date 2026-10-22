@@ -421,3 +421,150 @@ class VerifyBuildTests(unittest.TestCase):
     def test_an_operator_home_without_a_credential_file_is_refused(self) -> None:
         (self.home / review.CLAUDE_CREDENTIAL_FILE).unlink()
         self.assertRefused(FakeClaude(), "credentials", inconclusive=False)
+
+
+class VerifyClaudeCommandTests(unittest.TestCase):
+    """``workflow-controller verify-claude`` (CP3, D2, D5) over ``FakeClaude``,
+    with ``--runtime-dir`` and the settings file in temporary folders."""
+
+    def setUp(self) -> None:
+        from controller import cli
+
+        self.cli = cli
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.root = base / "rt"
+        self.settings = base / "cfg" / "settings.json"
+        self.home = base / "claude-home"
+        self.home.mkdir()
+        (self.home / review.CLAUDE_CREDENTIAL_FILE).write_text("{}")
+        self.bindir = base / "bin"
+        self.bindir.mkdir()
+        self.real = base / "versions" / "claude-9.9.9"
+        self.real.parent.mkdir()
+        self.real.write_bytes(elf("real"))
+        self.real.chmod(0o755)
+        (self.bindir / "claude").symlink_to(self.real)
+        self.fake = FakeClaude()
+        real_verify = cb.verify_build
+        from controller import identity
+
+        pinned = identity.ControllerIdentity(
+            generation=1, source_root=REPO_ROOT, origin_source_root=REPO_ROOT, source_kind=identity.SOURCE_KIND_COMMIT,
+            source_commit="a" * 40, tree_digest="b" * 64, generation_source="head", pinned_at="2024-01-01T00:00:00Z",
+            version="9.9.9")
+        for patcher in (
+                mock.patch.object(identity, "pin", lambda: pinned),
+                mock.patch.object(identity, "current", lambda: pinned),
+                mock.patch.object(fr, "host_probe", lambda **kw: None),
+                mock.patch.dict(os.environ, {"PATH": f"{self.bindir}:{os.environ['PATH']}",
+                                             "CLAUDE_CONFIG_DIR": str(self.home)}),
+                mock.patch.object(cb, "verify_build", lambda binary, **kw: real_verify(binary, run=self.fake, **kw))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_cli(self, *extra: str) -> tuple[int, str, str]:
+        import contextlib
+        import io
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = self.cli.main(["--runtime-dir", str(self.root), "--settings", str(self.settings),
+                                  "verify-claude", *extra])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_clean_pass_records_the_digest_that_a_following_launch_check_admits(self) -> None:
+        code, out, _ = self.run_cli()
+        self.assertEqual(code, 0, out)
+        digest = hashlib.sha256(elf("real")).hexdigest()
+        recorded, note = cb.read_verified(self.root)
+        self.assertEqual(set(recorded), {digest})
+        self.assertIsNone(note)
+        self.assertEqual(recorded[digest]["version"], "2.9.9")
+        self.assertEqual(set(recorded[digest]["probes"]), {"boundary", "retry", "missing_component"})
+        for text in ("probe boundary: pass", "two short model turns"):
+            self.assertIn(text, out)
+        fr.identity_check(str(self.bindir / "claude"), recorded=cb.recorded_digests(self.root)[0])  # admits
+        with self.assertRaises(fr.TesterUnavailable):
+            fr.identity_check(str(self.bindir / "claude"))  # not without the record
+        self.assertEqual(list((self.root / cb.SCRATCH_AREA).iterdir()), [])
+        self.assertFalse(self.settings.exists())
+
+    def test_each_broken_stub_exits_20_naming_the_probe_and_leaves_no_record_or_scratch(self) -> None:
+        for fault, probe in (("host_write", "boundary"), ("socket", "boundary"), ("login", "boundary"),
+                             ("no_retry", "retry"), ("not_refused", "missing_component"),
+                             ("timeout", "launch")):
+            with self.subTest(fault):
+                self.fake = FakeClaude(fault)
+                code, _, err = self.run_cli()
+                self.assertEqual(code, 20)
+                self.assertIn(probe, err)
+                self.assertFalse((self.root / cb.RECORD_NAME).exists())
+                scratch = self.root / cb.SCRATCH_AREA
+                self.assertEqual(list(scratch.iterdir()) if scratch.exists() else [], [])
+                self.assertFalse(self.settings.exists())
+
+    def test_a_rewritten_build_is_refused_and_a_re_pointed_symlink_records_the_original(self) -> None:
+        self.fake = FakeClaude(during=lambda: self.real.write_bytes(elf("changed")))
+        code, _, err = self.run_cli()
+        self.assertEqual((code, "build_changed" in err), (20, True))
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
+
+    def test_an_admitted_build_is_reported_without_a_probe_unless_forced(self) -> None:
+        self.assertEqual(self.run_cli()[0], 0)
+        launches = self.fake.launches
+        code, out, _ = self.run_cli()
+        self.assertEqual(code, 0)
+        self.assertIn("already admitted", out)
+        self.assertEqual(self.fake.launches, launches)
+        code, out, _ = self.run_cli("--force")
+        self.assertEqual(code, 0)
+        self.assertGreater(self.fake.launches, launches)
+
+    def test_a_built_in_build_is_reported_without_a_probe(self) -> None:
+        digest = hashlib.sha256(elf("real")).hexdigest()
+        with mock.patch.dict(fr.VERIFIED_NATIVE_BUILDS, {"2.1.303": digest}):
+            code, out, _ = self.run_cli()
+        self.assertEqual(code, 0)
+        self.assertIn("built in", out)
+        self.assertEqual(self.fake.launches, 0)
+
+    def test_a_different_claude_binary_is_verified_with_the_launch_differs_note(self) -> None:
+        other = self.real.parent / "claude-other"
+        other.write_bytes(elf("other"))
+        other.chmod(0o755)
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = self.cli.main(["--runtime-dir", str(self.root), "--settings", str(self.settings),
+                                  "--claude-binary", str(other), "verify-claude"])
+        self.assertEqual(code, 0)
+        self.assertIn("a launch runs", out.getvalue())
+        self.assertEqual(set(cb.read_verified(self.root)[0]), {hashlib.sha256(elf("other")).hexdigest()})
+
+    def test_the_settings_file_is_never_created_filled_or_updated(self) -> None:
+        self.settings.parent.mkdir()
+        self.settings.write_text('{"schema_version": 1}\n')  # an existing file with missing defaults
+        before = self.settings.read_bytes()
+        self.assertEqual(self.run_cli()[0], 0)
+        self.assertEqual(self.settings.read_bytes(), before)
+        self.fake = FakeClaude("socket")
+        self.assertEqual(self.run_cli("--force")[0], 20)
+        self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_the_command_is_not_read_only_and_the_help_states_the_cost(self) -> None:
+        self.assertNotIn("verify-claude", self.cli.READ_ONLY_COMMANDS)
+        self.assertIn("verify-claude", self.cli.SETTINGS_READ_ONLY_COMMANDS)
+        self.assertIn("model turns", self.cli.build_parser().format_help() + self._help())
+
+    def _help(self) -> str:
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+            self.cli.build_parser().parse_args(["verify-claude", "--help"])
+        return " ".join(out.getvalue().split())

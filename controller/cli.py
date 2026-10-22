@@ -29,8 +29,9 @@ from pathlib import Path
 from typing import Any
 
 from controller import (
-    evidence, handoff, identity, job, lock, managed_repo, milestone_branch, notify, observe, protocol_decision,
-    review, review_mode, review_rounds, routing, runtime, settings, target_state, telemetry, usage, worker,
+    claude_build, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, notify,
+    observe, protocol_decision, review, review_mode, review_rounds, routing, runtime, settings, target_state,
+    telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
@@ -41,9 +42,14 @@ from controller.errors import ControllerError, LifecycleWorkerActiveError, Sourc
 #: updating. ``settings`` is dispatched before pinning, like ``follow``, and
 #: touches only the user settings file, never a target or the runtime root.
 READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telemetry", "usage", "notifications"})
+#: Commands that write the runtime root yet never the settings file
+#: (claude-build-verify D5): dispatch only *loads* the file for them, so it is
+#: never created, filled or updated. The named exception to the generic
+#: ``write = not read_only`` rule.
+SETTINGS_READ_ONLY_COMMANDS = frozenset({"verify-claude"})
 ALL_COMMANDS = frozenset({
     "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
-    "telemetry", "usage", "notifications",
+    "telemetry", "usage", "notifications", "verify-claude",
 })
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
@@ -469,6 +475,20 @@ def build_parser() -> argparse.ArgumentParser:
                                   "under and whether it was a lowered-policy review (default: one group)")
     telemetry_p.add_argument("repo", nargs="?", default=None,
                              help="only this target repository's jobs (default: every target)")
+
+    # claude-build-verify D5: verify a `claude` build for the functional tester.
+    verify_p = subparsers.add_parser(
+        "verify-claude",
+        help="run the live enforcement probes against the claude build a launch would run and record its digest "
+             "when every probe holds",
+        description="Verify the claude build the functional tester would launch (claude on PATH; --claude-binary "
+                    "names a different build to verify). Runs the live enforcement probes and, only when every "
+                    "probe holds and the build's bytes are unchanged by the run, records its SHA-256 in the "
+                    "Controller's runtime root (never in the settings file). COST: up to two short model turns at "
+                    "low effort, using your existing Claude credentials; the usage budget gate is not consulted. "
+                    "Exit 0: the build is verified (newly recorded, already recorded or built in); 20: it is not.")
+    verify_p.add_argument("--force", action="store_true", default=False,
+                          help="probe again even when the build is already admitted")
 
     # workflow-controller-signalhub-notifications CP4 (D10): the effective
     # notification configuration, and the transport check. Takes no
@@ -1469,6 +1489,46 @@ def _claude_home() -> Path:
     return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
 
+def cmd_verify_claude(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
+    """``verify-claude`` (claude-build-verify D2, D5): probe the build a launch
+    would run and record its digest only when every probe holds."""
+    on_path = review.resolve_binary(review.CLAUDE.default_binary)
+    named = getattr(args, "claude_binary", None)
+    binary = review.resolve_binary(named) if named else on_path
+    real = os.path.realpath(binary)
+    digest = claude_build.file_digest(real)
+    if digest is None:
+        raise ControllerError(f"{real} cannot be read", evidence={"raised_by": "cli.cmd_verify_claude"})
+    print(f"claude: {real}")
+    print(f"digest: {digest}")
+    if os.path.realpath(on_path) != real:
+        print(f"note: a launch runs {os.path.realpath(on_path)} (claude on PATH), which stays unadmitted until it "
+              f"is verified or PATH is changed")
+    recorded, note = claude_build.read_verified(runtime_root)
+    if note:
+        print(f"note: {note}")
+    builtin = {d: v for v, d in functional_review.VERIFIED_NATIVE_BUILDS.items()}
+    if not args.force and (digest in builtin or digest in recorded):
+        known = builtin.get(digest) or recorded[digest].get("version", "unknown")
+        where = "built in" if digest in builtin else "recorded"
+        print(f"already admitted: version {known} ({where}); not probed (--force probes again)")
+        return EXIT_OK
+    print("probing: up to two short model turns at low effort, using your Claude credentials "
+          "(the usage budget is not consulted)")
+    result = claude_build.verify_build(binary, runtime_root=runtime_root, operator_home=_claude_home())
+    print(f"version: {result.version}")
+    for probe in result.probes:
+        print(f"probe {probe.name}: {probe.result} -- {probe.detail}")
+    claude_build.record_verified(runtime_root, result.digest, {
+        "version": result.version,
+        "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "controller_version": ident.version,
+        "probes": {probe.name: probe.result for probe in result.probes},
+    })
+    print(f"recorded: {result.digest} in {runtime_root / claude_build.RECORD_NAME}")
+    return EXIT_OK
+
+
 def _local_time(epoch: float) -> str:
     """``epoch`` in local time, with the epoch itself (D7, D10); a stored
     figure beyond the calendar shows as the bare epoch."""
@@ -2361,6 +2421,7 @@ _DISPATCH = {
     "run": cmd_run,
     "resume": cmd_resume,
     "milestone-binding": cmd_milestone_binding,
+    "verify-claude": cmd_verify_claude,
     # "status" is dispatched specially: it needs the pre-existing-state
     # snapshot captured before this run's own identity.json write.
 }
@@ -2702,7 +2763,8 @@ def _dispatch(args: argparse.Namespace, argv: list[str]) -> int:
     # dispatched -- a refusal (exit 20) leaves the ordinary dispatch
     # footprint, `identity.json` and no job record. A writing command fills
     # the file first (A.4).
-    _apply_settings(args, write=not read_only, runtime_root=None if read_only else runtime_root)
+    _apply_settings(args, write=not read_only and command not in SETTINGS_READ_ONLY_COMMANDS,
+                    runtime_root=None if read_only else runtime_root)
 
     if command == "status":
         return cmd_status(args, runtime_root, ident, pre_existing=pre_existing)

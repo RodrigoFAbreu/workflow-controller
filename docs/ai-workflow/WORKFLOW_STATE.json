@@ -22679,7 +22679,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -22796,7 +22796,186 @@
           "workflow_release": "2.18.2"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+        "approved_review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a127c9b15ad700c2cdb34154f516dea1fe49f169"
+          },
+          {
+            "path": "controller/claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8651a1984e97e42057460f591db7f1965692c257"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9ffa93aae47b44f1dabc3672627201371a14e00d"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "218e763f4e4615d92403e9860bed639ce1d75356"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c3deaf5a688a20a79ddfdfcb2b7a4c1661096081"
+          },
+          {
+            "path": "controller/runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ce2bb98269a132013201273e7424f2e0b33c1a6f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fbb5f4282fb45ac31ef2ce40b73b463ef1133bf8"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "40c9be943dc819e7617b84bdfb9784a3909ac094"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "955403ae019d5573bb67b983ce24f4149c7c1b9c"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7aee01e989391a9844855965a90de83c9abfabf0"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a80a0e1bf903ed1076571793fab2690d5e5a9fce"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2b90320ce57e4a3c5fc03d46e1ac7baa95f997c4"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1b1dc1c3e321304e0902f3159e003327b5a87c77"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7e2747d26b1fdab71cc3ae2970dfa77ccee41c6"
+          },
+          {
+            "path": "docs/install.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8efda73f9acb1c9d58c12f6c55847096ed112a6"
+          },
+          {
+            "path": "tests/test_claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9405f1a08bb5d165059ad6ece6b4ad8ea6ec3f3b"
+          },
+          {
+            "path": "tests/test_functional_enforcement.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3408d2a2dc675e320585b8583bdd54b91080a1da"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8e5dd4b613473e7631918683cff17d50767c78c1"
+          }
+        ],
+        "reviewed_content_commit": "d47eacbb743a98a3c4ebf22a8bcac89ca605d70d",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-22T20:54:02Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+            "ledger": {
+              "local": {
+                "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "c6a5ce088c92aa425b0fea6b0064da16e5929873cb1256532b7e89da16c75ab7",
+                "ledger_entry_sha256": "ec344f9b2ec0dfe0089e60fc93a19dd19dd31572f7f0657821ffb015bbd932b3",
+                "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "43f4407ef63d27ab2354133ce59f945f14c8be187c245197830a09e86da76471",
+                "ledger_entry_sha256": "41a27023c7e2646e5b8916ee34bdb1e38c82f0437b7818bcf611353ec022d535",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-22T20:54:02Z",
+          "workflow_release": "2.18.2"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
@@ -22827,12 +23006,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-10-22T20:44:13Z",
+      "state_revision": 30,
+      "last_transition": "2026-10-22T20:54:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -23052,20 +23231,98 @@
               "at": "2026-10-22T20:05:41.772964+00:00"
             }
           ]
+        },
+        "F-08372d222382": {
+          "digest": "08372d2223823a88b8f26fd41ff225c3f9eb0e3f58bfaa0c252e37d216e36b5b",
+          "text": "**O1 -- The bundle's narrative files were not updated for revision 3.** `IMPLEMENTATION_SUMMARY.md` has no round-2 section and still describes the retry probe as counting \"when the stream shows an attempted Bash call with dangerouslyDisableSandbox\". `TEST_RESULTS.md` still reports implementation revision 1 at head e5d5719. The code and tests are correct; only the reviewer-facing description lags. Update both at the next generation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:47:16Z"
+            }
+          ]
+        },
+        "F-941cdcae267a": {
+          "digest": "941cdcae267a66bcd22ea8e84aa672385a237edb29b9186e921fca44dfb1f5d2",
+          "text": "**O2 -- `need_clean` does not separate a transient API error from a broken boundary.** An `is_error` result caused by a transient API error (not one of the login/limit words) is reported as a definite failure, not \"run it again\". Exit 20 and no record either way, so this is fail-closed; it only affects the wording an operator sees.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:47:16Z"
+            }
+          ]
+        },
+        "F-5efb42ee6d7e": {
+          "digest": "5efb42ee6d7e5f3bc0bf5b5855f09f26781ff1447b97afcd6e626973c016f5e9",
+          "text": "**O1 — Bundle narrative remains stale.** `current/TEST_RESULTS.md` describes revision 1; `current/REVIEW_REQUEST.md` names an earlier head; `current/IMPLEMENTATION_SUMMARY.md:41` omits the strengthened retry validation. Refresh these narrative files to describe revision 3.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:52:46Z"
+            }
+          ]
+        },
+        "F-94d5cf8f1452": {
+          "digest": "94d5cf8f145251b555bc117000c44863090a3a6b5a70b75c480675c901a5fd70",
+          "text": "**O2 — Transient errors receive a definite failure classification.** `controller/claude_build.py:372` raises `BuildNotVerified` with `inconclusive=False` for generic API errors. Admission correctly remains closed; distinguish retriable service failures from measured enforcement failures.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:52:46Z"
+            }
+          ]
+        },
+        "F-cd547180f75a": {
+          "digest": "cd547180f75ac80bd15089fe18151ac597d7f6d06678a3e416f24b4a0b1dd563",
+          "text": "**O3 — Missing-credential skip guidance is inaccurate.** `docs/guide/development.md:32` says missing `.credentials.json` causes skips. Preparation raises `BuildNotVerified(\"credentials\", ...)`, while `LiveEnforcementTests._probe` catches only `ModelUnreachable`, so those tests error instead.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:52:46Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+        "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "6c0bc790d14a9ff0088f4aa22bcbcdb1af5f52542965f5d1405d329bb6a7069d",
+          "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-22T19:58:14Z",
-          "verdict_sha256": "ebce9de332e8366c843160ce364cd62f8926d9a38b816a13e9616fa91502a10e",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "round": 3,
+          "completed_at": "2026-10-22T20:47:16Z",
+          "verdict_sha256": "c6a5ce088c92aa425b0fea6b0064da16e5929873cb1256532b7e89da16c75ab7",
+          "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-22T20:52:46Z",
+          "verdict_sha256": "43f4407ef63d27ab2354133ce59f945f14c8be187c245197830a09e86da76471",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-ci-time",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -21537,7 +21537,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci-time-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci-time-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 8,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -21888,8 +21888,8 @@
           "external": 2
         }
       },
-      "state_revision": 54,
-      "last_transition": "2026-10-22T14:03:00Z",
+      "state_revision": 55,
+      "last_transition": "2026-10-22T15:33:20Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -22290,6 +22290,384 @@
           "run_ref": "session:local .ai-review/workflow-controller-ci-time/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "plan at 492f07d: digest `e1be9ec3...5524`, 6 shards (flow1.log)",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "round 1 (unchanged code): local plan keeps both `main` modules",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "5 runs of `FollowCommandTest` under `taskset -c 0,1` at 492f07d, all pass (flow3-*.log)",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "the four modules plus `tests.test_docs`: OK at 492f07d (flows4-6.log)",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "refusal exit 2 at 492f07d; round 1 operator `main-check tests.test_catalogue_determinism`: 3 ran, none skipped",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "`SubsetDeterminismTest` OK at 492f07d, outside the sandbox",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "`ci_workflows.py --check` exit 0; round 1 traced the release gate over 12 cases",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "`ci_workflows.py --check` exit 0; matrix from the planner, `CI_MAX_SHARDS = 6`",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:43Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "round 1 operator: `tests.test_protocol_lifecycle` 23 tests OK (unchanged code)",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:44Z"
+          },
+          "flow-10": {
+            "flow_id": "flow-10",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "`check_docs` exit 0 at 492f07d",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:44Z"
+          },
+          "flow-11": {
+            "flow_id": "flow-11",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "the guide states both measurements (24.3 before, 20.9 after) and the corrected release timing; the ROADMAP C2b row still says \"without more shards or runners\" (the owner's 2026-10-22 decision raised the shards to six) and \"46 after the timings refresh\": wording for the post-C2b documentation pull request",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:44Z"
+          },
+          "flow-12": {
+            "flow_id": "flow-12",
+            "status": "passed",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "ran_at": "2026-10-22T14:06:39Z",
+            "summary": {
+              "result": "24.3 and 20.9 minutes both reported as above 20; \"refs #119\", #121 fixed",
+              "tester": "operator re-run at the checklist head plus round 1 (Codex tester and operator) for unchanged code"
+            },
+            "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+            "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md",
+            "reporter": "workflow-controller lane orchestrator (Claude Opus 5.5)",
+            "identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:06:44Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 123,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/123"
+          },
+          "state": "open",
+          "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+          "observed_at": "2026-10-22T15:33:20Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "50fc0ea366137f431ade6918ea3913a856159eff",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-22T15:33:20Z",
+            "raw_sha256": "e746968fe2ef66faeded41bc7c40336bf2018feefe1c23d867e90046fc51eb8c",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "42a7856d6b182b717d8e59612a5d1c6b0e3c1bb707fcd7a57aa64029da75aae1"
+          },
+          "fact_id": "1363dce3ffe399c105766efaf576de109cb2f50ee94fe83783c0ac845b66eddf"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 123,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/123"
+          },
+          "state": "open",
+          "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+          "observed_at": "2026-10-22T14:38:42Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "50fc0ea366137f431ade6918ea3913a856159eff",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.18.0"
+            },
+            "fetched_at": "2026-10-22T14:38:42Z",
+            "raw_sha256": "e746968fe2ef66faeded41bc7c40336bf2018feefe1c23d867e90046fc51eb8c",
+            "run_ref": "controller:20261022T143842Z-f71ead68"
+          },
+          "fact_id": "be51e33089db725d2269dd0f61144e9fef4dceb7b3eb051b0a6734d8bcd38cf4"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-10', 'flow-11', 'flow-12', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #123 at 492f07d95727c10acd864820b99fa5ae5b1b37bb is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "50fc0ea366137f431ade6918ea3913a856159eff",
+          "anchor_identity": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "cb1d51081e11bedd70130b8691c1dad4aad352f80ea9cff95695d323cb248b47",
+            "recorded_at": "2026-10-22T14:03:00Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "f63f89a53e6362abf6fd258a54c1c0d8541f90934c30452608136f61ec80d473",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-10": {
+              "evidence_id": "b67c652cb22be8dead25032cc1a07b853fad248d039e283b2f65f00840682a77",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-11": {
+              "evidence_id": "bc65159dc3badde6958e68f08a7ad88373634d3706ad5fcc4decb83016cdc110",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-12": {
+              "evidence_id": "214fef4150f3e96af2299077b6d43e7110c9707b276215c68688f7930c6d8239",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-2": {
+              "evidence_id": "e7d7b4106f2a19b849d351d5ccbc8ffddd7ca6a518cfcdada4a94b7bce87171e",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-3": {
+              "evidence_id": "c4b96134882629fdb1dee382b3b11ede2b77e814ffe270a447a611a0ee9979af",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-4": {
+              "evidence_id": "9713bf3134add9487f6dfa12701f6c8f4be10471f8262ce683e84674a17b2857",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-5": {
+              "evidence_id": "2b1b042a75bd92576c351d7e6c18d9cb9d2972759eafc3e9b747a220c8153f21",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-6": {
+              "evidence_id": "7956adfbf4d8d2d8e7992e30b136e6e25454326ca49f75aa9e4fbcb622d9c8a2",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-7": {
+              "evidence_id": "ae6e3fde9a45a8d0932ceb277ee20849b96f70ab25375caaa8568abb53bdd8e3",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-8": {
+              "evidence_id": "be5f7a0fdacdd01420400924dcab3d31792cabe1239127acf9b414872d886b29",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            },
+            "flow-9": {
+              "evidence_id": "1ad9449aff6dfbad973b72ecc5eb684fb0c18b27ad24e2ad02be2e1efbfbaded",
+              "log_digest": "b669ff320f40da4abecc62b854ef255522118439bb1ba9a80643e31022a4cf5f",
+              "run_ref": "archive:.ai-review/archive/workflow-controller-ci-time/functional-review-round2-PASSED.md"
+            }
+          },
+          "pr": {
+            "fact_id": "1363dce3ffe399c105766efaf576de109cb2f50ee94fe83783c0ac845b66eddf",
+            "head": "492f07d95727c10acd864820b99fa5ae5b1b37bb",
+            "provenance": "workflow_gh",
+            "raw_sha256": "e746968fe2ef66faeded41bc7c40336bf2018feefe1c23d867e90046fc51eb8c"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-22T15:33:20Z",
+        "workflow_release": "2.18.2"
       }
     }
   }

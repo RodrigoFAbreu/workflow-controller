@@ -8,7 +8,9 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-19).** Controller 1.17.0 is the latest release (PR #107, squash `a76daff`), from C13b
+**Where things stand (2026-10-21).** Controller 1.18.0 is the latest release (PR #111, squash `5f3f131`), from C10c
+(accepted 2026-10-21 by gate policy): under an automatic acceptance gate the Controller runs the functional review
+itself in an isolated tester, so acceptance clears itself. 1.17.0 (PR #107, squash `a76daff`) came from C13b
 (accepted 2026-10-19 by gate policy): each review stage has a local round cap (6) and an external round cap (4) on the
 Workflow's split counts, and the external review is capped too. 1.16.1 (PR #102, squash `70016a4`) came from A1
 (accepted 2026-10-19 by gate policy): the harness and the git host sit behind adapters and every worker and review job
@@ -29,15 +31,17 @@ user with one provider is never blocked at an external gate (C14, review modes,
 [11.14](#1114-review-modes)). 1.12.0 (PR #61) added the review round cap and per-round `telemetry`
 (C13, [11.13](#1113-review-convergence)). The Controller admits Workflow 2.5.1 and 2.6.0, and any
 Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow
-2.16.0 with automatic gates (since 2026-10-19). What is complete is marked in the tables below; what
+2.16.0 with automatic gates (since 2026-10-19); it moves to Workflow 2.18.2 next. What is complete is marked in the tables below; what
 each release changed is in the [release history](release-history.md).
 
-**Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16 and 2026-10-18):
-1. A2, the backlog file and the generated roadmap, once workflow#48 is released (owner decision, 2026-10-18: right
-   after A1, before C10c; it never starts while a milestone is active);
-2. C10d, after C10c (accepted 2026-10-21 by gate policy, pull request #111 awaiting merge; C10a and C10b are released; C10 is three steps, each released on its own);
-3. C12, then C11;
-4. the orchestrator series O1-O7.
+**Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18 and 2026-10-22):
+1. C2b, CI time and flakiness (owner decision, 2026-10-22: a pull request's CI must take 15-20 minutes; over 30
+   minutes, improving it is the next item);
+2. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0; this repository moves to
+   Workflow 2.18.2 in a chore pull request before C2b);
+3. C10d, after A2 (C10c is released as 1.18.0, PR #111; C10a and C10b are released; C10 is three steps, each released on its own);
+4. C12, then C11;
+5. the orchestrator series O1-O7.
 
 A3, A4 and A5 follow their dependencies in the table below.
 
@@ -120,15 +124,16 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | CU2 | Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91 (the `/satisfy-gate` route split: Haiku 5.5 for plan and technical approval, Sonnet 5.5 for acceptance) and #93-#95. #88 waits for workflow#43 (complete, accepted 2026-10-18 by gate policy; #82 fixed by disarming the fake workers' timers at exit; released as 1.16.0 from PR #99, squash `6b3c54b`; owner decision, 2026-10-18: CU2 before C10c) | C10b | [known follow-ups](#known-follow-ups-carried-forward) |
 | A1 | Harness and git-host adapters: one interface for the Claude and Codex seams and one for the git host (GitHub first), and the usage record, one format whatever the harness reports. A refactor with no change in behaviour: the existing contract tests pass unchanged (owner decision, 2026-10-18: right after CU2, before C10c) (complete, accepted 2026-10-19 by gate policy; released as 1.16.1 from PR #102, squash `70016a4`; follow-ups #103, fill the price table, and #104, small usage-record points, are planned before A3) | CU2 | Adapters and backlog (above) |
 | C13b | Two review round caps per stage, local (default 6) and external (default 4), on the Workflow's separate round counts (protocol 1.5, Workflow 2.15.0); `review.round_cap` keeps working for one release (complete, accepted 2026-10-19 by gate policy; released as 1.17.0 from PR #107, squash `a76daff`; follow-up [#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108), `settings show` prints the stored caps; [#88](https://github.com/RodrigoFAbreu/workflow-controller/issues/88), [follow-up 55](#known-follow-ups-carried-forward); this repository runs Workflow 2.15.0 since 2026-10-19) | C13, A1 | [follow-up 55](#known-follow-ups-carried-forward) |
-| A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It waits for [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released, because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it (owner decision, 2026-10-18: right after A1, before C10c) | A1, workflow#48 | Adapters and backlog (above) |
-| C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e; complete, accepted 2026-10-21 by gate policy; pull request #111 on `milestone/workflow-controller-automated-functional-review`, planned as 1.18.0) | C10b | [11.9](#119-automated-functional-review) |
+| A2 | The backlog: `docs/backlog.yaml` with one entry per item, a generated `docs/ROADMAP.md` with a CI check that it is not out of date, and a one-time migration of the prose sections. It needed [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48), because `/milestone-plan` reads `docs/ROADMAP.md` and acceptance edits it; that shipped in Workflow 2.17.0, and this repository moves to Workflow 2.18.2 (a chore pull request) before A2 starts (owner decision, 2026-10-18: right after A1; next) | A1, workflow#48 | Adapters and backlog (above) |
+| C10c | The automated functional review ([11.9](#119-automated-functional-review)), so acceptance passes on its evidence (row 38e; complete, accepted 2026-10-21 by gate policy; released as 1.18.0 from PR #111, squash `5f3f131`; follow-ups [67-74](#known-follow-ups-carried-forward), issues #112-#119) | C10b | [11.9](#119-automated-functional-review) |
+| C2b | CI time and flakiness: bring a pull request's CI back to 15-20 minutes (about 85 since C10c; 46 after the timings refresh of 2026-10-22) without more shards or runners: check catalogue determinism on `main` only, share one built sandbox across the functional test cases, make other slow tests cheaper, and fix the flaky `FollowCommandTest` ([#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119), [#121](https://github.com/RodrigoFAbreu/workflow-controller/issues/121)). Owner rule, 2026-10-22: when a pull request's CI goes over 30 minutes, improving it is the next item | — | [11.2](#112-ci-reliability) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C12a | Test leftovers end with their test: a fake worker, detached helpers and child Controllers a killed test run leaves behind end by themselves within a bounded time (the test side of follow-up 8; no change to `controller/`) (complete, accepted 2026-10-12 by gate policy) | — | [follow-up 8](#known-follow-ups-carried-forward) |
 | C12 | Self-recovery: the Controller clears leftover test processes that hold a job draining, survives a message from another session, and retries network failures, instead of handing the run back | C10 | [11.10](#1110-self-recovery), follow-ups 8, 9 and 14 |
 | C11 | The kanban runner: next roadmap item, one run, merge, release, next, until the roadmap is empty | C8, C10, C12 | [11.7](#117-the-kanban-runner) |
 | A3 | Backlog refinement: split every item above about five checkpoints into increments that can each be released alone, and measure the result as cost per shipped outcome, not cost per milestone (A1's follow-ups #103 and #104 are planned before it) | A1, A2 | Adapters and backlog (above) |
 | A4 | The tracker interface: the `file` adapter first, then a board mirror, then proposals back as pull requests and commands from trusted accounts (levels `admin`, `maintainer` and `viewer` in the settings file; default closed) | A2, C11 | Adapters and backlog (above) |
-| A5 | More harnesses, including Codex as a worker, each with its own safety review before it is used | A1 | Adapters and backlog (above) |
+| A5 | More harnesses, including Codex as a worker, each with its own safety review before it is used. The harnesses share one set of command files (`.claude/commands/*.md`), which the adapter renders at launch; there are no per-harness copies (owner decision, 2026-10-19). The adapter itself refuses the user-only commands. The harness-neutral command-file contract shipped in Workflow 2.18.0 as `docs/ai-workflow/COMMAND_FILES.md` ([workflow#59](https://github.com/RodrigoFAbreu/workflow/issues/59)) | A1 | Adapters and backlog (above) |
 
 **Manager and Workflow lane, in order.** Workflow Manager's roadmap owns these; they are listed here
 because C9, C10 and C13 depend on them; W9 and the rows after it change how every milestone's
@@ -490,6 +495,25 @@ hurts now, else in a later step or the next clean-up milestone.
     under the real home and reads real state, so none is allowed today) (C10c).
 66. Vendor a Workflow tree newer than 2.12.0 under `tests/workflow_releases/` so row 38e is tested on the
     release this repository runs (C10c, as item 60 for C13b).
+67. [#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112): run the tester's static probe before
+    the usage admission, so a host that cannot run the tester stops before a reservation is made (C10c review).
+68. [#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113): verify a newer `claude` build and add
+    its digest, so the automated review keeps working after a CLI update; only Claude Code 2.1.303 is admitted
+    today (C10c; planned next).
+69. [#114](https://github.com/RodrigoFAbreu/workflow-controller/issues/114): the tester's probe and launch should
+    use one resolved `claude` binary (C10c review).
+70. [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115): deny the tester reads of credential
+    locations and detect a `file://` origin (C10c review; planned next).
+71. [#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116): checklist parsing, where a flow ends
+    and link containment (C10c review).
+72. [#117](https://github.com/RodrigoFAbreu/workflow-controller/issues/117): documentation gaps at row 38e (every
+    cause of `functional_tester_unavailable`, the `.gitignore` patterns `explain` lists, a missing comma) (C10c
+    review; docs only).
+    Fixed in the documentation pull request after 1.18.0.
+73. [#118](https://github.com/RodrigoFAbreu/workflow-controller/issues/118): tests for the tester's final-message
+    capture and small test tidy-ups (C10c review).
+74. [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119): a pull request's CI takes about 85
+    minutes since C10c, against about 15 before (planned next).
 
 ---
 

@@ -1141,7 +1141,7 @@ class RealInventoryLocalFloorTest(unittest.TestCase):
                  if key != self.MATRIX}
         self.assertEqual(self._local_plan(atoms)["shard_count"], 8)
 
-    def test_the_ci_plan_floors_on_the_matrix_over_every_atom(self) -> None:
+    def test_the_ci_plan_floors_on_the_largest_atom(self) -> None:
         selection = self.inventory.select(ci_placement=True)
         parameters = shards.profile_parameters("ci")
         timings = shards.timings_for("ci", fixtures.REPO_ROOT, warn=self.fail)
@@ -1149,8 +1149,7 @@ class RealInventoryLocalFloorTest(unittest.TestCase):
         estimates = shards.estimate_atoms(selection.atoms, [profile for _, profile in timings])
         parallel = [max(1, round(estimates[atom.key] * 1000)) for atom in selection.atoms
                     if atom.key not in shards.EXCLUSIVE_ATOMS]
-        largest = max(parallel)
-        self.assertEqual(largest, round(estimates[self.MATRIX] * 1000))
+        largest = max(parallel)  # whichever atom the committed timings make the largest
         self.assertGreater(largest, parameters.target_shard_seconds * 1000)
         expected = min(max(-(-sum(parallel) // largest), parameters.min_shards),
                        parameters.max_shards, len(parallel))

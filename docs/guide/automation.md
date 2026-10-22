@@ -442,9 +442,10 @@ detail, no repeated run).
 
 The stops, each with its remedy in the message: `flows_not_runnable` (the `environment_limited`
 case: run those flows by hand and record them, or change the checklist so they run offline),
-`checklist_unrecognised`, `functional_tester_unavailable` (no `claude` binary, the role refused, the
-sandbox components missing or the launch probe failing, or the fresh clone not matching the
-manifest), `results_invalid` (the stop text carries a bounded excerpt of the tester's final message,
+`checklist_unrecognised`, `functional_tester_unavailable` (no `claude` binary, the role refused, `bwrap` or `socat`
+missing, no seccomp filter, an unverified `claude` build, the fresh clone not matching the manifest, or no
+folder short enough for the tester's `TMPDIR`; each cause with its remedy is in
+[common problems](../common-problems.md#functional_tester_unavailable)), `results_invalid` (the stop text carries a bounded excerpt of the tester's final message,
 which usually names the cause when `RESULTS.json` was not written), `isolation_breach` (a difference in the real repository, its path
 origin or the private Claude home; the sandbox is kept for inspection and nothing is recorded; a
 person must look before anything is tested again), `tested_bytes_unbound` (the clone no longer
@@ -467,7 +468,8 @@ no real model and no tool outside `PATH`; a pull-request flow therefore **cannot
 refusing a scratch `gh` and a scratch origin, and neither is relaxed): such a flow is `environment`
 and ends at `flows_not_runnable` until a person runs it. A Codex tester does not exist yet (the Codex
 adapter declares only the reviewer role). `explain` at row 38e shows, read-only, the head, the
-checklist blob, the flow ids, the previous functional job and any sandbox kept by an earlier breach.
+checklist blob, the flow ids, the previous functional job, the `.gitignore` patterns the writable-location derivation
+refused (each with its reason) and any sandbox kept by an earlier breach.
 The design record is [ADR 0017](../adr/0017-automated-functional-review.md).
 
 **A protocol minor release.** A value a 1.x minor release adds to a closed enum

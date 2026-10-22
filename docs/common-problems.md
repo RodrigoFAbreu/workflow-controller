@@ -146,7 +146,29 @@ The message names the file and the key. Fix that key by hand and run again, or m
 
 ## The run stopped at the functional review (row 38e)
 
-From Controller 1.18.0, under an automatic acceptance gate, the Controller runs the functional tester itself and stops for a person only for a fault: `flows_not_runnable` (flows that need the network, a pull request or a tool outside the sandbox), `functional_tester_unavailable` (no `claude`, an unverified `claude` build such as a newer release or a script-launched one, or `bubblewrap`/`socat` missing; for an unverified build run a verified one, run the flows by hand, or set `functional.automated` to `false`), `checklist_unrecognised`, `results_invalid`, `isolation_breach`, `tested_bytes_unbound`, `recording_refused` or `functional_rounds_exhausted` (three failed tester runs). Each message names its remedy: run the head's flows by hand and record one `functional_evidence` result per flow, or set `functional.automated` to `false`. See [the automated functional review](guide/automation.md#protocol-mode-workflow-27-and-later) and [troubleshooting](guide/troubleshooting.md#common-situations).
+From Controller 1.18.0, under an automatic acceptance gate, the Controller runs the functional tester itself and stops for a person only for a fault: `flows_not_runnable` (flows that need the network, a pull request or a tool outside the sandbox), `functional_tester_unavailable` (see below), `checklist_unrecognised`, `results_invalid`, `isolation_breach`, `tested_bytes_unbound`, `recording_refused` or `functional_rounds_exhausted` (three failed tester runs). Each message names its remedy: run the head's flows by hand and record one `functional_evidence` result per flow, or set `functional.automated` to `false`. See [the automated functional review](guide/automation.md#protocol-mode-workflow-27-and-later) and [troubleshooting](guide/troubleshooting.md#common-situations).
+
+### `functional_tester_unavailable`
+
+The Controller stopped before it launched the tester. The message names the cause:
+
+- **No `claude` binary found.** Install `claude` or put it on `PATH`.
+- **The functional-tester role was refused** (for example by the routing file). Fix the role in the routing file.
+- **`bwrap` or `socat` is not installed**, or `bwrap` cannot make an unprivileged namespace here. Install them, or
+  allow user namespaces on the host.
+- **The kernel does not accept a seccomp filter**, so the sandbox cannot block Unix sockets. Use a kernel that does.
+- **The `claude` build is not a verified one.** Only the native build whose SHA-256 is in `VERIFIED_NATIVE_BUILDS`
+  is admitted (Claude Code 2.1.303 for 1.18.0); a newer build, a launcher or a script-launched `claude` is refused.
+  Run a verified build.
+- **The fresh clone did not match the manifest** of the candidate the Controller captured (`clone_mismatch`). Run
+  the step again; if it repeats, look at the repository for files that change on checkout.
+- **No folder is short enough for the tester's `TMPDIR`.** Claude's bridge sockets need a path of at most 107 bytes.
+  Set `XDG_RUNTIME_DIR` to a short path, or make `/tmp` usable.
+- **The tree cannot be tested here**: it holds a submodule, the checklist is not tracked at the head, or the sandbox
+  folder already exists.
+
+Whatever the cause, you can run the head's flows by hand and record one `functional_evidence` result per flow, or set
+`functional.automated` to `false` to keep the person's stop.
 
 ## The milestone stopped at a pull request or release gate
 

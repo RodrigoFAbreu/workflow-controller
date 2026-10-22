@@ -5,7 +5,7 @@
 **Complete.** `workflow-controller-automated-functional-review` (C10c, `docs/ROADMAP.md`) reached
 `MILESTONE_COMPLETE` on 2026-10-21. The Controller now runs the functional review itself at row 38e: an isolated
 sandbox, an independent tester, one `functional_evidence` result per checklist flow, and findings for the applier when
-a flow fails. Its pull request is #111 (title `feat:`, so it releases the minor release 1.18.0 once merged).
+a flow fails. Its pull request is #111 (title `feat:`), released as 1.18.0.
 
 The milestone was accepted **by gate policy, not by a person**. `/satisfy-gate acceptance` found every acceptance
 requirement met (policy source `default`, digest `bae758b4f4ce`).
@@ -31,6 +31,8 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-The next incomplete milestone in `docs/ROADMAP.md` is **A2** (the backlog), which waits for
-[workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) to be released; **C10d** follows C10c. After the
-owner merges pull request #111 (squash) and 1.18.0 is released, run `/milestone-plan` for the next milestone.
+Pull request #111 is merged and 1.18.0 is released. The next milestone in `docs/ROADMAP.md` is **C2b** (CI time
+and flakiness: a pull request's CI back to 15-20 minutes, and the flaky `FollowCommandTest` fixed; #119, #121). This
+repository first moves to Workflow 2.18.2 in a chore pull request. Then run `/milestone-plan` for C2b; **A2** (the
+backlog; [workflow#48](https://github.com/RodrigoFAbreu/workflow/issues/48) shipped in Workflow 2.17.0) and **C10d**
+follow.

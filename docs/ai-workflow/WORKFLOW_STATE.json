@@ -22679,7 +22679,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -23006,12 +23006,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 3,
-          "external": 2
+          "local": 4,
+          "external": 3
         }
       },
-      "state_revision": 32,
-      "last_transition": "2026-10-22T21:15:26Z",
+      "state_revision": 34,
+      "last_transition": "2026-10-22T21:26:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -23301,28 +23301,104 @@
               "at": "2026-10-22T20:52:46Z"
             }
           ]
+        },
+        "F-5459285fd593": {
+          "digest": "5459285fd593e652c7ebd8acf5c4c0d5bb6ca0e7662e6ed5f5c02f27bd213f00",
+          "text": "**O1 -- The bundle narrative is stale again.** `current/TEST_RESULTS.md` still describes revision 1 (head e5d5719). `current/IMPLEMENTATION_SUMMARY.md` has no section for revision 4 or the functional-round-1 fix. Neither records a test run of 71cc23c or any live `verify-claude` run after the fix. Refresh both for the next generation. In functional round 2, record the `verify-claude --force` run at a normal-depth runtime root that the checklist asks for.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-4e64196fb2b4": {
+          "digest": "4e64196fb2b459e2a6267ca9a8975885aef938cc6d23caf82e0bfaeb37fa5f9f",
+          "text": "**O2 -- A short `TMPDIR` can leak when `_Run.__init__` fails part way.** `controller/claude_build.py` creates `self.tmp = short_tmp()` before `fr.tester_settings(...)` and `tempfile.mkdtemp(prefix=\"wcv-\")`. If either of those raises, `verify_build` never gets a `state` to clean up, and the `wcf-*` folder stays in `/tmp` or `$XDG_RUNTIME_DIR`. Unlike `fr.make_short_tmp`, the folder is recorded nowhere, so a killed run's folder is not swept either. Create it last in `__init__`, or remove it on failure.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-589622b737e2": {
+          "digest": "589622b737e2ebb8f5428bd935a58866933280a40d0cf1ebef4b3a4fcbc5d47a",
+          "text": "**O3 -- The docs do not say that the probes use a folder outside the runtime root.** In `docs/guide/commands.md`, the `verify-claude` section says \"the scratch folder is removed either way\". It names neither the short `wcf-*` `TMPDIR` under `$XDG_RUNTIME_DIR` or `/tmp` nor the new `host` refusal when no short folder fits. `docs/common-problems.md:169` gives that cause and its remedy only for the tester. A one-line mention in the `verify-claude` section would cover both.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-c2f2b4bed092": {
+          "digest": "c2f2b4bed092e051b8b59c5cad99c52a1ae518a2a9cd371a38fcde1a5cbacf0b",
+          "text": "**O4 -- A sandbox start failure can hide a host effect from the message.** In `boundary` and `retry`, `need_sandbox` raises before `host_effects`. A build that reported the sandbox start failure and still wrote to the host would be shown as \"inconclusive (nothing was probed)\" rather than as the host write. It still fails closed and records nothing. Consider checking host effects before classifying the run as inconclusive.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-d8421c687544": {
+          "digest": "d8421c68754490db77a3ee9702793039c2183ce1bd6de5027c34c1b0e32bb1c4",
+          "text": "**O1 — Sandbox-start errors can misname an observed host effect.** `need_sandbox` runs before `host_effects` in boundary and retry. Independent reproductions combining a tracked-file write with the sandbox-start error both exited 20 and preserved an existing admission record byte-for-byte. Admission remains closed; only the cause is misreported, including the inaccurate “nothing was probed” statement.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "REVISE",
+              "at": "2026-10-22T21:26:23Z"
+            }
+          ]
+        },
+        "F-3fa8a75acd69": {
+          "digest": "3fa8a75acd69b5483972ff7544423160222b9441b5e8b329a18c84fe764b376e",
+          "text": "**O2 — Probe scratch placement remains undocumented.** The command guide does not explain that its private `wcf-*` TMPDIR lives under an eligible `$XDG_RUNTIME_DIR`, otherwise `/tmp`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "REVISE",
+              "at": "2026-10-22T21:26:23Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+        "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+          "bundle_id": "ce74e620ffb04f020b5c9f9b335f74fed48cb90dd9baea084abc520fc5065159",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-22T20:47:16Z",
-          "verdict_sha256": "c6a5ce088c92aa425b0fea6b0064da16e5929873cb1256532b7e89da16c75ab7",
+          "round": 4,
+          "completed_at": "2026-10-22T21:19:38Z",
+          "verdict_sha256": "0fb628d90ea4a9bd682665c373c867886dc6dface08de0119839011729ab9ef5",
           "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
-          "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-22T20:52:46Z",
-          "verdict_sha256": "43f4407ef63d27ab2354133ce59f945f14c8be187c245197830a09e86da76471",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
-          "reviewer_model": "openai/gpt-6.1-sol"
-        }
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

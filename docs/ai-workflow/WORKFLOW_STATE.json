@@ -23761,12 +23761,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": 2,
+      "implementation_revision": 3,
       "functional_review_round": null,
       "base_commit": "8b5fdb02686682e708df4afe927d40c6ffd4db32",
-      "reviewed_implementation_head": "d50bec7d6034262c96885dd5a4d3a5ca044f1ad7",
+      "reviewed_implementation_head": "befe03123c03a2777af4283d292b2af96fa78531",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP4",
       "checkpoints": {
@@ -23913,8 +23913,8 @@
           "external": 0
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-10-23T22:15:39Z",
+      "state_revision": 28,
+      "last_transition": "2026-10-23T22:31:07Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

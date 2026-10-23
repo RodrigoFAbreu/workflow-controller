@@ -412,8 +412,6 @@ def result_text(result: dict) -> str:
 LIVE = os.environ.get("CONTROLLER_LIVE_CLAUDE_TESTS") == "1"
 
 
-@unittest.skipUnless(LIVE, "live model probes run only with CONTROLLER_LIVE_CLAUDE_TESTS=1 (they spend model usage)")
-@unittest.skipUnless(CLAUDE and shutil.which("bwrap") and shutil.which("socat"), "claude, bwrap or socat is absent")
 class ExcludeLinesTests(unittest.TestCase):
     def test_a_line_is_not_glued_to_an_exclude_file_without_a_final_newline(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="wfr-excl-"))
@@ -425,6 +423,8 @@ class ExcludeLinesTests(unittest.TestCase):
         self.assertEqual(exclude.read_bytes(), b"hidden.py\n/build\n")
 
 
+@unittest.skipUnless(LIVE, "live model probes run only with CONTROLLER_LIVE_CLAUDE_TESTS=1 (they spend model usage)")
+@unittest.skipUnless(CLAUDE and shutil.which("bwrap") and shutil.which("socat"), "claude, bwrap or socat is absent")
 class LiveEnforcementTests(unittest.TestCase):
     """The probes of D10 on the pinned CLI, under the real sandbox settings."""
 

@@ -158,6 +158,14 @@ milestone binds integration to it. This is why this repository's ruleset
 does not require a pull request to be up to date before merging (see
 [Repository settings](ci-and-releases.md#repository-settings)).
 
+## Sizing a plan: small, releasable steps
+
+Size a plan by what reviewers must check, not only by scope. A plan that combines live behaviour of an outside tool,
+a trust or security record and a launch path is split before implementation, so each part can be released alone; the
+rest becomes a row in `docs/ROADMAP.md`. Optional review findings are recorded and triaged at acceptance (fixed,
+dropped with a reason, or a follow-up issue) and never start another review round. When more than 8
+`review-follow-up` issues are open, a clean-up milestone is the next item.
+
 ## Squash merges and the pull request title
 
 In squash mode the pull request lands on `main` as one commit whose

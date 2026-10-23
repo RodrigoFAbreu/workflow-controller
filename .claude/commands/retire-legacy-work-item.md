@@ -49,7 +49,10 @@ execution, whatever the flag says.
    first), `LegacyRetirementWrongPhaseError` (any phase other than exactly
    `LEGACY_READY`: a promoted, already retired or finished item and every
    other phase), `LegacyRetirementActiveItemError` or
-   `LegacyRetirementUnfinishedChildrenError`. Report the refusal and stop. It
+   `LegacyRetirementUnfinishedChildrenError`. The same `LegacyRetirementWrongPhaseError`
+   is also raised, with the message "<id> names no work item", for an id that is not a
+   key of `work_items` (step 1 refuses that earlier when it can, and the writer repeats
+   it). Report the refusal and stop. It
    never runs the stale-approval or branch-reconciliation checks, never calls
    `promote_legacy_work_item` or `complete_work_item`, and takes no lifecycle
    lock (a `LEGACY_READY` item has no checkpoint, claim or amendment; a

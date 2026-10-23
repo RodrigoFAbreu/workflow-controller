@@ -7,8 +7,9 @@
 # not a Workflow regression. Run those explicitly when you want them.
 #
 # The suites run in parallel inside this one job (min(width_cap, nproc) at a
-# time, longest first), each in its own copy of the checkout with its own
-# TMPDIR and HOME, and every suite always runs to its end. The acceptance-matrix
+# time, longest first, in a fixed order taken from measured durations), each in
+# its own copy of the checkout with its own TMPDIR and HOME, and every suite
+# always runs to its end. The acceptance-matrix
 # suite is split into `shards` groups of whole test classes (shards=0 runs it as
 # one suite); the shards and the other suites share the one queue and the one
 # limit, and a coverage check requires every acceptance test to run exactly once.
@@ -38,6 +39,15 @@ jobs:
         shell: bash
         run: |
           suites="workflow_acceptance_matrix_test.py workflow_protocol_test.py workflow_state_test.py workflow_gate_policy_test.py workflow_fingerprint_generalization_test.py workflow_state_completion_obligations_test.py workflow_integration_test.py workflow_fingerprint_test.py workflow_test_harness_test.py"
+          # The start order, longest first (median seconds over twelve green runs, 2026-10-14
+          # to 2026-10-21): the whole acceptance suite when shards=0 (about 1730), protocol 645,
+          # state 486, acceptance-1of4 463.5, 4of4 439, 3of4 420.5, 2of4 405, gate_policy 335,
+          # fingerprint_generalization 218; every other unit is shorter and keeps its order in
+          # suites=. The shard-to-duration assignment rests on the planner's greedy test-count
+          # binning: if the binning or the acceptance tests change which shard is longest, re-measure
+          # and update this list and the duration table in tools/release/release_test.py together.
+          # A name that is not a unit of this run is skipped, so a stale list only costs wall time.
+          longest="workflow_acceptance_matrix_test.py workflow_protocol_test.py workflow_state_test.py acceptance-1of4 acceptance-4of4 acceptance-3of4 acceptance-2of4 workflow_gate_policy_test.py workflow_fingerprint_generalization_test.py"
           acceptance=workflow_acceptance_matrix_test.py
           width_cap=4
           shards=4
@@ -263,6 +273,10 @@ jobs:
             while [ "$i" -le "$n" ]; do units="$units acceptance-${i}of${n}"; i=$((i + 1)); done
             for s in $suites; do if [ "$s" != "$acceptance" ]; then units="$units $s"; fi; done
           fi
+          ordered=""
+          for l in $longest; do for u in $units; do if [ "$u" = "$l" ]; then ordered="$ordered $u"; fi; done; done
+          for u in $units; do case " $ordered " in *" $u "*) ;; *) ordered="$ordered $u" ;; esac; done
+          units="$ordered"
           run_suite() {
             d="$base/$1"; mkdir -p "$d/tmp" "$d/home"
             cp -a "$GITHUB_WORKSPACE/." "$d/repo" >>"$d/log" 2>&1

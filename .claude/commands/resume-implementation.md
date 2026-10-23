@@ -63,7 +63,10 @@ it, naming the exact `work_item_id`, and stop.
    `CURRENT` plan approval covering the registry, which is what a promoted
    legacy item lacks), `ResumeImplementationRegistryTerminalError` (nothing is
    outstanding) and `ResumeWithoutTechnicalApprovalError` (no technical
-   approval to stale). Report the refusal and stop.
+   approval to stale). The same `ResumeImplementationWrongPhaseError` is also raised,
+   with the message "<id> names no work item", for an id that is not a key of
+   `work_items` (step 1 refuses that earlier when it can, and the writer repeats it).
+   Report the refusal and stop.
    It writes `phase`, `technical_approval.status` (an already-`STALE` record is
    accepted as it is), `state_revision` and `last_transition` only. It clears
    nothing: `current_checkpoint_id`, the plan approval, `gate_evidence`,

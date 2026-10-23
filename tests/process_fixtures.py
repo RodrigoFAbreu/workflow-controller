@@ -307,9 +307,10 @@ LEFTOVER_INVENTORY = (
      "the burst's shell FIFO read of its gate runs under `timeout --foreground` for the orphan lifetime (D6)"),
     ("fake_claude_review.py", "start:run", 1, "bounded",
      "the scripted shell command of a fake review: its timeout=30 is enforced by the fake, which ends with its test"),
-    ("fake_functional_tester.py", "start:run", 2, "bounded",
-     "the scripted `cp -a` of the edited-copy action and the scripted shell command of a fake tester: each is waited by "
-     "the fake (the shell command with timeout=60), and the fake ends with its test"),
+    ("fake_functional_tester.py", "start:run", 4, "bounded",
+     "the scripted `cp -a` of the edited-copy action, the `cp -a` copy and link-refill steps of the copy rule (D2) and the "
+     "scripted shell command of a fake tester: each is waited by the fake (the shell command with timeout=60), and the "
+     "fake ends with its test"),
     ("fake_codex.py", "start:run", 1, "bounded",
      "the scripted shell command of a fake exec: its timeout=20 is enforced by the fake, which ends with its test"),
     ("fake_codex.py", "start:Popen", 1, "bounded",
@@ -320,11 +321,11 @@ LEFTOVER_INVENTORY = (
      "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
     ("test_review_mode.py", "start:run", 1, "short",
      "the captures generator's --check run: a read-only comparison that exits by itself"),
-    ("test_functional_enforcement.py", "start:run", 3, "bounded",
-     "the `sh -n` syntax check and the unsandboxed home-probe control (each exits at once) and the live tester-shaped "
+    ("test_functional_enforcement.py", "start:run", 4, "bounded",
+     "the `sh -n` syntax check and the unsandboxed home-probe and link-probe controls (each exits at once) and the live tester-shaped "
      "launch of the real CLI (timeout=300, opt-in, skipped without claude, bwrap and socat): all waited by the test"),
-    ("test_functional_sandbox.py", "start:run", 2, "short",
-     "git calls and the fakes' launchers run by the test and waited for; each exits at once"),
+    ("test_functional_sandbox.py", "start:run", 5, "short",
+     "git calls, the fakes' launchers and the `cp -a` copies of the copy rule run by the test and waited for; each exits at once"),
     ("test_harness.py", "start:run", 1, "short",
      "the fresh-interpreter import of one module: exits at once"),
     ("test_usage_record.py", "start:run", 1, "short",

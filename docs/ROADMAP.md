@@ -10,8 +10,8 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 **Where things stand (2026-10-23).** Controller 1.19.0 is the latest release (PR #128, squash `2375b51`), from C10e
 (accepted 2026-10-23 by gate policy): `workflow-controller verify-claude` verifies a new Claude build with live probes and
-records its digest, so the automated functional review can use it. No installed Claude build passes yet: 2.1.304 and later
-block writes inside the denied clone, which C10f (#129) fixes next. 1.18.0 (PR #111, squash `5f3f131`) came from C10c
+records its digest, so the automated functional review can use it. C10f (#129, complete) lays the tester's sandbox out so Claude Code 2.1.304 and later
+can pass `verify-claude` too. 1.18.0 (PR #111, squash `5f3f131`) came from C10c
 (accepted 2026-10-21 by gate policy): under an automatic acceptance gate the Controller runs the functional review
 itself in an isolated tester, so acceptance clears itself. 1.17.0 (PR #107, squash `a76daff`) came from C13b
 (accepted 2026-10-19 by gate policy): each review stage has a local round cap (6) and an external round cap (4) on the
@@ -38,15 +38,14 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18, 2026-10-22 and 2026-10-23):
-1. C10f, the sandbox layout that lets Claude Code 2.1.304 and later pass `verify-claude` (#129);
-2. #126, the after-merge determinism job (32 minutes, so every release waits; a `ci:` change, no release);
-3. CU3, a clean-up milestone, because more than 8 `review-follow-up` issues are open (see the rule below);
-4. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0);
-5. C10d, after A2 (C10c is released as 1.18.0 and C10e as 1.19.0; C10 is three steps, each released on its own);
-6. CL1, retention of finished work-item files and its check (#130; the same rule in the Workflow and the Manager), then its alert and opt-in automatic cleanup;
-7. C10g, the Codex functional tester without a per-release version block (#131), after C10f;
-8. C12, then C11;
-9. the orchestrator series O1-O7.
+1. #126, the after-merge determinism job (32 minutes, so every release waits; a `ci:` change, no release);
+2. CU3, a clean-up milestone, because more than 8 `review-follow-up` issues are open (see the rule below);
+3. A2, the backlog file and the generated roadmap (workflow#48 shipped in Workflow 2.17.0);
+4. C10d, after A2 (C10c is released as 1.18.0 and C10e as 1.19.0; C10 is three steps, each released on its own);
+5. CL1, retention of finished work-item files and its check (#130; the same rule in the Workflow and the Manager), then its alert and opt-in automatic cleanup;
+6. C10g, the Codex functional tester without a per-release version block (#131);
+7. C12, then C11;
+8. the orchestrator series O1-O7.
 
 A3, A4 and A5 follow their dependencies in the table below.
 
@@ -138,7 +137,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C2b | CI time and flakiness: bring a pull request's CI back to 15-20 minutes (about 85 since C10c; 46 after the first timings refresh of 2026-10-22): check catalogue determinism on `main` only, share one built sandbox across the functional test cases, make other slow tests cheaper, and fix the flaky `FollowCommandTest` ([#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119), [#121](https://github.com/RodrigoFAbreu/workflow-controller/issues/121)). Owner rule, 2026-10-22: when a pull request's CI goes over 30 minutes, improving it is the next item (complete, accepted 2026-10-22 by gate policy, PR #123, no release: #121 fixed; the whole-catalogue checks run on `main` and gate the release, six shards, shared lifecycle snapshots, refreshed timings; a pull request's complete check took 19.3 minutes at the acceptance head, within the target, so #119 is closed) | — | [11.2](#112-ci-reliability) |
 | C10d | The post-acceptance defect loop: report the fixed query at the merge flow's `checks_failing` stop or at a `CHANGES_REQUESTED` decision so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C10e | A command that verifies a new `claude` build for the functional tester: it runs the live sandbox enforcement probes against that binary and, only when every probe holds, records its digest in the Controller's state (never the settings file); the launch admits the built-in list plus the recorded digests, so a Claude update needs no release ([#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113); owner decision 2026-10-22: right after C2b) (complete, accepted 2026-10-23 by gate policy; released as 1.19.0 from PR #128, squash `2375b51`: `workflow-controller verify-claude`; the probe and the launch use one resolved binary, #114; follow-ups [81-82](#known-follow-ups-carried-forward), issues #132 and #133) | C10c | [11.9](#119-automated-functional-review) |
-| C10f | The sandbox layout for Claude Code 2.1.304 and later: those builds block writes to an allowed folder below a denied path, so `verify-claude` refuses them with `boundary: writable: REFUSED`; lay the tester's folders out so no allowed write sits below a denied path, then verify a current build ([#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129); owner decision 2026-10-23: right after C10e) | C10e | [11.9](#119-automated-functional-review) |
+| C10f | The sandbox layout for Claude Code 2.1.304 and later: those builds block writes to an allowed folder below a denied path, so `verify-claude` refuses them with `boundary: writable: REFUSED`; lay the tester's folders out so no allowed write sits below a denied path, then verify a current build ([#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129); owner decision 2026-10-23: right after C10e) (complete: the writable folders live outside the clone behind links, with a `link` probe and a fake tester that applies the deny-above-wins rule) | C10e | [11.9](#119-automated-functional-review) |
 | C10g | The functional tester on Codex without a per-release version block: Codex sandbox enforcement and its proof, `verify-codex` with verify-on-first-use cached by the build's digest, then the tester role and a tester-harness setting with fallback ([#131](https://github.com/RodrigoFAbreu/workflow-controller/issues/131); three small releasable steps; extends [follow-up 61](#known-follow-ups-carried-forward)) | C10f | [11.9](#119-automated-functional-review) |
 | CU3 | A clean-up milestone for the open `review-follow-up` issues (more than 8 are open: #100, #103, #104, #108, #112, #115, #116, #118, #125, #132, #133 and the others then open), under the limit of 8 (owner decision, 2026-10-23) | C10f, #126 | [Clean-up milestones](#at-a-glance) |
 | CL1 | Retention of finished work-item files (registry, audit, old plans, fixtures): a written rule, a `verify` check that warns and then fails above a limit, and a safe dry-run command to apply it, the same rule in the Workflow and the Manager ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), [workflow#84](https://github.com/RodrigoFAbreu/workflow/issues/84), [workflow-manager#90](https://github.com/RodrigoFAbreu/workflow-manager/issues/90)); a later release adds a notification when the limit is crossed and an opt-in automatic cleanup after acceptance | CU3 | [Clean-up milestones](#at-a-glance) |
@@ -537,7 +536,7 @@ hurts now, else in a later step or the next clean-up milestone.
     28-32 minutes, so an ordinary release waits that long after the merge (a `ci:` change, third in the order above;
     the owner moved it up on 2026-10-23).
 78. [#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129): the sandbox layout for Claude Code 2.1.304
-    and later (C10f, next).
+    and later (C10f, complete).
 79. [#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130): retention of finished work-item files and
     a check that it holds (CL1; filed with workflow#84 and workflow-manager#90).
 80. [#131](https://github.com/RodrigoFAbreu/workflow-controller/issues/131): run the automatic functional review on

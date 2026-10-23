@@ -24,7 +24,11 @@ held files this one does not; delete `build/` and rebuild.
 
 The live probes are one implementation, `controller/claude_build.py`, shared
 by these tests and by `workflow-controller verify-claude`; a test with a fake
-`claude` exercises it without a model.
+`claude` exercises it without a model. The probes run on the layout the launch
+uses: the writable folders are outside the clone, the clone holds a link to each,
+and a `link` probe checks the link cannot be replaced. The fake tester judges a
+write as Claude Code 2.1.304 and later do (a deny above the path wins), so a
+layout those builds refuse fails the fake suite too.
 
 The live sandbox probes run in their own empty home, into which they copy
 `.credentials.json` from the operator's Claude home (`CLAUDE_CONFIG_DIR`, else

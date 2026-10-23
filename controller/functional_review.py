@@ -935,14 +935,15 @@ def make_writable_links(clone: Path, writable_dir: Path, names: Iterable[str]) -
         os.symlink(target, clone / name)
 
 
-def exclude_writable_links(git_dir: Path, names: Iterable[str]) -> None:
+def exclude_writable_links(runtime_root: Path, git_dir_rel: str, names: Iterable[str]) -> None:
     """One ``/<name>`` line per link in ``<git_dir>/info/exclude`` (no trailing
     slash, so a link matches; ``name/`` matches only a directory), so the
-    clone's ``git status`` is empty exactly as with empty directories (D2)."""
-    exclude = git_dir / "info" / "exclude"
-    exclude.parent.mkdir(parents=True, exist_ok=True)
-    with open(exclude, "a", encoding="utf-8") as handle:
-        handle.writelines(f"/{name}\n" for name in names)
+    clone's ``git status`` is empty exactly as with empty directories (D2).
+    ``git_dir_rel`` is the clone's ``.git`` relative to the runtime root."""
+    exclude = runtime_root / git_dir_rel / "info" / "exclude"
+    kept = exclude.read_bytes() if exclude.exists() else b""
+    lines = "".join(f"/{name}\n" for name in names).encode()
+    runtime.write_bytes(runtime_root, f"{git_dir_rel}/info/exclude", kept + lines)
 
 
 def tester_flags(settings_path: Path) -> list[str]:
@@ -1778,7 +1779,7 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
         _plain(clone, "push", "-q", "-u", "origin", candidate.branch)
         writable, refused = derive_writable_locations(candidate.root_gitignore, candidate.manifest)
         make_writable_links(clone, base / "writable", writable)
-        exclude_writable_links(clone / ".git", writable)
+        exclude_writable_links(runtime_root, f"{SANDBOX_AREA}/{job_id}/clone/.git", writable)
         sandbox = Sandbox(runtime_root, job_id, work_item_id, base, candidate, writable, refused,
                           _git_dir_state(clone / ".git"), refs_of(clone / ".git"), tmp_dir)
         write_launchers(runtime_root, f"{SANDBOX_AREA}/{job_id}", sandbox.fake_logs,

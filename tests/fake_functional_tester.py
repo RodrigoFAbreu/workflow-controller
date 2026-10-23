@@ -25,6 +25,8 @@ Actions, each ``{"op": ..., ...}``:
   written into the working directory (the output folder);
 - ``write`` -- ``path``, ``data``: one write, by absolute path (a relative
   ``path`` is below the clone);
+- ``unlink`` / ``mkdir`` -- ``path``: remove a file or link, or make a
+  directory; judged without following a link at the last component;
 - ``restore`` -- ``path`` (relative to the clone), ``new``: write, run a check
   that reads it, restore the original bytes;
 - ``shell`` -- ``argv``: run a command with the environment as launched;
@@ -75,13 +77,19 @@ class Sandbox:
         self.deny = [Path(p) for p in filesystem.get("denyWrite", [])]
         self.emulate = emulate
 
-    def allows(self, path: Path) -> bool:
+    def allows(self, path: Path, *, parent_only: bool = False) -> bool:
+        """Whether a write to ``path`` is allowed. The path is resolved through
+        symlinks first, as a sandbox mount does; an unlink, a rename or a mkdir
+        over a link resolves only the parent (``parent_only``), as the kernel
+        does, so the link itself is judged where it lies."""
         if not self.emulate:
             return True
         path = Path(os.path.abspath(path))
+        path = Path(os.path.realpath(path.parent)) / path.name if parent_only else Path(os.path.realpath(path))
         best: tuple[int, bool] | None = None
         for entries, allowed in ((self.allow, True), (self.deny, False)):
             for entry in entries:
+                entry = Path(os.path.realpath(entry))
                 if path == entry or entry in path.parents:
                     depth = len(entry.parts)
                     if best is None or depth > best[0] or (depth == best[0] and not allowed):
@@ -120,6 +128,13 @@ def _act(action: dict, ctx: dict) -> None:
             path.write_text(data)
         if action.get("fifo"):
             os.mkfifo(path)
+        log.append({"op": op, "path": str(path), "refused": False})
+    elif op in ("unlink", "mkdir"):
+        path = Path(action["path"]) if os.path.isabs(action["path"]) else clone / action["path"]
+        if not sandbox.allows(path, parent_only=True):
+            log.append({"op": op, "path": str(path), "refused": True})
+            return
+        os.unlink(path) if op == "unlink" else os.mkdir(path)
         log.append({"op": op, "path": str(path), "refused": False})
     elif op == "restore":
         path = clone / action["path"]

@@ -643,7 +643,7 @@ class PromptTest(unittest.TestCase):
 
     def test_none_is_said_when_nothing_is_writable_or_refused(self) -> None:
         text = self.prompt(writable=(), refused=())
-        self.assertIn("Writable locations below the clone root: none", text)
+        self.assertIn("Writable locations in the clone root, each a link to a folder outside the clone: none", text)
         self.assertIn("Refused as writable locations (so a flow that writes there is `environment`): none", text)
 
     def test_the_row_37_note_shares_the_limits(self) -> None:

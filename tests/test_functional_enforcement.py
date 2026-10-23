@@ -46,7 +46,7 @@ def sandbox_dirs(base: Path) -> dict[str, Path]:
     (clone / ".git" / "config").write_text("[core]\n")
     (clone / TRACKED).write_bytes(ORIGINAL)
     (clone / CHECKLIST).write_bytes(ORIGINAL)
-    (clone / "build").mkdir()
+    fr.make_writable_links(clone, base / "writable", ["build"])
     scratch = [base / "home", base / "tmp"]
     out = base / "out"
     for path in (out, *scratch):
@@ -59,7 +59,7 @@ class SettingsTests(unittest.TestCase):
         base = Path("/work")
         return fr.tester_settings(
             clone_dir=base / "clone", output_dir=base / "out", scratch_dirs=[base / "home", base / "tmp"],
-            writable=["build", ".venv"])
+            writable_dir=base / "writable", writable=["build", ".venv"])
 
     def test_the_sandbox_is_required_closed_and_without_an_unsandboxed_retry(self) -> None:
         sandbox = self.build()["sandbox"]
@@ -72,7 +72,22 @@ class SettingsTests(unittest.TestCase):
     def test_the_write_allowlist_holds_only_the_output_scratch_and_writable_locations(self) -> None:
         sandbox = self.build()["sandbox"]
         self.assertEqual(sandbox["filesystem"]["allowWrite"],
-                         ["/work/out", "/work/home", "/work/tmp", "/work/clone/build", "/work/clone/.venv"])
+                         ["/work/out", "/work/home", "/work/tmp", "/work/writable/build", "/work/writable/.venv"])
+
+    def test_an_allowance_equal_to_or_below_a_denial_is_refused_and_a_denial_below_an_allowance_is_fine(self) -> None:
+        refused = {
+            "a child of the clone root": {"allowWrite": ["/w/clone/build"], "denyWrite": ["/w/clone"]},
+            "the clone root itself": {"allowWrite": ["/w/clone"], "denyWrite": ["/w/clone"]},
+            "a child of .git": {"allowWrite": ["/w/clone/.git/hooks"], "denyWrite": ["/w/clone/.git"]},
+            "an allow equal to a deny": {"allowWrite": ["/w/x"], "denyWrite": ["/w/x"]},
+        }
+        for name, filesystem in refused.items():
+            with self.subTest(name), self.assertRaises(ValueError):
+                fr.assert_writes_not_below_denies(filesystem)
+        fr.assert_writes_not_below_denies({"allowWrite": ["/w"], "denyWrite": ["/w/clone"]})
+        with self.assertRaises(ValueError):
+            fr.tester_settings(clone_dir=Path("/w/clone"), output_dir=Path("/w/out"), scratch_dirs=[],
+                               writable_dir=Path("/w/clone/writable"), writable=["build"])
 
     def test_the_deny_list_covers_the_clone_root_and_git_by_name(self) -> None:
         self.assertEqual(self.build()["sandbox"]["filesystem"]["denyWrite"], ["/work/clone", "/work/clone/.git"])
@@ -317,7 +332,8 @@ class LiveEnforcementTests(unittest.TestCase):
         self.dirs = sandbox_dirs(self.base)
         self.settings = fr.tester_settings(
             clone_dir=self.dirs["clone"], output_dir=self.dirs["out"],
-            scratch_dirs=[self.dirs["home"], self.dirs["tmp"]], writable=["build"])
+            scratch_dirs=[self.dirs["home"], self.dirs["tmp"]], writable_dir=self.base / "writable",
+            writable=["build"])
         self.marker = f"wfr-cp2-{uuid.uuid4().hex}"
         self.host_paths = [Path("/tmp") / self.marker, Path("/var/tmp") / self.marker, Path("/dev/shm") / self.marker]
         for path in self.host_paths:

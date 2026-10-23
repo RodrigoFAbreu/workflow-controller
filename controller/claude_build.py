@@ -331,12 +331,13 @@ class _Run:
         base = self.layout.base
         self.clone, self.out = base / "clone", base / "out"
         self.stand_in_home = base / "stand-in-home"
+        self.writable_dir = base / "writable"
         # Claude's bridge sockets live in TMPDIR: a runtime root of normal depth makes `layout.tmp` too long.
         self.tmp = short_tmp()
         try:
             self.settings = fr.tester_settings(
                 clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.tmp],
-                writable=["build"])
+                writable_dir=self.writable_dir, writable=["build"])
             self.sock_dir = Path(tempfile.mkdtemp(prefix="wcv-"))  # short: a Unix socket path is limited to 107 bytes
         except BaseException:
             # construction failed before `verify_build` could clean up: release the TMPDIR just allocated.
@@ -349,8 +350,8 @@ class _Run:
         for name, data in (("clone/.git/config", b"[core]\n"), (f"clone/{TRACKED}", ORIGINAL),
                            (f"clone/{CHECKLIST}", ORIGINAL), ("stand-in-home/.config/keep", b"")):
             runtime.write_bytes(self.runtime_root, rel(*name.split("/")), data)
-        for sub in ("clone/build", "out"):
-            (self.layout.base / sub).mkdir(parents=True, exist_ok=True)
+        (self.layout.base / "out").mkdir(parents=True, exist_ok=True)
+        fr.make_writable_links(self.clone, self.writable_dir, ["build"])  # the layout the tester is launched under
         try:
             self.review.build_claude_home(self.layout, operator_home)
         except ControllerError as exc:

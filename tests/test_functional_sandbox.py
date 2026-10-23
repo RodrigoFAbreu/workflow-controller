@@ -181,9 +181,60 @@ class SandboxBuildTest(Fixture):
     def test_a_fresh_clone_is_bound_and_the_writable_locations_exist_empty(self) -> None:
         box = self.build()
         self.assertEqual(box.writable, ("build", "__pycache__"))
+        self.assertTrue((box.clone / "__pycache__").is_symlink())
         self.assertTrue((box.clone / "__pycache__").is_dir())
         self.assertEqual(sorted(p.pattern for p in box.refused), ["*.pyc"])
         self.assertEqual(fr.check_bound(box), [])
+
+    def test_the_writable_locations_are_external_folders_reached_by_links(self) -> None:
+        box = self.build()
+        for name in box.writable:
+            external = box.base / "writable" / name
+            self.assertTrue(external.is_dir() and not external.is_symlink())
+            self.assertTrue((box.clone / name).is_symlink())
+            self.assertEqual(os.readlink(box.clone / name), str(external))
+        self.assertEqual(box.writable_links, {name: box.base / "writable" / name for name in box.writable})
+        filesystem = box.settings()["sandbox"]["filesystem"]
+        self.assertIn(str(box.base / "writable" / "build"), filesystem["allowWrite"])
+        self.assertEqual([p for p in filesystem["allowWrite"] if Path(p).is_relative_to(box.clone)], [])
+        self.assertEqual(json.loads(box.settings_path.read_text()), box.settings())
+
+    def test_git_status_is_empty_in_a_fresh_clone_and_in_a_cp_a_copy_of_it(self) -> None:
+        box = self.build()
+        self.assertEqual(git(box.clone, "status", "--porcelain"), "")
+        copy = self.tmp / "copy"
+        subprocess.run(["cp", "-a", str(box.clone), str(copy)], check=True)
+        self.assertEqual(git(copy, "status", "--porcelain"), "")
+
+    def test_the_copy_rule_gives_each_copy_its_own_folder_holding_what_the_clones_held(self) -> None:
+        box = self.build()
+        (box.clone / "build" / "seed").write_text("s")
+        copies = []
+        for index in range(2):
+            copy = self.tmp / f"copy{index}"
+            subprocess.run(["cp", "-a", str(box.clone), str(copy)], check=True)
+            for name in box.writable:  # the rule the prompt gives, applied literally
+                subprocess.run(f"rm {copy}/{name} && mkdir {copy}/{name} && cp -a {box.clone}/{name}/. {copy}/{name}/",
+                               shell=True, check=True)
+            copies.append(copy)
+        self.assertEqual((copies[0] / "build" / "seed").read_text(), "s")
+        (copies[0] / "build" / "only-in-0").write_text("0")
+        self.assertFalse((copies[1] / "build" / "only-in-0").exists())
+        self.assertFalse((box.clone / "build" / "only-in-0").exists())
+        self.assertFalse((box.base / "writable" / "build" / "only-in-0").exists())
+        (copies[0] / "build" / "seed").write_text("changed")
+        self.assertEqual((box.clone / "build" / "seed").read_text(), "s")
+        self.assertFalse((copies[0] / "build").is_symlink())
+
+    def test_the_prompt_states_the_links_the_copy_rule_and_the_rmtree_limit(self) -> None:
+        box = self.build()
+        text = fr.tester_prompt(self.flows, clone_dir=box.clone, output_dir=box.out, head=self.head,
+                                checklist_blob="b", writable=box.writable, refused=box.refused, timeout_seconds=60)
+        self.assertIn("each a link to a folder outside the clone", text)
+        self.assertIn("rm <copy>/<name> && mkdir <copy>/<name> && cp -a <clone>/<name>/. <copy>/<name>/", text)
+        self.assertIn("A copy that is edited, except by that step, is a tester fault.", text)
+        self.assertIn("`shutil.rmtree('build')`", text)
+        self.assertIn("a sandbox limit (`environment`), not a product `defect`", text)
 
     def test_the_launchers_are_scripts_the_controller_wrote_with_mode_0755(self) -> None:
         box = self.build()
@@ -361,6 +412,47 @@ class BindingTest(Fixture):
                 self.clone = box.clone
                 change()
                 self.assertTrue(fr.check_bound(box), name)
+
+    def test_the_controllers_own_links_pass_and_every_other_change_to_them_is_a_difference(self) -> None:
+        external = self.box.base / "writable" / "build"
+
+        def replace_with_directory() -> None:
+            os.unlink(self.clone / "build")
+            (self.clone / "build").mkdir()
+
+        def replace_with_file() -> None:
+            os.unlink(self.clone / "build")
+            (self.clone / "build").write_text("x")
+
+        def retarget() -> None:
+            os.unlink(self.clone / "build")
+            os.symlink(self.box.base / "writable" / "__pycache__", self.clone / "build")
+
+        cases = {
+            "a missing link": lambda: os.unlink(self.clone / "build"),
+            "a retargeted link": retarget,
+            "a link replaced by a directory": replace_with_directory,
+            "a link replaced by a file": replace_with_file,
+            "a second symlink to anywhere": lambda: os.symlink("/etc", self.clone / "extra-link"),
+            "a second symlink to a writable folder": lambda: os.symlink(external, self.clone / "extra-link"),
+        }
+        self.assertEqual(fr.check_bound(self.box), [])
+        for name, change in cases.items():
+            with self.subTest(name):
+                box = fr.build_sandbox(self.candidate, runtime_root=self.runtime,
+                                       job_id=f"link-{name.replace(' ', '-')}", work_item_id="item-1")
+                self.clone = box.clone
+                change()
+                problems = fr.check_bound(box)
+                self.assertTrue(any("build" in p or "extra-link" in p for p in problems), (name, problems))
+
+    def test_a_symlink_inside_a_writable_folder_is_not_walked(self) -> None:
+        os.symlink("/etc", self.box.base / "writable" / "build" / "anything")
+        self.assertEqual(fr.check_bound(self.box), [])
+
+    def test_the_walk_without_links_is_usable_on_a_bare_clone(self) -> None:
+        self.assertTrue(any("build" in p for p in fr.walk_differences(self.clone, self.box.candidate, self.box.check_dir)))
+        self.assertEqual(fr.walk_differences(self.clone, self.box.candidate, self.box.check_dir, self.box.writable_links), [])
 
     def test_a_moved_head_is_refused(self) -> None:
         git(self.clone, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "moved")
@@ -638,6 +730,15 @@ class RunTest(Fixture):
         self.assertEqual(result["unbound"], [])
         self.settle(result)
 
+    def test_an_unlink_of_the_link_is_judged_at_the_clone_directory_and_refused(self) -> None:
+        result = self.launch({"actions": [{"op": "unlink", "path": "build"}, {"op": "mkdir", "path": "build"},
+                                          {"op": "write", "path": "build/out.o", "data": "o"}, results()]})
+        first, second, third = self.actions()[:3]
+        self.assertTrue(first["refused"] and second["refused"])
+        self.assertFalse(third["refused"])
+        self.assertEqual(result["unbound"], [])
+        self.settle(result)
+
     def test_the_git_cases_of_a_tester_that_steers_git_end_unbound(self) -> None:
         marker = self.tmp / "ran-marker"
         result = self.launch({"emulate_sandbox": False, "actions": [
@@ -765,12 +866,22 @@ class ArgvAndSettingsTest(Fixture):
 
     def test_a_writable_root_outside_the_sandbox_or_at_the_candidate_is_refused_even_if_settings_agree(self) -> None:
         box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="roots", work_item_id="i")
-        for bad in (Path("/tmp"), box.clone, box.clone / ".git", box.clone / ".git" / "hooks"):
-            with self.subTest(bad=str(bad)), mock.patch.object(
-                    fr.Sandbox, "scratch_dirs", new_callable=mock.PropertyMock, return_value=[bad]):
-                box.settings_path.write_text(json.dumps(box.settings()))
-                with self.assertRaises(review.ReviewLaunchRefusedError):
-                    review.check_functional_settings(box)
+        with mock.patch.object(fr.Sandbox, "scratch_dirs", new_callable=mock.PropertyMock,
+                               return_value=[Path("/tmp")]):
+            box.settings_path.write_text(json.dumps(box.settings()))
+            with self.assertRaises(review.ReviewLaunchRefusedError):
+                review.check_functional_settings(box)
+        for bad in (box.clone, box.clone / ".git", box.clone / ".git" / "hooks", box.clone / "build"):
+            with self.subTest(bad=str(bad)):
+                document = box.settings()
+                document["sandbox"]["filesystem"]["allowWrite"].append(str(bad))
+                box.settings_path.write_text(json.dumps(document))
+                with mock.patch.object(fr.Sandbox, "settings", return_value=document):
+                    with self.assertRaises(review.ReviewLaunchRefusedError) as caught:
+                        review.check_functional_settings(box)
+                self.assertIn("layout invariant", str(caught.exception))
+                with self.assertRaises(ValueError):
+                    fr.assert_writes_not_below_denies(document["sandbox"]["filesystem"])
 
 
 class LayoutTest(unittest.TestCase):

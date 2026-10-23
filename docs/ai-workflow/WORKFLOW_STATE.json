@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-sandbox-layout",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -23750,6 +23750,291 @@
         },
         "evaluated_at": "2026-10-23T16:37:36Z",
         "workflow_release": "2.18.2"
+      }
+    },
+    "workflow-controller-sandbox-layout": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-sandbox-layout",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_SANDBOX_LAYOUT_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "8b5fdb02686682e708df4afe927d40c6ffd4db32",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+        "approved_review_content_id": "331fe0d86ab8570ec4d8f6fb1ba9edd8fdf2d7fdaee6dddb176f22d1862419c0",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_SANDBOX_LAYOUT_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b18d99f4a17c69185514775a61a7eb0fa4569cad"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c6b841a4197895e90f02f83b767855b03afc063a"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7cdee79e736f5ab961c16a222ae1528381d64f60"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-23T19:20:16Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "331fe0d86ab8570ec4d8f6fb1ba9edd8fdf2d7fdaee6dddb176f22d1862419c0",
+            "ledger": {
+              "local": {
+                "bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "29bd1227e7c32a5ef1b2df26e024ab475232ece1b2bce295c6e00ddb10cfc41b",
+                "ledger_entry_sha256": "091c7cd8a11bf4efcb1c9e59a389c73b908106ba2d66aa3267ef29e308916aa6",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "edc39a0777e4a9b9dee567c783649af2a6535b67fa13b36c212336897f6d8561",
+                "ledger_entry_sha256": "52f95db26e28d58db8aa29a7eb99428fbbf24ab158960afc4b657146bcf353db",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-23T19:20:16Z",
+          "workflow_release": "2.18.5"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "331fe0d86ab8570ec4d8f6fb1ba9edd8fdf2d7fdaee6dddb176f22d1862419c0",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-23T18:56:31Z",
+          "verdict_sha256": "29bd1227e7c32a5ef1b2df26e024ab475232ece1b2bce295c6e00ddb10cfc41b",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-23T19:16:59Z",
+          "verdict_sha256": "edc39a0777e4a9b9dee567c783649af2a6535b67fa13b36c212336897f6d8561",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 15,
+      "last_transition": "2026-10-23T19:20:16Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-23T18:53:55Z",
+        "consumed": {
+          "review_content_id": "f91ce967b3be82da596efa20d81a0cbb3fe503315b3e91476985c75c76a0f91d",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "331fe0d86ab8570ec4d8f6fb1ba9edd8fdf2d7fdaee6dddb176f22d1862419c0",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "331fe0d86ab8570ec4d8f6fb1ba9edd8fdf2d7fdaee6dddb176f22d1862419c0",
+          "bundle_id": "127475a20e9b8ab8eaac6d31797f8b94350e6675cc9f2224a38fbe6b8bcc24de",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "d4da3033f19ad6aef4700ef8d1ee3b47c4d99a83f95a8e41503a1b71a0b7d4cb",
+        "e5282d3d7c3e066179a23460ee4b5ccb564fd63b0a24bb23f5740afa3fdb78dc",
+        "f91ce967b3be82da596efa20d81a0cbb3fe503315b3e91476985c75c76a0f91d"
+      ],
+      "optional_findings": {
+        "F-8ec4895570e2": {
+          "digest": "8ec4895570e2b8fdf758ae63ee99b8f27567a4288c70a990f7c86b5c2efcccd2",
+          "text": "D7 says that the closing `docs/ROADMAP.md` and `docs/ACTIVE_MILESTONE.md` records \"go in the acceptance\", but CP4 lists both files and says that `docs/ROADMAP.md` marks C10f complete. Say which step writes them.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d4da3033f19ad6aef4700ef8d1ee3b47c4d99a83f95a8e41503a1b71a0b7d4cb",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:43:31Z"
+            }
+          ]
+        },
+        "F-ee7aa6303d55": {
+          "digest": "ee7aa6303d5510c84b813ff7e11e7b40602ee58bd5a4cd72b49a9e801243079e",
+          "text": "D5's rule does not restate that a resolved path in no `allowWrite` entry is refused, which the fake's current docstring says. Keep that clause, so the new emulation is not read as allow-by-default outside the denied paths.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d4da3033f19ad6aef4700ef8d1ee3b47c4d99a83f95a8e41503a1b71a0b7d4cb",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:43:31Z"
+            }
+          ]
+        },
+        "F-b08e56964946": {
+          "digest": "b08e56964946d23f95d51600d66118afadf693675e5e57be7b5bc6a2cd1e76fa",
+          "text": "A tool that deletes and recreates its output directory behaves differently on a link: `shutil.rmtree('build')` refuses a symlink outright, and `rm -rf build` unlinks the link and is refused. Today both remove the contents and then fail on the directory itself. A sentence in the prompt's sandbox limits (`SANDBOX_LIMITS`) would make such a flow `environment`, not `defect`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d4da3033f19ad6aef4700ef8d1ee3b47c4d99a83f95a8e41503a1b71a0b7d4cb",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:43:31Z"
+            }
+          ]
+        },
+        "F-d831438ff3f4": {
+          "digest": "d831438ff3f47dbd7037897b9606dde2b5e1adb15a1a3120ff1a5762deb3dfb6",
+          "text": "`tester_prompt` still says \"Writable locations below the clone root\". CP1 could name the wording change (links to folders outside the clone) as part of its done-when.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d4da3033f19ad6aef4700ef8d1ee3b47c4d99a83f95a8e41503a1b71a0b7d4cb",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:43:31Z"
+            }
+          ]
+        },
+        "F-3a9cdb477afd": {
+          "digest": "3a9cdb477afde6f064b2c46527daec129a3cf5cda36bc5543d2dcf78f6af97c8",
+          "text": "The prompt's present copy rule says that a copy \"is made from the clone unchanged, with `cp -a`\" and that \"A copy that is edited is a tester fault\". D2's new step (`rm <copy>/<name> && mkdir <copy>/<name>`) edits the copy. Say that CP1 rewrites that sentence to allow this one step, so the prompt does not hold two contradicting rules.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e5282d3d7c3e066179a23460ee4b5ccb564fd63b0a24bb23f5740afa3fdb78dc",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:48:21Z"
+            }
+          ]
+        },
+        "F-e699a264dc90": {
+          "digest": "e699a264dc9066aef940fe999ced8ec4f5c7eb185894343330777e71f1e71318",
+          "text": "D5 resolves a path through symlinks. For an unlink, a rename or a `mkdir` over the link itself, the fake must resolve only the parent and not the last component, as the kernel does. Otherwise it resolves `clone/build` to the allowed external folder and lets the link be removed. CP2's \"refuses the replacement of the link\" will catch this, but D5 could state it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e5282d3d7c3e066179a23460ee4b5ccb564fd63b0a24bb23f5740afa3fdb78dc",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:48:21Z"
+            }
+          ]
+        },
+        "F-1c45c8e32a24": {
+          "digest": "1c45c8e32a24113be0663cfa149bd91c8a9bde4d241f90c708218a8fc3398aa6",
+          "text": "D2 says that a copy starts with its own empty state \"as today\". That holds only for a copy made before anything is written to `build/` (and the other writable names) in the clone: today `cp -a` carries what the clone's directories already hold, but the copy rule gives an empty directory. Either state the difference or copy the contents (`cp -a <clone>/<name>/. <copy>/<name>/`) after the `mkdir`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e5282d3d7c3e066179a23460ee4b5ccb564fd63b0a24bb23f5740afa3fdb78dc",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:48:21Z"
+            }
+          ]
+        },
+        "F-7934c296aec8": {
+          "digest": "7934c296aec88c92c2c4a348887dd96cfbfb53bf60bf0f9f14d5159b3142aa2a",
+          "text": "CP3 records the live evidence \"in the functional-review checklist\", but CP3's **Files:** name only the two test modules, and `docs/ACTIVE_MILESTONE.md` (the checklist) appears only in CP4's. That path is excluded, so the declaration gate does not stop on it. Name it in CP3's **Files:**, or say that CP3's evidence is written into the checklist at the functional review, so the checkpoint's write set is exact.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "f91ce967b3be82da596efa20d81a0cbb3fe503315b3e91476985c75c76a0f91d",
+              "verdict": "REVISE",
+              "at": "2026-10-23T18:52:07Z"
+            }
+          ]
+        }
       }
     }
   }

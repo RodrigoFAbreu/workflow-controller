@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-sandbox-layout",
+  "requirements": {
+    "R1": {
+      "description": "No allowed write location lies below a denied path; enforced when the settings are derived and on the file at launch",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Writable locations live outside the clone and are reached through Controller-made links; the deny list and every refusal are unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The post-run walk accepts exactly the Controller links and reports any other change",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The probes prove the link works and cannot be replaced; the fake tester emulates the stricter precedence; verify_build judges the new line",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "Current Claude builds pass the live probes and verify-claude on the new layout, and 2.1.303 does not regress",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "Documentation, roadmap and the suite agree with the behaviour",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

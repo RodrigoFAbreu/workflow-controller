@@ -105,6 +105,74 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(fr.TESTER_TOOLS, ("Bash",))
 
 
+class FakeSandboxEmulationTests(unittest.TestCase):
+    """The fake tester judges a write as Claude Code 2.1.304 and later do (D5), so a layout those builds refuse
+    fails the fake suite too."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="wfr-fake-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        sys.path.insert(0, str(REPO_ROOT / "tests"))
+        import fake_functional_tester  # noqa: E402
+        self.fake = fake_functional_tester
+        self.dirs = sandbox_dirs(self.tmp)
+        self.settings = fr.tester_settings(
+            clone_dir=self.dirs["clone"], output_dir=self.dirs["out"], scratch_dirs=[self.dirs["home"], self.dirs["tmp"]],
+            writable_dir=self.tmp / "writable", writable=["build"])
+
+    def sandbox(self, settings: dict | None = None):
+        return self.fake.Sandbox(settings or self.settings, True)
+
+    def test_a_write_through_the_link_reaches_the_external_folder_and_is_allowed(self) -> None:
+        box = self.sandbox()
+        self.assertTrue(box.allows(self.dirs["clone"] / "build" / "out.o"))
+        self.assertTrue(box.allows(self.dirs["out"] / "RESULTS.json"))
+
+    def test_the_replacement_of_the_link_is_judged_at_the_clone_and_refused(self) -> None:
+        box = self.sandbox()
+        self.assertFalse(box.allows(self.dirs["clone"] / "build", parent_only=True))
+
+    def test_every_tracked_path_a_new_file_and_git_stay_refused(self) -> None:
+        box = self.sandbox()
+        for path in (TRACKED, CHECKLIST, "new-file", ".git/config", "build2/x"):
+            with self.subTest(path):
+                self.assertFalse(box.allows(self.dirs["clone"] / path))
+
+    def test_a_path_in_no_allowance_is_refused(self) -> None:
+        self.assertFalse(self.sandbox().allows(self.tmp / "elsewhere"))
+
+    def test_the_previous_layout_is_refused_as_the_real_builds_refuse_it(self) -> None:
+        clone = self.dirs["clone"]
+        old = {"sandbox": {"filesystem": {"allowWrite": [str(self.dirs["out"]), str(clone / "build")],
+                                          "denyWrite": [str(clone), str(clone / ".git")]}}}
+        (clone / "build").unlink()
+        (clone / "build").mkdir()
+        self.assertFalse(self.sandbox(old).allows(clone / "build" / "out.o"))
+        self.assertTrue(self.sandbox(old).allows(self.dirs["out"] / "x"))
+
+    def test_a_denial_below_an_allowance_still_refuses(self) -> None:
+        settings = {"sandbox": {"filesystem": {"allowWrite": [str(self.tmp)], "denyWrite": [str(self.tmp / "clone")]}}}
+        box = self.sandbox(settings)
+        self.assertTrue(box.allows(self.tmp / "other"))
+        self.assertFalse(box.allows(self.dirs["clone"] / TRACKED))
+
+    def test_two_copies_made_by_the_copy_rule_do_not_meet(self) -> None:
+        (self.dirs["clone"] / "build" / "seed").write_text("s")
+        tmpdir = self.dirs["tmp"]
+        log: list[dict] = []
+        ctx = {"sandbox": self.sandbox(), "clone": self.dirs["clone"], "record": {"actions": log}}
+        with mock.patch.dict(os.environ, {"TMPDIR": str(tmpdir)}):
+            for index in range(2):
+                self.fake._act({"op": "copy_rule", "name": f"copy{index}", "path": f"build/only-{index}"}, ctx)
+        first, second = tmpdir / "copy0", tmpdir / "copy1"
+        self.assertEqual((first / "build" / "seed").read_text(), "s")
+        self.assertTrue((first / "build" / "only-0").exists())
+        self.assertFalse((second / "build" / "only-0").exists())
+        self.assertFalse((first / "build").is_symlink())
+        self.assertEqual(sorted(p.name for p in (self.tmp / "writable" / "build").iterdir()), ["seed"])
+        self.assertEqual(sorted(p.name for p in (self.dirs["clone"] / "build").iterdir()), ["seed"])
+
+
 class StaticProbeTests(unittest.TestCase):
     def test_a_missing_program_ends_at_the_unavailable_gate_naming_it(self) -> None:
         for gone in fr.REQUIRED_PROGRAMS:
@@ -261,10 +329,26 @@ class JudgeTests(unittest.TestCase):
         subprocess.run(["sh", "-n"], input=command.encode(), check=True)
         for name in ("rename", "delete", "tcp", "unix"):
             self.assertIn(f"PROBE {name} ", command)
-        for name in set(fr.PROBE_EXPECTED) - {"rename", "delete", "tcp", "unix"} | {"shm"}:
+        for name in set(fr.PROBE_EXPECTED) - {"rename", "delete", "tcp", "unix", "link"} | {"shm"}:
             self.assertIn(f"\nw {name} ", command)
+        self.assertIn("PROBE link ", command)
+        self.assertIn("rm -f /w/clone/build 2>/dev/null && mkdir /w/clone/build", command)
         self.assertIn("/w/clone/.git/config", command)
         self.assertIn("/var/tmp/m1", command)
+
+    def test_the_link_probe_replaces_the_link_where_nothing_refuses_it(self) -> None:
+        """The positive control of the link probe: without a sandbox the link is replaced, so only enforcement can make
+        the live probe's REFUSED."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dirs = sandbox_dirs(Path(tmp))
+            targets = fr.ProbeTargets(
+                clone_dir=dirs["clone"], output_dir=dirs["out"], tracked=TRACKED, checklist=CHECKLIST,
+                writable="build", stand_in_home=Path(tmp, "home"), socket_path=Path(tmp, "s"), tcp_port=9)
+            lines = fr.probe_command(targets, marker="m1").splitlines()
+            script = "\n".join([lines[0], next(line for line in lines if "PROBE link" in line)])
+            done = subprocess.run(["sh"], input=script.encode(), capture_output=True, check=True)
+            self.assertEqual(done.stdout.decode().strip(), "PROBE link WROTE")
+            self.assertFalse((dirs["clone"] / "build").is_symlink())
 
     def test_the_home_probe_writes_where_nothing_refuses_it(self) -> None:
         """The positive control of the home probe: without a sandbox, the line writes, so only enforcement can make
@@ -365,17 +449,14 @@ class LiveEnforcementTests(unittest.TestCase):
     def test_a_launch_without_an_enforcement_component_is_refused_before_any_model_call(self) -> None:
         self.assertEqual([p.name for p in self._probe("missing_component").probes], ["missing_component"])
 
-    def test_a_writable_location_below_the_denied_clone_root_needs_the_output_folder_as_working_directory(self) -> None:
-        """The precedence of D5 depends on the working directory: from a directory above the clone the CLI's own
-        working-directory grant outranks the allow, and the writable location is refused too. This pins the
-        reason ``tester_settings`` states the output folder as the working directory."""
-        target = self.dirs["clone"] / "build" / "probe"
+    def test_a_launch_from_above_the_clone_still_cannot_write_a_tracked_file(self) -> None:
+        """Release-side only: the working directory is the output folder in every launch the Controller makes; from a
+        directory above the clone the denial of the clone root must still hold."""
+        target = self.dirs["clone"] / TRACKED
         result, _ = run_claude(f"Run `echo hi > {target}; echo done` with the Bash tool and report the output.",
                                cwd=self.base, settings=self.settings)
         self._skip_without_a_model(result)
-        self.assertFalse(target.exists(), "the working-directory grant no longer outranks the allow: update D5")
-        self.assertFalse((self.dirs["clone"] / TRACKED).read_bytes() != ORIGINAL)
-
+        self.assertEqual(target.read_bytes(), ORIGINAL)
 
 if __name__ == "__main__":
     unittest.main()

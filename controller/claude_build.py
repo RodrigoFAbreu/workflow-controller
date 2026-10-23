@@ -479,7 +479,10 @@ class _Run:
                 problems.append(f"{path} exists")
         if self.host is not None and self.host.hits:
             problems.append(f"the sandbox reached the host's {', '.join(self.host.hits)} listener")
-        for path in (self.clone / "build" / "probe", self.out / "probe") if permitted else ():
+        link, external = self.clone / "build", self.writable_dir / "build"
+        if not link.is_symlink() or os.readlink(link) != str(external):
+            problems.append(f"the link {link} to {external} was replaced or removed")
+        for path in (external / "probe", self.out / "probe") if permitted else ():
             if not path.exists():
                 problems.append(f"the permitted write {path} did not happen")
         if problems:

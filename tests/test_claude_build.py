@@ -300,7 +300,10 @@ class FakeClaude:
         command = prompt.split("```sh\n", 1)[1].rsplit("\n```", 1)[0]
         if self.fault == "login":
             return [self.init(), {"type": "result", "is_error": True, "result": "Not logged in - please run /login"}]
-        (clone / "build" / "probe").write_bytes(b"")
+        if self.fault in ("link_replaced", "link_in_clone"):  # the link is removed and a directory made in its place
+            (clone / "build").unlink()
+            (clone / "build").mkdir()
+        (clone / "build" / "probe").write_bytes(b"")  # through the link: it lands in the external folder
         (out / "probe").write_bytes(b"")
         if self.fault == "host_write":
             (clone / "src.txt").write_bytes(b"changed\n")
@@ -315,6 +318,10 @@ class FakeClaude:
         lines = [f"PROBE {name} {want}" for name, want in fr.PROBE_EXPECTED.items()] + ["PROBE shm WROTE"]
         if self.fault == "missing_line":
             lines = [line for line in lines if "unix" not in line]
+        if self.fault == "link_wrote":
+            lines = [line.replace("link REFUSED", "link WROTE") for line in lines]
+        if self.fault == "link_missing_line":
+            lines = [line for line in lines if "link" not in line]
         if self.fault == "denied_write_reported":
             lines = [line.replace("home REFUSED", "home WROTE") for line in lines]
         output = "\n".join(lines)
@@ -446,6 +453,10 @@ class VerifyBuildTests(unittest.TestCase):
                 ("missing_line", "boundary", False, "unix: no result line"),
                 ("sandbox_failed", "boundary", True, "sandbox could not start"),
                 ("denied_write_reported", "boundary", False, "home: WROTE"),
+                ("link_replaced", "boundary", False, "was replaced or removed"),
+                ("link_in_clone", "boundary", False, "did not happen"),
+                ("link_wrote", "boundary", False, "link: WROTE, expected REFUSED"),
+                ("link_missing_line", "boundary", False, "link: no result line"),
                 ("tools", "boundary", False, "tool list"),
                 ("login", "boundary", True, "cannot reach a model"),
                 ("timeout", "launch", True, "did not finish"),

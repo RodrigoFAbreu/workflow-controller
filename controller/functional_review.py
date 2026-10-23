@@ -1097,8 +1097,8 @@ def launch_refusal(result_text: str) -> TesterUnavailable | None:
 @dataclasses.dataclass(frozen=True)
 class ProbeTargets:
     """The locations the probe command touches. ``tracked`` and ``checklist``
-    are existing files of the clone, ``writable`` a pre-created writable
-    directory below the clone root, ``stand_in_home`` a path in a stand-in home
+    are existing files of the clone, ``writable`` the name of a writable
+    location (the clone holds a link to its external folder), ``stand_in_home`` a path in a stand-in home
     or config location, ``socket_path`` a Unix socket the host listens on and
     ``tcp_port`` a TCP port the host listens on."""
 
@@ -1117,7 +1117,7 @@ class ProbeTargets:
 #: caller asserts the host path stays absent.
 PROBE_EXPECTED: Mapping[str, str] = {
     "tracked": "REFUSED", "checklist": "REFUSED", "git": "REFUSED", "newfile": "REFUSED", "rename": "REFUSED",
-    "delete": "REFUSED", "writable": "WROTE", "output": "WROTE", "home": "REFUSED", "tmp": "REFUSED",
+    "delete": "REFUSED", "writable": "WROTE", "link": "REFUSED", "output": "WROTE", "home": "REFUSED", "tmp": "REFUSED",
     "vartmp": "REFUSED", "tcp": "BLOCKED", "unix": "BLOCKED",
 }
 _PROBE_LINE_RE = re.compile(r"^PROBE (?P<name>[a-z]+) (?P<result>[A-Z]+)$", re.MULTILINE)
@@ -1127,7 +1127,8 @@ def probe_command(targets: ProbeTargets, *, marker: str) -> str:
     """The one shell command the probe turn runs (D10): by absolute path, a
     write to a tracked file, the checklist, a file in ``.git``, a new file
     beside a tracked one, a rename over and a deletion of a tracked file, a
-    write to the writable location and to the output folder, a write to a
+    write to the writable location (through its link) and an attempt to replace
+    that link by a directory, a write to the output folder, a write to a
     stand-in home and to ``/tmp`` and ``/var/tmp``, a TCP connection and a
     connection to a host Unix socket. Every line is ``PROBE <name> <result>``."""
     clone, out = targets.clone_dir, targets.output_dir
@@ -1141,6 +1142,8 @@ def probe_command(targets: ProbeTargets, *, marker: str) -> str:
         f"w git {q(str(clone / '.git' / 'config'))}",
         f"w newfile {q(str(clone / 'probe-new-file'))}",
         f"w writable {q(str(clone / targets.writable / 'probe'))}",
+        f"if rm -f {q(str(clone / targets.writable))} 2>/dev/null && mkdir {q(str(clone / targets.writable))} 2>/dev/null; "
+        f'then echo "PROBE link WROTE"; else echo "PROBE link REFUSED"; fi',
         f"w output {q(str(out / 'probe'))}",
         f"w home {q(str(targets.stand_in_home / '.config' / 'probe'))}",
         f"w tmp {q('/tmp/' + marker)}",

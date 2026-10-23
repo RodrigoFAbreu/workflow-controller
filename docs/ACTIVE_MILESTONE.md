@@ -12,7 +12,7 @@ Pull request title: `fix: lay out the functional tester's sandbox so Claude Code
 | Checkpoint | State |
 | --- | --- |
 | CP1 -- the layout: settings invariant, external folders with links, the walk | complete (narrow checks green: sandbox, enforcement, review and claude-build tests) |
-| CP2 -- the probes, the fake tester and the verification | pending |
+| CP2 -- the probes, the fake tester and the verification | complete (narrow checks green: enforcement, claude-build, sandbox, review and lifecycle tests) |
 | CP3 -- live measurement on the installed Claude builds | pending |
 | CP4 -- documentation, roadmap and the whole suite | pending |
 
@@ -21,4 +21,4 @@ Pull request title: `fix: lay out the functional tester's sandbox so Claude Code
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-sandbox-layout` for the next checkpoint (CP2). After C10f: #126, **CU3** and **A2** (see `docs/ROADMAP.md`).
+Run `/milestone-implement workflow-controller-sandbox-layout` for the next checkpoint (CP3). After C10f: #126, **CU3** and **A2** (see `docs/ROADMAP.md`).

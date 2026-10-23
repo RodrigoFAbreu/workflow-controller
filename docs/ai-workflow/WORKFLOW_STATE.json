@@ -23761,7 +23761,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -23909,12 +23909,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 24,
-      "last_transition": "2026-10-23T21:04:58.678723+00:00",
+      "state_revision": 25,
+      "last_transition": "2026-10-23T21:30:34.887730+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -24049,6 +24049,48 @@
               "review_content_id": "f91ce967b3be82da596efa20d81a0cbb3fe503315b3e91476985c75c76a0f91d",
               "verdict": "REVISE",
               "at": "2026-10-23T18:52:07Z"
+            }
+          ]
+        },
+        "F-49b569933de1": {
+          "digest": "49b569933de14c7ccefc073fa7e47ffd80c1b416cb0c963b5e0065a0463b114b",
+          "text": "**O1:** `exclude_writable_links` appends to an existing `info/exclude` without checking that it ends in a newline. The implementer already noted this. A one-line guard would close it: add `b\"\\n\"` when `kept` is non-empty and does not end in one.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "376c246a93fd18ca5a8345e0b186ae1aff4fb2e6881511eb6a708089bbd84289",
+              "verdict": "REVISE",
+              "at": "2026-10-23T21:30:34.887730+00:00"
+            }
+          ]
+        },
+        "F-c551f06dbdcf": {
+          "digest": "c551f06dbdcfe4b8af5a2dc33c1368945b235de2792ba20ca0b4aeb39fb9f931",
+          "text": "**O2:** In `tests/test_claude_build.py`, the `link_in_clone` fault does exactly what `link_replaced` does (unlink, then mkdir). It only asserts a different substring of the same failure, so the separate \"link write lands in the clone\" stub from CP2's Done-when is not really exercised on its own. One way to separate them: have `link_in_clone` keep the link and write the probe to a new directory in the clone, so it fails only on \"did not happen\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "376c246a93fd18ca5a8345e0b186ae1aff4fb2e6881511eb6a708089bbd84289",
+              "verdict": "REVISE",
+              "at": "2026-10-23T21:30:34.887730+00:00"
+            }
+          ]
+        },
+        "F-bacd7f2ba9b6": {
+          "digest": "bacd7f2ba9b622e5eb3759b3489cb62079b007f4f5fc0ba802339277e44ba60e",
+          "text": "**O3:** The first two `RunTest` tests of `tests/test_functional_sandbox.py` failed once under the 8-shard runner and passed on replay (see Summary). That is the behaviour of a load flake in the fake-tester launch. It is worth a follow-up issue if it recurs, and it should be named in `TEST_RESULTS.md` when it does.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "376c246a93fd18ca5a8345e0b186ae1aff4fb2e6881511eb6a708089bbd84289",
+              "verdict": "REVISE",
+              "at": "2026-10-23T21:30:34.887730+00:00"
             }
           ]
         }

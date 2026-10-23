@@ -1977,11 +1977,11 @@ def state_transaction(repo_root: Path, mutator, *, path: Path = DEFAULT_STATE_PA
     the publish raises (any `BaseException`), before the exception
     propagates -- the undo of a side effect the mutator or hook left outside
     the state file, so no other writer can interleave between the failure
-    and the undo. The original exception propagates;
-    an `Exception` raised by `on_failure` is suppressed, but a
-    `BaseException` that is not an `Exception` (`KeyboardInterrupt`,
-    `SystemExit`) is not -- it propagates and replaces the original, so an
-    operator interrupt during an undo is never hidden. Never called on
+    and the undo. The original exception propagates unless `on_failure`
+    raises a `BaseException` that is not an `Exception` (`KeyboardInterrupt`,
+    `SystemExit`), which then replaces it, so an operator interrupt during
+    an undo is never hidden;
+    an `Exception` raised by `on_failure` is suppressed. Never called on
     success."""
     full_path = repo_root / path
     with state_lock(repo_root):
@@ -3624,6 +3624,10 @@ def acquire_plan_approval_guard(
       the journal's current `owner_token`): the guard was provably left by
       a session whose ownership has already rotated away -- reclaimed with
       no authorization, then acquisition is retried exactly once.
+    - **`role="owner"`, a `step="takeover"` guard carrying the same
+      token** (takeover-fence, #82): refused, with a message of its own;
+      a takeover's guard is not the owner's to reclaim, and a leftover
+      one is cleared by re-running the takeover.
     - **`role="owner"`, same token**: this session's own leftover guard
       from an interrupted earlier step. Reclaimed and retried once; the
       window's first act is `assert_owner`, so a stale belief about
@@ -3687,6 +3691,21 @@ def _acquire_plan_approval_guard_locked(
     reclaim = False
     if held.get("holder_owner_token") != current_owner_token:
         reclaim = True                     # superseded epoch
+    elif (role == "owner" and held.get("step") == "takeover"
+          and held.get("holder_owner_token") == holder_owner_token):
+        # takeover-fence (#82): see `_acquire_guard_locked` -- a takeover's
+        # guard carries the observed owner token, so it is not this
+        # session's own leftover.
+        raise PlanApprovalGuardHeldError(
+            f"the plan-approval mutation guard (lease {held.get('lease_id')!r}) is a takeover's, "
+            f"and it carries this session's own owner token: a takeover of this transaction is "
+            f"in progress, or was left by one that died before it rotated the journal, so this "
+            f"session must not enter its own window. Let a running takeover finish (this "
+            f"session's next owner assertion then refuses); to clear a leftover one, re-run it: "
+            f"`workflow_state.plan_approval_takeover_evidence`, then "
+            f"`workflow_state.take_over_plan_approval_transaction` with the takeover literal and "
+            f"the guard-release literal "
+            f"{plan_approval_guard_release_authorization_literal(held)!r}")
     elif role == "owner" and held.get("holder_owner_token") == holder_owner_token:
         reclaim = True                     # this session's own leftover guard
     elif role == "takeover":
@@ -6349,6 +6368,11 @@ def acquire_guard(repo_root: Path, work_item_id: str, *, holder_owner_token: str
       this same guard. Reclaimed with no authorization, then acquisition
       is retried exactly **once**. Deliberately not narrowed to a
       worktree, so no post-takeover recovery is stranded.
+    - **`role="owner"`, a `step="takeover"` guard carrying the caller's
+      own token and worktree** (takeover-fence, #82): refused, with a
+      message of its own. A takeover run from the owner's worktree
+      publishes exactly that shape, and it is not the owner's to
+      reclaim; a leftover one is cleared by re-running the takeover.
     - **`role="owner"`, same token *and* same worktree**: the caller's
       own leftover guard from an interrupted earlier step. Reclaimed and
       retried once; the window's first act is `assert_claim_owner`, so a
@@ -6421,6 +6445,22 @@ def _acquire_guard_locked(repo_root: Path, work_item_id: str, *, body: dict,
         # construction only when its token happens to differ from
         # `current`, which is vacuously false when both are `None`).
         reclaim = True
+    elif (role == "owner" and held.get("step") == "takeover"
+          and held.get("holder_owner_token") == holder_owner_token
+          and held.get("holder_worktree_git_dir") == _worktree_git_dir(repo_root)):
+        # takeover-fence (#82): a takeover publishes its guard carrying the
+        # observed owner token, from the worktree that runs it -- so it is
+        # indistinguishable from this session's own leftover by token and
+        # worktree alone. It is not this session's to reclaim.
+        raise CheckpointOwnershipUnavailableError(
+            f"{work_item_id!r}'s mutation guard (lease {held.get('lease_id')!r}) is a takeover's, "
+            f"and it carries this session's own owner token: a takeover of this claim is in "
+            f"progress, or was left by one that died before it rotated the claim, so this "
+            f"session must not enter its own window. Let a running takeover finish (this "
+            f"session's next ownership check then refuses); to clear a leftover one, re-run it: "
+            f"`workflow_state.takeover_evidence`, then `workflow_state.take_over_claim` with the "
+            f"takeover literal and the guard-release literal "
+            f"{guard_release_authorization_literal(held)!r}")
     elif (role == "owner" and held.get("holder_owner_token") == holder_owner_token
           and held.get("holder_worktree_git_dir") == _worktree_git_dir(repo_root)):
         reclaim = True                     # this worktree's own leftover guard

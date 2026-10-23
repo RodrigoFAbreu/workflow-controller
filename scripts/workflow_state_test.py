@@ -9602,6 +9602,107 @@ class TestCheckpointMutationGuard(unittest.TestCase):
                                  checkpoint_id="CP", step="1d", step_class="bogus", now="t2")
 
 
+class TestTakeoverGuardIsNotTheOwnersToReclaim(unittest.TestCase):
+    """takeover-fence (#82, `D-Handoff`): a takeover publishes its guard
+    carrying the observed owner token in the worktree that runs it, so the
+    live owner in that worktree must not be able to reclaim it as its own
+    leftover. Each interleaving test makes its before-rotation observation
+    and its after-rotation one in the same test, at known instants, by
+    wrapping the primitive the takeover calls."""
+
+    def _takeover(self, repo, now="t2"):
+        evidence = ws.takeover_evidence(repo.root, "wi")
+        literal = ws.takeover_authorization_literal("wi", evidence, "CP")
+        guard = evidence.get("guard")
+        release = ws.guard_release_authorization_literal(guard) if guard else None
+        return ws.take_over_claim(repo.root, "wi", "CP", now=now, user_authorization=literal,
+                                  evidence=evidence, guard_release_authorization=release)
+
+    def _enter(self, repo, token, step, step_class, ran):
+        with ws.owner_mutation(repo.root, "wi", token, checkpoint_id="CP", step=step,
+                               step_class=step_class, now="t9"):
+            ran.append(step)
+
+    def test_owner_cannot_enter_during_a_takeover_and_is_fenced_after_the_rotation(self):
+        for step, step_class in (("1d", ws.ORDINARY), ("1f-commit", ws.DESTRUCTIVE)):
+            with self.subTest(step=step), ScratchRepo() as repo:
+                token = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")["owner_token"]
+                real = ws._publish_claim_replacing
+                seen = {}
+
+                def wrapped(*args, **kwargs):
+                    ran = []
+                    try:
+                        self._enter(repo, token, step, step_class, ran)
+                    except Exception as exc:  # noqa: BLE001 -- the class is asserted below
+                        seen["before"] = exc
+                    seen["before_ran"] = ran
+                    seen["guard_before"] = ws.read_guard(repo.root, "wi")
+                    result = real(*args, **kwargs)
+                    ran = []
+                    try:
+                        self._enter(repo, token, step, step_class, ran)
+                    except Exception as exc:  # noqa: BLE001
+                        seen["after"] = exc
+                    seen["after_ran"] = ran
+                    return result
+
+                with mock.patch.object(ws, "_publish_claim_replacing", wrapped):
+                    record = self._takeover(repo)
+                self.assertIsInstance(seen.get("before"), ws.CheckpointOwnershipUnavailableError)
+                self.assertIn("takeover", str(seen["before"]))
+                self.assertNotIn("foreign", str(seen["before"]))
+                self.assertEqual(seen["before_ran"], [])
+                self.assertEqual(seen["guard_before"]["step"], "takeover")
+                self.assertIsInstance(seen.get("after"), ws.CheckpointOwnershipStateMismatchError)
+                self.assertEqual(seen["after_ran"], [])
+                self.assertNotEqual(record["owner_token"], token)
+                self.assertIsNone(ws.read_guard(repo.root, "wi"))
+
+    def test_leftover_takeover_guard_names_the_route_and_the_route_clears_it(self):
+        with ScratchRepo() as repo:
+            token = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")["owner_token"]
+            # A takeover that died between publishing its guard and rotating.
+            dead = ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                    step="takeover", step_class=ws.ORDINARY, now="t2",
+                                    role="takeover")
+            ran = []
+            with self.assertRaises(ws.CheckpointOwnershipUnavailableError) as ctx:
+                self._enter(repo, token, "1d", ws.ORDINARY, ran)
+            self.assertEqual(ran, [])
+            message = str(ctx.exception)
+            self.assertIn("take_over_claim", message)
+            self.assertIn(ws.guard_release_authorization_literal(dead), message)
+            self.assertEqual(ws.read_guard(repo.root, "wi")["lease_id"], dead["lease_id"])
+            record = self._takeover(repo, now="t3")
+            self.assertIsNone(ws.read_guard(repo.root, "wi"))
+            self.assertNotEqual(record["owner_token"], token)
+            self._enter(repo, record["owner_token"], "1d", ws.ORDINARY, ran)
+            self.assertEqual(ran, ["1d"])
+
+    def test_same_token_other_worktree_still_gets_the_foreign_worktree_message(self):
+        with ScratchRepo() as repo:
+            token = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")["owner_token"]
+            lease = ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                     step="takeover", step_class=ws.ORDINARY, now="t2",
+                                     role="takeover")
+            wt2 = repo.worktree("b")
+            with self.assertRaises(ws.CheckpointOwnershipUnavailableError) as ctx:
+                ws.acquire_guard(wt2, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                 step="1d", step_class=ws.ORDINARY, now="t3")
+            self.assertIn("presenting the claim's token is not being the holder", str(ctx.exception))
+            ws.release_guard(repo.root, "wi", lease)
+
+    def test_non_takeover_guard_of_the_same_token_is_still_reclaimed(self):
+        with ScratchRepo() as repo:
+            token = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")["owner_token"]
+            ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                             step="1d", step_class=ws.ORDINARY, now="t2")
+            again = ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                     step="1f-commit", step_class=ws.DESTRUCTIVE, now="t3")
+            ws.release_guard(repo.root, "wi", again)
+
+
 class TestGuardFailureSurfaceItem372(unittest.TestCase):
     """Item 372: the mutation guard's own failure surface, asserted since
     the guard is itself a new shared object. Parts (a)-(e) and (g) below;
@@ -18912,6 +19013,16 @@ class TestStateTransactionOnFailure(unittest.TestCase):
         doc = ws.state_transaction.__doc__
         self.assertIn("an `Exception` raised by `on_failure` is suppressed", doc)
         self.assertNotIn("one raised by\n    `on_failure` is suppressed", doc)
+
+    def test_the_docstring_clause_carries_its_own_exception(self):
+        doc = " ".join(ws.state_transaction.__doc__.split())
+        self.assertIn(
+            "The original exception propagates unless `on_failure` raises a "
+            "`BaseException` that is not an `Exception` (`KeyboardInterrupt`, "
+            "`SystemExit`), which then replaces it, so an operator interrupt during "
+            "an undo is never hidden; an `Exception` raised by `on_failure` is "
+            "suppressed.", doc)
+        self.assertNotIn("The original exception propagates; an `Exception`", doc)
 
     def test_an_interrupt_raised_by_on_failure_propagates_and_replaces_the_original(self):
         with ScratchRepo() as repo:

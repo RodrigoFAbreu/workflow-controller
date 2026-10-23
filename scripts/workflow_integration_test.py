@@ -60,6 +60,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -1452,8 +1453,11 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # `$ARGUMENTS` (D-Args); the five rows below are first recorded hashes -- intentional content changes.
     "adopt-gate-policy.md": "c3787bfc199956d4ffb57500448da6ef2aaf613f51d696d4785a6764a48ab247",
     "request-plan-amendment.md": "ffdc4d7901132022ac74524bd9fabd7354ee6bc96082d3836276fe25b16fbd15",
-    "resume-implementation.md": "1da12ec1248b71a9f614f0dbb66f0e6652e78e2652948e4463703fe567e6368e",
-    "retire-legacy-work-item.md": "71e14a3e363ebdd0a31473424fbd44adadfff97bde0250bd359fb37925202625",
+    # workflow-2.18.4 (review-followups-4, CP2): step 3 of the next two rows says the unknown-id
+    # refusal is the same `...WrongPhaseError` with the message "<id> names no work item" --
+    # intentional content change.
+    "resume-implementation.md": "cc9f6264706f96c4e769410e7346e15de8e759690a1ba908f93fc5b6ad0e55f0",
+    "retire-legacy-work-item.md": "d6c6586626714156193455d01609e50dd3a0ac8b63a669a5afa0e907f7736a8f",
     "prepare-review.md": "de05a427f90087dd56703162e56fb388d86e74f090c95d6953590884d18bda1a",
 }
 
@@ -5586,6 +5590,94 @@ class TestPlanApprovalMutationGuardAndTakeover(unittest.TestCase):
                 )
             self.assertEqual(ws.read_plan_approval_guard(repo.root), live)
 
+    # -- takeover-fence (#82, `D-Handoff`) -----------------------------------
+
+    def _takeover_journal(self, repo, now="t9"):
+        evidence = ws.plan_approval_takeover_evidence(repo.root)
+        guard = evidence["guard"]
+        release = (ws.plan_approval_guard_release_authorization_literal(guard)
+                   if guard is not None else None)
+        return ws.take_over_plan_approval_transaction(
+            repo.root, work_item_id="wi", now=now, evidence=evidence,
+            user_authorization=ws.plan_approval_takeover_authorization_literal(evidence),
+            guard_release_authorization=release,
+        )
+
+    def test_owner_cannot_enter_during_a_takeover_and_is_fenced_after_the_rotation(self):
+        for step in ("step-5-declaration-pin", "step-6.2-stage-ordinary"):
+            with self.subTest(step=step), h.ScratchRepo() as repo:
+                journal = self._open(repo)
+                token = journal["owner_token"]
+                real = ws._replace_plan_approval_journal
+                seen = {}
+
+                def attempt(key):
+                    ran = []
+                    try:
+                        with ws.plan_approval_guarded_mutation(
+                            repo.root, owner_token=token, step=step, now="t5",
+                        ):
+                            ran.append(step)
+                    except Exception as exc:  # noqa: BLE001 -- the class is asserted below
+                        seen[key] = exc
+                    seen[key + "_ran"] = ran
+
+                def wrapped(*args, **kwargs):
+                    attempt("before")
+                    seen["guard_before"] = ws.read_plan_approval_guard(repo.root)
+                    result = real(*args, **kwargs)
+                    attempt("after")
+                    return result
+
+                with mock.patch.object(ws, "_replace_plan_approval_journal", wrapped):
+                    new_token = self._takeover_journal(repo)
+                self.assertIsInstance(seen.get("before"), ws.PlanApprovalGuardHeldError)
+                self.assertIn("takeover", str(seen["before"]))
+                self.assertEqual(seen["before_ran"], [])
+                self.assertEqual(seen["guard_before"]["step"], "takeover")
+                self.assertIsInstance(seen.get("after"), ws.PlanApprovalOwnershipError)
+                self.assertEqual(seen["after_ran"], [])
+                self.assertNotEqual(new_token, token)
+                self.assertIsNone(ws.read_plan_approval_guard(repo.root))
+
+    def test_leftover_takeover_guard_names_the_route_and_the_route_clears_it(self):
+        with h.ScratchRepo() as repo:
+            journal = self._open(repo)
+            token = journal["owner_token"]
+            # A takeover that died between publishing its guard and rotating.
+            dead = ws.acquire_plan_approval_guard(
+                repo.root, holder_owner_token=token, step="takeover", now="t2", role="takeover",
+            )
+            with self.assertRaises(ws.PlanApprovalGuardHeldError) as ctx:
+                with ws.plan_approval_guarded_mutation(
+                    repo.root, owner_token=token, step="step-5-declaration-pin", now="t3",
+                ):
+                    self.fail("must not enter its own window against a takeover's guard")
+            message = str(ctx.exception)
+            self.assertIn("take_over_plan_approval_transaction", message)
+            self.assertIn(ws.plan_approval_guard_release_authorization_literal(dead), message)
+            self.assertEqual(ws.read_plan_approval_guard(repo.root)["lease_id"], dead["lease_id"])
+            new_token = self._takeover_journal(repo, now="t4")
+            self.assertIsNone(ws.read_plan_approval_guard(repo.root))
+            self.assertNotEqual(new_token, token)
+            with ws.plan_approval_guarded_mutation(
+                repo.root, owner_token=new_token, step="step-5-declaration-pin", now="t5",
+            ):
+                pass
+
+    def test_non_takeover_guard_of_the_same_token_is_still_reclaimed(self):
+        with h.ScratchRepo() as repo:
+            journal = self._open(repo)
+            ws.acquire_plan_approval_guard(
+                repo.root, holder_owner_token=journal["owner_token"],
+                step="step-5-declaration-pin", now="t2",
+            )
+            again = ws.acquire_plan_approval_guard(
+                repo.root, holder_owner_token=journal["owner_token"],
+                step="step-6.2-stage-ordinary", now="t3",
+            )
+            ws.release_plan_approval_guard(repo.root, again)
+
     # -- guarded_mutation fixed window -------------------------------------
 
     def test_guarded_mutation_happy_path_mutates_advances_progress_and_releases(self):
@@ -8625,6 +8717,19 @@ class TestHarnessNeutralCommandBodies(unittest.TestCase):
             text = " ".join(_command_text(filename).split())
             for needle in needles + (self.PINNED, self.NEVER_INVOKE):
                 with self.subTest(filename=filename, needle=needle):
+                    self.assertIn(needle, text)
+
+    def test_the_unknown_id_refusal_is_described_in_step_three(self):
+        # workflow-2.18.4 (review-followups-4, CP2): both step 3s say the same `...WrongPhaseError`
+        # also covers an id that is not a key of `work_items`.
+        for filename, error in (("retire-legacy-work-item.md", "LegacyRetirementWrongPhaseError"),
+                                ("resume-implementation.md", "ResumeImplementationWrongPhaseError")):
+            text = " ".join(_command_text(filename).split())
+            with self.subTest(filename=filename):
+                self.assertIn(f"The same `{error}` is also raised, with the message "
+                              '"<id> names no work item", for an id that is not a key of `work_items`',
+                              text)
+                for needle in self.USER_ONLY[filename] + (self.PINNED, self.NEVER_INVOKE):
                     self.assertIn(needle, text)
 
     def test_the_history_moved_out_of_approve_review_into_the_contract(self):

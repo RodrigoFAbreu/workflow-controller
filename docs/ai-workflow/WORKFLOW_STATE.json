@@ -22679,7 +22679,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -22797,10 +22797,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
-        "approved_review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+        "reviewed_bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+        "approved_review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
         "review_content_manifest": [
           {
             "path": "controller/__init__.py",
@@ -22812,7 +22812,7 @@
             "path": "controller/claude_build.py",
             "exists": true,
             "mode": "100644",
-            "blob": "8651a1984e97e42057460f591db7f1965692c257"
+            "blob": "6ec319c9b5f991a52b43873b0f5d2ef37d3f1338"
           },
           {
             "path": "controller/cli.py",
@@ -22872,7 +22872,7 @@
             "path": "docs/guide/commands.md",
             "exists": true,
             "mode": "100644",
-            "blob": "2b90320ce57e4a3c5fc03d46e1ac7baa95f997c4"
+            "blob": "b248376ce83ebec8ead77d8cd19c2ace71f232de"
           },
           {
             "path": "docs/guide/development.md",
@@ -22896,7 +22896,7 @@
             "path": "tests/test_claude_build.py",
             "exists": true,
             "mode": "100644",
-            "blob": "9405f1a08bb5d165059ad6ece6b4ad8ea6ec3f3b"
+            "blob": "09002a5a6c8e3223910467b5e98e50460e82d26f"
           },
           {
             "path": "tests/test_functional_enforcement.py",
@@ -22911,11 +22911,11 @@
             "blob": "8e5dd4b613473e7631918683cff17d50767c78c1"
           }
         ],
-        "reviewed_content_commit": "d47eacbb743a98a3c4ebf22a8bcac89ca605d70d",
+        "reviewed_content_commit": "565f7a241144ec61575f8b0c5a11f705c0263991",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-22T20:54:02Z",
+        "recorded_at": "2026-10-23T00:03:29Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -22945,24 +22945,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+            "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
             "ledger": {
               "local": {
-                "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+                "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
                 "verdict": "APPROVE",
-                "round": 3,
-                "verdict_sha256": "c6a5ce088c92aa425b0fea6b0064da16e5929873cb1256532b7e89da16c75ab7",
-                "ledger_entry_sha256": "ec344f9b2ec0dfe0089e60fc93a19dd19dd31572f7f0657821ffb015bbd932b3",
+                "round": 5,
+                "verdict_sha256": "121abd3bbce4797c8526b4f1ca6da76e13bfe50a544f54112a072a70f465daa7",
+                "ledger_entry_sha256": "a4abbf39f780433e08351213c514ff720c351a1842aeb6dd839bfe5cf3e81fc7",
                 "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "80693cea17087a68f70886e52f4b923d9054d423fc96ad5c503d5bababf12766",
+                "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
                 "verdict": "APPROVE",
-                "round": 3,
-                "verdict_sha256": "43f4407ef63d27ab2354133ce59f945f14c8be187c245197830a09e86da76471",
-                "ledger_entry_sha256": "41a27023c7e2646e5b8916ee34bdb1e38c82f0437b7818bcf611353ec022d535",
-                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "round": 5,
+                "verdict_sha256": "828e5b0a7b91fa18a670291a9da4bf71b7deb9d2a402a703c146353896bb3833",
+                "ledger_entry_sha256": "386670042f1bee889ab6452b847bc42c785a9565bea66d40188ee502e7caf6dc",
+                "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -22972,7 +22972,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-10-22T20:54:02Z",
+          "evaluated_at": "2026-10-23T00:03:29Z",
           "workflow_release": "2.18.2"
         }
       },
@@ -23006,12 +23006,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 4,
-          "external": 3
+          "local": 5,
+          "external": 4
         }
       },
-      "state_revision": 35,
-      "last_transition": "2026-10-22T23:09:08.318980+00:00",
+      "state_revision": 38,
+      "last_transition": "2026-10-23T00:03:29Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -23385,20 +23385,84 @@
               "at": "2026-10-22T21:26:23Z"
             }
           ]
+        },
+        "F-bde44c4fdaff": {
+          "digest": "bde44c4fdaffed22b6c38e8c0884fb555a8a6d10a7119ac70bf92c87b7bd6af5",
+          "text": "**O1 — A non-`TesterUnavailable` failure during `_Run` construction still reaches the CLI as a traceback.**\n  `verify_build` turns only `fr.TesterUnavailable` into `BuildNotVerified`. An `OSError` such as the `ENOSPC` that I1\n  injects on the `wcv-*` `mkdtemp` now leaves nothing behind, but it propagates out of `cmd_verify_claude` and `main`\n  (which catches only `ControllerError`) as a Python traceback rather than the documented exit 20. No record is\n  written, so admission stays closed. Only the presentation is off. This is the same as before the fix.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T23:11:33Z"
+            }
+          ]
+        },
+        "F-41b605f07638": {
+          "digest": "41b605f076387912f1037e366d4bc2d3eb6406ab5cd328d4bb0e040b4238fe29",
+          "text": "**O2 — Sandbox-start errors can still misname an observed host effect** (external round 3 O1, not addressed).\n  `need_sandbox` runs before `host_effects` in `boundary` and `retry`, so a host effect combined with the\n  sandbox-start error is reported as \"nothing was probed\". Admission stays closed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T23:11:33Z"
+            }
+          ]
+        },
+        "F-b34a79e9d38f": {
+          "digest": "b34a79e9d38f01ebea7dae86da81041176b0f1619552da2e893d06727e5fa97d",
+          "text": "**O3 — The bundle's `TEST_RESULTS.md` and `IMPLEMENTATION_SUMMARY.md` stop at revision 1/2.** `TEST_RESULTS.md`\n  still reports head `e5d5719` and 72 targeted tests, and `IMPLEMENTATION_SUMMARY.md` has no section for the\n  revision 3-5 fixes (`fb380fd`, `d47eacb`, `71cc23c`, `565f7a2`). A reviewer has to rebuild the fix history from\n  `COMMITS.txt` and `CHANGES_SINCE_REVIEW.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T23:11:33Z"
+            }
+          ]
+        },
+        "F-e98b46797369": {
+          "digest": "e98b46797369a32df5d412bdd4cf4e9637b6cbce8d6f10290706ebf96bd4e137",
+          "text": "**O1 — Existing diagnostic limitation remains.** Boundary and retry check sandbox-start errors before host effects. A simultaneous host write can therefore be misreported as “nothing was probed.” Admission still fails closed. O2 is resolved by the TMPDIR documentation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-23T00:01:18Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+        "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "ce74e620ffb04f020b5c9f9b335f74fed48cb90dd9baea084abc520fc5065159",
+          "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-10-22T21:19:38Z",
-          "verdict_sha256": "0fb628d90ea4a9bd682665c373c867886dc6dface08de0119839011729ab9ef5",
+          "round": 5,
+          "completed_at": "2026-10-22T23:11:33Z",
+          "verdict_sha256": "121abd3bbce4797c8526b4f1ca6da76e13bfe50a544f54112a072a70f465daa7",
           "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-23T00:01:18Z",
+          "verdict_sha256": "828e5b0a7b91fa18a670291a9da4bf71b7deb9d2a402a703c146353896bb3833",
+          "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

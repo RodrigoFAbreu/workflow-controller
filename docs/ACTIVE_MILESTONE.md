@@ -35,5 +35,5 @@ Deferred follow-ups, not conditions of acceptance:
 
 ## Next action
 
-After the owner merges pull request #128 and 1.19.0 is released, run `/milestone-plan` for the next milestone in
-`docs/ROADMAP.md`: **C10f** (#129), then **A2** (the backlog).
+Controller 1.19.0 is released (C10e, pull request #128). Next, in order (see `docs/ROADMAP.md`): the move to Workflow 2.18.5, then
+`/milestone-plan` for **C10f** (#129), then #126, **CU3** (more than 8 `review-follow-up` issues are open) and **A2** (the backlog).

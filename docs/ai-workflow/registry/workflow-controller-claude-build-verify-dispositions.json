@@ -1,0 +1,122 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-claude-build-verify",
+ "dispositions": {
+  "F-00308765a77c": {
+   "disposition": "fixed",
+   "note": "controller/claude_build.py:90 writes the record with runtime.write_private_json_nofollow (0600, refuses symlinks)"
+  },
+  "F-07b6ecdfbd9b": {
+   "disposition": "fixed",
+   "note": "controller/claude_build.py:90 uses runtime.write_private_json_nofollow, private atomic write"
+  },
+  "F-08372d222382": {
+   "disposition": "dropped",
+   "reason": "bundle narrative files are regenerated each round and carry no shipped content"
+  },
+  "F-1a73475c6ffe": {
+   "disposition": "dropped",
+   "reason": "plan decided exact match; failure mode is safe (inconclusive); live acceptance covers it; Bash calls are keyed by id"
+  },
+  "F-3fa8a75acd69": {
+   "disposition": "fixed",
+   "note": "docs/guide/commands.md:192 documents the wcf-* TMPDIR under XDG_RUNTIME_DIR or /tmp"
+  },
+  "F-41b605f07638": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#132"
+  },
+  "F-47fe60b43d4c": {
+   "disposition": "dropped",
+   "reason": "plan decided exact match; safe failure; live acceptance covers it"
+  },
+  "F-4e64196fb2b4": {
+   "disposition": "fixed",
+   "note": "565f7a2 releases the TMPDIR when _Run construction fails (claude_build.py:335-341)"
+  },
+  "F-52b1d2ff28f2": {
+   "disposition": "dropped",
+   "reason": "wording only: refusal still names build_changed and nothing is recorded"
+  },
+  "F-5459285fd593": {
+   "disposition": "dropped",
+   "reason": "bundle narrative files are regenerated each round and carry no shipped content"
+  },
+  "F-580b818732a9": {
+   "disposition": "dropped",
+   "reason": "wording only: refusal still names build_changed and nothing is recorded"
+  },
+  "F-589622b737e2": {
+   "disposition": "fixed",
+   "note": "docs/guide/commands.md:192 now names the wcf-* TMPDIR and the host refusal"
+  },
+  "F-5efb42ee6d7e": {
+   "disposition": "dropped",
+   "reason": "bundle narrative files are regenerated each round and carry no shipped content"
+  },
+  "F-7b92aa4dc35e": {
+   "disposition": "dropped",
+   "reason": "bundle narrative files are regenerated each round and carry no shipped content"
+  },
+  "F-941cdcae267a": {
+   "disposition": "dropped",
+   "reason": "wording only; fail-closed, exit 20, no record; operator reruns"
+  },
+  "F-94d5cf8f1452": {
+   "disposition": "dropped",
+   "reason": "wording only; fail-closed, exit 20, no record; operator reruns"
+  },
+  "F-9e109057f52f": {
+   "disposition": "dropped",
+   "reason": "plan is a historical record; the layout already keeps the record outside the sandbox"
+  },
+  "F-a11f733a05b8": {
+   "disposition": "fixed",
+   "note": "docs/guide/development.md:30 now describes the .credentials.json copy and no API-key variables"
+  },
+  "F-b34a79e9d38f": {
+   "disposition": "dropped",
+   "reason": "bundle narrative files are regenerated each round and carry no shipped content"
+  },
+  "F-bde44c4fdaff": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#133"
+  },
+  "F-bfe9f980e2ba": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#133"
+  },
+  "F-c032af117c06": {
+   "disposition": "fixed",
+   "note": "controller/cli.py passes the resolved real path to verify_build; the digest printed is the one probed"
+  },
+  "F-c2f2b4bed092": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#132"
+  },
+  "F-cd547180f75a": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#133"
+  },
+  "F-d4de289b3f56": {
+   "disposition": "dropped",
+   "reason": "plan is a historical record; the safe behaviour is already what the code does"
+  },
+  "F-d8421c687544": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#132"
+  },
+  "F-e98b46797369": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#132"
+  },
+  "F-f556ece5aa28": {
+   "disposition": "dropped",
+   "reason": "plan is a historical record; the layout already keeps the record outside the sandbox"
+  },
+  "F-f82798514e26": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#133"
+  }
+ }
+}

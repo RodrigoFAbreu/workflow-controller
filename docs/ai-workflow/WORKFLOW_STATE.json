@@ -23761,7 +23761,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -23909,12 +23909,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 0
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-10-23T21:46:52Z",
+      "state_revision": 27,
+      "last_transition": "2026-10-23T22:15:39Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -24091,6 +24091,20 @@
               "review_content_id": "376c246a93fd18ca5a8345e0b186ae1aff4fb2e6881511eb6a708089bbd84289",
               "verdict": "REVISE",
               "at": "2026-10-23T21:30:34.887730+00:00"
+            }
+          ]
+        },
+        "F-bd940eec8376": {
+          "digest": "bd940eec837636fc53bf9cb0d4a0e498e89fdfddbd9c9616a1099f382522337a",
+          "text": "**O2 (carried, not applied):** In `tests/test_claude_build.py`, the `link_in_clone` fault still does exactly what `link_replaced` does. The summary leaves it for a follow-up. Record it as a follow-up issue at acceptance.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "378ad25096c212e0031a8b6192e87355be0a4825777b243f8b3aab4555e7d67e",
+              "verdict": "REVISE",
+              "at": "2026-10-23T22:15:39Z"
             }
           ]
         }

@@ -9,6 +9,13 @@ refused happened. They are skipped when ``claude`` or ``bwrap`` is absent, or
 when the CLI cannot reach a model (not logged in, a usage limit); each run is
 one short model turn at low effort, except the missing-component run, which the
 CLI refuses before any model call.
+
+The one assumption the sandbox layout of ``workflow-controller-sandbox-layout``
+(#129) rests on, and which only these live tests can check: a build lets a write
+through a symlink in a denied directory (``clone/build``) reach an allowed
+folder outside it (``writable/build``), while it refuses to replace the link.
+A build that refuses the write through the link contradicts decision D6 of that
+plan: the layout is amended, never relaxed into a weaker deny.
 """
 
 from __future__ import annotations

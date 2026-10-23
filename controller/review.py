@@ -45,7 +45,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
-from . import functional_review, gitrepo, harness as harness_registry, runtime, usage, usage_record, worker_stream
+from . import claude_build, functional_review, gitrepo, harness as harness_registry, runtime, usage, usage_record, worker_stream
 from .anchor import OWNERSHIP_VAR
 from .errors import ControllerError, ReviewLaunchRefusedError
 
@@ -2145,7 +2145,7 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
                       effort: str, timeout: float, binary_name: str = "claude", system_dir: Path | None = None,
                       inherited_env: Mapping[str, str] | None = None,
                       on_spawn: Callable[[int, int], None] | None = None, out: dict | None = None,
-                      probe: Callable[[], None] = functional_review.static_probe) -> dict:
+                      probe: Callable[[], None] | None = None) -> dict:
     """Run the functional tester end to end in a fresh sandbox and return what
     was observed; it records, validates and decides nothing (``functional_review``
     and the step do). The tester is ``claude`` under the closed boundary of
@@ -2182,6 +2182,13 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
         binary = resolve_binary(binary_name)
     except ReviewLaunchRefusedError as exc:
         raise functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc)) from exc
+    # One resolved real path is probed, admitted by digest and executed (#114): a symlink
+    # re-pointed after this point cannot make the launch run another build.
+    binary = Path(os.path.realpath(binary))
+    if probe is None:
+        recorded, record_note = claude_build.recorded_digests(runtime_root)
+        probe = lambda: functional_review.static_probe(  # noqa: E731
+            claude=str(binary), recorded=recorded, record_note=record_note)
     probe()
     functional_review.sweep_kept(runtime_root, work_item_id)
     layout = JobLayout(runtime_root, job_id, area=functional_review.SANDBOX_AREA)
@@ -2204,6 +2211,14 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
                   refused=[{"pattern": item.pattern, "reason": item.reason} for item in sandbox.refused])
     captured = None
     try:
+        # The record of verified builds must not sit where the tester writes (claude_build, D3).
+        root_real = Path(runtime_root).resolve()
+        for folder in (sandbox.clone, sandbox.out):
+            if root_real == Path(folder).resolve() or Path(folder).resolve() in root_real.parents:
+                raise functional_review.unavailable(
+                    functional_review.UNAVAILABLE_ENFORCEMENT,
+                    f"the runtime root {root_real} lies inside the tester's {Path(folder).name} folder, "
+                    "where the record of verified claude builds could be written by the tester")
         captured = build_claude_home(layout, operator_home)
         env = {**claude_environment(layout, binary, job_id, inherited_env), **sandbox.environment()}
         ctx = AttemptContext(layout, binary, env, model, effort, timeout, system_dir, None)

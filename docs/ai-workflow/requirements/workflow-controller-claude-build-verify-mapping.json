@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-claude-build-verify",
+  "requirements": {
+    "R1": {
+      "description": "A build whose digest is recorded in the Controller's runtime root is admitted by the identity check of the static probe and the launch alongside the built-in list; an unreadable, malformed, wrong-schema, non-ELF, symlinked, foreign-owned or other-writable record never admits one, and a record cannot be redirected into the tester's folders; the settings file is never written (#113)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R2": {
+      "description": "The probe and the launch examine and execute the same resolved real path (a re-pointed symlink cannot change what runs), and the stop for an unadmitted build names `verify-claude` and the digest (#114, #113)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The live probe implementation is one module shared by the command and the live release tests; the host-side effects, the tool list and the retry are checked, the boundary probe counts only when its exact command was executed and its tool result matches, and every failure mode, including a build whose resolved bytes change during the run (a re-pointed symlink does not), fails closed with the probe named (#113)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "`workflow-controller verify-claude` records a digest only when every probe holds and the build's digest is unchanged by the run, under a lock, reports an admitted build without re-probing unless `--force`, exits 0 or 20, removes its scratch folder, states its model-turn cost and leaves the settings file untouched (#113)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The guides and roadmap agree with the behaviour; `check_docs`, the golden `--check` forms and the full suite are green but for the known tests (#113)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

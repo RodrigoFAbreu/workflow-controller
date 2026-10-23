@@ -20,6 +20,7 @@
 | `workflow-controller --work-item <id> milestone-binding --abandon <repo>` | retire such a binding, under the preconditions stated there; exactly one of `--new-pr`/`--abandon` is required |
 | `workflow-controller settings show\|path\|clean` | the user settings file (see [`settings`](#settings)); `show` and `path` are read-only |
 | `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by GROUPING] [<repo>]` | the recorded jobs' turns, tokens, cost and time (see [`telemetry`](#telemetry)); read-only |
+| `workflow-controller verify-claude [--force]` | run the live sandbox probes against the `claude` a launch would run and record its digest when every probe holds (see [`verify-claude`](#verify-claude)); takes no repository |
 | `workflow-controller notifications [--test]` | the effective SignalHub notification table and where the URL and key were found (never the key); `--test` sends one `info` test event through the real transport (see [`notifications`](#notifications)); takes no repository and writes nothing |
 | `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted |
 | `workflow-controller --version` | the version, then the running runtime (see [Runtime identity](runtime.md#runtime-identity)) |
@@ -173,6 +174,28 @@ What each figure means is in [Telemetry](workers.md#telemetry).
 A job recorded before telemetry existed has no block. Its figures are
 derived from its `worker.stdout` each time, marked `"derived": true`,
 and nothing is written back. A job whose stream is gone has no figures.
+
+## `verify-claude`
+
+`workflow-controller verify-claude` makes a newer `claude` build usable by the automated functional review without
+waiting for a Controller release. It takes no repository. It resolves `claude` on `PATH` (the build a launch would
+run; `--claude-binary` names a different build to verify, and the command then notes that a launch still runs the
+one on `PATH`), prints its resolved path and SHA-256 digest, and then:
+
+- a build already admitted, built in or recorded, is reported and **not probed**; `--force` probes it again;
+- otherwise it runs the live enforcement probes (writes and sockets the sandbox must refuse, the permitted
+  writes, the tool list, the missing-component refusal and the retry) in a scratch home. **Cost:** up to two short
+  model turns at low effort with your Claude credentials; the usage budget gate is not consulted;
+- only when every probe holds and the build's bytes are unchanged by the run, it records the digest, version and
+  probe results in `verified-claude-builds.json` in the runtime root (see [runtime](runtime.md)) and exits `0`;
+- a failing probe exits `20`, names the probe and records nothing; the scratch folder is removed either way. The
+  probes run with a private `TMPDIR` (a `wcf-*` folder, mode `0700`) under an eligible `$XDG_RUNTIME_DIR`, otherwise
+  `/tmp`, because Claude's sockets need a short path; it is removed with the run.
+
+The settings file is never created, filled or updated by this command. The record is per runtime root: a source
+checkout and the shared install each need their own run. The record defends against the sandboxed tester and
+against redirection, not against a lifecycle worker running as you, and a build file rewritten in place between the
+hash and the exec is not caught (see [runtime](runtime.md#controller-owned-runtime-state)).
 
 ## `notifications`
 

@@ -22669,6 +22669,1088 @@
         "evaluated_at": "2026-10-22T15:33:20Z",
         "workflow_release": "2.18.2"
       }
+    },
+    "workflow-controller-claude-build-verify": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-claude-build-verify",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CLAUDE_BUILD_VERIFY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 3,
+      "implementation_revision": 5,
+      "functional_review_round": null,
+      "base_commit": "679b34cf0fc10f8105877b15c3a221dc135dd5ba",
+      "reviewed_implementation_head": "565f7a241144ec61575f8b0c5a11f705c0263991",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP4",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "e1e10e2581a39b0dadcdaf62919f989c395bdd71"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "b502d62a8d2d2cf7069f924ed47264056c7de3d5"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "dc28c9c465359feebfd544dca5ed8ddd71ddbf5f"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "be3e0ce5eeb01d7e41aae230dcac32d9b088f8bb"
+        }
+      },
+      "current_bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+        "approved_review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CLAUDE_BUILD_VERIFY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c90c94a33e8a1861e4c392545fbc81ff129a8371"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4db3307346615178a18a009f1e8eddd687e52bfc"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-claude-build-verify-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "56d23b2bcfe7ca59d5873ea03d47b07ec3a4dc3e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-22T17:24:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+            "ledger": {
+              "local": {
+                "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "af06d8f862cbe6ded3966f1a1de934d8d04eb95e2f50bb60efd31ad3e4ace6f8",
+                "ledger_entry_sha256": "bf838980b0adfeea721fa9e6d05b0ec0389ca9483e2f855970a97c5eddc45b56",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "2f6673d9adc6a54b4178829035aa9f07224096652254b4ddb6c2d3a70e81afed",
+                "ledger_entry_sha256": "63f5a5660865885ab0a3a603c5512cfe01b1ffcf98218a4ff8cb3a3cf5a323c6",
+                "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-22T17:24:00Z",
+          "workflow_release": "2.18.2"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+        "approved_review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a127c9b15ad700c2cdb34154f516dea1fe49f169"
+          },
+          {
+            "path": "controller/claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6ec319c9b5f991a52b43873b0f5d2ef37d3f1338"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9ffa93aae47b44f1dabc3672627201371a14e00d"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "218e763f4e4615d92403e9860bed639ce1d75356"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c3deaf5a688a20a79ddfdfcb2b7a4c1661096081"
+          },
+          {
+            "path": "controller/runtime.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ce2bb98269a132013201273e7424f2e0b33c1a6f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-claude-build-verify-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fbb5f4282fb45ac31ef2ce40b73b463ef1133bf8"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "40c9be943dc819e7617b84bdfb9784a3909ac094"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "955403ae019d5573bb67b983ce24f4149c7c1b9c"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7aee01e989391a9844855965a90de83c9abfabf0"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a80a0e1bf903ed1076571793fab2690d5e5a9fce"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b248376ce83ebec8ead77d8cd19c2ace71f232de"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1b1dc1c3e321304e0902f3159e003327b5a87c77"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7e2747d26b1fdab71cc3ae2970dfa77ccee41c6"
+          },
+          {
+            "path": "docs/install.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8efda73f9acb1c9d58c12f6c55847096ed112a6"
+          },
+          {
+            "path": "tests/test_claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "09002a5a6c8e3223910467b5e98e50460e82d26f"
+          },
+          {
+            "path": "tests/test_functional_enforcement.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3408d2a2dc675e320585b8583bdd54b91080a1da"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8e5dd4b613473e7631918683cff17d50767c78c1"
+          }
+        ],
+        "reviewed_content_commit": "565f7a241144ec61575f8b0c5a11f705c0263991",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-23T00:03:29Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "ledger": {
+              "local": {
+                "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "121abd3bbce4797c8526b4f1ca6da76e13bfe50a544f54112a072a70f465daa7",
+                "ledger_entry_sha256": "a4abbf39f780433e08351213c514ff720c351a1842aeb6dd839bfe5cf3e81fc7",
+                "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "828e5b0a7b91fa18a670291a9da4bf71b7deb9d2a402a703c146353896bb3833",
+                "ledger_entry_sha256": "386670042f1bee889ab6452b847bc42c785a9565bea66d40188ee502e7caf6dc",
+                "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-23T00:03:29Z",
+          "workflow_release": "2.18.2"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-22T17:17:38Z",
+          "verdict_sha256": "af06d8f862cbe6ded3966f1a1de934d8d04eb95e2f50bb60efd31ad3e4ace6f8",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-22T17:22:16Z",
+          "verdict_sha256": "2f6673d9adc6a54b4178829035aa9f07224096652254b4ddb6c2d3a70e81afed",
+          "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 2
+        },
+        "implementation": {
+          "local": 5,
+          "external": 4
+        }
+      },
+      "state_revision": 39,
+      "last_transition": "2026-10-23T16:37:36Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-22T17:14:42Z",
+        "consumed": {
+          "review_content_id": "dc242817b417daedc2d9c9785ac59d71073362f5ad94c49dc66eea22a90f3b15",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+          "bundle_id": "ec030d307ecaada13e90132b7bc87d5b94e8701048b5f6c66fb106e78ae27a52",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "61e44755cb289b66686edb55e90d27c26df2fa7f0bf0a367cfb35f00bd9ca868",
+        "dc242817b417daedc2d9c9785ac59d71073362f5ad94c49dc66eea22a90f3b15"
+      ],
+      "optional_findings": {
+        "F-07b6ecdfbd9b": {
+          "digest": "07b6ecdfbd9b8b84bd6d84b383ab138f9f3a3f06c9697c356f1db03ae7bed8df",
+          "text": "**O1 -- The record's write primitive and its mode disagree (D3, CP1).** D3 and CP1 say the record is written \"through `runtime.write_json`\", and D3(c) says the file is created mode 0600. `write_json` goes through `_atomic_write`, which creates mode 0o644 (`runtime.py:147`). The read check only forbids group or world write, so 0644 is still admitted and nothing breaks. Still, the implementer should use `runtime.write_private_bytes` (`runtime.py:495`, 0o600, the same atomic mechanics) or a new `runtime.py` helper, and make the plan's wording match whichever is used.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:17:38Z"
+            }
+          ]
+        },
+        "F-f556ece5aa28": {
+          "digest": "f556ece5aa28451399f7f5f85d636659fb9c171c670db3ff9fc61bfbc21e37b7",
+          "text": "**O2 -- D3(a)'s runtime-root check can never trigger.** The tester's sandbox is always `<runtime root>/functional/<job id>/` (`review.py` `launch_functional`), so the runtime root cannot lie inside the clone or the output folder. The invariant that matters is that the record's path lies outside every `allowWrite` entry of `tester_settings`. Asserting that directly at launch is cheap and would stay true if the sandbox layout ever moves.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:17:38Z"
+            }
+          ]
+        },
+        "F-1a73475c6ffe": {
+          "digest": "1a73475c6ffeb922d2f296677de93d5d5c733c7446eae41bfe95cf526daa602b",
+          "text": "**O3 -- An exact command match may fail on every run.** If the stream's `tool_use.input.command` routinely differs from the sent command (for example by a trailing newline), every verification comes out inconclusive and the command can never record anything. That is safe, but it makes the feature useless. CP2's live run should confirm that the real stream reproduces the probe command exactly. Counting tool-use events by `id` would also stop a repeated stream event from being read as a \"second call\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:17:38Z"
+            }
+          ]
+        },
+        "F-00308765a77c": {
+          "digest": "00308765a77c065d779fc0476865d155a304a8a439c48f29a044ae9a51747d0c",
+          "text": "**O1 — Specify the private write primitive consistently.** D3/CP1 require `runtime.write_json` and mode 0600, but `_atomic_write` creates mode 0644 under the usual umask (`controller/runtime.py:145`). An isolated check confirmed this. Specify a runtime helper that provides private atomic publication and refuses symlinks. Mode 0644 still satisfies the admission check against group/world writes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-9e109057f52f": {
+          "digest": "9e109057f52fc7263db5186e1602a72d4cda93fdecc59e3a616538b963dad97e",
+          "text": "**O2 — The runtime-root containment check is unreachable under the current layout.** The clone and output are descendants of `<runtime root>/functional/<job id>/` (`controller/functional_review.py:1648`). The runtime root therefore cannot lie inside either. Assert the record’s resolved location against the actual write allowlist instead; the current layout already keeps it outside those locations.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-47fe60b43d4c": {
+          "digest": "47fe60b43d4cfba1c36290329e8347d2d3c17cf3f6b1e91ee49d4f95724373eb",
+          "text": "**O3 — Exact command matching needs live confirmation.** D1’s byte-for-byte requirement can turn harmless model formatting changes into repeated inconclusive runs. This is a plausible usability risk, with no demonstrated failure here. CP2’s required live acceptance should establish a successful exact match and matched tool result; count distinct tool-use IDs when detecting additional calls.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-d4de289b3f56": {
+          "digest": "d4de289b3f56224bfd70bb63069e520d0aa30bde5e17b22ec682857c092681f5",
+          "text": "**O4 — Descriptor pinning prevents substitution but does not detect every replacement.** D3(b)’s claim that a swapped file always becomes empty is stronger than its mechanism. Replacement after opening leaves the descriptor reading the original trusted inode, as an isolated check confirmed. Describe that safe behavior explicitly; rejecting every pathname replacement would require additional checks.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "aedf5c840668e5df92a4f04d0b31ec3a77e68fcd1d2bd908757c984411e2442f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T17:22:16Z"
+            }
+          ]
+        },
+        "F-bfe9f980e2ba": {
+          "digest": "bfe9f980e2ba4a09af7eca9264a5c0ff383844f6da619f4670c3b7c2520350e2",
+          "text": "`cmd_verify_claude` (`controller/cli.py`) resolves `claude` on `PATH` before it looks at `--claude-binary`. So\n   `verify-claude --claude-binary /path/to/claude` refuses when no `claude` is on `PATH`, even though the build to\n   verify was named. The review request raises this too (area 5). D5 does not require it to work, but the note path\n   could treat a missing `PATH` build as \"a launch finds no claude on PATH\" instead of refusing.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34a2c320e0739f0cc77adfa5a122902662adc85d88134f12389d46affe30a9f6",
+              "verdict": "REVISE",
+              "at": "2026-10-22T19:23:48Z"
+            }
+          ]
+        },
+        "F-c032af117c06": {
+          "digest": "c032af117c0684a5623ce8cec3fd7ec18b661668c434bef0bf1f949a1f4a401e",
+          "text": "`cmd_verify_claude` prints the digest of `os.path.realpath(binary)`. It then passes the unresolved `binary` to\n   `verify_build`, which resolves it again. If the symlink is re-pointed between the two, the printed `digest:` line\n   names another file than the one probed and recorded. The record stays correct, because it uses `result.digest`.\n   Passing `real` to `verify_build` would keep the output consistent.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34a2c320e0739f0cc77adfa5a122902662adc85d88134f12389d46affe30a9f6",
+              "verdict": "REVISE",
+              "at": "2026-10-22T19:23:48Z"
+            }
+          ]
+        },
+        "F-580b818732a9": {
+          "digest": "580b818732a9c01d080b17d5f83b10ebbed858bab465d192defbbce87b67b011",
+          "text": "A `build_changed` refusal is reported with the probe name `launch` (`_Run.launch` calls\n   `check_unchanged(\"launch\")`), not the probe whose launch saw the change. Passing the probe name through would\n   follow D2's \"the failing probe named\" more literally.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34a2c320e0739f0cc77adfa5a122902662adc85d88134f12389d46affe30a9f6",
+              "verdict": "REVISE",
+              "at": "2026-10-22T19:23:48Z"
+            }
+          ]
+        },
+        "F-f82798514e26": {
+          "digest": "f82798514e26f8736955a9e4d9a169300f31a5d9530dfc252c56a92a63e6265d",
+          "text": "`cmd_verify_claude` (`controller/cli.py`) resolves `claude` on `PATH` before it looks at `--claude-binary`. So\n   `verify-claude --claude-binary /path/to/claude` refuses when no `claude` is on `PATH`, even though the build to\n   verify was named. The note path could instead say \"a launch finds no claude on PATH\". This is carried from\n   round 1. The summary defers it as a follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T19:58:14Z"
+            }
+          ]
+        },
+        "F-52b1d2ff28f2": {
+          "digest": "52b1d2ff28f25ae555ece33c263803a8af7ccddd4c0c07b0cff357d6a6672f65",
+          "text": "A `build_changed` refusal is reported with the probe name `launch`, because `_Run.launch` calls\n   `check_unchanged(\"launch\")`. It is not named after the probe whose launch saw the change. Passing the probe name\n   through would follow D2's \"the failing probe named\" more literally. This is carried from round 1 and deferred.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T19:58:14Z"
+            }
+          ]
+        },
+        "F-7b92aa4dc35e": {
+          "digest": "7b92aa4dc35ea4ad5713e0bcba44bb5972bf6f8917ddc74511438267a96a428c",
+          "text": "`TEST_RESULTS.md` still says implementation revision 1, head `e5d5719`. The round-1 rerun is reported only in\n   one line of `IMPLEMENTATION_SUMMARY.md`. Updating the header and adding a line for the revision-2 rerun would keep\n   the bundle's test record matched to its head.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T19:58:14Z"
+            }
+          ]
+        },
+        "F-a11f733a05b8": {
+          "digest": "a11f733a05b80201a8f7e0e3ead7f676b5eb9d248f7a0653d64f0eef928bb4de",
+          "text": "**O1 — Live-test credential instructions are stale.** `docs/guide/development.md:29` says the probes use exported API-key/OAuth variables and see no credentials from the real Claude home. The three shared probes instead copy `.credentials.json` from the selected operator home and omit those environment variables. Document their actual credential source and failure behavior.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c40812ba0b6eb8ede1ccc3c6f4ecc975cd9dff16781a6de44ea025c0a148654f",
+              "verdict": "REVISE",
+              "at": "2026-10-22T20:05:41.772964+00:00"
+            }
+          ]
+        },
+        "F-08372d222382": {
+          "digest": "08372d2223823a88b8f26fd41ff225c3f9eb0e3f58bfaa0c252e37d216e36b5b",
+          "text": "**O1 -- The bundle's narrative files were not updated for revision 3.** `IMPLEMENTATION_SUMMARY.md` has no round-2 section and still describes the retry probe as counting \"when the stream shows an attempted Bash call with dangerouslyDisableSandbox\". `TEST_RESULTS.md` still reports implementation revision 1 at head e5d5719. The code and tests are correct; only the reviewer-facing description lags. Update both at the next generation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:47:16Z"
+            }
+          ]
+        },
+        "F-941cdcae267a": {
+          "digest": "941cdcae267a66bcd22ea8e84aa672385a237edb29b9186e921fca44dfb1f5d2",
+          "text": "**O2 -- `need_clean` does not separate a transient API error from a broken boundary.** An `is_error` result caused by a transient API error (not one of the login/limit words) is reported as a definite failure, not \"run it again\". Exit 20 and no record either way, so this is fail-closed; it only affects the wording an operator sees.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:47:16Z"
+            }
+          ]
+        },
+        "F-5efb42ee6d7e": {
+          "digest": "5efb42ee6d7e5f3bc0bf5b5855f09f26781ff1447b97afcd6e626973c016f5e9",
+          "text": "**O1 — Bundle narrative remains stale.** `current/TEST_RESULTS.md` describes revision 1; `current/REVIEW_REQUEST.md` names an earlier head; `current/IMPLEMENTATION_SUMMARY.md:41` omits the strengthened retry validation. Refresh these narrative files to describe revision 3.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:52:46Z"
+            }
+          ]
+        },
+        "F-94d5cf8f1452": {
+          "digest": "94d5cf8f145251b555bc117000c44863090a3a6b5a70b75c480675c901a5fd70",
+          "text": "**O2 — Transient errors receive a definite failure classification.** `controller/claude_build.py:372` raises `BuildNotVerified` with `inconclusive=False` for generic API errors. Admission correctly remains closed; distinguish retriable service failures from measured enforcement failures.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:52:46Z"
+            }
+          ]
+        },
+        "F-cd547180f75a": {
+          "digest": "cd547180f75ac80bd15089fe18151ac597d7f6d06678a3e416f24b4a0b1dd563",
+          "text": "**O3 — Missing-credential skip guidance is inaccurate.** `docs/guide/development.md:32` says missing `.credentials.json` causes skips. Preparation raises `BuildNotVerified(\"credentials\", ...)`, while `LiveEnforcementTests._probe` catches only `ModelUnreachable`, so those tests error instead.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c8036a1e629329d4ede39c08011129f23d8718b71f6606e04ac09f83c624238c",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T20:52:46Z"
+            }
+          ]
+        },
+        "F-5459285fd593": {
+          "digest": "5459285fd593e652c7ebd8acf5c4c0d5bb6ca0e7662e6ed5f5c02f27bd213f00",
+          "text": "**O1 -- The bundle narrative is stale again.** `current/TEST_RESULTS.md` still describes revision 1 (head e5d5719). `current/IMPLEMENTATION_SUMMARY.md` has no section for revision 4 or the functional-round-1 fix. Neither records a test run of 71cc23c or any live `verify-claude` run after the fix. Refresh both for the next generation. In functional round 2, record the `verify-claude --force` run at a normal-depth runtime root that the checklist asks for.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-4e64196fb2b4": {
+          "digest": "4e64196fb2b459e2a6267ca9a8975885aef938cc6d23caf82e0bfaeb37fa5f9f",
+          "text": "**O2 -- A short `TMPDIR` can leak when `_Run.__init__` fails part way.** `controller/claude_build.py` creates `self.tmp = short_tmp()` before `fr.tester_settings(...)` and `tempfile.mkdtemp(prefix=\"wcv-\")`. If either of those raises, `verify_build` never gets a `state` to clean up, and the `wcf-*` folder stays in `/tmp` or `$XDG_RUNTIME_DIR`. Unlike `fr.make_short_tmp`, the folder is recorded nowhere, so a killed run's folder is not swept either. Create it last in `__init__`, or remove it on failure.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-589622b737e2": {
+          "digest": "589622b737e2ebb8f5428bd935a58866933280a40d0cf1ebef4b3a4fcbc5d47a",
+          "text": "**O3 -- The docs do not say that the probes use a folder outside the runtime root.** In `docs/guide/commands.md`, the `verify-claude` section says \"the scratch folder is removed either way\". It names neither the short `wcf-*` `TMPDIR` under `$XDG_RUNTIME_DIR` or `/tmp` nor the new `host` refusal when no short folder fits. `docs/common-problems.md:169` gives that cause and its remedy only for the tester. A one-line mention in the `verify-claude` section would cover both.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-c2f2b4bed092": {
+          "digest": "c2f2b4bed092e051b8b59c5cad99c52a1ae518a2a9cd371a38fcde1a5cbacf0b",
+          "text": "**O4 -- A sandbox start failure can hide a host effect from the message.** In `boundary` and `retry`, `need_sandbox` raises before `host_effects`. A build that reported the sandbox start failure and still wrote to the host would be shown as \"inconclusive (nothing was probed)\" rather than as the host write. It still fails closed and records nothing. Consider checking host effects before classifying the run as inconclusive.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T21:19:38Z"
+            }
+          ]
+        },
+        "F-d8421c687544": {
+          "digest": "d8421c68754490db77a3ee9702793039c2183ce1bd6de5027c34c1b0e32bb1c4",
+          "text": "**O1 — Sandbox-start errors can misname an observed host effect.** `need_sandbox` runs before `host_effects` in boundary and retry. Independent reproductions combining a tracked-file write with the sandbox-start error both exited 20 and preserved an existing admission record byte-for-byte. Admission remains closed; only the cause is misreported, including the inaccurate “nothing was probed” statement.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "REVISE",
+              "at": "2026-10-22T21:26:23Z"
+            }
+          ]
+        },
+        "F-3fa8a75acd69": {
+          "digest": "3fa8a75acd69b5483972ff7544423160222b9441b5e8b329a18c84fe764b376e",
+          "text": "**O2 — Probe scratch placement remains undocumented.** The command guide does not explain that its private `wcf-*` TMPDIR lives under an eligible `$XDG_RUNTIME_DIR`, otherwise `/tmp`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "ae7e10fec731cef22e82b2333e819b11089cb69750025488dec7f43afc93580d",
+              "verdict": "REVISE",
+              "at": "2026-10-22T21:26:23Z"
+            }
+          ]
+        },
+        "F-bde44c4fdaff": {
+          "digest": "bde44c4fdaffed22b6c38e8c0884fb555a8a6d10a7119ac70bf92c87b7bd6af5",
+          "text": "**O1 — A non-`TesterUnavailable` failure during `_Run` construction still reaches the CLI as a traceback.**\n  `verify_build` turns only `fr.TesterUnavailable` into `BuildNotVerified`. An `OSError` such as the `ENOSPC` that I1\n  injects on the `wcv-*` `mkdtemp` now leaves nothing behind, but it propagates out of `cmd_verify_claude` and `main`\n  (which catches only `ControllerError`) as a Python traceback rather than the documented exit 20. No record is\n  written, so admission stays closed. Only the presentation is off. This is the same as before the fix.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T23:11:33Z"
+            }
+          ]
+        },
+        "F-41b605f07638": {
+          "digest": "41b605f076387912f1037e366d4bc2d3eb6406ab5cd328d4bb0e040b4238fe29",
+          "text": "**O2 — Sandbox-start errors can still misname an observed host effect** (external round 3 O1, not addressed).\n  `need_sandbox` runs before `host_effects` in `boundary` and `retry`, so a host effect combined with the\n  sandbox-start error is reported as \"nothing was probed\". Admission stays closed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T23:11:33Z"
+            }
+          ]
+        },
+        "F-b34a79e9d38f": {
+          "digest": "b34a79e9d38f01ebea7dae86da81041176b0f1619552da2e893d06727e5fa97d",
+          "text": "**O3 — The bundle's `TEST_RESULTS.md` and `IMPLEMENTATION_SUMMARY.md` stop at revision 1/2.** `TEST_RESULTS.md`\n  still reports head `e5d5719` and 72 targeted tests, and `IMPLEMENTATION_SUMMARY.md` has no section for the\n  revision 3-5 fixes (`fb380fd`, `d47eacb`, `71cc23c`, `565f7a2`). A reviewer has to rebuild the fix history from\n  `COMMITS.txt` and `CHANGES_SINCE_REVIEW.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-22T23:11:33Z"
+            }
+          ]
+        },
+        "F-e98b46797369": {
+          "digest": "e98b46797369a32df5d412bdd4cf4e9637b6cbce8d6f10290706ebf96bd4e137",
+          "text": "**O1 — Existing diagnostic limitation remains.** Boundary and retry check sandbox-start errors before host effects. A simultaneous host write can therefore be misreported as “nothing was probed.” Admission still fails closed. O2 is resolved by the TMPDIR documentation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-23T00:01:18Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-22T23:11:33Z",
+          "verdict_sha256": "121abd3bbce4797c8526b4f1ca6da76e13bfe50a544f54112a072a70f465daa7",
+          "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "6536bb7bdb32083dac4cd0091cfac5979f9f6d12626d57e094fd31c7df24c1f6",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-23T00:01:18Z",
+          "verdict_sha256": "828e5b0a7b91fa18a670291a9da4bf71b7deb9d2a402a703c146353896bb3833",
+          "run_ref": "session:local .ai-review/workflow-controller-claude-build-verify/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "tester: help exits 0 with --force, cost, credentials, budget not consulted, runtime root not settings"
+            },
+            "log_digest": "a8354ba7f542cffe52ac2aba58ec1f0ab7763f4fc569ec3edf7ecd1ba4fe2ab0",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "tester: script stand-in exit 20 with identity message, path, digest, cost; operator (outside the sandbox): the ELF stand-in with no credentials exits 20 'credentials: the operator's Claude home has no credential file', nothing recorded, no settings file, no scratch left; live 2.1.304/308/309 refused 'boundary: writable: REFUSED' at a normal-length runtime root"
+            },
+            "log_digest": "2bcfff9be14480647a77cd5076e4aa22c39301cfbf187c0530db31517344b56b",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "no record, no settings file, no leftover scratch folder after a refusal (tester and operator)"
+            },
+            "log_digest": "fa305af1487fd78840449c0506e5622994ae5f6f9c304bb7f24b9f27f61a8c25",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "{} and a partial settings file byte-identical, exit 20"
+            },
+            "log_digest": "32e7d27ea0b8c0c0d5e53764e76cb050b65a2bcd1aaa96a7a270f2a116d81957",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "symlink resolves to its real file; a different PATH file gets the note"
+            },
+            "log_digest": "d51e0b1bfcd67935e216d416758bc3394f6ea44cd361a479798deb21e95ee327",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "symlinked, 0660, 0666, malformed and directory records ignored with the reason, never written through"
+            },
+            "log_digest": "f303980f90034c27595a1a6016470bbcfac22a3a4ff4d1172c3834ce15a8ade2",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "verify-claude listed; not read-only; in SETTINGS_READ_ONLY_COMMANDS"
+            },
+            "log_digest": "25727d615fd9d480539158b894cb4801b7173f91c7786a13be552e27a72d22b7",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator: full suite 4,619 tests, only the two known Git 2.56 trailer failures plus four Ctrl-C tests that fail only in a backgrounded run and pass in the foreground (17 tests OK); test_claude_build 35 tests OK, F1 and I1 regression tests pass. Optional (follow-up): the test_claude_build module fails with a TMPDIR over ~100 characters (tester finding I2, rated Important by the tester, Optional here: tests only, default TMPDIR unaffected)"
+            },
+            "log_digest": "93f74ba100454553ae4e4dc89c4d39da4e00457135be8d84cac3e7aece2bf71e",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "ran_at": "2026-10-23T16:35:43Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "check_docs exit 0; the seven pages agree (tester and operator)"
+            },
+            "log_digest": "1bd641e50701976d0fd6b234e9cb6857ae64bef1af58a46a24d7eb6a73a77b14",
+            "run_ref": "c10e-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T16:35:43Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 128,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/128"
+          },
+          "state": "open",
+          "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+          "observed_at": "2026-10-23T16:37:36Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "565f7a241144ec61575f8b0c5a11f705c0263991",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-23T16:37:36Z",
+            "raw_sha256": "bbafc87960d4456469266c2a4082c721de83e4dab72771558d1a28c63efd2509",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "2f00fb0ee4faa7fb76fa0da97eabe1e539c89876532b545c436649888b59c9fa"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #128 at 468e2b9fbd89b4b060505a11b85a9c12519c537b is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "565f7a241144ec61575f8b0c5a11f705c0263991",
+          "anchor_identity": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "da6f8fff77a671ef8533a5b38bd1c2ca020826262ac55fce8c4247e958c318b4",
+            "recorded_at": "2026-10-23T00:03:29Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "84bd6f57863a39bd3bff415446c854db3ac4093e33a66a44b8003f3221de96df",
+              "log_digest": "a8354ba7f542cffe52ac2aba58ec1f0ab7763f4fc569ec3edf7ecd1ba4fe2ab0",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-2": {
+              "evidence_id": "4f43d2d45b109653a5ed10ca8b366fe5ac655ecde240c22bb726b850bbfbbf4d",
+              "log_digest": "2bcfff9be14480647a77cd5076e4aa22c39301cfbf187c0530db31517344b56b",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-3": {
+              "evidence_id": "859c818c03105f7c48a6394a1bed58016ff5ffd788ee26e328fe1dc3839af071",
+              "log_digest": "fa305af1487fd78840449c0506e5622994ae5f6f9c304bb7f24b9f27f61a8c25",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-4": {
+              "evidence_id": "c45c106f2579ff21d88d1b81d0363f831add7ec46d923b2b245f27fced747554",
+              "log_digest": "32e7d27ea0b8c0c0d5e53764e76cb050b65a2bcd1aaa96a7a270f2a116d81957",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-5": {
+              "evidence_id": "7e47bd3bb2ea6da5b84695e3f4b2302e1fcee3917662e1de7a5ebe68f51dc5b0",
+              "log_digest": "d51e0b1bfcd67935e216d416758bc3394f6ea44cd361a479798deb21e95ee327",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-6": {
+              "evidence_id": "b1ce41a7efd2f7f6de8417bcb5a9565fa558a5df277992586a4245f8e871268a",
+              "log_digest": "f303980f90034c27595a1a6016470bbcfac22a3a4ff4d1172c3834ce15a8ade2",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-7": {
+              "evidence_id": "09c85bdd74d0acca04def56295eab8560148065aae8efb5008fed0f3651efaef",
+              "log_digest": "25727d615fd9d480539158b894cb4801b7173f91c7786a13be552e27a72d22b7",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-8": {
+              "evidence_id": "13b5fefe0375b977761a34725ce72f8c6afc5a09436dd76c48cf3684457ba0c0",
+              "log_digest": "93f74ba100454553ae4e4dc89c4d39da4e00457135be8d84cac3e7aece2bf71e",
+              "run_ref": "c10e-functional-round2"
+            },
+            "flow-9": {
+              "evidence_id": "745ec68837c78e63fcdc5ebc97dc092cb4dec0308252a0027afc6dd6bba32e49",
+              "log_digest": "1bd641e50701976d0fd6b234e9cb6857ae64bef1af58a46a24d7eb6a73a77b14",
+              "run_ref": "c10e-functional-round2"
+            }
+          },
+          "pr": {
+            "fact_id": "2f00fb0ee4faa7fb76fa0da97eabe1e539c89876532b545c436649888b59c9fa",
+            "head": "468e2b9fbd89b4b060505a11b85a9c12519c537b",
+            "provenance": "workflow_gh",
+            "raw_sha256": "bbafc87960d4456469266c2a4082c721de83e4dab72771558d1a28c63efd2509"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-23T16:37:36Z",
+        "workflow_release": "2.18.2"
+      }
     }
   }
 }

@@ -157,9 +157,13 @@ The Controller stopped before it launched the tester. The message names the caus
 - **`bwrap` or `socat` is not installed**, or `bwrap` cannot make an unprivileged namespace here. Install them, or
   allow user namespaces on the host.
 - **The kernel does not accept a seccomp filter**, so the sandbox cannot block Unix sockets. Use a kernel that does.
-- **The `claude` build is not a verified one.** Only the native build whose SHA-256 is in `VERIFIED_NATIVE_BUILDS`
-  is admitted (Claude Code 2.1.303 for 1.18.0); a newer build, a launcher or a script-launched `claude` is refused.
-  Run a verified build.
+- **The `claude` build is not a verified one.** Only a native build whose SHA-256 is in `VERIFIED_NATIVE_BUILDS`
+  (Claude Code 2.1.303 for 1.18.0) or recorded by `workflow-controller verify-claude` is admitted; a launcher or a
+  script-launched `claude` is refused. The message names the build's digest. Run `workflow-controller verify-claude`:
+  it runs the live sandbox probes against the `claude` on `PATH` (up to two short model turns, with your
+  credentials) and records the digest only when every probe holds. The record belongs to one runtime root, so a
+  source checkout and the shared install each need their own run. If the message says the record was ignored, the
+  file is malformed, a symlink, or owned by someone else or writable by others; delete it and run the command again.
 - **The fresh clone did not match the manifest** of the candidate the Controller captured (`clone_mismatch`). Run
   the step again; if it repeats, look at the repository for files that change on checkout.
 - **No folder is short enough for the tester's `TMPDIR`.** Claude's bridge sockets need a path of at most 107 bytes.

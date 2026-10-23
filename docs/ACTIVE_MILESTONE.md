@@ -5,7 +5,7 @@
 **In progress.** `workflow-controller-claude-build-verify` (C10e, `docs/ROADMAP.md`; issues
 [#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113) and
 [#114](https://github.com/RodrigoFAbreu/workflow-controller/issues/114)) has implemented all four checkpoints
-(CP1-CP4); functional round 1 found one blocking defect (F1), fixed here, and awaits implementation review again.
+(CP1-CP4); functional round 1 found one blocking defect (F1), fixed here, and passed implementation review round 4 and awaits functional re-test.
 
 - `workflow-controller verify-claude [--force]` runs the live sandbox enforcement probes against the `claude` a
   launch would run and records its digest in `verified-claude-builds.json` in the runtime root only when every probe
@@ -24,7 +24,7 @@ Implementation review of C10e, then acceptance and the 1.19.0 release. Then A2, 
 
 ## Functional review checklist
 
-Work item `workflow-controller-claude-build-verify` (C10e), implementation revision 4 (functional round 1 fix). The flows below run offline
+Work item `workflow-controller-claude-build-verify` (C10e), implementation revision 5 (functional round 1 fix plus implementation review round 4). The flows below run offline
 from a read-only clone: the sandbox has no network, a refusing `gh`, `claude`, `codex` and `ssh`, and writes only go
 to the output folder and the scratch `HOME`, `XDG_*` and `TMPDIR`. The live probes need a real `claude` and a model,
 so they are out of the tester's reach (see the limitations); the flows exercise the command's contract around them.

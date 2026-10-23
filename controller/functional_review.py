@@ -907,7 +907,8 @@ def tester_settings(
     depend on which precedence the build implements. The run's working
     directory must be ``output_dir``: with a working directory above the clone,
     the CLI's own working-directory grant outranks the allow and the writable
-    locations become unwritable too."""
+    locations become unwritable too (pinned release-side by
+    ``test_a_launch_from_above_the_clone_cannot_write_through_a_link_either``)."""
     allow = [str(output_dir), *(str(path) for path in scratch_dirs), *(str(writable_dir / name) for name in writable)]
     filesystem = {"allowWrite": allow, "denyWrite": [str(clone_dir), str(clone_dir / ".git")]}
     assert_writes_not_below_denies(filesystem)
@@ -942,6 +943,8 @@ def exclude_writable_links(runtime_root: Path, git_dir_rel: str, names: Iterable
     ``git_dir_rel`` is the clone's ``.git`` relative to the runtime root."""
     exclude = runtime_root / git_dir_rel / "info" / "exclude"
     kept = exclude.read_bytes() if exclude.exists() else b""
+    if kept and not kept.endswith(b"\n"):
+        kept += b"\n"
     lines = "".join(f"/{name}\n" for name in names).encode()
     runtime.write_bytes(runtime_root, f"{git_dir_rel}/info/exclude", kept + lines)
 

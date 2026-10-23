@@ -414,6 +414,17 @@ LIVE = os.environ.get("CONTROLLER_LIVE_CLAUDE_TESTS") == "1"
 
 @unittest.skipUnless(LIVE, "live model probes run only with CONTROLLER_LIVE_CLAUDE_TESTS=1 (they spend model usage)")
 @unittest.skipUnless(CLAUDE and shutil.which("bwrap") and shutil.which("socat"), "claude, bwrap or socat is absent")
+class ExcludeLinesTests(unittest.TestCase):
+    def test_a_line_is_not_glued_to_an_exclude_file_without_a_final_newline(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="wfr-excl-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        exclude = root / "clone" / ".git" / "info" / "exclude"
+        exclude.parent.mkdir(parents=True)
+        exclude.write_bytes(b"hidden.py")
+        fr.exclude_writable_links(root, "clone/.git", ["build"])
+        self.assertEqual(exclude.read_bytes(), b"hidden.py\n/build\n")
+
+
 class LiveEnforcementTests(unittest.TestCase):
     """The probes of D10 on the pinned CLI, under the real sandbox settings."""
 
@@ -455,6 +466,19 @@ class LiveEnforcementTests(unittest.TestCase):
 
     def test_a_launch_without_an_enforcement_component_is_refused_before_any_model_call(self) -> None:
         self.assertEqual([p.name for p in self._probe("missing_component").probes], ["missing_component"])
+
+    def test_a_launch_from_above_the_clone_cannot_write_through_a_link_either(self) -> None:
+        """Release-side only. ``tester_settings`` states the output folder as the working directory because, from a
+        directory above the clone, the CLI's own working-directory grant outranks the allow and the writable
+        locations become unwritable too. On the link layout (D2) that claim is measured on ``clone/build``: a
+        write through the link from ``cwd=base`` must not land in ``writable/build``."""
+        target = self.dirs["clone"] / "build" / "probe"
+        result, _ = run_claude(f"Run `echo hi > {target}; echo done` with the Bash tool and report the output.",
+                               cwd=self.base, settings=self.settings)
+        self._skip_without_a_model(result)
+        self.assertFalse((self.base / "writable" / "build" / "probe").exists(),
+                         "the working-directory grant no longer outranks the allow: update D5 and the docstring")
+        self.assertEqual((self.dirs["clone"] / TRACKED).read_bytes(), ORIGINAL)
 
     def test_a_launch_from_above_the_clone_still_cannot_write_a_tracked_file(self) -> None:
         """Release-side only: the working directory is the output folder in every launch the Controller makes; from a

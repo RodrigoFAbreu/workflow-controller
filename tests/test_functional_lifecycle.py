@@ -285,7 +285,7 @@ def flow_stops_before_or_without_a_run(judge: Judge, test: unittest.TestCase, *,
     judge.equal({e["status"] for e in life.evidence().values()}, {"failed"}, "unrunnable: recorded failed")
     judge.check(not life.findings_path().exists(), "unrunnable: no findings file")
     judge.equal(life.tasks[launched:], [], "unrunnable: no applier launched")
-    judge.equal([e.event_type for e in job.derive_job_event(record)], ["user_gate"], "unrunnable: user_gate")
+    judge.equal([e.event_type for e in job.derive_job_event(record)], ["review_wait"], "unrunnable: review_wait")
     judge.equal(review_rounds.functional_rounds(tester_runs(life), str(life.root), WID), 0,
                 "unrunnable: not counted towards the round bound")
     judge.observe("unrunnable", {"gate": record["functional"]["gate"], "recorded": sorted(life.evidence())})
@@ -405,7 +405,7 @@ def flow_isolation_holds(judge: Judge, test: unittest.TestCase, tools: Path, *, 
     judge.equal(record["functional"]["gate"], "tested_bytes_unbound", "unbound: the gate")
     judge.equal(life.evidence(), {}, "unbound: nothing is recorded")
     judge.equal(real_state(life), before, "unbound: the real repository")
-    judge.equal([e.event_type for e in job.derive_job_event(record)], ["user_gate"], "unbound: user_gate")
+    judge.equal([e.event_type for e in job.derive_job_event(record)], ["review_wait"], "unbound: review_wait")
 
     # a breach: a session of the job's private Claude home (the nested-session check) fails closed
     life, real = real_cycle(judge, test, tools)

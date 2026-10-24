@@ -758,6 +758,225 @@ class RunRecordWiringTest(unittest.TestCase):
         self.assertEqual([e["event"] for e in self.events(run)], ["run_started", "run_ended"])
 
 
+WAIT_PHASES = ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+
+
+def wait_record(phase: str = WAIT_PHASES[0], *, protocol_gate: object = "default", functional: object = None,
+                **extra) -> dict:
+    gate = {"phase": phase, "what_is_required": "Wait for the verdict.", "safe_resume_command": "/record-manual-plan-review wi-1"}
+    if protocol_gate == "default":
+        protocol_gate = {"row": "14", "disposition": "external_gate", "action_id": "plan.review.external"}
+    record = job_record(job.STATUS_GATE_BLOCKED, human_gate_pending=gate, **extra)
+    if protocol_gate is not None:
+        record["protocol_gate"] = protocol_gate
+    if functional is not None:
+        record["functional"] = functional
+    return record
+
+
+class ReviewWaitDeriveTest(unittest.TestCase):
+    """``review_wait`` (notification-fix D1-D3): a stop that only waits for a reviewer or a tester."""
+
+    def test_a_protocol_external_review_wait_at_each_manual_phase_is_a_low_info_event_with_the_gates_identity(self) -> None:
+        for phase, action in zip(WAIT_PHASES, ("plan.review.external", "implementation.review.external")):
+            with self.subTest(phase=phase):
+                record = wait_record(phase, protocol_gate={"row": "14", "disposition": "external_gate", "action_id": action})
+                [event] = job.derive_job_event(record)
+                self.assertEqual((event.event_type, event.supersedes), ("review_wait", "user_gate"))
+                self.assertEqual(event.title, "Waiting for the external review: wi-1")
+                resolved = notify.resolve("review_wait", None)
+                self.assertEqual((resolved.enabled, resolved.category, resolved.severity), (True, "INFO", "LOW"))
+                self.assertIn("/record-manual-plan-review wi-1", event.message)
+                again = job.derive_job_event({**copy.deepcopy(record), "job_id": "20261012T999999Z-bbbb"})[0]
+                self.assertEqual((again.ident, again.title, again.message), (event.ident, event.title, event.message))
+                # The identity is the gate's: the user_gate the same stop sent before this change had it too.
+                legacy = job.derive_job_event({k: v for k, v in record.items() if k != "protocol_gate"})[0]
+                self.assertEqual((legacy.event_type, legacy.ident), ("user_gate", event.ident))
+
+    def test_every_other_protocol_gate_and_every_legacy_gate_stays_a_user_gate(self) -> None:
+        cases = {
+            "BLOCK resolution": wait_record(protocol_gate={"row": "11", "disposition": "human_gate",
+                                                           "action_id": "review.resolve_block"}),
+            "disposition not external": wait_record(protocol_gate={"row": "14", "disposition": "human_gate",
+                                                                   "action_id": "plan.review.external"}),
+            "another action": wait_record(protocol_gate={"row": "38", "disposition": "external_gate",
+                                                         "action_id": "pr.report"}),
+            "approval at a single-stage phase": wait_record("AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", protocol_gate={
+                "row": "33", "disposition": "external_gate", "action_id": "implementation.review.external"}),
+            "single-stage plan phase": wait_record("AWAITING_EXTERNAL_PLAN_REVIEW"),
+            "plan approval": wait_record("AWAITING_PLAN_APPROVAL"),
+            "acceptance": wait_record("AWAITING_USER_ACCEPTANCE"),
+            "legacy, no protocol_gate": wait_record(protocol_gate=None),
+            "malformed block": wait_record(protocol_gate="x"),
+        }
+        for name, record in cases.items():
+            with self.subTest(name):
+                [event] = job.derive_job_event(record)
+                self.assertEqual((event.event_type, event.supersedes), ("user_gate", None))
+
+    def test_a_blocked_disposition_and_pending_checks_keep_their_events(self) -> None:
+        blocked = wait_record(protocol={"decision": {"disposition": "blocked"}})
+        [event] = job.derive_job_event(blocked)
+        self.assertEqual(event.event_type, "lane_blocked")
+        pending = {"kind": job.PR_REPORT_KIND, "pr_report": {"outcome": job.pr_report.PENDING, "wait": {"waited": True}}}
+        self.assertEqual(types(job.derive_job_event(wait_record(**pending))), ["lane_blocked"])
+        pending["pr_report"]["wait"] = {"waited": False}
+        self.assertEqual(job.derive_job_event(wait_record(**pending)), [])
+
+    def test_each_tester_fault_stop_but_isolation_breach_waits_and_the_others_keep_their_events(self) -> None:
+        phase = "AWAITING_FUNCTIONAL_REVIEW"
+        for code in job.functional_review.FAULT_GATES:
+            with self.subTest(code=code):
+                record = wait_record(phase, protocol_gate=None, functional={"gate": code})
+                [event] = job.derive_job_event(record)
+                if code == job.functional_review.GATE_ISOLATION_BREACH:
+                    self.assertEqual((event.event_type, event.supersedes), ("user_gate", None))
+                    continue
+                self.assertEqual((event.event_type, event.supersedes), ("review_wait", "user_gate"))
+                self.assertEqual(event.title, f"Waiting: {code} (wi-1)")
+        [exhausted] = job.derive_job_event(wait_record(phase, protocol_gate=None, functional={
+            "gate": job.functional_review.GATE_ROUNDS_EXHAUSTED}))
+        self.assertEqual(exhausted.event_type, "review_wait")
+        [unchanged] = job.derive_job_event(wait_record(phase, protocol_gate=None, functional={
+            "gate": job.functional_review.GATE_UNCHANGED}))
+        self.assertEqual(unchanged.event_type, "lane_blocked")
+        [off] = job.derive_job_event(wait_record(phase, protocol_gate=None))
+        self.assertEqual(off.event_type, "user_gate")
+
+    def test_titles_are_the_exact_text_and_never_hold_the_identity(self) -> None:
+        for record, title in ((wait_record(), "Waiting for the external review: wi-1"),
+                              (wait_record("AWAITING_FUNCTIONAL_REVIEW", protocol_gate=None,
+                                           functional={"gate": "flows_not_runnable"}),
+                               "Waiting: flows_not_runnable (wi-1)")):
+            [event] = job.derive_job_event(record)
+            self.assertEqual(event.title, title)
+            self.assertNotIn(event.ident, event.title)
+            self.assertIsNone(re.search(r"[0-9a-f]{16}", event.title))
+
+    def test_a_normal_merge_is_info_and_the_owners_branch_gates_stay_user_gates(self) -> None:
+        resolved = notify.resolve("pr_merged", None)
+        self.assertEqual((resolved.category, resolved.severity), ("INFO", "NORMAL"))
+        self.assertIn(mb.GATE_MERGE_PULL_REQUEST if hasattr(mb, "GATE_MERGE_PULL_REQUEST") else "merge_pull_request",
+                      mb.USER_GATES)
+        self.assertIn("merge_held", mb.USER_GATES)
+
+
+class SupersededNoticeTest(unittest.TestCase):
+    """The old ``user_gate`` of a stop that now sends ``review_wait`` is never followed by a second notice (D3)."""
+
+    REPO = "target-repo"
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.root = self.tmp / "runtime"
+        (self.root / "runs").mkdir(parents=True)
+        self.event = job.derive_job_event(wait_record())[0]
+        self.old_key = notify.idempotency_key("user_gate", self.REPO, self.event.ident)
+
+    def log(self, run_id: str, status: str, *, key: str | None = None, source: str | None = None) -> None:
+        path = self.root / "runs" / run_id
+        path.mkdir(parents=True, exist_ok=True)
+        line = {"idempotency_key": key or self.old_key, "status": status, **({"source": source} if source else {})}
+        with open(path / "notifications.jsonl", "a") as handle:
+            handle.write(json.dumps(line) + "\n")
+
+    def handled(self, *, spent: bool, root: object = "default") -> bool:
+        return job._superseded_handled(self.event, self.REPO, self.root if root == "default" else root, spent=spent)
+
+    def test_delivered_outcomes_veto_on_both_questions_and_spent_attempts_only_on_recovery(self) -> None:
+        for status, live, recovery in (("sent", True, True), ("conflict", True, True), ("failed", False, True),
+                                       ("rejected", False, True), ("skipped", False, False)):
+            with self.subTest(status=status):
+                self.setUp()
+                self.log("20261012T000000Z-run1", status)
+                self.assertEqual((self.handled(spent=False), self.handled(spent=True)), (live, recovery))
+        self.setUp()
+        self.log("20261012T000000Z-run1", "duplicate", source="server")
+        self.assertTrue(self.handled(spent=False))
+        self.setUp()
+        self.log("20261012T000000Z-run1", "duplicate")
+        self.assertFalse(self.handled(spent=True))
+
+    def test_the_log_of_any_recent_run_counts_and_another_key_does_not(self) -> None:
+        self.log("20261012T000000Z-old", "sent")
+        self.log("20261012T000001Z-new", "sent", key="some-other-key")
+        self.assertTrue(self.handled(spent=False))
+
+    def test_only_the_newest_runs_by_name_are_read(self) -> None:
+        self.log("20260101T000000Z-oldest", "sent")
+        for n in range(job.RECOVERY_RECORD_LIMIT):
+            (self.root / "runs" / f"20261012T{n:06d}Z-run").mkdir()
+        self.assertFalse(self.handled(spent=False))
+
+    def test_a_missing_log_an_unresolvable_root_and_a_stop_with_nothing_superseded_send(self) -> None:
+        self.assertFalse(self.handled(spent=False))
+        self.assertFalse(self.handled(spent=False, root=None))
+        self.assertFalse(self.handled(spent=False, root=self.tmp / "nowhere"))
+        self.log("20261012T000000Z-run1", "sent")
+        self.assertFalse(job._superseded_handled(dataclasses.replace(self.event, supersedes=None), self.REPO,
+                                                 self.root, spent=False))
+
+    def test_a_symlinked_run_directory_or_log_is_not_followed(self) -> None:
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (outside / "notifications.jsonl").write_text(json.dumps({"idempotency_key": self.old_key, "status": "sent"}) + "\n")
+        (self.root / "runs" / "20261012T000000Z-linkdir").symlink_to(outside, target_is_directory=True)
+        self.assertFalse(self.handled(spent=False))
+        real = self.root / "runs" / "20261012T000001Z-linklog"
+        real.mkdir()
+        (real / "notifications.jsonl").symlink_to(outside / "notifications.jsonl")
+        self.assertFalse(self.handled(spent=False))
+
+    def deliver(self, hub: FakeSignalHub, event: job.DerivedEvent, **kwargs) -> list[str]:
+        hub.requests.clear()
+        job._send_derived([event], self.REPO, run_id="20261012T999999Z-now", **kwargs)
+        self.assertTrue(notify.flush(10))
+        return [r["body"]["metadata"]["event_type"] for r in hub.requests]
+
+    def hub(self) -> FakeSignalHub:
+        hub = FakeSignalHub().start()
+        self.addCleanup(hub.stop)
+        install_notifier(self, hub, self.root)
+        return hub
+
+    def test_a_wait_is_sent_as_review_wait_low_and_only_once_across_steps(self) -> None:
+        hub = self.hub()
+        self.assertEqual(self.deliver(hub, self.event), ["review_wait"])
+        self.assertEqual(hub.requests[0]["body"]["severity"], "LOW")
+        self.assertEqual(self.deliver(hub, self.event), [])  # the log of the run that sent it holds the outcome
+
+    def test_an_old_user_gate_already_delivered_is_never_followed_by_a_review_wait_on_the_live_path(self) -> None:
+        self.log("20261012T000000Z-earlier", "sent")
+        self.assertEqual(self.deliver(self.hub(), self.event), [])
+
+    def test_a_failed_or_rejected_old_user_gate_does_not_veto_a_fresh_send_but_recovery_replays_nothing(self) -> None:
+        for status in ("failed", "rejected"):
+            with self.subTest(status=status):
+                self.setUp()
+                self.log("20261012T000000Z-earlier", "notifier_active", key="x")
+                self.log("20261012T000000Z-earlier", status)
+                self.assertEqual(self.deliver(self.hub(), self.event), ["review_wait"])
+                notify.uninstall()
+                record = {"run_id": "20261012T000000Z-earlier"}
+                self.assertFalse(job._recoverable(record, self.root, self.event, self.REPO, None))
+
+    def test_recovery_sends_a_never_handled_stop_once_as_review_wait(self) -> None:
+        run = "20261012T000000Z-earlier"
+        self.log(run, "notifier_active", key="x")
+        record = {"run_id": run}
+        self.assertTrue(job._recoverable(record, self.root, self.event, self.REPO, None))
+        self.log(run, "sent", key=notify.idempotency_key("review_wait", self.REPO, self.event.ident))
+        self.assertFalse(job._recoverable(record, self.root, self.event, self.REPO, None))
+
+    def test_recovery_does_not_resend_a_stop_whose_old_user_gate_was_handled(self) -> None:
+        run = "20261012T000000Z-earlier"
+        self.log(run, "notifier_active", key="x")
+        self.log(run, "sent")
+        self.assertFalse(job._recoverable({"run_id": run}, self.root, self.event, self.REPO, None))
+
+
 class RecoveryTest(_StepCase):
     """``resume`` re-derives what a dead Controller never enqueued (D13)."""
 

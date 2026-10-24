@@ -2,13 +2,15 @@
 
 ## Status
 
-**Complete.** `workflow-controller-cleanup-3b` (CU3b: `verify-claude` diagnostics and small gaps, closes issues #132
-and #133) was accepted on 2026-10-24 by gate policy (pull request #148). A host effect outranks a sandbox-start error, the
-listener folder is short whatever `TMPDIR` is, a setup `OSError` is exit 20 as the `host` probe, `--claude-binary` stands
-alone, and the live tests skip without credentials. Plan: `docs/ai-workflow/CONTROLLER_CLEANUP_3B_PLAN.md`; archive copy
-in `docs/milestones/completed/`.
+**In progress.** `workflow-controller-notification-fix` (NF1: review and functional-review waits send `review_wait`, an
+info event, not `user_gate`; closes issue #149). Plan: `docs/ai-workflow/CONTROLLER_NOTIFICATION_FIX_PLAN.md` (revision
+10, approved by gate policy). Checkpoints: CP1 (the event type, the mapping and the superseded-notice check) done; CP2
+(the guides and the roadmap) next.
+
+The previous milestone, `workflow-controller-cleanup-3b` (CU3b), was accepted on 2026-10-24 (pull request #148); its
+archive copy is in `docs/milestones/completed/`.
 
 ## Next action
 
-No work item is active. The next item on the roadmap is NF1, the notification fix (issue #149): run `/milestone-plan`
-for it. RB1 (issue #150) follows, then the harness-neutral roles epic (H1 and H6 first).
+Run `/milestone-implement workflow-controller-notification-fix` for CP2. RB1 (issue #150) follows, then the
+harness-neutral roles epic (H1 and H6 first).

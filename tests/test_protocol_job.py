@@ -895,7 +895,7 @@ class OutcomesTest(_TesterCase):
         gate = record["human_gate_pending"]["what_is_required"]
         self.assertIn("flow-1", gate)
         self.assertIn("*.egg-info/", gate)  # the writable-location patterns the sandbox refused
-        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
         # Nothing is launched next, and the run does not count towards the bound.
         self.assertEqual(life.row(), "38i")
         self.assertEqual(review_rounds.functional_rounds(life.tester_records(), str(life.root), lifecycle.WID), 0)
@@ -948,7 +948,7 @@ class ThePreLaunchStopsTest(_TesterCase):
         self.assertEqual(record["functional"]["gate"], "checklist_unrecognised")
         self.assertIn("no flow", record["human_gate_pending"]["what_is_required"])
         self.assertEqual((life.launches, life.tester_records(), life.reservations()), ([], [], {}))
-        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
 
     def test_a_repeat_at_the_tested_head_is_unchanged_and_one_blocker_not_a_second_run(self) -> None:
         life = self.life()
@@ -1040,7 +1040,7 @@ class TheFaultStopsTest(_TesterCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
         return record["functional"]["gate"]
 
-    def test_each_cause_of_an_unavailable_tester_is_a_user_gate_with_nothing_recorded(self) -> None:
+    def test_each_cause_of_an_unavailable_tester_is_a_review_wait_with_nothing_recorded(self) -> None:
         for cause in (functional_review.UNAVAILABLE_NO_BINARY, functional_review.UNAVAILABLE_ROLE_REFUSED,
                       functional_review.UNAVAILABLE_ENFORCEMENT, functional_review.UNAVAILABLE_CLONE_MISMATCH):
             with self.subTest(cause=cause):
@@ -1051,7 +1051,7 @@ class TheFaultStopsTest(_TesterCase):
                 self.assertIn(f"cause {cause}", record["human_gate_pending"]["what_is_required"])
                 self.assertEqual(life.evidence(), {})
                 self.assertEqual(life.reservations(), {})  # released: nothing started
-                self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+                self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
 
     def test_a_breach_records_nothing_and_keeps_the_sandbox(self) -> None:
         life = self.life()
@@ -1173,3 +1173,46 @@ class AFunctionalRecordIsResumableTest(_TesterCase):
         [reconciled] = [r for r in results if r.get("kind") == "functional_test"]
         self.assertIn(reconciled["status"], (job.STATUS_INTERRUPTED, job.STATUS_INCOMPLETE))
         self.assertEqual(reconciled["reconciliation_evidence"]["code"], job.FUNCTIONAL_INTERRUPTED_CODE)
+
+
+class ReviewWaitProductionPathTest(unittest.TestCase):
+    """Notification-fix D7 (round 7 I1): the Workflow's own protocol gates, written by the production
+    ``run_job`` fall-through, derive the event the plan says -- never a hand-built record."""
+
+    def gate_records(self, life, stage: str, phase: str) -> tuple[dict, dict]:
+        """The wait and, after a BLOCK verdict is on file, the BLOCK-resolution gate at ``phase``."""
+        life.run_until(phase)
+        wait = life.step()
+        life.user_step(lifecycle._AUDITED_REVIEW, stage, "BLOCK", "manual")
+        return wait, life.step()
+
+    def assert_wait_and_block(self, wait: dict, block: dict, wait_row: str, block_row: str, action: str) -> None:
+        for record in (wait, block):
+            self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+            self.assertNotIn("protocol", record)  # the block `resume` reads as a launched protocol job is not added
+        self.assertEqual(wait["protocol_gate"], {"row": wait_row, "disposition": "external_gate", "action_id": action})
+        self.assertEqual(block["protocol_gate"]["row"], block_row)
+        self.assertEqual(block["protocol_gate"]["disposition"], "human_gate")
+        self.assertEqual(block["protocol_gate"]["action_id"], "review.resolve_block")
+        [waiting] = job.derive_job_event(wait)
+        self.assertEqual((waiting.event_type, waiting.title), ("review_wait", "Waiting for the external review: demo"))
+        self.assertEqual([e.event_type for e in job.derive_job_event(block)], ["user_gate"])
+
+    def test_the_plan_review_wait_is_a_review_wait_and_its_block_gate_a_user_gate(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        wait, block = self.gate_records(life, "plan", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.assert_wait_and_block(wait, block, "14", "11", "plan.review.external")
+
+    def test_the_implementation_review_wait_is_a_review_wait_and_its_block_gate_a_user_gate(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
+        life.run_until("IMPLEMENTING")
+        wait, block = self.gate_records(life, "implementation", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        self.assert_wait_and_block(wait, block, "28", "25", "implementation.review.external")
+
+    def test_a_record_written_before_this_change_is_a_user_gate(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        record = life.step()
+        legacy = {k: v for k, v in record.items() if k != "protocol_gate"}
+        self.assertEqual([e.event_type for e in job.derive_job_event(legacy)], ["user_gate"])

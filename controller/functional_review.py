@@ -75,8 +75,9 @@ ENVIRONMENT_LIMITED = "environment_limited"
 UNCHANGED = "unchanged"
 OUTCOMES = (RECORDED, FINDINGS, ENVIRONMENT_LIMITED, UNCHANGED)
 
-#: The gate codes of the stops. Every one sends ``user_gate`` except
-#: :data:`GATE_UNCHANGED`, which sends ``lane_blocked``.
+#: The gate codes of the stops. :data:`GATE_UNCHANGED` sends ``lane_blocked``,
+#: :data:`GATE_ISOLATION_BREACH` sends ``user_gate`` (a person must look at what
+#: changed), and every other one sends ``review_wait`` (an orchestrator's remedy).
 GATE_FLOWS_NOT_RUNNABLE = "flows_not_runnable"
 GATE_TESTED_BYTES_UNBOUND = "tested_bytes_unbound"
 GATE_CHECKLIST_UNRECOGNISED = "checklist_unrecognised"

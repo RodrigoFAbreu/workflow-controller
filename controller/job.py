@@ -5121,6 +5121,9 @@ class DerivedEvent:
     work_item: str | None = None
     message: str | None = None
     link: str | None = None
+    #: The event type the same stop sent before it was reclassified, so a stop whose
+    #: old notice was already handled is not announced a second time.
+    supersedes: str | None = None
 
     def key(self, repository: str) -> str:
         return notify.idempotency_key(self.event_type, repository, self.ident)
@@ -5128,7 +5131,11 @@ class DerivedEvent:
 
 def _send_derived(events: "list[DerivedEvent]", repository: str, *, run_id: str | None = None,
                   recovered: bool = False) -> None:
+    notifier = notify.installed()
+    runtime_root = notifier.runtime_root if notifier is not None else None
     for event in events:
+        if event.supersedes and _superseded_handled(event, repository, runtime_root, spent=False):
+            continue
         notify.send(event.event_type, repository=repository, ident=event.ident, title=event.title,
                     work_item=event.work_item, message=event.message, link=event.link, run_id=run_id,
                     recovered=recovered)
@@ -5207,9 +5214,82 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
                 # The Workflow itself calls the stop a blocker, so no person's decision is asked for
                 # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
                 out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
+            elif (wait_title := _review_wait_title(record, work_item)) is not None:
+                out.append(DerivedEvent("review_wait", ident, wait_title, work_item, body, supersedes="user_gate"))
             else:
                 out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item, body))
     return out
+
+
+#: The phases that host the wait for the manual external reviewer's verdict (rows 14 and 28).
+REVIEW_WAIT_PHASES = frozenset({"AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"})
+REVIEW_WAIT_ACTIONS = frozenset({"plan.review.external", "implementation.review.external"})
+
+
+def _protocol_gate(record: Mapping) -> Mapping | None:
+    """The Workflow's own protocol gate (``{row, disposition, action_id}``) a fall-through record carries,
+    or ``None`` for every record written without one (a legacy target, a Controller-coded gate)."""
+    block = record.get("protocol_gate")
+    return block if isinstance(block, Mapping) else None
+
+
+def _review_wait_title(record: Mapping, work_item: object) -> str | None:
+    """The title of a ``review_wait`` for a gate record that only waits for a reviewer or a tester, else
+    ``None`` (the stop asks a person). Two sources, never the phase alone: a protocol gate the Workflow
+    disposed ``external_gate`` for a review action at a manual-external phase, and a tester fault stop
+    other than ``isolation_breach``."""
+    gate = record.get("human_gate_pending")
+    functional = record.get("functional")
+    if isinstance(functional, Mapping):
+        code = functional.get("gate")
+        if code in functional_review.FAULT_GATES and code != functional_review.GATE_ISOLATION_BREACH:
+            return f"Waiting: {code} ({work_item})"
+        return None
+    protocol_gate = _protocol_gate(record)
+    if (protocol_gate is not None and isinstance(gate, Mapping) and gate.get("phase") in REVIEW_WAIT_PHASES
+            and protocol_gate.get("disposition") == "external_gate"
+            and protocol_gate.get("action_id") in REVIEW_WAIT_ACTIONS):
+        return f"Waiting for the external review: {work_item}"
+    return None
+
+
+def _superseded_handled(event: DerivedEvent, repository: str, runtime_root: "Path | None", *, spent: bool,
+                        logs: dict | None = None) -> bool:
+    """Whether the stop's notice under the **superseded** event type was already handled, in the
+    notification log of any of the :data:`RECOVERY_RECORD_LIMIT` newest runs. ``spent=False`` asks
+    whether the server holds the key (delivered outcomes only), the live question; ``spent=True`` asks
+    whether attempts were spent (``failed`` and ``rejected`` too), the recovery question. A symlinked
+    run directory or log, an unreadable or oversize log and an unresolvable root are skipped: the
+    event is then sent, the safe direction."""
+    if not event.supersedes or runtime_root is None:
+        return False
+    if logs is None:
+        logs = {}
+    key = notify.idempotency_key(event.supersedes, repository, event.ident)
+    accepted = _HANDLED_OUTCOMES if spent else frozenset({notify.SENT, notify.CONFLICT})
+    try:
+        runs = Path(runtime_root) / "runs"
+        resolved_runs = runs.resolve(strict=True)
+        names = sorted((p.name for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), reverse=True)
+        names = names[:RECOVERY_RECORD_LIMIT]
+    except OSError:
+        return False
+    for name in names:
+        slot = ("contained", name)
+        if slot not in logs:
+            log = runs / name / notify.NOTIFICATIONS_LOG
+            try:
+                contained = not log.is_symlink() and log.resolve(strict=True).parent == resolved_runs / name
+            except OSError:
+                contained = False
+            logs[slot] = _outcome_lines(Path(runtime_root), name) if contained else None
+        for line in logs[slot] or ():
+            if line.get("idempotency_key") != key:
+                continue
+            status = line.get("status")
+            if status in accepted or (status == notify.DUPLICATE and line.get("source") == "server"):
+                return True
+    return False
 
 
 def _pending_checks_wait(record: Mapping) -> bool | None:
@@ -5493,6 +5573,8 @@ def _recoverable(record: Mapping, runtime_root: Path, event: DerivedEvent, repos
         status = line.get("status")
         if status in _HANDLED_OUTCOMES or (status == notify.DUPLICATE and line.get("source") == "server"):
             return False
+    if event.supersedes and _superseded_handled(event, repository, runtime_root, spent=True, logs=logs):
+        return False
     return notify.resolve(event.event_type, config_events).enabled
 
 
@@ -8069,9 +8151,12 @@ def _execute_step_locked(
                 mode=options.get("mode", review_mode.MODE_AUTO), mode_source=options.get("source", "default"),
                 choice=choice,
             )
+        protocol = decision.protocol
         return _no_launch_record(
             runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
             decision, status=STATUS_GATE_BLOCKED, run_id=run_id,
+            extra=None if protocol is None else {"protocol_gate": {
+                "row": protocol.row, "disposition": protocol.disposition, "action_id": protocol.action_id}},
         )
     if decision.declined:
         return _no_launch_record(

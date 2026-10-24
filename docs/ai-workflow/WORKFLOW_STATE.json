@@ -25469,7 +25469,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -25617,12 +25617,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 2,
+          "local": 3,
           "external": 0
         }
       },
-      "state_revision": 35,
-      "last_transition": "2026-10-24T12:53:59Z",
+      "state_revision": 36,
+      "last_transition": "2026-10-24T12:58:14Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -25703,6 +25703,20 @@
               "review_content_id": "f98fdd7a7cc1c785882c4bd895c58107aec504f87643c5de8c24348d4fe1817d",
               "verdict": "REVISE",
               "at": "2026-10-24T12:29:31Z"
+            }
+          ]
+        },
+        "F-2f11f2ed6f1b": {
+          "digest": "2f11f2ed6f1bc8bebc21540b393e9001858088a06ac71cfe10562e1fad42f5ce",
+          "text": "**O1.** `TEST_RESULTS.md` is still headed \"implementation revision 1\" and code head `2911806`. The evidence for the revision-2 and revision-3 fixes (the `taskset` reproduction, 4 of 6 failing before and 8 of 8 passing after) is only in the summary. Head the file with the current revision and add a short section for each fix round.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "9cf4a5f59cdc8c7ddcb6a81d45557cf22ad163d140653d26f2a16c4c299033a7",
+              "verdict": "REVISE",
+              "at": "2026-10-24T12:58:14Z"
             }
           ]
         }

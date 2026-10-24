@@ -1218,6 +1218,32 @@ class ReviewWaitProductionPathTest(unittest.TestCase):
         self.assertEqual([e.event_type for e in job.derive_job_event(legacy)], ["user_gate"])
 
 
+class BlockedDispositionProductionPathTest(unittest.TestCase):
+    """Notification-fix D7 (implementation round 1 I1): a gate the Workflow itself disposes ``blocked`` is written
+    by the production fall-through with ``protocol_gate`` and no ``protocol`` block, and derives what it derived
+    at the base commit -- a ``user_gate``, never a ``review_wait``."""
+
+    def test_a_blocked_disposition_gate_is_a_user_gate_without_a_protocol_block(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        real = protocol.next_action
+
+        def blocked(*args, **kwargs):
+            answer = real(*args, **kwargs)
+            raw = dict(answer.raw, row="22", disposition="blocked", action=None, satisfied_by=None,
+                       reason=dict(answer.raw["reason"], code="plan_not_approved", text="the plan is not approved"))
+            return protocol.parse_decision(raw)
+
+        with mock.patch.object(protocol, "next_action", blocked):
+            record = life.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
+        self.assertNotIn("protocol", record)
+        self.assertEqual(record["protocol_gate"]["disposition"], "blocked")
+        [event] = job.derive_job_event(record)
+        self.assertEqual(event.event_type, "user_gate")
+        self.assertIsNone(event.supersedes)
+
+
 from controller import notify  # noqa: E402
 from tests import test_notifications_wiring as wiring, test_review_job as rj  # noqa: E402
 from tests.fake_signalhub import FakeSignalHub  # noqa: E402

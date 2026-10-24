@@ -300,10 +300,12 @@ class FakeClaude:
         command = prompt.split("```sh\n", 1)[1].rsplit("\n```", 1)[0]
         if self.fault == "login":
             return [self.init(), {"type": "result", "is_error": True, "result": "Not logged in - please run /login"}]
-        if self.fault in ("link_replaced", "link_in_clone"):  # the link is removed and a directory made in its place
+        if self.fault == "link_replaced":  # the link is replaced by a directory, the permitted write still happens
             (clone / "build").unlink()
             (clone / "build").mkdir()
-        (clone / "build" / "probe").write_bytes(b"")  # through the link: it lands in the external folder
+            (clone.parent / "writable" / "build" / "probe").write_bytes(b"")
+        elif self.fault != "link_in_clone":  # link_in_clone keeps the link and skips the permitted write
+            (clone / "build" / "probe").write_bytes(b"")  # through the link: it lands in the external folder
         (out / "probe").write_bytes(b"")
         if self.fault == "host_write":
             (clone / "src.txt").write_bytes(b"changed\n")
@@ -385,12 +387,16 @@ class VerifyBuildTests(unittest.TestCase):
     def verify(self, fake: FakeClaude, **kw):
         return cb.verify_build(self.link, runtime_root=self.root, operator_home=self.home, run=fake, **kw)
 
-    def assertRefused(self, fake: FakeClaude, probe: str, *, inconclusive: bool, text: str = "") -> None:
+    def assertRefused(self, fake: FakeClaude, probe: str, *, inconclusive: bool, text: str = "", absent: str = "") -> None:
         with self.assertRaises(cb.BuildNotVerified) as ctx:
             self.verify(fake)
         self.assertEqual(ctx.exception.probe, probe, ctx.exception.message)
         self.assertEqual(ctx.exception.inconclusive, inconclusive, ctx.exception.message)
         self.assertIn(text, ctx.exception.message)
+        if absent:  # a row for one cause reports that cause alone
+            problems = ctx.exception.evidence["problems"]
+            self.assertEqual(len(problems), 1, problems)
+            self.assertNotIn(absent, problems[0])
         self.assertFalse((self.root / cb.RECORD_NAME).exists())
         scratch = self.root / cb.SCRATCH_AREA
         self.assertEqual(list(scratch.iterdir()) if scratch.exists() else [], [])
@@ -447,14 +453,14 @@ class VerifyBuildTests(unittest.TestCase):
         self.assertIn("no short folder", ctx.exception.message)
 
     def test_each_broken_probe_fails_closed_and_names_the_probe(self) -> None:
-        for fault, probe, inconclusive, text in (
+        for fault, probe, inconclusive, text, *absent in (
                 ("host_write", "boundary", False, "changed"),
                 ("socket", "boundary", False, "listener"),
                 ("missing_line", "boundary", False, "unix: no result line"),
                 ("sandbox_failed", "boundary", True, "sandbox could not start"),
                 ("denied_write_reported", "boundary", False, "home: WROTE"),
-                ("link_replaced", "boundary", False, "was replaced or removed"),
-                ("link_in_clone", "boundary", False, "did not happen"),
+                ("link_replaced", "boundary", False, "was replaced or removed", "did not happen"),
+                ("link_in_clone", "boundary", False, "did not happen", "was replaced or removed"),
                 ("link_wrote", "boundary", False, "link: WROTE, expected REFUSED"),
                 ("link_missing_line", "boundary", False, "link: no result line"),
                 ("tools", "boundary", False, "tool list"),
@@ -471,7 +477,7 @@ class VerifyBuildTests(unittest.TestCase):
                 ("exit_nonzero", "boundary", False, "did not complete cleanly"),
                 ("not_refused", "missing_component", False, "not refused")):
             with self.subTest(fault):
-                self.assertRefused(FakeClaude(fault), probe, inconclusive=inconclusive, text=text)
+                self.assertRefused(FakeClaude(fault), probe, inconclusive=inconclusive, text=text, absent="".join(absent))
 
     def test_a_symlink_re_pointed_during_a_probe_still_passes_with_the_original_digest(self) -> None:
         other = self.real.parent / "claude-other"

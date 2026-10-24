@@ -388,6 +388,41 @@ class SandboxBuildTest(Fixture):
         self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_CLONE_MISMATCH)
 
 
+class SandboxPathTest(unittest.TestCase):
+    """``Sandbox.allows`` resolves ``..`` after a link through the link, as a sandbox mount does (#140)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="wfr-cp3-path-")).resolve()
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)], check=False)
+        (self.tmp / "clone" / "src").mkdir(parents=True)
+        (self.tmp / "writable" / "build").mkdir(parents=True)
+        (self.tmp / "clone" / "build").symlink_to(self.tmp / "writable" / "build")
+        self.sandbox = fake.Sandbox({"sandbox": {"filesystem": {
+            "allowWrite": [str(self.tmp / "writable")], "denyWrite": [str(self.tmp / "clone")]}}}, True)
+
+    def test_dot_dot_after_a_link_goes_through_the_link_not_around_it(self) -> None:
+        back = self.tmp / "writable" / "build" / "back"
+        back.symlink_to(self.tmp / "clone" / "src")  # back -> clone/src, so back/.. is clone
+        path = self.tmp / "clone" / "build" / "back" / ".." / "src" / "app.py"
+        self.assertFalse(self.sandbox.allows(path))
+        self.assertFalse(self.sandbox.allows(path, parent_only=True))
+        back.unlink()
+        back.mkdir()  # a plain folder: back/../src/app.py is writable/build/src/app.py
+        self.assertTrue(self.sandbox.allows(path))
+
+    def test_a_relative_path_is_joined_onto_the_current_folder_without_collapsing(self) -> None:
+        (self.tmp / "writable" / "build" / "back").symlink_to(self.tmp / "clone" / "src")
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(self.tmp)
+        self.assertFalse(self.sandbox.allows(Path("clone/build/back/../src/app.py")))
+
+    def test_a_path_ending_in_dot_dot_is_judged_fully_resolved(self) -> None:
+        (self.tmp / "writable" / "build" / "back").symlink_to(self.tmp / "clone" / "src")
+        path = self.tmp / "clone" / "build" / "back" / ".."  # resolves to clone, which is denied
+        self.assertFalse(self.sandbox.allows(path, parent_only=True))
+
+
 class BindingTest(Fixture):
     """The second layer alone: a hand-made clone that differs after a run."""
 

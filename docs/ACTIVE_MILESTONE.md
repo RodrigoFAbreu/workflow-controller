@@ -10,5 +10,5 @@ in `docs/milestones/completed/`.
 
 ## Next action
 
-No work item is active. The next item on the roadmap is the harness-neutral roles epic (H1 and H6 first): run
-`/milestone-plan` for it.
+No work item is active. The next item on the roadmap is NF1, the notification fix (issue #149): run `/milestone-plan`
+for it. RB1 (issue #150) follows, then the harness-neutral roles epic (H1 and H6 first).

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-cleanup-3b",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -26157,6 +26157,221 @@
         },
         "evaluated_at": "2026-10-24T15:19:25Z",
         "workflow_release": "2.18.6"
+      }
+    },
+    "workflow-controller-cleanup-3b": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-cleanup-3b",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CLEANUP_3B_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3b-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3b-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 1,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "cf62d04b1eec56dadec8265cb4e43618296b444e",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+        "approved_review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CLEANUP_3B_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "40acb27dc5251ea8289343c68e367500721ca379"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cleanup-3b-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9f42395f0c089c6aade287e951581e3af1e0dedd"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3b-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8af1d9880c49ca1a579f991ee7d63b659b2d24c2"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-24T16:36:36Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
+            "ledger": {
+              "local": {
+                "bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "797e6eea6a6a61009a45e0c32a2257fa46303efd6fb01e1cc6e8925f37511315",
+                "ledger_entry_sha256": "a9c49e33b324b47f64fdf59777e88ef1fe8c5081df0d7b689625ba411598ebbe",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "b756c176f075e31e5e38357e1f10ee731e670c0bee7922e8218a832c8b3e297b",
+                "ledger_entry_sha256": "155367bcaca4a0133cf9f58607c8cdb1e7ce5dce2eac81ba9e0a7dbb5cd15c23",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-24T16:36:36Z",
+          "workflow_release": "2.18.7"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-24T16:29:37Z",
+          "verdict_sha256": "797e6eea6a6a61009a45e0c32a2257fa46303efd6fb01e1cc6e8925f37511315",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-24T16:34:05Z",
+          "verdict_sha256": "b756c176f075e31e5e38357e1f10ee731e670c0bee7922e8218a832c8b3e297b",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-10-24T16:36:36Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-24T16:26:50Z",
+        "consumed": {
+          "review_content_id": "7a5060f78334b31ce7f5e4f355d1f96453d97c32e9c4c685e0e74489c699fdb7",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
+          "plan_revision": 1
+        },
+        "bound": {
+          "review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
+          "bundle_id": "f58adb57ef883a0d407c61434506c0db2420d15724bd9f696de27dbd05f5c603",
+          "plan_revision": 1
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "1080907a39f57ccacbdae23c354380b60a8ef176c68558237bea238bfa21c73e",
+        "7a5060f78334b31ce7f5e4f355d1f96453d97c32e9c4c685e0e74489c699fdb7",
+        "f900ba68f8c9aef351a3c6bd8cb2a0a3271b2e3b8cc8e89baf15a7f894295b96"
+      ],
+      "optional_findings": {
+        "F-8f74e1fc0ed4": {
+          "digest": "8f74e1fc0ed473925dd456ac5d8d7b344e2daa6b8684b7a5b50dcd67ec375614",
+          "text": "D5's guide sentence says \"the model probes skip\". Without `.credentials.json`, `prepare` refuses before any probe, so the `missing_component` probe (no model call) skips too. Say \"the probes skip\" or name all three.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f900ba68f8c9aef351a3c6bd8cb2a0a3271b2e3b8cc8e89baf15a7f894295b96",
+              "verdict": "REVISE",
+              "at": "2026-10-24T16:11:24+00:00"
+            }
+          ]
+        },
+        "F-eb55d3ead300": {
+          "digest": "eb55d3ead300ab8085400418c541fb15bfba8954956037d51e657d1078163b1b",
+          "text": "D3: when `Host(...)` raises after the Unix socket is bound (for example on the TCP bind), `self.host` stays `None` and the Unix socket's descriptor is not closed by `cleanup`. The folder is still removed, so only a descriptor leaks until garbage collection; close the Unix socket on a failed construction, or note it as accepted.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f900ba68f8c9aef351a3c6bd8cb2a0a3271b2e3b8cc8e89baf15a7f894295b96",
+              "verdict": "REVISE",
+              "at": "2026-10-24T16:11:24+00:00"
+            }
+          ]
+        },
+        "F-aef232341dc7": {
+          "digest": "aef232341dc7f811dbb9add6c5912e8acd147137e2e31d43e30e55e16ef19803",
+          "text": "**CP3's \"fake `claude` first on `PATH`\" check reaches the identity refusal, not the credentials refusal.** `verify_build` checks that the build is an ELF file and runs `fr.host_probe()` before `_Run`/`prepare` (`controller/claude_build.py:540-546`), so a shell-script fake ends at probe `identity` and the live tests still error. The check works with the installed native `claude` and a scratch `CLAUDE_CONFIG_DIR`, or with the plan's own alternative (the helper with the refusal patched in); name one of those, or say the fake must be a native (ELF) file, when the checkpoint runs.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T16:29:37Z"
+            }
+          ]
+        }
       }
     }
   }

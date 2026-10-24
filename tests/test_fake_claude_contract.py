@@ -2057,5 +2057,55 @@ def _wait(predicate, timeout=10.0) -> bool:
     return bool(predicate())
 
 
+class HangChildPidFileTest(unittest.TestCase):
+    """The hang child's pid file appears whole or not at all (``tests/fake_claude.py``, #100)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="hang-pid-file-"))
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.pid_file = self.tmp / "child"
+
+    def _start(self) -> subprocess.Popen:
+        env = {k: v for k, v in os.environ.items() if not k.startswith("FAKE_CLAUDE_")}
+        env.update({"FAKE_CLAUDE_HANG": "1", "FAKE_CLAUDE_HANG_CHILD_PID_FILE": str(self.pid_file)})
+        proc = subprocess.Popen([sys.executable, str(FAKE_CLAUDE), "-p", "task", "--output-format", "stream-json",
+                                 "--verbose"], env=env, cwd=self.tmp, stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(_kill_with, -proc.pid, signal.SIGKILL)
+        assert proc.stdin is not None
+        proc.stdin.write(task_line().encode())
+        proc.stdin.flush()
+        return proc
+
+    def _end_child(self) -> None:
+        try:
+            _kill_with(int(self.pid_file.read_text()), signal.SIGKILL)
+        except ValueError:
+            pass
+
+    def test_the_file_replaces_one_that_stood_there_as_a_new_inode_holding_an_integer(self) -> None:
+        from tests import process_fixtures
+
+        self.pid_file.write_text("sentinel")
+        before = self.pid_file.stat().st_ino
+        self._start()
+        self.addCleanup(self._end_child)
+        # os.replace gives the path a new inode; an in-place write keeps the sentinel's.
+        self.assertTrue(process_fixtures.wait_until(
+            lambda: self.pid_file.stat().st_ino != before, timeout=30), "the file was written in place")
+        self.assertTrue(self.pid_file.read_text().isdigit(), self.pid_file.read_text())
+
+    def test_a_reader_that_sees_the_path_reads_an_integer_every_time(self) -> None:
+        """A guard, not the proof: an in-place write holds an empty file only for microseconds."""
+        from tests import process_fixtures
+
+        self._start()
+        self.addCleanup(self._end_child)
+        self.assertTrue(process_fixtures.wait_until(self.pid_file.exists, timeout=30, interval=0),
+                        "the pid file never appeared")
+        for _ in range(200):
+            self.assertTrue(self.pid_file.read_text().isdigit())
+
+
 if __name__ == "__main__":
     unittest.main()

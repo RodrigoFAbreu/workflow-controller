@@ -1458,8 +1458,12 @@ def main() -> None:
         child_pid_file = os.environ.get("FAKE_CLAUDE_HANG_CHILD_PID_FILE")
         if child_pid_file:
             child = subprocess.Popen(["sleep", str(SUBPROCESS_SLEEP_SECONDS)])
-            with open(child_pid_file, "w") as fh:
+            # Whole or not at all: a waiter that sees the path must read an
+            # integer, never the empty file an in-place write leaves for a moment.
+            tmp_pid_file = f"{child_pid_file}.{os.getpid()}.tmp"
+            with open(tmp_pid_file, "w") as fh:
                 fh.write(str(child.pid))
+            os.replace(tmp_pid_file, child_pid_file)
         time.sleep(_hang_seconds())
         sys.exit(0)
 

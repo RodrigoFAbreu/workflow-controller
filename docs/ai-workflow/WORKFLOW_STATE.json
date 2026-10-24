@@ -23761,7 +23761,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -23878,7 +23878,168 @@
           "workflow_release": "2.18.5"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+        "approved_review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+        "review_content_manifest": [
+          {
+            "path": "controller/claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8cea6a82e8c15829a9f370b649dd250ac7061a77"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9433207241f836f3075ee2637384e1f7dc7a00cd"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0c9082370cc671d2762a5c93b6ea813b02c944b8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "78602e000f08af43504813113895749da636b16b"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8fc1e4a3e0cb199c2def7dca395cf6c89afe9a4"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "77ca121b19c6fae37466024597308e4e44d443e0"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fbf504b02107e0920436e0067ab648767a5a7ff9"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8987002036601f7013bf7e0200024fe641d29541"
+          },
+          {
+            "path": "docs/install.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "041290efc0d2f2d59a69abaf087e9eded001db63"
+          },
+          {
+            "path": "tests/fake_functional_tester.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "757baaebfd7bd05760c031019d6b6c761d336e98"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bd59ace8b57fda144e9e5bb433487a0c367d8a95"
+          },
+          {
+            "path": "tests/test_claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "40315e95a2df0f29b428f6035928bd6374387d0e"
+          },
+          {
+            "path": "tests/test_functional_enforcement.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2f21545ce30c0d319c979f6fc3f64a938827a11f"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dc089e00100daba82bbd4fe50215e75a3675e084"
+          },
+          {
+            "path": "tests/test_functional_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6400330855f87a820c80b92d2248a90302cab9f2"
+          }
+        ],
+        "reviewed_content_commit": "befe03123c03a2777af4283d292b2af96fa78531",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-24T00:30:31Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+            "ledger": {
+              "local": {
+                "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "dadeeced0692e7712e47886fab96c7a4b44e25a98576d277832f82ab11ee71da",
+                "ledger_entry_sha256": "88b1e5091fee71a5145cbcee48809d16b73beca34368bcfa52152a067b364aaf",
+                "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "6e7a2ca0abeb9a5ae03258905b584b2881b26f99e1660cfa5045e9314ed1d5e9",
+                "ledger_entry_sha256": "b692cfcdec3bcf295289d8895dc6a2c591702acd32cd45255936988355e00e06",
+                "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-24T00:30:31Z",
+          "workflow_release": "2.18.5"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "331fe0d86ab8570ec4d8f6fb1ba9edd8fdf2d7fdaee6dddb176f22d1862419c0",
@@ -23909,12 +24070,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
-          "external": 0
+          "local": 3,
+          "external": 1
         }
       },
-      "state_revision": 28,
-      "last_transition": "2026-10-23T22:31:07Z",
+      "state_revision": 31,
+      "last_transition": "2026-10-24T00:30:31Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -24107,6 +24268,83 @@
               "at": "2026-10-23T22:15:39Z"
             }
           ]
+        },
+        "F-c8d5920743a3": {
+          "digest": "c8d5920743a3cc87b4d66b951122985e4af584b3f9e70294987d2324d42b5f0e",
+          "text": "**O2 (carried):** In `tests/test_claude_build.py`, the `link_in_clone` fault takes the same unlink-and-mkdir path as `link_replaced`. It fails on the \"did not happen\" message only because the probe file then lands in the clone. A separate fault that leaves the link and writes into the clone directly would test the external-file check on its own. Record it as a follow-up issue at acceptance.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+              "verdict": "APPROVE",
+              "at": "2026-10-23T22:58:00Z"
+            }
+          ]
+        },
+        "F-4ab7b1719987": {
+          "digest": "4ab7b17199871e58774ae959315d7272283179b1ac45ec5fc4daf9a257cd6e9e",
+          "text": "**O4:** `test_the_controllers_own_links_pass_and_every_other_change_to_them_is_a_difference` (`tests/test_functional_sandbox.py`) asserts only that some problem contains `build` or `extra-link`. Asserting the exact `link changed: build` text for the four link cases would pin D3's message. Record it as a follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+              "verdict": "APPROVE",
+              "at": "2026-10-23T22:58:00Z"
+            }
+          ]
+        },
+        "F-f285b9eb34e2": {
+          "digest": "f285b9eb34e2a516319252b1e811a792ec884461c2aacce155b09c246842e892",
+          "text": "`tests/fake_functional_tester.py:93`: `abspath()` collapses `..` before symlink resolution. With `writable/build/back -> clone/src`, the fake allows `clone/build/back/../src/app.py`, although that path resolves into the denied clone. Preserve path-component order during resolution and add focused coverage.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T00:27:00Z"
+            }
+          ]
+        },
+        "F-adf350ddbcf9": {
+          "digest": "adf350ddbcf93adcc2d011a0965a4e26d86b4e9b0986e770ce825dc0b6d74fe1",
+          "text": "`tests/test_claude_build.py:303`: `link_in_clone` and `link_replaced` perform the same mutation. Separate them to improve fault isolation, as already recorded for follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T00:27:00Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-23T22:58:00Z",
+          "verdict_sha256": "dadeeced0692e7712e47886fab96c7a4b44e25a98576d277832f82ab11ee71da",
+          "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-24T00:27:00Z",
+          "verdict_sha256": "6e7a2ca0abeb9a5ae03258905b584b2881b26f99e1660cfa5045e9314ed1d5e9",
+          "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

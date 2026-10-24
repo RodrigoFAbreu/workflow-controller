@@ -8,10 +8,11 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 ## At a glance
 
-**Where things stand (2026-10-23).** Controller 1.19.0 is the latest release (PR #128, squash `2375b51`), from C10e
-(accepted 2026-10-23 by gate policy): `workflow-controller verify-claude` verifies a new Claude build with live probes and
-records its digest, so the automated functional review can use it. C10f (#129, complete) lays the tester's sandbox out so Claude Code 2.1.304 and later
-can pass `verify-claude` too. 1.18.0 (PR #111, squash `5f3f131`) came from C10c
+**Where things stand (2026-10-24).** Controller 1.19.1 is the latest release (PR #137, squash `8f1b053`), from C10f
+(accepted 2026-10-24 by gate policy): the functional tester's writable folders live outside the clone behind links, so
+`workflow-controller verify-claude` verifies Claude Code 2.1.304 and later too (tested live on 2.1.304, 2.1.308 and
+2.1.309). 1.19.0 (PR #128, squash `2375b51`) came from C10e, which added `verify-claude`: it verifies a new Claude build with
+live probes and records its digest, so the automated functional review can use it. 1.18.0 (PR #111, squash `5f3f131`) came from C10c
 (accepted 2026-10-21 by gate policy): under an automatic acceptance gate the Controller runs the functional review
 itself in an isolated tester, so acceptance clears itself. 1.17.0 (PR #107, squash `a76daff`) came from C13b
 (accepted 2026-10-19 by gate policy): each review stage has a local round cap (6) and an external round cap (4) on the
@@ -157,7 +158,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C10d-a | Complexity: medium. The post-acceptance defect loop at the merge flow's `checks_failing` stop: report the fixed query so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged); C10d is split into two items (owner decision, 2026-10-23) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C10d-b | Complexity: low to medium. The same report at a `CHANGES_REQUESTED` decision | C10d-a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C10e | A command that verifies a new `claude` build for the functional tester: it runs the live sandbox enforcement probes against that binary and, only when every probe holds, records its digest in the Controller's state (never the settings file); the launch admits the built-in list plus the recorded digests, so a Claude update needs no release ([#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113); owner decision 2026-10-22: right after C2b) (complete, accepted 2026-10-23 by gate policy; released as 1.19.0 from PR #128, squash `2375b51`: `workflow-controller verify-claude`; the probe and the launch use one resolved binary, #114; follow-ups [81-82](#known-follow-ups-carried-forward), issues #132 and #133) | C10c | [11.9](#119-automated-functional-review) |
-| C10f | Complexity: medium. The sandbox layout for Claude Code 2.1.304 and later: those builds block writes to an allowed folder below a denied path, so `verify-claude` refuses them with `boundary: writable: REFUSED`; lay the tester's folders out so no allowed write sits below a denied path, then verify a current build ([#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129); owner decision 2026-10-23: right after C10e) (complete: the writable folders live outside the clone behind links, with a `link` probe and a fake tester that applies the deny-above-wins rule) | C10e | [11.9](#119-automated-functional-review) |
+| C10f | Complexity: medium. The sandbox layout for Claude Code 2.1.304 and later: those builds block writes to an allowed folder below a denied path, so `verify-claude` refuses them with `boundary: writable: REFUSED`; lay the tester's folders out so no allowed write sits below a denied path, then verify a current build ([#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129); owner decision 2026-10-23: right after C10e) (complete, accepted 2026-10-24 by gate policy; released as 1.19.1 from PR #137, squash `8f1b053`: the writable folders live outside the clone behind links, with a `link` probe and a fake tester that applies the deny-above-wins rule; follow-ups [83-84](#known-follow-ups-carried-forward), issues #138 and #140) | C10e | [11.9](#119-automated-functional-review) |
 | C10g-1 | Complexity: high; split again before it is planned. The functional tester on Codex without a per-release version block, step 1: Codex sandbox enforcement and its proof ([#131](https://github.com/RodrigoFAbreu/workflow-controller/issues/131); extends [follow-up 61](#known-follow-ups-carried-forward)); the proof is also the Codex sandbox the Codex worker reuses (H4b) | C10f | [11.9](#119-automated-functional-review) |
 | C10g-2 | Complexity: medium. `verify-codex` with verify-on-first-use cached by the build's digest | C10g-1 | [11.9](#119-automated-functional-review) |
 | C10g-3 | Complexity: low. The tester role declared for Codex; the harness is chosen through H1's per-role routing and the fallback to the other harness is H9's chain, so there is no separate tester-harness setting | C10g-2, H1, H9 | [11.9](#119-automated-functional-review) |
@@ -177,7 +178,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | H4e | Complexity: medium. Codex worker, step 5: the four review-side roles (`review-plan`, `review-implementation`, `apply-plan-review`, `apply-implementation-review`) can be routed to Codex; a safety review and a live proof on a scratch repository (operator-run) | H4d, H1 | [Adapters and backlog](#at-a-glance) |
 | H4f | Complexity: medium. Codex worker, step 6: `milestone-implement` can be routed to Codex (the longest role: checkpoints, commits, self-review); a safety review and a live proof (operator-run) | H4e | [Adapters and backlog](#at-a-glance) |
 | H4g | Complexity: low. Codex worker, step 7: the remaining roles (`milestone-plan`, `apply-functional-review`, `apply-pr-review`, `satisfy-gate`, `prepare-functional-review`, `record-manual-*`) and the documentation; every role can run on either harness that declares it | H4f | [Adapters and backlog](#at-a-glance) |
-| CU3 | Complexity: low. A clean-up milestone for wording, documentation and test tidy-ups among the open `review-follow-up` issues (#100, #103, #104, #108, #116, #118, #125, #132, #133), under the limit of 8 (owner decision, 2026-10-23); mechanisms are not cleaned up here | C10f, #126 | [Clean-up milestones](#at-a-glance) |
+| CU3 | Complexity: low. A clean-up milestone for wording, documentation and test tidy-ups among the open `review-follow-up` issues (#100, #103, #104, #108, #116, #118, #125, #132, #133, #138, #140), under the limit of 8 (owner decision, 2026-10-23); mechanisms are not cleaned up here | C10f, #126 | [Clean-up milestones](#at-a-glance) |
 | C10h | Complexity: medium. Deny the functional tester reads of credential files and detect a `file://` origin ([#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115); split out of CU3: it adds a security mechanism; split again if the plan needs both parts) | C10f | [11.9](#119-automated-functional-review) |
 | C10i | Complexity: low to medium. Check sandbox availability before reserving usage and marking the tester job launched ([#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112); split out of CU3) | C10f | [11.9](#119-automated-functional-review) |
 | CL1a | Complexity: low. Retention of finished work-item files (registry, audit, old plans, fixtures): the written rule and its documentation, owned by the Workflow and followed by the Manager and the Controller ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), [workflow#84](https://github.com/RodrigoFAbreu/workflow/issues/84), [workflow-manager#90](https://github.com/RodrigoFAbreu/workflow-manager/issues/90)); CL1 is split into five items (owner decision, 2026-10-23) | CU3 | [Clean-up milestones](#at-a-glance) |
@@ -593,6 +594,12 @@ hurts now, else in a later step or the next clean-up milestone.
 82. [#133](https://github.com/RodrigoFAbreu/workflow-controller/issues/133): `--claude-binary` still needs a `claude` on
     `PATH`; an `OSError` while the probe run is built escapes as a traceback instead of exit 20; the development
     guide says missing credentials skip the live tests when they error (C10e review; later).
+83. [#138](https://github.com/RodrigoFAbreu/workflow-controller/issues/138): two flaky timing tests (the
+    `ConformanceLaneExecutionTest` SIGTERM case waiting a fixed 30 s, and the sandbox test whose run timeout is 2 s)
+    (C10f review; a `bug`, taken by CU3).
+84. [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140): `runtime.remove_tree` resolves the parent
+    before removing, so a path below a link would remove the external folder's contents (no caller does this); the
+    fake tester collapses `..` before it resolves links; two identical link tests (C10f review; later).
 
 ---
 

@@ -14,4 +14,4 @@ No milestone is active. `docs/ai-workflow/WORKFLOW_STATE.json` is the ground-tru
 
 ## Next action
 
-Plan the next item in `docs/ROADMAP.md` with `/milestone-plan`: #126, then **CU3** and **A2**.
+Controller 1.19.1 is released (C10f, pull request #137). Plan the next item in `docs/ROADMAP.md` with `/milestone-plan`: #126, then **CU3**, the harness-neutral roles epic (H1 first) and **A2**.

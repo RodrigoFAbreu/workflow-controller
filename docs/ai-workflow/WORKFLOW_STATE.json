@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-notification-fix",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -26825,6 +26825,381 @@
         },
         "evaluated_at": "2026-10-24T18:19:53Z",
         "workflow_release": "2.18.7"
+      }
+    },
+    "workflow-controller-notification-fix": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-notification-fix",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_NOTIFICATION_FIX_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-notification-fix-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-notification-fix-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 10,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "9e37d4cd332773f79c63133cffc83a3e2bf37d0b",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+        "approved_review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_NOTIFICATION_FIX_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ffa95d9b302d7d1d4c830cede22f6e89f181352d"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-notification-fix-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2d1e06117045ffaf043d6ef67eb586193bfc4c34"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-notification-fix-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9729c888e08aa51e4af9869c453687ed2b353bc5"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-24T21:13:41Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+            "ledger": {
+              "local": {
+                "bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+                "verdict": "APPROVE",
+                "round": 10,
+                "verdict_sha256": "c674f00517284cbbd98cd4f5ffccbc0c314e4c324479dc76052b6ac16c3fba18",
+                "ledger_entry_sha256": "1b39ece5e688c97b88a512ec5604cdec26d3bbe483ba4446be7ca6e5b0759c75",
+                "run_ref": "session:local .ai-review/workflow-controller-notification-fix/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+                "verdict": "APPROVE",
+                "round": 10,
+                "verdict_sha256": "ce99846ef30765473cb459f27c0d81b1389985c8f7a5aad0bed3cf4f374c3956",
+                "ledger_entry_sha256": "3f0a85166e0b6e3dd39aeb91c01cc20a16c388e901471a40d71f66088c64652a",
+                "run_ref": "session:local .ai-review/workflow-controller-notification-fix/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-24T21:13:41Z",
+          "workflow_release": "2.18.7"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+          "verdict": "APPROVE",
+          "round": 10,
+          "completed_at": "2026-10-24T21:07:28Z",
+          "verdict_sha256": "c674f00517284cbbd98cd4f5ffccbc0c314e4c324479dc76052b6ac16c3fba18",
+          "run_ref": "session:local .ai-review/workflow-controller-notification-fix/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+          "verdict": "APPROVE",
+          "round": 10,
+          "completed_at": "2026-10-24T21:11:43Z",
+          "verdict_sha256": "ce99846ef30765473cb459f27c0d81b1389985c8f7a5aad0bed3cf4f374c3956",
+          "run_ref": "session:local .ai-review/workflow-controller-notification-fix/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 10,
+          "external": 4
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 36,
+      "last_transition": "2026-10-24T21:13:41Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-24T21:05:38Z",
+        "consumed": {
+          "review_content_id": "d2370383ce211f9abaa8686bbcff5eea9732466782542b6d47d6853e3d10f6f6",
+          "plan_revision": 9,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+          "plan_revision": 10
+        },
+        "bound": {
+          "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+          "bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
+          "plan_revision": 10
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "00adf15e5efe127438d2efb548de94d241285f35e089f8ed5fd7d77b68be67c8",
+        "432c63609d4972aa6bc4a841063d6bb288e24e796ff49d58702d6ad546294767",
+        "5720258da8ec9a3a2e442b253d0cc435c66f106f5a0546cac03fe4852c5207c4",
+        "77944460d165065a38c2c38a311c62d771ece675e7c82d52c8b3f8bf0ac18f84",
+        "a2733b5868eb97d80b540aee5213b5f150557c431d9c21e80b71dbbc1b0e0930",
+        "ad3b5f16ea9f9b291530aba2a44d5422fce1b2f4b13a65804acbe7ae231bdd71",
+        "be9d29fa8a044c0108fe1be4916a842dd787ba7e7075ffa395527512ee50b898",
+        "d2370383ce211f9abaa8686bbcff5eea9732466782542b6d47d6853e3d10f6f6",
+        "dd6507b0843c937eecaf9970c86f1a3c5ea5c612a7ccc6910ec026cb1bf72204"
+      ],
+      "optional_findings": {
+        "F-cfae792d684c": {
+          "digest": "cfae792d684c45eee1d1ee68897fbee603bde72563d7a2e7e73aa1ca7c97622c",
+          "text": "D2 rule 2 keys on the gate's phase only. On a protocol target the record also carries the Workflow's disposition (`external_gate` against `human_gate`, `controller/protocol_decision.py`), which is the Workflow's own name for \"a wait for an external party\". Keeping the phase list as the rule is fine for legacy records without a `protocol` block; the plan could say why the phase is preferred, or add a test that a record at one of the four phases with disposition `external_gate` derives `review_wait`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "dd6507b0843c937eecaf9970c86f1a3c5ea5c612a7ccc6910ec026cb1bf72204",
+              "verdict": "REVISE",
+              "at": "2026-10-24T20:01:38Z"
+            }
+          ]
+        },
+        "F-830756c19131": {
+          "digest": "830756c191319ee6dd8948ac14b15c23e5a28071ea5f25b14febf38c7211e993",
+          "text": "The D3 title \"Waiting for review: <work item>\" is also used for the tester's fault stops (`checklist_unrecognised`, `functional_tester_unavailable`, `functional_rounds_exhausted`), where nobody is reviewing. A title that names the stop, such as \"Waiting: <gate code> (<work item>)\", would read better in the hub; a wording choice only.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "dd6507b0843c937eecaf9970c86f1a3c5ea5c612a7ccc6910ec026cb1bf72204",
+              "verdict": "REVISE",
+              "at": "2026-10-24T20:01:38Z"
+            }
+          ]
+        },
+        "F-785551951c6c": {
+          "digest": "785551951c6c4e8642b2a6a0817883696bd83a3ec5f94ab4129ab3bc80e82bfd",
+          "text": "`docs/guide/commands.md` says, under the event table, that \"[ADR 0012] says what each one is derived from\". After this change the ADR will not name `review_wait`. CP2 could add one sentence to the table's page saying where `review_wait` comes from, or point readers to `automation.md` for it, so the link does not leave the new type unexplained.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "77944460d165065a38c2c38a311c62d771ece675e7c82d52c8b3f8bf0ac18f84",
+              "verdict": "REVISE",
+              "at": "2026-10-24T20:09:34Z"
+            }
+          ]
+        },
+        "F-385daf2c9b95": {
+          "digest": "385daf2c9b95fefd2f6ad2f1c516cb896bbaaeff9d0c9718553f310bde177c5a",
+          "text": "D2 rule 3 quotes \"the orchestrator fixes the checklist or runs the flows\" as from \"the owner's comment on #149\". That text is in the issue body's table (the \"who really handles it\" column), not in either comment. The owner's decision comment (\"Review and functional-review waits are a low-severity info event\") and the guidance comment (\"the functional-review stops (... and the other tester stops) are sent as a new `state` event type\") support the same mapping. Cite one of those instead, or name the issue body.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "432c63609d4972aa6bc4a841063d6bb288e24e796ff49d58702d6ad546294767",
+              "verdict": "REVISE",
+              "at": "2026-10-24T20:18:30Z"
+            }
+          ]
+        },
+        "F-242f07956d2a": {
+          "digest": "242f07956d2ac3cf033f1048df00c7ad5fe59231b549b7c151592ec78c31ebfe",
+          "text": "CP1 describes the new helper as answering \"is this record a review or tester wait\" \"from the gate's phase and the `functional` block\". Rule 2 of D2 also needs the protocol disposition (`external_gate` through `_protocol_disposition`). The CP1 tests for `human_gate`/`review.resolve_block` and for the legacy records would catch a helper that checks the phase only. Still, the sentence should name the disposition so the checkpoint text matches D2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "be9d29fa8a044c0108fe1be4916a842dd787ba7e7075ffa395527512ee50b898",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:32:58Z"
+            }
+          ]
+        },
+        "F-0ab982ba1a57": {
+          "digest": "0ab982ba1a5738337896c31f22277175a69dd6a60a7eaf612db1cfa5842c005b",
+          "text": "At a `\"1\"` or `\"2.1\"` item, the wait for the external verdict is also `external_gate`, but at the single-stage phases: rows 21, 31a and 35 at `AWAITING_EXTERNAL_PLAN_REVIEW` / `AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW`. The approvals there are `human_gate` rows 19, 20 and 33. Because those phases are left out of the constant, these waits stay `user_gate`. That is the safe direction, and the goal's lanes are `\"2.2\"` items. D2 explains the exclusion by the phase alone, which predates the disposition key. A sentence naming this as a known limitation would keep the reasoning current.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "be9d29fa8a044c0108fe1be4916a842dd787ba7e7075ffa395527512ee50b898",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:32:58Z"
+            }
+          ]
+        },
+        "F-3d1c9288ad39": {
+          "digest": "3d1c9288ad399f8cd2cd095be77dc6d74eb2ec752052fe947be439404647203d",
+          "text": "**O1 — the existing `blocked` branch does not fire on production fall-through records, and D2 rule 1 reads as if it did.** `derive_job_event` sends `lane_blocked` when `_protocol_disposition(record) == \"blocked\"`. That reads `record[\"protocol\"]`, which `_no_launch_record` never writes. So every Workflow row disposed `blocked` that is recorded at the fall-through (for example 8a, 10, 11a, 14b, 16, 22, 25a and 25b) sends `user_gate` today, not `lane_blocked`. Only the hand-built record in `tests/test_notifications_wiring.py:126` takes the branch. D7 is accurate: it keeps the base behaviour and pins it on the production path. But D2 rule 1 (\"a stop the Workflow disposed as `blocked` ... send `lane_blocked`\") and CP1's \"a disposition `blocked` on an external-review phase still derives `lane_blocked`\" are true only for hand-built records. Suggest: say so in rule 1 (or label the CP1 case as a hand-built record), and file a follow-up issue for gate-policy D7's `blocked` mapping on fall-through records, which this plan correctly leaves out of scope.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a2733b5868eb97d80b540aee5213b5f150557c431d9c21e80b71dbbc1b0e0930",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:46:49Z"
+            }
+          ]
+        },
+        "F-e458ba2a6238": {
+          "digest": "e458ba2a6238ebd8fcbfd7af4211da0295a1facd0ed9e0754ba36289b93710f9",
+          "text": "**O2 — state that `protocol_gate` is omitted when `decision.protocol` is `None`.** The fall-through also records the `workflow_unhealthy` preflight gate (`protocol_decision.preflight` builds a `Decision` with no `protocol`) and every legacy-target gate. D7's \"absent otherwise\" implies a guard, but saying \"only when `decision.protocol` is not `None`\" leaves no room for an `AttributeError` on those paths. A production-path test of the unhealthy gate would pin it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a2733b5868eb97d80b540aee5213b5f150557c431d9c21e80b71dbbc1b0e0930",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:46:49Z"
+            }
+          ]
+        },
+        "F-e43e5dc11431": {
+          "digest": "e43e5dc114315c4a9468d27ffc2fe8a83ccb8ac9e4caf95628441377dd8f3b43",
+          "text": "**O3 — the single-stage protocol external-review wait stays `user_gate`.** Row 21 (`AWAITING_EXTERNAL_PLAN_REVIEW`, `_V1`, `external_gate`, `plan.review.external`) is a wait for a verdict that the three-key test could tell apart from that phase's approval rows (19 and 20, `human_gate`, `plan.approve`). The phase exclusion made sense under the phase-only reasoning of earlier rounds. With the action key it costs one HIGH per such wait on a `\"1\"` item. This is the safe direction and outside this repository's `\"2.2\"` items, so a follow-up note is enough.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "a2733b5868eb97d80b540aee5213b5f150557c431d9c21e80b71dbbc1b0e0930",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:46:49Z"
+            }
+          ]
+        },
+        "F-6702a2319972": {
+          "digest": "6702a2319972ad995fa544702d516fd12a060cb5b3298d75840a0f04f57cb088",
+          "text": "D3 names the live path's runtime root as \"the open run's `RunRecord.runtime_root`\" and also says no argument of `_send_derived` changes. On the recovery path, `_send_derived` gets the record's own `run_id`, which is not an open run. The check there would then find no root and send. That is harmless only because `_recoverable` has already filtered the event. The installed notifier's own `Notifier.runtime_root` (`controller/notify.py:486`) is always available wherever a send can happen. Naming it as the source would make the root resolvable on every path and simplify the \"cannot be resolved\" branch.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 9,
+              "review_content_id": "d2370383ce211f9abaa8686bbcff5eea9732466782542b6d47d6853e3d10f6f6",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:59:23Z"
+            }
+          ]
+        },
+        "F-c13fcb18bfe7": {
+          "digest": "c13fcb18bfe772f75e991153aabcc7e5a59233430c2924395e76f8b94014eca6",
+          "text": "D3 says \"the `RECOVERY_RECORD_LIMIT` newest `runs/<run_id>/` directories\" but not how \"newest\" is ordered. A sentence saying the order is by name (the run id starts with a UTC timestamp), not by mtime, would pin the order the tests rely on.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 9,
+              "review_content_id": "d2370383ce211f9abaa8686bbcff5eea9732466782542b6d47d6853e3d10f6f6",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T20:59:23Z"
+            }
+          ]
+        },
+        "F-728fb69e60d1": {
+          "digest": "728fb69e60d144b131afe486c3f43f1ca6d0ef6b7d03791a3530e09fcc26f58a",
+          "text": "**O1 — Specify containment for historical-log reads.** `_outcome_lines` follows symlinks through both `stat()` and `read_text()` (`controller/job.py:5450–5454`). A scratch probe read a log outside the runtime root through a symlink. The new helper should check resolved containment and skip escaped paths; directory enumeration alone provides no containment guarantee.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 9,
+              "review_content_id": "d2370383ce211f9abaa8686bbcff5eea9732466782542b6d47d6853e3d10f6f6",
+              "verdict": "REVISE",
+              "at": "2026-10-24T21:04:11Z"
+            }
+          ]
+        },
+        "F-d8a0d749dfa4": {
+          "digest": "d8a0d749dfa4c209c2b94ffff855fdcd529040051789adf42f4f72f1f59d5fe6",
+          "text": "D3 says the recovery path's runtime root is \"the one `resume` already holds\" and also that no argument of `_send_derived` changes. `_recover_job_notices` calls `_send_derived` with the record's own `run_id`, which is not in `_OPEN_RUNS`. So `_send_derived` cannot reach that root unless it reads it from the installed notifier (`Notifier.runtime_root`, `controller/notify.py:486`). This is harmless, because `_recoverable` has already applied the `spent=True` check, but the plan should name the notifier's root as the source on both paths.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T21:07:28Z"
+            }
+          ]
+        },
+        "F-9ead2235391e": {
+          "digest": "9ead2235391ee8ba8fc159c084432dbddf1e1d2f15685c1ca02755ab0def176a",
+          "text": "The \"Done when\" list of rows that must fail against the base commit does not name the I4 failed-attempt and rejected-attempt regressions. They fail at the base anyway (the base sends `user_gate`, never `review_wait`). Naming them would keep the list complete.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T21:07:28Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -23761,7 +23761,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -23879,10 +23879,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
-        "approved_review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+        "reviewed_bundle_id": "c7b59231e71224ce9c5a455bbc385c02ea0a0168b1e0e98783bf9c1970615dbb",
+        "approved_review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
         "review_content_manifest": [
           {
             "path": "controller/claude_build.py",
@@ -23894,7 +23894,7 @@
             "path": "controller/functional_review.py",
             "exists": true,
             "mode": "100644",
-            "blob": "9433207241f836f3075ee2637384e1f7dc7a00cd"
+            "blob": "58766a6bd0d280e6e0a52668e14bd1ff6d93cf15"
           },
           {
             "path": "controller/review.py",
@@ -23918,7 +23918,7 @@
             "path": "docs/compatibility.md",
             "exists": true,
             "mode": "100644",
-            "blob": "77ca121b19c6fae37466024597308e4e44d443e0"
+            "blob": "f363ac6006069fc37182fbdb6f530735f609bae7"
           },
           {
             "path": "docs/guide/automation.md",
@@ -23936,7 +23936,7 @@
             "path": "docs/install.md",
             "exists": true,
             "mode": "100644",
-            "blob": "041290efc0d2f2d59a69abaf087e9eded001db63"
+            "blob": "57411eab7d1a1365605f7ad45079a621a5a1bd96"
           },
           {
             "path": "tests/fake_functional_tester.py",
@@ -23960,7 +23960,7 @@
             "path": "tests/test_functional_enforcement.py",
             "exists": true,
             "mode": "100644",
-            "blob": "2f21545ce30c0d319c979f6fc3f64a938827a11f"
+            "blob": "40652b7b783b22810d100d60c6449bce1fa475ff"
           },
           {
             "path": "tests/test_functional_review.py",
@@ -23972,14 +23972,14 @@
             "path": "tests/test_functional_sandbox.py",
             "exists": true,
             "mode": "100644",
-            "blob": "6400330855f87a820c80b92d2248a90302cab9f2"
+            "blob": "802ea2b33dbb17e791aaed086e26aac9be7e3f0d"
           }
         ],
-        "reviewed_content_commit": "befe03123c03a2777af4283d292b2af96fa78531",
+        "reviewed_content_commit": "3bdd086c300251af0511ad066b88539ca0f0abbc",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-24T00:30:31Z",
+        "recorded_at": "2026-10-24T01:35:19Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -24009,23 +24009,23 @@
             }
           ],
           "inputs": {
-            "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+            "review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
             "ledger": {
               "local": {
-                "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+                "bundle_id": "c7b59231e71224ce9c5a455bbc385c02ea0a0168b1e0e98783bf9c1970615dbb",
                 "verdict": "APPROVE",
-                "round": 3,
-                "verdict_sha256": "dadeeced0692e7712e47886fab96c7a4b44e25a98576d277832f82ab11ee71da",
-                "ledger_entry_sha256": "88b1e5091fee71a5145cbcee48809d16b73beca34368bcfa52152a067b364aaf",
+                "round": 4,
+                "verdict_sha256": "d691ee8e3a483c180e08ff76b8831f1e37690e90b686fe13c7eb2cc8a71be96e",
+                "ledger_entry_sha256": "f468a4f27d4978647cb2861fc6f56edc6e51096e976b579ef2b99307e1382c3e",
                 "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+                "bundle_id": "c7b59231e71224ce9c5a455bbc385c02ea0a0168b1e0e98783bf9c1970615dbb",
                 "verdict": "APPROVE",
-                "round": 3,
-                "verdict_sha256": "6e7a2ca0abeb9a5ae03258905b584b2881b26f99e1660cfa5045e9314ed1d5e9",
-                "ledger_entry_sha256": "b692cfcdec3bcf295289d8895dc6a2c591702acd32cd45255936988355e00e06",
+                "round": 4,
+                "verdict_sha256": "17e4a5f0a77559938cba3ccfe42b1628a2936764ee69d8e4cdfa375926dfe89d",
+                "ledger_entry_sha256": "7912684c5b47b0a72b0c5f2745c41fc86e7c2f22b23a47945d5eca72b00a1cf9",
                 "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
@@ -24036,7 +24036,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-10-24T00:30:31Z",
+          "evaluated_at": "2026-10-24T01:35:19Z",
           "workflow_release": "2.18.5"
         }
       },
@@ -24070,12 +24070,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 3,
-          "external": 1
+          "local": 4,
+          "external": 2
         }
       },
-      "state_revision": 33,
-      "last_transition": "2026-10-24T00:57:40Z",
+      "state_revision": 36,
+      "last_transition": "2026-10-24T01:35:19Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -24324,25 +24324,81 @@
               "at": "2026-10-24T00:27:00Z"
             }
           ]
+        },
+        "F-f87a8cb50125": {
+          "digest": "f87a8cb50125f56a4150506868a26265751f509a28e0cfee11234444e1aafacb",
+          "text": "`tests/fake_functional_tester.py:93`: carried from round 3, still open. The fake applies `os.path.abspath` before\n  `realpath`, which collapses a `..` after a link before the link is followed. The Controller's own invariant\n  now does this correctly (it resolves the raw entry); the fake should do the same, with a focused test.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T01:23:48Z"
+            }
+          ]
+        },
+        "F-50ff138aebdc": {
+          "digest": "50ff138aebdc139983f04d8a0f01b9ceef0dc95af274c14b67fb49d23dfde2e5",
+          "text": "`tests/test_claude_build.py:303`: carried, still open. `link_in_clone` and `link_replaced` make the same\n  mutation; separate them so each failure points at one cause.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T01:23:48Z"
+            }
+          ]
+        },
+        "F-97964bf11fdb": {
+          "digest": "97964bf11fdb2a055bc91eed85033bcfbe5a6d500ffd44db741c60d50f784a2f",
+          "text": "`tests/test_functional_sandbox.py:768`: `test_a_run_past_the_timeout_ends_at_timeout_with_the_group_killed`\n  failed once under full 8-shard load ('failed' != 'timeout'). It did not reproduce alone or in a shard replay.\n  Record it as a CI-flake issue (its 2-second timeout is tight under load).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T01:23:48Z"
+            }
+          ]
+        },
+        "F-9682f3ec828c": {
+          "digest": "9682f3ec828c81aa2332e083548253ef2512c16d9043139e719e9b284c906d30",
+          "text": "`.ai-review/.../current/IMPLEMENTATION_SUMMARY.md` and `TEST_RESULTS.md` have no section for the functional\n  round 1 fixes (the summary still names head 05de0c5), and `REVIEW_REQUEST.md` says \"revision 3\" for a\n  revision 4 bundle. The fixes are recorded only in `docs/ACTIVE_MILESTONE.md`, whose \"do not touch the\n  build-facing code\" is slightly overstated: `claude_build`'s stand-in sandbox calls `tester_settings`, so the\n  stricter invariant does reach `verify-claude` (harmless; links and settings use one consistent root there).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T01:23:48Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "af2a5891c701ae7da0da603466e3eb30bde90e4d78400f4314bc482e96a17ecf",
+        "review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+          "bundle_id": "c7b59231e71224ce9c5a455bbc385c02ea0a0168b1e0e98783bf9c1970615dbb",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-23T22:58:00Z",
-          "verdict_sha256": "dadeeced0692e7712e47886fab96c7a4b44e25a98576d277832f82ab11ee71da",
+          "round": 4,
+          "completed_at": "2026-10-24T01:23:48Z",
+          "verdict_sha256": "d691ee8e3a483c180e08ff76b8831f1e37690e90b686fe13c7eb2cc8a71be96e",
           "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "6249445553aab83aea2d61ce601a3b231530c9205f26a05718727b59d99b3b24",
+          "bundle_id": "c7b59231e71224ce9c5a455bbc385c02ea0a0168b1e0e98783bf9c1970615dbb",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-10-24T00:27:00Z",
-          "verdict_sha256": "6e7a2ca0abeb9a5ae03258905b584b2881b26f99e1660cfa5045e9314ed1d5e9",
+          "round": 4,
+          "completed_at": "2026-10-24T01:33:47Z",
+          "verdict_sha256": "17e4a5f0a77559938cba3ccfe42b1628a2936764ee69d8e4cdfa375926dfe89d",
           "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }

@@ -465,6 +465,10 @@ class BindingTest(Fixture):
         (self.clone / "src" / "x.pyc").write_text("c")
         self.assertEqual(fr.check_bound(self.box), [])
 
+    def test_a_symlink_matching_an_ignore_rule_is_still_a_difference(self) -> None:
+        os.symlink(self.box.writable_dir / "build", self.clone / "src" / "extra.pyc")
+        self.assertIn("extra file: src/extra.pyc", fr.check_bound(self.box))
+
     def test_a_tester_that_only_refreshes_the_index_and_writes_logs_still_passes(self) -> None:
         git(self.clone, "status", "--porcelain")
         git(self.clone, "update-index", "--refresh")

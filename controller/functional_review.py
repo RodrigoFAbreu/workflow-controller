@@ -1432,7 +1432,7 @@ def walk_differences(clone: Path, candidate: Candidate, git_dir: Path,
     ``links`` maps each writable location to its external folder (D3): the
     Controller's own link ``<clone>/<name>`` to that folder is accepted and
     nothing else is; a missing, retargeted or replaced link is a difference,
-    and any other symlink is an extra file as before."""
+    and any other symlink is an extra file, whatever the ignore rules say."""
     seen = _scan(clone, skip_top=".git")
     differences: list[str] = []
     for name, target in sorted((links or {}).items()):
@@ -1450,15 +1450,18 @@ def walk_differences(clone: Path, candidate: Candidate, git_dir: Path,
         elif have != _describe(entry):
             differences.append(f"differs: {path}")
     extras: list[str] = []
+    links_found: list[str] = []
     for path, have in sorted(seen.items()):
         if have[0] in ("special", "unreadable"):
             differences.append(f"{'special file' if have[0] == 'special' else 'unreadable'}: {path}")
         elif posixpath.basename(path) in _STEERING_NAMES:
             differences.append(f"unlisted {posixpath.basename(path)}: {path}")
+        elif have[0] == "link":
+            links_found.append(path)  # D3: never filtered by an ignore rule
         else:
             extras.append(path)
     ignored = _ignored_paths(clone, git_dir, extras)
-    differences += [f"extra file: {path}" for path in extras if path not in ignored]
+    differences += [f"extra file: {path}" for path in sorted(links_found + [p for p in extras if p not in ignored])]
     return differences[:MAX_DIFFERENCES]
 
 

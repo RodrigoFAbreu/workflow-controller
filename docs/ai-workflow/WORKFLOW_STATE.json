@@ -24731,18 +24731,22 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-determinism-parallel-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-determinism-parallel-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 4,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "6aff67e4850e0d86319b649f2647f3641b55af9d",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP1",
+      "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
           "start_commit": "9ae9bf78b9ef8dc2c82a6f02c38354c5659dc3ae"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "5dc3752ab9177ab919d236d3d4cf45d91a7677bd"
         }
       },
       "current_bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
@@ -24871,8 +24875,8 @@
           "external": 0
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-10-24T05:41:02Z",
+      "state_revision": 21,
+      "last_transition": "2026-10-24T07:15:08.124470+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -94,6 +94,15 @@ The owner records the outcome of each owner-run flow here, with the build's vers
 | F9 `verify-claude --force` | 2.1.308 | | | |
 | F9 old-build check | 2.1.303 | not installed on this host: not performed | | |
 
+### Round 1 fixes
+
+The first functional round (tester report `.ai-review/archive/workflow-controller-sandbox-layout/functional-tester-round1-RESULTS.md`; the operator ran F7-F9, which passed) found two defects, both fixed in this bounded round, and one documentation gap:
+
+- **Finding 1, F1 (defect).** `assert_writes_not_below_denies` compared only spellings, so an allowance below a denial through a symlinked parent was accepted. It now also compares `os.path.realpath` of the allowances and the denials; the table gains the alias-parent, `..`-through-a-link, swapped-external-folder and aliased-denial cases. Re-test: F1 and F4.
+- **Finding 2, F3 (defect).** `walk_differences` filtered unexpected symlinks through the ignore rules. A symlink is now always a difference (decision D3); ordinary ignored output files stay accepted. Test: `test_a_symlink_matching_an_ignore_rule_is_still_a_difference`. Re-test: F2 and F3.
+- **Finding 3, F6 (Optional, fixed).** `docs/install.md` and `docs/compatibility.md` now state that the writable folders live outside the clone behind links. Re-test: F6.
+- **F5** was blocked in the tester's sandbox; the operator re-runs it outside the sandbox at the fix head. F7-F9 results stand: the fixes do not touch the build-facing code, but the operator may repeat F8 on request.
+
 ### Findings
 
 Write findings to `.ai-review/workflow-controller-sandbox-layout/feedback/FUNCTIONAL_REVIEW.md`. `/apply-functional-review` routes each one: a bounded fix for the same scope, or a `workflow-controller-sandbox-layout-remediation-<n>` child item for wider scope.

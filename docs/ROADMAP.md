@@ -177,7 +177,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | H4e | Complexity: medium. Codex worker, step 5: the four review-side roles (`review-plan`, `review-implementation`, `apply-plan-review`, `apply-implementation-review`) can be routed to Codex; a safety review and a live proof on a scratch repository (operator-run) | H4d, H1 | [Adapters and backlog](#at-a-glance) |
 | H4f | Complexity: medium. Codex worker, step 6: `milestone-implement` can be routed to Codex (the longest role: checkpoints, commits, self-review); a safety review and a live proof (operator-run) | H4e | [Adapters and backlog](#at-a-glance) |
 | H4g | Complexity: low. Codex worker, step 7: the remaining roles (`milestone-plan`, `apply-functional-review`, `apply-pr-review`, `satisfy-gate`, `prepare-functional-review`, `record-manual-*`) and the documentation; every role can run on either harness that declares it | H4f | [Adapters and backlog](#at-a-glance) |
-| CU3a | Complexity: low. Clean-up, part 1 (a `test:` change, no release; tests and test helpers only): [#100](https://github.com/RodrigoFAbreu/workflow-controller/issues/100), [#118](https://github.com/RodrigoFAbreu/workflow-controller/issues/118), [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125), [#138](https://github.com/RodrigoFAbreu/workflow-controller/issues/138), [#143](https://github.com/RodrigoFAbreu/workflow-controller/issues/143), and the fake tester's `..` handling and the two identical link tests of [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140); CU3 is split into three items and four more (owner decision, 2026-10-24: the sizing rule), and the clean-up limit of 8 is met after CU3a and CU3b | C10f | [Clean-up milestones](#at-a-glance) |
+| CU3a | Complexity: low. Clean-up, part 1 (a `test:` change, no release; tests and test helpers only): [#100](https://github.com/RodrigoFAbreu/workflow-controller/issues/100), [#118](https://github.com/RodrigoFAbreu/workflow-controller/issues/118), [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125), [#138](https://github.com/RodrigoFAbreu/workflow-controller/issues/138), [#143](https://github.com/RodrigoFAbreu/workflow-controller/issues/143), and the fake tester's `..` handling and the two identical link tests of [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140); CU3 is split into three items and four more (owner decision, 2026-10-24: the sizing rule), and the clean-up limit of 8 is met after CU3a and CU3b (implemented on its milestone branch; the pull request is `test: fix four test races and leaks and tidy small test spots`, closing #100, #118, #125, #138 and #143 and only referring to #140) | C10f | [Clean-up milestones](#at-a-glance) |
 | CU3b | Complexity: medium. Clean-up, part 2 (a `fix:` patch): `verify-claude` diagnostics ([#132](https://github.com/RodrigoFAbreu/workflow-controller/issues/132): a sandbox-start error is checked before host effects) and its small gaps ([#133](https://github.com/RodrigoFAbreu/workflow-controller/issues/133): `--claude-binary` still needs a `claude` on `PATH`, an `OSError` while the probe run is built escapes as a traceback instead of exit 20, a wrong line in the development guide) | CU3a | [Clean-up milestones](#at-a-glance) |
 | CU3c | Complexity: low. Clean-up, part 3 (a `fix:` patch): usage and settings tidy-ups ([#103](https://github.com/RodrigoFAbreu/workflow-controller/issues/103) the price table, [#104](https://github.com/RodrigoFAbreu/workflow-controller/issues/104) usage-record points, [#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108) the effective round caps in `settings show` and the fallback stop's wording) | CU3b | [Clean-up milestones](#at-a-glance) |
 | C10h | Complexity: medium. Deny the functional tester reads of credential files and detect a `file://` origin ([#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115); split out of CU3: it adds a security mechanism; split again if the plan needs both parts) | C10f | [11.9](#119-automated-functional-review) |
@@ -573,7 +573,9 @@ hurts now, else in a later step or the next clean-up milestone.
     review; docs only).
     Fixed in the documentation pull request after 1.18.0.
 73. [#118](https://github.com/RodrigoFAbreu/workflow-controller/issues/118): tests for the tester's final-message
-    capture and small test tidy-ups (C10c review).
+    capture and small test tidy-ups (C10c review). Done in CU3a: the import order, the not-run log folder assertion;
+    the final-message capture was already covered by `test_the_final_message_is_captured_flattened_and_bounded` and
+    `test_a_short_final_message_is_kept_whole` in `tests/test_functional_sandbox.py`.
 74. [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119): a pull request's CI took about 85
     minutes since C10c, against about 15 before. Done and closed: C2b brought it to 19.3 minutes (acceptance-head
     run), within the 15-20 minute target. The vendored acceptance atom, which is placed and not shortened, is the
@@ -581,7 +583,8 @@ hurts now, else in a later step or the next clean-up milestone.
 75. [#124](https://github.com/RodrigoFAbreu/workflow-controller/issues/124): documentation gaps after C2b (the
     roadmap row's wording, a replaced `main` run skipping the `after-merge-*` checks, "every surviving `main` run").
     Fixed in the documentation pull request after C2b.
-76. [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125): C2b test tidy-ups (later).
+76. [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125): C2b test tidy-ups. Done in CU3a: the snapshot key carries
+    `wait_seconds`, the refused-validation helper explains its launches, and the two identical branches are one.
 77. [#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126): the after-merge determinism job takes
     28-32 minutes, so an ordinary release waits that long after the merge. Fixed: the two passes run at the same time
     (a `ci:` change, no release; complete, accepted 2026-10-24 by gate policy, pull request #142; median 692 s to
@@ -602,12 +605,14 @@ hurts now, else in a later step or the next clean-up milestone.
     guide says missing credentials skip the live tests when they error (C10e review; later).
 83. [#138](https://github.com/RodrigoFAbreu/workflow-controller/issues/138): two flaky timing tests (the
     `ConformanceLaneExecutionTest` SIGTERM case waiting a fixed 30 s, and the sandbox test whose run timeout is 2 s)
-    (C10f review; a `bug`, taken by CU3).
+    (C10f review; a `bug`). Done in CU3a: the executor wait is bounded at 180 s with its output kept, and the
+    signalled fixtures block for 600 s.
 84. [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140): `runtime.remove_tree` resolves the parent
     before removing, so a path below a link would remove the external folder's contents (no caller does this); the
-    fake tester collapses `..` before it resolves links; two identical link tests (C10f review; later).
+    fake tester collapses `..` before it resolves links; two identical link tests (C10f review). The two test points
+    are done in CU3a; the `remove_tree` point stays open as C10k.
 85. [#143](https://github.com/RodrigoFAbreu/workflow-controller/issues/143): `run_bounded` can leave zombie
-    descendants after the forced-reaper fallback, and its leak check cannot see zombies (#126 review; later).
+    descendants after the forced-reaper fallback, and its leak check cannot see zombies (#126 review). Done in CU3a.
 
 ---
 

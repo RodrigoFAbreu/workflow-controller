@@ -58,6 +58,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -6060,6 +6061,166 @@ class TestPlanApprovalMutationGuardAndTakeover(unittest.TestCase):
 
 
 _STATE_PATH = Path("docs/ai-workflow/WORKFLOW_STATE.json")
+
+
+# live-guard-visibility: a worker that holds the plan-approval guard in a real
+# process, driven over pipes (it writes one JSON line when its window is open and
+# blocks on its stdin).
+_LIVE_JOURNAL_GUARD_WORKER_SOURCE = """
+import json
+import sys
+from pathlib import Path
+
+import workflow_state as ws
+
+repo_root, token, step = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+lease = ws.acquire_plan_approval_guard(repo_root, holder_owner_token=token, step=step, now="t-hold")
+sys.stdout.write(json.dumps({"event": "ready", "lease": lease}) + "\\n")
+sys.stdout.flush()
+sys.stdin.readline()
+ws.release_plan_approval_guard(repo_root, lease)
+sys.stdout.write(json.dumps({"event": "released"}) + "\\n")
+sys.stdout.flush()
+"""
+
+
+class TestLiveGuardVisibilityJournal(unittest.TestCase):
+    """live-guard-visibility (#91): the plan-approval guard's own-leftover
+    reclaim refuses a guard whose lock another process holds, and still
+    reclaims a crashed holder's leftover."""
+
+    _STEPS = ("step-5-declaration-pin", "step-6.5-commit")
+
+    @classmethod
+    def setUpClass(cls):
+        cls._scripts_dir = Path(__file__).resolve().parent
+        cls._worker_dir = Path(tempfile.mkdtemp(prefix="wf-live-journal-worker-"))
+        cls._worker = cls._worker_dir / "_live_journal_worker.py"
+        cls._worker.write_text(_LIVE_JOURNAL_GUARD_WORKER_SOURCE)
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls._worker_dir, ignore_errors=True)
+
+    def _open(self, repo):
+        return TestPlanApprovalMutationGuardAndTakeover._open(self, repo)
+
+    def _setup(self, repo, wi="wi"):
+        return TestPlanApprovalFailureAtomicityTransaction._setup(self, repo, wi)
+
+    def _open_journal(self, repo, wi, *args):
+        return TestPlanApprovalFailureAtomicityTransaction._open_journal(self, repo, wi, *args)
+
+    def _hold(self, repo, token, step):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(self._scripts_dir) + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        proc = subprocess.Popen([sys.executable, str(self._worker), str(repo.root), token, step],
+                                env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.addCleanup(self._reap, proc)
+        line = proc.stdout.readline()
+        self.assertTrue(line, f"the worker produced no event (exit status {proc.poll()})")
+        event = json.loads(line)
+        self.assertEqual(event["event"], "ready")
+        return proc, event["lease"]
+
+    @staticmethod
+    def _reap(proc):
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=15)
+        for stream in (proc.stdin, proc.stdout):
+            try:
+                stream.close()
+            except (OSError, ValueError):
+                pass
+
+    def _end_window(self, proc):
+        proc.stdin.write("go\n")
+        proc.stdin.flush()
+        self.assertEqual(json.loads(proc.stdout.readline())["event"], "released")
+        proc.wait(timeout=15)
+
+    def test_live_owner_a_refuses_same_token_b(self):
+        for step in self._STEPS:
+            with self.subTest(step=step), h.ScratchRepo() as repo:
+                token = self._open(repo)["owner_token"]
+                proc, lease = self._hold(repo, token, step)
+                with self.assertRaises(ws.PlanApprovalGuardHeldError) as ctx:
+                    ws.acquire_plan_approval_guard(repo.root, holder_owner_token=token,
+                                                   step="step-6.2-stage-ordinary", now="t2")
+                message = str(ctx.exception)
+                self.assertIn(lease["lease_id"], message)
+                self.assertIn(step, message)
+                self.assertIn("still running", message)
+                self.assertIn("fuser", message)
+                self.assertEqual(ws.read_plan_approval_guard(repo.root)["lease_id"],
+                                 lease["lease_id"])
+                self._end_window(proc)
+
+    def test_killed_owner_a_leftover_is_reclaimed_by_b(self):
+        for step in self._STEPS:
+            with self.subTest(step=step), h.ScratchRepo() as repo:
+                token = self._open(repo)["owner_token"]
+                proc, lease = self._hold(repo, token, step)
+                proc.kill()
+                proc.wait(timeout=15)
+                self.assertEqual(ws.read_plan_approval_guard(repo.root)["lease_id"],
+                                 lease["lease_id"])
+                fresh = ws.acquire_plan_approval_guard(repo.root, holder_owner_token=token,
+                                                       step="step-6.2-stage-ordinary", now="t2")
+                self.assertNotEqual(fresh["lease_id"], lease["lease_id"])
+                self.assertEqual(ws.read_plan_approval_guard(repo.root), fresh)
+                ws.release_plan_approval_guard(repo.root, fresh)
+                self.assertNotIn(fresh["lease_id"], ws._guard_holder_locks)
+
+    def test_the_authorized_break_and_the_destructive_refusal_are_unchanged(self):
+        with h.ScratchRepo() as repo:
+            token = self._open(repo)["owner_token"]
+            proc, lease = self._hold(repo, token, "step-5-declaration-pin")
+            new_owner = ws.acquire_plan_approval_guard(
+                repo.root, holder_owner_token=token, step="takeover", now="t2", role="takeover",
+                authorized_lease_id=lease["lease_id"])
+            self.assertNotEqual(new_owner["lease_id"], lease["lease_id"])
+            self._end_window(proc)
+            self.assertEqual(ws.read_plan_approval_guard(repo.root), new_owner)
+            ws.release_plan_approval_guard(repo.root, new_owner)
+        with h.ScratchRepo() as repo:
+            token = self._open(repo)["owner_token"]
+            proc, lease = self._hold(repo, token, "step-6.5-commit")
+            with self.assertRaises(ws.PlanApprovalTakeoverRefusedError):
+                ws.acquire_plan_approval_guard(
+                    repo.root, holder_owner_token=token, step="takeover", now="t2",
+                    role="takeover", authorized_lease_id=lease["lease_id"])
+            self._end_window(proc)
+
+    def test_a_live_guard_of_a_superseded_epoch_is_reclaimed(self):
+        with h.ScratchRepo() as repo:
+            token = self._open(repo)["owner_token"]
+            proc, lease = self._hold(repo, "0" * 32, "step-6.5-commit")
+            fresh = ws.acquire_plan_approval_guard(repo.root, holder_owner_token=token,
+                                                   step="step-6.2-stage-ordinary", now="t2")
+            self.assertNotEqual(fresh["lease_id"], lease["lease_id"])
+            ws.release_plan_approval_guard(repo.root, fresh)
+
+    def test_a_release_and_a_lost_race_leave_no_descriptor(self):
+        with h.ScratchRepo() as repo:
+            token = self._open(repo)["owner_token"]
+            lease = ws.acquire_plan_approval_guard(repo.root, holder_owner_token=token,
+                                                   step="step-5-declaration-pin", now="t2")
+            self.assertEqual(list(ws._guard_holder_locks), [lease["lease_id"]])
+            ws.release_plan_approval_guard(repo.root, lease)
+            self.assertNotIn(lease["lease_id"], ws._guard_holder_locks)
+            ws._publish_plan_approval_guard(repo.root, {"lease_id": "taken"},
+                                            ws.PLAN_APPROVAL_GUARD_PATH)
+            with self.assertRaises(FileExistsError):
+                ws._publish_plan_approval_guard(repo.root, {"lease_id": "lost"},
+                                                ws.PLAN_APPROVAL_GUARD_PATH)
+            self.assertNotIn("lost", ws._guard_holder_locks)
+            ws.release_plan_approval_guard(repo.root, {"lease_id": "taken"})
+            self.assertEqual(ws._guard_holder_locks, {})
+            self.assertNotIn("1", [kind for kind, _ in ws.held_primitives()])
 
 
 class TestPlanApprovalStateBlobPinAndMaterialize(unittest.TestCase):

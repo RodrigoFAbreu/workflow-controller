@@ -812,11 +812,13 @@ MUTATION_WRAP_PUBLISH_GUARD_CALL_IN_RETRY = (
     # exactly the shape `OPUS-R117-002` found defeating the EEXIST clause's
     # own one-level-only climb (`OPUS-R120-003`).
     "def _publish_guard(repo_root: Path, work_item_id: str, body: dict) -> None:\n"
-    "    _publish_claim_exclusive(guard_path(repo_root, work_item_id), body)\n",
+    "    _publish_claim_exclusive(guard_path(repo_root, work_item_id), body,\n"
+    "                             lock_lease_id=body[\"lease_id\"])\n",
     "def _publish_guard(repo_root: Path, work_item_id: str, body: dict) -> None:\n"
     "    while True:\n"
     "        try:\n"
-    "            _publish_claim_exclusive(guard_path(repo_root, work_item_id), body)\n"
+    "            _publish_claim_exclusive(guard_path(repo_root, work_item_id), body,\n"
+    "                                     lock_lease_id=body[\"lease_id\"])\n"
     "            return\n"
     "        except FileExistsError:\n"
     "            time.sleep(0.05)\n",

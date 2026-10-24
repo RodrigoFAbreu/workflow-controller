@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "workflow_version": "2.18.5",
+  "workflow_version": "2.18.6",
   "profile": "full",
   "upstream": {
     "repository": "repflow-android",
@@ -14,13 +14,13 @@
   "source": {
     "kind": "package",
     "repository": "RodrigoFAbreu/workflow",
-    "archive": "workflow-2.18.5.tar.gz",
-    "sha256": "08f4cb16752ccfb23a992b53f6230a4079b29ac6ed13a96f9f3047a96fc20163",
+    "archive": "workflow-2.18.6.tar.gz",
+    "sha256": "16674a59afe13ddeb298cb928df80d26821227762d90bd675b99238ed6cfc0fe",
     "trust": "discovered",
     "from": "github:RodrigoFAbreu/workflow"
   },
   "installed_at": "2026-09-05T14:33:32Z",
-  "updated_at": "2026-10-23T18:10:50Z",
+  "updated_at": "2026-10-24T08:53:06Z",
   "managed": {
     ".claude/commands/accept-milestone.md": {
       "sha256": "8eb653d3352bb4dba6efc4fb637a12b8d16ad71b857a33a366f13b7851e8f8f7",
@@ -135,7 +135,7 @@
       "executable": false
     },
     "docs/ai-workflow/ORCHESTRATION_PROTOCOL.md": {
-      "sha256": "53116c2e1fedb5570324bf32dc3411341710b285cd116121d8f53f584d4f1129",
+      "sha256": "a7d42c5cb8375bb8fe422e85e891053f48670afd29e6698f034980523849b82a",
       "executable": false
     },
     "docs/ai-workflow/PLAN_REVIEW_WORKFLOW.md": {
@@ -195,7 +195,7 @@
       "executable": false
     },
     "docs/ai-workflow/dry-run/verify_372h_raw_edge_derivation.py": {
-      "sha256": "f6baa2743b0f9c7628f25b0973fd5a8ae05f4259efa9914cfb406f5d6871fa78",
+      "sha256": "883919e88cdf1964fc662823a06167d50c77184fd4fb5dd103a53c007a978ba8",
       "executable": false
     },
     "docs/ai-workflow/orchestration-protocol-v1.schema.json": {
@@ -299,19 +299,19 @@
       "executable": false
     },
     "scripts/workflow_integration_test.py": {
-      "sha256": "3b86abab59f5a2e45ad13b38f4e3c34cc99bf4154f1a5f013df763e1e238fc0d",
+      "sha256": "3e351cb677e5bc5d106c97efa178f2555d8a0145d56e46de206aec799c891b69",
       "executable": false
     },
     "scripts/workflow_protocol.py": {
-      "sha256": "85131e0f9d00733dc72eb95d79afeedc139e91cc4f452ecb959e015ec241cf48",
+      "sha256": "6fd6b8dec647bd257f95843dda2c40b3bc9347018ff92983a993a48ef1856f52",
       "executable": false
     },
     "scripts/workflow_protocol_test.py": {
-      "sha256": "bd39b300d0e278518708e4c0bc6fcb8b4c56da830fae673ef6bfde167a941810",
+      "sha256": "42294c4bd89cb4e85f1599d0cd3dca52e95de3d44678a565d3ddcdc8a5fb749a",
       "executable": false
     },
     "scripts/workflow_state.py": {
-      "sha256": "ccbe0a28019490baa25caf4f32730fe2f0d58a031a9959265d8108c8b86143db",
+      "sha256": "583be41cfdc7a7401502f0cfaaea366a9d969f6ed587d2681f47c98b076ef0ae",
       "executable": false
     },
     "scripts/workflow_state_completion_obligations_test.py": {
@@ -323,7 +323,7 @@
       "executable": false
     },
     "scripts/workflow_state_test.py": {
-      "sha256": "87d0f54418928e859e07427b598376cfcf6d2f1e0261a020e5727ea6f506a68b",
+      "sha256": "46201b1b5d4bac3462696bc51d101d912e733e8fc26244170eb88c9963f9f1dc",
       "executable": false
     },
     "scripts/workflow_test_harness.py": {

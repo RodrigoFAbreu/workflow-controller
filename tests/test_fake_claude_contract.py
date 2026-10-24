@@ -2092,7 +2092,7 @@ class HangChildPidFileTest(unittest.TestCase):
     def _end_child(self) -> None:
         try:
             _kill_with(int(self.pid_file.read_text()), signal.SIGKILL)
-        except ValueError:
+        except (OSError, ValueError):
             pass
 
     def test_the_file_replaces_one_that_stood_there_as_a_new_inode_holding_an_integer(self) -> None:

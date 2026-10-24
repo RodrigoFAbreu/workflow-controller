@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -800,7 +801,10 @@ class RunTest(Fixture):
         self.assertEqual(fr.kept_sandboxes(self.runtime, "item-1"), [])
 
     def test_a_run_past_the_timeout_ends_at_timeout_with_the_group_killed(self) -> None:
-        result = self.launch({"hang_seconds": 30, "actions": [results()]}, timeout=2)
+        # The job id is the ownership tag, and the deadline sweep kills every process carrying it: a fixed
+        # "job-N" id lets a copy of this test running beside it (another shard) kill this one's tester early.
+        result = self.launch({"hang_seconds": 30, "actions": [results()]}, timeout=2,
+                             job_id=f"timeout-{os.getpid()}-{uuid.uuid4().hex[:8]}")
         self.assertEqual(result["outcome"], "timeout")
         self.assertEqual(result["breach"], [])
         self.settle(result)

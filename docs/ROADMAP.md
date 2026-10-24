@@ -605,8 +605,9 @@ hurts now, else in a later step or the next clean-up milestone.
     guide says missing credentials skip the live tests when they error (C10e review; later).
 83. [#138](https://github.com/RodrigoFAbreu/workflow-controller/issues/138): two flaky timing tests (the
     `ConformanceLaneExecutionTest` SIGTERM case waiting a fixed 30 s, and the sandbox test whose run timeout is 2 s)
-    (C10f review; a `bug`). Done in CU3a: the executor wait is bounded at 180 s with its output kept, and the
-    signalled fixtures block for 600 s.
+    (C10f review; a `bug`). Done in CU3a, both tests: the executor wait is bounded at 180 s with its output kept and
+    the signalled fixtures block for 600 s; the sandbox test gets its own job id, because the job id is the ownership
+    tag and the deadline sweep of a copy running beside it (another shard) killed its tester early.
 84. [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140): `runtime.remove_tree` resolves the parent
     before removing, so a path below a link would remove the external folder's contents (no caller does this); the
     fake tester collapses `..` before it resolves links; two identical link tests (C10f review). The two test points

@@ -23,6 +23,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests import process_fixtures as pf
 from tests import test_run_scenarios as base
 from tests.scenarios import kit
 
@@ -140,6 +141,11 @@ class RunBoundedTest(unittest.TestCase):
         argv = [sys.executable, "-c", STALLED, str(base.REPO_ROOT), str(record)]
         return argv, record
 
+    def new_zombies(self, before: "set[int]") -> "set[int]":
+        """Zombie children of the test process now that were not there before the call (a set comparison: a zombie an
+        earlier test left is not this call's, and an older one reaped during the call must not hide a new one)."""
+        return pf.zombie_children() - before
+
     def assert_nothing_left(self, record: Path) -> None:
         same, other, scratch = record.read_text().split(" ", 2)
         self.assertTrue(_gone(int(same)), "the descendant in the child's group survived")
@@ -148,6 +154,7 @@ class RunBoundedTest(unittest.TestCase):
 
     def test_a_stalled_child_and_both_descendants_are_gone_when_it_fails(self) -> None:
         argv, record = self.stalled()
+        before = pf.zombie_children()
         started = time.monotonic()
         with self.assertRaises(base.PassFailure) as caught:
             base.run_bounded(argv, cwd=base.REPO_ROOT, env=dict(os.environ), deadline=self.DEADLINE,
@@ -155,27 +162,59 @@ class RunBoundedTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, self.BOUND)
         self.assertIn("stalled did not finish within its 3-second deadline", str(caught.exception))
         self.assert_nothing_left(record)
+        self.assertEqual(self.new_zombies(before), set(), "a descendant of the stalled pass was left a zombie")
 
     def test_an_unresponsive_reaper_is_swept_by_the_pass_root_alone(self) -> None:
         patched = base.REAPER_SOURCE.replace("signal.signal(signal.SIGTERM, on_term)",
                                              "signal.signal(signal.SIGTERM, signal.SIG_IGN)")
         self.assertNotEqual(patched, base.REAPER_SOURCE)
         argv, record = self.stalled()
+        before = pf.zombie_children()
         started = time.monotonic()
-        with self.assertRaises(base.PassFailure):
+        with self.assertRaises(base.PassFailure) as caught:
             # no clone or output tag: only the pass-owned temporary root can find the other-session descendant
             base.run_bounded(argv, cwd=base.REPO_ROOT, env=dict(os.environ), deadline=self.DEADLINE,
                              grace=self.GRACE, name="stalled", reaper=patched)
         self.assertLess(time.monotonic() - started, self.BOUND)
         self.assert_nothing_left(record)
+        self.assertEqual(self.new_zombies(before), set(), "a descendant of the dead reaper was left a zombie")
+        # 137 when the descendants are killed first: the reaper's wait on the real command returns -9 and it ends itself
+        # with 128 + 9 before ``proc.kill()`` runs; -9 when the reaper is killed first. Any non-zero value passes; a 0
+        # means a sweep reaped the reaper behind ``Popen``'s back (``Popen`` then gets ECHILD and records 0).
+        self.assertIn(caught.exception.reaper_returncode, {137, -9})
 
     def test_a_child_that_exits_leaves_nothing_behind(self) -> None:
         argv, record = self.stalled()
         argv[2] = STALLED.replace("subprocess.Popen([sleep, \"602\"], env=env).wait()", "")
+        before = pf.zombie_children()
         done = base.run_bounded(argv, cwd=base.REPO_ROOT, env=dict(os.environ), deadline=self.DEADLINE,
                                 grace=self.GRACE)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assert_nothing_left(record)
+        self.assertEqual(self.new_zombies(before), set(), "a descendant of the clean pass was left a zombie")
+
+    def test_the_subreaper_scope_is_counted_and_restores_the_previous_value(self) -> None:
+        previous = base._subreaper_value()
+        entered, release = threading.Event(), threading.Event()
+        seen = []
+
+        def other() -> None:
+            with base.child_subreaper():
+                entered.set()
+                release.wait(10)
+
+        thread = threading.Thread(target=other)
+        thread.start()
+        try:
+            self.assertTrue(entered.wait(10))
+            with base.child_subreaper():
+                seen.append(base._subreaper_value())
+            seen.append(base._subreaper_value())  # the first scope is still open
+        finally:
+            release.set()
+            thread.join()
+        self.assertEqual(seen, [1, 1])
+        self.assertEqual(base._subreaper_value(), previous)
 
     def test_a_stalled_pass_beside_a_terminating_one_fails_the_helper_after_it_is_reaped(self) -> None:
         argv, record = self.stalled()

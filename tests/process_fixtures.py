@@ -470,6 +470,24 @@ def read_stat(pid: int) -> tuple[str, int, int] | None:
     return rest[0], int(rest[2]), int(rest[19])
 
 
+def zombie_children(parent: int | None = None) -> set[int]:
+    """The pids of the zombie children of ``parent`` (default: this process), from ``/proc/<pid>/stat``
+    (state ``Z``, parent pid equal to ``parent``). A process that vanishes while the listing runs is skipped."""
+    parent = os.getpid() if parent is None else parent
+    found: set[int] = set()
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            text = Path(f"/proc/{entry}/stat").read_text()
+        except OSError:
+            continue
+        rest = text[text.rfind(")") + 1:].split()
+        if rest[0] == "Z" and int(rest[1]) == parent:
+            found.add(int(entry))
+    return found
+
+
 def kill_group(pgid: int | None) -> None:
     """``SIGKILL`` a whole process group, ignoring one that is already gone."""
     if not isinstance(pgid, int) or pgid <= 1:

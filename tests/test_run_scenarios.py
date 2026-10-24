@@ -11,6 +11,7 @@ disposable clone of the checkout with the working tree's code committed on top
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import importlib.util
 import io
 import json
@@ -26,6 +27,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests import process_fixtures as pf
 from tests.scenarios import kit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -109,22 +111,85 @@ sys.exit(code if code >= 0 else 128 - code)
 
 
 class PassFailure(AssertionError):
-    """A bounded pass that timed out or left a process behind."""
+    """A bounded pass that timed out or left a process behind. ``reaper_returncode`` is the reaper's exit status once
+    it has been waited (``None`` for a failure raised before that)."""
+
+    def __init__(self, message: str, reaper_returncode: "int | None" = None) -> None:
+        super().__init__(message)
+        self.reaper_returncode = reaper_returncode
 
 
-def _sweep(tags: "list[str]", *, bound: float) -> "list[int]":
-    """SIGKILL every process carrying any of ``tags`` until none is left or ``bound`` seconds pass; returns survivors."""
+PR_SET_CHILD_SUBREAPER, PR_GET_CHILD_SUBREAPER = 36, 37
+_subreaper_lock = threading.Lock()
+_subreaper_users = 0
+_subreaper_previous = 0
+
+
+def _subreaper_value() -> int:
+    """This process's child-subreaper flag (0 where ``prctl`` is unavailable)."""
+    value = ctypes.c_int(0)
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        return value.value if libc.prctl(PR_GET_CHILD_SUBREAPER, ctypes.byref(value), 0, 0, 0) == 0 else 0
+    except (OSError, AttributeError):
+        return 0
+
+
+def _set_subreaper(flag: int) -> None:
+    with contextlib.suppress(OSError, AttributeError):
+        ctypes.CDLL(None, use_errno=True).prctl(PR_SET_CHILD_SUBREAPER, flag, 0, 0, 0)
+
+
+@contextlib.contextmanager
+def child_subreaper():
+    """Make this process a child subreaper while the block runs, so the descendants of a reaper that was killed are
+    re-parented here, where ``_reap_killed`` can reap them, instead of to an outside process that may never reap.
+    Counted: overlapping blocks (two passes in two threads) set it once, and the last one out restores the value the
+    process had before the first one came in."""
+    global _subreaper_users, _subreaper_previous
+    with _subreaper_lock:
+        if _subreaper_users == 0:
+            _subreaper_previous = _subreaper_value()
+            _set_subreaper(1)
+        _subreaper_users += 1
+    try:
+        yield
+    finally:
+        with _subreaper_lock:
+            _subreaper_users -= 1
+            if _subreaper_users == 0:
+                _set_subreaper(_subreaper_previous)
+
+
+def _sweep(tags: "list[str]", *, bound: float, killed: "set[int]", exclude: "set[int] | None" = None) -> "list[int]":
+    """SIGKILL every process carrying any of ``tags`` (except ``exclude``) until none is left or ``bound`` seconds
+    pass; returns survivors. Every pid it sends ``SIGKILL`` is added to ``killed``. It reaps nothing: a pass made while
+    the reaper is alive leaves that to the reaper, and ``_reap_killed`` does it after the reaper is waited."""
     end = time.monotonic() + bound
     while True:
-        alive = sorted({pid for tag in tags for pid in kit.tagged_pids(tag)})
+        alive = sorted({pid for tag in tags for pid in kit.tagged_pids(tag, exclude=exclude)})
         for pid in alive:
+            killed.add(pid)
             with contextlib.suppress(OSError):
                 os.kill(pid, signal.SIGKILL)
-            with contextlib.suppress(OSError):
-                os.waitpid(pid, os.WNOHANG)
         if not alive or time.monotonic() >= end:
             return alive
         time.sleep(0.05)
+
+
+def _reap_killed(killed: "set[int]", *, bound: float) -> None:
+    """Reap, for at most ``bound`` seconds, every pid in ``killed`` that is a zombie child of this process. A pid is
+    taken only while ``/proc/<pid>/stat`` shows state ``Z`` and a parent pid equal to ours, so a recorded pid that its
+    own parent reaped and a new child of ours has since reused is never taken; any other pid is left to its parent."""
+    end = time.monotonic() + bound
+    while True:
+        mine = killed & pf.zombie_children()
+        for pid in mine:
+            with contextlib.suppress(OSError):
+                os.waitpid(pid, os.WNOHANG)
+        if not mine or time.monotonic() >= end:
+            return
+        time.sleep(0.01)
 
 
 def run_bounded(argv: "list[str]", *, cwd: Path, env: dict, deadline: float, grace: float = PASS_GRACE,
@@ -133,41 +198,48 @@ def run_bounded(argv: "list[str]", *, cwd: Path, env: dict, deadline: float, gra
 
     The command starts in a session of its own under a reaping subreaper (``REAPER_SOURCE``) with ``TMPDIR`` set to a
     pass-owned temporary root, which the scenario kit's scratch directories, and so every sandbox descendant's
-    environment, live under. At the deadline the group and the reaper get ``SIGTERM``; after ``grace`` seconds the
-    group gets ``SIGKILL`` and every process still carrying the root (or one of ``tags``) is swept for at most
-    ``SWEEP_BOUND`` seconds. The reaper is always ``wait()``ed before a failure is raised, so the whole call takes at
-    most ``deadline + grace + SWEEP_BOUND``. Returns a ``CompletedProcess``; raises ``PassFailure`` on a timeout or a
+    environment, live under. At the deadline the group and the reaper get ``SIGTERM``; after ``grace`` seconds every
+    process still carrying the root (or one of ``tags``) except the reaper is killed first, while the reaper is alive
+    and still their parent, and only then the group and the reaper. The reaper is always ``wait()``ed before a failure
+    is raised, then a last sweep kills what is left and a bounded ``waitpid`` loop reaps the zombies of the pids killed
+    (this process is a child subreaper for the whole call), so the whole call takes at most
+    ``deadline + grace + 2 * SWEEP_BOUND``. Returns a ``CompletedProcess``; raises ``PassFailure`` on a timeout or a
     leak. The pass-owned root is removed on return.
     """
     root = Path(tempfile.mkdtemp(prefix="det-pass-"))
+    killed: "set[int]" = set()
     try:
-        out, err = root / "stdout", root / "stderr"
-        with open(out, "w") as out_fh, open(err, "w") as err_fh:
-            proc = subprocess.Popen([sys.executable, "-I", "-c", reaper, "--", *argv], cwd=cwd,
-                                    env={**env, "TMPDIR": str(root)}, stdout=out_fh, stderr=err_fh,
-                                    start_new_session=True)
-            timed_out = False
-            try:
-                proc.wait(timeout=deadline)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                for send in (lambda: os.killpg(proc.pid, signal.SIGTERM), lambda: proc.send_signal(signal.SIGTERM)):
-                    with contextlib.suppress(OSError):
-                        send()
+        with child_subreaper():
+            out, err = root / "stdout", root / "stderr"
+            with open(out, "w") as out_fh, open(err, "w") as err_fh:
+                proc = subprocess.Popen([sys.executable, "-I", "-c", reaper, "--", *argv], cwd=cwd,
+                                        env={**env, "TMPDIR": str(root)}, stdout=out_fh, stderr=err_fh,
+                                        start_new_session=True)
+                timed_out = False
                 try:
-                    proc.wait(timeout=grace)
+                    proc.wait(timeout=deadline)
                 except subprocess.TimeoutExpired:
-                    with contextlib.suppress(OSError):
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    proc.kill()
-            proc.wait()
-            survivors = _sweep([str(root), *tags], bound=SWEEP_BOUND)
+                    timed_out = True
+                    for send in (lambda: os.killpg(proc.pid, signal.SIGTERM), lambda: proc.send_signal(signal.SIGTERM)):
+                        with contextlib.suppress(OSError):
+                            send()
+                    try:
+                        proc.wait(timeout=grace)
+                    except subprocess.TimeoutExpired:
+                        _sweep([str(root), *tags], bound=SWEEP_BOUND, killed=killed, exclude={proc.pid})
+                        with contextlib.suppress(OSError):
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        proc.kill()
+                proc.wait()
+                survivors = _sweep([str(root), *tags], bound=SWEEP_BOUND, killed=killed)
+            _reap_killed(killed, bound=SWEEP_BOUND)
         stdout, stderr = out.read_text(errors="replace"), err.read_text(errors="replace")
         if survivors:
-            raise PassFailure(f"{name} left processes behind: {survivors}\n{stdout[-2000:]}{stderr[-2000:]}")
+            raise PassFailure(f"{name} left processes behind: {survivors}\n{stdout[-2000:]}{stderr[-2000:]}",
+                              proc.returncode)
         if timed_out:
             raise PassFailure(f"{name} did not finish within its {deadline}-second deadline\n"
-                              f"stdout: {stdout[-2000:]}\nstderr: {stderr[-2000:]}")
+                              f"stdout: {stdout[-2000:]}\nstderr: {stderr[-2000:]}", proc.returncode)
         return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
     finally:
         shutil.rmtree(root, ignore_errors=True)

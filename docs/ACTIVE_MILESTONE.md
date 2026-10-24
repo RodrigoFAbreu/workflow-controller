@@ -20,6 +20,52 @@ record of state.
 
 ## Functional-review checklist
 
+The milestone changes how the catalogue determinism test runs. It has no user-facing feature, so each flow runs the
+test or the documentation directly. Every flow runs offline: the test makes its own local clones, and nothing pushes or
+calls GitHub.
+
+### Setup
+
+- The milestone head checked out in a clean working tree, Python 3, `git`, `taskset` and `lscpu`.
+- Linux user namespaces enabled: the scenario kit runs `unshare`. If the sandbox refuses them, flows 1 and 3 cannot run;
+  that is an `environment` limit, not a `defect`.
+- No services, no network and no `gh` are needed.
+
+### Test data
+
+None to seed. Each flow builds its own clones and output folders under the temporary directory and removes them.
+
+### Flows
+
+1. **The two passes run at the same time on the whole catalogue.** Run
+   `taskset -c 0-3 python3 tools/run_tests.py main-check tests.test_catalogue_determinism`.
+   Expected: exit 0, 10 tests run, none skipped, all passed. Wall time about 6 minutes on this machine (6 min 9 s at CP1).
+2. **The helper runs jobs together and in order.** In the same module, `RunConcurrentlyTest` passes: the jobs overlap,
+   results come back in job order, and a failure of either job, or of both, is raised only after both have finished.
+3. **A stalled pass is bounded and leaves nothing behind.** In the same module, `RunBoundedTest` passes: a stalled child
+   with two sleeping descendants, one in its own session, fails within the deadline plus the 10-second grace, and all
+   three are gone before the runner returns. The variant whose reaper ignores `SIGTERM` passes too. Before and after the
+   command, compare `ps -eo pid,ppid,args`: no process the run started remains.
+4. **The leftover-process inventory is complete.** Run `tests.test_fake_claude_contract` with the same command form as
+   flow 1; `test_the_bounds_cannot_regress_and_the_inventory_is_complete` passes.
+5. **The documentation matches the behaviour.** `python3 tools/check_docs.py` exits 0. In
+   `docs/guide/ci-and-releases.md` (the determinism section, around lines 85 to 140), both passes are described as
+   running at the same time, with the measured ratio. `docs/ROADMAP.md` no longer lists #126 under "Next, in order".
+6. **Optional, long: the full suite.** `python3 tools/run_tests.py` runs 4656 tests. Expected: only the three known
+   failures listed below.
+
+### Known limitations and out of scope
+
+- The speed-up is measured on this machine, on four CPUs (`taskset -c 0-3`). The real effect on CI shows only in the
+  `after-merge-determinism` job of the next `main` run (the target is near the 17 to 18 minutes of the mutations job,
+  against 32.1 minutes before). The sandbox has no GitHub, so no flow can check it.
+- Known failures that are not from this milestone: `TrailerRuleTest` and `SquashReleaseNotesTest` (the Git 2.56 trailer
+  rule), and `test_claude_build`'s deep-`TMPDIR` test, which also fails on `main`.
+- Out of scope: splitting the check into separate jobs (the D5 amendment path), the mutations job, the shard layout,
+  `validate`'s timing, and any change to `.github/workflows/` or `tools/ci_workflows.py`.
+
+### Automated verification and measurement (CP2 record)
+
 Measured on an AMD Ryzen 7 9800X3D (16 logical CPUs, 8 cores with two threads each; `taskset -c 0-3` selects four
 different physical cores, `lscpu -e` shows CPU 0-3 on cores 0-3, so no two share a core). Command, in a clone of each
 commit: `taskset -c 0-3 python3 tools/run_tests.py main-check tests.test_catalogue_determinism`, alternating base and

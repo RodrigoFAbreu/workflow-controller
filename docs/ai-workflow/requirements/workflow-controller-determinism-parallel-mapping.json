@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-determinism-parallel",
+  "requirements": {
+    "R1": {
+      "description": "The determinism test runs its two complete passes at the same time, each on its own clone, with unchanged assertions and unchanged fail-closed rules",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A failure of either pass fails the test only after both have finished, and the helper has tests of overlap, order and failure",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The speed-up is measured on four CPUs and is at least 30%, else the plan is amended",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The CI guide and the roadmap state the new behaviour and #126 done",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

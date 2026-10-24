@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-determinism-parallel",
+  "plan_revision": 4,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The two passes run at the same time, with tests of the helper",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Measure the speed-up, then the documentation and the roadmap",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

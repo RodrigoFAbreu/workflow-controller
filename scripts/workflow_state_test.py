@@ -24,6 +24,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import copy
+import errno
 import hashlib
 import importlib.util
 import io
@@ -10200,13 +10201,14 @@ class TestPublishAtomically(unittest.TestCase):
 
 
 class TestSameWorktreeConcurrencyRealProcesses(unittest.TestCase):
-    """Item 372(f): same-worktree concurrency is honestly out of scope,
-    not falsely fenced, and the assertion is the one the specified
-    mechanism can satisfy -- proven with real, separate OS processes,
-    since a single process/thread fixture cannot reproduce two
-    independent holders (mirroring `TestRealProcessConcurrentTakeover`'s
-    own reasoning, applied to the guard rather than the claim). The
-    corresponding cross-worktree half is item 373(f), not this item."""
+    """Item 372(f), as amended by live-guard-visibility: a live holder's
+    guard is visible, so a second process of the same owner is refused
+    beside it, and a crashed holder's leftover is reclaimed. Proven with
+    real, separate OS processes, since a single process/thread fixture
+    cannot reproduce two independent holders (mirroring
+    `TestRealProcessConcurrentTakeover`'s own reasoning, applied to the
+    guard rather than the claim). The corresponding cross-worktree half is
+    item 373(f), not this item."""
 
     @classmethod
     def setUpClass(cls):
@@ -10226,7 +10228,11 @@ class TestSameWorktreeConcurrencyRealProcesses(unittest.TestCase):
             os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         return subprocess.Popen([sys.executable, str(self._worker), *[str(a) for a in args]], env=env)
 
-    def test_second_process_reclaims_first_process_destructive_guard_windows_open_simultaneously(self):
+    def test_second_process_is_refused_while_the_first_is_parked_and_reclaims_once_it_is_killed(self):
+        """A second process with the same token no longer opens a second
+        window beside a live holder (it used to: both stayed open). It is
+        refused while the first is parked, and reclaims the leftover once
+        the first has died."""
         with ScratchRepo() as repo:
             claim = ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")
             token = claim["owner_token"]
@@ -10235,6 +10241,7 @@ class TestSameWorktreeConcurrencyRealProcesses(unittest.TestCase):
                 ready = scratch_path / "ready"
                 release = scratch_path / "release"
                 out_hold = scratch_path / "out_hold.json"
+                out_refused = scratch_path / "out_refused.json"
                 out_reclaim = scratch_path / "out_reclaim.json"
 
                 holder = self._spawn("hold", repo.root, "wi", "CP", token, ws.DESTRUCTIVE, "t2",
@@ -10248,27 +10255,362 @@ class TestSameWorktreeConcurrencyRealProcesses(unittest.TestCase):
                     first_lease = json.loads(ready.read_text())
                     self.assertEqual(first_lease["step_class"], ws.DESTRUCTIVE)
 
+                    refused = self._spawn("reclaim", repo.root, "wi", "CP", token, ws.ORDINARY,
+                                          "t3", out_refused)
+                    self.assertEqual(refused.wait(timeout=15), 0)
+                    result = json.loads(out_refused.read_text())
+                    self.assertEqual(result["outcome"], "refused", result)
+                    self.assertIn("still running", result["detail"])
+                    self.assertEqual(ws.read_guard(repo.root, "wi")["lease_id"],
+                                     first_lease["lease_id"])
+                    self.assertIsNone(holder.poll())
+
+                    holder.kill()
+                    holder.wait(timeout=15)
                     reclaimer = self._spawn("reclaim", repo.root, "wi", "CP", token, ws.ORDINARY,
-                                            "t3", out_reclaim)
+                                            "t4", out_reclaim)
                     self.assertEqual(reclaimer.wait(timeout=15), 0)
                     result = json.loads(out_reclaim.read_text())
                     self.assertEqual(result["outcome"], "success", result)
                     self.assertNotEqual(result["lease_id"], first_lease["lease_id"])
-
-                    # Both windows open simultaneously: the reclaim above
-                    # returned without waiting for the holder, which is
-                    # still parked right now -- the "they serialize"
-                    # control arm the item text names must fail, and does.
-                    self.assertIsNone(
-                        holder.poll(),
-                        "the holder process already exited -- the reclaim must not wait for "
-                        "it, but something serialized them")
                 finally:
                     release.write_text("go")
+                    if holder.poll() is None:
+                        holder.kill()
                     holder.wait(timeout=15)
 
-                held_result = json.loads(out_hold.read_text())
-                self.assertEqual(held_result["outcome"], "held_to_completion")
+
+# A worker of its own for the live-guard-visibility tests, driven over pipes: it
+# writes one JSON line when its window is open and blocks on its stdin.
+_LIVE_GUARD_WORKER_SOURCE = """
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+import workflow_state as ws
+
+mode, repo_root, work_item_id, token, step, step_class = sys.argv[1:7]
+repo_root = Path(repo_root)
+
+
+def say(**fields):
+    sys.stdout.write(json.dumps(fields) + "\\n")
+    sys.stdout.flush()
+
+
+lease = ws.acquire_guard(repo_root, work_item_id, holder_owner_token=token, checkpoint_id="CP",
+                         step=step, step_class=step_class, now="t-hold")
+say(event="ready", lease=lease)
+if mode == "fork":
+    inherited = list(ws._guard_holder_locks.values())
+    if os.fork() == 0:
+        report = {"event": "child", "table": len(ws._guard_holder_locks), "closed": []}
+        for fd in inherited:
+            try:
+                os.fstat(fd)
+                report["closed"].append(False)
+            except OSError:
+                report["closed"].append(True)
+        try:
+            ws.acquire_guard(repo_root, work_item_id, holder_owner_token=token,
+                             checkpoint_id="CP", step="1d", step_class=ws.ORDINARY, now="t-child")
+            report["acquired"] = True
+        except ws.CheckpointOwnershipUnavailableError as exc:
+            report["refused"] = str(exc)
+        report["probe"] = ws.guard_holder_is_running(repo_root, work_item_id)
+        report["guard_lease"] = ws.read_guard(repo_root, work_item_id)["lease_id"]
+        say(**report)
+        sys.stdin.readline()
+        os._exit(0)
+    time.sleep(60)
+    sys.exit(0)
+sys.stdin.readline()
+ws.release_guard(repo_root, work_item_id, lease)
+say(event="released")
+"""
+
+_LIVE_STEPS = (("1d", "destructive"), ("1f-commit", "destructive"), ("1f-release", "ordinary"))
+
+
+class LiveGuardWorkerMixin:
+    """Spawns `_LIVE_GUARD_WORKER_SOURCE` and reads its events."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._scripts_dir = Path(__file__).resolve().parent
+        cls._worker_dir = Path(tempfile.mkdtemp(prefix="wf-live-guard-worker-"))
+        cls._worker = cls._worker_dir / "_live_guard_worker.py"
+        cls._worker.write_text(_LIVE_GUARD_WORKER_SOURCE)
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls._worker_dir, ignore_errors=True)
+
+    def _spawn_worker(self, mode, root, token, step, step_class, work_item_id="wi"):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(self._scripts_dir) + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        proc = subprocess.Popen(
+            [sys.executable, str(self._worker), mode, str(root), work_item_id, token, step,
+             step_class],
+            env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.addCleanup(self._reap, proc)
+        return proc
+
+    @staticmethod
+    def _reap(proc):
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=15)
+        for stream in (proc.stdin, proc.stdout):
+            with contextlib.suppress(OSError, ValueError):
+                stream.close()
+
+    def _event(self, proc):
+        line = proc.stdout.readline()
+        self.assertTrue(line, f"the worker produced no event (exit status {proc.poll()})")
+        return json.loads(line)
+
+    def _hold(self, root, token, step, step_class, mode="hold"):
+        proc = self._spawn_worker(mode, root, token, step, step_class)
+        event = self._event(proc)
+        self.assertEqual(event["event"], "ready")
+        return proc, event["lease"]
+
+    def _kill(self, proc):
+        proc.kill()
+        proc.wait(timeout=15)
+
+    def _end_window(self, proc):
+        proc.stdin.write("go\n")
+        proc.stdin.flush()
+        self.assertEqual(self._event(proc)["event"], "released")
+        proc.wait(timeout=15)
+
+
+class TestLiveGuardVisibility(LiveGuardWorkerMixin, unittest.TestCase):
+    """live-guard-visibility (#91, `D-Lock`/`D-Probe`/`D-Reclaim`): a live
+    holder's guard is visible, so a same-token owner is refused beside it;
+    a crashed holder's leftover is still reclaimed."""
+
+    def _claim(self, repo):
+        return ws.claim_checkpoint(repo.root, "wi", "CP", now="t1")["owner_token"]
+
+    def test_live_owner_a_refuses_same_token_b(self):
+        for step, step_class in _LIVE_STEPS:
+            with self.subTest(step=step), ScratchRepo() as repo:
+                token = self._claim(repo)
+                proc, lease = self._hold(repo.root, token, step, step_class)
+                ran = []
+                with self.assertRaises(ws.CheckpointOwnershipUnavailableError) as ctx:
+                    with ws.owner_mutation(repo.root, "wi", token, checkpoint_id="CP",
+                                           step="1d", step_class=ws.DESTRUCTIVE, now="t2"):
+                        ran.append("b")
+                message = str(ctx.exception)
+                self.assertEqual(ran, [])
+                self.assertIn(lease["lease_id"], message)
+                self.assertIn(step, message)
+                self.assertIn("still running", message)
+                self.assertIn("fuser", message)
+                self.assertNotIn("foreign worktree", message)
+                self.assertEqual(ws.read_guard(repo.root, "wi")["lease_id"], lease["lease_id"])
+                self.assertTrue(ws.guard_holder_is_running(repo.root, "wi"))
+                self._end_window(proc)
+
+    def test_killed_owner_a_leftover_is_reclaimed_by_b(self):
+        for step, step_class in _LIVE_STEPS:
+            with self.subTest(step=step), ScratchRepo() as repo:
+                token = self._claim(repo)
+                proc, lease = self._hold(repo.root, token, step, step_class)
+                self._kill(proc)
+                self.assertEqual(ws.read_guard(repo.root, "wi")["lease_id"], lease["lease_id"])
+                self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))
+                fresh = ws.acquire_guard(repo.root, "wi", holder_owner_token=token,
+                                         checkpoint_id="CP", step="1d", step_class=ws.DESTRUCTIVE,
+                                         now="t2")
+                self.assertNotEqual(fresh["lease_id"], lease["lease_id"])
+                self.assertEqual(ws.read_guard(repo.root, "wi")["lease_id"], fresh["lease_id"])
+                self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))
+                ws.release_guard(repo.root, "wi", fresh)
+                self.assertIsNone(ws.read_guard(repo.root, "wi"))
+                self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))
+
+    def test_a_normal_release_lets_b_enter_and_leaves_no_descriptor(self):
+        with ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, _ = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE)
+            self._end_window(proc)
+            baseline = self._open_descriptors()
+            ran = []
+            with ws.owner_mutation(repo.root, "wi", token, checkpoint_id="CP", step="1d",
+                                   step_class=ws.DESTRUCTIVE, now="t2"):
+                ran.append("b")
+            self.assertEqual(ran, ["b"])
+            self.assertEqual(self._open_descriptors(), baseline)
+
+    def test_the_probe(self):
+        with ScratchRepo() as repo:
+            token = self._claim(repo)
+            self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))      # no guard
+
+            own = ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                   step="1d", step_class=ws.DESTRUCTIVE, now="t2")
+            self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))      # this process's own
+            ws.release_guard(repo.root, "wi", own)
+
+            proc, lease = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE)
+            path = ws.guard_path(repo.root, "wi")
+            before = path.read_bytes()
+            self.assertTrue(ws.guard_holder_is_running(repo.root, "wi"))
+            self.assertTrue(ws.guard_holder_is_running(repo.root, "wi"))      # a second probe
+            self.assertEqual(path.read_bytes(), before)
+            self.assertIsNone(proc.poll())
+            self._end_window(proc)                                             # holder unaffected
+
+            proc, lease = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE)
+            self._kill(proc)
+            self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))      # leftover
+
+            path.write_text("{ torn")
+            with self.assertRaises(ws.CheckpointOwnershipUnavailableError):
+                ws.guard_holder_is_running(repo.root, "wi")                    # undecidable
+            path.unlink()
+
+            # published as a release before 2.18.6 does: no lock is held
+            ws._publish_claim_exclusive(path, {"lease_id": "old", "holder_owner_token": token})
+            self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))
+
+    def test_the_probe_helper_translates_every_other_error_to_unavailable(self):
+        with ScratchRepo() as repo:
+            token = self._claim(repo)
+            path = ws.guard_path(repo.root, "wi")
+            ws._publish_claim_exclusive(path, {"lease_id": "old", "holder_owner_token": token})
+            real_flock = ws.fcntl.flock
+
+            def failing_probe_flock(fd, operation):
+                if operation & ws.fcntl.LOCK_SH:
+                    raise OSError(errno.ENOLCK, "no locks")
+                return real_flock(fd, operation)
+
+            with mock.patch.object(ws.fcntl, "flock", failing_probe_flock):
+                with self.assertRaises(ws.CheckpointOwnershipUnavailableError):
+                    ws.guard_holder_is_running(repo.root, "wi")
+            with mock.patch.object(ws.os, "open", side_effect=OSError(errno.EACCES, "denied")):
+                with self.assertRaises(ws.CheckpointOwnershipUnavailableError):
+                    ws._guard_held_by_another_process(path, "old")
+            self.assertFalse(ws._guard_held_by_another_process(path.with_name("absent"), "old"))
+
+    def test_the_unchanged_routes_with_a_locked_guard(self):
+        with self.subTest("an authorized break of a live ordinary guard"), ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, lease = self._hold(repo.root, token, "1f-release", ws.ORDINARY)
+            new_owner = ws.acquire_guard(repo.root, "wi", holder_owner_token="a-different-token",
+                                         checkpoint_id="CP", step="1d", step_class=ws.ORDINARY,
+                                         now="t2", role="takeover",
+                                         authorized_lease_id=lease["lease_id"])
+            self.assertNotEqual(new_owner["lease_id"], lease["lease_id"])
+            self._end_window(proc)                          # the broken owner's release
+            self.assertEqual(ws.read_guard(repo.root, "wi"), new_owner)
+            ws.release_guard(repo.root, "wi", new_owner)
+        with self.subTest("a live destructive guard still refuses a takeover"), ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, lease = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE)
+            with self.assertRaises(ws.CheckpointClaimTakeoverRefusedError):
+                ws.acquire_guard(repo.root, "wi", holder_owner_token="a-different-token",
+                                 checkpoint_id="CP", step="1d", step_class=ws.ORDINARY, now="t2",
+                                 role="takeover", authorized_lease_id=lease["lease_id"])
+            self._end_window(proc)
+        with self.subTest("a live guard of a superseded epoch"), ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, lease = self._hold(repo.root, "bogus-old-token", "1f-commit", ws.DESTRUCTIVE)
+            fresh = ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                     step="1d", step_class=ws.DESTRUCTIVE, now="t2")
+            self.assertNotEqual(fresh["lease_id"], lease["lease_id"])
+            ws.release_guard(repo.root, "wi", fresh)
+        with self.subTest("a live takeover guard keeps the takeover-fence message"), ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, lease = self._hold(repo.root, token, "takeover", ws.ORDINARY)
+            with self.assertRaises(ws.CheckpointOwnershipUnavailableError) as ctx:
+                ws.acquire_guard(repo.root, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                 step="1d", step_class=ws.ORDINARY, now="t2")
+            self.assertIn("take_over_claim", str(ctx.exception))
+            self.assertNotIn("still running", str(ctx.exception))
+            self._end_window(proc)
+        with self.subTest("the same-token other-worktree refusal"), ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, lease = self._hold(repo.root, token, "1d", ws.ORDINARY)
+            wt2 = repo.worktree("b")
+            with self.assertRaises(ws.CheckpointOwnershipUnavailableError) as ctx:
+                ws.acquire_guard(wt2, "wi", holder_owner_token=token, checkpoint_id="CP",
+                                 step="1d", step_class=ws.ORDINARY, now="t3")
+            self.assertIn("presenting the claim's token is not being the holder", str(ctx.exception))
+            self._end_window(proc)
+
+    def test_a_forked_child_owns_nothing_it_inherited(self):
+        with ScratchRepo() as repo:
+            token = self._claim(repo)
+            proc, lease = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE, mode="fork")
+            child = self._event(proc)
+            self.assertEqual(child["event"], "child")
+            self.assertIn("still running", child.get("refused", ""), child)        # (a)
+            self.assertNotIn("acquired", child)
+            self.assertTrue(child["probe"])
+            self.assertEqual(child["guard_lease"], lease["lease_id"])
+            self.assertEqual(child["table"], 0)                                    # (b)
+            self.assertEqual(child["closed"], [True])
+            self._kill(proc)                                                       # (c) parent dies
+            self.assertFalse(ws.guard_holder_is_running(repo.root, "wi"))
+            fresh = ws.acquire_guard(repo.root, "wi", holder_owner_token=token,
+                                     checkpoint_id="CP", step="1d", step_class=ws.DESTRUCTIVE,
+                                     now="t2")
+            self.assertNotEqual(fresh["lease_id"], lease["lease_id"])
+            ws.release_guard(repo.root, "wi", fresh)
+            proc.stdin.write("go\n")                                               # let the child go
+            proc.stdin.flush()
+
+    @staticmethod
+    def _open_descriptors():
+        for directory in ("/proc/self/fd", "/dev/fd"):
+            if os.path.isdir(directory):
+                return len(os.listdir(directory))
+        raise unittest.SkipTest("no way to count this process's open descriptors")
+
+    def test_descriptor_hygiene(self):
+        with ScratchRepo() as repo:
+            token = self._claim(repo)
+            baseline = self._open_descriptors()
+
+            def acquire(now):
+                return ws.acquire_guard(repo.root, "wi", holder_owner_token=token,
+                                        checkpoint_id="CP", step="1d", step_class=ws.ORDINARY,
+                                        now=now)
+
+            first = acquire("t2")
+            self.assertEqual(self._open_descriptors(), baseline + 1)
+            self.assertIn(first["lease_id"], ws._guard_holder_locks)
+            ws.release_guard(repo.root, "wi", first)                       # a release
+            self.assertNotIn(first["lease_id"], ws._guard_holder_locks)
+            self.assertEqual(self._open_descriptors(), baseline)
+
+            own = acquire("t3")
+            second = acquire("t4")                                         # reclaim of its own lease
+            self.assertNotIn(own["lease_id"], ws._guard_holder_locks)
+            self.assertIn(second["lease_id"], ws._guard_holder_locks)
+            self.assertEqual(self._open_descriptors(), baseline + 1)
+            ws.release_guard(repo.root, "wi", second)
+            self.assertNotIn(second["lease_id"], ws._guard_holder_locks)
+            self.assertEqual(self._open_descriptors(), baseline)
+
+            ws._publish_claim_exclusive(ws.guard_path(repo.root, "wi"),
+                                        {"lease_id": "taken", "holder_owner_token": token})
+            with self.assertRaises(FileExistsError):                       # a lost publication race
+                ws._publish_guard(repo.root, "wi", {**second, "lease_id": "lost"})
+            self.assertNotIn("lost", ws._guard_holder_locks)
+            self.assertEqual(self._open_descriptors(), baseline)
+            ws.guard_path(repo.root, "wi").unlink()
 
 
 class TestExplicitTakeover(unittest.TestCase):

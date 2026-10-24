@@ -35,7 +35,7 @@ user with one provider is never blocked at an external gate (C14, review modes,
 [11.14](#1114-review-modes)). 1.12.0 (PR #61) added the review round cap and per-round `telemetry`
 (C13, [11.13](#1113-review-convergence)). The Controller admits Workflow 2.5.1 and 2.6.0, and any
 Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow
-2.18.5 with automatic gates (since 2026-10-23). What is complete is marked in the tables below; what
+2.18.6 with automatic gates (since 2026-10-24). What is complete is marked in the tables below; what
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18, 2026-10-22 and 2026-10-23; each item carries its complexity label in the table below):
@@ -177,7 +177,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | H4e | Complexity: medium. Codex worker, step 5: the four review-side roles (`review-plan`, `review-implementation`, `apply-plan-review`, `apply-implementation-review`) can be routed to Codex; a safety review and a live proof on a scratch repository (operator-run) | H4d, H1 | [Adapters and backlog](#at-a-glance) |
 | H4f | Complexity: medium. Codex worker, step 6: `milestone-implement` can be routed to Codex (the longest role: checkpoints, commits, self-review); a safety review and a live proof (operator-run) | H4e | [Adapters and backlog](#at-a-glance) |
 | H4g | Complexity: low. Codex worker, step 7: the remaining roles (`milestone-plan`, `apply-functional-review`, `apply-pr-review`, `satisfy-gate`, `prepare-functional-review`, `record-manual-*`) and the documentation; every role can run on either harness that declares it | H4f | [Adapters and backlog](#at-a-glance) |
-| CU3 | Complexity: low. A clean-up milestone for wording, documentation and test tidy-ups among the open `review-follow-up` issues (#100, #103, #104, #108, #116, #118, #125, #132, #133, #138, #140), under the limit of 8 (owner decision, 2026-10-23); mechanisms are not cleaned up here | C10f, #126 | [Clean-up milestones](#at-a-glance) |
+| CU3 | Complexity: low. A clean-up milestone for wording, documentation and test tidy-ups among the open `review-follow-up` issues (#100, #103, #104, #108, #116, #118, #125, #132, #133, #138, #140, #143), under the limit of 8 (owner decision, 2026-10-23); mechanisms are not cleaned up here | C10f, #126 | [Clean-up milestones](#at-a-glance) |
 | C10h | Complexity: medium. Deny the functional tester reads of credential files and detect a `file://` origin ([#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115); split out of CU3: it adds a security mechanism; split again if the plan needs both parts) | C10f | [11.9](#119-automated-functional-review) |
 | C10i | Complexity: low to medium. Check sandbox availability before reserving usage and marking the tester job launched ([#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112); split out of CU3) | C10f | [11.9](#119-automated-functional-review) |
 | CL1a | Complexity: low. Retention of finished work-item files (registry, audit, old plans, fixtures): the written rule and its documentation, owned by the Workflow and followed by the Manager and the Controller ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), [workflow#84](https://github.com/RodrigoFAbreu/workflow/issues/84), [workflow-manager#90](https://github.com/RodrigoFAbreu/workflow-manager/issues/90)); CL1 is split into five items (owner decision, 2026-10-23) | CU3 | [Clean-up milestones](#at-a-glance) |
@@ -581,8 +581,9 @@ hurts now, else in a later step or the next clean-up milestone.
 77. [#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126): the after-merge determinism job takes
     28-32 minutes, so an ordinary release waits that long after the merge. Fixed: the two passes run at the same time
     (a `ci:` change, no release; complete, accepted 2026-10-24 by gate policy, pull request #142; median 692 s to
-    368 s on four CPUs); the first `main` run's job time is recorded in the documentation pull request after
-    the merge.
+    368 s on four CPUs); the first `main` run (cbb8d11) measured 17.4 minutes for
+    `after-merge-determinism` (against 28-33) and 14.9 for `after-merge-mutations`, so a release now waits about 17
+    minutes after its merge).
 78. [#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129): the sandbox layout for Claude Code 2.1.304
     and later (C10f, complete).
 79. [#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130): retention of finished work-item files and
@@ -601,6 +602,8 @@ hurts now, else in a later step or the next clean-up milestone.
 84. [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140): `runtime.remove_tree` resolves the parent
     before removing, so a path below a link would remove the external folder's contents (no caller does this); the
     fake tester collapses `..` before it resolves links; two identical link tests (C10f review; later).
+85. [#143](https://github.com/RodrigoFAbreu/workflow-controller/issues/143): `run_bounded` can leave zombie
+    descendants after the forced-reaper fallback, and its leak check cannot see zombies (#126 review; later).
 
 ---
 

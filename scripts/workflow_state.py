@@ -1810,6 +1810,94 @@ def held_primitives() -> tuple[tuple[str, str], ...]:
     return tuple(_held_primitives)
 
 
+# live-guard-visibility (#91, `D-Lock`): the **holder lock**. The holder of a
+# mutation guard (the checkpoint guard (5), the plan-approval guard (1))
+# keeps a non-blocking `fcntl.flock` on the guard's own inode for the whole
+# window; the kernel drops it when the holder dies. It is a visibility
+# lock, not a lock-order primitive: never waited on, a leaf that takes
+# nothing else. This process's own locks are kept here, `lease_id` to
+# descriptor; a forked child owns none of them (`D-Fork`). Not thread-local,
+# for the same reason `_held_primitives` is not.
+_guard_holder_locks: dict[str, int] = {}
+
+
+def _drop_guard_lock(lease_id: object) -> None:
+    """Close this process's holder lock for `lease_id`, idempotently."""
+    fd = _guard_holder_locks.pop(lease_id, None) if isinstance(lease_id, str) else None
+    if fd is not None:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+def _forget_inherited_guard_locks() -> None:
+    """`D-Fork`: in a forked child, close every inherited holder-lock
+    descriptor and forget the table. Closing a duplicate descriptor leaves
+    the open file description, and its lock, held by the parent (never
+    `LOCK_UN`, which would release it). Cannot raise."""
+    inherited = list(_guard_holder_locks.values())
+    _guard_holder_locks.clear()
+    for fd in inherited:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+os.register_at_fork(after_in_child=_forget_inherited_guard_locks)
+
+
+def _lock_guard_inode(fd: int, unavailable: type[Exception], guard: Path) -> None:
+    """Take the holder lock on a freshly staged, still private inode."""
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        raise unavailable(
+            f"cannot take the holder lock on the staged guard for {guard} ({exc}) -- publishing "
+            f"nothing") from exc
+
+
+def _guard_held_by_another_process(guard_file: Path, lease_id: str,
+                                   unavailable: type[Exception] | None = None) -> bool:
+    """`D-Probe`: does another process hold the lock of the guard published
+    at `guard_file`? A lease this process holds is its own (`D-Own`): `False`.
+    An absent guard is `False`. Every other error raises `unavailable`
+    (default `CheckpointOwnershipUnavailableError`), never `False`: an
+    undecidable guard is not evidence that nobody runs. Call it only with the
+    guard bytes already read, under the guard's serialization lock."""
+    unavailable = unavailable or CheckpointOwnershipUnavailableError
+    if lease_id in _guard_holder_locks:
+        return False
+    try:
+        fd = os.open(guard_file, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise unavailable(f"cannot probe the holder lock of {guard_file} ({exc})") from exc
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError as exc:
+            raise unavailable(f"cannot probe the holder lock of {guard_file} ({exc})") from exc
+        return False
+    finally:
+        os.close(fd)               # also drops a shared lock taken for the probe
+
+
+def _live_holder_message(subject: str, held: dict, guard_file: Path) -> str:
+    return (
+        f"{subject} (lease {held.get('lease_id')!r}, step {held.get('step')!r}, class "
+        f"{held.get('step_class')!r}) belongs to this session's own owner token, and the process "
+        f"holding the guard's lock is still running -- a second window of the same owner must not "
+        f"open beside it. Wait for that window to finish and retry; if it is certain that process "
+        f"is not doing this work, find it with `fuser {guard_file}` and stop it. A crashed "
+        f"holder holds nothing: its leftover guard is reclaimed by the next entry, with no "
+        f"further step")
+
+
 @contextlib.contextmanager
 def state_lock(repo_root: Path, *, lock_path: Path = STATE_LOCK_PATH):
     """`D1`'s state-writer primitive (item 354(a)): the lock file is
@@ -3577,13 +3665,20 @@ def _publish_plan_approval_guard(repo_root: Path, body: dict, path: Path) -> Non
     fd, tmp_name = tempfile.mkstemp(
         dir=str(full_path.parent), prefix=".plan-approval-guard-", suffix=".tmp",
     )
+    published = False
     try:
-        with os.fdopen(fd, "wb") as handle:
+        with os.fdopen(fd, "wb", closefd=False) as handle:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+        _lock_guard_inode(fd, PlanApprovalGuardUnavailableError, full_path)   # `D-Lock`
         os.link(tmp_name, full_path)
+        published = True
     finally:
+        if published:
+            _guard_holder_locks[body["lease_id"]] = fd
+        else:
+            os.close(fd)
         Path(tmp_name).unlink(missing_ok=True)
     _note_primitive_acquired("1", body["lease_id"])
 
@@ -3631,7 +3726,10 @@ def acquire_plan_approval_guard(
     - **`role="owner"`, same token**: this session's own leftover guard
       from an interrupted earlier step. Reclaimed and retried once; the
       window's first act is `assert_owner`, so a stale belief about
-      ownership is caught immediately regardless.
+      ownership is caught immediately regardless. Unless another process
+      still holds the guard's lock (live-guard-visibility, `D-Reclaim`):
+      then it is refused with `PlanApprovalGuardHeldError`; a crashed
+      holder holds nothing and is reclaimed.
     - **`role="takeover"`, current epoch, `"destructive"`**: refuses
       unconditionally, by anyone, under any authorization.
     - **`role="takeover"`, current epoch, `"ordinary"`**: released only
@@ -3707,7 +3805,14 @@ def _acquire_plan_approval_guard_locked(
             f"the guard-release literal "
             f"{plan_approval_guard_release_authorization_literal(held)!r}")
     elif role == "owner" and held.get("holder_owner_token") == holder_owner_token:
-        reclaim = True                     # this session's own leftover guard
+        # this session's own leftover guard -- unless its holder still runs
+        # (live-guard-visibility, `D-Reclaim`): a crashed holder holds no lock.
+        guard_file = plan_approval_guard_path(repo_root, guard_path)
+        if _guard_held_by_another_process(guard_file, held["lease_id"],
+                                          PlanApprovalGuardUnavailableError):
+            raise PlanApprovalGuardHeldError(_live_holder_message(
+                "the plan-approval mutation guard", held, guard_file))
+        reclaim = True
     elif role == "takeover":
         if held.get("step_class") == DESTRUCTIVE:
             raise PlanApprovalTakeoverRefusedError(
@@ -3761,6 +3866,7 @@ def _release_plan_approval_guard_locked(repo_root: Path, lease_id: str, path: Pa
     if held is None or held.get("lease_id") != lease_id:
         return
     full_path.unlink(missing_ok=True)
+    _drop_guard_lock(lease_id)
     _note_primitive_released("1", lease_id)
 
 
@@ -3771,6 +3877,7 @@ def release_plan_approval_guard(
         with _plan_approval_guard_lock(repo_root):
             _release_plan_approval_guard_locked(repo_root, lease.get("lease_id"), path)
     finally:
+        _drop_guard_lock(lease.get("lease_id"))
         _note_primitive_released("1", lease.get("lease_id"))
 
 
@@ -6029,14 +6136,19 @@ def _build_claim_record(repo_root: Path, work_item_id: str, checkpoint_id: str, 
     return record
 
 
-def _stage_claim_payload(path: Path, record: dict, *, allow_unreadable_target: bool = False) -> Path:
+def _stage_claim_payload(path: Path, record: dict, *, allow_unreadable_target: bool = False,
+                         keep_open: bool = False) -> Path | tuple[Path, int]:
     """Stage the payload in the claims directory. The claims **directory**
     must always be a real directory -- that assertion is never relaxed.
     `allow_unreadable_target` relaxes the assertion on the final *name*
     only, for the two authorized operations that exist to replace an
     undecidable record (`OPUS-R83-002`): safe because staging happens at
     a fresh temp name and publication is `os.rename` onto the final one,
-    which replaces the link, never follows it, never writes through it."""
+    which replaces the link, never follows it, never writes through it.
+
+    The descriptor `mkstemp` returned is closed here, except for the one
+    caller that passes `keep_open` (the guard's publisher, which locks it,
+    `D-Lock`): that caller gets `(path, fd)` and owns the descriptor."""
     payload = json.dumps(record, indent=2, sort_keys=True) + "\n"
     _assert_not_symlink(path.parent, "claims directory")
     if not allow_unreadable_target:
@@ -6044,15 +6156,22 @@ def _stage_claim_payload(path: Path, record: dict, *, allow_unreadable_target: b
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".claim-", suffix=".tmp")
-        with os.fdopen(fd, "w") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
+        try:
+            with os.fdopen(fd, "w", closefd=False) as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except BaseException:
+            os.close(fd)
+            raise
     except OSError as exc:
         raise CheckpointOwnershipUnavailableError(
             f"cannot stage a claim next to {path} ({exc}) -- refusing to start a checkpoint "
             f"whose claim cannot be made discoverable to this repository's other worktrees"
         ) from exc
+    if keep_open:
+        return Path(tmp_name), fd
+    os.close(fd)
     return Path(tmp_name)
 
 
@@ -6073,17 +6192,29 @@ def _publish_claim_replacing(path: Path, record: dict, *, allow_unreadable_targe
         ) from exc
 
 
-def _publish_claim_exclusive(path: Path, record: dict) -> None:
+def _publish_claim_exclusive(path: Path, record: dict, *, lock_lease_id: str | None = None) -> None:
     """Atomic in **both** senses -- complete content, and create-if-absent.
     Write the whole payload to a temp file in the same directory, then
     `os.link` it into place: the link either creates the final name with
     fully-written content, or fails `EEXIST` because somebody else won.
     There is no window in which a reader can observe a partially-written
     claim, so a crash can never leave a record that fails closed for
-    everybody."""
-    tmp = _stage_claim_payload(path, record)
+    everybody.
+
+    `lock_lease_id` is the one opt-in only `_publish_guard` passes
+    (`D-Lock`): the staged inode is locked (`LOCK_EX | LOCK_NB`) before the
+    link and the descriptor is kept in `_guard_holder_locks` under that
+    lease. The claim's own publication passes nothing and stays lockless."""
+    if lock_lease_id is None:
+        tmp, fd = _stage_claim_payload(path, record), None
+    else:
+        tmp, fd = _stage_claim_payload(path, record, keep_open=True)
+    published = False
     try:
+        if fd is not None:
+            _lock_guard_inode(fd, CheckpointOwnershipUnavailableError, path)
         os.link(tmp, path)
+        published = True
     except FileExistsError:
         raise
     except OSError as exc:
@@ -6092,6 +6223,11 @@ def _publish_claim_exclusive(path: Path, record: dict) -> None:
             f"cannot be made discoverable to this repository's other worktrees"
         ) from exc
     finally:
+        if fd is not None:
+            if published:
+                _guard_holder_locks[lock_lease_id] = fd
+            else:
+                os.close(fd)
         tmp.unlink(missing_ok=True)
 
 
@@ -6339,7 +6475,8 @@ def read_guard(repo_root: Path, work_item_id: str) -> dict | None:
 
 
 def _publish_guard(repo_root: Path, work_item_id: str, body: dict) -> None:
-    _publish_claim_exclusive(guard_path(repo_root, work_item_id), body)
+    _publish_claim_exclusive(guard_path(repo_root, work_item_id), body,
+                             lock_lease_id=body["lease_id"])
     _note_primitive_acquired("5", body["lease_id"])
 
 
@@ -6377,6 +6514,11 @@ def acquire_guard(repo_root: Path, work_item_id: str, *, holder_owner_token: str
       own leftover guard from an interrupted earlier step. Reclaimed and
       retried once; the window's first act is `assert_claim_owner`, so a
       stale belief about ownership is caught immediately regardless.
+      **Unless another process still holds the guard's lock**
+      (live-guard-visibility, `D-Reclaim`): then it is refused, because a
+      second window of the same owner must not open beside a running one;
+      a crashed holder holds nothing and is reclaimed. A lock this process
+      holds itself is its own leftover (`D-Own`).
       `holder_worktree_git_dir` is a required conjunct (`OPUS-R82-002`):
       the token is world-readable coordination data any worktree can
       read out of the claim, so token equality alone would let a
@@ -6463,7 +6605,12 @@ def _acquire_guard_locked(repo_root: Path, work_item_id: str, *, body: dict,
             f"{guard_release_authorization_literal(held)!r}")
     elif (role == "owner" and held.get("holder_owner_token") == holder_owner_token
           and held.get("holder_worktree_git_dir") == _worktree_git_dir(repo_root)):
-        reclaim = True                     # this worktree's own leftover guard
+        # this worktree's own leftover guard -- unless its holder still runs
+        # (live-guard-visibility, `D-Reclaim`): a crashed holder holds no lock.
+        if _guard_held_by_another_process(guard_path(repo_root, work_item_id), held["lease_id"]):
+            raise CheckpointOwnershipUnavailableError(_live_holder_message(
+                f"{work_item_id!r}'s mutation guard", held, guard_path(repo_root, work_item_id)))
+        reclaim = True
     elif role == "owner" and held.get("holder_owner_token") == holder_owner_token:
         # `OPUS-R82-002`: same token, different worktree. The token
         # proves the epoch, never the holder.
@@ -6544,6 +6691,7 @@ def _release_guard_path_locked(repo_root: Path, work_item_id: str, lease_id: str
     if held.get("lease_id") != lease_id:
         return
     path.unlink(missing_ok=True)
+    _drop_guard_lock(lease_id)
     _note_primitive_released("5", lease_id)
 
 
@@ -6627,7 +6775,31 @@ def release_guard(repo_root: Path, work_item_id: str, lease: dict) -> None:
     try:
         _release_guard_path(repo_root, work_item_id, lease.get("lease_id"))
     finally:
+        _drop_guard_lock(lease.get("lease_id"))
         _note_primitive_released("5", lease.get("lease_id"))
+
+
+def guard_holder_is_running(repo_root: Path, work_item_id: str) -> bool:
+    """Is a guarded window of `work_item_id` running in another process now?
+
+    - `True`: another process holds the lock of the guard now published. A
+      `fork`ed child of the holder is another process too (`D-Fork`).
+    - `False`: no guard is published, or its holder holds no lock -- it
+      crashed, or the guard was published by a release before 2.18.6, which
+      keeps none. A guard this process itself holds is not another
+      process's, so the caller's own window answers `False`.
+    - An undecidable guard raises `CheckpointOwnershipUnavailableError`,
+      never `False`.
+
+    Not a proof about time outside a window: between two windows no guard
+    exists. Takes `guard_mutation_lock` (6) as a leaf, writes nothing, and
+    must not be called holding the checkpoint guard it asks about."""
+    with guard_mutation_lock(repo_root, work_item_id):
+        held = read_guard(repo_root, work_item_id)
+        if held is None:
+            return False
+        return _guard_held_by_another_process(guard_path(repo_root, work_item_id),
+                                              held["lease_id"])
 
 
 def assert_claim_owner(repo_root: Path, work_item_id: str, owner_token: str) -> dict:

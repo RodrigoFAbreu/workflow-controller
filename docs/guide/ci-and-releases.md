@@ -123,8 +123,8 @@ after the slower of `validate` (11.8 to 22.1 minutes across the six shards when 
 runs the full plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs
 (measured on the first run with them, at 37c80b6, when the two passes ran one after
 the other: determinism 32.1 minutes, mutations 17.3; since the passes run at the same
-time, determinism is expected near the mutations job, and the first `main` run after
-that change is the measure), plus setup and the release jobs. So a release waits about
+time, the first `main` run after that change, at cbb8d11, measured determinism 17.4 minutes and mutations 14.9), plus
+setup and the release jobs. So a release waits about
 as long as the mutations job after the merge. Locally on four CPUs the module took a
 median of 11.5 minutes before and 6.1 after (three runs each). The two passes use two
 clones and never share a checkout; a failed or hung pass fails the test within a

@@ -6352,6 +6352,190 @@ def release_checkpoint(repo_root: Path, work_item_id: str, checkpoint_id: str, *
         ) from exc
 
 
+def _checkpoint_entry_at(repo_root: Path, commit: str, work_item_id: str, checkpoint_id: str,
+                         *, required: bool) -> dict | None:
+    """`checkpoints[checkpoint_id]` of the `WORKFLOW_STATE.json` committed at
+    `commit`, or `None` when that state does not record it. A state that is
+    absent at `commit` is an absent entry unless `required`; a torn one is
+    never an absent entry (`CheckpointOwnershipStateMismatchError`)."""
+    shown = subprocess.run(
+        ["git", "show", f"{commit}:{DEFAULT_STATE_PATH.as_posix()}"], cwd=repo_root,
+        capture_output=True)
+    if shown.returncode != 0:
+        if required:
+            raise CheckpointOwnershipStateMismatchError(
+                f"the {DEFAULT_STATE_PATH.as_posix()} committed at {commit} cannot be read -- "
+                f"refusing to decide what {checkpoint_id!r}'s start would be restored to")
+        return None
+    try:
+        state = json.loads(shown.stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CheckpointOwnershipStateMismatchError(
+            f"the {DEFAULT_STATE_PATH.as_posix()} committed at {commit} is not valid JSON "
+            f"({exc}) -- refusing to decide what {checkpoint_id!r}'s start would be restored to"
+        ) from exc
+    item = (state.get("work_items") or {}).get(work_item_id) if isinstance(state, dict) else None
+    entries = item.get("checkpoints") if isinstance(item, dict) else None
+    entry = entries.get(checkpoint_id) if isinstance(entries, dict) else None
+    return copy.deepcopy(entry) if isinstance(entry, dict) else None
+
+
+def _classify_checkpoint_start(repo_root: Path, work_item_id: str, checkpoint_id: str,
+                               state: dict | None = None) -> tuple[str, dict | None, dict | None, dict]:
+    """What `release_checkpoint_start` would release, from fresh reads:
+    `(kind, working_entry, baseline, claim)`. `baseline` is `B`, the entry the
+    state committed at `HEAD` records (absent, or the `NEEDS_REVALIDATION` entry
+    of a demoted checkpoint); `kind` is `"entry"` for a working `IN_PROGRESS`
+    entry and `"baseline"` for a working entry equal to `B`. Refuses, writing
+    nothing, every other case (`D-Refusals`)."""
+    if state is None:
+        state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    item = (state.get("work_items") or {}).get(work_item_id)
+    if not isinstance(item, dict):
+        raise CheckpointNotInProgressLocallyError(
+            f"{work_item_id!r} has no entry in this worktree's {DEFAULT_STATE_PATH.as_posix()} -- "
+            f"there is no checkpoint start to release")
+    entries = item.get("checkpoints")
+    working = entries.get(checkpoint_id) if isinstance(entries, dict) else None
+    if not isinstance(working, dict):
+        working = None
+    status = working.get("status") if working is not None else None
+    claim = resolve_claim(repo_root, work_item_id)
+    if claim is None:
+        if status == "IN_PROGRESS":
+            raise CheckpointOwnershipStateMismatchError(
+                f"{work_item_id!r} checkpoint {checkpoint_id!r} is IN_PROGRESS here but nothing "
+                f"claims it, so nothing fences it -- step 1c adopts it first; refusing to release")
+        raise CheckpointNotInProgressLocallyError(
+            f"{work_item_id!r} holds no claim and {checkpoint_id!r} is not IN_PROGRESS here -- "
+            f"there is nothing to release")
+    if not claim_is_this_worktree(repo_root, claim):
+        raise CheckpointOwnedByOtherWorktreeError(
+            f"{work_item_id!r}'s claim is held by worktree {claim.get('worktree_root')!r}; a start "
+            f"is released only from the worktree that holds it -- to take another worktree's "
+            f"claim use the explicit takeover, never this function")
+    if claim.get("checkpoint_id") != checkpoint_id:
+        raise CheckpointOwnershipStateMismatchError(
+            f"{work_item_id!r}'s claim is for checkpoint {claim.get('checkpoint_id')!r}, not "
+            f"{checkpoint_id!r} -- refusing to release")
+    baseline = _checkpoint_entry_at(repo_root, "HEAD", work_item_id, checkpoint_id, required=True)
+    if baseline is not None and baseline.get("status") != "NEEDS_REVALIDATION":
+        raise CheckpointOwnershipStateMismatchError(
+            f"the state committed at HEAD records {work_item_id!r} checkpoint {checkpoint_id!r} as "
+            f"{baseline.get('status')!r}: it is committed past a start, so there is no uncommitted "
+            f"start to release. If it is COMPLETE, step 1c releases this worktree's claim")
+    if status == "IN_PROGRESS":
+        return "entry", working, baseline, claim
+    if working == baseline:
+        return "baseline", working, baseline, claim
+    raise CheckpointNotInProgressLocallyError(
+        f"{work_item_id!r} checkpoint {checkpoint_id!r} is {status!r} in this worktree, not "
+        f"IN_PROGRESS -- there is no start to release. If a completion is committed, step 1c "
+        f"releases the claim; if it is an uncommitted one (an owner died in 1f-commit after "
+        f"persisting it and before committing), resume step 1f in the owner's worktree")
+
+
+def _assert_no_commit_past_start(repo_root: Path, work_item_id: str, checkpoint_id: str,
+                                 start_commit: object, baseline: dict | None) -> None:
+    """The commit rule: `start_commit` resolves and is an ancestor of `HEAD`, and
+    no commit in `start_commit..HEAD` carries this work item's
+    `Workflow-Checkpoint: <checkpoint_id>` trailer or commits a state that
+    records the checkpoint other than as `baseline` does. An unrelated commit
+    (a merge into the branch) records it exactly as `baseline` does."""
+    resolved = None
+    if isinstance(start_commit, str) and start_commit:
+        found = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{start_commit}^{{commit}}"],
+                               cwd=repo_root, capture_output=True, text=True)
+        resolved = found.stdout.strip() if found.returncode == 0 else None
+    if not resolved or not _is_ancestor(repo_root, resolved, "HEAD"):
+        raise CheckpointOwnershipStateMismatchError(
+            f"{work_item_id!r} checkpoint {checkpoint_id!r}'s start_commit {start_commit!r} does not "
+            f"resolve to an ancestor of HEAD -- refusing to decide whether a commit followed the start")
+    for commit in _run(["git", "rev-list", f"{resolved}..HEAD"], cwd=repo_root).split():
+        trailers = _commit_trailers(repo_root, commit)
+        if (trailers.get("Workflow-Work-Item") == work_item_id
+                and trailers.get("Workflow-Checkpoint") == checkpoint_id):
+            raise CheckpointOwnershipStateMismatchError(
+                f"commit {commit} carries the Workflow-Checkpoint: {checkpoint_id} trailer since "
+                f"{checkpoint_id!r}'s start -- the checkpoint was completed, so its start is not "
+                f"uncommitted")
+        if _checkpoint_entry_at(repo_root, commit, work_item_id, checkpoint_id, required=False) != baseline:
+            raise CheckpointOwnershipStateMismatchError(
+                f"commit {commit} records {checkpoint_id!r} other than as HEAD's baseline does -- "
+                f"the start is committed, so it is not an uncommitted start to release")
+
+
+def release_checkpoint_start(repo_root: Path, work_item_id: str, checkpoint_id: str, *,
+                             now: str) -> None:
+    """Release an **uncommitted** checkpoint start -- the `IN_PROGRESS` state
+    entry and the claim that go with it -- as one continuous window, so that an
+    amendment is no longer wedged by a start its own plan forbids completing
+    (#55). Nothing calls it yet.
+
+    **I1.** A start is removed (entry first, claim second) only inside one
+    window in which this process holds the work item's lifecycle lock (9) and a
+    live `release-start` guard, after proving under that guard that no owner
+    window is running and no commit followed the start, so that any interruption
+    leaves the start whole or half removed (entry gone, claim kept) under a
+    guard whose holder is gone, and calling the function again finishes the
+    release or refuses.
+
+    Success leaves the entry as the state committed at `HEAD` records it (absent
+    for a checkpoint `HEAD` never recorded; the `NEEDS_REVALIDATION` entry of a
+    demoted one), no claim and no guard; a live owner holding the old token then
+    passes `acquire_guard` and fails `assert_claim_owner`, so its body never
+    runs. A window running when the release began is never overtaken. Nothing is
+    committed, staged or fabricated; every refusal is an existing class and
+    changes nothing. An interruption does not fence the owner between it and the
+    next call (`D-Residual`): the dead guard is reclaimable by the owner."""
+    with lifecycle_lock(repo_root, work_item_id):
+        _, _, _, claim = _classify_checkpoint_start(repo_root, work_item_id, checkpoint_id)
+        if guard_holder_is_running(repo_root, work_item_id):
+            raise CheckpointOwnershipUnavailableError(
+                f"a guarded window of {work_item_id!r} is still running in another process -- "
+                f"refusing to release {checkpoint_id!r}'s start beside it; let it end, then call again")
+        owner_token = claim["owner_token"]
+        with owner_mutation(repo_root, work_item_id, owner_token, checkpoint_id=checkpoint_id,
+                            step="release-start", step_class=DESTRUCTIVE, now=now):
+            kind = _classify_checkpoint_start(repo_root, work_item_id, checkpoint_id)[0]
+            if kind == "entry":
+                def restore(state: dict) -> dict:
+                    kind_now, entry, base, _ = _classify_checkpoint_start(
+                        repo_root, work_item_id, checkpoint_id, state)
+                    if kind_now != "entry":
+                        raise CheckpointNotInProgressLocallyError(
+                            f"{work_item_id!r} checkpoint {checkpoint_id!r} is no longer IN_PROGRESS")
+                    _assert_no_commit_past_start(
+                        repo_root, work_item_id, checkpoint_id, entry.get("start_commit"), base)
+                    new_state = copy.deepcopy(state)
+                    item = new_state["work_items"][work_item_id]
+                    if base is None:
+                        item["checkpoints"].pop(checkpoint_id, None)
+                    else:
+                        item["checkpoints"][checkpoint_id] = copy.deepcopy(base)
+                    if item.get("current_checkpoint_id") == checkpoint_id:
+                        item["current_checkpoint_id"] = None
+                    item["state_revision"] = item.get("state_revision", 1) + 1
+                    item["last_transition"] = now
+                    return new_state
+
+                state_transaction(repo_root, restore)
+            current = resolve_claim(repo_root, work_item_id)
+            held = read_guard(repo_root, work_item_id)
+            if (current is None or current.get("owner_token") != owner_token
+                    or held is None or held.get("lease_id") not in _guard_holder_locks):
+                raise CheckpointOwnershipUnavailableError(
+                    f"{work_item_id!r}'s claim or guard changed after {checkpoint_id!r}'s entry was "
+                    f"restored -- this call unlinked nothing, and the entry now equals HEAD's: call "
+                    f"again to finish or be refused")
+            try:
+                claim_path(repo_root, work_item_id).unlink(missing_ok=True)
+            except OSError as exc:
+                raise CheckpointOwnershipUnavailableError(
+                    f"cannot remove {work_item_id!r}'s claim ({exc}) -- the entry now equals HEAD's "
+                    f"and the claim was not unlinked: calling again finishes the release") from exc
+
+
 # ---------------------------------------------------------------------------
 # Adoption -- "Reconciling the two authorities" (revisions 63-72). The
 # one-time migration path for a checkpoint interrupted before this

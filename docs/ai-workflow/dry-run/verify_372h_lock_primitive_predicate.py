@@ -906,6 +906,28 @@ MUTATION_UNCONDITIONAL_RELEASE = (
     "        claim_path(repo_root, work_item_id).unlink(missing_ok=True)\n",
 )
 
+MUTATION_UNCONDITIONAL_RELEASE_START = (
+    # release_checkpoint_start (checkpoint-start-engine, workflow-2.18.7): the
+    # engine's own gated claim unlink is a second such site. The same
+    # regression applies to it: the re-read of the claim and the guard, and the
+    # unlink inside the owner_mutation window, become one plain unlink.
+    "            current = resolve_claim(repo_root, work_item_id)\n"
+    "            held = read_guard(repo_root, work_item_id)\n"
+    "            if (current is None or current.get(\"owner_token\") != owner_token\n"
+    "                    or held is None or held.get(\"lease_id\") not in _guard_holder_locks):\n"
+    "                raise CheckpointOwnershipUnavailableError(\n"
+    "                    f\"{work_item_id!r}'s claim or guard changed after {checkpoint_id!r}'s entry was \"\n"
+    "                    f\"restored -- this call unlinked nothing, and the entry now equals HEAD's: call \"\n"
+    "                    f\"again to finish or be refused\")\n"
+    "            try:\n"
+    "                claim_path(repo_root, work_item_id).unlink(missing_ok=True)\n"
+    "            except OSError as exc:\n"
+    "                raise CheckpointOwnershipUnavailableError(\n"
+    "                    f\"cannot remove {work_item_id!r}'s claim ({exc}) -- the entry now equals HEAD's \"\n"
+    "                    f\"and the claim was not unlinked: calling again finishes the release\") from exc\n",
+    "        claim_path(repo_root, work_item_id).unlink(missing_ok=True)\n",
+)
+
 MUTATION_JOURNAL_COMPARE_AND_DELETE = (
     # close_plan_approval_journal: turn the bare unconditional unlink into
     # a genuine compare-and-delete on owner_token, mirroring the exact
@@ -947,10 +969,13 @@ def run_regression_checks(base_src: str) -> list[str]:
         failures.append("baseline: PLAN_APPROVAL_JOURNAL.json expected excluded, was member")
 
     old, new = MUTATION_UNCONDITIONAL_RELEASE
-    if old not in base_src:
+    start_old, start_new = MUTATION_UNCONDITIONAL_RELEASE_START
+    if old not in base_src or start_old not in base_src:
         failures.append("mutation 1 anchor text not found -- source has drifted, update the mutation")
     else:
-        mutated_src = base_src.replace(old, new, 1)
+        # Both gated unlinks of the claim are made unconditional: the claim
+        # stays a member while either one still gates it.
+        mutated_src = base_src.replace(old, new, 1).replace(start_old, start_new, 1)
         mutated_tree = parse_module(mutated_src)
         mutated_candidates, _ = run_pass(mutated_tree, verbose=False)
         if member_verdict(mutated_candidates, target_claim):

@@ -484,6 +484,43 @@ class VerifyBuildTests(unittest.TestCase):
         self.assertIn("no short folder for the host listener", ctx.exception.message)
         self.assertNotIn("probes' TMPDIR", ctx.exception.message)
 
+    def assertSetupRefused(self, fake: FakeClaude) -> None:
+        with self.assertRaises(cb.BuildNotVerified) as ctx:
+            self.verify(fake)
+        self.assertEqual(ctx.exception.probe, "host", ctx.exception.message)
+        self.assertIn("No space left on device", ctx.exception.message)
+        self.assertEqual(fake.launches, 0)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
+        scratch = self.root / cb.SCRATCH_AREA
+        self.assertEqual(list(scratch.iterdir()) if scratch.exists() else [], [])
+
+    def test_a_clone_file_that_cannot_be_written_is_a_host_refusal_with_nothing_left(self) -> None:
+        from controller import runtime
+
+        def failing(root, rel, data, *args, **kw):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with mock.patch.object(runtime, "write_bytes", failing):
+            self.assertSetupRefused(FakeClaude())
+
+    def test_an_output_folder_that_cannot_be_made_is_a_host_refusal_with_nothing_left(self) -> None:
+        real_mkdir = Path.mkdir
+
+        def failing(path, *args, **kw):
+            if path.name == "out":
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_mkdir(path, *args, **kw)
+
+        with mock.patch.object(Path, "mkdir", failing):
+            self.assertSetupRefused(FakeClaude())
+
+    def test_a_listener_that_cannot_bind_is_a_host_refusal_with_nothing_left(self) -> None:
+        def failing(sock_dir):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with mock.patch.object(cb, "Host", failing):
+            self.assertSetupRefused(FakeClaude())
+
     def test_no_short_root_refuses_before_any_launch(self) -> None:
         fake = FakeClaude()
         with mock.patch.object(fr, "short_tmp_roots", lambda: [self.root / ("x" * 120)]):
@@ -685,6 +722,45 @@ class VerifyClaudeCommandTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("a launch runs", out.getvalue())
         self.assertEqual(set(cb.read_verified(self.root)[0]), {hashlib.sha256(elf("other")).hexdigest()})
+
+    def run_cli_global(self, *args: str) -> tuple[int, str, str]:
+        import contextlib
+        import io
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = self.cli.main(["--runtime-dir", str(self.root), "--settings", str(self.settings), *args])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_claude_binary_needs_no_claude_on_path_and_the_note_does_not_offer_it_for_the_tester(self) -> None:
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent-wc-path"}):
+            code, out, err = self.run_cli_global("--claude-binary", str(self.real), "verify-claude")
+        self.assertEqual((code, err), (0, ""), out)
+        note = next(line for line in out.splitlines() if line.startswith("note: a launch finds no claude on PATH"))
+        self.assertIn("functional review cannot start until a claude is on PATH", note)
+        self.assertNotIn("--claude-binary", note)
+        self.assertEqual(set(cb.read_verified(self.root)[0]), {hashlib.sha256(elf("real")).hexdigest()})
+
+    def test_without_claude_binary_and_without_claude_on_path_the_command_still_refuses(self) -> None:
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent-wc-path"}):
+            code, out, err = self.run_cli_global("verify-claude")
+        self.assertEqual(code, 20)
+        self.assertIn("cannot be resolved", err)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
+
+    def test_a_setup_oserror_exits_20_without_a_traceback_and_records_nothing(self) -> None:
+        from controller import runtime
+
+        def failing(root, rel, data, *args, **kw):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with mock.patch.object(runtime, "write_bytes", failing):
+            code, _, err = self.run_cli()
+        self.assertEqual(code, 20)
+        self.assertIn("host", err)
+        self.assertIn("No space left on device", err)
+        self.assertNotIn("Traceback", err)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
 
     def test_the_settings_file_is_never_created_filled_or_updated(self) -> None:
         self.settings.parent.mkdir()

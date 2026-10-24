@@ -556,8 +556,13 @@ def verify_build(binary: str | os.PathLike, *, runtime_root: Path, operator_home
         state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout)
     except fr.TesterUnavailable as exc:
         raise BuildNotVerified("host", exc.message) from exc
+    except OSError as exc:  # a refusal like any other setup failure, never a traceback (exit 20)
+        raise BuildNotVerified("host", f"the run could not be set up: {exc}") from exc
     try:
-        state.prepare(operator_home)
+        try:
+            state.prepare(operator_home)
+        except OSError as exc:  # the clone files, the output folder, the listener bind
+            raise BuildNotVerified("host", f"the run could not be prepared: {exc}") from exc
         chosen = [("boundary", state.boundary), ("retry", state.retry), ("missing_component", state.missing_component)]
         done = [probe() for name, probe in chosen if probes is None or name in probes]
         state.check_unchanged("build")

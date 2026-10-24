@@ -706,10 +706,7 @@ class MainWorkflowTest(unittest.TestCase):
             self.assertNotIn("always()", expression)
             self.assertIn("!cancelled()", expression)
             for needed in self.jobs[name]["needs"]:
-                if needed in ci.CHECK_JOBS:
-                    # required through the coverage term, never through _after(...)
-                    self.assertIn(f"needs.{needed}.result == 'success'", expression, (name, needed))
-                    continue
+                # a check job is required through the coverage term, never through _after(...)
                 self.assertIn(f"needs.{needed}.result == 'success'", expression, (name, needed))
         # validate itself is the only job that tolerates reuse not succeeding.
         self.assertEqual(self.jobs["validate"]["if"], "!cancelled()")

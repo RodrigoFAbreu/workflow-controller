@@ -405,12 +405,15 @@ class NotRunTest(unittest.TestCase):
         return fr.Entry(flow_id, status, "s", reason, log, fr.sha256_file(log))
 
     def test_a_flow_left_out_is_a_failed_environment_entry_with_a_valid_digest(self) -> None:
-        completed = fr.complete_entries(self.out, FLOWS, [self.entry("flow-2")], timed_out=False, job_id=JOB)
+        log_dir = self.out / "controller-logs"
+        completed = fr.complete_entries(log_dir, FLOWS, [self.entry("flow-2")], timed_out=False, job_id=JOB)
         self.assertEqual([e.flow_id for e in completed], ["flow-1", "flow-2", "flow-3"])
         left = completed[0]
         self.assertEqual((left.status, left.reason), ("failed", "environment"))
         self.assertEqual(left.summary, "not run: the tester left this flow out of the results file")
-        self.assertEqual(left.log_path, self.out / "flow-1.not-run.log")  # (the log folder is the caller's)
+        # The log lies under the caller's log folder, which is not the output folder the tester writes.
+        self.assertEqual(left.log_path, log_dir / "flow-1.not-run.log")
+        self.assertNotEqual(left.log_path.parent, self.out)
         self.assertEqual(left.log_digest, fr.sha256_bytes(left.log_content))
         self.assertRegex(left.log_digest, r"^[0-9a-f]{64}$")
         self.assertIn(JOB.encode(), left.log_content)

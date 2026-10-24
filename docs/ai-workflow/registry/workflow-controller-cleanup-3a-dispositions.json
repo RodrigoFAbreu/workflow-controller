@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-cleanup-3a",
+ "dispositions": {
+  "F-2f11f2ed6f1b": {
+   "disposition": "fixed",
+   "note": "revision 4 heads TEST_RESULTS.md with the current revision and adds a section for the fix rounds (local round 4)"
+  },
+  "F-77024e2564a7": {
+   "disposition": "dropped",
+   "reason": "The implementation summary is a bundle narrative file regenerated each round; it carries no shipped content."
+  },
+  "F-95632070fd76": {
+   "disposition": "fixed",
+   "note": "plan revision 4 D3 compares the set of pids sent SIGKILL, not list lengths"
+  },
+  "F-9ae1004255f6": {
+   "disposition": "fixed",
+   "note": "plan D4 names the expected result: without the link the path resolves to writable/build/src/app.py and is allowed"
+  },
+  "F-c853c2391b1c": {
+   "disposition": "dropped",
+   "reason": "A recorded pid reused by a new child of the test process is a tiny double-fault risk with today's pid_max; hardening beyond what the sequential form did."
+  },
+  "F-fc8c76f9784e": {
+   "disposition": "fixed",
+   "note": "commit aaac602 widens the pid-file cleanup catch to (OSError, ValueError)"
+  }
+ }
+}

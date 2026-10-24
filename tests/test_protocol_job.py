@@ -11,8 +11,8 @@ stops: nothing here reads an outcome (that is ``tests/test_protocol_outcome.py``
 from __future__ import annotations
 
 import contextlib
-import subprocess
 import json
+import subprocess
 import sys
 import tempfile
 import time

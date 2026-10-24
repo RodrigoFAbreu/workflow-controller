@@ -2524,6 +2524,13 @@ class LanePlanningTest(unittest.TestCase):
         self.assertEqual(self.plan(*args, shards=3), self.plan(*args, shards=3))
 
 
+# The outer bound for a signalled executor to end, and how long every fixture it
+# is signalled for blocks: longer than the bound, so only the executor's own
+# termination (never the fixture finishing by itself) ends a child inside it.
+EXECUTOR_END_SECONDS = 180
+SIGNALLED_FIXTURE_SECONDS = 600
+
+
 class ConformanceLaneExecutionTest(unittest.TestCase):
     """``execute_shard`` runs the shard's conformance suites beside its
     controller tests and still collects both exactly as before."""
@@ -2772,8 +2779,10 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
         command = [sys.executable, str(fixtures.REPO_ROOT / "tools" / "run_tests.py"),
                    "exec-shard", "--plan", str(plan_file), "--shard", "0",
                    "--results-dir", str(self.results), "--repo-root", str(self.top)]
-        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL, start_new_session=True)
+        output_file = self.root / "executor.out"
+        with output_file.open("wb") as output:
+            process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=output,
+                                       stderr=subprocess.STDOUT, start_new_session=True)
         self.addCleanup(lambda: process.poll() is None and process.kill())
         deadline = time.monotonic() + 30
         while not (self.sync / "suite").exists():
@@ -2785,7 +2794,13 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
             process.send_signal(getattr(signal, mode.partition(":")[2] or "SIGTERM"))
         elif mode != "exit":
             process.send_signal(getattr(signal, mode))
-        process.wait(timeout=30)
+        try:
+            process.wait(timeout=EXECUTOR_END_SECONDS)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            tail = output_file.read_text(errors="replace")[-2000:]
+            self.fail(f"the executor did not end within {EXECUTOR_END_SECONDS}s after {mode}; its output ended:\n{tail}")
         self.assertTrue(self.gone(), f"a helper or suite process outlived the executor ({mode})")
 
     def direct_plan(self, mode: str):
@@ -2796,8 +2811,8 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                     meet("controller", "suite")
                     if "%s" == "exit":
                         os._exit(3)
-                    __import__("time").sleep(60)
-            """ % mode
+                    __import__("time").sleep(%d)
+            """ % (mode, SIGNALLED_FIXTURE_SECONDS)
         return self.build(body, {"a_test.py": (
             "import subprocess, sys, time\n"
             "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
@@ -2828,8 +2843,8 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                             while not __import__("glob").glob(r"%s"):
                                 time.sleep(0.05)
                             open(os.path.join(r"%s", "suite"), "w").close()
-                            time.sleep(60)
-                    """ % (self.results / "lane-0-*.done", self.sync),
+                            time.sleep(%d)
+                    """ % (self.results / "lane-0-*.done", self.sync, SIGNALLED_FIXTURE_SECONDS),
                     {"a_test.py": "import subprocess, sys\n"
                                   "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'],\n"
                                   "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"})
@@ -2940,8 +2955,8 @@ class ConformanceLaneExecutionTest(unittest.TestCase):
                     while not glob.glob(r"%s"):
                         time.sleep(0.05)
                     open(os.path.join(r"%s", "suite"), "w").close()
-                    time.sleep(60)
-            """ % (self.sync / "second", self.results / "lane-0-*.done", self.sync),
+                    time.sleep(%d)
+            """ % (self.sync / "second", self.results / "lane-0-*.done", self.sync, SIGNALLED_FIXTURE_SECONDS),
             {"a_test.py": "open(r'%s', 'a').write('x')\n" % counter})
         self.run_directly(plan, "SIGINT")
         self.assertEqual(counter.read_text(), "x")

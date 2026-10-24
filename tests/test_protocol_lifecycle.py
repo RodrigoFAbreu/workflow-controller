@@ -741,6 +741,8 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         life.refused = {"plan"}
         unmet = self.UNMET
         life.report = report
+        # Every launch returns life.report as its result, but only /satisfy-gate reads life.refused: the first step's
+        # /review-plan launch still records its review and ends "ok", and the refusal text is the validation's.
         self.assertGreater(life.report.index(unmet), 400)
         first = life.step()
         # After the first refusal the gate is still automatic, and explain already names the unmet requirement.
@@ -974,7 +976,7 @@ class LoopLifecycle(GateLifecycle):
     def snapshot_inputs(self) -> tuple:
         # The binding is in the runtime tree and the world file is beside it: both are what a drive starts from.
         return (*super().snapshot_inputs(), json.dumps(self.acceptance, sort_keys=True), self.world.path.read_text(),
-                self.bound)
+                self.bound, self.wait_seconds)
 
     def snapshot_state(self) -> dict:
         return {**super().snapshot_state(), "queries": self.world.queries}

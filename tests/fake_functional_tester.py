@@ -90,8 +90,11 @@ class Sandbox:
         does, so the link itself is judged where it lies."""
         if not self.emulate:
             return True
-        path = Path(os.path.abspath(path))
-        path = Path(os.path.realpath(path.parent)) / path.name if parent_only else Path(os.path.realpath(path))
+        path = Path(os.getcwd()) / path  # joined, not collapsed: ``..`` after a link must resolve through it
+        if parent_only and path.name != "..":
+            path = Path(os.path.realpath(path.parent)) / path.name
+        else:
+            path = Path(os.path.realpath(path))
         deny = [Path(os.path.realpath(entry)) for entry in self.deny]
 
         def covers(entry: Path) -> bool:

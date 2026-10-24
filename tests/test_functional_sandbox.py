@@ -104,6 +104,9 @@ class Fixture(unittest.TestCase):
         self.candidate = fr.capture_candidate(self.repo, self.head, branch="main")
         self.flows = fr.candidate_flows(self.candidate)
         self.count = 0
+        # The job id is the ownership tag, and ``run_bounded`` kills every process carrying it after each run, so
+        # a fixed id would let another test class running in another shard end this one's tester early.
+        self.job_prefix = f"job{os.getpid()}-"
 
     def remove_short_folders(self) -> None:
         """Remove the short ``TMPDIR`` of every sandbox the test built (they live outside the fixture tree);
@@ -114,7 +117,7 @@ class Fixture(unittest.TestCase):
     def launch(self, scenario: dict, *, timeout: float = 60, job_id: str | None = None, item: str = "item-1",
                probe=lambda: None, candidate: fr.Candidate | None = None) -> dict:
         self.count += 1
-        job = job_id or f"job-{self.count}"
+        job = job_id or f"{self.job_prefix}{self.count}"
         scenario = {"log": str(self.tmp / f"{job}.log"), **scenario}
         wrapper = fake.write_binary(self.tools, scenario, name=f"claude{self.count}")
         self.log_path = self.tmp / f"{job}.log"
@@ -386,6 +389,41 @@ class SandboxBuildTest(Fixture):
                 fr.build_sandbox(fr.capture_candidate(repo, head), runtime_root=self.runtime, job_id="auto",
                                  work_item_id="item-1")
         self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_CLONE_MISMATCH)
+
+
+class SandboxPathTest(unittest.TestCase):
+    """``Sandbox.allows`` resolves ``..`` after a link through the link, as a sandbox mount does (#140)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="wfr-cp3-path-")).resolve()
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)], check=False)
+        (self.tmp / "clone" / "src").mkdir(parents=True)
+        (self.tmp / "writable" / "build").mkdir(parents=True)
+        (self.tmp / "clone" / "build").symlink_to(self.tmp / "writable" / "build")
+        self.sandbox = fake.Sandbox({"sandbox": {"filesystem": {
+            "allowWrite": [str(self.tmp / "writable")], "denyWrite": [str(self.tmp / "clone")]}}}, True)
+
+    def test_dot_dot_after_a_link_goes_through_the_link_not_around_it(self) -> None:
+        back = self.tmp / "writable" / "build" / "back"
+        back.symlink_to(self.tmp / "clone" / "src")  # back -> clone/src, so back/.. is clone
+        path = self.tmp / "clone" / "build" / "back" / ".." / "src" / "app.py"
+        self.assertFalse(self.sandbox.allows(path))
+        self.assertFalse(self.sandbox.allows(path, parent_only=True))
+        back.unlink()
+        back.mkdir()  # a plain folder: back/../src/app.py is writable/build/src/app.py
+        self.assertTrue(self.sandbox.allows(path))
+
+    def test_a_relative_path_is_joined_onto_the_current_folder_without_collapsing(self) -> None:
+        (self.tmp / "writable" / "build" / "back").symlink_to(self.tmp / "clone" / "src")
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(self.tmp)
+        self.assertFalse(self.sandbox.allows(Path("clone/build/back/../src/app.py")))
+
+    def test_a_path_ending_in_dot_dot_is_judged_fully_resolved(self) -> None:
+        (self.tmp / "writable" / "build" / "back").symlink_to(self.tmp / "clone" / "src")
+        path = self.tmp / "clone" / "build" / "back" / ".."  # resolves to clone, which is denied
+        self.assertFalse(self.sandbox.allows(path, parent_only=True))
 
 
 class BindingTest(Fixture):
@@ -674,7 +712,7 @@ class RunTest(Fixture):
     def test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ(self) -> None:
         stop = threading.Event()
         seen: list[str] = []
-        job = "job-1"
+        job = f"{self.job_prefix}watch"
         paths = {rel: self.runtime / "functional" / job / "clone" / rel
                  for rel in ("src/app.py", "docs/ACTIVE_MILESTONE.md")}
         originals = {rel: (self.repo / rel).read_bytes() for rel in paths}
@@ -815,7 +853,7 @@ class UnavailableTest(Fixture):
         with self.assertRaises(fr.TesterUnavailable) as caught:
             self.launch({"actions": [results()]}, candidate=candidate)
         self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_CLONE_MISMATCH)
-        self.assertFalse(self.tmp.joinpath("job-1.log").exists(), "the tester was started")
+        self.assertFalse(self.tmp.joinpath(f"{self.job_prefix}1.log").exists(), "the tester was started")
 
 
 class OriginTest(Fixture):

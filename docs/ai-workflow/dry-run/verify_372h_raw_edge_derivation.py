@@ -183,6 +183,11 @@ CODE_DERIVABLE = {
     # (9)->(8)), `adopt_claim` ((9)->(6), (9)->(8)), and an absent-claim
     # `take_over_claim` ((9)->(6), (9)->(5), (9)->(3)).
     ("9", "2"), ("9", "8"), ("9", "6"), ("9", "5"), ("9", "3"),
+    # checkpoint-start-engine (workflow-2.18.7): `release_checkpoint_start`'s
+    # `with owner_mutation(...):` body calls `state_transaction`, so the graph
+    # arm derives (5)->(2) from code. It stays command-orchestrated below too:
+    # steps 1d and 1f take it from the command side.
+    ("5", "2"),
 }
 
 COMMAND_ORCHESTRATED = {

@@ -26836,7 +26836,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-notification-fix-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-notification-fix-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 10,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -26976,12 +26976,12 @@
           "external": 4
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 41,
-      "last_transition": "2026-10-24T22:27:23Z",
+      "state_revision": 42,
+      "last_transition": "2026-10-24T22:47:56Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -27206,6 +27206,34 @@
               "review_content_id": "3eca0fd95312092d89e334a0b0b83a506db5db1c0cd77ee2f57b5bd6a790a3e5",
               "verdict": "APPROVE",
               "at": "2026-10-24T21:07:28Z"
+            }
+          ]
+        },
+        "F-886233558f2f": {
+          "digest": "886233558f2f2381940f56ad78f9db9d6f259584e8b43cdab99ed52ee0189c8e",
+          "text": "The CP1 commit `ee0371b` is titled `feat: review_wait, an info event, ...`, while the plan and the summary call the change a `fix:` patch (1.19.3). The squash title the plan declares is what releases, so nothing breaks. Still, a `feat:` subject on the branch could mislead a reader of the branch history or a tool that reads per-commit types.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "08d0308f7f9d7948ab0bada43aca15c4da7e4cc4d405badf90a0cb962fb06df0",
+              "verdict": "REVISE",
+              "at": "2026-10-24T22:47:56Z"
+            }
+          ]
+        },
+        "F-767a688b4125": {
+          "digest": "767a688b412516bc67eec0660e7da00f1459b5198fb9cf44c6ca335be48f8857",
+          "text": "The plan's round-8 O2 suggested a production-path test of the `workflow_unhealthy` preflight gate (`decision.protocol is None`, so no `protocol_gate`). The code guards it correctly (`extra=None if protocol is None`), but no test reaches that branch through `execute_step`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "08d0308f7f9d7948ab0bada43aca15c4da7e4cc4d405badf90a0cb962fb06df0",
+              "verdict": "REVISE",
+              "at": "2026-10-24T22:47:56Z"
             }
           ]
         }

@@ -226,13 +226,15 @@ category and severity, see
 
 | kind | event types |
 |---|---|
-| `state` | `step_done`, `run_finished`, `usage_paused`, `usage_resumed`, and, off by default, `usage_released` and `usage_reservation_expired` |
+| `state` | `step_done`, `run_finished`, `review_wait`, `usage_paused`, `usage_resumed`, and, off by default, `usage_released` and `usage_reservation_expired` |
 | `info` | `milestone_started`, `milestone_planned`, `approval_recorded`, `milestone_accepted`, `pr_merged`, `release_published` |
 | `gate` | `user_gate` |
 | `blocker` | `lane_blocked` |
 
 [ADR 0012](../adr/0012-signalhub-notifications.md) says what each one is
-derived from.
+derived from, except `review_wait`, added later: it is a stop that waits for
+an external reviewer or for the functional tester's fault to be looked at,
+and [automation](automation.md#notifications-from-an-unattended-run) says which stops send it.
 
 ## `usage`
 

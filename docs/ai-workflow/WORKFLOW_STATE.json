@@ -26836,18 +26836,22 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-notification-fix-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-notification-fix-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 10,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "9e37d4cd332773f79c63133cffc83a3e2bf37d0b",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP1",
+      "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
           "start_commit": "72e5fef8677d41268ddd7510f881a44b70082191"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "ee0371ba3b7467cf31ddb23392226972eb742224"
         }
       },
       "current_bundle_id": "bd4972fa453cf3a2fb8b0168526579ed3820f5a693799b5ed9034a9ef859cea0",
@@ -26976,8 +26980,8 @@
           "external": 0
         }
       },
-      "state_revision": 38,
-      "last_transition": "2026-10-24T21:57:03Z",
+      "state_revision": 40,
+      "last_transition": "2026-10-24T21:58:52.035490+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

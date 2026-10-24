@@ -155,10 +155,17 @@ the `user_gate` (a human gate, or a merge left to a person) and
 `lane_blocked` (a failed job, a refusal, a gate that needs a fix); by default
 they are the highest severities. A stop the Workflow itself answers with
 the disposition `blocked` is a `lane_blocked` ("Blocked: <work item>"), not a
-`user_gate`, because no person's decision is asked for; a human or external
-gate (for example a pull request whose checks are still running) stays a
-`user_gate`. A finished step, a usage pause and a run
-that closed are `INFO`/`LOW`.
+`user_gate`, because no person's decision is asked for; a human gate (an
+approval, an acceptance, a merge left to a person, a BLOCK-resolution gate)
+stays a `user_gate`. A wait that needs no decision from you sends
+`review_wait` (`INFO`/`LOW`, "Waiting for the external review: <work item>"):
+the wait for an external reviewer's verdict on a Workflow-governed target (a
+legacy target keeps `user_gate` for every gate at those phases) and the
+functional tester's fault stops, each titled "Waiting: <stop>
+(<work item>)", except `isolation_breach`, whose text says a person must look
+at what changed, and which stays a `user_gate`. A wait whose `user_gate` an
+earlier version already delivered is not announced again. A finished step, a
+usage pause and a run that closed are `INFO`/`LOW`.
 
 To set it up:
 
@@ -453,8 +460,9 @@ person must look before anything is tested again), `tested_bytes_unbound` (the c
 matches the candidate after the run; nothing is recorded), `recording_refused` (the Workflow
 refused a flow's result; results accepted before it stand) and `functional_rounds_exhausted` (the
 tester has ended in `findings` three times for the work item; the count is read from job records
-and nothing resets it). Every one of these except `functional_unchanged` sends `user_gate`;
-`functional_unchanged` sends `lane_blocked`. The remedy of the others is to test the head by hand
+and nothing resets it). `functional_unchanged` sends `lane_blocked`, `isolation_breach` sends `user_gate`, and every other
+one, `functional_rounds_exhausted` included, sends `review_wait` (`INFO`/`LOW`, see
+[notifications](#notifications-from-an-unattended-run)). The remedy of the others is to test the head by hand
 and record the evidence as before, or to set `functional.automated` false, which restores the old
 stop at row 38e for the repository so the tester is not launched again. A usage limit is handled
 like any job's.

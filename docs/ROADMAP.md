@@ -580,7 +580,8 @@ hurts now, else in a later step or the next clean-up milestone.
 76. [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125): C2b test tidy-ups (later).
 77. [#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126): the after-merge determinism job takes
     28-32 minutes, so an ordinary release waits that long after the merge. Fixed: the two passes run at the same time
-    (a `ci:` change, no release); the first `main` run's job time is recorded in the documentation pull request after
+    (a `ci:` change, no release; complete, accepted 2026-10-24 by gate policy, pull request #142; median 692 s to
+    368 s on four CPUs); the first `main` run's job time is recorded in the documentation pull request after
     the merge.
 78. [#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129): the sandbox layout for Claude Code 2.1.304
     and later (C10f, complete).

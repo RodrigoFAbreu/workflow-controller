@@ -25469,7 +25469,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -25617,12 +25617,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 0
         }
       },
-      "state_revision": 33,
-      "last_transition": "2026-10-24T12:18:24Z",
+      "state_revision": 34,
+      "last_transition": "2026-10-24T12:29:31Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -25689,6 +25689,20 @@
               "review_content_id": "2c3a87e0dfa7e61612d8585564d4aedc699aa4c2795d189404f4b0d8e6ced2d8",
               "verdict": "REVISE",
               "at": "2026-10-24T09:53:06Z"
+            }
+          ]
+        },
+        "F-fc8c76f9784e": {
+          "digest": "fc8c76f9784e2694c12ac11cc0ef3afa5e9f9b4ad20a6a20b9553ebe6e02888c",
+          "text": "**O1.** `HangChildPidFileTest._end_child` catches only `ValueError`. In `test_a_reader_that_sees_the_path_reads_an_integer_every_time`, if the fake never writes the file (the very failure that test reports), `read_text` raises `FileNotFoundError`, and the cleanup adds a second error on top of the real failure. Catching `(OSError, ValueError)` would keep the report to the one failure.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "f98fdd7a7cc1c785882c4bd895c58107aec504f87643c5de8c24348d4fe1817d",
+              "verdict": "REVISE",
+              "at": "2026-10-24T12:29:31Z"
             }
           ]
         }

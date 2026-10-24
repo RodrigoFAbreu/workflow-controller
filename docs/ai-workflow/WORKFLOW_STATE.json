@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-sandbox-layout",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -23761,7 +23761,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-layout-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-layout-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 4,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -24074,8 +24074,8 @@
           "external": 2
         }
       },
-      "state_revision": 36,
-      "last_transition": "2026-10-24T01:35:19Z",
+      "state_revision": 37,
+      "last_transition": "2026-10-24T03:11:12Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -24402,6 +24402,324 @@
           "run_ref": "session:local .ai-review/workflow-controller-sandbox-layout/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "f1": {
+            "flow_id": "f1",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "Codex tester: settings tests 7 OK, round 1 symlink-parent regression included; adversarial probes 45 pass"
+            },
+            "log_digest": "e23fa0af349619b20514f9822475459c7a9df2dda07de10c0b920c8e3e530d15",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:55Z"
+          },
+          "f2": {
+            "flow_id": "f2",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "Codex tester: sandbox module 76 tests OK, writable folders external behind links, git status empty"
+            },
+            "log_digest": "3de404ea6254ad0d26385892da12b8bcb168e8619e65d4eeba450fefb8fc65bc",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:55Z"
+          },
+          "f3": {
+            "flow_id": "f3",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "Codex tester: same module OK; walk reports missing, retargeted, replaced, additional and ignored-name links"
+            },
+            "log_digest": "9296bfd49933ecc50d52065f18634408e8bbf8a73c4aeb077dfc5fe682eba0ae",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:55Z"
+          },
+          "f4": {
+            "flow_id": "f4",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "Codex tester: fake tester 7 tests OK"
+            },
+            "log_digest": "5063c191651774f755f809304e35e92345526fc8930264a9711e1b0575dcf132",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:55Z"
+          },
+          "f5": {
+            "flow_id": "f5",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator (outside the tester sandbox): test_claude_build, JudgeTests, StaticProbeTests 57 tests OK, 1 expected skip"
+            },
+            "log_digest": "cff86ac0ec5afacdbc5b2cdac9f8f5080e23b7ff0cbd0ac6cb7caefbcc100a03",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:56Z"
+          },
+          "f6": {
+            "flow_id": "f6",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "Codex tester: check_docs exit 0; the five passages describe the layout and verification of newer builds"
+            },
+            "log_digest": "a0b1cbcfd5d7d56aea989c0a6d8f3a592878a630a282d29af9a52d77bd51d3f8",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:56Z"
+          },
+          "f7": {
+            "flow_id": "f7",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator, 2.1.309: 3 live tests pass, 2 release-side tests skipped (they accept only an API key or OAuth token in the environment; not extracted): not performed"
+            },
+            "log_digest": "34027e4977aec3ec3b11293a58f34bc50c8130eacc33d95620b040783df992dd",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:56Z"
+          },
+          "f8": {
+            "flow_id": "f8",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator: verify-claude --force on 2.1.309 exit 0, three probes pass, digest 4d704a8a recorded in a scratch runtime root"
+            },
+            "log_digest": "41e0380a4bf167a4a42d2651611ba7e638c0e945209518e4b9598116333475c5",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:56Z"
+          },
+          "f9": {
+            "flow_id": "f9",
+            "status": "passed",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "ran_at": "2026-10-24T02:49:55Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator: the same on 2.1.304 (digest ea0f1357) and 2.1.308 (356733f1); 2.1.303 is not installed: not performed"
+            },
+            "log_digest": "f15274618b8850e9a2632d3cde30fd061c5502a7d2d3c116278fce979e60d8b7",
+            "run_ref": "c10f-functional-round2",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T02:49:56Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 137,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/137"
+          },
+          "state": "open",
+          "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+          "observed_at": "2026-10-24T03:11:12Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "3bdd086c300251af0511ad066b88539ca0f0abbc",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-24T03:11:12Z",
+            "raw_sha256": "078101037d1383351939aa543e0614ec38b1e376b6ede523d87a233839a2e41d",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "690dd1b7dec643bacd1771cb2e0e8998761b6b17b5d2e2df331dd3186aa24f6c"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 137,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/137"
+          },
+          "state": "open",
+          "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+          "observed_at": "2026-10-24T03:10:06Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "3bdd086c300251af0511ad066b88539ca0f0abbc",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.18.0"
+            },
+            "fetched_at": "2026-10-24T03:10:06Z",
+            "raw_sha256": "078101037d1383351939aa543e0614ec38b1e376b6ede523d87a233839a2e41d",
+            "run_ref": "controller:20261024T031006Z-cb1ba8e1"
+          },
+          "fact_id": "0ce3be4fb7a18d790c3c1316a3685c72796dea7f9a54d94fe3b858fda9774557"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #137 at 7ec6df74f1e8a927654e4f34143a3d8afe213d1d is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "3bdd086c300251af0511ad066b88539ca0f0abbc",
+          "anchor_identity": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "cd81fadcaed6d51430b9bc36d9105759aa85459ee365b846f1bb2a4914fe474b",
+            "recorded_at": "2026-10-24T01:35:19Z"
+          },
+          "functional": {
+            "f1": {
+              "evidence_id": "7c32e3b9f9a2f3bef3b79d91ff409e3914a690900154f06b621d36be133a2c1f",
+              "log_digest": "e23fa0af349619b20514f9822475459c7a9df2dda07de10c0b920c8e3e530d15",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f2": {
+              "evidence_id": "ed5030d36228d95390041092f6b9e173a06ecf8dd6fc8d09274b1b1ff2d6fb3e",
+              "log_digest": "3de404ea6254ad0d26385892da12b8bcb168e8619e65d4eeba450fefb8fc65bc",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f3": {
+              "evidence_id": "c7f98a6903ca953ddcf1175786c08e43762aa7575edfdfc61efedc831a9ffee4",
+              "log_digest": "9296bfd49933ecc50d52065f18634408e8bbf8a73c4aeb077dfc5fe682eba0ae",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f4": {
+              "evidence_id": "8e2c5159425be2a873aa4c41162a1ced32b58278dba2992d194023288c3b5af8",
+              "log_digest": "5063c191651774f755f809304e35e92345526fc8930264a9711e1b0575dcf132",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f5": {
+              "evidence_id": "27cbb20bd54fc1994a13e8f86f0e134f16c6e11eeddb536a74aa2c00891338c1",
+              "log_digest": "cff86ac0ec5afacdbc5b2cdac9f8f5080e23b7ff0cbd0ac6cb7caefbcc100a03",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f6": {
+              "evidence_id": "3dc56874ea9766d8c06061a814f7798d3b4a29e3e3651fd446633f1eb47fdaea",
+              "log_digest": "a0b1cbcfd5d7d56aea989c0a6d8f3a592878a630a282d29af9a52d77bd51d3f8",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f7": {
+              "evidence_id": "a051249d2e8b4f537c798eb2d53d6641cc84d40e29081404044a3d95318a5628",
+              "log_digest": "34027e4977aec3ec3b11293a58f34bc50c8130eacc33d95620b040783df992dd",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f8": {
+              "evidence_id": "4aff2efe69f353cb3ec90cb1f7253aada3bbb728986c98ff4614b8896afa01fd",
+              "log_digest": "41e0380a4bf167a4a42d2651611ba7e638c0e945209518e4b9598116333475c5",
+              "run_ref": "c10f-functional-round2"
+            },
+            "f9": {
+              "evidence_id": "610636af5316dc5c6f62c66f9c343dc257d36ef68c47bbe6b91c905a65495fc8",
+              "log_digest": "f15274618b8850e9a2632d3cde30fd061c5502a7d2d3c116278fce979e60d8b7",
+              "run_ref": "c10f-functional-round2"
+            }
+          },
+          "pr": {
+            "fact_id": "690dd1b7dec643bacd1771cb2e0e8998761b6b17b5d2e2df331dd3186aa24f6c",
+            "head": "7ec6df74f1e8a927654e4f34143a3d8afe213d1d",
+            "provenance": "workflow_gh",
+            "raw_sha256": "078101037d1383351939aa543e0614ec38b1e376b6ede523d87a233839a2e41d"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-24T03:11:12Z",
+        "workflow_release": "2.18.5"
       }
     }
   }

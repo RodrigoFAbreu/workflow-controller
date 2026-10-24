@@ -96,6 +96,29 @@ class SettingsTests(unittest.TestCase):
             fr.tester_settings(clone_dir=Path("/w/clone"), output_dir=Path("/w/out"), scratch_dirs=[],
                                writable_dir=Path("/w/clone/writable"), writable=["build"])
 
+    def test_an_allowance_that_resolves_below_a_denial_through_a_link_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(os.path.realpath(raw))
+            clone, outside = root / "clone", root / "outside"
+            (clone / "nested").mkdir(parents=True)
+            outside.mkdir()
+            (outside / "alias").symlink_to(clone)
+            (outside / "bridge").symlink_to(clone / "nested")
+            (outside / "swapped").symlink_to(clone / "nested")
+            (root / "denial-alias").symlink_to(clone)
+            refused = {
+                "an alias parent": [str(outside / "alias" / "build")],
+                "a .. through a link": [str(outside / "bridge" / ".." / "build")],
+                "an external folder swapped for a link": [str(outside / "swapped")],
+            }
+            for name, allow in refused.items():
+                with self.subTest(name), self.assertRaises(ValueError):
+                    fr.assert_writes_not_below_denies({"allowWrite": allow, "denyWrite": [str(clone), str(clone / ".git")]})
+            with self.subTest("a denial named through an alias"), self.assertRaises(ValueError):
+                fr.assert_writes_not_below_denies({"allowWrite": [str(clone / "build")],
+                                                   "denyWrite": [str(root / "denial-alias")]})
+            fr.assert_writes_not_below_denies({"allowWrite": [str(outside / "plain")], "denyWrite": [str(clone)]})
+
     def test_the_deny_list_covers_the_clone_root_and_git_by_name(self) -> None:
         self.assertEqual(self.build()["sandbox"]["filesystem"]["denyWrite"], ["/work/clone", "/work/clone/.git"])
 

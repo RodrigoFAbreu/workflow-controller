@@ -881,12 +881,16 @@ def assert_writes_not_below_denies(filesystem: Mapping[str, Any]) -> None:
     more specific allow win over the deny above it (Claude Code 2.1.303) or
     lets the deny above win (2.1.304 and later). A ``ValueError``: a document
     that breaks it is a programming error, never a runtime fallback."""
-    denies = [Path(os.path.abspath(entry)) for entry in filesystem.get("denyWrite", [])]
+    denies = [Path(entry) for entry in filesystem.get("denyWrite", [])]
     for entry in filesystem.get("allowWrite", []):
-        allowed = Path(os.path.abspath(entry))
-        for denied in denies:
-            if allowed == denied or denied in allowed.parents:
-                raise ValueError(f"the write allowance {entry} equals or lies below the denied path {denied}")
+        # Lexically and as the file system resolves it: a symlinked parent (or a
+        # ``..`` after one) can put an allowance below a denial it does not
+        # name. ``realpath`` of the raw entry, so ``..`` follows the links.
+        for allowed, denied in ((Path(os.path.abspath(entry)), [Path(os.path.abspath(d)) for d in denies]),
+                                (Path(os.path.realpath(entry)), [Path(os.path.realpath(d)) for d in denies])):
+            for blocked in denied:
+                if allowed == blocked or blocked in allowed.parents:
+                    raise ValueError(f"the write allowance {entry} equals or lies below the denied path {blocked}")
 
 
 def tester_settings(

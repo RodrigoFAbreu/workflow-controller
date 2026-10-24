@@ -25469,7 +25469,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -25617,12 +25617,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 31,
-      "last_transition": "2026-10-24T11:57:55Z",
+      "state_revision": 32,
+      "last_transition": "2026-10-24T12:05:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

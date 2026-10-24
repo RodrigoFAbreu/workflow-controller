@@ -202,9 +202,9 @@ def run_bounded(argv: "list[str]", *, cwd: Path, env: dict, deadline: float, gra
     process still carrying the root (or one of ``tags``) except the reaper is killed first, while the reaper is alive
     and still their parent, and only then the group and the reaper. The reaper is always ``wait()``ed before a failure
     is raised, then a last sweep kills what is left and a bounded ``waitpid`` loop reaps the zombies of the pids killed
-    (this process is a child subreaper for the whole call), so the whole call takes at most
-    ``deadline + grace + 2 * SWEEP_BOUND``. Returns a ``CompletedProcess``; raises ``PassFailure`` on a timeout or a
-    leak. The pass-owned root is removed on return.
+    (this process is a child subreaper for the whole call). Each of the two sweeps and the reaping loop is bounded by
+    ``SWEEP_BOUND``, so the whole call takes at most ``deadline + grace + 3 * SWEEP_BOUND``. Returns a
+    ``CompletedProcess``; raises ``PassFailure`` on a timeout or a leak. The pass-owned root is removed on return.
     """
     root = Path(tempfile.mkdtemp(prefix="det-pass-"))
     killed: "set[int]" = set()

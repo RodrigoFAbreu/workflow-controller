@@ -856,15 +856,19 @@ class ReviewWaitDeriveTest(unittest.TestCase):
     def test_a_normal_merge_is_info_and_the_owners_branch_gates_stay_user_gates(self) -> None:
         resolved = notify.resolve("pr_merged", None)
         self.assertEqual((resolved.category, resolved.severity), ("INFO", "NORMAL"))
-        self.assertIn(mb.GATE_MERGE_PULL_REQUEST if hasattr(mb, "GATE_MERGE_PULL_REQUEST") else "merge_pull_request",
-                      mb.USER_GATES)
-        self.assertIn("merge_held", mb.USER_GATES)
+        for code in ("merge_pull_request", "merge_held"):
+            with self.subTest(code=code):
+                self.assertIn(code, mb.USER_GATES)
+                event = job.derive_branch_gate_event(gate(code), binding(), waited=False, spent=False)
+                self.assertEqual(event.event_type, "user_gate")
 
 
 class SupersededNoticeTest(unittest.TestCase):
     """The old ``user_gate`` of a stop that now sends ``review_wait`` is never followed by a second notice (D3)."""
 
     REPO = "target-repo"
+    #: The stop under test: here the protocol wait for the external review (rule 2).
+    RECORD = staticmethod(wait_record)
 
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -872,7 +876,8 @@ class SupersededNoticeTest(unittest.TestCase):
         self.tmp = Path(tmp.name)
         self.root = self.tmp / "runtime"
         (self.root / "runs").mkdir(parents=True)
-        self.event = job.derive_job_event(wait_record())[0]
+        self.event = job.derive_job_event(self.RECORD())[0]
+        self.assertEqual((self.event.event_type, self.event.supersedes), ("review_wait", "user_gate"))
         self.old_key = notify.idempotency_key("user_gate", self.REPO, self.event.ident)
 
     def log(self, run_id: str, status: str, *, key: str | None = None, source: str | None = None) -> None:
@@ -975,6 +980,13 @@ class SupersededNoticeTest(unittest.TestCase):
         self.log(run, "notifier_active", key="x")
         self.log(run, "sent")
         self.assertFalse(job._recoverable({"run_id": run}, self.root, self.event, self.REPO, None))
+
+
+class TesterStopSupersededNoticeTest(SupersededNoticeTest):
+    """The same checks for a tester fault stop (rule 3, ``flows_not_runnable``)."""
+
+    RECORD = staticmethod(lambda: wait_record("AWAITING_FUNCTIONAL_REVIEW", protocol_gate=None,
+                                              functional={"gate": "flows_not_runnable"}))
 
 
 class RecoveryTest(_StepCase):

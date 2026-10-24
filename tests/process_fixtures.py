@@ -349,6 +349,12 @@ LEFTOVER_INVENTORY = (
     ("scenarios/selftest.py", "start:run", 5, "short", "attack paths and git calls the scenario waits for; each exits"),
     ("test_run_scenarios.py", "start:run", 1, "deadline",
      "the runner CLI in a clone of the checkout: the scenarios it runs sit behind the kit's per-scenario timeout (D14) and the call waits for it"),
+    ("test_run_scenarios.py", "start:Popen", 1, "deadline",
+     "run_bounded's reaping subreaper and its pass: a deadline, SIGTERM, a grace period, SIGKILL and a tagged sweep end every "
+     "descendant in any session before the call returns (D2 of the determinism milestone)"),
+    ("test_catalogue_determinism.py", "sleep", 3, "exception",
+     "the stalled stand-in of the bounded-runner tests: sleeps above the leftover lifetime that run_bounded's deadline, "
+     "grace and tagged sweep must end, which is what the tests assert"),
     ("test_scenarios.py", "start:run", 1, "short",
      "a python -c that imports the two suite wrappers and prints which scenario modules they loaded: no scenario runs, it exits at once"),
     ("test_scenario_kit.py", "start:helper:popen_bounded", 2, "deadline",

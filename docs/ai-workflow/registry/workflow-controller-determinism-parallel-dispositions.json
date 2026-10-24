@@ -1,0 +1,62 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-determinism-parallel",
+ "dispositions": {
+  "F-068d356ab08c": {
+   "disposition": "fixed",
+   "note": "The tests sit in a named class, RunBoundedTest, in tests/test_catalogue_determinism.py, beside IsolationGateTest."
+  },
+  "F-1e4c9d8e5c7c": {
+   "disposition": "dropped",
+   "reason": "Polish: run_concurrently raises the first failure in job order after both finished; a rerun for a rare double, different failure is cheap."
+  },
+  "F-2b9bc45c2f55": {
+   "disposition": "fixed",
+   "note": "REAPER_SOURCE runs reap_all() after child.wait() on every exit path; RunBoundedTest.test_a_child_that_exits_leaves_nothing_behind covers it."
+  },
+  "F-2c37c7641370": {
+   "disposition": "fixed",
+   "note": "run_bounded's docstring states deadline + grace + SWEEP_BOUND and RunBoundedTest.BOUND includes base.SWEEP_BOUND; the plan stays a historical record."
+  },
+  "F-68e9035e071f": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#143"
+  },
+  "F-892ef847a7b1": {
+   "disposition": "fixed",
+   "note": "setUpClass names the second clone <base>/pass-b, with a comment that neither clone path contains the other."
+  },
+  "F-a0af7dfe276a": {
+   "disposition": "fixed",
+   "note": "Same as the pass-b naming: setUpClass in tests/test_catalogue_determinism.py."
+  },
+  "F-b8c16a5f2e76": {
+   "disposition": "dropped",
+   "reason": "Dead-code polish in a test helper (the unused reaper parameter of stalled()); no behaviour is affected."
+  },
+  "F-d70cf15dcddc": {
+   "disposition": "dropped",
+   "reason": "Plan wording only; run_concurrently's docstring already says each job is bounded by its own deadline."
+  },
+  "F-e02af6044ec6": {
+   "disposition": "dropped",
+   "reason": "Placement preference: the helper is used only by the post-merge determinism module, whose failure blocks the release, so a regression cannot ship unnoticed."
+  },
+  "F-e3281ebcf7c0": {
+   "disposition": "fixed",
+   "note": "Plan D5 states it: the concurrent median is at most 0.70 of the sequential median."
+  },
+  "F-e7538d1a9cbd": {
+   "disposition": "fixed",
+   "note": "run_bounded calls proc.wait() on the reaper before the sweep and before any failure is raised, on every path; the docstring says so."
+  },
+  "F-ed14ae05df0d": {
+   "disposition": "fixed",
+   "note": "RunBoundedTest.BOUND = DEADLINE + GRACE + SWEEP_BOUND and both timing assertions use it."
+  },
+  "F-ff78b34e19b4": {
+   "disposition": "fixed",
+   "note": "Plan D5/CP2 require three alternating runs each, none skipped, and lscpu CPU topology recorded."
+  }
+ }
+}

@@ -16,9 +16,12 @@ import io
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -32,6 +35,166 @@ GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT
            "GIT_COMMITTER_EMAIL": "t@example.invalid"}
 
 _PROBE = kit.probe_isolation()
+
+
+# A pass of the catalogue determinism check gets 45 minutes, against about 16 for one pass run alone.
+PASS_DEADLINE = 2700
+# The bounds of ``run_bounded``'s forced path: the grace given to the reaper after ``SIGTERM``, and the sweep's own bound.
+PASS_GRACE = 10
+SWEEP_BOUND = 10.0
+
+# The reaping subreaper ``run_bounded`` starts the real command under. The scenario kit puts its heavy descendants in
+# sessions of their own, so a process-group signal does not reach them; as a subreaper this process adopts every
+# descendant that survives the real command, in any session, and kills and reaps them before it exits, on every path.
+REAPER_SOURCE = r"""
+import ctypes, os, signal, subprocess, sys, time
+
+if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+    sys.exit(3)
+child = subprocess.Popen(sys.argv[2:], start_new_session=True)  # argv: -c -- <command>
+
+
+def adopted():
+    found = set()
+    for task in os.listdir("/proc/self/task"):
+        try:
+            with open(f"/proc/self/task/{task}/children") as fh:
+                found.update(int(pid) for pid in fh.read().split())
+        except OSError:
+            continue
+    return found
+
+
+def kill_group(group):
+    if group != os.getpgrp():
+        try:
+            os.killpg(group, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def reap_all():
+    for _ in range(400):
+        pids = adopted()
+        if not pids:
+            return
+        for pid in pids:
+            for target in (lambda: os.getpgid(pid), lambda: os.getsid(pid)):
+                try:
+                    kill_group(target())
+                except OSError:
+                    pass
+            try:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+            except OSError:
+                pass
+        time.sleep(0.01)
+
+
+def on_term(signum, frame):
+    try:
+        os.killpg(child.pid, signal.SIGTERM)
+    except OSError:
+        pass
+    reap_all()
+    os._exit(143)
+
+
+signal.signal(signal.SIGTERM, on_term)
+code = child.wait()
+reap_all()
+sys.exit(code if code >= 0 else 128 - code)
+"""
+
+
+class PassFailure(AssertionError):
+    """A bounded pass that timed out or left a process behind."""
+
+
+def _sweep(tags: "list[str]", *, bound: float) -> "list[int]":
+    """SIGKILL every process carrying any of ``tags`` until none is left or ``bound`` seconds pass; returns survivors."""
+    end = time.monotonic() + bound
+    while True:
+        alive = sorted({pid for tag in tags for pid in kit.tagged_pids(tag)})
+        for pid in alive:
+            with contextlib.suppress(OSError):
+                os.kill(pid, signal.SIGKILL)
+            with contextlib.suppress(OSError):
+                os.waitpid(pid, os.WNOHANG)
+        if not alive or time.monotonic() >= end:
+            return alive
+        time.sleep(0.05)
+
+
+def run_bounded(argv: "list[str]", *, cwd: Path, env: dict, deadline: float, grace: float = PASS_GRACE,
+                tags: "tuple[str, ...]" = (), name: str = "pass", reaper: str = REAPER_SOURCE):
+    """Run ``argv`` to completion within ``deadline`` seconds and leave nothing of it behind.
+
+    The command starts in a session of its own under a reaping subreaper (``REAPER_SOURCE``) with ``TMPDIR`` set to a
+    pass-owned temporary root, which the scenario kit's scratch directories, and so every sandbox descendant's
+    environment, live under. At the deadline the group and the reaper get ``SIGTERM``; after ``grace`` seconds the
+    group gets ``SIGKILL`` and every process still carrying the root (or one of ``tags``) is swept for at most
+    ``SWEEP_BOUND`` seconds. The reaper is always ``wait()``ed before a failure is raised, so the whole call takes at
+    most ``deadline + grace + SWEEP_BOUND``. Returns a ``CompletedProcess``; raises ``PassFailure`` on a timeout or a
+    leak. The pass-owned root is removed on return.
+    """
+    root = Path(tempfile.mkdtemp(prefix="det-pass-"))
+    try:
+        out, err = root / "stdout", root / "stderr"
+        with open(out, "w") as out_fh, open(err, "w") as err_fh:
+            proc = subprocess.Popen([sys.executable, "-I", "-c", reaper, "--", *argv], cwd=cwd,
+                                    env={**env, "TMPDIR": str(root)}, stdout=out_fh, stderr=err_fh,
+                                    start_new_session=True)
+            timed_out = False
+            try:
+                proc.wait(timeout=deadline)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                for send in (lambda: os.killpg(proc.pid, signal.SIGTERM), lambda: proc.send_signal(signal.SIGTERM)):
+                    with contextlib.suppress(OSError):
+                        send()
+                try:
+                    proc.wait(timeout=grace)
+                except subprocess.TimeoutExpired:
+                    with contextlib.suppress(OSError):
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    proc.kill()
+            proc.wait()
+            survivors = _sweep([str(root), *tags], bound=SWEEP_BOUND)
+        stdout, stderr = out.read_text(errors="replace"), err.read_text(errors="replace")
+        if survivors:
+            raise PassFailure(f"{name} left processes behind: {survivors}\n{stdout[-2000:]}{stderr[-2000:]}")
+        if timed_out:
+            raise PassFailure(f"{name} did not finish within its {deadline}-second deadline\n"
+                              f"stdout: {stdout[-2000:]}\nstderr: {stderr[-2000:]}")
+        return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def run_concurrently(jobs: list):
+    """Run the callables ``jobs`` in threads at the same time and wait for all of them; returns their results in job
+    order. The first failure, in job order, is raised only after every job has finished, so a failing job never masks
+    another and nothing runs once this returns. Each job is bounded by its own deadline, so the wait is finite."""
+    results: list = [None] * len(jobs)
+    failures: "list[BaseException | None]" = [None] * len(jobs)
+
+    def work(index: int) -> None:
+        try:
+            results[index] = jobs[index]()
+        except BaseException as exc:  # noqa: BLE001 -- re-raised below, after every job has finished
+            failures[index] = exc
+
+    threads = [threading.Thread(target=work, args=(i,), name=f"pass-{i}") for i in range(len(jobs))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    for failure in failures:
+        if failure is not None:
+            raise failure
+    return results
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -87,12 +250,17 @@ class CloneCase(unittest.TestCase):
         _git(self.clone, "reset", "-q", "--hard", self.head)
         _git(self.clone, "clean", "-qfd", "--", *kit.CODE_PATHS)
 
-    def runner(self, *args: str, output: "Path | None" = None, module: bool = True):
-        argv = [sys.executable, "-B", str(self.clone / "tools" / "run_scenarios.py"), *args]
+    def runner(self, *args: str, output: "Path | None" = None, module: bool = True, clone: "Path | None" = None,
+               timeout: "float | None" = None):
+        clone = clone or self.clone
+        argv = [sys.executable, "-B", str(clone / "tools" / "run_scenarios.py"), *args]
         if args[0] == "run":
             argv += ["--output", str(output or self.out)] + (["--module", SELFTEST] if module else [])
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-        return subprocess.run(argv, cwd=self.clone, env=env, capture_output=True, text=True)
+        if timeout is not None:
+            tags = (str(clone), str(output or self.out))
+            return run_bounded(argv, cwd=clone, env=env, deadline=timeout, tags=tags, name=f"run in {clone.name}")
+        return subprocess.run(argv, cwd=clone, env=env, capture_output=True, text=True)
 
     def records(self, output: "Path | None" = None) -> dict:
         folder = output or self.out

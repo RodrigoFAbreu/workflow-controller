@@ -24721,6 +24721,744 @@
         "evaluated_at": "2026-10-24T03:11:12Z",
         "workflow_release": "2.18.5"
       }
+    },
+    "workflow-controller-determinism-parallel": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-determinism-parallel",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_DETERMINISM_PARALLEL_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-determinism-parallel-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-determinism-parallel-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 4,
+      "implementation_revision": 1,
+      "functional_review_round": null,
+      "base_commit": "6aff67e4850e0d86319b649f2647f3641b55af9d",
+      "reviewed_implementation_head": "9d748984d3a8255a53dd6e8af59a01fbd322abab",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP2",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "9ae9bf78b9ef8dc2c82a6f02c38354c5659dc3ae"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "5dc3752ab9177ab919d236d3d4cf45d91a7677bd"
+        }
+      },
+      "current_bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+        "approved_review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_DETERMINISM_PARALLEL_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "809b12a842f51af50298ea5a5029cdc7eecb9b5b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-determinism-parallel-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "90a3f23d07cdf52c362d166a3aea47b4526b9463"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-determinism-parallel-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "55e5046b8116f5f16dfe73594556b7df464d0f70"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-24T05:07:36Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+            "ledger": {
+              "local": {
+                "bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "87894ec98fc49a4a74cff220ed0291be99c50b14ac529b65cb7ab8db149f2669",
+                "ledger_entry_sha256": "69dd7ede48edaeb3c4316baef64ecd7eb175ebcf077f081f47f2bbde1875fc91",
+                "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "b54413a3be2ce1cbe3cc0542a4008c17b73b87201dbc317f587d0cb6c776981b",
+                "ledger_entry_sha256": "b96a36c6f2403eb00221d264e09ee64c42699fd8260f7e8c4203ae95eb591275",
+                "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-24T05:07:36Z",
+          "workflow_release": "2.18.5"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "62a65127d5f29987e995fdba72712952db4c2dfecc7e4583057d367e676f3480",
+        "approved_review_content_id": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-determinism-parallel-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "41b8e4e208667900628d609091569df83160b370"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ee14699c9238223c3b110921711bbf19bccf7344"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d9fcc1771e51f6e8c21bff28a06b6445e7cdc45e"
+          },
+          {
+            "path": "tests/test_catalogue_determinism.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "999709dbd77fbdab22566c8061a659c654ff81bb"
+          },
+          {
+            "path": "tests/test_run_scenarios.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e61521f52a6bb5acfb80f05b8681fb1d785e11d2"
+          }
+        ],
+        "reviewed_content_commit": "9d748984d3a8255a53dd6e8af59a01fbd322abab",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-24T07:48:39Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "ledger": {
+              "local": {
+                "bundle_id": "62a65127d5f29987e995fdba72712952db4c2dfecc7e4583057d367e676f3480",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ad86156cb29cd6b0bcd2080804ee8efdc1848fc5e98a6e4081e0aa45110e5299",
+                "ledger_entry_sha256": "2e9d629b450c6b50a3cda54523dc8c11718fa66158d7d6bd09705d42408d414b",
+                "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "62a65127d5f29987e995fdba72712952db4c2dfecc7e4583057d367e676f3480",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "347f4d3c68c897c6a6e71bbd8a4930cd2095b31eb03d8e110ffb1a5c7467255b",
+                "ledger_entry_sha256": "12f61506ac2d7bb3eebb020cfdc28efc44994125b86261830d92c5044453bb45",
+                "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-24T07:48:39Z",
+          "workflow_release": "2.18.5"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-24T05:01:05Z",
+          "verdict_sha256": "87894ec98fc49a4a74cff220ed0291be99c50b14ac529b65cb7ab8db149f2669",
+          "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-24T05:05:44Z",
+          "verdict_sha256": "b54413a3be2ce1cbe3cc0542a4008c17b73b87201dbc317f587d0cb6c776981b",
+          "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 3
+        },
+        "implementation": {
+          "local": 1,
+          "external": 1
+        }
+      },
+      "state_revision": 26,
+      "last_transition": "2026-10-24T08:12:19Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-24T04:57:57Z",
+        "consumed": {
+          "review_content_id": "70b0a5d22037c268760036fef0e942e905e1ca29b6f1700d63f500c7501190b4",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+          "bundle_id": "81c6f79b0af0db3d4d5f3413fcd0ea905e2cfcc71bcc17945fb3bbf62bdbdf7c",
+          "plan_revision": 4
+        }
+      },
+      "optional_findings": {
+        "F-ff78b34e19b4": {
+          "digest": "ff78b34e19b4aa3b7adf7839a4252977a8af8f7d01470978249856c54c750aa2",
+          "text": "D5/CP2: one concurrent run on four CPUs proves the speed-up but is thin evidence that the release-gating job stays flake-free under the doubled contention; consider recording two or three concurrent runs (each passing, none skipped) rather than one, and noting how `taskset -c 0-3` maps to physical cores on the measuring machine (a 4-vCPU runner is usually two SMT cores).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "67beddba70542ff9c47f8def2ccecb028fa6671e02606a80b87fb191ad87d882",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:37:42Z"
+            }
+          ]
+        },
+        "F-e3281ebcf7c0": {
+          "digest": "e3281ebcf7c03ace1fabcd460c1ee1fe274ed4c672e0b2623d19894f4eb83775",
+          "text": "D5: \"at least 30% faster\" can be read as wall time at most 0.70 of the sequential time or as a 1.3x speed ratio (at most about 0.77); state which, so the gate is unambiguous.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "67beddba70542ff9c47f8def2ccecb028fa6671e02606a80b87fb191ad87d882",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:37:42Z"
+            }
+          ]
+        },
+        "F-1e4c9d8e5c7c": {
+          "digest": "1e4c9d8e5c7ca95bccce805c9512b3a072306a9a90adc2bab13abadc12500841",
+          "text": "D2/CP1: when both passes fail only the first failure is raised; including the second pass's return code and output tail in the same failure message (or as a note) would save a rerun when the two fail differently.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "67beddba70542ff9c47f8def2ccecb028fa6671e02606a80b87fb191ad87d882",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:37:42Z"
+            }
+          ]
+        },
+        "F-d70cf15dcddc": {
+          "digest": "d70cf15dcddc4fa034df186d0332a49e2f2a96207899eb1957d4b47ea212f8d7",
+          "text": "D2: the \"hung pass\" half of the title rests on the existing per-scenario worker timeout and on `main-check`'s process-group signalling at an interrupt, not on the helper; a sentence saying so keeps the helper from being read as needing its own timeout.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "67beddba70542ff9c47f8def2ccecb028fa6671e02606a80b87fb191ad87d882",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:37:42Z"
+            }
+          ]
+        },
+        "F-068d356ab08c": {
+          "digest": "068d356ab08c8d3311b6bee7bafd978a6100728e17b23a138059548fff5ef891",
+          "text": "D4: \"in the module's unit-test class next to `IsolationGateTest`\" reads as either inside `IsolationGateTest` or a new class beside it; name the class (a new class is fine: the planner estimates it from the module mean).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "67beddba70542ff9c47f8def2ccecb028fa6671e02606a80b87fb191ad87d882",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:37:42Z"
+            }
+          ]
+        },
+        "F-2b9bc45c2f55": {
+          "digest": "2b9bc45c2f5561948a06192a719abf5f5120f3044e53c15f1c47c3913b4d37bf",
+          "text": "D2: the reaper's behaviour when its real child exits on its own (success, or a failing pass before the deadline) is not stated. Only the `SIGTERM` path kills and reaps the adopted descendants. If the reaper simply exits after `waitpid(child)`, anything the scenario run left behind is re-parented past it and outlives the call. That is what happens today, but it falls short of D2's \"never leaves anything behind\". Consider having the reaper run the same kill-and-reap loop over its adopted children before every exit, and covering it with a stand-in that exits 0 and leaves a `setsid` sleeper behind.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "70b0a5d22037c268760036fef0e942e905e1ca29b6f1700d63f500c7501190b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:50:43Z"
+            }
+          ]
+        },
+        "F-892ef847a7b1": {
+          "digest": "892ef847a7b1092d06dc3f0935941010ec3c103d565e7487a645366b3d90c600",
+          "text": "D2/CP1: `kit.tagged_pids` matches substrings. If the second clone's path has the class clone's path (`<base>/clone`) as a prefix, for example `<base>/clone2`, pass A's backstop sweep would also kill pass B's processes. Give the second clone a path that neither contains nor is contained in the first, for example a separate `mkdtemp` or `<base>/pass-b`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "70b0a5d22037c268760036fef0e942e905e1ca29b6f1700d63f500c7501190b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:50:43Z"
+            }
+          ]
+        },
+        "F-e02af6044ec6": {
+          "digest": "e02af6044ec64d8ffb74fc6550a89c87aa5c3ec9ca5ace8ad4cf79f8ae78a431",
+          "text": "D3/D4: `run_bounded` lives in `tests/test_run_scenarios.py`, which runs on every pull request, but its subprocess tests sit in `tests.test_catalogue_determinism`, which runs only after the merge. So a regression in the lifecycle helper would show up only after it lands on `main`. Placing the runner's own tests in `tests/test_run_scenarios.py` would catch it on the pull request. Its tests need no sandbox, and the determinism module's job count would stay as it is.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "70b0a5d22037c268760036fef0e942e905e1ca29b6f1700d63f500c7501190b4",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T04:50:43Z"
+            }
+          ]
+        },
+        "F-a0af7dfe276a": {
+          "digest": "a0af7dfe276a13686e7738e48f4bb5ba4ad8a742d4d45ede8e2dcc2a3bd3c51a",
+          "text": "D1/D2: the plan does not say where the second clone lives. The sweep also tags by the clone path and the output folder, and `kit.tagged_pids` matches by substring. If the second clone is named something like `<base>/clone2` or `<base>/clone-b`, the first clone's path `<base>/clone` is a substring of it, so a forced sweep of pass A would also kill pass B's processes. Name the clones (or the output folders) so that neither path contains the other, for example a separate `mkdtemp` base or `clone-a`/`clone-b`, or tag with a trailing `/`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T05:01:05Z"
+            }
+          ]
+        },
+        "F-ed14ae05df0d": {
+          "digest": "ed14ae05df0db58f7729b1e8093b5e0c5842f9804ebab2a0902d0c93056848a3",
+          "text": "D2: D2 says \"at most the deadline plus the grace period\", but the forced path now adds the sweep's own 10-second bound. State the bound as deadline + grace + sweep bound, and give D4's elapsed-time assertions that margin, so the unresponsive-reaper variant cannot flake on a loaded runner.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T05:01:05Z"
+            }
+          ]
+        },
+        "F-e7538d1a9cbd": {
+          "digest": "e7538d1a9cbdb7d6a8e8f2ea4b95525041079b951310bbf3b56a8ea12c551041",
+          "text": "D2: in the sentence \"A tag that is still matched after the bound fails the call with a named leak, never silently, and it reaps the reaper with `wait()`\", it is unclear whether the reaper is also reaped on the leak path. Say that `wait()` on the reaper happens in every case, before the leak or timeout failure is raised.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T05:01:05Z"
+            }
+          ]
+        },
+        "F-2c37c7641370": {
+          "digest": "2c37c7641370b69fff537e672d3329797e63408629bbccf4d8a9238d723d4999",
+          "text": "**O1 — Include the sweep budget in the stated timeout bound.** D2 adds a bounded 10-second sweep after the grace period, while D2/D4/CP1 still describe completion within deadline plus grace. Include the additional sweep allowance and scheduling tolerance in the documented bound and regression timing assertions.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "d2c857b6dc13ece89eaa98131e8b2cb04f87cf7f6edfc9c8c9a0e0c2f7792b97",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T05:05:44Z"
+            }
+          ]
+        },
+        "F-b8c16a5f2e76": {
+          "digest": "b8c16a5f2e76e8a9bdc2dbff72621c63cb9ebf3b5385d9483016c13b335dad32",
+          "text": "**O1 -- `RunBoundedTest.stalled()` has an unused `reaper` parameter** (`tests/test_catalogue_determinism.py`). It is\n  dead code (already noted in the summary); drop it, or pass it through, so the unresponsive-reaper test does not\n  appear to rely on it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T07:39:43Z"
+            }
+          ]
+        },
+        "F-68e9035e071f": {
+          "digest": "68e9035e071f333290a26602da9eab89110ffbc8a7640d1b724ca1bc717ed27d",
+          "text": "**O2 -- `_sweep` reaps with `WNOHANG` straight after `SIGKILL`** (`tests/test_run_scenarios.py`). A tagged survivor\n  that is a child of the test process is usually not dead yet at that moment. `kit.tagged_pids` then skips it as a\n  zombie, so it is never reaped. D2 says such children are reaped. No such child exists today: the only child of the\n  runner, the reaper, is waited before the sweep. A blocking `waitpid` for children, or a final `WNOHANG` pass over\n  the pids killed, would make the code match the plan's wording.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T07:39:43Z"
+            }
+          ]
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "67beddba70542ff9c47f8def2ccecb028fa6671e02606a80b87fb191ad87d882",
+        "70b0a5d22037c268760036fef0e942e905e1ca29b6f1700d63f500c7501190b4",
+        "72c5b2cb2515577c77f4113c9c79cfa9c112c3f2f2f8aaa1597ca24f615fc684"
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "62a65127d5f29987e995fdba72712952db4c2dfecc7e4583057d367e676f3480",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-24T07:39:43Z",
+          "verdict_sha256": "ad86156cb29cd6b0bcd2080804ee8efdc1848fc5e98a6e4081e0aa45110e5299",
+          "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "62a65127d5f29987e995fdba72712952db4c2dfecc7e4583057d367e676f3480",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-24T07:46:58Z",
+          "verdict_sha256": "347f4d3c68c897c6a6e71bbd8a4930cd2095b31eb03d8e110ffb1a5c7467255b",
+          "run_ref": "session:local .ai-review/workflow-controller-determinism-parallel/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+            "ran_at": "2026-10-24T08:01:01Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator: main-check tests.test_catalogue_determinism on four CPUs (taskset -c 0-3): exit 0, 10 tests ran, none skipped, all passed"
+            },
+            "log_digest": "14fa54d61b52d52c5259710cd44fcdef9af354050f3400a4318f4bff1fc1f15c",
+            "run_ref": "c126-functional-round1",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "recorded_at": "2026-10-24T08:01:01Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+            "ran_at": "2026-10-24T08:01:01Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "Codex tester: RunConcurrentlyTest 3 tests OK; independent barrier stand-ins: results in job order, failures raised after both jobs finish; operator re-run also OK"
+            },
+            "log_digest": "779ca27b8152c714ca5b5e45e3ccb359e9af8c644f143c1b005d87aecc0c5e99",
+            "run_ref": "c126-functional-round1",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "recorded_at": "2026-10-24T08:01:01Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+            "ran_at": "2026-10-24T08:01:01Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator: RunBoundedTest and RunConcurrentlyTest 7 tests OK in 12 s; no leftover process from the run; Codex tester probes: stalled child with two descendants (one in its own session) ends within deadline plus grace, all gone at return; forced-reaper fallback within SWEEP_BOUND"
+            },
+            "log_digest": "be2fe544e2fca2bb7ccfd4db7f872444b52be4ef31c628d5d6ee5590f9d0bb8e",
+            "run_ref": "c126-functional-round1",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "recorded_at": "2026-10-24T08:01:01Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+            "ran_at": "2026-10-24T08:01:01Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "the leftover-process inventory test passes when selected directly (OrphanWatchdogTest.test_the_bounds_cannot_regress_and_the_inventory_is_complete, operator and tester); the checklist's main-check command form cannot select that module (it is not placed in main.yml): a wording defect of the checklist, not of the change"
+            },
+            "log_digest": "af0a1dd1250711399f4c832460cfc6c880cbb243c9062c65e621655364aff861",
+            "run_ref": "c126-functional-round1",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "recorded_at": "2026-10-24T08:01:01Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+            "ran_at": "2026-10-24T08:01:01Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "check_docs exit 0; the guide describes the concurrent independent clones and the measured medians 11.5 to 6.1 minutes (ratio about 0.53); #126 is absent from Next, in order"
+            },
+            "log_digest": "123c5cfec0cc349fbc2df540c5b8f5e19357ec72997e28bb4aa4e87c474b5683",
+            "run_ref": "c126-functional-round1",
+            "reporter": "controller-lane-orchestrator",
+            "identity": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "recorded_at": "2026-10-24T08:01:01Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 142,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/142"
+          },
+          "state": "open",
+          "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+          "observed_at": "2026-10-24T08:12:19Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "9d748984d3a8255a53dd6e8af59a01fbd322abab",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-24T08:12:19Z",
+            "raw_sha256": "46e8e5b54c01b2d83045177ef5576910199baaed306724fd7d079a253e650779",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "ff71e35d67cca27908f4b69ea65625ccfa42441f5f2b633992b9224dfeac286b"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 142,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/142"
+          },
+          "state": "open",
+          "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+          "observed_at": "2026-10-24T08:11:21Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "9d748984d3a8255a53dd6e8af59a01fbd322abab",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.19.1"
+            },
+            "fetched_at": "2026-10-24T08:11:21Z",
+            "raw_sha256": "46e8e5b54c01b2d83045177ef5576910199baaed306724fd7d079a253e650779",
+            "run_ref": "controller:20261024T081121Z-321428c7"
+          },
+          "fact_id": "eef13fe40eb1bbd564c120753da77a96b62b78c0be8ea8f8e38855ce0ac0702e"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #142 at a451d7f45aed4e4929ae62823100610bd3ac2a97 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "9d748984d3a8255a53dd6e8af59a01fbd322abab",
+          "anchor_identity": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "477cd199ff87504422136bc8f1a338e1f9bf1d74315e3c6beeae3f384c16c103",
+            "recorded_at": "2026-10-24T07:48:39Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "9e119342722c71abdd721fa686fca12da726a388d8a1fb5d5ca11e90f0f4c021",
+              "log_digest": "14fa54d61b52d52c5259710cd44fcdef9af354050f3400a4318f4bff1fc1f15c",
+              "run_ref": "c126-functional-round1"
+            },
+            "flow-2": {
+              "evidence_id": "a9e2d7a18b6f40c73ebc308d4ba01d40833049d710015a30b4f956f156e83688",
+              "log_digest": "779ca27b8152c714ca5b5e45e3ccb359e9af8c644f143c1b005d87aecc0c5e99",
+              "run_ref": "c126-functional-round1"
+            },
+            "flow-3": {
+              "evidence_id": "f2654233075acf08f9ec1552287b1dac2a90d46ff81548d6b6c1e927277ef174",
+              "log_digest": "be2fe544e2fca2bb7ccfd4db7f872444b52be4ef31c628d5d6ee5590f9d0bb8e",
+              "run_ref": "c126-functional-round1"
+            },
+            "flow-4": {
+              "evidence_id": "98ec3df151aae5cd38cc45253980a646c714dc80d2e05ebb0e3f28540f392e60",
+              "log_digest": "af0a1dd1250711399f4c832460cfc6c880cbb243c9062c65e621655364aff861",
+              "run_ref": "c126-functional-round1"
+            },
+            "flow-5": {
+              "evidence_id": "a290a2683c85e04d2f685044044250270834b8508d007d3797e2f1b5947f561c",
+              "log_digest": "123c5cfec0cc349fbc2df540c5b8f5e19357ec72997e28bb4aa4e87c474b5683",
+              "run_ref": "c126-functional-round1"
+            }
+          },
+          "pr": {
+            "fact_id": "ff71e35d67cca27908f4b69ea65625ccfa42441f5f2b633992b9224dfeac286b",
+            "head": "a451d7f45aed4e4929ae62823100610bd3ac2a97",
+            "provenance": "workflow_gh",
+            "raw_sha256": "46e8e5b54c01b2d83045177ef5576910199baaed306724fd7d079a253e650779"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-24T08:12:19Z",
+        "workflow_release": "2.18.5"
+      }
     }
   }
 }

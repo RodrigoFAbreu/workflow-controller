@@ -96,9 +96,9 @@ reproduction commands.
 
 ### Checks that run after the merge
 
-Two scenario checks cost about 12 and 16 minutes and no longer run in a pull
+Two scenario checks cost about 6 and 16 minutes and no longer run in a pull
 request's shards: `tests.test_catalogue_determinism` (every catalogue scenario run
-twice, the normalised summaries compared) and `tests.test_scenarios_negative` (the
+twice, at the same time in two clones, the normalised summaries compared) and `tests.test_scenarios_negative` (the
 mutation checks). They stay in a local full run. A pull request keeps a cheap
 subset determinism check (`SubsetDeterminismTest` in `tests/test_run_scenarios.py`,
 about 10 seconds, three scenarios, the exact name set and equal summaries), which
@@ -121,10 +121,14 @@ missing, pending, failed, cancelled or skipped covering job, or a success for a
 different commit, prevents the release. **Timing:** an ordinary release publishes
 after the slower of `validate` (11.8 to 22.1 minutes across the six shards when it
 runs the full plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs
-(measured on the first run with them, at 37c80b6: determinism 32.1 minutes, mutations
-17.3), plus setup and the release jobs. So a release waits about 32 minutes after the
-merge, and the determinism job is the slower one
-([#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126) tracks making it faster). A `RESUME` of an ancestor adds the target checks
+(measured on the first run with them, at 37c80b6, when the two passes ran one after
+the other: determinism 32.1 minutes, mutations 17.3; since the passes run at the same
+time, determinism is expected near the mutations job, and the first `main` run after
+that change is the measure), plus setup and the release jobs. So a release waits about
+as long as the mutations job after the merge. Locally on four CPUs the module took a
+median of 11.5 minutes before and 6.1 after (three runs each). The two passes use two
+clones and never share a checkout; a failed or hung pass fails the test within a
+bounded time and leaves no process behind. A `RESUME` of an ancestor adds the target checks
 after `release-plan` (another 18 minutes or so) before `build`. A following merge's
 run waits behind the `main-release` slot as before. A target that predates the
 moved module blocks the release (fail-closed) for the owner to decide. A

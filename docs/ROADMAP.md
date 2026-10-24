@@ -39,15 +39,14 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18, 2026-10-22 and 2026-10-23; each item carries its complexity label in the table below):
-1. #126, the after-merge determinism job (28-32 minutes, so every release waits; a `ci:` change, no release);
-2. CU3, a clean-up milestone, because more than 8 `review-follow-up` issues are open (see the rule below);
-3. the harness-neutral roles epic, owner decision 2026-10-24: H1 and H6 first, then H8, H7, H2, H3, H10, H9 and H11, the Codex tester (C10g-1 to C10g-3) and H4a to H4g (the Codex worker);
-4. C10h (#115) and C10i (#112);
-5. A2a, A2b and A2c, the backlog file, the generated roadmap and the migration (workflow#48 shipped in Workflow 2.17.0);
-6. C10d-a and C10d-b, the post-acceptance defect loop (C10c is released as 1.18.0 and C10e as 1.19.0; C10 is three steps, each released on its own);
-7. CL1a to CL1e, retention of finished work-item files, one mechanism per item (#130; the same rule in the Workflow and the Manager);
-8. C12b to C12d, then C11;
-9. the orchestrator series O1-O7.
+1. CU3, a clean-up milestone, because more than 8 `review-follow-up` issues are open (see the rule below);
+2. the harness-neutral roles epic, owner decision 2026-10-24: H1 and H6 first, then H8, H7, H2, H3, H10, H9 and H11, the Codex tester (C10g-1 to C10g-3) and H4a to H4g (the Codex worker);
+3. C10h (#115) and C10i (#112);
+4. A2a, A2b and A2c, the backlog file, the generated roadmap and the migration (workflow#48 shipped in Workflow 2.17.0);
+5. C10d-a and C10d-b, the post-acceptance defect loop (C10c is released as 1.18.0 and C10e as 1.19.0; C10 is three steps, each released on its own);
+6. CL1a to CL1e, retention of finished work-item files, one mechanism per item (#130; the same rule in the Workflow and the Manager);
+7. C12b to C12d, then C11;
+8. the orchestrator series O1-O7.
 
 A3 and A4 follow their dependencies in the table below (A5 is replaced by the harness-neutral roles epic).
 
@@ -580,8 +579,10 @@ hurts now, else in a later step or the next clean-up milestone.
     Fixed in the documentation pull request after C2b.
 76. [#125](https://github.com/RodrigoFAbreu/workflow-controller/issues/125): C2b test tidy-ups (later).
 77. [#126](https://github.com/RodrigoFAbreu/workflow-controller/issues/126): the after-merge determinism job takes
-    28-32 minutes, so an ordinary release waits that long after the merge (a `ci:` change, second in the order above;
-    the owner moved it up on 2026-10-23).
+    28-32 minutes, so an ordinary release waits that long after the merge. Fixed: the two passes run at the same time
+    (a `ci:` change, no release; complete, accepted 2026-10-24 by gate policy, pull request #142; median 692 s to
+    368 s on four CPUs); the first `main` run's job time is recorded in the documentation pull request after
+    the merge.
 78. [#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129): the sandbox layout for Claude Code 2.1.304
     and later (C10f, complete).
 79. [#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130): retention of finished work-item files and

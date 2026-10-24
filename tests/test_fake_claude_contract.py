@@ -2064,6 +2064,18 @@ class HangChildPidFileTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="hang-pid-file-"))
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
         self.pid_file = self.tmp / "child"
+        from tests import process_fixtures
+
+        before = process_fixtures.zombie_children()
+        self.addCleanup(lambda: self.assertEqual(process_fixtures.zombie_children() - before, set(),
+                                                 "the test left a zombie child"))
+
+    @staticmethod
+    def _stop(proc: subprocess.Popen) -> None:
+        _kill_with(-proc.pid, signal.SIGKILL)
+        if proc.stdin is not None:
+            proc.stdin.close()
+        proc.wait(10)
 
     def _start(self) -> subprocess.Popen:
         env = {k: v for k, v in os.environ.items() if not k.startswith("FAKE_CLAUDE_")}
@@ -2071,7 +2083,7 @@ class HangChildPidFileTest(unittest.TestCase):
         proc = subprocess.Popen([sys.executable, str(FAKE_CLAUDE), "-p", "task", "--output-format", "stream-json",
                                  "--verbose"], env=env, cwd=self.tmp, stdin=subprocess.PIPE,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        self.addCleanup(_kill_with, -proc.pid, signal.SIGKILL)
+        self.addCleanup(self._stop, proc)
         assert proc.stdin is not None
         proc.stdin.write(task_line().encode())
         proc.stdin.flush()

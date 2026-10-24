@@ -10,8 +10,8 @@ The roadmap is ordered by dependency and operational value. Correctness, runtime
 
 **Where things stand (2026-10-23).** Controller 1.19.0 is the latest release (PR #128, squash `2375b51`), from C10e
 (accepted 2026-10-23 by gate policy): `workflow-controller verify-claude` verifies a new Claude build with live probes and
-records its digest, so the automated functional review can use it. No installed Claude build passes yet: 2.1.304 and later
-block writes inside the denied clone, which C10f (#129) fixes next. 1.18.0 (PR #111, squash `5f3f131`) came from C10c
+records its digest, so the automated functional review can use it. C10f (#129, complete) lays the tester's sandbox out so Claude Code 2.1.304 and later
+can pass `verify-claude` too. 1.18.0 (PR #111, squash `5f3f131`) came from C10c
 (accepted 2026-10-21 by gate policy): under an automatic acceptance gate the Controller runs the functional review
 itself in an isolated tester, so acceptance clears itself. 1.17.0 (PR #107, squash `a76daff`) came from C13b
 (accepted 2026-10-19 by gate policy): each review stage has a local round cap (6) and an external round cap (4) on the
@@ -38,16 +38,15 @@ Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repositor
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18, 2026-10-22 and 2026-10-23; each item carries its complexity label in the table below):
-1. C10f, the sandbox layout that lets Claude Code 2.1.304 and later pass `verify-claude` (#129);
-2. #126, the after-merge determinism job (28-32 minutes, so every release waits; a `ci:` change, no release);
-3. CU3, a clean-up milestone, because more than 8 `review-follow-up` issues are open (see the rule below);
-4. the harness-neutral roles epic, owner decision 2026-10-24: H1 and H6 first, then H8, H7, H2, H3, H10, H9 and H11, the Codex tester (C10g-1 to C10g-3) and H4a to H4g (the Codex worker);
-5. C10h (#115) and C10i (#112);
-6. A2a, A2b and A2c, the backlog file, the generated roadmap and the migration (workflow#48 shipped in Workflow 2.17.0);
-7. C10d-a and C10d-b, the post-acceptance defect loop (C10c is released as 1.18.0 and C10e as 1.19.0; C10 is three steps, each released on its own);
-8. CL1a to CL1e, retention of finished work-item files, one mechanism per item (#130; the same rule in the Workflow and the Manager);
-9. C12b to C12d, then C11;
-10. the orchestrator series O1-O7.
+1. #126, the after-merge determinism job (28-32 minutes, so every release waits; a `ci:` change, no release);
+2. CU3, a clean-up milestone, because more than 8 `review-follow-up` issues are open (see the rule below);
+3. the harness-neutral roles epic, owner decision 2026-10-24: H1 and H6 first, then H8, H7, H2, H3, H10, H9 and H11, the Codex tester (C10g-1 to C10g-3) and H4a to H4g (the Codex worker);
+4. C10h (#115) and C10i (#112);
+5. A2a, A2b and A2c, the backlog file, the generated roadmap and the migration (workflow#48 shipped in Workflow 2.17.0);
+6. C10d-a and C10d-b, the post-acceptance defect loop (C10c is released as 1.18.0 and C10e as 1.19.0; C10 is three steps, each released on its own);
+7. CL1a to CL1e, retention of finished work-item files, one mechanism per item (#130; the same rule in the Workflow and the Manager);
+8. C12b to C12d, then C11;
+9. the orchestrator series O1-O7.
 
 A3 and A4 follow their dependencies in the table below (A5 is replaced by the harness-neutral roles epic).
 
@@ -158,7 +157,7 @@ numbers are not in sequence. The owner set this order on 2026-10-03, 2026-10-09,
 | C10d-a | Complexity: medium. The post-acceptance defect loop at the merge flow's `checks_failing` stop: report the fixed query so row 38d arms for a completed item, with a lifecycle scenario (accepted, red, reopened, accepted again, merged); C10d is split into two items (owner decision, 2026-10-23) | C10c | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C10d-b | Complexity: low to medium. The same report at a `CHANGES_REQUESTED` decision | C10d-a | [1.9](#19-pr-review-defect-loop-and-merge-readiness-identity) |
 | C10e | A command that verifies a new `claude` build for the functional tester: it runs the live sandbox enforcement probes against that binary and, only when every probe holds, records its digest in the Controller's state (never the settings file); the launch admits the built-in list plus the recorded digests, so a Claude update needs no release ([#113](https://github.com/RodrigoFAbreu/workflow-controller/issues/113); owner decision 2026-10-22: right after C2b) (complete, accepted 2026-10-23 by gate policy; released as 1.19.0 from PR #128, squash `2375b51`: `workflow-controller verify-claude`; the probe and the launch use one resolved binary, #114; follow-ups [81-82](#known-follow-ups-carried-forward), issues #132 and #133) | C10c | [11.9](#119-automated-functional-review) |
-| C10f | Complexity: medium. The sandbox layout for Claude Code 2.1.304 and later: those builds block writes to an allowed folder below a denied path, so `verify-claude` refuses them with `boundary: writable: REFUSED`; lay the tester's folders out so no allowed write sits below a denied path, then verify a current build ([#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129); owner decision 2026-10-23: right after C10e) | C10e | [11.9](#119-automated-functional-review) |
+| C10f | Complexity: medium. The sandbox layout for Claude Code 2.1.304 and later: those builds block writes to an allowed folder below a denied path, so `verify-claude` refuses them with `boundary: writable: REFUSED`; lay the tester's folders out so no allowed write sits below a denied path, then verify a current build ([#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129); owner decision 2026-10-23: right after C10e) (complete: the writable folders live outside the clone behind links, with a `link` probe and a fake tester that applies the deny-above-wins rule) | C10e | [11.9](#119-automated-functional-review) |
 | C10g-1 | Complexity: high; split again before it is planned. The functional tester on Codex without a per-release version block, step 1: Codex sandbox enforcement and its proof ([#131](https://github.com/RodrigoFAbreu/workflow-controller/issues/131); extends [follow-up 61](#known-follow-ups-carried-forward)); the proof is also the Codex sandbox the Codex worker reuses (H4b) | C10f | [11.9](#119-automated-functional-review) |
 | C10g-2 | Complexity: medium. `verify-codex` with verify-on-first-use cached by the build's digest | C10g-1 | [11.9](#119-automated-functional-review) |
 | C10g-3 | Complexity: low. The tester role declared for Codex; the harness is chosen through H1's per-role routing and the fallback to the other harness is H9's chain, so there is no separate tester-harness setting | C10g-2, H1, H9 | [11.9](#119-automated-functional-review) |
@@ -583,7 +582,7 @@ hurts now, else in a later step or the next clean-up milestone.
     28-32 minutes, so an ordinary release waits that long after the merge (a `ci:` change, second in the order above;
     the owner moved it up on 2026-10-23).
 78. [#129](https://github.com/RodrigoFAbreu/workflow-controller/issues/129): the sandbox layout for Claude Code 2.1.304
-    and later (C10f, next).
+    and later (C10f, complete).
 79. [#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130): retention of finished work-item files and
     a check that it holds (CL1; filed with workflow#84 and workflow-manager#90).
 80. [#131](https://github.com/RodrigoFAbreu/workflow-controller/issues/131): run the automatic functional review on

@@ -420,7 +420,8 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
 3. starts an independent tester, a `functional_test` job on the `functional-tester` role (Sonnet 5.5,
    `medium`, one agent, `Bash` only), inside Claude Code's own shell sandbox (bubblewrap, `socat`,
    a kernel that accepts a seccomp filter and the native `claude` build are required -- the build check is by identity: the `claude` that would run must be an ELF whose SHA-256 digest is in `VERIFIED_NATIVE_BUILDS` (`controller/functional_review.py`), the builds on which the enforcement spike proved the seccomp helper blocks Unix sockets, so a launcher, script, package-CLI bundle or a newer build that is neither in that list nor recorded by `workflow-controller verify-claude` ends at `functional_tester_unavailable` before any launch (the command runs the live enforcement probes on the build and records its digest in the runtime root, [`verify-claude`](commands.md#verify-claude)); the probe and the launch examine and execute the same resolved real path; the writable locations are the output folder, the scratch directories and the
-   locations derived from the repository's `.gitignore`; no network and no Unix socket; the
+   locations derived from the repository's `.gitignore`, which live in `<sandbox>/writable/<name>/` outside the clone while the clone holds a
+   link to each (so the settings never allow a write below a denied path, whichever precedence a Claude build applies, and Claude Code 2.1.304 and later can be verified; a tool that deletes and recreates a linked folder is refused, an `environment` fault, not a product `defect`); no network and no Unix socket; the
    product files, the checklist and `.git` are read-only). It writes `RESULTS.json`, one entry per
    flow, each with a log file and, for a failure, the reason `defect` (the product did not behave as
    the flow expects) or `environment` (the flow could not run in the sandbox);

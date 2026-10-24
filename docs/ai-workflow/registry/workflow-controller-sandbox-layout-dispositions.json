@@ -1,0 +1,86 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-sandbox-layout",
+ "dispositions": {
+  "F-1c45c8e32a24": {
+   "disposition": "fixed",
+   "note": "Plan D2 now copies contents with `cp -a <clone>/<name>/. <copy>/<name>/`; prompt in controller/functional_review.py (~line 821) carries it."
+  },
+  "F-3a9cdb477afd": {
+   "disposition": "fixed",
+   "note": "Plan D2 states CP1 rewrites the 'A copy that is edited is a tester fault' sentence; prompt copy rule updated (functional_review.py ~818)."
+  },
+  "F-49b569933de1": {
+   "disposition": "fixed",
+   "note": "exclude_writable_links in controller/functional_review.py adds a newline when the existing exclude lacks one."
+  },
+  "F-4ab7b1719987": {
+   "disposition": "dropped",
+   "reason": "Test already asserts the link problem names build/extra-link; pinning exact message text is polish."
+  },
+  "F-50ff138aebdc": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  },
+  "F-7934c296aec8": {
+   "disposition": "fixed",
+   "note": "Plan CP3 now says the evidence is written into the checklist at the functional review, so its write set is the two test modules."
+  },
+  "F-8ec4895570e2": {
+   "disposition": "fixed",
+   "note": "Plan D7 now says CP4 writes the closing ROADMAP/ACTIVE_MILESTONE records and acceptance only confirms them."
+  },
+  "F-9682f3ec828c": {
+   "disposition": "dropped",
+   "reason": "Bundle narrative files are regenerated each round and carry no shipped content; the build-facing remark is harmless wording."
+  },
+  "F-97964bf11fdb": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#138"
+  },
+  "F-adf350ddbcf9": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  },
+  "F-b08e56964946": {
+   "disposition": "fixed",
+   "note": "SANDBOX_LIMITS in controller/functional_review.py (~line 126) says delete-and-recreate of a linked folder is a sandbox limit."
+  },
+  "F-bacd7f2ba9b6": {
+   "disposition": "dropped",
+   "reason": "Single load flake that passed on replay; superseded by the timeout-test flake finding F-97964bf11fdb."
+  },
+  "F-bd940eec8376": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  },
+  "F-c551f06dbdcf": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  },
+  "F-c8d5920743a3": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  },
+  "F-d831438ff3f4": {
+   "disposition": "fixed",
+   "note": "tester_prompt now reads 'Writable locations in the clone root, each a link to a folder outside the clone' (functional_review.py ~810)."
+  },
+  "F-e699a264dc90": {
+   "disposition": "fixed",
+   "note": "Plan D5 states the parent-only resolution for unlink/rename/mkdir over a link; fake has parent_only handling."
+  },
+  "F-ee7aa6303d55": {
+   "disposition": "fixed",
+   "note": "Plan D5 restates that a resolved path in no allowWrite entry is refused."
+  },
+  "F-f285b9eb34e2": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  },
+  "F-f87a8cb50125": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#140"
+  }
+ }
+}

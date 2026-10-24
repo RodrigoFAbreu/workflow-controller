@@ -2080,11 +2080,11 @@ def check_functional_argv(command: Sequence[str], *, model: str, effort: str, fl
 
 def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
     """The run settings on disk are exactly the document the sandbox derives,
-    and every writable root lies in the sandbox's own scratch locations (``TMPDIR`` is the short folder
-    outside it) or is a
-    derived writable location below the clone (never the clone root, its
-    ``.git`` or a path outside the sandbox); the deny list holds the clone root
-    and ``.git``."""
+    every writable root lies in the sandbox folder (``TMPDIR`` is the short
+    folder outside it), no writable root equals or lies below a denied path
+    (D1: the writable locations are the external folders, never a path below the
+    clone, the clone root or its ``.git``), and the deny list holds the clone
+    root and ``.git``."""
     try:
         on_disk = json.loads(sandbox.settings_path.read_text())
     except (OSError, ValueError) as exc:
@@ -2105,8 +2105,10 @@ def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
         except ValueError:
             raise _refuse(f"the tester may write {root}, which is outside its sandbox", check="settings",
                           entry=root) from None
-        if path in (sandbox.clone, sandbox.clone / ".git") or sandbox.clone / ".git" in path.parents:
-            raise _refuse(f"the tester may write {root}, which is the candidate", check="settings", entry=root)
+    try:
+        functional_review.assert_writes_not_below_denies(filesystem)
+    except ValueError as exc:
+        raise _refuse(f"the tester's settings break the layout invariant: {exc}", check="settings") from None
     if [str(sandbox.clone), str(sandbox.clone / ".git")] != filesystem["denyWrite"]:
         raise _refuse("the tester's deny list is not the clone root and its .git", check="settings")
 

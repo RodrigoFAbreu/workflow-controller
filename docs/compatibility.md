@@ -34,7 +34,7 @@ were checked against it (protocol mode, protocol 1.5). Workflow 2.16.0 keeps pro
 the same way; Controller 1.17.0 was checked against it. Workflow 2.18.2 and 2.18.5 also keep protocol 1.5 (2.17.0 adds the
 optional backlog file, 2.18.0 the harness-neutral command files, 2.18.1 to 2.18.5 are fixes and speed-ups: 2.18.4 shortens
 the conformance job, 2.18.5 stops a live same-worktree owner reclaiming a takeover's guard) and are admitted the
-same way; Controller 1.18.0 was checked against 2.18.2 and Controller 1.19.0 against 2.18.5 (protocol mode, protocol 1.5). Controller 1.12.0
+same way; Controller 1.18.0 was checked against 2.18.2 and Controller 1.19.0 against 2.18.5 (protocol mode, protocol 1.5). The functional tester's sandbox layout does not depend on a Claude build's write-precedence rule, so a build, 2.1.304 and later included, is admitted once `workflow-controller verify-claude` has recorded it. That layout keeps the tester's writable folders outside the clone, behind links the Controller makes, so no write allowance lies below a denied path (resolved through links too). Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
 job records instead. Controller 1.17.0, which adds the local and external round caps, reads the four per-role counts
 (protocol 1.5) and applies each cap to its own count; without them (a Workflow before 2.15.0, or an item with

@@ -161,7 +161,8 @@ The Controller stopped before it launched the tester. The message names the caus
   (Claude Code 2.1.303 for 1.18.0) or recorded by `workflow-controller verify-claude` is admitted; a launcher or a
   script-launched `claude` is refused. The message names the build's digest. Run `workflow-controller verify-claude`:
   it runs the live sandbox probes against the `claude` on `PATH` (up to two short model turns, with your
-  credentials) and records the digest only when every probe holds. The record belongs to one runtime root, so a
+  credentials) and records the digest only when every probe holds, Claude Code 2.1.304 and later included (the tester's
+  writable folders lie outside the clone behind links, so the build's deny-above-wins rule does not refuse them). The record belongs to one runtime root, so a
   source checkout and the shared install each need their own run. If the message says the record was ignored, the
   file is malformed, a symlink, or owned by someone else or writable by others; delete it and run the command again.
 - **The fresh clone did not match the manifest** of the candidate the Controller captured (`clone_mismatch`). Run

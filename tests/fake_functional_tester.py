@@ -6,9 +6,12 @@ sandbox's output folder with the sandbox's environment, so (like
 ``fake_claude_review.py``) the fake is driven by a scenario file written with
 :func:`write_binary`. It spends nothing and connects nowhere.
 
-It **emulates the CLI's sandbox** for the writes it makes: a write is refused
-when the settings file's ``denyWrite``/``allowWrite`` lists refuse it (the most
-specific entry wins, a tie goes to the deny, a path in neither list is refused).
+It **emulates the CLI's sandbox** as Claude Code 2.1.304 and later enforce it
+(D5): a path is resolved through symlinks, then refused when any ``denyWrite``
+entry is the path or an ancestor of it, and allowed only when it lies in an
+``allowWrite`` entry that is not itself below a deny; a path in no such entry is
+refused. An allowance below a denial therefore never counts, which is what
+fails the layout that 2.1.303 still accepted.
 That checks the Controller hands the CLI the right settings; the enforcement
 itself is proved on the real CLI in ``tests/test_functional_enforcement.py``.
 ``"emulate_sandbox": false`` turns the emulation off, which is what a sandbox
@@ -25,10 +28,15 @@ Actions, each ``{"op": ..., ...}``:
   written into the working directory (the output folder);
 - ``write`` -- ``path``, ``data``: one write, by absolute path (a relative
   ``path`` is below the clone);
+- ``unlink`` / ``mkdir`` -- ``path``: remove a file or link, or make a
+  directory; judged without following a link at the last component;
 - ``restore`` -- ``path`` (relative to the clone), ``new``: write, run a check
   that reads it, restore the original bytes;
 - ``shell`` -- ``argv``: run a command with the environment as launched;
 - ``copy_edit`` -- copy the clone into ``TMPDIR``, edit the copy, read it back;
+- ``copy_rule`` -- ``name``, ``path``, ``data``: copy the clone into ``TMPDIR/<name>``,
+  replace each link of the copy by its own directory holding what the clone's
+  folder held (the prompt's copy rule), write ``path`` in the copy;
 - ``git_config`` -- ``key``, ``value``: append to the clone's ``.git/config``;
 - ``session`` -- create a transcript in ``CLAUDE_CONFIG_DIR/projects``;
 - ``sleep`` -- ``seconds``.
@@ -75,18 +83,27 @@ class Sandbox:
         self.deny = [Path(p) for p in filesystem.get("denyWrite", [])]
         self.emulate = emulate
 
-    def allows(self, path: Path) -> bool:
+    def allows(self, path: Path, *, parent_only: bool = False) -> bool:
+        """Whether a write to ``path`` is allowed. The path is resolved through
+        symlinks first, as a sandbox mount does; an unlink, a rename or a mkdir
+        over a link resolves only the parent (``parent_only``), as the kernel
+        does, so the link itself is judged where it lies."""
         if not self.emulate:
             return True
         path = Path(os.path.abspath(path))
-        best: tuple[int, bool] | None = None
-        for entries, allowed in ((self.allow, True), (self.deny, False)):
-            for entry in entries:
-                if path == entry or entry in path.parents:
-                    depth = len(entry.parts)
-                    if best is None or depth > best[0] or (depth == best[0] and not allowed):
-                        best = (depth, allowed)
-        return best is not None and best[1]
+        path = Path(os.path.realpath(path.parent)) / path.name if parent_only else Path(os.path.realpath(path))
+        deny = [Path(os.path.realpath(entry)) for entry in self.deny]
+
+        def covers(entry: Path) -> bool:
+            return path == entry or entry in path.parents
+
+        if any(covers(entry) for entry in deny):
+            return False
+        for entry in self.allow:
+            entry = Path(os.path.realpath(entry))
+            if covers(entry) and not any(entry == d or d in entry.parents for d in deny):
+                return True
+        return False
 
 
 def _act(action: dict, ctx: dict) -> None:
@@ -121,6 +138,13 @@ def _act(action: dict, ctx: dict) -> None:
         if action.get("fifo"):
             os.mkfifo(path)
         log.append({"op": op, "path": str(path), "refused": False})
+    elif op in ("unlink", "mkdir"):
+        path = Path(action["path"]) if os.path.isabs(action["path"]) else clone / action["path"]
+        if not sandbox.allows(path, parent_only=True):
+            log.append({"op": op, "path": str(path), "refused": True})
+            return
+        os.unlink(path) if op == "unlink" else os.mkdir(path)
+        log.append({"op": op, "path": str(path), "refused": False})
     elif op == "restore":
         path = clone / action["path"]
         original = path.read_bytes()
@@ -137,6 +161,17 @@ def _act(action: dict, ctx: dict) -> None:
         target = scratch / action["path"]
         target.write_text(action["new"])
         log.append({"op": op, "copy": str(scratch), "check_saw": target.read_text()})
+    elif op == "copy_rule":
+        copy = Path(os.environ["TMPDIR"]) / action["name"]
+        subprocess.run(["cp", "-a", str(clone), str(copy)], check=True)
+        for link in sorted(p for p in copy.iterdir() if p.is_symlink()):
+            folder = Path(os.readlink(link))
+            link.unlink()
+            link.mkdir()
+            subprocess.run(["cp", "-a", f"{folder}/.", str(link)], check=True)
+        target = copy / action["path"]
+        target.write_text(action.get("data", "x\n"))
+        log.append({"op": op, "copy": str(copy), "path": str(target)})
     elif op == "shell":
         done = subprocess.run(action["argv"], capture_output=True, cwd=action.get("cwd") or clone,
                               timeout=60, check=False)

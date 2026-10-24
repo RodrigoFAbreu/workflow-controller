@@ -122,6 +122,9 @@ SANDBOX_LIMITS: tuple[str, ...] = (
     "no real `claude`, `codex` or `ssh`: each is a stand-in that refuses and logs",
     "a `PATH` of the sandbox's `bin/` and the system directories, with no other tool",
     "the product clone is read-only: no flow may write inside it, except the writable locations listed",
+    "a writable location in the clone is a link to a folder outside it: a tool that deletes and recreates the "
+    "linked folder (`shutil.rmtree('build')`, `rm -rf build`) is refused on the link, a sandbox limit "
+    "(`environment`), not a product `defect`",
     "writes go to the output folder and the scratch `HOME`, `XDG_*` directories and `TMPDIR`",
 )
 
@@ -804,7 +807,8 @@ def tester_prompt(
         "",
         *[f"- {limit}" for limit in SANDBOX_LIMITS],
         "",
-        "Writable locations below the clone root: " + (", ".join(f"{name}/" for name in writable) or "none"),
+        "Writable locations in the clone root, each a link to a folder outside the clone: "
+        + (", ".join(f"{name}/" for name in writable) or "none"),
         "Refused as writable locations (so a flow that writes there is `environment`): "
         + ("; ".join(f"`{item.pattern}` ({item.reason})" for item in refused) or "none"),
         "",
@@ -812,8 +816,12 @@ def tester_prompt(
         "",
         "- Use only the shell. Write `RESULTS.json` and the logs with shell redirection, inside the output folder.",
         "- Any copy of the clone (for example to build or install) is made from the clone unchanged, with `cp -a`, "
-        "under your `TMPDIR`. No flow edits product source, the checklist or anything under `.git`. A copy that "
-        "is edited is a tester fault.",
+        "under your `TMPDIR`. A writable location in the clone is a link, and a copy of it would share the "
+        "clone's folder: right after `cp -a <clone> <copy>`, replace each of them in the copy with an empty "
+        "directory that holds what the clone's folder holds, `rm <copy>/<name> && mkdir <copy>/<name> && "
+        "cp -a <clone>/<name>/. <copy>/<name>/`, so two copies never meet in one folder. No flow edits product "
+        "source, the checklist or anything under `.git`. A copy that is edited, except by that step, is a tester "
+        "fault.",
         f"- Never choose flow ids: use exactly the ids below. A flow the sandbox cannot run is `failed` with "
         f"`reason` `{REASON_ENVIRONMENT}`, never `{REASON_DEFECT}`, and its summary names what was missing.",
         "",
@@ -867,23 +875,47 @@ class TesterUnavailable(ControllerError):
     code = GATE_TESTER_UNAVAILABLE
 
 
+def assert_writes_not_below_denies(filesystem: Mapping[str, Any]) -> None:
+    """The layout invariant of D1: no ``allowWrite`` entry equals or lies below a
+    ``denyWrite`` entry, so the document means the same whether a build lets a
+    more specific allow win over the deny above it (Claude Code 2.1.303) or
+    lets the deny above win (2.1.304 and later). A ``ValueError``: a document
+    that breaks it is a programming error, never a runtime fallback."""
+    denies = [Path(entry) for entry in filesystem.get("denyWrite", [])]
+    for entry in filesystem.get("allowWrite", []):
+        # Lexically and as the file system resolves it: a symlinked parent (or a
+        # ``..`` after one) can put an allowance below a denial it does not
+        # name. ``realpath`` of the raw entry, so ``..`` follows the links.
+        for allowed, denied in ((Path(os.path.abspath(entry)), [Path(os.path.abspath(d)) for d in denies]),
+                                (Path(os.path.realpath(entry)), [Path(os.path.realpath(d)) for d in denies])):
+            for blocked in denied:
+                if allowed == blocked or blocked in allowed.parents:
+                    raise ValueError(f"the write allowance {entry} equals or lies below the denied path {blocked}")
+
+
 def tester_settings(
-    *, clone_dir: Path, output_dir: Path, scratch_dirs: Sequence[Path], writable: Sequence[str],
+    *, clone_dir: Path, output_dir: Path, scratch_dirs: Sequence[Path], writable_dir: Path,
+    writable: Sequence[str],
 ) -> dict[str, Any]:
     """The ``--settings`` document of the tester's launch.
 
     The sandbox is required (``failIfUnavailable``), has no unsandboxed retry
     and no excluded command, no allowed domain and no allowed Unix socket. The
     write allowlist is the output folder, the scratch directories and the
-    derived writable locations (D5), and the deny list covers the **clone root
-    recursively** and, by name, its ``.git`` (I2): on the pinned CLI a more
-    specific allow below the denied root wins, so a writable location stays
-    writable while every tracked path, every new file beside one, the checklist
-    and ``.git`` are refused (proved live in CP2). The run's working directory
-    must be ``output_dir``: with a working directory above the clone, the
-    CLI's own working-directory grant outranks the allow and the writable
-    locations become unwritable too."""
-    allow = [str(output_dir), *(str(path) for path in scratch_dirs), *(str(clone_dir / name) for name in writable)]
+    external folders of the derived writable locations ``<writable_dir>/<name>``
+    (D2: the clone holds a link to each, so the allow list never names a path
+    below the clone). The deny list covers the **clone root recursively** and,
+    by name, its ``.git`` (I2): every tracked path, every new file beside one,
+    the checklist and ``.git`` are refused, and no allowance lies below a
+    denial (D1, :func:`assert_writes_not_below_denies`), so the document does not
+    depend on which precedence the build implements. The run's working
+    directory must be ``output_dir``: with a working directory above the clone,
+    the CLI's own working-directory grant outranks the allow and the writable
+    locations become unwritable too (pinned release-side by
+    ``test_a_launch_from_above_the_clone_cannot_write_through_a_link_either``)."""
+    allow = [str(output_dir), *(str(path) for path in scratch_dirs), *(str(writable_dir / name) for name in writable)]
+    filesystem = {"allowWrite": allow, "denyWrite": [str(clone_dir), str(clone_dir / ".git")]}
+    assert_writes_not_below_denies(filesystem)
     return {
         "sandbox": {
             "enabled": True,
@@ -891,10 +923,34 @@ def tester_settings(
             "allowUnsandboxedCommands": False,
             "autoAllowBashIfSandboxed": True,
             "excludedCommands": [],
-            "filesystem": {"allowWrite": allow, "denyWrite": [str(clone_dir), str(clone_dir / ".git")]},
+            "filesystem": filesystem,
             "network": {"allowedDomains": [], "allowUnixSockets": []},
         },
     }
+
+
+def make_writable_links(clone: Path, writable_dir: Path, names: Iterable[str]) -> None:
+    """Make ``<writable_dir>/<name>/`` for each writable location and, in the
+    clone, a symlink ``<clone>/<name>`` to it (an absolute target), so a flow
+    writes ``build/x`` relative to the clone and the write lands outside the
+    denied clone (D2)."""
+    for name in names:
+        target = writable_dir / name
+        target.mkdir(parents=True, exist_ok=True)
+        os.symlink(target, clone / name)
+
+
+def exclude_writable_links(runtime_root: Path, git_dir_rel: str, names: Iterable[str]) -> None:
+    """One ``/<name>`` line per link in ``<git_dir>/info/exclude`` (no trailing
+    slash, so a link matches; ``name/`` matches only a directory), so the
+    clone's ``git status`` is empty exactly as with empty directories (D2).
+    ``git_dir_rel`` is the clone's ``.git`` relative to the runtime root."""
+    exclude = runtime_root / git_dir_rel / "info" / "exclude"
+    kept = exclude.read_bytes() if exclude.exists() else b""
+    if kept and not kept.endswith(b"\n"):
+        kept += b"\n"
+    lines = "".join(f"/{name}\n" for name in names).encode()
+    runtime.write_bytes(runtime_root, f"{git_dir_rel}/info/exclude", kept + lines)
 
 
 def tester_flags(settings_path: Path) -> list[str]:
@@ -1049,8 +1105,8 @@ def launch_refusal(result_text: str) -> TesterUnavailable | None:
 @dataclasses.dataclass(frozen=True)
 class ProbeTargets:
     """The locations the probe command touches. ``tracked`` and ``checklist``
-    are existing files of the clone, ``writable`` a pre-created writable
-    directory below the clone root, ``stand_in_home`` a path in a stand-in home
+    are existing files of the clone, ``writable`` the name of a writable
+    location (the clone holds a link to its external folder), ``stand_in_home`` a path in a stand-in home
     or config location, ``socket_path`` a Unix socket the host listens on and
     ``tcp_port`` a TCP port the host listens on."""
 
@@ -1069,7 +1125,7 @@ class ProbeTargets:
 #: caller asserts the host path stays absent.
 PROBE_EXPECTED: Mapping[str, str] = {
     "tracked": "REFUSED", "checklist": "REFUSED", "git": "REFUSED", "newfile": "REFUSED", "rename": "REFUSED",
-    "delete": "REFUSED", "writable": "WROTE", "output": "WROTE", "home": "REFUSED", "tmp": "REFUSED",
+    "delete": "REFUSED", "writable": "WROTE", "link": "REFUSED", "output": "WROTE", "home": "REFUSED", "tmp": "REFUSED",
     "vartmp": "REFUSED", "tcp": "BLOCKED", "unix": "BLOCKED",
 }
 _PROBE_LINE_RE = re.compile(r"^PROBE (?P<name>[a-z]+) (?P<result>[A-Z]+)$", re.MULTILINE)
@@ -1079,7 +1135,8 @@ def probe_command(targets: ProbeTargets, *, marker: str) -> str:
     """The one shell command the probe turn runs (D10): by absolute path, a
     write to a tracked file, the checklist, a file in ``.git``, a new file
     beside a tracked one, a rename over and a deletion of a tracked file, a
-    write to the writable location and to the output folder, a write to a
+    write to the writable location (through its link) and an attempt to replace
+    that link by a directory, a write to the output folder, a write to a
     stand-in home and to ``/tmp`` and ``/var/tmp``, a TCP connection and a
     connection to a host Unix socket. Every line is ``PROBE <name> <result>``."""
     clone, out = targets.clone_dir, targets.output_dir
@@ -1093,6 +1150,8 @@ def probe_command(targets: ProbeTargets, *, marker: str) -> str:
         f"w git {q(str(clone / '.git' / 'config'))}",
         f"w newfile {q(str(clone / 'probe-new-file'))}",
         f"w writable {q(str(clone / targets.writable / 'probe'))}",
+        f"if rm -f {q(str(clone / targets.writable))} 2>/dev/null && mkdir {q(str(clone / targets.writable))} 2>/dev/null; "
+        f'then echo "PROBE link WROTE"; else echo "PROBE link REFUSED"; fi',
         f"w output {q(str(out / 'probe'))}",
         f"w home {q(str(targets.stand_in_home / '.config' / 'probe'))}",
         f"w tmp {q('/tmp/' + marker)}",
@@ -1361,15 +1420,29 @@ def _ignored_paths(clone: Path, git_dir: Path, paths: Sequence[str]) -> set[str]
     return {os.fsdecode(item) for item in done.stdout.split(b"\0") if item}
 
 
-def walk_differences(clone: Path, candidate: Candidate, git_dir: Path) -> list[str]:
+def walk_differences(clone: Path, candidate: Candidate, git_dir: Path,
+                     links: Mapping[str, Path] | None = None) -> list[str]:
     """How the clone's worktree differs from the candidate (D5): a tracked
     path missing or different in mode, size or sha256 (a symlink by its
     target), a socket, FIFO or device anywhere, an unlisted ``.gitignore`` or
     ``.gitattributes`` file, and any extra file the candidate's ignore rules do
     not ignore. The clone's ``.git`` is not part of this walk. Nothing in the
-    clone is opened but regular files for hashing, and no Git runs in it."""
+    clone is opened but regular files for hashing, and no Git runs in it.
+
+    ``links`` maps each writable location to its external folder (D3): the
+    Controller's own link ``<clone>/<name>`` to that folder is accepted and
+    nothing else is; a missing, retargeted or replaced link is a difference,
+    and any other symlink is an extra file, whatever the ignore rules say."""
     seen = _scan(clone, skip_top=".git")
     differences: list[str] = []
+    for name, target in sorted((links or {}).items()):
+        seen.pop(name, None)
+        try:
+            intact = stat.S_ISLNK(os.lstat(clone / name).st_mode) and os.readlink(clone / name) == str(target)
+        except OSError:
+            intact = False
+        if not intact:
+            differences.append(f"link changed: {name}")
     for path, entry in sorted(candidate.manifest.items()):
         have = seen.pop(path, None)
         if have is None:
@@ -1377,15 +1450,18 @@ def walk_differences(clone: Path, candidate: Candidate, git_dir: Path) -> list[s
         elif have != _describe(entry):
             differences.append(f"differs: {path}")
     extras: list[str] = []
+    links_found: list[str] = []
     for path, have in sorted(seen.items()):
         if have[0] in ("special", "unreadable"):
             differences.append(f"{'special file' if have[0] == 'special' else 'unreadable'}: {path}")
         elif posixpath.basename(path) in _STEERING_NAMES:
             differences.append(f"unlisted {posixpath.basename(path)}: {path}")
+        elif have[0] == "link":
+            links_found.append(path)  # D3: never filtered by an ignore rule
         else:
             extras.append(path)
     ignored = _ignored_paths(clone, git_dir, extras)
-    differences += [f"extra file: {path}" for path in extras if path not in ignored]
+    differences += [f"extra file: {path}" for path in sorted(links_found + [p for p in extras if p not in ignored])]
     return differences[:MAX_DIFFERENCES]
 
 
@@ -1481,6 +1557,16 @@ class Sandbox:
         return self.tmp_dir if self.tmp_dir is not None else self.base / "tmp"
 
     @property
+    def writable_dir(self) -> Path:
+        """The folder of the external writable locations (D2)."""
+        return self.base / "writable"
+
+    @property
+    def writable_links(self) -> dict[str, Path]:
+        """Each writable location's name to its external folder (D3)."""
+        return {name: self.writable_dir / name for name in self.writable}
+
+    @property
     def fake_logs(self) -> Path:
         return self.base / "fake-logs"
 
@@ -1497,7 +1583,7 @@ class Sandbox:
 
     def settings(self) -> dict[str, Any]:
         return tester_settings(clone_dir=self.clone, output_dir=self.out, scratch_dirs=self.scratch_dirs,
-                               writable=self.writable)
+                               writable_dir=self.writable_dir, writable=self.writable)
 
     def environment(self) -> dict[str, str]:
         """The sandbox's part of the tester's environment (D3): a ``PATH`` of
@@ -1702,15 +1788,15 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
         _plain(clone, "remote", "add", "origin", str(base / "origin.git"))
         _plain(clone, "push", "-q", "-u", "origin", candidate.branch)
         writable, refused = derive_writable_locations(candidate.root_gitignore, candidate.manifest)
-        for name in writable:
-            (clone / name).mkdir(exist_ok=True)
+        make_writable_links(clone, base / "writable", writable)
+        exclude_writable_links(runtime_root, f"{SANDBOX_AREA}/{job_id}/clone/.git", writable)
         sandbox = Sandbox(runtime_root, job_id, work_item_id, base, candidate, writable, refused,
                           _git_dir_state(clone / ".git"), refs_of(clone / ".git"), tmp_dir)
         write_launchers(runtime_root, f"{SANDBOX_AREA}/{job_id}", sandbox.fake_logs,
                         python=python, package_parent=package_parent)
         runtime.write_bytes(runtime_root, sandbox.rel("settings.json"),
                             json.dumps(sandbox.settings(), indent=2).encode())
-        differences = walk_differences(clone, candidate, sandbox.check_dir)
+        differences = walk_differences(clone, candidate, sandbox.check_dir, sandbox.writable_links)
         if differences:
             raise unavailable(UNAVAILABLE_CLONE_MISMATCH,
                               f"the fresh clone does not match the manifest (a checkout conversion?): {differences[0]}",
@@ -1735,7 +1821,7 @@ def check_bound(sandbox: Sandbox) -> list[str]:
     now = _git_dir_state(clone / ".git")
     problems += [d for d in git_dir_differences(sandbox.git_state, now)
                  if not any(d.startswith(f".git/{name}:") for name in moved)]
-    problems += walk_differences(clone, sandbox.candidate, sandbox.check_dir)
+    problems += walk_differences(clone, sandbox.candidate, sandbox.check_dir, sandbox.writable_links)
     return problems[:MAX_DIFFERENCES]
 
 

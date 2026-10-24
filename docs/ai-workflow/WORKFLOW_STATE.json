@@ -26168,7 +26168,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 1,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -26281,7 +26281,120 @@
           "workflow_release": "2.18.7"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "5240adcd926fc8a3966b72fe721f11201ad7066ef617adbd4d427f2f1724257a",
+        "approved_review_content_id": "2e65973a27aa23d003afb1cf8eb0a9b9cced9c0673784300c141fa18fae76b92",
+        "review_content_manifest": [
+          {
+            "path": "controller/claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "245a1c1605e4f294068e2656aa7c87bc723e5d17"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "73ad3a8d04a79b223f1aae0fe1f82cd724c72ca5"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cleanup-3b-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9a3bd31f736bb9d2fdc20257e880835135547e82"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "10349bb568f208571deff0fd3481bdf030766892"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5892dc485621189e1e3aa81d49b9ded69633df68"
+          },
+          {
+            "path": "tests/test_claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2c5cb7e0e8d4cf2f3308bdf826da5d12133261e8"
+          },
+          {
+            "path": "tests/test_functional_enforcement.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b4afb418bbce4b64e0362244a54ce26ce58b327b"
+          }
+        ],
+        "reviewed_content_commit": "d7493109a70846ee8fa50bf1dcbf34bfdd13642c",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-24T17:51:51Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2e65973a27aa23d003afb1cf8eb0a9b9cced9c0673784300c141fa18fae76b92",
+            "ledger": {
+              "local": {
+                "bundle_id": "5240adcd926fc8a3966b72fe721f11201ad7066ef617adbd4d427f2f1724257a",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "38aac932865b22711539f064ba2cf85804efd3c4b32f01368303dfd2cde554da",
+                "ledger_entry_sha256": "ed28f0a462af1ed18ee1611678c84432afa3b1472dbaf6dbf4d870ac90e62638",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "5240adcd926fc8a3966b72fe721f11201ad7066ef617adbd4d427f2f1724257a",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "4ee22856cd6d5709a8835988487edfefd314f496322c6e84163a53ff2bdf78ed",
+                "ledger_entry_sha256": "55a296f868edf619ef75c5914d0359201b1e06007b798dd4919938e7f52eb6ac",
+                "run_ref": "session:local .ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-24T17:51:51Z",
+          "workflow_release": "2.18.7"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "a933c6cc88ee2ab2c03a708e46dba64aa297474e0f10d21232762611c6f07f80",
@@ -26312,12 +26425,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-10-24T17:37:26Z",
+      "state_revision": 26,
+      "last_transition": "2026-10-24T17:51:51Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -26384,6 +26497,55 @@
               "at": "2026-10-24T16:29:37Z"
             }
           ]
+        },
+        "F-baf38d2d9179": {
+          "digest": "baf38d2d9179a4f8db57ef01e7f36c7a8abd6edbd5a1b9d68990e72075c139d6",
+          "text": "O1 (`docs/ACTIVE_MILESTONE.md`, \"Next action\"): the section still says to run\n  `/milestone-implement workflow-controller-cleanup-3b` to enter self-review and prepare the bundle. The bundle is\n  already prepared and the item is in implementation review, so the next action is now stale. Update it at the next\n  edit of the page (acceptance).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2e65973a27aa23d003afb1cf8eb0a9b9cced9c0673784300c141fa18fae76b92",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T17:42:17Z"
+            }
+          ]
+        },
+        "F-1b0e574cf289": {
+          "digest": "1b0e574cf289df28136c73f1241d2c16523537215ce790392480a68c50fc753b",
+          "text": "O2 (`tests/test_claude_build.py`, `test_a_setup_oserror_exits_20_without_a_traceback_and_records_nothing`):\n  `assertIn(\"host\", err)` is weak, because the word could appear anywhere in the message. Assert the probe the CLI\n  prints, or the \"the run could not be prepared\" text, so the test pins the D3 wrapper and not only the exit code.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2e65973a27aa23d003afb1cf8eb0a9b9cced9c0673784300c141fa18fae76b92",
+              "verdict": "APPROVE",
+              "at": "2026-10-24T17:42:17Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "2e65973a27aa23d003afb1cf8eb0a9b9cced9c0673784300c141fa18fae76b92",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5240adcd926fc8a3966b72fe721f11201ad7066ef617adbd4d427f2f1724257a",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-24T17:42:17Z",
+          "verdict_sha256": "38aac932865b22711539f064ba2cf85804efd3c4b32f01368303dfd2cde554da",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5240adcd926fc8a3966b72fe721f11201ad7066ef617adbd4d427f2f1724257a",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-24T17:50:01Z",
+          "verdict_sha256": "4ee22856cd6d5709a8835988487edfefd314f496322c6e84163a53ff2bdf78ed",
+          "run_ref": "session:local .ai-review/workflow-controller-cleanup-3b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

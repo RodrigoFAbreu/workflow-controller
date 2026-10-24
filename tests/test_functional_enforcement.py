@@ -480,6 +480,10 @@ class LiveEnforcementTests(unittest.TestCase):
                                    probes=[name])
         except cb.ModelUnreachable as exc:
             self.skipTest(str(exc))
+        except cb.BuildNotVerified as exc:
+            if exc.probe == "credentials":  # no .credentials.json in the operator's Claude home: nothing to log in with
+                self.skipTest(str(exc))
+            raise
 
     def test_the_boundary_holds_on_the_pinned_cli(self) -> None:
         self.assertEqual([p.name for p in self._probe("boundary").probes], ["boundary"])

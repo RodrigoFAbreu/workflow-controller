@@ -179,8 +179,9 @@ and nothing is written back. A job whose stream is gone has no figures.
 
 `workflow-controller verify-claude` makes a newer `claude` build usable by the automated functional review without
 waiting for a Controller release. It takes no repository. It resolves `claude` on `PATH` (the build a launch would
-run; `--claude-binary` names a different build to verify, and the command then notes that a launch still runs the
-one on `PATH`), prints its resolved path and SHA-256 digest, and then:
+run; `--claude-binary` names a different build to verify and needs no `claude` on `PATH`: the command then notes
+that a launch still runs the one on `PATH`, or, when there is none, that functional review cannot start until a
+`claude` is put there), prints its resolved path and SHA-256 digest, and then:
 
 - a build already admitted, built in or recorded, is reported and **not probed**; `--force` probes it again;
 - otherwise it runs the live enforcement probes (writes and sockets the sandbox must refuse, the permitted
@@ -188,7 +189,9 @@ one on `PATH`), prints its resolved path and SHA-256 digest, and then:
   model turns at low effort with your Claude credentials; the usage budget gate is not consulted;
 - only when every probe holds and the build's bytes are unchanged by the run, it records the digest, version and
   probe results in `verified-claude-builds.json` in the runtime root (see [runtime](runtime.md)) and exits `0`;
-- a failing probe exits `20`, names the probe and records nothing; the scratch folder is removed either way. The
+- a failing probe exits `20`, names the probe and records nothing; so does a setup failure while the probe run is
+  built (a full disk, an unwritable folder, a listener that cannot bind), which is reported as the `host` probe; the
+  scratch folder is removed either way. The
   probes run with a private `TMPDIR` (a `wcf-*` folder, mode `0700`) under an eligible `$XDG_RUNTIME_DIR`, otherwise
   `/tmp`, because Claude's sockets need a short path; it is removed with the run.
 

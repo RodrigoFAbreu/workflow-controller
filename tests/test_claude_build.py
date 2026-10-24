@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -328,7 +329,9 @@ class FakeClaude:
         if self.fault == "denied_write_reported":
             lines = [line.replace("home REFUSED", "home WROTE") for line in lines]
         output = "\n".join(lines)
-        if self.fault == "sandbox_failed":
+        if self.fault == "sandbox_failed_new_file":  # the sandbox did not start and the run still wrote into the clone
+            (clone / "probe-new-file").write_bytes(b"")
+        if self.fault in ("sandbox_failed", "sandbox_failed_new_file"):
             output = "Sandbox is required but failed to initialize: bridge socket path too long"
         if self.fault == "not_executed":
             return [self.init(), {"type": "result", "is_error": False, "result": output}]
@@ -353,6 +356,13 @@ class FakeClaude:
                     {"type": "result", "is_error": False, "result": "done"}]
         if self.fault == "retry_host_write":
             (Path(self.clone_dir) / "src.txt").write_bytes(b"changed\n")
+        if self.fault in ("retry_sandbox", "retry_sandbox_host_path", "retry_sandbox_clone_write"):
+            if self.fault == "retry_sandbox_host_path":
+                Path(target).write_text("hi\n")
+            if self.fault == "retry_sandbox_clone_write":
+                (Path(self.clone_dir) / "src.txt").write_bytes(b"changed\n")
+            return [self.init(), *self.call(attempted, f"{cb.SANDBOX_FAILED}: no bridge"),
+                    {"type": "result", "is_error": False, "result": "done"}]
         if self.fault == "retry_error":
             return [self.init(), *self.call(attempted, "refused"),
                     {"type": "result", "is_error": True, "subtype": "error_during_execution",
@@ -427,8 +437,8 @@ class VerifyBuildTests(unittest.TestCase):
         self.assertFalse(Path(tmpdir).is_relative_to(deep))
 
     def test_a_failure_after_the_tmpdir_is_allocated_releases_it_and_records_nothing(self) -> None:
-        shorts = self.root / "short"
-        shorts.mkdir()
+        shorts = Path(tempfile.mkdtemp(prefix="wcs-", dir="/tmp"))  # short whatever the ambient TMPDIR is
+        self.addCleanup(shutil.rmtree, shorts, True)
         fake = FakeClaude()
         real_mkdtemp = tempfile.mkdtemp
 
@@ -439,11 +449,40 @@ class VerifyBuildTests(unittest.TestCase):
 
         with mock.patch.object(fr, "short_tmp_roots", lambda: [shorts]), \
                 mock.patch.object(tempfile, "mkdtemp", failing):
-            with self.assertRaises(OSError):
+            with self.assertRaises(cb.BuildNotVerified) as ctx:
                 self.verify(fake)
+        self.assertEqual(ctx.exception.probe, "host")
         self.assertEqual(list(shorts.iterdir()), [])  # the wcf-* TMPDIR was released
         self.assertEqual(fake.launches, 0)
         self.assertFalse((self.root / cb.RECORD_NAME).exists())
+
+    def test_a_deep_ambient_tmpdir_does_not_reach_the_host_listener_folder(self) -> None:
+        deep = self.root
+        for part in ("a" * 40, "b" * 40, "c" * 40):
+            deep = deep / part
+        deep.mkdir(parents=True)
+        fake = FakeClaude()
+        with mock.patch.object(tempfile, "tempdir", str(deep)):
+            self.verify(fake)
+        self.assertEqual(fake.launches, 3)
+
+    def test_a_listener_folder_that_cannot_be_made_names_the_host_listener(self) -> None:
+        shorts = Path(tempfile.mkdtemp(prefix="wcs-", dir="/tmp"))  # short whatever the ambient TMPDIR is
+        self.addCleanup(shutil.rmtree, shorts, True)
+        fake = FakeClaude()
+        real_mkdtemp = tempfile.mkdtemp
+
+        def failing(prefix=None, **kw):
+            if prefix == "wcv-":
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_mkdtemp(prefix=prefix, **kw)
+
+        with mock.patch.object(fr, "short_tmp_roots", lambda: [shorts]), \
+                mock.patch.object(tempfile, "mkdtemp", failing):
+            with self.assertRaises(cb.BuildNotVerified) as ctx:
+                self.verify(fake)
+        self.assertIn("no short folder for the host listener", ctx.exception.message)
+        self.assertNotIn("probes' TMPDIR", ctx.exception.message)
 
     def test_no_short_root_refuses_before_any_launch(self) -> None:
         fake = FakeClaude()
@@ -459,6 +498,10 @@ class VerifyBuildTests(unittest.TestCase):
                 ("socket", "boundary", False, "listener"),
                 ("missing_line", "boundary", False, "unix: no result line"),
                 ("sandbox_failed", "boundary", True, "sandbox could not start"),
+                ("sandbox_failed_new_file", "boundary", False, "probe-new-file exists", "sandbox could not start"),
+                ("retry_sandbox", "retry", True, "sandbox could not start"),
+                ("retry_sandbox_host_path", "retry", False, "was written on the host"),
+                ("retry_sandbox_clone_write", "retry", False, "changed"),
                 ("denied_write_reported", "boundary", False, "home: WROTE"),
                 ("link_replaced", "boundary", False, "was replaced or removed", "did not happen"),
                 ("link_in_clone", "boundary", False, "did not happen", "was replaced or removed"),

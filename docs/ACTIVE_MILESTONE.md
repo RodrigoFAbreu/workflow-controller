@@ -2,12 +2,15 @@
 
 ## Status
 
-**Complete.** `workflow-controller-cleanup-3a` (CU3a, pull request #146; closes issues #100, #118, #125, #138 and #143
-and only refers to #140) was accepted on 2026-10-24 by gate policy (digest `bae758b4f4ce`). The change touches tests,
-test helpers and the roadmap only, so there is no release. The seven functional flows passed at head `4168dda`. The plan
-is archived at `docs/milestones/completed/workflow-controller-cleanup-3a.md`; the findings record is
-`docs/milestones/completed/workflow-controller-cleanup-3a-findings.md`.
+**In progress.** `workflow-controller-cleanup-3b` (CU3b: `verify-claude` diagnostics and small gaps, closes issues #132
+and #133), plan revision 1, in `docs/ai-workflow/CONTROLLER_CLEANUP_3B_PLAN.md`. Checkpoints:
+
+- CP1 (a host effect outranks a sandbox error, and the listener folder is short): complete. `python3 -m unittest
+  tests.test_claude_build` passes, also with `TMPDIR` set to a 110-character folder; the new host-effect and deep-`TMPDIR`
+  tests fail against the base commit.
+- CP2 (a setup failure is exit 20, and `--claude-binary` stands alone): not started.
+- CP3 (the live tests skip without credentials; the documentation, the roadmap): not started.
 
 ## Next action
 
-Plan the next item in `docs/ROADMAP.md` with `/milestone-plan`: **CU3b**, then the harness-neutral roles epic.
+`/milestone-implement workflow-controller-cleanup-3b` for the next checkpoint.

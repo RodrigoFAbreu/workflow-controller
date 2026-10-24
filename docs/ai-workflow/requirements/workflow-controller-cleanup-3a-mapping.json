@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-3a",
+  "requirements": {
+    "R1": {
+      "description": "The fake claude's hang-child pid file appears whole or not at all, with a test that reads it the moment it exists (#100)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The executor test waits long for the child's end and prints the child's output on a miss (#138)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A forced stop of run_bounded leaves no tagged process and no zombie child of the test process, and the leak check sees zombies (#143)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The fake tester resolves a path component by component, so a link followed by .. is judged where a sandbox judges it (#140 point 2)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The two identical link tests become two tests with one cause each (#140 point 3)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "The small tidy-ups of #118 and #125 are made, or named as already covered",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R7": {
+      "description": "The roadmap and the pull request text follow the change; the docs check passes",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

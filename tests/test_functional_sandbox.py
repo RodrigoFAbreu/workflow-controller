@@ -20,7 +20,6 @@ import tempfile
 import threading
 import time
 import unittest
-import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -105,6 +104,9 @@ class Fixture(unittest.TestCase):
         self.candidate = fr.capture_candidate(self.repo, self.head, branch="main")
         self.flows = fr.candidate_flows(self.candidate)
         self.count = 0
+        # The job id is the ownership tag, and ``run_bounded`` kills every process carrying it after each run, so
+        # a fixed id would let another test class running in another shard end this one's tester early.
+        self.job_prefix = f"job{os.getpid()}-"
 
     def remove_short_folders(self) -> None:
         """Remove the short ``TMPDIR`` of every sandbox the test built (they live outside the fixture tree);
@@ -115,7 +117,7 @@ class Fixture(unittest.TestCase):
     def launch(self, scenario: dict, *, timeout: float = 60, job_id: str | None = None, item: str = "item-1",
                probe=lambda: None, candidate: fr.Candidate | None = None) -> dict:
         self.count += 1
-        job = job_id or f"job-{self.count}"
+        job = job_id or f"{self.job_prefix}{self.count}"
         scenario = {"log": str(self.tmp / f"{job}.log"), **scenario}
         wrapper = fake.write_binary(self.tools, scenario, name=f"claude{self.count}")
         self.log_path = self.tmp / f"{job}.log"
@@ -710,7 +712,7 @@ class RunTest(Fixture):
     def test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ(self) -> None:
         stop = threading.Event()
         seen: list[str] = []
-        job = "job-1"
+        job = f"{self.job_prefix}watch"
         paths = {rel: self.runtime / "functional" / job / "clone" / rel
                  for rel in ("src/app.py", "docs/ACTIVE_MILESTONE.md")}
         originals = {rel: (self.repo / rel).read_bytes() for rel in paths}
@@ -801,10 +803,7 @@ class RunTest(Fixture):
         self.assertEqual(fr.kept_sandboxes(self.runtime, "item-1"), [])
 
     def test_a_run_past_the_timeout_ends_at_timeout_with_the_group_killed(self) -> None:
-        # The job id is the ownership tag, and the deadline sweep kills every process carrying it: a fixed
-        # "job-N" id lets a copy of this test running beside it (another shard) kill this one's tester early.
-        result = self.launch({"hang_seconds": 30, "actions": [results()]}, timeout=2,
-                             job_id=f"timeout-{os.getpid()}-{uuid.uuid4().hex[:8]}")
+        result = self.launch({"hang_seconds": 30, "actions": [results()]}, timeout=2)
         self.assertEqual(result["outcome"], "timeout")
         self.assertEqual(result["breach"], [])
         self.settle(result)
@@ -854,7 +853,7 @@ class UnavailableTest(Fixture):
         with self.assertRaises(fr.TesterUnavailable) as caught:
             self.launch({"actions": [results()]}, candidate=candidate)
         self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_CLONE_MISMATCH)
-        self.assertFalse(self.tmp.joinpath("job-1.log").exists(), "the tester was started")
+        self.assertFalse(self.tmp.joinpath(f"{self.job_prefix}1.log").exists(), "the tester was started")
 
 
 class OriginTest(Fixture):

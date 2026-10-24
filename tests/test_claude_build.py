@@ -179,7 +179,8 @@ class LaunchTests(sandbox_tests.Fixture):
         self.link = self.bin / "claude"
         self.link.symlink_to(self.wrappers["a"])
 
-    def launch_default(self, *, probe=None, job="job-1", runtime=None):
+    def launch_default(self, *, probe=None, job=None, runtime=None):
+        job = job or f"{self.job_prefix}1"
         env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}"}
         with mock.patch.dict(os.environ, env), mock.patch.object(fr, "host_probe"):
             return review.launch_functional(
@@ -244,7 +245,7 @@ class LaunchTests(sandbox_tests.Fixture):
             with self.assertRaises(fr.TesterUnavailable) as caught:
                 self.launch_default()
         self.assertIn("runtime root", str(caught.exception))
-        self.assertFalse((self.runtime / fr.SANDBOX_AREA / "job-1").exists())
+        self.assertFalse((self.runtime / fr.SANDBOX_AREA / f"{self.job_prefix}1").exists())
 
 
 if __name__ == "__main__":

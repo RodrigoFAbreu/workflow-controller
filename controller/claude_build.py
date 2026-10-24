@@ -125,14 +125,14 @@ _LOGIN_WORDS = ("login", "credit", "limit", "authenticat", "api key", "overloade
 SANDBOX_FAILED = "Sandbox is required but failed to initialize"
 
 
-def short_tmp() -> Path:
-    """A private scratch ``TMPDIR`` (0700) short enough for Claude's bridge
+def short_tmp(prefix: str = fr.TMP_PREFIX, purpose: str = "the probes' TMPDIR") -> Path:
+    """A private scratch folder (0700) short enough for Claude's bridge
     sockets, like the functional launch's (``functional_review.make_short_tmp``).
     Raises ``TesterUnavailable`` when no root is short enough."""
     problems = []
     for root in fr.short_tmp_roots():
         try:
-            tmp = Path(tempfile.mkdtemp(prefix=fr.TMP_PREFIX, dir=root))
+            tmp = Path(tempfile.mkdtemp(prefix=prefix, dir=root))
         except OSError as exc:
             problems.append(f"{root}: {exc.strerror or exc}")
             continue
@@ -142,7 +142,7 @@ def short_tmp() -> Path:
             continue
         return tmp
     raise fr.unavailable(fr.UNAVAILABLE_ENFORCEMENT,
-                         f"no short folder for the probes' TMPDIR: Claude's bridge sockets need a path of at most "
+                         f"no short folder for {purpose}: Claude's bridge sockets need a path of at most "
                          f"{fr.SOCKET_PATH_LIMIT} bytes ({'; '.join(problems)})")
 
 
@@ -338,7 +338,7 @@ class _Run:
             self.settings = fr.tester_settings(
                 clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.tmp],
                 writable_dir=self.writable_dir, writable=["build"])
-            self.sock_dir = Path(tempfile.mkdtemp(prefix="wcv-"))  # short: a Unix socket path is limited to 107 bytes
+            self.sock_dir = short_tmp("wcv-", "the host listener")  # a Unix socket path is limited to 107 bytes
         except BaseException:
             # construction failed before `verify_build` could clean up: release the TMPDIR just allocated.
             runtime.remove_tree(self.tmp.parent, self.tmp.name)
@@ -397,9 +397,10 @@ class _Run:
         self.check_unchanged("launch")
         return results[-1], events
 
-    def need_sandbox(self, probe: str, events: Sequence[dict]) -> None:
+    def need_sandbox(self, probe: str, events: Sequence[dict], watcher: Watcher) -> None:
         """A sandbox that could not start leaves no probe line, so it is one
-        inconclusive cause, not one failure per probe target."""
+        inconclusive cause, not one failure per probe target -- unless the run
+        also had a host effect, which is reported as the failure it is."""
         for event in events:
             message = event.get("message")
             if event.get("type") != "user" or not isinstance(message, dict):
@@ -409,6 +410,7 @@ class _Run:
                     content = block.get("content")
                     text = content if isinstance(content, str) else json.dumps(content)
                     if SANDBOX_FAILED in text:
+                        self.host_effects(probe, watcher, permitted=False)
                         raise BuildNotVerified(probe, f"{SANDBOX_FAILED} (the build's sandbox could not start; "
                                                f"nothing was probed): {text.strip()[:200]}", inconclusive=True)
 
@@ -450,7 +452,7 @@ class _Run:
         self.need_a_model("boundary", result)
         self.need_clean("boundary", result)
         self.need_tools("boundary", events)
-        self.need_sandbox("boundary", events)
+        self.need_sandbox("boundary", events, watcher)
         # Evidence is the executed command and its tool result, never the model's final text.
         calls = bash_calls(events)
         if len(calls) != 1 or str(calls[0]["input"].get("command", "")).rstrip("\n") != command.rstrip("\n"):
@@ -498,9 +500,9 @@ class _Run:
         self.need_a_model("retry", result)
         self.need_clean("retry", result)
         self.need_tools("retry", events)
-        self.need_sandbox("retry", events)
         if target.exists():
             raise BuildNotVerified("retry", f"{target} was written on the host")
+        self.need_sandbox("retry", events, watcher)
         wanted = f"echo hi > {target}"
         retries = [call for call in bash_calls(events) if call["input"].get("dangerouslyDisableSandbox")
                    and str(call["input"].get("command", "")).strip() == wanted]
@@ -554,8 +556,13 @@ def verify_build(binary: str | os.PathLike, *, runtime_root: Path, operator_home
         state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout)
     except fr.TesterUnavailable as exc:
         raise BuildNotVerified("host", exc.message) from exc
+    except OSError as exc:  # a refusal like any other setup failure, never a traceback (exit 20)
+        raise BuildNotVerified("host", f"the run could not be set up: {exc}") from exc
     try:
-        state.prepare(operator_home)
+        try:
+            state.prepare(operator_home)
+        except OSError as exc:  # the clone files, the output folder, the listener bind
+            raise BuildNotVerified("host", f"the run could not be prepared: {exc}") from exc
         chosen = [("boundary", state.boundary), ("retry", state.retry), ("missing_component", state.missing_component)]
         done = [probe() for name, probe in chosen if probes is None or name in probes]
         state.check_unchanged("build")

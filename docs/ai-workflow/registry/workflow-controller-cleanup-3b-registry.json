@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-3b",
+  "plan_revision": 1,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "A host effect outranks a sandbox error, and the listener folder is short",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "A setup failure is exit 20, and --claude-binary stands alone",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The live tests skip without credentials; the documentation, the roadmap",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

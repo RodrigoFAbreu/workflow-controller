@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-3b",
+  "requirements": {
+    "R1": {
+      "description": "A host write is reported as the host write, not as \"nothing was probed\", when the sandbox also failed to start (#132)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The host-listener folder is short whatever the ambient TMPDIR is, so verify-claude and its tests work under a deep TMPDIR (#132)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "An OSError while the probe run is built or prepared is a BuildNotVerified refusal (exit 20), not a traceback (#133)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "--claude-binary works without a claude on PATH (#133)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The live tests skip without credentials and the development guide and command page are exact; the roadmap follows (#133)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

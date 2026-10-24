@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-3b",
+  "dispositions": {
+    "F-1b0e574cf289": {
+      "disposition": "dropped",
+      "reason": "The test also asserts exit code 20 and the empty record; the weak assertIn on 'host' only loosens the message check. The functional tester confirmed the host probe text on the real CLI (flow 3). Not worth a post-approval code change."
+    },
+    "F-8f74e1fc0ed4": {
+      "disposition": "fixed",
+      "note": "docs/guide/development.md now says every live probe skips and explains that the missing_component probe, which makes no model call, skips too."
+    },
+    "F-aef232341dc7": {
+      "disposition": "dropped",
+      "reason": "The plan is a historical record and is not edited after approval. The checkpoint was run with the fix the finding asked for: the functional operator ran the check with a native stand-in and reached the identity refusal with exit 20 (flow 3)."
+    },
+    "F-baf38d2d9179": {
+      "disposition": "fixed",
+      "note": "Acceptance step 4 rewrites docs/ACTIVE_MILESTONE.md, including its Next action, so the stale instruction is replaced in the acceptance commit."
+    },
+    "F-eb55d3ead300": {
+      "disposition": "dropped",
+      "reason": "The leak needs Host(...) to fail between the Unix and TCP binds, a setup failure that exits 20 and ends the short-lived verify-claude process, which releases the descriptor at once. The listener folder is still removed. No lasting effect."
+    }
+  }
+}

@@ -33,8 +33,10 @@ layout those builds refuse fails the fake suite too.
 The live sandbox probes run in their own empty home, into which they copy
 `.credentials.json` from the operator's Claude home (`CLAUDE_CONFIG_DIR`, else
 `~/.claude`); they pass no `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
-Without that file the model probes skip and the run can still report `OK`;
-only a run with no skips proves the enforcement.
+Without that file every live probe skips (preparation refuses before any probe
+runs, so the `missing_component` probe, which makes no model call, skips too)
+and the run can still report `OK`; only a run with no skips proves the
+enforcement.
 
 `CONTROLLER_TEST_OLD_GIT` names a Git older than 2.36, built from source
 if need be. It runs the live check that such a Git runs a boolean

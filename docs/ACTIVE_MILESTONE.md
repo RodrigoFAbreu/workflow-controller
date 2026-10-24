@@ -2,12 +2,13 @@
 
 ## Status
 
-**Complete.** `workflow-controller-cleanup-3a` (CU3a, pull request #146; closes issues #100, #118, #125, #138 and #143
-and only refers to #140) was accepted on 2026-10-24 by gate policy (digest `bae758b4f4ce`). The change touches tests,
-test helpers and the roadmap only, so there is no release. The seven functional flows passed at head `4168dda`. The plan
-is archived at `docs/milestones/completed/workflow-controller-cleanup-3a.md`; the findings record is
-`docs/milestones/completed/workflow-controller-cleanup-3a-findings.md`.
+**Complete.** `workflow-controller-cleanup-3b` (CU3b: `verify-claude` diagnostics and small gaps, closes issues #132
+and #133) was accepted on 2026-10-24 by gate policy (pull request #148). A host effect outranks a sandbox-start error, the
+listener folder is short whatever `TMPDIR` is, a setup `OSError` is exit 20 as the `host` probe, `--claude-binary` stands
+alone, and the live tests skip without credentials. Plan: `docs/ai-workflow/CONTROLLER_CLEANUP_3B_PLAN.md`; archive copy
+in `docs/milestones/completed/`.
 
 ## Next action
 
-Plan the next item in `docs/ROADMAP.md` with `/milestone-plan`: **CU3b**, then the harness-neutral roles epic.
+No work item is active. The next item on the roadmap is the harness-neutral roles epic (H1 and H6 first): run
+`/milestone-plan` for it.

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -328,7 +329,9 @@ class FakeClaude:
         if self.fault == "denied_write_reported":
             lines = [line.replace("home REFUSED", "home WROTE") for line in lines]
         output = "\n".join(lines)
-        if self.fault == "sandbox_failed":
+        if self.fault == "sandbox_failed_new_file":  # the sandbox did not start and the run still wrote into the clone
+            (clone / "probe-new-file").write_bytes(b"")
+        if self.fault in ("sandbox_failed", "sandbox_failed_new_file"):
             output = "Sandbox is required but failed to initialize: bridge socket path too long"
         if self.fault == "not_executed":
             return [self.init(), {"type": "result", "is_error": False, "result": output}]
@@ -353,6 +356,13 @@ class FakeClaude:
                     {"type": "result", "is_error": False, "result": "done"}]
         if self.fault == "retry_host_write":
             (Path(self.clone_dir) / "src.txt").write_bytes(b"changed\n")
+        if self.fault in ("retry_sandbox", "retry_sandbox_host_path", "retry_sandbox_clone_write"):
+            if self.fault == "retry_sandbox_host_path":
+                Path(target).write_text("hi\n")
+            if self.fault == "retry_sandbox_clone_write":
+                (Path(self.clone_dir) / "src.txt").write_bytes(b"changed\n")
+            return [self.init(), *self.call(attempted, f"{cb.SANDBOX_FAILED}: no bridge"),
+                    {"type": "result", "is_error": False, "result": "done"}]
         if self.fault == "retry_error":
             return [self.init(), *self.call(attempted, "refused"),
                     {"type": "result", "is_error": True, "subtype": "error_during_execution",
@@ -427,8 +437,8 @@ class VerifyBuildTests(unittest.TestCase):
         self.assertFalse(Path(tmpdir).is_relative_to(deep))
 
     def test_a_failure_after_the_tmpdir_is_allocated_releases_it_and_records_nothing(self) -> None:
-        shorts = self.root / "short"
-        shorts.mkdir()
+        shorts = Path(tempfile.mkdtemp(prefix="wcs-", dir="/tmp"))  # short whatever the ambient TMPDIR is
+        self.addCleanup(shutil.rmtree, shorts, True)
         fake = FakeClaude()
         real_mkdtemp = tempfile.mkdtemp
 
@@ -439,11 +449,77 @@ class VerifyBuildTests(unittest.TestCase):
 
         with mock.patch.object(fr, "short_tmp_roots", lambda: [shorts]), \
                 mock.patch.object(tempfile, "mkdtemp", failing):
-            with self.assertRaises(OSError):
+            with self.assertRaises(cb.BuildNotVerified) as ctx:
                 self.verify(fake)
+        self.assertEqual(ctx.exception.probe, "host")
         self.assertEqual(list(shorts.iterdir()), [])  # the wcf-* TMPDIR was released
         self.assertEqual(fake.launches, 0)
         self.assertFalse((self.root / cb.RECORD_NAME).exists())
+
+    def test_a_deep_ambient_tmpdir_does_not_reach_the_host_listener_folder(self) -> None:
+        deep = self.root
+        for part in ("a" * 40, "b" * 40, "c" * 40):
+            deep = deep / part
+        deep.mkdir(parents=True)
+        fake = FakeClaude()
+        with mock.patch.object(tempfile, "tempdir", str(deep)):
+            self.verify(fake)
+        self.assertEqual(fake.launches, 3)
+
+    def test_a_listener_folder_that_cannot_be_made_names_the_host_listener(self) -> None:
+        shorts = Path(tempfile.mkdtemp(prefix="wcs-", dir="/tmp"))  # short whatever the ambient TMPDIR is
+        self.addCleanup(shutil.rmtree, shorts, True)
+        fake = FakeClaude()
+        real_mkdtemp = tempfile.mkdtemp
+
+        def failing(prefix=None, **kw):
+            if prefix == "wcv-":
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_mkdtemp(prefix=prefix, **kw)
+
+        with mock.patch.object(fr, "short_tmp_roots", lambda: [shorts]), \
+                mock.patch.object(tempfile, "mkdtemp", failing):
+            with self.assertRaises(cb.BuildNotVerified) as ctx:
+                self.verify(fake)
+        self.assertIn("no short folder for the host listener", ctx.exception.message)
+        self.assertNotIn("probes' TMPDIR", ctx.exception.message)
+
+    def assertSetupRefused(self, fake: FakeClaude) -> None:
+        with self.assertRaises(cb.BuildNotVerified) as ctx:
+            self.verify(fake)
+        self.assertEqual(ctx.exception.probe, "host", ctx.exception.message)
+        self.assertIn("No space left on device", ctx.exception.message)
+        self.assertEqual(fake.launches, 0)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
+        scratch = self.root / cb.SCRATCH_AREA
+        self.assertEqual(list(scratch.iterdir()) if scratch.exists() else [], [])
+
+    def test_a_clone_file_that_cannot_be_written_is_a_host_refusal_with_nothing_left(self) -> None:
+        from controller import runtime
+
+        def failing(root, rel, data, *args, **kw):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with mock.patch.object(runtime, "write_bytes", failing):
+            self.assertSetupRefused(FakeClaude())
+
+    def test_an_output_folder_that_cannot_be_made_is_a_host_refusal_with_nothing_left(self) -> None:
+        real_mkdir = Path.mkdir
+
+        def failing(path, *args, **kw):
+            if path.name == "out":
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return real_mkdir(path, *args, **kw)
+
+        with mock.patch.object(Path, "mkdir", failing):
+            self.assertSetupRefused(FakeClaude())
+
+    def test_a_listener_that_cannot_bind_is_a_host_refusal_with_nothing_left(self) -> None:
+        def failing(sock_dir):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with mock.patch.object(cb, "Host", failing):
+            self.assertSetupRefused(FakeClaude())
 
     def test_no_short_root_refuses_before_any_launch(self) -> None:
         fake = FakeClaude()
@@ -459,6 +535,10 @@ class VerifyBuildTests(unittest.TestCase):
                 ("socket", "boundary", False, "listener"),
                 ("missing_line", "boundary", False, "unix: no result line"),
                 ("sandbox_failed", "boundary", True, "sandbox could not start"),
+                ("sandbox_failed_new_file", "boundary", False, "probe-new-file exists", "sandbox could not start"),
+                ("retry_sandbox", "retry", True, "sandbox could not start"),
+                ("retry_sandbox_host_path", "retry", False, "was written on the host"),
+                ("retry_sandbox_clone_write", "retry", False, "changed"),
                 ("denied_write_reported", "boundary", False, "home: WROTE"),
                 ("link_replaced", "boundary", False, "was replaced or removed", "did not happen"),
                 ("link_in_clone", "boundary", False, "did not happen", "was replaced or removed"),
@@ -642,6 +722,45 @@ class VerifyClaudeCommandTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("a launch runs", out.getvalue())
         self.assertEqual(set(cb.read_verified(self.root)[0]), {hashlib.sha256(elf("other")).hexdigest()})
+
+    def run_cli_global(self, *args: str) -> tuple[int, str, str]:
+        import contextlib
+        import io
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = self.cli.main(["--runtime-dir", str(self.root), "--settings", str(self.settings), *args])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_claude_binary_needs_no_claude_on_path_and_the_note_does_not_offer_it_for_the_tester(self) -> None:
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent-wc-path"}):
+            code, out, err = self.run_cli_global("--claude-binary", str(self.real), "verify-claude")
+        self.assertEqual((code, err), (0, ""), out)
+        note = next(line for line in out.splitlines() if line.startswith("note: a launch finds no claude on PATH"))
+        self.assertIn("functional review cannot start until a claude is on PATH", note)
+        self.assertNotIn("--claude-binary", note)
+        self.assertEqual(set(cb.read_verified(self.root)[0]), {hashlib.sha256(elf("real")).hexdigest()})
+
+    def test_without_claude_binary_and_without_claude_on_path_the_command_still_refuses(self) -> None:
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent-wc-path"}):
+            code, out, err = self.run_cli_global("verify-claude")
+        self.assertEqual(code, 20)
+        self.assertIn("cannot be resolved", err)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
+
+    def test_a_setup_oserror_exits_20_without_a_traceback_and_records_nothing(self) -> None:
+        from controller import runtime
+
+        def failing(root, rel, data, *args, **kw):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with mock.patch.object(runtime, "write_bytes", failing):
+            code, _, err = self.run_cli()
+        self.assertEqual(code, 20)
+        self.assertIn("host", err)
+        self.assertIn("No space left on device", err)
+        self.assertNotIn("Traceback", err)
+        self.assertFalse((self.root / cb.RECORD_NAME).exists())
 
     def test_the_settings_file_is_never_created_filled_or_updated(self) -> None:
         self.settings.parent.mkdir()

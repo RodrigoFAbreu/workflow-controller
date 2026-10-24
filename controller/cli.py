@@ -1492,16 +1492,25 @@ def _claude_home() -> Path:
 def cmd_verify_claude(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
     """``verify-claude`` (claude-build-verify D2, D5): probe the build a launch
     would run and record its digest only when every probe holds."""
-    on_path = review.resolve_binary(review.CLAUDE.default_binary)
     named = getattr(args, "claude_binary", None)
-    binary = review.resolve_binary(named) if named else on_path
+    if named:
+        binary = review.resolve_binary(named)
+        try:
+            on_path = review.resolve_binary(review.CLAUDE.default_binary)
+        except ControllerError:  # --claude-binary needs no claude on PATH; the note below says what that means
+            on_path = None
+    else:
+        binary = on_path = review.resolve_binary(review.CLAUDE.default_binary)
     real = os.path.realpath(binary)
     digest = claude_build.file_digest(real)
     if digest is None:
         raise ControllerError(f"{real} cannot be read", evidence={"raised_by": "cli.cmd_verify_claude"})
     print(f"claude: {real}")
     print(f"digest: {digest}")
-    if os.path.realpath(on_path) != real:
+    if on_path is None:
+        print("note: a launch finds no claude on PATH, so functional review cannot start until a claude is on PATH "
+              "(for example by linking the verified build there)")
+    elif os.path.realpath(on_path) != real:
         print(f"note: a launch runs {os.path.realpath(on_path)} (claude on PATH), which stays unadmitted until it "
               f"is verified or PATH is changed")
     recorded, note = claude_build.read_verified(runtime_root)

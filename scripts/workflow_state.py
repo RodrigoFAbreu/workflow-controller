@@ -6405,7 +6405,10 @@ def _classify_checkpoint_start(repo_root: Path, work_item_id: str, checkpoint_id
         if status == "IN_PROGRESS":
             raise CheckpointOwnershipStateMismatchError(
                 f"{work_item_id!r} checkpoint {checkpoint_id!r} is IN_PROGRESS here but nothing "
-                f"claims it, so nothing fences it -- step 1c adopts it first; refusing to release")
+                f"claims it, so nothing fences it -- step 1c adopts it only when "
+                f"current_checkpoint_id names it; with that pointer absent or naming another "
+                f"checkpoint it is not adopted, and the entry is not releasable until state "
+                f"and claim agree; refusing to release")
         raise CheckpointNotInProgressLocallyError(
             f"{work_item_id!r} holds no claim and {checkpoint_id!r} is not IN_PROGRESS here -- "
             f"there is nothing to release")
@@ -14799,15 +14802,28 @@ def apply_technical_approval(state: dict, work_item_id: str, record: dict, now: 
 _AMENDMENT_REQUEST_ALLOWED_PHASES = frozenset({"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION"})
 
 
-def _release_start_next_step(work_item_id: str, checkpoint_id: object) -> str:
+def _release_start_next_step(
+    work_item_id: str, checkpoint_id: object, *, entry_may_be_unclaimed: bool = False,
+) -> str:
     """The next step the amendment refusals name (`D-Amendment-Message`). It is
     the step for a start that was never committed, not for every case, and the
     release has two refusals the raise sites cannot see: an `IN_PROGRESS` entry
-    with no claim, and a claim held by another worktree."""
-    return (f"If the checkpoint's own approved plan forbids completing it and its start was "
+    with no claim, and a claim held by another worktree. The `IN_PROGRESS` raise
+    site does not read the claim, so it passes `entry_may_be_unclaimed` to state
+    both facts under the condition each holds."""
+    step = (f"If the checkpoint's own approved plan forbids completing it and its start was "
             f"never committed, stop its owner session and run the user-only "
             f"/release-checkpoint-start {work_item_id} {checkpoint_id} from the worktree that "
             f"holds the claim")
+    if entry_may_be_unclaimed:
+        step += (f". The release refuses an IN_PROGRESS entry that nothing claims; "
+                 f"/milestone-implement {work_item_id} (step 1c) adopts such an entry only when "
+                 f"current_checkpoint_id names it, so with that pointer absent or naming another "
+                 f"checkpoint, adoption is not offered and the entry is not releasable until "
+                 f"state and claim agree. Run from the worktree that holds the work item's "
+                 f"claim: if that claim is for another checkpoint, the release of this one "
+                 f"refuses with the claim's checkpoint named; release that checkpoint instead")
+    return step
 
 
 def request_plan_amendment(
@@ -14914,11 +14930,13 @@ def request_plan_amendment(
         if entry.get("status") == "IN_PROGRESS"
     ]
     if in_progress_ids:
+        current_id = work_item.get("current_checkpoint_id")
+        named_id = current_id if current_id in in_progress_ids else in_progress_ids[0]
         raise AmendmentCheckpointActiveError(
             f"{work_item_id!r} has a checkpoint IN_PROGRESS "
-            f"({work_item.get('current_checkpoint_id')!r}) -- /request-plan-amendment "
+            f"({named_id!r}) -- /request-plan-amendment "
             f"refuses while implementation is live. "
-            f"{_release_start_next_step(work_item_id, work_item.get('current_checkpoint_id') or in_progress_ids[0])}"
+            f"{_release_start_next_step(work_item_id, named_id, entry_may_be_unclaimed=True)}"
         )
     outstanding_claim = resolve_claim(repo_root, work_item_id)
     if outstanding_claim is not None:

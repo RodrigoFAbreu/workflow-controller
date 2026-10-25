@@ -3284,11 +3284,52 @@ class TestReleaseCheckpointStartCommandFile(unittest.TestCase):
         self.assertIn("the pre-release obligation of step 3 is lifted", text)
         self.assertIn("No sentence is asked and nothing is written", text)
 
+    def test_the_released_bullet_states_the_work_items_one_claim_in_any_worktree(self):
+        """command-wording (W2): `released` is returned only when `resolve_claim` finds no
+        claim for the work item at all; a claim held by another worktree is refused."""
+        text = self._text()
+        self.assertIn("the work item has no claim in any worktree and the checkpoint's entry is `HEAD`'s", text)
+        self.assertNotIn("this worktree holds no claim", text)
+
     def test_it_is_listed_in_the_contract_and_the_operator_reference(self):
         root = _repo_root() / "docs" / "ai-workflow"
         self.assertIn("- `/release-checkpoint-start`\n", (root / "COMMAND_FILES.md").read_text())
         self.assertIn("### `/release-checkpoint-start <work-item-id> <checkpoint-id>` \u2014 user-only",
                       _operator_reference_text())
+
+
+class TestUserOnlyCommandListings(unittest.TestCase):
+    """command-wording (W1, W5): the shipped documents state the user-only commands the command
+    files actually carry. The set and its count are derived from the files, never typed."""
+
+    _WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+              8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
+
+    def _flagged(self) -> list[str]:
+        commands = _repo_root() / ".claude" / "commands"
+        return sorted(
+            path.stem for path in commands.glob("*.md")
+            if "disable-model-invocation: true" in path.read_text().split("---\n", 2)[1]
+        )
+
+    def test_the_command_files_row_states_the_number_of_flagged_commands(self):
+        flagged = self._flagged()
+        self.assertIn(len(flagged), self._WORDS)
+        row = next(line for line in (_repo_root() / "docs" / "ai-workflow" / "COMMAND_FILES.md")
+                   .read_text().splitlines() if line.startswith("| `disable-model-invocation`"))
+        self.assertIn(f"`true` ({self._WORDS[len(flagged)]} commands)", row)
+
+    def test_the_operator_reference_names_every_user_only_command(self):
+        text = _operator_reference_text()
+        start = text.index("- **User-only commands**")
+        end = text.index("\n- **", start + 1)
+        bullet = " ".join(text[start:end].split())
+        for name in self._flagged():
+            with self.subTest(command=name):
+                self.assertIn(f"`/{name}`", bullet)
+        self.assertNotIn("naming the exact work item and stage.", bullet)
+        self.assertNotIn("(the exact work item, and", bullet)
+        self.assertIn("for `/adopt-gate-policy` the policy digest", bullet)
 
 
 class TestTrailerParagraphWordingConformance(unittest.TestCase):

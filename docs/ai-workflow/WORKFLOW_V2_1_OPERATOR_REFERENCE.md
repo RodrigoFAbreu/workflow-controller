@@ -31,13 +31,18 @@ Where they disagree, see [Known discrepancies](#known-discrepancies).
   mirrors it at the technical-approval gate — see the `/review-implementation`,
   `/record-manual-implementation-review`, and `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`/
   `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` sections below.
-- **User-only commands** (`/approve-review`, `/accept-milestone`) carry
+- **User-only commands** (`/approve-review`, `/accept-milestone`,
+  `/adopt-gate-policy`, `/release-checkpoint-start`, `/request-plan-amendment`,
+  `/resume-implementation`, `/retire-legacy-work-item`) carry
   `disable-model-invocation: true`.
   The control each of them carries itself, under every harness, is the
   literal-confirmation check: they refuse to write anything unless *your
-  current-turn message* contains literal confirmation text naming the exact
-  work item and stage. The flag is an additional layer where the harness
-  enforces it; it does not replace the check. The agent must never run them;
+  current-turn message* contains literal confirmation text naming what the
+  command acts on (for six of them the exact work item, with a stage,
+  checkpoint or keyword where the command needs one; for `/adopt-gate-policy`
+  the policy digest; each command file states its own). The flag is an
+  additional layer where the harness enforces it; it does not replace the
+  check. The agent must never run them;
   where the harness enforces the flag they cannot be launched for it and do
   not appear in its command list. To run the commands from
   another harness, see `docs/ai-workflow/COMMAND_FILES.md`.

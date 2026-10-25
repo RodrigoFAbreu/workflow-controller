@@ -9,5 +9,6 @@ enforces, in fixed text a `reviewer.brief` cannot replace. The plan is archived 
 
 ## Next action
 
-No milestone is active. The operator's trial of `reviewer.harness=codex` from a scratch settings copy follows (ROADMAP
-next item 1); then run `/milestone-plan` for the next incomplete milestone in `docs/ROADMAP.md`.
+No milestone is active. The next item is H6 (a role-by-harness table in the documentation, generated from the adapter
+registry, issue #166): run `/milestone-plan` for it. It is also the trial of the Controller-run Codex external review
+(`reviewer.harness=codex` from a scratch settings copy, owner decision 2026-10-25); the shared settings stay unchanged.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-routing-harness",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -28675,6 +28675,333 @@
         },
         "evaluated_at": "2026-10-25T08:19:11Z",
         "workflow_release": "2.18.7"
+      }
+    },
+    "workflow-controller-routing-harness": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-routing-harness",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ROUTING_HARNESS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-routing-harness-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-routing-harness-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "f8b9fc4be7ae9a42c1e684fdc8dbcf36b65e0e21",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+        "approved_review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ROUTING_HARNESS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "50db5358665b708f795d74ee835ef0ed91a212a6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-routing-harness-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aa65b15c5aa5ed46cff37c60bc972c20e8605813"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-routing-harness-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "285b7d75fc31d65d8ed12036c88e9b95229d283a"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T11:46:20Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+            "ledger": {
+              "local": {
+                "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "4d50106d91362d5906b1b2dc7e45ec09d626c488ec75cd8003d2412c42dd354f",
+                "ledger_entry_sha256": "11e5777ad3fa8ca9e3e4f6965272232b1672afb3d1a9775ccaf6d2b71d7860e3",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "01c55f5b39e88ca6e8b744e8861fe3e8062cd236d50f2f9af0b2690a0c5e275a",
+                "ledger_entry_sha256": "cca93b3a638cac4dc958712f88e6beb4494b82e090a4b29fb1bcee61d4412ad9",
+                "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T11:46:20Z",
+          "workflow_release": "2.19.1"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-25T11:39:35Z",
+          "verdict_sha256": "4d50106d91362d5906b1b2dc7e45ec09d626c488ec75cd8003d2412c42dd354f",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-25T11:43:48Z",
+          "verdict_sha256": "01c55f5b39e88ca6e8b744e8861fe3e8062cd236d50f2f9af0b2690a0c5e275a",
+          "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-10-25T11:46:20Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-25T11:36:48Z",
+        "consumed": {
+          "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+          "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+        "329533460949dc3e07f4dd1419bf492aa5838f23358ebdec3c10604b5958a93e",
+        "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4"
+      ],
+      "optional_findings": {
+        "F-4cc788a619be": {
+          "digest": "4cc788a619be3b769dcd7158617281ae4164e073aed59016e456a4d85d4b01d1",
+          "text": "O1. D4 checks `default.harness` against the roles with no config-role harness, without knowing `--role-harness`, so a `default.harness` that every role overrides on the command line is still refused at load. That is conservative and fine, but say so in D4 so the implementer does not \"fix\" it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:19:00Z"
+            }
+          ]
+        },
+        "F-57d58a2eb2e7": {
+          "digest": "57d58a2eb2e7d68804fcbed7f3ac0d24dc44f7dd0bfb338892609e349ace935b",
+          "text": "O2. CP1's D6 test (a `harness` entry read as generation 14: warns, `settings clean` refuses, not rewritten by a fill) only works if the fixture carries `_table_generation: 15`. Without the stamp, `clean` strips the entry and a fill rewrites the stamp. Name the stamp in the test description.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:19:00Z"
+            }
+          ]
+        },
+        "F-3dc36830126e": {
+          "digest": "3dc36830126e53e28624e7e1889f98ce7128c133d74acee1d2fa184009f20473",
+          "text": "O3. CP3 asks `docs/run.md` to say it \"where [it] describes routing and the settings generations\", but `docs/run.md` has no routing text today (a search for `routing` finds nothing). Either name the section to add or drop the file from CP3. `docs/compatibility.md` needs a new 1.21.0 paragraph in the style of its 1.10.0 one, not an edit of an existing routing passage.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:19:00Z"
+            }
+          ]
+        },
+        "F-9c4f278cf555": {
+          "digest": "9c4f278cf555b8327f886aa3d94cfe40c76714db1a9ae87038987826e7eaa6ce",
+          "text": "O1. D7/CP2 write the review record's route as `harness=harness.get(harness.name).name`. In that function (`job.py:6870`), `harness` is a local holding `review.harness(...)`'s object, and `controller.harness` is not imported into `job.py` (`job.py:108-111`). The expression cannot run as written. Say that the registry module is imported under another name (or that `review` exposes the mapping) so the implementer does not write a call that resolves against the local object.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "329533460949dc3e07f4dd1419bf492aa5838f23358ebdec3c10604b5958a93e",
+              "verdict": "REVISE",
+              "at": "2026-10-25T12:10:00Z"
+            }
+          ]
+        },
+        "F-ecf43255866e": {
+          "digest": "ecf43255866e225add1c490da0fbdd865450f3fd3a5b69a6d79ff5e56f84ebc9",
+          "text": "O2. CP3's done-when searches the guides for `--role-effort`. Besides `docs/guide/runtime.md`, `docs/guide/commands.md:35` lists the run/step routing options. The search covers it, but CP3's prose names only commands.md's \"Worker routing\" precedence list. Name the option list at line 35 too, so it is not missed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "329533460949dc3e07f4dd1419bf492aa5838f23358ebdec3c10604b5958a93e",
+              "verdict": "REVISE",
+              "at": "2026-10-25T12:10:00Z"
+            }
+          ]
+        },
+        "F-6c9532e0be05": {
+          "digest": "6c9532e0be05e8d1753068d15126ae7ff254df5745507e1c96d34da71a0696c3",
+          "text": "O1. D4 says a rejected settings-file value is \"left out of the effective routing\". CP1 and D6, however, say \"leaving the entry out\", and \"entry\" could be read as the whole `roles.<role>` entry, which would silently drop that role's `model` and `effort` too. Say that only the `harness` key is left out, and that a sibling `model`/`effort` in the same entry (and in `default`) still applies. Add a CP1 test with `roles.review-plan: {\"model\": \"m\", \"harness\": \"codex\"}` in the settings file, where the route resolves model `m` from `config-role` and harness `claude-code` from `default`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:27:00Z"
+            }
+          ]
+        },
+        "F-488d36825312": {
+          "digest": "488d36825312a76c0cef5bc3771d463eb935810eb2f520774703693e5128229b",
+          "text": "O2. D4 checks `default.harness` against \"every routing role that has no `harness` of its own\". It does not say whether, in the settings file, a role whose own `harness` was itself left out as rejected counts as having one. Under the literal reading the role has none after the drop, so the default's value is checked against it too and may be rejected a second time for the same role. Either reading is safe, because both fall back to `claude-code` with a warning. Pick one so that the warning count in CP1's \"one warning each\" tests is predictable.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:27:00Z"
+            }
+          ]
+        },
+        "F-b26c1b4ca1d4": {
+          "digest": "b26c1b4ca1d41bd2d542fcbcd5892065bdddeb28c0d58978c17b11000b7ea9f3",
+          "text": "O3. D4 names the first production caller as \"`routing.load_routing_config` at `routing.py:416`\". Line 416 is in `parse_routing_config`, which `load_routing_config` calls. The edit lands in the same place either way.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:27:00Z"
+            }
+          ]
+        },
+        "F-b2ce9a233226": {
+          "digest": "b2ce9a233226676bb7cd9e3ceacf09938d2d4d75b3f67996a5250f6cd43fbffd",
+          "text": "**O1 — Conflicting CLI error contract.** D4 specifies `RoutingConfigError`/exit 20 for invalid command-line harness assignments, while CP2 specifies argparse usage errors/exit 2. Align D4 with CP2 and the existing role-option convention.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:40:00Z"
+            }
+          ]
+        },
+        "F-229de38d3c86": {
+          "digest": "229de38d3c86d5c7be4ef6724109a8fb8bbab6a2dc978c1775e59ed8e24d22fe",
+          "text": "O1. The `controller/routing.py` module docstring ends \"Imports nothing from the package beyond `controller.errors` and `controller.decision`\". CP1 updates the docstring's precedence list, but should also add `controller.harness` to that import sentence, or the docstring will be stale.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:39:35Z"
+            }
+          ]
+        },
+        "F-c275caf264b4": {
+          "digest": "c275caf264b4805dd9139071d98a9eec294ad412bf4f52891e0aad3daf32a18b",
+          "text": "O2. `docs/guide/commands.md:340` reads \"All six are accepted by `--role-model`/`--role-effort`, a `--routing-config` file and the settings file's `routing` section\". CP3's search criterion will make it name `--role-harness`, but under D3 a harness choice for these roles accepts only `claude-code` today. Word the sentence so it does not suggest the tester role can take another harness yet.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:39:35Z"
+            }
+          ]
+        }
       }
     }
   }

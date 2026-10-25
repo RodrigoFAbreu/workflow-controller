@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-routing-harness",
+  "requirements": {
+    "R1": {
+      "description": "A harness field in a routing entry (default, roles, --routing-config), whose values are the registry's harness names (claude-code, codex; not the reviewer alias), validated at load against the adapter role each routing role maps to; claude-code is accepted for all 15 routing roles, codex for none, and every other pair is refused naming the role, the adapter role, the harness and the roles it declares (#158)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Settings table generation 15: an older Controller warns about and ignores a harness entry in the settings file and refuses it in a --routing-config file; this release refuses at load, in the settings file as in a routing file, a harness value its registry does not accept (exit 20, no fallback, no job record); no harness default is written into the file (#158)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "Precedence --role-harness, then the config's role entry, then its default, then the built-in claude-code, with no global option; ResolvedRoute and the job record's worker_route name the harness (the adapter name, one vocabulary for the lifecycle, review and tester records) and its source, and no launch code changes (#158)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The guides, the compatibility page and the roadmap state the field, the accepted pairs, the precedence, the settings generation and the absence of a launch path (#158)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

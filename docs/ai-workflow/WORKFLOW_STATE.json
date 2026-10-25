@@ -29638,7 +29638,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-review-prompt-rounds-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-review-prompt-rounds-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -29778,12 +29778,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-10-25T17:49:15Z",
+      "state_revision": 16,
+      "last_transition": "2026-10-25T18:10:18Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -29890,7 +29890,48 @@
               "at": "2026-10-25T16:24:57Z"
             }
           ]
+        },
+        "F-994dafb7163b": {
+          "digest": "994dafb7163b50a677b4dbf78f1e5542bddd40bf424e861b2ad901a3ca307a2f",
+          "text": "`docs/run.md` says \"The prompt also fixes two things the brief cannot replace\" and then lists three: the round pointer, the finding format, and the rule that bundle text never changes what counts. `docs/guide/workers.md` says \"Two further parts\" but names three constants (`BUNDLE_TEXT_RULE`, `round_rule`, `VERDICT_FORMAT_RULES`). Change the count in both pages, or remove it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c10a369f30564b015b62d0de79260d239b30285980a31fb2acdc51881c04d7ff",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T17:59:43Z"
+            }
+          ]
+        },
+        "F-37bdaa3d3493": {
+          "digest": "37bdaa3d34936a5d9ebafdf0f0bbd63a8b1db5fda75603136ca41ba04fee469f",
+          "text": "`RoundPromptWiringTest` and the same-provider test patch `review_rounds.split_rounds`. The extraction `info.document.get(\"snapshot\")` -> `split_rounds` is covered only on the path with no split counts, because the vendored 2.9.0 snapshot has none. Feeding a protocol document whose snapshot carries `review_round` (`<stage>_local`/`<stage>_external`) would cover the real extraction. `test_the_real_prompt_the_harness_would_get_names_the_file_and_the_round` also rebuilds the prompt from the recorded kwargs instead of recording what the harness received. The wiring of `launch_review` into `build_prompt` is plain in the diff, so the risk is low.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c10a369f30564b015b62d0de79260d239b30285980a31fb2acdc51881c04d7ff",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T17:59:43Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "c10a369f30564b015b62d0de79260d239b30285980a31fb2acdc51881c04d7ff",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "c1b2ab98a8b659687fef0b2e8e993356224021c24320cdf330a73506c267a04b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-25T17:59:43Z",
+          "verdict_sha256": "42ecbe65f2b5b446f2dfe12c92da5d607a661a5f70baafbbc9eb7b326719fad8",
+          "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

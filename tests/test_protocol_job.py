@@ -895,7 +895,7 @@ class OutcomesTest(_TesterCase):
         gate = record["human_gate_pending"]["what_is_required"]
         self.assertIn("flow-1", gate)
         self.assertIn("*.egg-info/", gate)  # the writable-location patterns the sandbox refused
-        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
         # Nothing is launched next, and the run does not count towards the bound.
         self.assertEqual(life.row(), "38i")
         self.assertEqual(review_rounds.functional_rounds(life.tester_records(), str(life.root), lifecycle.WID), 0)
@@ -948,7 +948,7 @@ class ThePreLaunchStopsTest(_TesterCase):
         self.assertEqual(record["functional"]["gate"], "checklist_unrecognised")
         self.assertIn("no flow", record["human_gate_pending"]["what_is_required"])
         self.assertEqual((life.launches, life.tester_records(), life.reservations()), ([], [], {}))
-        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
 
     def test_a_repeat_at_the_tested_head_is_unchanged_and_one_blocker_not_a_second_run(self) -> None:
         life = self.life()
@@ -1040,7 +1040,7 @@ class TheFaultStopsTest(_TesterCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
         return record["functional"]["gate"]
 
-    def test_each_cause_of_an_unavailable_tester_is_a_user_gate_with_nothing_recorded(self) -> None:
+    def test_each_cause_of_an_unavailable_tester_is_a_review_wait_with_nothing_recorded(self) -> None:
         for cause in (functional_review.UNAVAILABLE_NO_BINARY, functional_review.UNAVAILABLE_ROLE_REFUSED,
                       functional_review.UNAVAILABLE_ENFORCEMENT, functional_review.UNAVAILABLE_CLONE_MISMATCH):
             with self.subTest(cause=cause):
@@ -1051,7 +1051,7 @@ class TheFaultStopsTest(_TesterCase):
                 self.assertIn(f"cause {cause}", record["human_gate_pending"]["what_is_required"])
                 self.assertEqual(life.evidence(), {})
                 self.assertEqual(life.reservations(), {})  # released: nothing started
-                self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+                self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
 
     def test_a_breach_records_nothing_and_keeps_the_sandbox(self) -> None:
         life = self.life()
@@ -1173,3 +1173,173 @@ class AFunctionalRecordIsResumableTest(_TesterCase):
         [reconciled] = [r for r in results if r.get("kind") == "functional_test"]
         self.assertIn(reconciled["status"], (job.STATUS_INTERRUPTED, job.STATUS_INCOMPLETE))
         self.assertEqual(reconciled["reconciliation_evidence"]["code"], job.FUNCTIONAL_INTERRUPTED_CODE)
+
+
+class ReviewWaitProductionPathTest(unittest.TestCase):
+    """Notification-fix D7 (round 7 I1): the Workflow's own protocol gates, written by the production
+    ``run_job`` fall-through, derive the event the plan says -- never a hand-built record."""
+
+    def gate_records(self, life, stage: str, phase: str) -> tuple[dict, dict]:
+        """The wait and, after a BLOCK verdict is on file, the BLOCK-resolution gate at ``phase``."""
+        life.run_until(phase)
+        wait = life.step()
+        life.user_step(lifecycle._AUDITED_REVIEW, stage, "BLOCK", "manual")
+        return wait, life.step()
+
+    def assert_wait_and_block(self, wait: dict, block: dict, wait_row: str, block_row: str, action: str) -> None:
+        for record in (wait, block):
+            self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+            self.assertNotIn("protocol", record)  # the block `resume` reads as a launched protocol job is not added
+        self.assertEqual(wait["protocol_gate"], {"row": wait_row, "disposition": "external_gate", "action_id": action})
+        self.assertEqual(block["protocol_gate"]["row"], block_row)
+        self.assertEqual(block["protocol_gate"]["disposition"], "human_gate")
+        self.assertEqual(block["protocol_gate"]["action_id"], "review.resolve_block")
+        [waiting] = job.derive_job_event(wait)
+        self.assertEqual((waiting.event_type, waiting.title), ("review_wait", "Waiting for the external review: demo"))
+        self.assertEqual([e.event_type for e in job.derive_job_event(block)], ["user_gate"])
+
+    def test_the_plan_review_wait_is_a_review_wait_and_its_block_gate_a_user_gate(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        wait, block = self.gate_records(life, "plan", "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.assert_wait_and_block(wait, block, "14", "11", "plan.review.external")
+
+    def test_the_implementation_review_wait_is_a_review_wait_and_its_block_gate_a_user_gate(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        life.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
+        life.run_until("IMPLEMENTING")
+        wait, block = self.gate_records(life, "implementation", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        self.assert_wait_and_block(wait, block, "28", "25", "implementation.review.external")
+
+    def test_a_record_written_before_this_change_is_a_user_gate(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        record = life.step()
+        legacy = {k: v for k, v in record.items() if k != "protocol_gate"}
+        self.assertEqual([e.event_type for e in job.derive_job_event(legacy)], ["user_gate"])
+
+
+class BlockedDispositionProductionPathTest(unittest.TestCase):
+    """Notification-fix D7 (implementation round 1 I1): a gate the Workflow itself disposes ``blocked`` is written
+    by the production fall-through with ``protocol_gate`` and no ``protocol`` block, and derives what it derived
+    at the base commit -- a ``user_gate``, never a ``review_wait``."""
+
+    def test_a_blocked_disposition_gate_is_a_user_gate_without_a_protocol_block(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        real = protocol.next_action
+
+        def blocked(*args, **kwargs):
+            answer = real(*args, **kwargs)
+            raw = dict(answer.raw, row="22", disposition="blocked", action=None, satisfied_by=None,
+                       reason=dict(answer.raw["reason"], code="plan_not_approved", text="the plan is not approved"))
+            return protocol.parse_decision(raw)
+
+        with mock.patch.object(protocol, "next_action", blocked):
+            record = life.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
+        self.assertNotIn("protocol", record)
+        self.assertEqual(record["protocol_gate"]["disposition"], "blocked")
+        [event] = job.derive_job_event(record)
+        self.assertEqual(event.event_type, "user_gate")
+        self.assertIsNone(event.supersedes)
+
+
+from controller import notify  # noqa: E402
+from tests import test_notifications_wiring as wiring, test_review_job as rj  # noqa: E402
+from tests.fake_signalhub import FakeSignalHub  # noqa: E402
+
+
+class ControllerCodedGateOverARow14DecisionTest(rj._ReviewCase):
+    """Notification-fix D7: the Controller-coded gates over a row-14 decision (the review-mode refusal, the
+    external round cap) are written without ``protocol_gate``, so they stay ``user_gate``; the plain wait of the
+    same row is the ``review_wait``."""
+
+    def assert_user_gate(self, record: dict) -> None:
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
+        self.assertNotIn("protocol_gate", record)
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
+
+    def test_the_review_mode_refusal_is_a_user_gate(self) -> None:
+        with mock.patch.object(worker, "launch", mock.Mock(side_effect=AssertionError("no worker"))):
+            record = job.execute_step(self.life.inspect(), identity=IDENTITY, runtime=self.runtime_root,
+                                      reviewer=None, review_mode_options={"mode": "cross-model", "source": "cli"})
+        self.assertIn("review_mode_unavailable", record["human_gate_pending"]["what_is_required"])
+        self.assert_user_gate(record)
+
+    def test_the_external_round_cap_is_a_user_gate(self) -> None:
+        with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(1, 4)):
+            record = self.step()
+        self.assertTrue(record["human_gate_pending"]["what_is_required"].startswith("review_round_cap_reached: "))
+        self.assert_user_gate(record)
+
+    def test_the_plain_wait_of_the_same_row_is_a_review_wait(self) -> None:
+        record = self.step(reviewer_options=None)
+        self.assertEqual(record["protocol_gate"]["row"], "14")
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
+
+
+class ReviewWaitLiveUpgradeTest(unittest.TestCase):
+    """Notification-fix D3 (round 9 I3, round 10 I4): after the upgrade, a production ``step`` in a new run that
+    meets the unchanged row-14 gate sends no second notice for a stop whose old ``user_gate`` the server holds,
+    and one ``review_wait`` for a stop whose old notice failed, was rejected or was never sent."""
+
+    def setUp(self) -> None:
+        self.life = lifecycle.GateLifecycle(self)
+        self.life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.hub = FakeSignalHub().start()
+        self.addCleanup(self.hub.stop)
+
+    def step(self, *, before_this_change: bool = False) -> dict:
+        """One production step in a run of its own, under a fresh notifier (a new Controller invocation);
+        ``before_this_change`` derives as the released Controller did (no ``review_wait``)."""
+        wiring.install_notifier(self, self.hub, self.life.runtime)
+        run = job.open_run(self.life.runtime, command="step", target_repo=str(self.life.root), max_steps=None,
+                           ident=IDENTITY)
+        self.addCleanup(run.discard)
+        old = mock.patch.object(job, "_review_wait_title", return_value=None) if before_this_change \
+            else contextlib.nullcontext()
+        with old:
+            record = job.execute_step(self.life.inspect(), identity=IDENTITY, runtime=self.life.runtime,
+                                      run_id=run.run_id)
+        self.assertTrue(notify.flush(10))
+        notify.uninstall()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
+        return record
+
+    def requested(self) -> list[str]:
+        return [r["body"]["metadata"]["event_type"] for r in self.hub.requests]
+
+    def test_an_old_user_gate_the_server_holds_is_never_followed_by_a_review_wait(self) -> None:
+        first = self.step(before_this_change=True)
+        self.assertEqual((self.requested(), len(self.hub.events)), (["user_gate"], 1))
+        second = self.step()
+        self.assertNotEqual(second["job_id"], first["job_id"])
+        self.assertEqual(job.derive_job_event(second)[0].ident, job.derive_job_event(first)[0].ident)
+        self.assertEqual((self.requested(), len(self.hub.events)), (["user_gate"], 1))
+
+    def test_a_never_sent_stop_is_one_review_wait_and_a_later_step_stores_nothing_more(self) -> None:
+        self.step()
+        self.assertEqual((self.requested(), len(self.hub.events)), (["review_wait"], 1))
+        self.assertEqual(self.hub.requests[0]["body"]["severity"], "LOW")
+        self.step()
+        self.assertEqual(set(self.requested()), {"review_wait"})
+        self.assertEqual(len(self.hub.events), 1)
+
+    def test_a_failed_or_rejected_old_user_gate_does_not_veto_and_recovery_replays_nothing(self) -> None:
+        for status, scripted in (("failed", None), ("rejected", 401)):
+            with self.subTest(status=status):
+                self.setUp()
+                self.hub.queue(scripted)
+                first = self.step(before_this_change=True)
+                self.assertEqual((self.requested(), self.hub.events), (["user_gate"], {}))
+                log = self.life.runtime / "runs" / first["run_id"] / notify.NOTIFICATIONS_LOG
+                self.assertIn(status, [json.loads(line)["status"] for line in log.read_text().splitlines()])
+                self.step()  # the service or the credentials are restored
+                self.assertEqual(self.requested(), ["user_gate", "review_wait"])
+                self.assertEqual(len(self.hub.events), 1)
+                self.hub.requests.clear()
+                wiring.install_notifier(self, self.hub, self.life.runtime)
+                job.resume(self.life.inspect(), identity=IDENTITY, runtime=self.life.runtime)
+                self.assertTrue(notify.flush(10))
+                notify.uninstall()
+                self.assertEqual(self.requested(), [])

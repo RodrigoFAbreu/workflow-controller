@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-notification-fix",
+  "requirements": {
+    "R1": {
+      "description": "A Workflow protocol gate's wait for an external reviewer's verdict (a persisted protocol_gate block: disposition external_gate, action plan.review.external or implementation.review.external, at a manual-external phase) sends review_wait (INFO, LOW); a BLOCK-resolution gate, a Controller-coded gate and every legacy gate there stay user_gate (#149)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The tester's fault stops send review_wait except isolation_breach (user_gate) and functional_unchanged (lane_blocked); a functional-review gate without a tester block stays user_gate (#149)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "Human gates, merge_pull_request and merge_held stay user_gate, pr_merged stays INFO/NORMAL and checks_pending is unchanged (#149)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The guides and the roadmap state the new mapping (#149)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The record writer persists protocol_gate for the Workflow's own gates without changing the blocked or pending-checks behaviour, and recovery treats a handled historical user_gate as handling the reclassified review_wait (#149)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    }
+  }
+}

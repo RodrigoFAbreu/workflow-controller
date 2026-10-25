@@ -86,6 +86,7 @@ ROUTING_KEY = "routing"
 REVIEW_MODES = ("auto", "cross-model", "single-provider", "manual")
 NOTIFICATIONS_EVENTS_KEY = "notifications.events"
 NOTIFICATIONS_URL_KEY = "notifications.url"
+REVIEWER_BRIEF_KEY = "reviewer.brief"
 
 #: Where an effective value came from (``settings show``, the job record).
 SOURCE_CLI = "cli"
@@ -197,6 +198,10 @@ TABLE: tuple[Setting, ...] = (
     # person's stop; the timeout bounds one tester run.
     Setting("functional.automated", TYPE_BOOL, True, None, None, None, 13),
     Setting("functional.timeout_seconds", TYPE_INT, 3600, 60, 86400, None, 13),
+    # workflow-controller-reviewer-brief D1: the operator's severity bar and
+    # scope for the external reviewer's prompt; unset, empty or blank means
+    # the built-in ``review.DEFAULT_BRIEF``.
+    Setting("reviewer.brief", TYPE_OPTIONAL_STRING, None, 0, 2000, None, 14),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort", 1),
 )
@@ -216,8 +221,9 @@ TABLE: tuple[Setting, ...] = (
 #: rows ``review.local_round_cap`` and ``review.external_round_cap``
 #: (workflow-controller-round-caps D4). 13: the rows ``functional.automated``
 #: and ``functional.timeout_seconds`` and the role ``functional-tester``
-#: (workflow-controller-automated-functional-review D8).
-TABLE_GENERATION = 13
+#: (workflow-controller-automated-functional-review D8). 14: the row
+#: ``reviewer.brief`` (workflow-controller-reviewer-brief D1).
+TABLE_GENERATION = 14
 
 
 def _table() -> dict[str, Setting]:
@@ -394,6 +400,9 @@ def _check_string(path: Path, setting: Setting, value: Any) -> None:
     if not isinstance(value, str) or not setting.minimum <= len(value) <= setting.maximum:
         raise _refuse(path, setting.key, f"{setting.key} must be {expected}, got {json.dumps(value)}",
                       value=value, minimum=setting.minimum, maximum=setting.maximum)
+    if setting.key == REVIEWER_BRIEF_KEY and re.search(r"[\x00-\x08\x0b-\x1f\x7f]", value):
+        raise _refuse(path, setting.key, f"{setting.key} must not contain a control character other than "
+                      f"newline and tab, got {json.dumps(value)}", value=value)
     if setting.key == NOTIFICATIONS_URL_KEY and not re.fullmatch(r"https?://[^\s/?#]+\S*", value):
         raise _refuse(path, setting.key, f"{setting.key} must be an http or https URL, got {json.dumps(value)}",
                       value=value)

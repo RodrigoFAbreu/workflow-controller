@@ -248,7 +248,7 @@ mode.
 
 ## Command reference
 
-`.claude/commands/` holds 22 files today, and all 22 are sectioned below
+`.claude/commands/` holds 23 files today, and all 23 are sectioned below
 — including `/review-implementation` and `/review-functional`
 (`workflow-v2-3`) and `/request-plan-amendment` (`workflow-2.4.0`),
 previously undocumented here. `[work-item-id]` defaults
@@ -263,8 +263,8 @@ What is actually guaranteed about that inventory, precisely:
 set of `### /<name>` sections in this document and the set of
 `.claude/commands/*.md` stems on disk and asserts the two are **equal** —
 that part is derived, so a command added or removed without a section here
-fails. The number 22 itself is *not* derived: it is a hardcoded tripwire
-in that same test (`assertEqual(len(on_disk), 22)`) whose job is to make a
+fails. The number 23 itself is *not* derived: it is a hardcoded tripwire
+in that same test (`assertEqual(len(on_disk), 23)`) whose job is to make a
 change in the roster size a deliberate, reviewed edit. So the set equality
 is mechanical; the count in this paragraph and in the test is a
 hand-maintained pair that must be updated together. If they disagree, the
@@ -481,7 +481,10 @@ test fails and is authoritative about which one moved.
   first included.
 - **Refuses**: the wrong phase
   (`WrongPhaseForAmendmentRequestError`); a checkpoint still `IN_PROGRESS`
-  or an outstanding checkpoint claim (`AmendmentCheckpointActiveError`,
+  or an outstanding checkpoint claim (`AmendmentCheckpointActiveError`; for a
+  start that was never committed, its message names the user-only
+  `/release-checkpoint-start <work-item-id> <checkpoint-id>`, run from the
+  worktree that holds the claim,
   XMODEL-R4-B1, checked *before* superseding anything and *authoritatively*
   inside `request_plan_amendment` itself, not only this command's own
   preflight read -- closing the race in which a checkpoint claim is
@@ -970,6 +973,46 @@ committed"); if a round was refused with "must always transition phase", see
   `AWAITING_FUNCTIONAL_REVIEW`; a `1` item; a missing or not `CURRENT` plan
   approval; a terminal registry; no technical approval to stale.
 
+### `/release-checkpoint-start <work-item-id> <checkpoint-id>` — user-only
+- **When**: `/request-plan-amendment` refused with `AmendmentCheckpointActiveError`
+  because a checkpoint start (its `IN_PROGRESS` entry and its claim) exists that
+  was never committed and that the approved plan forbids completing. Run it from
+  the worktree that holds the claim. It is not a `next-action` action: the
+  protocol cannot see a checkpoint whose own plan forbids completing it.
+- **Expects**: both ids in `$ARGUMENTS` (never the active item) and your
+  current-turn answer carrying the one sentence the command prints, which names
+  the checkpoint, the work item and the claim it showed you (`claim_ref`, the first
+  12 characters of the claim's `owner_token`) and attests that the owner session
+  is stopped and stays stopped until the release has completed. The match is
+  case-insensitive. The owner session is any session other than the one running
+  the command that started, resumed or may resume the checkpoint, in this worktree
+  or another; the session running the command counts as stopped only while it runs
+  nothing else for the work item.
+- **Does**: `workflow_state.observe_checkpoint_start_release` shows the claim, the
+  kind of start (`entry`, `baseline` or `released`), the guard and the probe result;
+  `workflow_state.release_checkpoint_start_confirmed` then validates the sentence and
+  calls `release_checkpoint_start` with the claim reference, which the engine
+  re-checks under its own lock. It restores the entry to `HEAD`'s state and removes
+  the claim, in that order. A merge into the branch after the start does not block
+  it; a commit that carries the checkpoint's trailer does.
+- **Writes**: the working-tree `WORKFLOW_STATE.json` and the claim only. It commits
+  nothing.
+- **The attestation is a stated precondition, not a check**: the disk cannot show an
+  owner session that is alive and idle. An interrupted release must be finished by
+  running the command again, and no session may resume the checkpoint, from any
+  worktree, until it has reported success. When the claim is already gone and the
+  entry equals `HEAD`'s the command reports the start already released, asks for
+  nothing and writes nothing, and the obligation ends.
+- **Next**: `/request-plan-amendment <id>` or `/milestone-implement <id>`.
+- **Refuses**: a missing or wrong sentence (nothing changes); a guarded window that
+  is running; a claim that changed since it was shown
+  (`CheckpointOwnershipStateMismatchError`); a claim held by another worktree
+  (`CheckpointOwnedByOtherWorktreeError`); an entry with no claim; a commit that
+  carries the checkpoint's trailer or records it other than as `HEAD` does; a
+  `COMPLETE` checkpoint, which names two next steps: a committed completion
+  (`/milestone-implement` step 1c releases the claim) and an uncommitted one
+  (resume step 1f in the owner's worktree).
+
 ### `/prepare-review <base-sha> <stage> [work-item-id]`
 - **When**: a one-off review of work that is not part of a tracked milestone
   checkpoint.
@@ -1003,7 +1046,7 @@ committed"); if a round was refused with "must always transition phase", see
   file says it is "retired — deleted — only at this work item's own
   `MILESTONE_COMPLETE`". That condition is now met — `workflow-v2-1-core`
   is `MILESTONE_COMPLETE` — but the file has not been deleted, so the
-  command is still on disk and still in this reference's roster of 22.
+  command is still on disk and still in this reference's roster of 23.
   Retiring it is a scoped act of its own (the way
   `/accept-scoped-remediation`'s retirement was); until then, treat it as
   live-but-unreachable: its target is terminal, so every invocation refuses

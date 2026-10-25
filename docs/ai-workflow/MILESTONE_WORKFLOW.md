@@ -79,7 +79,10 @@ branches on governing version, unchanged.
   `/milestone-plan` call. Reachable only from `IMPLEMENTING` or
   `SELF_REVIEWING_IMPLEMENTATION` (see those sections' own re-entry note
   below), with no checkpoint `IN_PROGRESS` or claimed
-  (`AmendmentCheckpointActiveError` otherwise, XMODEL-R4-B1 -- checked
+  (`AmendmentCheckpointActiveError` otherwise, whose message names the
+  user-only `/release-checkpoint-start <work-item-id> <checkpoint-id>` for a
+  start that was never committed, run from the worktree that holds the claim,
+  XMODEL-R4-B1 -- checked
   authoritatively inside `request_plan_amendment` itself, against both
   `WORKFLOW_STATE.json` and the shared filesystem checkpoint-claim record,
   not only this command's own preflight read; the claim record must be

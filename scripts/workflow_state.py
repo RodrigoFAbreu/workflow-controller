@@ -6466,7 +6466,7 @@ def _assert_no_commit_past_start(repo_root: Path, work_item_id: str, checkpoint_
 
 
 def release_checkpoint_start(repo_root: Path, work_item_id: str, checkpoint_id: str, *,
-                             now: str) -> None:
+                             now: str, confirmed_claim_ref: str | None = None) -> None:
     """Release an **uncommitted** checkpoint start -- the `IN_PROGRESS` state
     entry and the claim that go with it -- as one continuous window, so that an
     amendment is no longer wedged by a start its own plan forbids completing
@@ -6487,9 +6487,20 @@ def release_checkpoint_start(repo_root: Path, work_item_id: str, checkpoint_id: 
     runs. A window running when the release began is never overtaken. Nothing is
     committed, staged or fabricated; every refusal is an existing class and
     changes nothing. An interruption does not fence the owner between it and the
-    next call (`D-Residual`): the dead guard is reclaimable by the owner."""
+    next call (`D-Residual`): the dead guard is reclaimable by the owner.
+
+    `confirmed_claim_ref` (checkpoint-start-command, `D-Engine-Keyword`): when
+    given, the claim classified under (9) must carry that reference (the first
+    `CLAIM_REF_LENGTH` characters of its `owner_token`), or the call refuses
+    with `CheckpointOwnershipStateMismatchError` before the probe and the
+    guard; `None` leaves the behaviour above unchanged."""
     with lifecycle_lock(repo_root, work_item_id):
         _, _, _, claim = _classify_checkpoint_start(repo_root, work_item_id, checkpoint_id)
+        if confirmed_claim_ref is not None and claim_reference(claim) != confirmed_claim_ref:
+            raise CheckpointOwnershipStateMismatchError(
+                f"{work_item_id!r}'s claim for {checkpoint_id!r} changed since you confirmed "
+                f"{confirmed_claim_ref!r} (it is now {claim_reference(claim)!r}) -- refusing to "
+                f"release a start you were not shown: run the command again")
         if guard_holder_is_running(repo_root, work_item_id):
             raise CheckpointOwnershipUnavailableError(
                 f"a guarded window of {work_item_id!r} is still running in another process -- "
@@ -6534,6 +6545,91 @@ def release_checkpoint_start(repo_root: Path, work_item_id: str, checkpoint_id: 
                 raise CheckpointOwnershipUnavailableError(
                     f"cannot remove {work_item_id!r}'s claim ({exc}) -- the entry now equals HEAD's "
                     f"and the claim was not unlinked: calling again finishes the release") from exc
+
+
+#: How many leading characters of a claim's `owner_token` identify the claim a
+#: person was shown (`D-Literal`).
+CLAIM_REF_LENGTH = 12
+
+
+def claim_reference(claim: dict) -> str:
+    """The reference of a claim: the first `CLAIM_REF_LENGTH` characters of its
+    `owner_token`. A re-created claim (a release and a new start, an adoption,
+    a takeover) mints a new token, so it carries a different reference."""
+    return str(claim["owner_token"])[:CLAIM_REF_LENGTH]
+
+
+def checkpoint_start_release_confirmation(work_item_id: str, checkpoint_id: str,
+                                          claim_ref: str) -> str:
+    """The one sentence `/release-checkpoint-start` asks a person for
+    (`D-Literal`). It names the work item, the checkpoint and the claim that
+    was shown, and attests that the owner session is stopped and stays stopped
+    until the release has completed."""
+    return (f"Release checkpoint start {checkpoint_id} of {work_item_id} held under claim "
+            f"{claim_ref}; its owner session is stopped and stays stopped until this release "
+            f"has completed.")
+
+
+def validate_checkpoint_start_release_confirmation(
+        text: str, *, work_item_id: str, checkpoint_id: str, claim_ref: str) -> None:
+    """Whitespace-normalised and case-insensitive, like
+    `validate_user_only_confirmation`: the sentence must occur in `text` with an
+    id-alphabet boundary before it. Raises `UserConfirmationRejectedError`,
+    printing the sentence expected."""
+    sentence = checkpoint_start_release_confirmation(work_item_id, checkpoint_id, claim_ref)
+    if (not isinstance(text, str)
+            or not re.search(rf"(?<![{_ID_ALPHABET}]){re.escape(sentence)}",
+                             " ".join(text.split()), re.IGNORECASE)):
+        raise UserConfirmationRejectedError(
+            f"user_confirmation is not the release sentence for {checkpoint_id!r} of "
+            f"{work_item_id!r} under claim {claim_ref!r}. Expected, in full: {sentence}")
+
+
+def observe_checkpoint_start_release(repo_root: Path, work_item_id: str, checkpoint_id: str) -> dict:
+    """What `/release-checkpoint-start` shows before it asks for anything
+    (`D-Functions`). Read-only: it takes no lock of its own and writes nothing.
+    Returns `kind` (`entry`, `baseline`, or the terminal `released`), the
+    observed `claim` (`None` for `released`) with its `claim_ref`, the `guard`
+    body (or `None`) and whether its holder is `running`. The engine's
+    classification refusals pass through unchanged."""
+    state = _load_json(repo_root / DEFAULT_STATE_PATH) or {}
+    item = (state.get("work_items") or {}).get(work_item_id)
+    entries = item.get("checkpoints") if isinstance(item, dict) else None
+    if isinstance(entries, dict) and resolve_claim(repo_root, work_item_id) is None:
+        working = entries.get(checkpoint_id)
+        working = working if isinstance(working, dict) else None
+        if working is None or working.get("status") != "IN_PROGRESS":
+            baseline = _checkpoint_entry_at(repo_root, "HEAD", work_item_id, checkpoint_id,
+                                            required=True)
+            if (working == baseline
+                    and (baseline is None or baseline.get("status") == "NEEDS_REVALIDATION")):
+                return {"kind": "released", "claim": None, "claim_ref": None,
+                        "guard": read_guard(repo_root, work_item_id),
+                        "running": guard_holder_is_running(repo_root, work_item_id)}
+    kind, _, _, claim = _classify_checkpoint_start(repo_root, work_item_id, checkpoint_id, state)
+    return {"kind": kind, "claim": claim, "claim_ref": claim_reference(claim),
+            "guard": read_guard(repo_root, work_item_id),
+            "running": guard_holder_is_running(repo_root, work_item_id)}
+
+
+def release_checkpoint_start_confirmed(repo_root: Path, work_item_id: str, checkpoint_id: str, *,
+                                       user_confirmation: str, now: str) -> dict:
+    """`/release-checkpoint-start`'s writer (`D-Functions`): observe, validate
+    the literal against the observed claim reference, then release with that
+    reference as `confirmed_claim_ref`, so the engine refuses a claim that
+    changed in between. Returns the observation it acted on. For kind
+    `released` it validates nothing, calls nothing and writes nothing. Refusal
+    order: the classification refusals, `UserConfirmationRejectedError`, then
+    the engine's own."""
+    observed = observe_checkpoint_start_release(repo_root, work_item_id, checkpoint_id)
+    if observed["kind"] == "released":
+        return observed
+    validate_checkpoint_start_release_confirmation(
+        user_confirmation, work_item_id=work_item_id, checkpoint_id=checkpoint_id,
+        claim_ref=observed["claim_ref"])
+    release_checkpoint_start(repo_root, work_item_id, checkpoint_id, now=now,
+                             confirmed_claim_ref=observed["claim_ref"])
+    return observed
 
 
 # ---------------------------------------------------------------------------
@@ -14703,6 +14799,17 @@ def apply_technical_approval(state: dict, work_item_id: str, record: dict, now: 
 _AMENDMENT_REQUEST_ALLOWED_PHASES = frozenset({"IMPLEMENTING", "SELF_REVIEWING_IMPLEMENTATION"})
 
 
+def _release_start_next_step(work_item_id: str, checkpoint_id: object) -> str:
+    """The next step the amendment refusals name (`D-Amendment-Message`). It is
+    the step for a start that was never committed, not for every case, and the
+    release has two refusals the raise sites cannot see: an `IN_PROGRESS` entry
+    with no claim, and a claim held by another worktree."""
+    return (f"If the checkpoint's own approved plan forbids completing it and its start was "
+            f"never committed, stop its owner session and run the user-only "
+            f"/release-checkpoint-start {work_item_id} {checkpoint_id} from the worktree that "
+            f"holds the claim")
+
+
 def request_plan_amendment(
     state: dict, work_item_id: str, reason: str, *, repo_root: Path, now: str,
 ) -> dict:
@@ -14802,14 +14909,16 @@ def request_plan_amendment(
     # shared filesystem checkpoint claim is outstanding for this work item.
     # See `AmendmentCheckpointActiveError`'s own docstring for why both
     # halves are checked (they are two different synchronization domains).
-    if any(
-        entry.get("status") == "IN_PROGRESS"
-        for entry in work_item.get("checkpoints", {}).values()
-    ):
+    in_progress_ids = [
+        cid for cid, entry in work_item.get("checkpoints", {}).items()
+        if entry.get("status") == "IN_PROGRESS"
+    ]
+    if in_progress_ids:
         raise AmendmentCheckpointActiveError(
             f"{work_item_id!r} has a checkpoint IN_PROGRESS "
             f"({work_item.get('current_checkpoint_id')!r}) -- /request-plan-amendment "
-            f"refuses while implementation is live"
+            f"refuses while implementation is live. "
+            f"{_release_start_next_step(work_item_id, work_item.get('current_checkpoint_id') or in_progress_ids[0])}"
         )
     outstanding_claim = resolve_claim(repo_root, work_item_id)
     if outstanding_claim is not None:
@@ -14818,7 +14927,8 @@ def request_plan_amendment(
             f"(checkpoint {outstanding_claim.get('checkpoint_id')!r}, worktree "
             f"{outstanding_claim.get('worktree_root')!r}) -- /request-plan-amendment "
             f"refuses while a checkpoint start is in flight, even though "
-            f"WORKFLOW_STATE.json may not show it IN_PROGRESS yet"
+            f"WORKFLOW_STATE.json may not show it IN_PROGRESS yet. "
+            f"{_release_start_next_step(work_item_id, outstanding_claim.get('checkpoint_id'))}"
         )
 
     # IMPL2-R1: refuse by name, before anything is superseded, if the

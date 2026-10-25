@@ -857,6 +857,59 @@ class CliTest(_ReviewCase):
                 self.assertIn("reviewer.brief is ignored", stderr.getvalue())
                 self.assertEqual(effective["reviewer.harness"], "codex")  # the other rows are still read
 
+    def untrusted_step(self, path: Path, route: str, *, via_env: bool = False):
+        """One real ``_run_one_step`` with the settings read from ``path`` (``--settings`` or, with ``via_env``,
+        ``$WORKFLOW_CONTROLLER_SETTINGS``), on the ``codex`` or the ``same-provider`` route; returns the recorded launch."""
+        body = {"reviewer": {"harness": "codex", "brief": "Only report crashes."}}
+        if route == "claude":
+            body["review"] = {"mode": "single-provider"}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(body))
+        if self.life.root in path.parents:  # git-ignored, so the working tree stays clean for the step
+            with (self.life.root / ".git" / "info" / "exclude").open("a") as exclude:
+                exclude.write(f"/{path.relative_to(self.life.root)}\n/{path.relative_to(self.life.root)}.lock\n")
+        env = {settings.ENV_SETTINGS: str(path)} if via_env else {}
+        args = argparse.Namespace(
+            repo=str(self.life.root), work_item=None, json=False, workflow_manager=None, permission_mode=None,
+            timeout=60, claude_binary="claude", max_steps=None, pause_file=None,
+            settings=None if via_env else str(path), follow=False, usage_cap=None)
+        from tests.test_review_mode import signal  # imported late: that module imports this one
+        with mock.patch.dict(os.environ, env), mock.patch.dict(review.HARNESSES, {"claude": review.CLAUDE}), \
+                mock.patch.object(job, "_review_mode_signal", return_value=signal("lowering_only")):
+            cli._apply_settings(args, write=True)
+            stderr = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(stderr):
+                    code, _result = self.one_step(args, outcome="empty")  # no verdict: the gate stays open for the next call
+            finally:
+                path.unlink()  # an untracked file in the repository would block the next step
+        self.assertEqual(code, cli.EXIT_INCOMPLETE, _result["status"])
+        self.assertIn("reviewer.brief is ignored", stderr.getvalue())
+        return args, self.double.calls[0]
+
+    def test_a_rejected_brief_reaches_neither_launch_so_each_prompt_is_the_default(self) -> None:
+        root, runtime = self.life.root, self.runtime_root
+        places = {"repository": root / "settings.json", "ai-review": root / ".ai-review" / "s.json",
+                  "reviews": runtime / "reviews" / "j1" / "s.json"}
+        for route, harness in (("codex", "codex"), ("claude", "claude")):
+            for name, path in places.items():
+                for via_env in (False, True):
+                    with self.subTest(route=route, place=name, via_env=via_env):
+                        cli._brief_warned.clear()
+                        self.addCleanup(cli._brief_warned.clear)
+                        args, call = self.untrusted_step(path, route, via_env=via_env)
+                        self.assertEqual(call["harness_name"], harness)
+                        self.assertIsNone(call["brief"])
+                        prompt = review.build_prompt(call["stage"], review.expected_headers(
+                            call["manifest"], call["stage"], call["model"],
+                            review.harness(call["harness_name"]).verdict_family),
+                            bundle_dir=call["bundle_dir"], brief=call["brief"])
+                        self.assertIn(review.DEFAULT_BRIEF, prompt)
+                        self.assertNotIn("Only report crashes.", prompt)
+                        effective = cli._effective(args)  # the file's other rows stay in force
+                        self.assertEqual(effective["reviewer.harness"], "codex")
+                        self.assertEqual(effective["review.mode"], "single-provider" if route == "claude" else "auto")
+
     def test_a_settings_file_outside_them_is_honoured(self) -> None:
         effective = self.brief_options(self.life.td / "elsewhere" / "s.json")
         stderr = io.StringIO()

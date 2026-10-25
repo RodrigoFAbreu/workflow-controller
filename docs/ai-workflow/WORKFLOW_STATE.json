@@ -27694,7 +27694,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-brief-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-brief-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -27834,12 +27834,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 15,
-      "last_transition": "2026-10-25T05:07:46Z",
+      "state_revision": 16,
+      "last_transition": "2026-10-25T05:26:57Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -27969,6 +27969,34 @@
               "review_content_id": "7df1e22cfd537d62f2d4c5907e523191ee1d8dde536b4db6855a8ec0972a9ce0",
               "verdict": "APPROVE",
               "at": "2026-10-25T04:15:54Z"
+            }
+          ]
+        },
+        "F-e064262be701": {
+          "digest": "e064262be70174579172c07916319b2a22157d4e9a51fc05a733557953f45f7d",
+          "text": "O1. `_reviewer_brief` guards `target.root` and `target.root/.ai-review`. The second is always inside the first, so its separate entry only affects the warning's wording (\"the repository under review\" is always matched first, so the `.ai-review` reason is never printed). Harmless. Drop it, or order it first if the more specific reason is wanted.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0b6b411dc10353bffd52d6088a4f4c4d97d344767919e5e91c2f6a74a40763d8",
+              "verdict": "REVISE",
+              "at": "2026-10-25T05:26:57Z"
+            }
+          ]
+        },
+        "F-b1b4003f28fd": {
+          "digest": "b1b4003f28fdc0ac06c8026cfdc3d9800a39c0e8cad549aa957ab3009004f656",
+          "text": "O2. When the managed target is a linked worktree, a settings file in the main checkout (or in another linked worktree of the same repository) is not under `target.root` and is honoured, although the branch under review could also have written it. This is outside D2's literal set (repository root, `.ai-review/`, reviews tree). Record it as a possible extension of the trust rule, beside the repository-level default.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0b6b411dc10353bffd52d6088a4f4c4d97d344767919e5e91c2f6a74a40763d8",
+              "verdict": "REVISE",
+              "at": "2026-10-25T05:26:57Z"
             }
           ]
         }

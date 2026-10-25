@@ -2,9 +2,10 @@
 
 ## Status
 
-**In progress.** `workflow-controller-review-prompt-rounds` (RB2, issue #161): a round-aware external-review prompt and
-the verdict format the Workflow's ingest enforces. Plan revision 2 is approved (policy, `c975470`); the plan is
-`docs/ai-workflow/CONTROLLER_REVIEW_PROMPT_ROUNDS_PLAN.md`.
+**Implemented, in implementation review.** `workflow-controller-review-prompt-rounds` (RB2, issue #161): a round-aware
+external-review prompt and the verdict format the Workflow's ingest enforces. Plan revision 2 is approved (policy,
+`c975470`); the plan is `docs/ai-workflow/CONTROLLER_REVIEW_PROMPT_ROUNDS_PLAN.md`. Both checkpoints are complete and the
+self-review is done; the full suite passes apart from the two Git 2.56 trailer tests that also fail on `main` locally.
 
 - CP1 (the prompt paragraphs, the changes-file check and the wiring): complete. `controller/review.py` has
   `BUNDLE_TEXT_RULE`, `VERDICT_FORMAT_RULES`, `changes_file_for` and the round paragraph; `_run_review_job` passes
@@ -16,5 +17,5 @@ the verdict format the Workflow's ingest enforces. Plan revision 2 is approved (
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-review-prompt-rounds` again: all checkpoints are complete, so it enters
-self-review, runs the full verification and prepares the implementation review bundle.
+The implementation review of revision 1: the local review, then the external review, then functional review and
+acceptance.

@@ -467,7 +467,7 @@ the read-only tools and the disposable copy bound what that can do. Like the
 Codex reviewer, it is given the severity bar in its prompt; the operator changes
 it with `reviewer.brief` ([the settings](runtime.md#what-it-holds)), read only
 from a settings file outside the repository under review. Two further parts of
-the prompt are fixed text in the Controller (`BUNDLE_TEXT_RULE`, `ROUND_RULE`,
+the prompt are fixed text in the Controller (`BUNDLE_TEXT_RULE`, `round_rule`,
 `VERDICT_FORMAT_RULES` in `controller/review.py`) and `reviewer.brief` cannot
 replace them: the verdict format the ingest enforces (list-item findings,
 `None.` for an empty section, a status consistent with the findings), and, from

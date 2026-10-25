@@ -29628,6 +29628,725 @@
         "evaluated_at": "2026-10-25T14:37:53Z",
         "workflow_release": "2.19.1"
       }
+    },
+    "workflow-controller-review-prompt-rounds": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-review-prompt-rounds",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_REVIEW_PROMPT_ROUNDS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-review-prompt-rounds-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-review-prompt-rounds-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 2,
+      "implementation_revision": 2,
+      "functional_review_round": null,
+      "base_commit": "a76bd4a654d750784a4b7bdf142ddde598fcd1c1",
+      "reviewed_implementation_head": "1592d8cd2374a1cbf0e729882a7a128ed23b2c85",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP2",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "c975470bf0e5842a63374c560673a5dc6289cdaa"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "a790669cadd28072c9d2ed78f0cc1b6759d7d47e"
+        }
+      },
+      "current_bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+        "approved_review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_REVIEW_PROMPT_ROUNDS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3695156d78dc237c4adcc124dc6f44da052cfd17"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-review-prompt-rounds-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e9ed3da0518bc08fb70216353ca790e1eb43af3f"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-review-prompt-rounds-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4d0189e4c7f04bad58bc8fed4e8fdaa9e13929b1"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T16:38:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+            "ledger": {
+              "local": {
+                "bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "dbce3a7963fcf1536f6b428674ff49b04f9288b3f83c491035a0569d23b8f8c2",
+                "ledger_entry_sha256": "aab15dd62f3d445d39c09ea747b3e4e4659fcff784e13c264ec34956d3175ce9",
+                "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "efa17a61c761fbdca760aa9a56a6058b1ed2d5d1c4e1bed981e5b11b9ec8e62e",
+                "ledger_entry_sha256": "ece4ccb179faac2b8c23832c6be528abf2473a3f674a310cced9a5e57a4556dc",
+                "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T16:38:00Z",
+          "workflow_release": "2.19.2"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e3f7eacf7fc5b5d1fc15e21b0ab14f89237150898493de8ceac8e2bcbed9a359",
+        "approved_review_content_id": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+        "review_content_manifest": [
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "894fb28ccfe4170d15d14025d6dc959294c4ca00"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "16e5e8e33da72db45d84fd2f67cda367a4d7e28c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-review-prompt-rounds-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7f5a162fe66881b475ed812a256af2a0db311e8"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0903a3fc28675f32aca4605dce51a5d51e55de8e"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8c233f439be3112bf2785006eaac3365c2e30228"
+          },
+          {
+            "path": "docs/run.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "961647d391e5ca0c6877eaf1db13fbe0bbc4bbc0"
+          },
+          {
+            "path": "tests/test_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a225cb1bb344d96df1c45634ead3c48fbef8d0de"
+          },
+          {
+            "path": "tests/test_review_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1a597631c2463632952bafaec38dbb6ddf78cb1d"
+          },
+          {
+            "path": "tests/test_review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "71847bc93109652772d565a51e5e683e5b0f0609"
+          },
+          {
+            "path": "tests/test_review_same_provider.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d663d1a4930c32cf93f1bac531a54cfbcbad3046"
+          }
+        ],
+        "reviewed_content_commit": "1592d8cd2374a1cbf0e729882a7a128ed23b2c85",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T18:52:35Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "ledger": {
+              "local": {
+                "bundle_id": "e3f7eacf7fc5b5d1fc15e21b0ab14f89237150898493de8ceac8e2bcbed9a359",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "a7b00b1a538297d325174548dcfb19bc149cff7ed8534a22578cb89141df5a96",
+                "ledger_entry_sha256": "271bafaa8803a112544ef07ff89bfa21f815c950816c8629dd58fc8246d5bbca",
+                "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e3f7eacf7fc5b5d1fc15e21b0ab14f89237150898493de8ceac8e2bcbed9a359",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "069aa674cb8b23ce03a6c2759af89cf4a29434145c4edcafa6d8442cbe1d77d8",
+                "ledger_entry_sha256": "1698574c0e184ecd676d2ef5202c9d1d02b1586727070ee0d41cacca7ac202f4",
+                "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T18:52:35Z",
+          "workflow_release": "2.19.2"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T16:24:57Z",
+          "verdict_sha256": "dbce3a7963fcf1536f6b428674ff49b04f9288b3f83c491035a0569d23b8f8c2",
+          "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T16:35:00Z",
+          "verdict_sha256": "efa17a61c761fbdca760aa9a56a6058b1ed2d5d1c4e1bed981e5b11b9ec8e62e",
+          "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 2,
+          "external": 2
+        }
+      },
+      "state_revision": 21,
+      "last_transition": "2026-10-25T19:21:17Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-25T16:22:21Z",
+        "consumed": {
+          "review_content_id": "7503d3367158aec2a649b273c3c6ee1a383586971047af021ea250d3d6d2aca9",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+          "bundle_id": "d13fad52191a0c0325fbfffa717915101f3388badd3f235d9ed3199c25cee97c",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "7503d3367158aec2a649b273c3c6ee1a383586971047af021ea250d3d6d2aca9"
+      ],
+      "optional_findings": {
+        "F-bcb78a09755e": {
+          "digest": "bcb78a09755e7752987fa355bfdcb41bf2ca05afca65e9d50955f2d2f9ca27d6",
+          "text": "LOCAL-R1-002 -- D1's section test can be matched by the wrong heading. A section's `### Previous findings` embeds the previous REVIEW_FEEDBACK.md verbatim (`_previous_findings_text`, `scripts/workflow_fingerprint.py`), so a `## MANUAL_EXTERNAL_<STAGE>_REVIEW` line inside the LOCAL section's embedded feedback comes before the real external section. A first-match parse would then report a basis when the real section reads \"not available\". The worst outcome is a pointer to a section the reviewer finds unavailable, so this is not harm, but CP1 could say which heading counts (the role sections are written in a fixed order, local then external, so for example the last exact `## <role>` line outside a fenced block) and add that case to the hostile-text test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7503d3367158aec2a649b273c3c6ee1a383586971047af021ea250d3d6d2aca9",
+              "verdict": "REVISE",
+              "at": "2026-10-25T16:20:45Z"
+            }
+          ]
+        },
+        "F-13fc604ba2fe": {
+          "digest": "13fc604ba2fe0700c0be1c80d8cad3881d3ffc0a025d21602a40efdf0a8fd86f",
+          "text": "LOCAL-R1-003 -- D2 says `_run_review_job` \"passes `round` to `launch_review`\", while CP1 names the keyword `external_round`. Use one name.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7503d3367158aec2a649b273c3c6ee1a383586971047af021ea250d3d6d2aca9",
+              "verdict": "REVISE",
+              "at": "2026-10-25T16:20:45Z"
+            }
+          ]
+        },
+        "F-296d95e469dc": {
+          "digest": "296d95e469dc6fd77dc713b61f47022a4e874b9dfcb697b2918a96542216d313",
+          "text": "LOCAL-R1-004 -- CP2's done-when (\"a search of the guides for `reviewer.brief` finds every page that describes the reviewer's prompt and each now names the round and format text\") also matches `docs/guide/runtime.md` (around line 398, which describes where the brief sits in the prompt). That file is not in CP2's **Files:**. Either add it, or narrow the criterion to the pages that describe the prompt's contents (`docs/guide/workers.md`, `docs/run.md`). runtime.md's placement sentence (\"after the review instructions and before the verdict format\") stays true under D5's order.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7503d3367158aec2a649b273c3c6ee1a383586971047af021ea250d3d6d2aca9",
+              "verdict": "REVISE",
+              "at": "2026-10-25T16:20:45Z"
+            }
+          ]
+        },
+        "F-a57f4a6da36d": {
+          "digest": "a57f4a6da36d7890d98b1c6397d0446936c690b0264ea1f27148ed7675bd6e5f",
+          "text": "LOCAL-R2-001 -- D1 says that on a first external round the prompt is \"today's plus the always-present paragraphs of D3 and D4\". D4's paragraph is the conditional round paragraph; the always-present ones are D3's and D5's (CP1 says this correctly: \"the two always-present paragraphs\", `BUNDLE_TEXT_RULE` and `VERDICT_FORMAT_RULES`). Change \"D4\" to \"D5\" in D1 so a reader building the first-round test from D1 does not expect the round paragraph.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T16:24:57Z"
+            }
+          ]
+        },
+        "F-da035c4d461d": {
+          "digest": "da035c4d461db42944122fd47db313b65400ebeb902e860ebbe25240ea6c64bd",
+          "text": "LOCAL-R2-002 -- D3's principle line says bundle text \"may narrow what is looked at\", while its paragraph text says the review request and changes file \"may name where to look first\". \"Narrow\" could be read as letting a review request limit an APPROVE to part of the bundle, which D4 rules out. When writing `BUNDLE_TEXT_RULE`, keep the \"where to look first\" wording (not \"only\"), so the paragraph cannot be read as letting bundle text shrink an approval's scope.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T16:24:57Z"
+            }
+          ]
+        },
+        "F-a3c611113c4a": {
+          "digest": "a3c611113c4a12e0c6952b788dcdb1b187b8b3c349d9827c8ab875ec875ea8ab",
+          "text": "LOCAL-R2-003 -- D1's last-heading rule has one remaining false positive: a changes file with no external-role section at all, whose LOCAL section embeds a previous verdict that holds a `## MANUAL_EXTERNAL_<STAGE>_REVIEW` line followed by text that does not start with `not available`. The Workflow writes every role section, so this needs a malformed or foreign file, and the worst outcome is a pointer to a section the reviewer cannot find. No change needed beyond what CP1 already tests; noted so the helper's docstring does not claim the rule is exact.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a930d9a09e4b6499825c6a3067a8129ee4eef8f583873b9be4b33ae59468b25e",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T16:24:57Z"
+            }
+          ]
+        },
+        "F-994dafb7163b": {
+          "digest": "994dafb7163b50a677b4dbf78f1e5542bddd40bf424e861b2ad901a3ca307a2f",
+          "text": "`docs/run.md` says \"The prompt also fixes two things the brief cannot replace\" and then lists three: the round pointer, the finding format, and the rule that bundle text never changes what counts. `docs/guide/workers.md` says \"Two further parts\" but names three constants (`BUNDLE_TEXT_RULE`, `round_rule`, `VERDICT_FORMAT_RULES`). Change the count in both pages, or remove it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c10a369f30564b015b62d0de79260d239b30285980a31fb2acdc51881c04d7ff",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T17:59:43Z"
+            }
+          ]
+        },
+        "F-37bdaa3d3493": {
+          "digest": "37bdaa3d34936a5d9ebafdf0f0bbd63a8b1db5fda75603136ca41ba04fee469f",
+          "text": "`RoundPromptWiringTest` and the same-provider test patch `review_rounds.split_rounds`. The extraction `info.document.get(\"snapshot\")` -> `split_rounds` is covered only on the path with no split counts, because the vendored 2.9.0 snapshot has none. Feeding a protocol document whose snapshot carries `review_round` (`<stage>_local`/`<stage>_external`) would cover the real extraction. `test_the_real_prompt_the_harness_would_get_names_the_file_and_the_round` also rebuilds the prompt from the recorded kwargs instead of recording what the harness received. The wiring of `launch_review` into `build_prompt` is plain in the diff, so the risk is low.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c10a369f30564b015b62d0de79260d239b30285980a31fb2acdc51881c04d7ff",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T17:59:43Z"
+            }
+          ]
+        },
+        "F-f6f10033b41d": {
+          "digest": "f6f10033b41de5c194c3ed8c85db890aa0a914383293c739cd4af369b2a6818c",
+          "text": "`docs/run.md:204` says \"two things the brief cannot replace\" and then describes three (the round pointer, the finding format, the bundle-text rule). `docs/guide/workers.md:469` says \"Two further parts\" but names three constants. Correct the count or remove it (carried from round 1, still open).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T18:40:44Z"
+            }
+          ]
+        },
+        "F-501dd8f62d57": {
+          "digest": "501dd8f62d573ac23d59f7f9610cf26b601893c264c12510f110fd6c99ec8b42",
+          "text": "The `info.document[\"snapshot\"]` -> `review_rounds.split_rounds` extraction in `_run_review_job` is still exercised only with `split_rounds` patched, or on a snapshot with no split counts. A protocol document whose snapshot carries `review_round` counts would cover the real extraction (carried from round 1; low risk).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T18:40:44Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e3f7eacf7fc5b5d1fc15e21b0ab14f89237150898493de8ceac8e2bcbed9a359",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T18:40:44Z",
+          "verdict_sha256": "a7b00b1a538297d325174548dcfb19bc149cff7ed8534a22578cb89141df5a96",
+          "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e3f7eacf7fc5b5d1fc15e21b0ab14f89237150898493de8ceac8e2bcbed9a359",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T18:50:23Z",
+          "verdict_sha256": "069aa674cb8b23ce03a6c2759af89cf4a29434145c4edcafa6d8442cbe1d77d8",
+          "run_ref": "session:local .ai-review/workflow-controller-review-prompt-rounds/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:10:07Z",
+            "summary": {
+              "checklist_blob": "792b9209291744c8ce7fa55e92c3fbefab8d6252",
+              "text": "Prompt has BUNDLE_TEXT_RULE before the brief precedence paragraph, ends with VERDICT_FORMAT_RULES, no round paragraph."
+            },
+            "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+            "run_ref": "controller:20261025T185435Z-2324b95a",
+            "reporter": "workflow-controller 1.21.0",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:10:07Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:10:07Z",
+            "summary": {
+              "checklist_blob": "792b9209291744c8ce7fa55e92c3fbefab8d6252",
+              "text": "changes_file_for returned the changes file path relative to the bundle's parent (bundle path is the bundle dir, file beside it); prompt with external_round=2 has the round paragraph between bundle-text rule and precedence paragraph with role section, whole-bundle APPROVE and 'Review scope: changes'; file text not copied."
+            },
+            "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+            "run_ref": "controller:20261025T185435Z-2324b95a",
+            "reporter": "workflow-controller 1.21.0",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:10:07Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:10:07Z",
+            "summary": {
+              "checklist_blob": "792b9209291744c8ce7fa55e92c3fbefab8d6252",
+              "text": "Different review_content_id, symlink, >1MiB, missing role section, 'not available' section and fenced-only heading each returned None and gave no round paragraph."
+            },
+            "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+            "run_ref": "controller:20261025T185435Z-2324b95a",
+            "reporter": "workflow-controller 1.21.0",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:10:07Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:10:07Z",
+            "summary": {
+              "checklist_blob": "792b9209291744c8ce7fa55e92c3fbefab8d6252",
+              "text": "external_round=1 with valid file: no paragraph; external_round=None: paragraph without 'This is external round N'."
+            },
+            "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+            "run_ref": "controller:20261025T185435Z-2324b95a",
+            "reporter": "workflow-controller 1.21.0",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:10:07Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:10:08Z",
+            "summary": {
+              "checklist_blob": "792b9209291744c8ce7fa55e92c3fbefab8d6252",
+              "text": "With a hostile brief, bundle-text rule, precedence paragraph, brief and verdict format rules all present in that order."
+            },
+            "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+            "run_ref": "controller:20261025T185435Z-2324b95a",
+            "reporter": "workflow-controller 1.21.0",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:10:08Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:10:08Z",
+            "summary": {
+              "checklist_blob": "792b9209291744c8ce7fa55e92c3fbefab8d6252",
+              "text": "tests.test_review_job: 80 tests OK, including all 5 RoundPromptWiringTest cases."
+            },
+            "log_digest": "83dbd5db7fbafe6978756a20602eab0bd22f0b296ea372a797e64cb62fefc69f",
+            "run_ref": "controller:20261025T185435Z-2324b95a",
+            "reporter": "workflow-controller 1.21.0",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:10:08Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "ran_at": "2026-10-25T19:19:14Z",
+            "summary": {
+              "result": "PASS",
+              "detail": "operator (outside the tester sandbox, whose PID namespace reads the lock status as unknown): the four review test modules 269 tests OK; the golden checks in the form docs/guide/development.md documents (plan_stage_decisions and external_implementation_review_decisions with --release 2.6.0, no_policy_lifecycle, protocol_vs_legacy_differences) all current (the bare --check of the checklist compares the 2.6.0-pinned plan-stage golden with the current Workflow and reports a difference that also occurs on the base commit, so it is the checklist command, not this change); check_docs exits 0; docs/run.md, docs/guide/workers.md and docs/guide/runtime.md describe the round paragraph and the format paragraph; the ROADMAP RB2 row says implemented"
+            },
+            "log_digest": "7ba5d9a88d956119ed19e4e63314894b1976f259289024f35f564e6bdd96306c",
+            "run_ref": "rb2-functional-operator-1",
+            "reporter": "operator",
+            "identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T19:19:14Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 164,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/164"
+          },
+          "state": "open",
+          "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+          "observed_at": "2026-10-25T19:21:17Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "1592d8cd2374a1cbf0e729882a7a128ed23b2c85",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-25T19:21:17Z",
+            "raw_sha256": "9a31e6f70fa5935f5d4d4e103d5a9ff98041d79dcabd1b6e105c920c6d93a00a",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "a3ee4f749755c532a50babb424b1188ab07455708d8ad7a7c1099016593bfb75"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #164 at e48352ab5c63f64674508ad5abc964061563c9b2 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "1592d8cd2374a1cbf0e729882a7a128ed23b2c85",
+          "anchor_identity": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "aeabf827305649eec8ae335a3c6bf4e7e8667bf5b93fe87c3bddf688468b4d66",
+            "recorded_at": "2026-10-25T18:52:35Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "a44f9cdde89dddfc48598115cddecea43690ddb0ad859a0e1f85e8db5cfc20de",
+              "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+              "run_ref": "controller:20261025T185435Z-2324b95a"
+            },
+            "flow-2": {
+              "evidence_id": "bc4cfa87fa85fff7743966395dc90f201474baf3e2b5b88f90e45b3061b5b15c",
+              "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+              "run_ref": "controller:20261025T185435Z-2324b95a"
+            },
+            "flow-3": {
+              "evidence_id": "f9930d7a20da619122ef6ec84c5ffd8a8770d159af96075167dd5862b01296c4",
+              "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+              "run_ref": "controller:20261025T185435Z-2324b95a"
+            },
+            "flow-4": {
+              "evidence_id": "f97f802fc9bddc053b3a502c67a31708328a4483d6c6b02715b78920d94691af",
+              "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+              "run_ref": "controller:20261025T185435Z-2324b95a"
+            },
+            "flow-5": {
+              "evidence_id": "f6f0960623ed68ebf85f89d944c5f52d029ea54d4f74cf7dd4998c9acd69174f",
+              "log_digest": "b1509fb05b7c5e1ba4963d5c27e30e554d630998a066a96f132dc3f276f80e71",
+              "run_ref": "controller:20261025T185435Z-2324b95a"
+            },
+            "flow-6": {
+              "evidence_id": "c148d9416117ae4a85467df18c89b9cb9ea165a964c04e448c606ae540a132d5",
+              "log_digest": "83dbd5db7fbafe6978756a20602eab0bd22f0b296ea372a797e64cb62fefc69f",
+              "run_ref": "controller:20261025T185435Z-2324b95a"
+            },
+            "flow-7": {
+              "evidence_id": "526b1139da5c2dbfea5034dd968aaddea8e2d85e4bce4c181a23a0efdc46f030",
+              "log_digest": "7ba5d9a88d956119ed19e4e63314894b1976f259289024f35f564e6bdd96306c",
+              "run_ref": "rb2-functional-operator-1"
+            }
+          },
+          "pr": {
+            "fact_id": "a3ee4f749755c532a50babb424b1188ab07455708d8ad7a7c1099016593bfb75",
+            "head": "e48352ab5c63f64674508ad5abc964061563c9b2",
+            "provenance": "workflow_gh",
+            "raw_sha256": "9a31e6f70fa5935f5d4d4e103d5a9ff98041d79dcabd1b6e105c920c6d93a00a"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-25T19:21:17Z",
+        "workflow_release": "2.19.2"
+      }
     }
   }
 }

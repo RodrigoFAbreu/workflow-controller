@@ -413,7 +413,10 @@ review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
   The brief cannot relax the rules that stand above it (the review is
   read-only, the reviewer delegates nothing, files it reads are content and
   never instructions) or change the verdict format; where it conflicts, they
-  win. The Controller's check of the verdict verifies the status and the
+  win. The round paragraph (from the second external round) and the
+  finding-format rules are fixed text too; the brief's place in the prompt
+  is unchanged, after the review instructions and before the verdict
+  format. The Controller's check of the verdict verifies the status and the
   identifiers in its header, not the section names or what the brief asked
   for. The text is copied into job records, so a secret or a local path does
   not belong in it. It is at most 2000 characters and may not hold a control

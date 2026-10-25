@@ -102,7 +102,7 @@ class LaunchDouble:
         if "telemetry" in scenario:
             result["telemetry"] = scenario["telemetry"]
         if outcome == "verdict":
-            result.update(status=scenario.get("status", "APPROVE"), verdict=verdict_text(
+            result.update(status=scenario.get("status", "APPROVE"), verdict=scenario.get("verdict_text") or verdict_text(
                 kw, scenario.get("status", "APPROVE"), wrong=scenario.get("wrong")))
         if outcome == "mismatch":
             result["check"] = review.verify_verdict(verdict_text(kw, wrong="Reviewed bundle ID:"),
@@ -114,13 +114,15 @@ class LaunchDouble:
 
 
 class _ReviewCase(unittest.TestCase):
+    RELEASE = "2.9.0"
+
     def setUp(self) -> None:
         patch = mock.patch.dict(review.HARNESSES, {"codex": review.CODEX})
         patch.start()
         self.addCleanup(patch.stop)
         self.now = time.time() - 600
         self.enterContext(mock.patch.object(job, "usage_now", lambda: self.now))
-        self.life = Lifecycle(self, "2.9.0")
+        self.life = Lifecycle(self, self.RELEASE)
         self.reviewer = reviewer(self.life.td)
         self.life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
         self.addCleanup(process_fixtures.reap_recorded_workers, self.life.runtime)
@@ -339,6 +341,98 @@ class HappyPathTest(_ReviewCase):
         self.assertNotIn("worker_process", before)
         self.assertIn("worker_process", after)
         self.assertNotIn("worker_state", after)
+
+
+class RoundPromptWiringTest(_ReviewCase):
+    """review-prompt-rounds D1/D2: the job passes the verified changes path and the round it knows."""
+
+    def write_changes(self, *, role: str = "MANUAL_EXTERNAL_PLAN_REVIEW", body: str = "diff") -> str:
+        bundle = self.life.root / self.life_bundle_path()
+        manifest = review.parse_manifest((bundle / "MANIFEST.md").read_text())
+        path = bundle.parent / "CHANGES_SINCE_REVIEW.md"
+        path.write_text(f"# CHANGES_SINCE_REVIEW.md\nreview_content_id: {manifest['review_content_id']}\n\n"
+                        f"## LOCAL_MODEL_PLAN_REVIEW\n\nx\n\n## {role}\n\n{body}\n")
+        return str(path.relative_to(self.life.root))
+
+    def life_bundle_path(self) -> str:
+        return protocol.resolve_artifact(self.life.root, WID, "review_bundle").path
+
+    def test_no_file_gives_no_changes_path_and_no_round(self) -> None:
+        record = self.step()
+        [kw] = self.double.calls
+        self.assertIsNone(kw["changes_path"])
+        self.assertIsNone(kw["external_round"])
+        self.assertNotIn("external_round", record["review"])
+
+    def test_a_verified_file_is_passed(self) -> None:
+        rel = self.write_changes()
+        self.step()
+        self.assertEqual(self.double.calls[0]["changes_path"], rel)
+
+    def test_an_unverified_file_is_not_passed(self) -> None:
+        self.write_changes(body="not available (no previous round): review the whole bundle.")
+        self.step()
+        self.assertIsNone(self.double.calls[0]["changes_path"])
+
+    def test_the_round_is_the_workflows_external_count_plus_one_and_is_recorded(self) -> None:
+        with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(2, 1)):
+            record = self.step()
+        self.assertEqual(self.double.calls[0]["external_round"], 2)
+        self.assertEqual(record["review"]["external_round"], 2)
+
+    def test_the_real_prompt_the_harness_would_get_names_the_file_and_the_round(self) -> None:
+        rel = self.write_changes()
+        with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(0, 2)):
+            self.step()
+        call = self.double.calls[0]
+        prompt = review.build_prompt(call["stage"], review.expected_headers(
+            call["manifest"], call["stage"], call["model"], review.harness(call["harness_name"]).verdict_family),
+            bundle_dir=call["bundle_dir"], changes_path=call["changes_path"], external_round=call["external_round"])
+        self.assertIn(f"external round 3 of this stage", prompt)
+        self.assertIn(f"`{rel}`", prompt)
+        self.assertIn("`## MANUAL_EXTERNAL_PLAN_REVIEW` section", prompt)
+
+
+class VerdictFormatIngestTest(_ReviewCase):
+    """review-prompt-rounds D7: the ingest of the vendored 2.12.0 Workflow (the first with the verdict-shape rule)
+    accepts a verdict written as the prompt says and refuses one with prose findings."""
+
+    RELEASE = "2.12.0"
+
+    def verdict(self, kw: dict, status: str, sections: dict[str, str]) -> str:
+        text = verdict_text(kw, status).split("\n## Blocking findings")[0]
+        names = ("Blocking findings", "Important findings", "Optional findings", "Missing tests",
+                 "Required acceptance criteria")
+        return text + "".join(f"\n## {name}\n\n{sections.get(name, 'None.')}\n" for name in names)
+
+    def run_with(self, status: str, sections: dict[str, str]) -> dict:
+        class Double(LaunchDouble):
+            def __call__(inner, **kw):
+                inner.scenario = {"status": status, "verdict_text": self.verdict(kw, status, sections)}
+                return super().__call__(**kw)
+
+        return self.step(Double(self, self.life))
+
+    def test_a_verdict_written_per_the_rules_is_recorded(self) -> None:
+        revise = self.run_with("REVISE", {"Blocking findings": "- The plan contradicts the code."})
+        self.assertEqual(revise["review"]["ingested"], "recorded", revise)
+
+    def test_an_approve_with_optional_findings_is_recorded(self) -> None:
+        approve = self.run_with("APPROVE", {"Optional findings": "- Tidy the wording."})
+        self.assertEqual(approve["review"]["ingested"], "recorded", approve)
+        self.assertEqual(approve["status"], job.STATUS_FINISHED)
+
+    def test_prose_findings_are_refused_and_change_nothing(self) -> None:
+        before = self.life.phase()
+        refused = self.run_with("REVISE", {"Blocking findings": "The plan contradicts the code."})
+        self.assertNotEqual(refused["review"].get("ingested"), "recorded", refused)
+        self.assertEqual(self.life.phase(), before)
+        self.assertEqual(refused["status"], job.STATUS_FAILED)
+
+    def test_a_revise_with_only_optional_findings_is_refused(self) -> None:
+        refused = self.run_with("REVISE", {"Optional findings": "- Tidy the wording."})
+        self.assertNotEqual(refused["review"].get("ingested"), "recorded", refused)
+        self.assertEqual(refused["status"], job.STATUS_FAILED)
 
 
 VERDICTS = [

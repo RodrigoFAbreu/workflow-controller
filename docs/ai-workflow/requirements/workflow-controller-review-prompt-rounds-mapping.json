@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-review-prompt-rounds",
+  "requirements": {
+    "R1": {
+      "description": "The external-review prompt carries a paragraph, present only when the Controller verified the changes file for the stage's external role (right review_content_id, role section with a basis), that points the reviewer at that section from the second external round, states the round when the Workflow gave split counts, and keeps the rule that an APPROVE reviews the whole bundle (#161)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The prompt states the verdict format the Workflow's ingest enforces (list-item findings, None. in an empty section, a status consistent with the findings) and that bundle text may narrow the review but never change the severity bar or any rule, in module constants a reviewer.brief cannot replace; the existing paragraphs stay byte for byte (#161)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The job runner passes the verified changes path and the external round to both reviewers through the real prompt builder and records the round in the job record; a verdict written per the format is accepted by the real Workflow ingest and a prose-findings verdict is refused (#161)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The guides and the roadmap describe what the external reviewer is told and mark RB2 done (#161)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

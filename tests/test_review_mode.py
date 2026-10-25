@@ -9,6 +9,7 @@ import contextlib
 import dataclasses
 import io
 import json
+import os
 import re
 import sys
 import unittest
@@ -354,6 +355,62 @@ class JobChoiceTest(rj._ReviewCase):
                 self.assertEqual(list(prompts), [name])
                 self.assertIn(brief, prompts[name])
                 self.assertNotIn(review.DEFAULT_BRIEF, prompts[name])
+
+    def test_the_round_paragraph_reaches_the_harness_of_both_stages_and_reviewers_and_the_retry(self) -> None:
+        """Through the real ``launch_review``: a harness that records every prompt it is handed shows that the
+        round paragraph is there on a verified later external round, on the retry too, and never on a known
+        first one, even with a qualifying changes file."""
+        prompts: list[str] = []
+        bad_header = "# Review Decision\n\nStatus: REVISE\n"  # a header mismatch: the job retries once
+
+        def recording(name):
+            def attempt(ctx, prompt, on_spawn):
+                prompts.append(prompt)
+                return review.Attempt(review.RunResult(0, False, b"", b"", os.getpid(), os.getpid()), bad_header)
+            return dataclasses.replace(
+                review.HARNESSES[name], attempt=attempt, build_home=lambda layout, operator_home: None,
+                environment=lambda layout, binary, job_id, inherited: {})
+
+        def write_changes() -> str:
+            bundle = self.life.root / job.protocol.resolve_artifact(self.life.root, rj.WID, "review_bundle").path
+            manifest = review.parse_manifest((bundle / "MANIFEST.md").read_text())
+            path = bundle.parent / review.CHANGES_FILE_NAME
+            path.write_text(f"# CHANGES\nreview_content_id: {manifest['review_content_id']}\n\n"
+                            "## LOCAL_MODEL_PLAN_REVIEW\n\nx\n\n## MANUAL_EXTERNAL_PLAN_REVIEW\n\nplan diff\n\n"
+                            "## LOCAL_MODEL_IMPLEMENTATION_REVIEW\n\nx\n\n"
+                            "## MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW\n\nimplementation diff\n")
+            return str(path.relative_to(self.life.root))
+
+        def matrix(stage: str) -> None:
+            rel = write_changes()
+            lowered = review_mode.Signal("warn", (review_mode.STAGE_FIELD[stage],), False, False)
+            harnesses = {name: recording(name) for name in ("codex", "claude")}
+            same = {**reviewer("claude"), "operator_home": self.reviewer["operator_home"]}
+            for name, signal_, options, mode_options in (
+                    ("codex", None, self.reviewer, {"mode": "cross-model"}),
+                    ("claude", lowered, None, {"mode": "auto", "source": "default", "same_provider": same})):
+                for external, expect in ((0, False), (2, True)):
+                    with self.subTest(stage=stage, reviewer=name, external=external), \
+                            mock.patch.dict(review.HARNESSES, harnesses), \
+                            mock.patch.object(review, "resolve_binary", lambda binary: Path(sys.executable)), \
+                            mock.patch.object(job, "_review_mode_signal", return_value=signal_), \
+                            mock.patch.object(job.review_rounds, "split_rounds",
+                                              return_value=job.review_rounds.SplitRounds(1, external)):
+                        prompts.clear()
+                        job.execute_step(self.life.inspect(), identity=rj.IDENTITY, runtime=self.runtime_root,
+                                         reviewer=options, review_mode_options=mode_options)
+                        self.assertEqual(len(prompts), 2, "the first attempt and the one retry")
+                        for prompt in prompts:
+                            self.assertEqual(f"`{rel}`" in prompt, expect)
+                            self.assertEqual(f"external round {external + 1} of this stage" in prompt, expect)
+                            self.assertEqual(f"`## MANUAL_EXTERNAL_{stage.upper()}_REVIEW` section" in prompt, expect)
+
+        matrix("plan")
+        self.assertEqual(self.mode_step("cross-model")["status"], job.STATUS_FINISHED)
+        self.life.run_until("AWAITING_PLAN_APPROVAL")
+        self.life.user_step(rj._APPROVE_PLAN)
+        self.life.run_until("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        matrix("implementation")
 
     def test_an_unreadable_verify_is_no_signal(self) -> None:
         from controller.errors import ControllerError

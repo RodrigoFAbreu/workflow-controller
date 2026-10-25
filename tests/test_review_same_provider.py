@@ -103,6 +103,18 @@ class RunTest(SameProviderCase):
         self.assertIn("Reviewer model: anthropic/claude-opus-5-5", text)
         self.assertEqual(text, rj.verdict_text(self.double.calls[0]))  # byte for byte what the harness returned
 
+    def test_the_same_provider_review_gets_the_changes_path_and_the_round(self) -> None:
+        bundle = self.life.root / job.protocol.resolve_artifact(self.life.root, WID, "review_bundle").path
+        manifest = review.parse_manifest((bundle / "MANIFEST.md").read_text())
+        changes = bundle.parent / "CHANGES_SINCE_REVIEW.md"
+        changes.write_text(f"# CHANGES\nreview_content_id: {manifest['review_content_id']}\n\n"
+                           "## MANUAL_EXTERNAL_PLAN_REVIEW\n\ndiff\n")
+        with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(1, 1)):
+            record = self.mode_step()
+        [kw] = self.double.calls
+        self.assertEqual(kw["changes_path"], str(changes.relative_to(self.life.root)))
+        self.assertEqual((kw["external_round"], record["review"]["external_round"]), (2, 2))
+
     def test_a_revise_is_returned_to_the_workflow(self) -> None:
         record = self.mode_step(status="REVISE")
         self.assertEqual(record["status"], job.STATUS_FINISHED)

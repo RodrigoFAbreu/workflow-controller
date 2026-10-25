@@ -466,7 +466,20 @@ empty `--setting-sources` stops Claude Code loading the repository's
 the read-only tools and the disposable copy bound what that can do. Like the
 Codex reviewer, it is given the severity bar in its prompt; the operator changes
 it with `reviewer.brief` ([the settings](runtime.md#what-it-holds)), read only
-from a settings file outside the repository under review.
+from a settings file outside the repository under review. Two further parts of
+the prompt are fixed text in the Controller (`BUNDLE_TEXT_RULE`, `round_rule`,
+`VERDICT_FORMAT_RULES` in `controller/review.py`) and `reviewer.brief` cannot
+replace them: the verdict format the ingest enforces (list-item findings,
+`None.` for an empty section, a status consistent with the findings), and, from
+the second external round, a pointer to the stage's section of
+`CHANGES_SINCE_REVIEW.md`. The Controller adds the pointer only after
+`changes_file_for` has read the file on the worktree: a regular file of at most
+1 MiB whose `review_content_id` is the bundle's and whose last
+`## <reviewer role>` section is not "not available". The round number comes
+from the Workflow's split round counts and is stored as `review.external_round`
+in the job record. An approval is a review of the whole bundle; `Review scope:
+changes` is valid on a `REVISE` or `BLOCK` only. Text taken from the bundle
+may narrow where the reviewer looks, never what counts or what is allowed.
 
 The verdict's header must match the bundle exactly with the family
 `anthropic`, and is handed to `record-external-result` verbatim; the Workflow

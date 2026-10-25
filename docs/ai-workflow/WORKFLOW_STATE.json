@@ -30357,7 +30357,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-table-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-table-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -30497,12 +30497,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 17,
-      "last_transition": "2026-10-25T22:46:03Z",
+      "state_revision": 18,
+      "last_transition": "2026-10-25T23:00:31Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -30622,6 +30622,76 @@
               "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
               "verdict": "APPROVE",
               "at": "2026-10-25T21:24:02Z"
+            }
+          ]
+        },
+        "F-8169cd14902f": {
+          "digest": "8169cd14902f77d35cc99c1f650025188ca41956802832e5e2b3408e0ae07d68",
+          "text": "**O1. A missing wording surfaces as a traceback, not one line.** `check()` calls `render()` outside its `try`, so a\n  registry constant with no entry in `ROLE_WORDING`/`USAGE_WORDING` makes `python3 tools/check_docs.py` and\n  `harness_table.py --check` stop with a `ValueError` traceback instead of one problem line naming the page (`--write`\n  does catch it). The message still names the key, so this is cosmetic; catching `ValueError` around `render()` in\n  `check()` would keep the one-line form.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "6fcd7094af89b7b85b78cf1aa01c0999cd4c1774238969cc4988ffaa3b9f983b",
+              "verdict": "REVISE",
+              "at": "2026-10-25T23:00:31Z"
+            }
+          ]
+        },
+        "F-80ca79df6203": {
+          "digest": "80ca79df6203d37e693d3d966a8648699452294e1f8fbd9f498a0fac512537b3",
+          "text": "**O2. `sys.modules.setdefault(\"harness_table\", module)` in `check_harness_table` has no effect on behaviour.** The\n  freshly executed module is used either way, and the entry keeps only the first one loaded; drop the line or say why\n  it is there.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "6fcd7094af89b7b85b78cf1aa01c0999cd4c1774238969cc4988ffaa3b9f983b",
+              "verdict": "REVISE",
+              "at": "2026-10-25T23:00:31Z"
+            }
+          ]
+        },
+        "F-ec6ea627b1dd": {
+          "digest": "ec6ea627b1dd08dd0bfa454457dc99bcf4cf4d55ab8aff682784a3356fc9988b",
+          "text": "**O3. `runtime.md` keeps a hand-written copy of the accepted pairs** (\"`claude-code`: every routing role; `codex`: no\n  routing role yet\"), now next to the link to the generated table. It is correct today but is exactly the kind of list\n  the milestone exists to stop drifting; the item that first declares a Codex role (C10g-3) has to edit it by hand, and\n  `development.md`'s \"Adding a harness\" step does not mention it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "6fcd7094af89b7b85b78cf1aa01c0999cd4c1774238969cc4988ffaa3b9f983b",
+              "verdict": "REVISE",
+              "at": "2026-10-25T23:00:31Z"
+            }
+          ]
+        },
+        "F-2b48ed7b72b0": {
+          "digest": "2b48ed7b72b0cbab47dffaac228998f5df68af9b99dd0d3c54ac483f9854f117",
+          "text": "**O4. The plan review's Optional O1 (a mutation test of `routing.ADAPTER_ROLE` alone) was not taken up.** Not\n  required by the plan; noted for the record.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "6fcd7094af89b7b85b78cf1aa01c0999cd4c1774238969cc4988ffaa3b9f983b",
+              "verdict": "REVISE",
+              "at": "2026-10-25T23:00:31Z"
+            }
+          ]
+        },
+        "F-12d7756e44e7": {
+          "digest": "12d7756e44e7892ae2b37dfd77e8797bd2885cf4d177c2e259e4e4f7f8755882",
+          "text": "**O5. The `if before and not before.endswith(\"\\n\")` branch of `write` is unreachable**: `before` always ends with the\n  begin-marker line, and a begin line without a newline is the last line, so `_split` has already refused the page.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "6fcd7094af89b7b85b78cf1aa01c0999cd4c1774238969cc4988ffaa3b9f983b",
+              "verdict": "REVISE",
+              "at": "2026-10-25T23:00:31Z"
             }
           ]
         }

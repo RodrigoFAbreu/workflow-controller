@@ -10,8 +10,11 @@ the verdict format the Workflow's ingest enforces. Plan revision 2 is approved (
   `BUNDLE_TEXT_RULE`, `VERDICT_FORMAT_RULES`, `changes_file_for` and the round paragraph; `_run_review_job` passes
   `changes_path` and `external_round` to `launch_review` and records `review.external_round`. Verified by the four
   review test modules, the golden `--check` and the full suite.
-- CP2 (the guides and the roadmap): not started.
+- CP2 (the guides and the roadmap): complete. `docs/run.md`, `docs/guide/workers.md` and `docs/guide/runtime.md` describe the
+  fixed round and finding-format text; `docs/ROADMAP.md` marks RB2 implemented and moves the next action to the operator's
+  Codex trial. Verified by `tools/check_docs.py`.
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-review-prompt-rounds` for CP2.
+Run `/milestone-implement workflow-controller-review-prompt-rounds` again: all checkpoints are complete, so it enters
+self-review, runs the full verification and prepares the implementation review bundle.

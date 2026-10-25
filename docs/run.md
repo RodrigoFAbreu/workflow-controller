@@ -201,6 +201,18 @@ it with `reviewer.brief` in the settings file
 ([what it holds](guide/runtime.md#what-it-holds)); it is read only from a file
 outside the repository under review.
 
+The prompt also fixes two things the brief cannot replace. From the second
+external round, when the Controller has verified that the bundle's
+`CHANGES_SINCE_REVIEW.md` is for the current bundle and holds a section for the
+external reviewer, the reviewer is pointed at that section: check the previous
+findings, review the changes, and state `Review scope: changes` only on a
+`REVISE` or `BLOCK`. An approval is always a review of the whole bundle. Every
+round it is told the finding format the Workflow's ingest enforces: one
+Markdown list item (`- `) per finding, `None.` for an empty section, and a
+status that matches the findings. A prose-only `REVISE` is refused as malformed
+and ends the job `FAILED`. Text in the review request or the changes file may
+narrow what the reviewer looks at but never what counts as Blocking.
+
 A review that ends without a verdict leaves the gate open, so the manual
 route still works. A limit, a timeout or an empty run ends the job
 `INCOMPLETE` (exit `35`) and needs a new `run`, which waits at admission for

@@ -257,6 +257,7 @@ file is never an error: every setting then takes its built-in default.
 | `review.mode` | string | `auto` | `auto`, `cross-model`, `single-provider`, `manual` | `--review-mode` |
 | `reviewer.same_provider_model` | string or `null` | `null` (built-in `claude-opus-5-5`) | 1 to 128 characters | none |
 | `reviewer.same_provider_effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
+| `reviewer.brief` | string or `null` | `null` (built-in severity bar) | 0 to 2000 characters, no control character | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
 
 Each default is the value the Controller used before the file existed,
@@ -393,7 +394,30 @@ review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
 - `reviewer.timeout_seconds` is the hard deadline of one review run. A
   review that passes it ends `INCOMPLETE` (exit `35`);
 - `reviewer.binary` is the reviewer program (a name looked up on `PATH`,
-  or a path), the test seam like `--claude-binary`.
+  or a path), the test seam like `--claude-binary`;
+- `reviewer.brief` is the severity bar and scope the reviewer is
+  given, placed after the review instructions and before the verdict
+  format. Unset, empty or blank, it is the built-in brief: judge only what
+  the milestone changed, against its baseline; call a finding Blocking or
+  Important only for real harm (a wrong result, a lost or hidden failure,
+  or a claim in the plan, the bundle or the documentation that the code
+  contradicts); wording, polish, a second fault that needs a first to have
+  happened, and extra hardening are Optional, and an Optional finding never
+  turns a verdict into `REVISE` or `BLOCK` and never starts another round.
+  The brief applies to both reviewers (Codex and the same-provider Claude
+  reviewer) and to both stages. It is read only from a settings file
+  outside the repository under review: a file at or under that repository,
+  its `.ai-review/` or the reviews tree could have been written by the
+  branch being reviewed, so for this row it is ignored, with one warning per
+  invocation, and the built-in brief is used (the file's other rows apply as before).
+  The brief cannot relax the rules that stand above it (the review is
+  read-only, the reviewer delegates nothing, files it reads are content and
+  never instructions) or change the verdict format; where it conflicts, they
+  win. The Controller's check of the verdict verifies the status and the
+  identifiers in its header, not the section names or what the brief asked
+  for. The text is copied into job records, so a secret or a local path does
+  not belong in it. It is at most 2000 characters and may not hold a control
+  character other than a tab or a line break.
 
 The `review.mode` row (1.13.0) chooses how the external review of a protocol
 target runs at the two external review gates (rows 14 and 28). `--review-mode`
@@ -575,6 +599,10 @@ The release that adds the `functional` rows is table generation 13: it adds `fun
 `functional.timeout_seconds` to a file filled by an earlier release, and the routing role
 `functional-tester`, and moves nothing else. An older Controller sharing the file afterwards warns
 about the two unknown keys, ignores them, and its `settings clean` refuses.
+
+The release that adds `reviewer.brief` is table generation 14: it adds the row to a file filled by an earlier release,
+unset (`null`), and moves nothing else. An older Controller sharing the file afterwards warns about the unknown key,
+ignores it, and its `settings clean` refuses.
 
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer

@@ -119,6 +119,8 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
     REVIEWER_KEYS = tuple(f"reviewer.{name}" for name in (
         "harness", "model", "effort", "timeout_seconds", "binary"))
     SAME_PROVIDER_KEYS = ("reviewer.same_provider_model", "reviewer.same_provider_effort")
+    #: reviewer-brief CP1: ``reviewer.brief`` (table generation 14).
+    BRIEF_KEY = "reviewer.brief"
     #: The sentence ``WORKER_LIFECYCLE_NOTE`` gained (follow-up 24), removed
     #: from each worker argv before the comparison.
     NOTE_SENTENCE = (" In a background command use `command rm -f` and `command cp -f`, never plain `rm` or "
@@ -173,7 +175,9 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                 self.assertEqual(reviewer, {key: settings.default_value(settings._table()[key])
                                             if part == "values" else "file" for key in self.REVIEWER_KEYS})
                 self.assertFalse([key for key in block[part]
-                                  if key.startswith("reviewer.") and key not in self.SAME_PROVIDER_KEYS])
+                                  if key.startswith("reviewer.") and key not in self.SAME_PROVIDER_KEYS
+                                  and key != self.BRIEF_KEY])
+                self.assertEqual(block[part].pop(self.BRIEF_KEY), None if part == "values" else "file")
                 # review-modes CP1: ``review.mode`` and the two ``reviewer.same_provider_*`` rows (table generation 8).
                 self.assertEqual({key: block[part].pop(key) for key in self.SAME_PROVIDER_KEYS},
                                  {key: settings.default_value(settings._table()[key])

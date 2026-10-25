@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-reviewer-brief",
+  "dispositions": {
+    "F-224dd4a127dd": {
+      "disposition": "fixed"
+    },
+    "F-320d07002717": {
+      "disposition": "dropped",
+      "reason": "Safe by design: the brief is ignored with a warning when the settings file is under the repository root; a dotfiles repository at $HOME is an unusual setup and the warning names the cause."
+    },
+    "F-3d346c6ee9db": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a per-round bundle artefact, regenerated for each bundle; the later runs and mutation results are recorded in IMPLEMENTATION_SUMMARY.md and only test files changed since the full-suite run, so the result stands."
+    },
+    "F-3fb6411068dd": {
+      "disposition": "fixed"
+    },
+    "F-4bde1874ed04": {
+      "disposition": "fixed"
+    },
+    "F-5a20308cf4bc": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a per-round bundle artefact, regenerated for each bundle; the later runs and mutation results are recorded in IMPLEMENTATION_SUMMARY.md and only test files changed since the full-suite run, so the result stands."
+    },
+    "F-5bb1f703648a": {
+      "disposition": "dropped",
+      "reason": "A settings file in another worktree of the same repository is outside the plan's D2 trust rule; the rule is unchanged by this milestone. Candidate extension, recorded here, not worth a separate change for a single-operator setup."
+    },
+    "F-6ea41c02e8c5": {
+      "disposition": "fixed"
+    },
+    "F-767220941aec": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a per-round bundle artefact, regenerated for each bundle; the later runs and mutation results are recorded in IMPLEMENTATION_SUMMARY.md and only test files changed since the full-suite run, so the result stands."
+    },
+    "F-911040cda352": {
+      "disposition": "fixed"
+    },
+    "F-b1b4003f28fd": {
+      "disposition": "dropped",
+      "reason": "A settings file in another worktree of the same repository is outside the plan's D2 trust rule; the rule is unchanged by this milestone. Candidate extension, recorded here, not worth a separate change for a single-operator setup."
+    },
+    "F-b832aa26f850": {
+      "disposition": "fixed"
+    },
+    "F-c9eb47e769a7": {
+      "disposition": "dropped",
+      "reason": "A settings file in another worktree of the same repository is outside the plan's D2 trust rule; the rule is unchanged by this milestone. Candidate extension, recorded here, not worth a separate change for a single-operator setup."
+    },
+    "F-d31408d301e6": {
+      "disposition": "fixed"
+    },
+    "F-d68b99816949": {
+      "disposition": "fixed"
+    },
+    "F-e064262be701": {
+      "disposition": "dropped",
+      "reason": "Harmless: the second guard entry only affects the warning's wording and is never reached."
+    },
+    "F-e3c262a6c3a5": {
+      "disposition": "dropped",
+      "reason": "The warning repeating once per consumption across a multi-step run is acceptable: it is a warning about a refused brief the operator should fix."
+    }
+  }
+}

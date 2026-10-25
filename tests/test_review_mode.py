@@ -6,6 +6,7 @@ consultation of ``choose``."""
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import io
 import json
 import re
@@ -18,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, job, review, review_mode, worker  # noqa: E402
+from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import test_review_job as rj  # noqa: E402
 from controller.review_mode import (  # noqa: E402
     MODE_AUTO, MODE_CROSS_MODEL, MODE_MANUAL, MODE_SINGLE_PROVIDER, choose, read_signal, signal_of_checks,
@@ -299,6 +301,36 @@ class JobChoiceTest(rj._ReviewCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertNotIn(review_mode.REVIEW_MODE_UNAVAILABLE, json.dumps(record))
         self.assertEqual(self.double.calls, [])
+
+    def test_the_brief_reaches_the_prompt_of_both_reviewers_through_the_real_launch(self) -> None:
+        """The job runner's real ``launch_review`` builds the prompt: a harness that records it and then
+        refuses shows what each reviewer would have been told."""
+        prompts = {}
+
+        def recording(name):
+            def attempt(ctx, prompt, on_spawn):
+                prompts[name] = prompt
+                raise ReviewLaunchRefusedError("recorded", evidence={"check": "recorded"})
+            return dataclasses.replace(
+                review.HARNESSES[name], attempt=attempt, build_home=lambda layout, operator_home: None,
+                environment=lambda layout, binary, job_id, inherited: {})
+
+        lowered = review_mode.Signal("warn", ("plan_approval.require",), False, False)
+        harnesses = {name: recording(name) for name in ("codex", "claude")}
+        same = {**reviewer("claude"), "brief": "Same-provider bar.", "operator_home": self.reviewer["operator_home"]}
+        for name, signal, options, brief, mode_options in (
+                ("codex", None, {**self.reviewer, "brief": "Codex bar."}, "Codex bar.", {"mode": "cross-model"}),
+                ("claude", lowered, None, "Same-provider bar.",
+                 {"mode": "auto", "source": "default", "same_provider": same})):
+            with self.subTest(reviewer=name), mock.patch.dict(review.HARNESSES, harnesses), \
+                    mock.patch.object(review, "resolve_binary", lambda binary: Path(sys.executable)), \
+                    mock.patch.object(job, "_review_mode_signal", return_value=signal):
+                prompts.clear()
+                job.execute_step(self.life.inspect(), identity=rj.IDENTITY, runtime=self.runtime_root,
+                                 reviewer=options, review_mode_options=mode_options)
+                self.assertEqual(list(prompts), [name])
+                self.assertIn(brief, prompts[name])
+                self.assertNotIn(review.DEFAULT_BRIEF, prompts[name])
 
     def test_an_unreadable_verify_is_no_signal(self) -> None:
         from controller.errors import ControllerError

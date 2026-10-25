@@ -463,7 +463,10 @@ directory and the Workflow state are compared before and after, as for Codex
 (the job record and the operator's Claude home are not snapshotted). The
 empty `--setting-sources` stops Claude Code loading the repository's
 `CLAUDE.md` on its own, but a reviewer that reads the file may still follow it;
-the read-only tools and the disposable copy bound what that can do.
+the read-only tools and the disposable copy bound what that can do. Like the
+Codex reviewer, it is given the severity bar in its prompt; the operator changes
+it with `reviewer.brief` ([the settings](runtime.md#what-it-holds)), read only
+from a settings file outside the repository under review.
 
 The verdict's header must match the bundle exactly with the family
 `anthropic`, and is handed to `record-external-result` verbatim; the Workflow

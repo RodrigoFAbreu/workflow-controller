@@ -194,6 +194,13 @@ always stops at the gate. A choice that cannot run stops at the
 A repository that sets nothing behaves as before. `explain` shows what the next
 step will do.
 
+Either reviewer is given a severity bar: judge only what the milestone changed,
+call a finding Blocking or Important only for real harm, and leave wording,
+polish and extra hardening Optional, which never starts another round. Change
+it with `reviewer.brief` in the settings file
+([what it holds](guide/runtime.md#what-it-holds)); it is read only from a file
+outside the repository under review.
+
 A review that ends without a verdict leaves the gate open, so the manual
 route still works. A limit, a timeout or an empty run ends the job
 `INCOMPLETE` (exit `35`) and needs a new `run`, which waits at admission for

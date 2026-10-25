@@ -1117,7 +1117,8 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
         effective_settings = _effective(args)
         mode_report = job.review_mode_report(
             runtime_root, target, None if work_item is target_state.NoWorkItemYet else work_item.work_item_id,
-            decision, _reviewer_options(effective_settings), _review_mode_options(effective_settings))
+            decision, _reviewer_options(effective_settings, target.root, runtime_root),
+            _review_mode_options(effective_settings, target.root, runtime_root))
     if mode_report is not None and mode_report["choice"] == "review":
         # Round-caps D2: the step stops at the external cap instead of launching this review.
         capped = job.external_review_cap_gate(target, work_item, decision, _round_caps(_effective(args)))
@@ -1435,7 +1436,44 @@ def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run:
     return gate
 
 
-def _reviewer_options(effective: settings.EffectiveSettings) -> dict | None:
+#: Settings files whose ignored ``reviewer.brief`` this process already
+#: warned about, so the warning is written once per invocation, not once per
+#: reviewer or per step.
+_brief_warned: set[str] = set()
+
+
+def _reviewer_brief(effective: settings.EffectiveSettings, target_root: Path | None,
+                    runtime_root: Path | None) -> str | None:
+    """``reviewer.brief`` for the prompt, or ``None`` (the built-in default)
+    when the settings file lies at or under the repository under review, its
+    ``.ai-review/`` or the reviews tree: a file the branch could have written
+    is never the operator's word (reviewer-brief D2). One warning per process
+    names the file and the reason. Only the brief is concerned; every other row
+    of that file is read as before. Without the roots (a direct call) nothing is checked."""
+    brief = effective[settings.REVIEWER_BRIEF_KEY]
+    if brief is None or not brief.strip():
+        return None
+    guarded = [("the repository under review", target_root)]
+    if target_root is not None:
+        guarded.append(("its .ai-review directory", target_root / ".ai-review"))
+    if runtime_root is not None:
+        guarded.append(("the reviews tree", runtime_root / "reviews"))
+    real = Path(os.path.realpath(effective.path))
+    for what, root in guarded:
+        if root is None:
+            continue
+        resolved = Path(os.path.realpath(root))
+        if real == resolved or resolved in real.parents:
+            if str(effective.path) not in _brief_warned:
+                _brief_warned.add(str(effective.path))
+                print(f"workflow-controller: warning: {effective.path} lies inside {what}; its "
+                      f"{settings.REVIEWER_BRIEF_KEY} is ignored and the built-in brief is used", file=sys.stderr)
+            return None
+    return brief
+
+
+def _reviewer_options(effective: settings.EffectiveSettings, target_root: Path | None = None,
+                      runtime_root: Path | None = None) -> dict | None:
     """The ``reviewer.*`` settings as ``execute_step``'s ``reviewer`` argument:
     ``None`` while ``reviewer.harness`` is unset (today's gate), else the
     harness, model, effort, deadline and binary, each with its built-in
@@ -1450,6 +1488,7 @@ def _reviewer_options(effective: settings.EffectiveSettings) -> dict | None:
         "timeout_seconds": effective["reviewer.timeout_seconds"],
         "binary": effective["reviewer.binary"] or "codex",
         "operator_home": str(_codex_home()),
+        "brief": _reviewer_brief(effective, target_root, runtime_root),
     }
 
 
@@ -1465,7 +1504,8 @@ def _functional_options(effective: settings.EffectiveSettings) -> dict:
     }
 
 
-def _review_mode_options(effective: settings.EffectiveSettings) -> dict:
+def _review_mode_options(effective: settings.EffectiveSettings, target_root: Path | None = None,
+                         runtime_root: Path | None = None) -> dict:
     """``review.mode`` and where it came from, as ``execute_step``'s
     ``review_mode_options`` argument (review-modes D1), with the options of
     the same-provider (Claude) reviewer, which reads only the
@@ -1479,6 +1519,7 @@ def _review_mode_options(effective: settings.EffectiveSettings) -> dict:
             "timeout_seconds": effective["reviewer.timeout_seconds"],
             "binary": review.CLAUDE.default_binary,
             "operator_home": str(_claude_home()),
+            "brief": _reviewer_brief(effective, target_root, runtime_root),
         },
     }
 
@@ -2070,9 +2111,9 @@ def _run_one_step(
         poll_seconds=effective["merge.poll_seconds"],
         on_wait=None if run is None else (lambda code, deadline: run.event("waiting", gate=code, deadline=deadline)),
         usage_gate=_usage_gate(runtime_root, target, run, effective, usage_pause),
-        reviewer=_reviewer_options(effective),
+        reviewer=_reviewer_options(effective, target.root, runtime_root),
         review_round_caps=_round_caps(effective),
-        review_mode_options=_review_mode_options(effective),
+        review_mode_options=_review_mode_options(effective, target.root, runtime_root),
         functional=_functional_options(effective),
     )
 

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-reviewer-brief",
+  "requirements": {
+    "R1": {
+      "description": "A reviewer.brief setting (optional string, 0 to 2000 characters, no control characters, table generation 14) in the settings file; null, empty and whitespace mean the built-in default; settings show lists it with its source (#150)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "build_prompt adds the brief (the default carrying the severity bar and scope, or the operator text) after the first paragraph and before the verdict-format paragraph, introduced by a precedence paragraph that subordinates the brief to the read-only, no-delegation, file-content and verdict-format rules; those paragraphs stay unchanged, the format paragraph last; a hostile brief cannot change them, and the verdict check's actual limits are stated (#150)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The Codex and the same-provider reviewers, at both stages, receive the same brief through the real prompt builder; the brief is read only from a settings file outside the target repository, its .ai-review/ and the reviews tree (checked by real path), otherwise the default is used with a warning, with no command-line option (#150)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The guides and the roadmap state the setting, its default, its source rule and its limits (#150)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

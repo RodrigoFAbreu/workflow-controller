@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import io
 import json
 import os
@@ -804,6 +805,153 @@ class CliTest(_ReviewCase):
         self.assertEqual({k: options[k] for k in ("harness", "model", "effort", "timeout_seconds", "binary")}, {
             "harness": "codex", "model": "gpt-6.1-sol", "effort": "high", "timeout_seconds": 3600,
             "binary": "/x/codex"})
+
+    def brief_options(self, file_path: Path):
+        """The effective settings read from ``file_path`` (any place), as the reviewer options see them."""
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(json.dumps({"reviewer": {"harness": "codex", "brief": "Only report crashes."}}))
+        return settings.resolve(settings.load(file_path))
+
+    def test_the_brief_reaches_both_reviewers_and_the_real_prompt(self) -> None:
+        effective = self.brief_options(self.settings_path)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            codex = cli._reviewer_options(effective, self.life.root, self.runtime_root)
+            claude = cli._review_mode_options(effective, self.life.root, self.runtime_root)["same_provider"]
+        self.assertEqual((codex["brief"], claude["brief"]), ("Only report crashes.",) * 2)
+        self.assertEqual(stderr.getvalue(), "")
+        code, _result = self.one_step(self.args({"harness": "codex", "brief": "Only report crashes."}))
+        self.assertEqual(code, cli.EXIT_OK)
+        call = self.double.calls[0]
+        self.assertEqual(call["brief"], "Only report crashes.")
+        prompt = review.build_prompt(call["stage"], review.expected_headers(
+            call["manifest"], call["stage"], call["model"], review.harness(call["harness_name"]).verdict_family),
+            bundle_dir=call["bundle_dir"], brief=call["brief"])
+        self.assertIn("Only report crashes.", prompt)
+        self.assertNotIn(review.DEFAULT_BRIEF, prompt)
+
+    def test_an_unset_brief_is_none_so_the_default_applies(self) -> None:
+        code, _result = self.one_step(self.args({"harness": "codex"}))
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIsNone(self.double.calls[0]["brief"])
+
+    def test_a_settings_file_the_branch_could_have_written_is_not_the_operators_word(self) -> None:
+        root, runtime = self.life.root, self.runtime_root
+        link_dir = self.life.td / "link"
+        link_dir.symlink_to(root, target_is_directory=True)
+        places = {
+            "repository": root / "settings.json", "ai-review": root / ".ai-review" / "s.json",
+            "reviews": runtime / "reviews" / "j1" / "s.json", "symlink": link_dir / "s.json",
+            "dotdot": self.life.td / "config" / ".." / "repo" / "d.json"}
+        cli._brief_warned.clear()
+        self.addCleanup(cli._brief_warned.clear)
+        for name, path in places.items():
+            with self.subTest(place=name):
+                effective = self.brief_options(path)
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    codex = cli._reviewer_options(effective, root, runtime)
+                    claude = cli._review_mode_options(effective, root, runtime)["same_provider"]
+                    again = cli._reviewer_options(effective, root, runtime)  # a later step of the same run
+                self.assertEqual((codex["brief"], claude["brief"], again["brief"]), (None, None, None))
+                self.assertEqual(stderr.getvalue().count("warning:"), 1)
+                self.assertIn("reviewer.brief is ignored", stderr.getvalue())
+                self.assertEqual(effective["reviewer.harness"], "codex")  # the other rows are still read
+
+    def untrusted_step(self, path: Path, route: str, *, via_env: bool = False):
+        """One real ``_run_one_step`` with the settings read from ``path`` (``--settings`` or, with ``via_env``,
+        ``$WORKFLOW_CONTROLLER_SETTINGS``), on the ``codex`` or the ``same-provider`` route, through the real
+        ``launch_review``; returns the args and the ``(harness name, prompt)`` of each real invocation."""
+        body = {"reviewer": {"harness": "codex", "brief": "Only report crashes."}}
+        if route == "claude":
+            body["review"] = {"mode": "single-provider"}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(body))
+        if self.life.root in path.parents:  # git-ignored, so the working tree stays clean for the step
+            with (self.life.root / ".git" / "info" / "exclude").open("a") as exclude:
+                exclude.write(f"/{path.relative_to(self.life.root)}\n/{path.relative_to(self.life.root)}.lock\n")
+        env = {settings.ENV_SETTINGS: str(path)} if via_env else {}
+        args = argparse.Namespace(
+            repo=str(self.life.root), work_item=None, json=False, workflow_manager=None, permission_mode=None,
+            timeout=60, claude_binary="claude", max_steps=None, pause_file=None,
+            settings=None if via_env else str(path), follow=False, usage_cap=None)
+        from tests.test_review_mode import signal  # imported late: that module imports this one
+        with mock.patch.dict(os.environ, env), mock.patch.dict(review.HARNESSES, {"claude": review.CLAUDE}), \
+                mock.patch.object(job, "_review_mode_signal", return_value=signal("lowering_only")):
+            cli._apply_settings(args, write=True)
+            stderr = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(stderr):
+                    code, _result, launches = self.real_launch_step(args)  # no verdict: the gate stays open for the next call
+            finally:
+                path.unlink()  # an untracked file in the repository would block the next step
+        self.assertEqual(code, cli.EXIT_INCOMPLETE, _result)
+        self.assertIn("reviewer.brief is ignored", stderr.getvalue())
+        return args, launches
+
+    def real_launch_step(self, args):
+        """One real ``_run_one_step`` through the **real** ``review.launch_review``: only the harness's own
+        home, environment and invocation (``attempt``) are replaced, the last by one that records the prompt it is
+        handed and returns no verdict, so no reviewer binary runs and no credential is read. Returns ``(exit code, result, [(harness name, prompt), ...])``."""
+        launches, real_launch = [], review.launch_review
+        stub = self.life.td / "bin" / "stub-reviewer"
+        stub.parent.mkdir(exist_ok=True)
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(0o755)
+
+        def recording(harness_name):
+            def attempt(ctx, prompt, on_spawn):
+                launches.append((harness_name, prompt))
+                return review.Attempt(review.RunResult(0, False, b"", b"", os.getpid(), os.getpid()), "")
+            return dataclasses.replace(review.harness(harness_name), attempt=attempt, build_home=lambda layout, home: "",
+                                       environment=lambda *a, **k: {})
+
+        def launch(**kw):
+            return real_launch(**{**kw, "binary_name": str(stub)})
+
+        with mock.patch.object(worker, "launch", mock.Mock(side_effect=AssertionError("no Claude worker"))), \
+                mock.patch.dict(review.HARNESSES, {name: recording(name) for name in ("codex", "claude")}), \
+                mock.patch.object(review, "launch_review", launch):
+            code, result = cli._run_one_step(args, self.runtime_root, IDENTITY, self.life.inspect())
+        return code, result, launches
+
+    def test_a_rejected_brief_reaches_neither_launch_so_each_prompt_is_the_default(self) -> None:
+        root, runtime = self.life.root, self.runtime_root
+        places = {"repository": root / "settings.json", "ai-review": root / ".ai-review" / "s.json",
+                  "reviews": runtime / "reviews" / "j1" / "s.json"}
+        for route, harness in (("codex", "codex"), ("claude", "claude")):
+            for name, path in places.items():
+                for via_env in (False, True):
+                    with self.subTest(route=route, place=name, via_env=via_env):
+                        cli._brief_warned.clear()
+                        self.addCleanup(cli._brief_warned.clear)
+                        args, launches = self.untrusted_step(path, route, via_env=via_env)
+                        self.assertEqual([name for name, _prompt in launches], [harness])
+                        prompt = launches[0][1]
+                        self.assertIn(review.DEFAULT_BRIEF, prompt)
+                        self.assertNotIn("Only report crashes.", prompt)
+                        effective = cli._effective(args)  # the file's other rows stay in force
+                        self.assertEqual(effective["reviewer.harness"], "codex")
+                        self.assertEqual(effective["review.mode"], "single-provider" if route == "claude" else "auto")
+
+    def test_a_settings_file_outside_them_is_honoured(self) -> None:
+        effective = self.brief_options(self.life.td / "elsewhere" / "s.json")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            options = cli._reviewer_options(effective, self.life.root, self.runtime_root)
+        self.assertEqual((options["brief"], stderr.getvalue()), ("Only report crashes.", ""))
+
+    def test_a_hand_built_reviewer_dict_without_a_brief_means_the_default(self) -> None:
+        reviewer = {"harness": "codex", "model": "gpt-6.1-sol", "effort": "high", "timeout_seconds": 3600,
+                    "binary": "codex", "operator_home": str(self.life.td / "home")}
+        args = self.args({"harness": "codex"})
+        double = LaunchDouble(self, self.life)
+        with mock.patch.object(worker, "launch", mock.Mock(side_effect=AssertionError("no Claude worker"))), \
+                mock.patch.object(review, "launch_review", double), \
+                mock.patch.object(cli, "_reviewer_options", lambda *a, **k: reviewer):
+            code, _result = cli._run_one_step(args, self.runtime_root, IDENTITY, self.life.inspect())
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIsNone(double.calls[0]["brief"])
 
     def test_an_unconfigured_run_step_still_stops_at_the_gate_with_exit_10(self) -> None:
         code, result = self.one_step(self.args(None))

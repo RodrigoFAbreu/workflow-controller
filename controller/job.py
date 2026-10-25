@@ -7019,7 +7019,7 @@ def _run_review_job(
             binary_name=reviewer["binary"], operator_home=operator_home, stage=stage, manifest=manifest,
             bundle_dir=bundle.path, model=reviewer["model"], effort=reviewer["effort"],
             timeout=float(reviewer["timeout_seconds"]), feedback_dir=feedback_dir, state_identity=identity_now,
-            on_spawn=on_spawn, out=out)
+            brief=reviewer.get("brief"), on_spawn=on_spawn, out=out)
     except ReviewLaunchRefusedError as exc:
         # The boundary refused. Before the exec was spawned nothing was started (released, no charge);
         # after it (the retry's re-check), the first run spent allowance and is charged.

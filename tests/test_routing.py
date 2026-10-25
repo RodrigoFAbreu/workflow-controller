@@ -13,6 +13,7 @@ The worker's command line is ``tests/test_worker.py``'s and
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import tempfile
@@ -210,7 +211,7 @@ class PrecedenceTest(unittest.TestCase):
     def test_each_level_beats_every_level_below_it_for_each_field(self) -> None:
         for role in ("review-implementation", "milestone-plan"):
             builtin_route = routing.ROLE_ROUTES[role]
-            for field in ("model", "effort"):  # the harness resolves in CP2
+            for field in ("model", "effort"):  # the harness has no global option: HarnessResolutionTest
                 for index, level in enumerate(self.LEVELS):
                     present = set(self.LEVELS[index:])
                     with self.subTest(role=role, field=field, winner=level):
@@ -334,7 +335,7 @@ class HarnessFieldTest(unittest.TestCase):
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
 
     def test_a_later_codex_declaration_flips_exactly_that_row(self) -> None:
-        wider = harness.dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER, harness.FUNCTIONAL_TESTER))
+        wider = dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER, harness.FUNCTIONAL_TESTER))
         with unittest.mock.patch.dict(harness.ADAPTERS, {"codex": wider}):
             self.assertEqual(routing.check_role_harness("functional-tester", "codex"), "codex")
             with self.assertRaises(ValueError):

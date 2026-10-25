@@ -29638,12 +29638,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-review-prompt-rounds-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-review-prompt-rounds-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 2,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "a76bd4a654d750784a4b7bdf142ddde598fcd1c1",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "787b78eb7ad9f0c78b079478496b170dfdf67827",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -29782,8 +29782,8 @@
           "external": 0
         }
       },
-      "state_revision": 13,
-      "last_transition": "2026-10-25T17:25:40Z",
+      "state_revision": 14,
+      "last_transition": "2026-10-25T17:49:15Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -27694,7 +27694,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-brief-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-brief-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -27834,12 +27834,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 17,
-      "last_transition": "2026-10-25T05:45:09Z",
+      "state_revision": 19,
+      "last_transition": "2026-10-25T05:59:57+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -27999,11 +27999,52 @@
               "at": "2026-10-25T05:26:57Z"
             }
           ]
+        },
+        "F-3d346c6ee9db": {
+          "digest": "3d346c6ee9db7d66490e2f73c70540a5703d7ff8222da48dc654ef7ed69b9f6d",
+          "text": "O1. `TEST_RESULTS.md` is still titled \"implementation revision 1\" and reports only the `d552af2` runs. The revision-2 test runs and the mutation check are recorded only in `IMPLEMENTATION_SUMMARY.md`. Before the external round, add a short revision-2 section (the narrow run with the two new tests, and the mutation) so the test record matches the bundle.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "4b55f1cc21ea9276a08bc6871fb1c852986bdc198cf5d2d040ee31676754ae34",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T05:51:15Z"
+            }
+          ]
+        },
+        "F-c9eb47e769a7": {
+          "digest": "c9eb47e769a70487d241daf8948e715134d9edac95230eb04f99e0714a7279af",
+          "text": "O2 (carried from round 1, recorded rather than applied by the implementer): a settings file in another worktree of the same repository is honoured. This is outside D2's literal set. It is a candidate extension of the trust rule.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "4b55f1cc21ea9276a08bc6871fb1c852986bdc198cf5d2d040ee31676754ae34",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T05:51:15Z"
+            }
+          ]
         }
       },
       "consumed_plan_review_content_ids": [
         "9440becb343a0a7696ae3f0fad5bbc611d1efc9a09bc0ce250703c9684433ec2"
-      ]
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "4b55f1cc21ea9276a08bc6871fb1c852986bdc198cf5d2d040ee31676754ae34",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d012ab91e0213147283dda052973da45384d0c4c242824c3f422c61dff1db07b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T05:51:15Z",
+          "verdict_sha256": "2530e2bc8e38ff6f8d7bc1324319f1ae05028e0e36ba598510ca53e1ac0628d0",
+          "run_ref": "session:local .ai-review/workflow-controller-reviewer-brief/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

@@ -22,36 +22,14 @@ writes inside the clone (`PYTHONDONTWRITEBYTECODE=1` keeps Python from writing `
 `export PYTHONDONTWRITEBYTECODE=1`. No test data to seed: the tests build their own scratch repositories, run
 directories and notification logs under `TMPDIR`.
 
-**Flow 1: the event type exists and is an info event.**
-`python3 -B -c "from controller import notify; print(notify.EVENT_TABLE['review_wait'])"`.
-Expected: `state` (the LOW-severity class), not `user_gate`.
-
-**Flow 2: derivation (plan and implementation review waits, tester fault stops).**
-`python3 -B -m unittest tests.test_notifications_wiring.ReviewWaitDeriveTest`.
-Expected: OK. A Workflow-governed target waiting at `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` or
-`..._IMPLEMENTATION_REVIEW` derives `review_wait` ("Waiting for the external review: <item>"); every tester fault
-stop except `isolation_breach` derives `review_wait` ("Waiting: <stop> (<item>)"); `isolation_breach`, every other
-protocol gate, every legacy gate, the blocked disposition and pending checks keep their old events.
-
-**Flow 3: a wait already announced as `user_gate` is not announced again.**
-`python3 -B -m unittest tests.test_notifications_wiring.SupersededNoticeTest tests.test_notifications_wiring.TesterStopSupersededNoticeTest tests.test_notifications_wiring.ReviewWaitLiveUpgradeTest`.
-Expected: OK. A delivered old `user_gate` suppresses the `review_wait` (live and recovery); a failed or rejected one
-does not veto a fresh send, and recovery replays nothing; a symlinked run directory or log is not followed.
-
-**Flow 4: the production step path.**
-`python3 -B -m unittest tests.test_notifications_wiring.ReviewWaitProductionPathTest tests.test_notifications_wiring.BlockedDispositionProductionPathTest tests.test_notifications_wiring.ControllerCodedGateOverARow14DecisionTest`
-(slow; allow several minutes). Expected: OK. The plan and implementation review waits are `review_wait`; their BLOCK
-gates, the review-mode refusal and the external round cap stay `user_gate`; a record written before this change is a
-`user_gate`.
-
-**Flow 5: the wider suites the change touches.**
-`python3 -B -m unittest tests.test_protocol_job tests.test_functional_lifecycle tests.test_notify`. Expected: OK (a
-timing-only failure in a Ctrl-C or reap test under load is the known flake, not a defect).
-
-**Flow 6: the documentation.** `python3 -B tools/check_docs.py`; read `docs/guide/automation.md` ("Notifications from
-an unattended run" and the functional-review fault stops) and `docs/guide/commands.md`. Expected: the checker passes;
-the text matches Flows 2-4 (`review_wait` is `INFO`/`LOW`; `isolation_breach` and `functional_unchanged` keep
-`user_gate` and `lane_blocked`).
+| # | Flow | Expected |
+| --- | --- | --- |
+| flow-1 | `python3 -B -c "from controller import notify; print(notify.EVENT_TABLE['review_wait'])"` | Prints `state` (the LOW-severity class), not `user_gate`. |
+| flow-2 | `python3 -B -m unittest tests.test_notifications_wiring.ReviewWaitDeriveTest` | OK. A Workflow-governed target waiting at `AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW` or `..._IMPLEMENTATION_REVIEW` derives `review_wait`; every tester fault stop except `isolation_breach` derives `review_wait`; `isolation_breach`, every other protocol gate, every legacy gate, the blocked disposition and pending checks keep their old events. |
+| flow-3 | `python3 -B -m unittest tests.test_notifications_wiring.SupersededNoticeTest tests.test_notifications_wiring.TesterStopSupersededNoticeTest tests.test_notifications_wiring.ReviewWaitLiveUpgradeTest` | OK. A delivered old `user_gate` suppresses the `review_wait` (live and recovery); a failed or rejected one does not veto a fresh send; an unrelated delivered notice never suppresses; a symlinked run directory or log is not followed. |
+| flow-4 | `python3 -B -m unittest tests.test_notifications_wiring.ReviewWaitProductionPathTest tests.test_notifications_wiring.BlockedDispositionProductionPathTest tests.test_notifications_wiring.ControllerCodedGateOverARow14DecisionTest` (slow; allow several minutes) | OK. The plan and implementation review waits are `review_wait`; their BLOCK gates, the review-mode refusal and the external round cap stay `user_gate`; a record written before this change is a `user_gate`. |
+| flow-5 | `python3 -B -m unittest tests.test_protocol_job tests.test_functional_lifecycle tests.test_notify` | OK (a timing-only failure in a Ctrl-C or reap test under load is the known flake, not a defect). |
+| flow-6 | `python3 -B tools/check_docs.py`; read `docs/guide/automation.md` ("Notifications from an unattended run" and the functional-review fault stops) and `docs/guide/commands.md` | The checker passes; the text matches flows 2-4 (`review_wait` is `INFO`/`LOW`; `isolation_breach` and `functional_unchanged` keep `user_gate` and `lane_blocked`). |
 
 **Known limits / out of scope.** No real SignalHub delivery is exercised (no network); the legacy-target behaviour is
 unchanged by design; the configurable reviewer brief (RB1, issue #150) is the next milestone.

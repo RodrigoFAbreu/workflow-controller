@@ -24,8 +24,9 @@ The second table has one row per routing role, the role a model, effort and
 harness are chosen for in the `routing` section of the settings file. Each
 routing role is launched as one adapter role (`Runs as`), and a harness is
 accepted for the routing role only when its adapter declares that adapter role.
-`yes` means the pair is accepted; `no` means it is refused at load with exit
-`20`. See [the routing section](runtime.md#the-routing-section) for the file
+`yes` means the pair is accepted; `no` means it is refused before anything
+runs: exit `20` in a settings file or a `--routing-config` file, a usage error
+(exit `2`) for `--role-harness`. See [the routing section](runtime.md#the-routing-section) for the file
 format and [worker routing](commands.md#worker-routing) for the options.
 
 The tables change when an adapter gains or loses a role, so a role that is

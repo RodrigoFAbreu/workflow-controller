@@ -258,7 +258,7 @@ file is never an error: every setting then takes its built-in default.
 | `reviewer.same_provider_model` | string or `null` | `null` (built-in `claude-opus-5-5`) | 1 to 128 characters | none |
 | `reviewer.same_provider_effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
 | `reviewer.brief` | string or `null` | `null` (built-in severity bar) | 0 to 2000 characters, no control character | none |
-| `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort` |
+| `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort`, `--role-harness` |
 
 Each default is the value the Controller used before the file existed,
 so a file holding only defaults behaves as no file. A boolean is not an
@@ -650,7 +650,50 @@ than that file:
 - `routing.schema_version` is reserved and refused (exit `20`): it means
   a `--routing-config` file was pasted in whole;
 - everything else is strict, as in that file: a section or entry that is
-  not an object, or an unusable model or effort value, is refused.
+  not an object, or an unusable model, effort or harness value, is refused.
+
+`default` and each role's entry accept a third field, `harness`: the
+harness a worker session of that role runs on. Its vocabulary is this
+Controller's adapter registry (`claude-code` or `codex`), not the `claude`
+CLI's and not the reviewer alias `claude`, which names a verdict family. Each
+routing role is launched as one adapter role (`functional-tester` as
+`functional-tester`, every other routing role as `worker`), and a harness is
+accepted for a role only when its adapter declares that adapter role. Today
+that makes exactly these pairs valid:
+
+- `claude-code`: every routing role;
+- `codex`: no routing role yet, because its adapter declares `reviewer` only.
+  The Codex tester (C10g) and the Codex worker roles (H4a to H4e) will add roles to
+  that declaration, and the same check then accepts them with no change to the
+  file format or the settings generation.
+
+So this release gives the choice a name and a check; the choice becomes useful
+as the registry grows. Any other pair is refused at load, with exit `20` before
+any job record is written, in the settings file, in a `--routing-config` file
+and for `--role-harness` alike (a usage error, exit `2`, on the command line). The
+message names the role, the harness and what the harness does declare, for
+example `role 'review-plan' runs as a 'worker' and harness 'codex' declares only
+['reviewer']`. An unsupported pair is never replaced by a fallback and never
+launches. A `default.harness` is checked against every role that has no `harness`
+of its own, so it is refused even when `--role-harness` would override every one
+of them. The built-in `claude-code` applies when nothing names a harness, and no
+`harness` default is written into the file.
+
+The resolved harness is recorded in each job's `worker_route` as `harness`, with
+`sources.harness`, using the adapter name for every job kind. A same-provider
+external review's record now reads `claude-code` there, where it read `claude`
+before; the `review` block's own `harness` key keeps the reviewer vocabulary. The
+launch does not read the resolved harness yet (H3 does that), so today every
+worker runs on Claude Code.
+
+The release that adds the `harness` field is table generation 15: it adds no
+key and moves no value, but a file it fills records `"_table_generation": 15`.
+An older Controller sharing the file warns once about the unknown `harness` key,
+ignores it, and its `settings clean` refuses. An older Controller given a
+`--routing-config` file with `harness` refuses it, since that file is strict.
+A later release that lets Codex take a role makes a file holding that pair
+valid for it and refused by this one at load, naming the role, the harness and what it declares;
+update the Controller or remove the entry.
 
 The fill only ever adds an empty `{"default": {}, "roles": {}}`. The
 contents are yours, and no release migrates them. A `--routing-config`

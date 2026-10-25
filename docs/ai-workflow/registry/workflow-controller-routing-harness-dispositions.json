@@ -1,0 +1,58 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-routing-harness",
+ "dispositions": {
+  "F-1f712e5db5fb": {
+   "disposition": "dropped",
+   "reason": "the reviewer confirms disabling pair validation alone fails the test, so existing coverage already detects the regression; the extra evidence assertion adds no protection"
+  },
+  "F-229de38d3c86": {
+   "disposition": "dropped",
+   "reason": "docstring-only inaccuracy: controller/routing.py's closing sentence still omits controller.harness from its import list; no behaviour is affected, and touching the file now would make the technical approval stale. Corrected the next time routing.py is edited"
+  },
+  "F-3dc36830126e": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4): docs/run.md is stated as not edited, and docs/compatibility.md gets a new 1.21.0 paragraph"
+  },
+  "F-488d36825312": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, D4): the rule for a role whose own harness was left out is stated, so the warning count is predictable"
+  },
+  "F-4cc788a619be": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, D4): states the default.harness check is deliberately conservative and not to be fixed"
+  },
+  "F-57d58a2eb2e7": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, D6): the fixture carries _table_generation: 15, named in the test description"
+  },
+  "F-5f4374bf450d": {
+   "disposition": "dropped",
+   "reason": "docs/guide/commands.md:341 is about which role names are accepted by the routing options and is accurate as written; naming --role-harness there would suggest the tester role can take another harness, which D3 does not allow yet. --role-harness is listed at commands.md:36 and :366"
+  },
+  "F-6c9532e0be05": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, D4/D6): only the harness key is left out, a sibling model/effort still applies, and a test pins it"
+  },
+  "F-9c4f278cf555": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, CP2): job.py imports the registry module as adapters because harness is a local there"
+  },
+  "F-b26c1b4ca1d4": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, D4): names routing.parse_routing_config, reached through routing.load_routing_config"
+  },
+  "F-b2ce9a233226": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, D4): a command-line harness assignment is an argparse usage error, exit 2, as CP2 says"
+  },
+  "F-c275caf264b4": {
+   "disposition": "dropped",
+   "reason": "same sentence as F-5f4374bf450d: docs/guide/commands.md:341 is accurate about role names and was left unchanged so it does not suggest the tester role can take another harness"
+  },
+  "F-ecf43255866e": {
+   "disposition": "fixed",
+   "note": "approved plan (revision 4, CP3): the option list at docs/guide/commands.md:35 is named and gains --role-harness"
+  }
+ }
+}

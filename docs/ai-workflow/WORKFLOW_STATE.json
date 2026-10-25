@@ -28676,6 +28676,958 @@
         "evaluated_at": "2026-10-25T08:19:11Z",
         "workflow_release": "2.18.7"
       }
+    },
+    "workflow-controller-routing-harness": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-routing-harness",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ROUTING_HARNESS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-routing-harness-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-routing-harness-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 4,
+      "implementation_revision": 1,
+      "functional_review_round": null,
+      "base_commit": "f8b9fc4be7ae9a42c1e684fdc8dbcf36b65e0e21",
+      "reviewed_implementation_head": "d24f5ec3af258789d53819bd890a7ca96999a2ec",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP3",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "d614c4d017932d8a033fd3cbcc9c9dfb6ed9627b"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "96f3c839d9ee15c7c8b02d9ebadba6b033a301f0"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "4c1e5b229c824fb3f36d8a0d4e79dcb7dbf4d4d7"
+        }
+      },
+      "current_bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+        "approved_review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ROUTING_HARNESS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "50db5358665b708f795d74ee835ef0ed91a212a6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-routing-harness-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aa65b15c5aa5ed46cff37c60bc972c20e8605813"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-routing-harness-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "285b7d75fc31d65d8ed12036c88e9b95229d283a"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T11:46:20Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+            "ledger": {
+              "local": {
+                "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "4d50106d91362d5906b1b2dc7e45ec09d626c488ec75cd8003d2412c42dd354f",
+                "ledger_entry_sha256": "11e5777ad3fa8ca9e3e4f6965272232b1672afb3d1a9775ccaf6d2b71d7860e3",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "01c55f5b39e88ca6e8b744e8861fe3e8062cd236d50f2f9af0b2690a0c5e275a",
+                "ledger_entry_sha256": "cca93b3a638cac4dc958712f88e6beb4494b82e090a4b29fb1bcee61d4412ad9",
+                "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T11:46:20Z",
+          "workflow_release": "2.19.1"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+        "approved_review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "25f7abd1b76763ac4b2400c32f3d08353e99fb24"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c6a22735cd737583afea2fc69736db97401a9808"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "815626bd9c5fa906627af1b7ad1b3c889503a880"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "58908ffb894ec85366ad9cec5b77aba4182b4f1f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-routing-harness-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c714b2e7f86e6f9c066807d454f6c99e78d31ba7"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "004c9bac49570963493c36e9a8a73deee3b770e0"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "47a5aa63197f054f816ed12cff99bda71ef0a66d"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3e62e267899d091f0cd64612e896f1a1347cef0f"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f76b2e3dede034993656ed707e71e98f2e56c8e1"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6354b69a4ac225b5c5245e58514b07bb358363ee"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2de347a0215e457f4046b12aa09bc5a987ab6f15"
+          },
+          {
+            "path": "tests/test_lifecycle_orchestration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2273b9040f14cdfb7fcb962f108b61c00c961a11"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "11f9a422807aff82d3dcedb55342aae039550680"
+          },
+          {
+            "path": "tests/test_review_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4bf5036eaea4c2aa3ba200f4c714530a64d5769c"
+          },
+          {
+            "path": "tests/test_review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca46b25eb46beba0ff633d9572aad6f206312ba0"
+          },
+          {
+            "path": "tests/test_review_same_provider.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "455426284c51a5c0f04981005aa54e12491bb1b9"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4a17036f15ee76c802ee988e3c77a472d294e344"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7e2cc70c3eee9023d52b668c9d62d0cd80c0633d"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "30ec670afafa9c9dbaf55036f9467615499c9f9a"
+          }
+        ],
+        "reviewed_content_commit": "d24f5ec3af258789d53819bd890a7ca96999a2ec",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T14:13:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "ledger": {
+              "local": {
+                "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d9e850bc5ed2174a51b697f69cf3de7e8fcc29697bb0ddba949cfb214c5b28b3",
+                "ledger_entry_sha256": "a11cc787ff3699484dff527f73e776ca38348991381aeae5bdf0a8df246a68c1",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "52c6d3aeacdf5f44c4cd261b0b34c815078de228b3595f267845fedfba6f45d9",
+                "ledger_entry_sha256": "53fa5a8c1430d907f34e2893078ba9a258964acee39d7da74cf4f4ffd3ae492e",
+                "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T14:13:00Z",
+          "workflow_release": "2.19.1"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-25T11:39:35Z",
+          "verdict_sha256": "4d50106d91362d5906b1b2dc7e45ec09d626c488ec75cd8003d2412c42dd354f",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-25T11:43:48Z",
+          "verdict_sha256": "01c55f5b39e88ca6e8b744e8861fe3e8062cd236d50f2f9af0b2690a0c5e275a",
+          "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 1,
+          "external": 1
+        }
+      },
+      "state_revision": 27,
+      "last_transition": "2026-10-25T14:37:53Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-25T11:36:48Z",
+        "consumed": {
+          "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+          "bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+        "329533460949dc3e07f4dd1419bf492aa5838f23358ebdec3c10604b5958a93e",
+        "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4"
+      ],
+      "optional_findings": {
+        "F-4cc788a619be": {
+          "digest": "4cc788a619be3b769dcd7158617281ae4164e073aed59016e456a4d85d4b01d1",
+          "text": "O1. D4 checks `default.harness` against the roles with no config-role harness, without knowing `--role-harness`, so a `default.harness` that every role overrides on the command line is still refused at load. That is conservative and fine, but say so in D4 so the implementer does not \"fix\" it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:19:00Z"
+            }
+          ]
+        },
+        "F-57d58a2eb2e7": {
+          "digest": "57d58a2eb2e7d68804fcbed7f3ac0d24dc44f7dd0bfb338892609e349ace935b",
+          "text": "O2. CP1's D6 test (a `harness` entry read as generation 14: warns, `settings clean` refuses, not rewritten by a fill) only works if the fixture carries `_table_generation: 15`. Without the stamp, `clean` strips the entry and a fill rewrites the stamp. Name the stamp in the test description.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:19:00Z"
+            }
+          ]
+        },
+        "F-3dc36830126e": {
+          "digest": "3dc36830126e53e28624e7e1889f98ce7128c133d74acee1d2fa184009f20473",
+          "text": "O3. CP3 asks `docs/run.md` to say it \"where [it] describes routing and the settings generations\", but `docs/run.md` has no routing text today (a search for `routing` finds nothing). Either name the section to add or drop the file from CP3. `docs/compatibility.md` needs a new 1.21.0 paragraph in the style of its 1.10.0 one, not an edit of an existing routing passage.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "569332225f61809dcfe461f79029d0a8278e2920eb463811648a7c18ee5574a4",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:19:00Z"
+            }
+          ]
+        },
+        "F-9c4f278cf555": {
+          "digest": "9c4f278cf555b8327f886aa3d94cfe40c76714db1a9ae87038987826e7eaa6ce",
+          "text": "O1. D7/CP2 write the review record's route as `harness=harness.get(harness.name).name`. In that function (`job.py:6870`), `harness` is a local holding `review.harness(...)`'s object, and `controller.harness` is not imported into `job.py` (`job.py:108-111`). The expression cannot run as written. Say that the registry module is imported under another name (or that `review` exposes the mapping) so the implementer does not write a call that resolves against the local object.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "329533460949dc3e07f4dd1419bf492aa5838f23358ebdec3c10604b5958a93e",
+              "verdict": "REVISE",
+              "at": "2026-10-25T12:10:00Z"
+            }
+          ]
+        },
+        "F-ecf43255866e": {
+          "digest": "ecf43255866e225add1c490da0fbdd865450f3fd3a5b69a6d79ff5e56f84ebc9",
+          "text": "O2. CP3's done-when searches the guides for `--role-effort`. Besides `docs/guide/runtime.md`, `docs/guide/commands.md:35` lists the run/step routing options. The search covers it, but CP3's prose names only commands.md's \"Worker routing\" precedence list. Name the option list at line 35 too, so it is not missed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "329533460949dc3e07f4dd1419bf492aa5838f23358ebdec3c10604b5958a93e",
+              "verdict": "REVISE",
+              "at": "2026-10-25T12:10:00Z"
+            }
+          ]
+        },
+        "F-6c9532e0be05": {
+          "digest": "6c9532e0be05e8d1753068d15126ae7ff254df5745507e1c96d34da71a0696c3",
+          "text": "O1. D4 says a rejected settings-file value is \"left out of the effective routing\". CP1 and D6, however, say \"leaving the entry out\", and \"entry\" could be read as the whole `roles.<role>` entry, which would silently drop that role's `model` and `effort` too. Say that only the `harness` key is left out, and that a sibling `model`/`effort` in the same entry (and in `default`) still applies. Add a CP1 test with `roles.review-plan: {\"model\": \"m\", \"harness\": \"codex\"}` in the settings file, where the route resolves model `m` from `config-role` and harness `claude-code` from `default`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:27:00Z"
+            }
+          ]
+        },
+        "F-488d36825312": {
+          "digest": "488d36825312a76c0cef5bc3771d463eb935810eb2f520774703693e5128229b",
+          "text": "O2. D4 checks `default.harness` against \"every routing role that has no `harness` of its own\". It does not say whether, in the settings file, a role whose own `harness` was itself left out as rejected counts as having one. Under the literal reading the role has none after the drop, so the default's value is checked against it too and may be rejected a second time for the same role. Either reading is safe, because both fall back to `claude-code` with a warning. Pick one so that the warning count in CP1's \"one warning each\" tests is predictable.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:27:00Z"
+            }
+          ]
+        },
+        "F-b26c1b4ca1d4": {
+          "digest": "b26c1b4ca1d41bd2d542fcbcd5892065bdddeb28c0d58978c17b11000b7ea9f3",
+          "text": "O3. D4 names the first production caller as \"`routing.load_routing_config` at `routing.py:416`\". Line 416 is in `parse_routing_config`, which `load_routing_config` calls. The edit lands in the same place either way.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:27:00Z"
+            }
+          ]
+        },
+        "F-b2ce9a233226": {
+          "digest": "b2ce9a233226676bb7cd9e3ceacf09938d2d4d75b3f67996a5250f6cd43fbffd",
+          "text": "**O1 — Conflicting CLI error contract.** D4 specifies `RoutingConfigError`/exit 20 for invalid command-line harness assignments, while CP2 specifies argparse usage errors/exit 2. Align D4 with CP2 and the existing role-option convention.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "02b7e72d7d000789bff85b1a9b43e54f904882594e236f6d7cb9890cefa5d652",
+              "verdict": "REVISE",
+              "at": "2026-10-25T11:40:00Z"
+            }
+          ]
+        },
+        "F-229de38d3c86": {
+          "digest": "229de38d3c86d5c7be4ef6724109a8fb8bbab6a2dc978c1775e59ed8e24d22fe",
+          "text": "O1. The `controller/routing.py` module docstring ends \"Imports nothing from the package beyond `controller.errors` and `controller.decision`\". CP1 updates the docstring's precedence list, but should also add `controller.harness` to that import sentence, or the docstring will be stale.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:39:35Z"
+            }
+          ]
+        },
+        "F-c275caf264b4": {
+          "digest": "c275caf264b4805dd9139071d98a9eec294ad412bf4f52891e0aad3daf32a18b",
+          "text": "O2. `docs/guide/commands.md:340` reads \"All six are accepted by `--role-model`/`--role-effort`, a `--routing-config` file and the settings file's `routing` section\". CP3's search criterion will make it name `--role-harness`, but under D3 a harness choice for these roles accepts only `claude-code` today. Word the sentence so it does not suggest the tester role can take another harness yet.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T11:39:35Z"
+            }
+          ]
+        },
+        "F-5f4374bf450d": {
+          "digest": "5f4374bf450dfd26e65d54be2997ec0a2d0359088de1a89aa30c5d3a17661dba",
+          "text": "O1. `docs/guide/commands.md:341` still reads \"All six are accepted by `--role-model`/`--role-effort`, a\n  `--routing-config` file and the settings file's `routing` section\". CP3's done-when asks that every place in the\n  guides listing the routing options also list `--role-harness`, and this sentence is a hit for a `--role-effort`\n  search. The sentence is about which role names are accepted, and it is not wrong as it stands. Still, a reader\n  could take it as the full list of options that accept these roles. Add `--role-harness`, worded so it does not\n  suggest the tester role can take a harness other than `claude-code` yet (the plan-stage round-4 note O2).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T13:59:36Z"
+            }
+          ]
+        },
+        "F-1f712e5db5fb": {
+          "digest": "1f712e5db5fb7a0810d7cb4d029a00a9048c34631ba2ac29c9a809a753118017",
+          "text": "`tests/test_settings.py:985`: consider asserting the unsupported pair’s evidence. This test also passes against the base because its strict loader rejects the unknown field. Disabling pair validation alone does fail it, so existing coverage detects the relevant regression.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T14:11:22Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-25T13:59:36Z",
+          "verdict_sha256": "d9e850bc5ed2174a51b697f69cf3de7e8fcc29697bb0ddba949cfb214c5b28b3",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-25T14:11:22Z",
+          "verdict_sha256": "52c6d3aeacdf5f44c4cd261b0b34c815078de228b3595f267845fedfba6f45d9",
+          "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:24Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 0; routing line shows harness claude-code in default and review-plan beside model sonnet, (cli)"
+            },
+            "log_digest": "2121ba3d2e45f7b589f84c4f91198cd28d290c6a99ff4d24bcf8b7d07c5ccb77",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:24Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:24Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 20; exact roles.review-plan.harness message"
+            },
+            "log_digest": "e6d86610602458fb0d68f9820284eb70599aedfc1af6c0ed7517df668e4b5a00",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:24Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:24Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 20; routing.default.harness names apply-functional-review and '(and 14 further role(s) the default would apply to)'"
+            },
+            "log_digest": "18d798d51ab20892171fc0e07cc47b42c28134d45ea129e8240a0b399caa0398",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:24Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:24Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 20 same refusal; file byte-identical (cmp)"
+            },
+            "log_digest": "793cf6a961e007fb9db7a3cc58195fbf4982842c6a39468d6d6c4cf070aba2a1",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:24Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:25Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 0; review-plan harness claude-code, source (file)"
+            },
+            "log_digest": "8a0791f625980f2ef0493b86815866aa3fea068d675e1199bbf2c45aad3027e2",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:25Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:25Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 2 usage error with the pair message"
+            },
+            "log_digest": "4268d30f23b612b877907c1f17b10f21b4bc9f8f0352115822bad7c96f3f5a44",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:25Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:25Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 2; message 'expected a registered harness name, got 'claude'; registered: ['claude-code', 'codex']'"
+            },
+            "log_digest": "0c3b872fce6094b9ee3750d76d2d7bc882bee234cc32e5a3f1f77caa081f6a28",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:25Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:25Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 2; unknown role 'bogus' with 15 known roles"
+            },
+            "log_digest": "d7ec9b37bcf58502b1f794f42be68942d849770f2e86cc7561b109c593e250d6",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:26Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:26Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 2; role 'review-plan' is assigned more than once"
+            },
+            "log_digest": "3fbee94c7bbd0ecbc011608243db40142d536562671737b1d3cd135408f4fb65",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:26Z"
+          },
+          "flow-10": {
+            "flow_id": "flow-10",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:26Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "rc 0"
+            },
+            "log_digest": "1650cf12b812706e6319fedb9343775164caced2221edb88f0366d4afbb20f49",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:26Z"
+          },
+          "flow-11": {
+            "flow_id": "flow-11",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:26Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "--help lists --role-harness ROLE=HARNESS; --harness is not an option (rejected by argparse); help only says 'there is no global --harness'"
+            },
+            "log_digest": "32621320bcc5a6d082a4c789ba5c95d9d962db09c031deca2fd8e17458664bc3",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:26Z"
+          },
+          "flow-12": {
+            "flow_id": "flow-12",
+            "status": "passed",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "ran_at": "2026-10-25T14:17:26Z",
+            "summary": {
+              "checklist_blob": "ee0103dcfe415a8b1663f50b613b7bb32065dcb1",
+              "text": "check_docs.py rc 0; runtime.md routing section has harness field, pairs (claude-code all 15 roles, codex none and why), load-time refusal, generation 15 paragraph, matching flows 1-10; --role-harness is in the option lists (commands.md:35, runtime.md:261, harness precedence list). Minor: commands.md:341 names only --role-model/--role-effort for the six protocol-only roles."
+            },
+            "log_digest": "f3fd7339d6785fafcfde14ea8b0b584153e1e44e2c28df464d95aa0b93df1124",
+            "run_ref": "controller:20261025T141623Z-508907ac",
+            "reporter": "workflow-controller 1.20.0",
+            "identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:17:26Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 160,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/160"
+          },
+          "state": "open",
+          "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+          "observed_at": "2026-10-25T14:37:53Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "d24f5ec3af258789d53819bd890a7ca96999a2ec",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-25T14:37:53Z",
+            "raw_sha256": "a4efa6e3ae4d1982470465db85eaf122a75825c02d6a9e46cad40f91c834372d",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "159264a876a549dcd5885184309b170bf3c297c629c7ecff83d9447f9a2cb726"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 160,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/160"
+          },
+          "state": "open",
+          "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+          "observed_at": "2026-10-25T14:36:52Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "d24f5ec3af258789d53819bd890a7ca96999a2ec",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.20.0"
+            },
+            "fetched_at": "2026-10-25T14:36:52Z",
+            "raw_sha256": "a4efa6e3ae4d1982470465db85eaf122a75825c02d6a9e46cad40f91c834372d",
+            "run_ref": "controller:20261025T143652Z-97843182"
+          },
+          "fact_id": "f1c86e12e94ed520e99e170c9b8a189b8f6a16fd22d23e14697602973200efa0"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-10', 'flow-11', 'flow-12', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #160 at e01a832498af2531e2ac2572390539cc388a79bd is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "d24f5ec3af258789d53819bd890a7ca96999a2ec",
+          "anchor_identity": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "recorded_at": "2026-10-25T14:13:00Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "132ad296ee6602ff23e0eeed547b82274ce998b196a648499e7f3d28c69c29cc",
+              "log_digest": "2121ba3d2e45f7b589f84c4f91198cd28d290c6a99ff4d24bcf8b7d07c5ccb77",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-10": {
+              "evidence_id": "6e30e7415f5057e1fb0b502953e7800051cd49a0bc2a7fcbc95d9526cca34971",
+              "log_digest": "1650cf12b812706e6319fedb9343775164caced2221edb88f0366d4afbb20f49",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-11": {
+              "evidence_id": "d40f08ecfc9a53c52cf15542f6c0b062b4cf087e4a7b68fc4e0d57c3df9d34c5",
+              "log_digest": "32621320bcc5a6d082a4c789ba5c95d9d962db09c031deca2fd8e17458664bc3",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-12": {
+              "evidence_id": "749ff5352b9ee215e4a0b768cc9033eef5cc459187569a71c824a3183024961d",
+              "log_digest": "f3fd7339d6785fafcfde14ea8b0b584153e1e44e2c28df464d95aa0b93df1124",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-2": {
+              "evidence_id": "c9508947038f46bab4260a0ecf34d22aa0562ec20a3384d80f6c0876db5b895f",
+              "log_digest": "e6d86610602458fb0d68f9820284eb70599aedfc1af6c0ed7517df668e4b5a00",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-3": {
+              "evidence_id": "0327c7ac3613ea236fa2b3069208b3185e70052ec1b3974c1eae092d564a57de",
+              "log_digest": "18d798d51ab20892171fc0e07cc47b42c28134d45ea129e8240a0b399caa0398",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-4": {
+              "evidence_id": "cc4679e367f02f301964b9ee57819921df315bbf0930002d64d72524880de76f",
+              "log_digest": "793cf6a961e007fb9db7a3cc58195fbf4982842c6a39468d6d6c4cf070aba2a1",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-5": {
+              "evidence_id": "7eb8f3b0d5d17e640ef3886d9d9c0f88775469b9a2b7d7891ae7f857f503e254",
+              "log_digest": "8a0791f625980f2ef0493b86815866aa3fea068d675e1199bbf2c45aad3027e2",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-6": {
+              "evidence_id": "d647260370fa1fb34ae907973c0381b366d02deb2cfae8f592c8c61e14ff6833",
+              "log_digest": "4268d30f23b612b877907c1f17b10f21b4bc9f8f0352115822bad7c96f3f5a44",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-7": {
+              "evidence_id": "b29c4c2d8f4d9f5fd3b6977f34bdee789bff8eb84bb7989b3e703cedcc3d73af",
+              "log_digest": "0c3b872fce6094b9ee3750d76d2d7bc882bee234cc32e5a3f1f77caa081f6a28",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-8": {
+              "evidence_id": "4d649ee1c9c02df72091f7dbf437f4052b31ea9a5bbe1e3db6445435b03c78f6",
+              "log_digest": "d7ec9b37bcf58502b1f794f42be68942d849770f2e86cc7561b109c593e250d6",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            },
+            "flow-9": {
+              "evidence_id": "ba336ae24675dde00010908d2f80c8cb7fde6027c47b54e5af867b778ac83118",
+              "log_digest": "3fbee94c7bbd0ecbc011608243db40142d536562671737b1d3cd135408f4fb65",
+              "run_ref": "controller:20261025T141623Z-508907ac"
+            }
+          },
+          "pr": {
+            "fact_id": "159264a876a549dcd5885184309b170bf3c297c629c7ecff83d9447f9a2cb726",
+            "head": "e01a832498af2531e2ac2572390539cc388a79bd",
+            "provenance": "workflow_gh",
+            "raw_sha256": "a4efa6e3ae4d1982470465db85eaf122a75825c02d6a9e46cad40f91c834372d"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-25T14:37:53Z",
+        "workflow_release": "2.19.1"
+      }
     }
   }
 }

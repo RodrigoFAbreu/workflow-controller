@@ -83,7 +83,7 @@ class RunTest(SameProviderCase):
         self.assertEqual((block["harness"], block["mode"], block["mode_source"], block["lowered"]),
                          ("claude", "auto", "cli", True))
         self.assertEqual(block["signal_key"], ["warn", True, False, False])
-        self.assertEqual(record["worker_route"]["harness"], "claude")
+        self.assertEqual(record["worker_route"]["harness"], "claude-code")
         self.assertEqual(record["worker_route"]["sources"]["model"], "reviewer.same_provider_model")
         # D8: admitted against the Claude budget, not the Codex one
         self.assertEqual([(provider, model) for provider, _, model in calls], [("claude", "claude-opus-5-5")])

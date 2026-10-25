@@ -203,7 +203,7 @@ TABLE: tuple[Setting, ...] = (
     # the built-in ``review.DEFAULT_BRIEF``.
     Setting("reviewer.brief", TYPE_OPTIONAL_STRING, None, 0, 2000, None, 14),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
-            "--routing-config, --model, --effort, --role-model, --role-effort", 1),
+            "--routing-config, --model, --effort, --role-model, --role-effort, --role-harness", 1),
 )
 
 #: The highest ``generation`` in :data:`TABLE`, raised as well by a release
@@ -222,8 +222,9 @@ TABLE: tuple[Setting, ...] = (
 #: (workflow-controller-round-caps D4). 13: the rows ``functional.automated``
 #: and ``functional.timeout_seconds`` and the role ``functional-tester``
 #: (workflow-controller-automated-functional-review D8). 14: the row
-#: ``reviewer.brief`` (workflow-controller-reviewer-brief D1).
-TABLE_GENERATION = 14
+#: ``reviewer.brief`` (workflow-controller-reviewer-brief D1). 15: the routing
+#: field ``harness`` (workflow-controller-routing-harness D6).
+TABLE_GENERATION = 15
 
 
 def _table() -> dict[str, Setting]:

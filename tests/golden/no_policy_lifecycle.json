@@ -480,11 +480,13 @@
             "config_source": "settings",
             "effort": null,
             "fresh_session": true,
+            "harness": "claude-code",
             "model": null,
             "role": "milestone-plan",
             "single_agent": false,
             "sources": {
               "effort": "inherit",
+              "harness": "default",
               "model": "inherit"
             }
           },
@@ -1054,11 +1056,13 @@
             "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
+            "harness": "claude-code",
             "model": "claude-opus-5-5",
             "role": "milestone-implement",
             "single_agent": false,
             "sources": {
               "effort": "default",
+              "harness": "default",
               "model": "default"
             }
           },
@@ -1457,11 +1461,13 @@
             "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
+            "harness": "claude-code",
             "model": "claude-opus-5-5",
             "role": "milestone-implement",
             "single_agent": false,
             "sources": {
               "effort": "default",
+              "harness": "default",
               "model": "default"
             }
           },
@@ -1862,11 +1868,13 @@
             "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
+            "harness": "claude-code",
             "model": "claude-opus-5-5",
             "role": "milestone-implement-self-review",
             "single_agent": true,
             "sources": {
               "effort": "default",
+              "harness": "default",
               "model": "default"
             }
           },
@@ -2269,11 +2277,13 @@
             "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
+            "harness": "claude-code",
             "model": "claude-opus-5-5",
             "role": "review-implementation",
             "single_agent": true,
             "sources": {
               "effort": "default",
+              "harness": "default",
               "model": "default"
             }
           },
@@ -2685,11 +2695,13 @@
             "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
+            "harness": "claude-code",
             "model": "claude-opus-5-5",
             "role": "apply-implementation-review",
             "single_agent": false,
             "sources": {
               "effort": "default",
+              "harness": "default",
               "model": "default"
             }
           },
@@ -3092,11 +3104,13 @@
             "config_source": "settings",
             "effort": "xhigh",
             "fresh_session": true,
+            "harness": "claude-code",
             "model": "claude-opus-5-5",
             "role": "review-implementation",
             "single_agent": true,
             "sources": {
               "effort": "default",
+              "harness": "default",
               "model": "default"
             }
           },
@@ -3800,11 +3814,13 @@
             "config_source": "settings",
             "effort": null,
             "fresh_session": true,
+            "harness": "claude-code",
             "model": null,
             "role": "milestone-plan",
             "single_agent": false,
             "sources": {
               "effort": "inherit",
+              "harness": "default",
               "model": "inherit"
             }
           },

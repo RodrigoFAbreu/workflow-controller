@@ -825,9 +825,17 @@ class RoutingOptionsParserTest(unittest.TestCase):
         self.assertEqual(args.role_effort, {"review-implementation": "max"})
         self.assertEqual(args.routing_config, "/cfg.json")
 
+    def test_the_role_harness_option_parses_into_the_routing_options(self) -> None:
+        args = cli.build_parser().parse_args([
+            "--role-harness", "review-plan=claude-code", "--role-harness", "functional-tester=claude-code",
+            "step", "/target",
+        ])
+        self.assertEqual(args.role_harness, {"review-plan": "claude-code", "functional-tester": "claude-code"})
+        self.assertEqual(dict(cli._routing_options(args).cli_role_harnesses), args.role_harness)
+
     def test_the_defaults_are_no_overrides(self) -> None:
         args = cli.build_parser().parse_args(["step", "/target"])
-        for name in ("model", "effort", "role_model", "role_effort", "routing_config"):
+        for name in ("model", "effort", "role_model", "role_effort", "role_harness", "routing_config"):
             self.assertIsNone(getattr(args, name), name)
         self.assertEqual(cli._routing_options(args), routing.NO_OVERRIDES)
 
@@ -839,6 +847,12 @@ class RoutingOptionsParserTest(unittest.TestCase):
             "empty role value": ["--role-effort", "review-plan="],
             "option-like role value": ["--role-model", "review-plan=--resume"],
             "role assigned twice": ["--role-model", "review-plan=a", "--role-model", "review-plan=b"],
+            "harness assigned twice": ["--role-harness", "review-plan=claude-code",
+                                       "--role-harness", "review-plan=claude-code"],
+            "unknown role harness": ["--role-harness", "nobody=claude-code"],
+            "codex harness": ["--role-harness", "review-plan=codex"],
+            "reviewer alias harness": ["--role-harness", "review-plan=claude"],
+            "harness no equals": ["--role-harness", "review-plan"],
             "empty model": ["--model="],
             "option-like effort": ["--effort=-c"],
         }
@@ -947,8 +961,9 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
             self.assertEqual(cli.cmd_step(args, self.runtime_root, self.ident), cli.EXIT_WORKER_FAILED)
         [record] = [json.loads(path.read_text()) for path in self.runtime_root.glob("jobs/*.json")]
         self.assertEqual(record["worker_route"], {
-            "role": "milestone-plan", "model": "claude-sonnet-5", "effort": "low", "single_agent": False,
-            "fresh_session": True, "sources": {"model": "config-role", "effort": "config-default"},
+            "role": "milestone-plan", "model": "claude-sonnet-5", "effort": "low", "harness": "claude-code",
+            "single_agent": False, "fresh_session": True,
+            "sources": {"model": "config-role", "effort": "config-default", "harness": "default"},
             "config_source": "routing-config",
         })
         argv = json.loads(diag.read_text())["argv"]
@@ -3277,7 +3292,7 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
             self.assertEqual(cli.cmd_step(args, self.runtime_root, self.ident), cli.EXIT_WORKER_FAILED)
         [record] = [json.loads(path.read_text()) for path in self.runtime_root.glob("jobs/*.json")]
         self.assertEqual(record["worker_route"]["config_source"], "settings")
-        self.assertEqual(record["worker_route"]["sources"], {"model": "config-role", "effort": "config-default"})
+        self.assertEqual(record["worker_route"]["sources"], {"model": "config-role", "effort": "config-default", "harness": "default"})
         self.assertEqual(json.loads(diag.read_text())["argv"][-8:-4],
                          ["--model", "claude-sonnet-5", "--effort", "low"])
         block = record["controller_settings"]
@@ -3301,6 +3316,18 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         self.assertIn("run.max_steps", err.getvalue())
         self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
         self.assertEqual(self.settings_path.read_bytes(), before)
+
+    def test_an_unsupported_harness_in_the_settings_file_exits_20_before_any_job_record(self) -> None:
+        job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
+        self.settings_path.parent.mkdir(parents=True)
+        self.settings_path.write_text('{"routing": {"roles": {"functional-tester": {"harness": "codex"}}}}')
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = cli.main(["--runtime-dir", str(self.runtime_root), "--workflow-manager", str(self.stub_manager),
+                             "--settings", str(self.settings_path), "step", str(self.repo)])
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED, err.getvalue())
+        self.assertIn("routing.roles.functional-tester.harness", err.getvalue())
+        self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
 
     def test_non_positive_flags_are_usage_errors(self) -> None:
         parser = cli.build_parser()

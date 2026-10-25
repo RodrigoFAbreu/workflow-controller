@@ -105,6 +105,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
+from controller import harness as adapters
 from controller import (
     evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_stream, workflow_contract,
@@ -6889,7 +6890,9 @@ def _run_review_job(
 
     prefix = "reviewer.same_provider_" if harness.name == review_mode.SAME_PROVIDER_HARNESS else "reviewer."
     route = routing.ResolvedRoute(role=review.REVIEW_ROLE, model=reviewer["model"], effort=reviewer["effort"],
-                                  single_agent=True, model_source=prefix + "model", effort_source=prefix + "effort")
+                                  single_agent=True, model_source=prefix + "model", effort_source=prefix + "effort",
+                                  harness=adapters.get(harness.name).name,
+                                  harness_source="review.mode" if prefix != "reviewer." else "reviewer.harness")
     provider = usage.PROVIDER_CLAUDE if harness.verdict_family == review_mode.WORKER_FAMILY else usage.PROVIDER_CODEX
     token: str | None = None
     if usage_gate is not None:
@@ -6916,7 +6919,7 @@ def _run_review_job(
         "human_gate_pending": None,
         "handoff_pending": False,
         "lifecycle_lock": {"path": str(lifecycle_lock.path)},
-        "worker_route": {**route.to_record(), "harness": harness.name, "config_source": config_source},
+        "worker_route": {**route.to_record(), "config_source": config_source},
         "review": {
             "stage": stage, "kind": kind, "action_id": info.action_id, "row": info.row,
             "state_identity": info.state_identity, "harness": harness.name, "launched": False,
@@ -7526,7 +7529,7 @@ def _run_functional(
         "human_gate_pending": None,
         "handoff_pending": False,
         "lifecycle_lock": {"path": str(lifecycle_lock.path)},
-        "worker_route": {**route.to_record(), "harness": review.CLAUDE.name, "config_source": config_source},
+        "worker_route": {**route.to_record(), "config_source": config_source},
         "protocol": _protocol_block(decision),
         "functional": {
             "row": info.row, "action_id": info.action_id, "state_identity": info.state_identity, "head": head,

@@ -844,6 +844,8 @@ class OutcomesTest(_TesterCase):
         [call] = life.launches
         self.assertEqual((call["model"], call["effort"], call["timeout"]), ("claude-sonnet-5-5", "medium", 600.0))
         self.assertEqual(record["worker_route"]["role"], "functional-tester")
+        self.assertEqual(record["worker_route"]["harness"], "claude-code")
+        self.assertEqual(record["worker_route"]["sources"]["harness"], "default")
         events = [e.event_type for e in job.derive_job_event(record)]
         self.assertEqual(events, ["step_done"])
 

@@ -164,7 +164,7 @@ V1_ROLES = frozenset({
 })
 
 
-def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 14) -> dict:
+def _defaults_file(rows: tuple = TABLE_ROWS, table_generation: int = 15) -> dict:
     """The file this release's fill writes over a missing one (``rows``
     and ``table_generation``: another release's)."""
     data: dict = {"schema_version": 1, "_table_generation": table_generation, "_defaults_written": {}}
@@ -247,10 +247,10 @@ class TableTest(unittest.TestCase):
         # D3) were added at generation 5, so the table's generation equals its
         # highest row's (generation 3 only added routing roles, which raise it
         # alone; generation 4 added the usage rows).
-        self.assertEqual(settings.TABLE_GENERATION, 14)
+        self.assertEqual(settings.TABLE_GENERATION, 15)
         self.assertGreaterEqual(settings.TABLE_GENERATION, max(s.generation for s in settings.TABLE))
         self.assertEqual(routing.ROLES, V1_ROLES)
-        self.assertEqual(routing.FIELDS, ("model", "effort"))
+        self.assertEqual(routing.FIELDS, ("model", "effort", "harness"))
         self.assertEqual(routing.SECTION_KEYS, ("default", "roles"))
 
     def test_every_default_fits_every_generation_of_its_key(self) -> None:
@@ -463,7 +463,7 @@ class MergeRowsTest(_TempSettings):
         self.assertEqual(data["merge"], {"auto": True, "wait_seconds": 3600, "poll_seconds": 30})
         for key, value in (("merge.auto", True), ("merge.wait_seconds", 3600), ("merge.poll_seconds", 30)):
             self.assertEqual(data["_defaults_written"][key], {"value": value, "generation": 2})
-        self.assertEqual(data["_table_generation"], 14)
+        self.assertEqual(data["_table_generation"], 15)
         for key in [key for key in data
                     if key not in ("merge", "usage", "notifications", "reviewer", "review", "functional", "_defaults_written",
                                   "_table_generation")]:
@@ -536,7 +536,7 @@ class FillTest(_TempSettings):
 
     def test_the_fill_never_lowers_the_table_generation(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 14
+        data["_table_generation"] = 15
         _write(self.path, data)
         before = self.path.read_bytes()
         settings.fill(self.path)
@@ -587,12 +587,12 @@ class UnknownKeyTest(_TempSettings):
 
     def test_a_newer_release_s_file_says_so(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 15
+        data["_table_generation"] = 16
         data["forge"]["new_thing"] = 1
         _write(self.path, data)
         _loaded, err = self.stderr_of(settings.load, self.path)
         self.assertIn("forge.new_thing", err)
-        self.assertIn("last filled by a newer Controller release (table generation 15", err)
+        self.assertIn("last filled by a newer Controller release (table generation 16", err)
 
 
 class UsageRowsTest(_TempSettings):
@@ -640,7 +640,7 @@ class UsageRowsTest(_TempSettings):
         _write(self.path, old)
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data["_table_generation"], 14)
+        self.assertEqual(data["_table_generation"], 15)
         self.assertEqual(data["usage"], {name: default for (key, _k, default, *_r) in V4_ROWS
                                          for name in [key.partition(".")[2]]})
         for key, _kind, default, _minimum, _maximum, generation in V4_ROWS:
@@ -671,7 +671,7 @@ class UsageRowsTest(_TempSettings):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertEqual(err.count("warning:"), 1)
             self.assertIn("unknown key(s) functional, notifications, review, reviewer, usage;", err)  # the whole sections are new to it
-            self.assertIn("last filled by a newer Controller release (table generation 14", err)
+            self.assertIn("last filled by a newer Controller release (table generation 15", err)
             self.assertEqual(settings.resolve(loaded)["run.max_steps"], 20)
             with self.assertRaises(SettingsError):
                 settings.clean(self.path)
@@ -774,13 +774,13 @@ class CleanTest(_TempSettings):
 
     def test_clean_refuses_a_file_filled_by_a_newer_release(self) -> None:
         data = _defaults_file()
-        data["_table_generation"] = 15
+        data["_table_generation"] = 16
         data["run"]["speed"] = "fast"
         _write(self.path, data)
         before = self.path.read_bytes()
         with self.assertRaises(SettingsError) as ctx:
             settings.clean(self.path)
-        self.assertIn("table generation 15", ctx.exception.message)
+        self.assertIn("table generation 16", ctx.exception.message)
         self.assertIn("newest installed release", ctx.exception.message)
         self.assertEqual(ctx.exception.evidence["key"], "_table_generation")
         self.assertEqual(self.path.read_bytes(), before)
@@ -818,7 +818,7 @@ class SplitRoundCapRowsTest(_TempSettings):
         _write(self.path, old)
         settings.fill(self.path)
         data = _read(self.path)
-        expected = _defaults_file(TABLE_ROWS, 14)
+        expected = _defaults_file(TABLE_ROWS, 15)
         expected["run"]["max_steps"] = 7
         del expected["_defaults_written"]["run.max_steps"]
         self.assertEqual(data, expected)
@@ -870,7 +870,7 @@ class FunctionalRowsTest(_TempSettings):
         _write(self.path, old)
         settings.fill(self.path)
         data = _read(self.path)
-        expected = _defaults_file(TABLE_ROWS, 14)
+        expected = _defaults_file(TABLE_ROWS, 15)
         expected["run"]["max_steps"] = 7
         del expected["_defaults_written"]["run.max_steps"]
         self.assertEqual(data, expected)
@@ -884,7 +884,7 @@ class FunctionalRowsTest(_TempSettings):
         with _release(old_table, 12, routing.ROLES - {"functional-tester"}):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertIn("unknown key(s) functional;", err)
-            self.assertIn("table generation 14", err)
+            self.assertIn("table generation 15", err)
             self.assertEqual(settings.resolve(loaded)["run.max_steps"], 20)
 
 
@@ -927,8 +927,63 @@ class ReviewerBriefRowTest(_TempSettings):
         _write(self.path, old)
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data, _defaults_file(TABLE_ROWS, 14))
+        self.assertEqual(data, _defaults_file(TABLE_ROWS, 15))
         self.assertEqual(data["_defaults_written"][self.KEY], {"value": None, "generation": 14})
+
+
+class RoutingHarnessTest(_TempSettings):
+    """workflow-controller-routing-harness D4 and D6: the ``harness`` routing
+    field of table generation 15."""
+
+    def test_a_generation_14_release_warns_once_and_ignores_the_entry(self) -> None:
+        settings.fill(self.path)
+        data = _read(self.path)
+        data["routing"] = {"roles": {"review-plan": {"model": "m", "harness": "claude-code"}}}
+        _write(self.path, data)
+        before = self.path.read_bytes()
+        with _release(settings.TABLE, 14), mock.patch.object(routing, "FIELDS", ("model", "effort")):
+            loaded, err = self.stderr_of(settings.load, self.path)
+            self.assertEqual(err.count("warning:"), 1)
+            self.assertIn("routing.roles.review-plan.harness", err)
+            route = routing.resolve_route("review-plan", config=loaded.routing_config)
+            self.assertEqual((route.model, route.model_source), ("m", "config-role"))
+            settings.fill(self.path)
+            self.assertEqual(self.path.read_bytes(), before)
+            with self.assertRaises(SettingsError):
+                settings.clean(self.path)
+            self.assertEqual(self.path.read_bytes(), before)
+
+    def test_this_release_writes_no_harness_default_into_the_file(self) -> None:
+        settings.fill(self.path)
+        self.assertEqual(_read(self.path)["routing"], {"default": {}, "roles": {}})
+
+    def test_an_unsupported_pair_in_the_file_is_exit_20_through_load_fill_and_the_cli(self) -> None:
+        for section in ({"roles": {"functional-tester": {"harness": "codex"}}},
+                        {"roles": {"review-plan": {"model": "m", "harness": "codex"}}},
+                        {"default": {"harness": "codex"}}):
+            with self.subTest(section=section):
+                self.path.unlink(missing_ok=True)
+                settings.fill(self.path)
+                data = _read(self.path)
+                data["routing"] = section
+                _write(self.path, data)
+                before = self.path.read_bytes()
+                with self.assertRaises(SettingsError) as ctx:
+                    settings.load(self.path)
+                self.assertTrue(ctx.exception.evidence["key"].endswith(".harness"), ctx.exception.evidence)
+                self.assertIn("codex", ctx.exception.message)
+                with self.assertRaises(SettingsError):
+                    settings.fill(self.path)
+                self.assertEqual(self.path.read_bytes(), before)
+                code, _out, err = _main(["--settings", str(self.path), "settings", "show"])
+                self.assertEqual(code, 20, err)
+                self.assertIn("codex", err)
+
+    def test_the_same_value_in_a_routing_config_file_is_exit_20(self) -> None:
+        path = self.dir / "routing.json"
+        _write(path, {"schema_version": 1, "roles": {"functional-tester": {"harness": "codex"}}})
+        with self.assertRaises(RoutingConfigError):
+            routing.load_routing_config(path)
 
 
 class ReviewRoundCapRowTest(_TempSettings):
@@ -965,7 +1020,7 @@ class ReviewRoundCapRowTest(_TempSettings):
         self.assertEqual(data["review"], {"mode": "auto", "round_cap": 4,
                                           "local_round_cap": None, "external_round_cap": None})
         self.assertEqual(data["run"]["max_steps"], 7)
-        self.assertEqual(data["_table_generation"], 14)
+        self.assertEqual(data["_table_generation"], 15)
 
 
 class ReviewerRowsTest(_TempSettings):
@@ -1063,7 +1118,7 @@ class NotificationsRowsTest(_TempSettings):
         self.assertEqual(data["notifications"], {
             "enabled": True, "url": None, "api_key_file": None, "timeout_seconds": 5, "attempts": 3,
             "retry_seconds": 2, "events": {"kinds": {}, "events": {}}})
-        self.assertEqual(data["_table_generation"], 14)
+        self.assertEqual(data["_table_generation"], 15)
         self.assertEqual(data["_defaults_written"]["notifications.events"]["generation"], 5)
         before = self.path.read_bytes()
         settings.fill(self.path)
@@ -1141,7 +1196,7 @@ class NotificationsRowsTest(_TempSettings):
         _write(self.path, old)
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data["_table_generation"], 14)
+        self.assertEqual(data["_table_generation"], 15)
         self.assertEqual(data["run"]["max_steps"], 7)
         self.assertEqual(data["notifications"]["timeout_seconds"], 5)
         before = self.path.read_bytes()
@@ -1149,7 +1204,7 @@ class NotificationsRowsTest(_TempSettings):
         with _release(old_table, 4):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertIn("unknown key(s) notifications, review, reviewer;", err)
-            self.assertIn("table generation 14", err)
+            self.assertIn("table generation 15", err)
             self.assertEqual(settings.resolve(loaded)["run.max_steps"], 7)
             with self.assertRaises(SettingsError):
                 settings.clean(self.path)
@@ -1269,14 +1324,14 @@ class SharedRoutingTest(_TempSettings):
         old_roles = routing.ROLES - {"prepare-functional-review", "apply-functional-review"}
         settings.fill(self.path)
         data = _read(self.path)
-        self.assertEqual(data["_table_generation"], 14)
+        self.assertEqual(data["_table_generation"], 15)
         data["routing"]["roles"] = {"apply-functional-review": {"model": "m-fix"}, "review-plan": {"model": "m-rp"}}
         _write(self.path, data)
         before = self.path.read_bytes()
         with _release(settings.TABLE, 2, old_roles):
             loaded, err = self.stderr_of(settings.load, self.path)
             self.assertIn("routing.roles.apply-functional-review", err)
-            self.assertIn("table generation 14", err)
+            self.assertIn("table generation 15", err)
             route = routing.resolve_route("review-plan", config=loaded.routing_config)
             self.assertEqual((route.model, route.model_source), ("m-rp", "config-role"))
             settings.fill(self.path)

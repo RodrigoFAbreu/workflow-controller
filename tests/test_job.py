@@ -993,8 +993,9 @@ class WorkerRouteTest(unittest.TestCase):
         managed_repo = _build_target(self.tmp_root, phase="PLANNING", governing_workflow_version="2.1")
         record, argv, writes = self._execute(managed_repo)
         expected = {
-            "role": "milestone-plan", "model": None, "effort": None, "single_agent": False,
-            "fresh_session": True, "sources": {"model": "inherit", "effort": "inherit"},
+            "role": "milestone-plan", "model": None, "effort": None, "harness": "claude-code",
+            "single_agent": False, "fresh_session": True,
+            "sources": {"model": "inherit", "effort": "inherit", "harness": "default"},
             "config_source": "none",
         }
         self.assertEqual(writes[0]["status"], job.STATUS_PLANNED)
@@ -1041,7 +1042,8 @@ class WorkerRouteTest(unittest.TestCase):
                     (role, model, effort, single_agent, True),
                 )
                 source = "default" if model is not None else "inherit"
-                self.assertEqual(route["sources"], {"model": source, "effort": source})
+                self.assertEqual(route["sources"], {"model": source, "effort": source, "harness": "default"})
+                self.assertEqual(route["harness"], "claude-code")
                 self.assertEqual(record["worker_route"], route)
                 self.assertEqual(_launched_task(self.tmp_root / f"diag-{self._runs}.json"), f"{command} wi-1")
                 self._assert_argv_carries(argv, route)
@@ -1062,6 +1064,14 @@ class WorkerRouteTest(unittest.TestCase):
             (routing.RoutingOptions(cli_role_models={"apply-plan-review": "other"}, config=config),
              ("m-config-role", "config-role"), ("e-config-default", "config-default")),
         )
+        harness_config = routing.parse_routing_config(json.dumps({
+            "schema_version": 1, "roles": {"review-plan": {"harness": "claude-code"}}}), path="<test>")
+        managed_repo = self._implementation_target("harness-source", "AWAITING_LOCAL_PLAN_REVIEW")
+        record, _argv, _writes = self._execute(
+            managed_repo, forced=("AWAITING_LOCAL_PLAN_REVIEW", "/review-plan"),
+            options=routing.RoutingOptions(config=harness_config, config_source="settings"))
+        self.assertEqual((record["worker_route"]["harness"], record["worker_route"]["sources"]["harness"]),
+                         ("claude-code", "config-role"))
         for index, (options, (model, model_source), (effort, effort_source)) in enumerate(cases):
             with self.subTest(case=index):
                 managed_repo = self._implementation_target(f"sources-{index}", "AWAITING_LOCAL_PLAN_REVIEW")
@@ -1070,7 +1080,9 @@ class WorkerRouteTest(unittest.TestCase):
                 )
                 route = record["worker_route"]
                 self.assertEqual((route["model"], route["effort"]), (model, effort))
-                self.assertEqual(route["sources"], {"model": model_source, "effort": effort_source})
+                self.assertEqual(route["harness"], "claude-code")
+                self.assertEqual(route["sources"], {"model": model_source, "effort": effort_source,
+                                                    "harness": "default"})
                 self.assertTrue(route["single_agent"])
                 self._assert_argv_carries(argv, route)
 

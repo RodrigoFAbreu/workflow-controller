@@ -17,6 +17,16 @@ order:
 6. ``inherit``: no flag is passed, so the ``claude`` CLI's own
    configuration applies.
 
+The ``harness`` field (H1) is a third routable field: which agent harness
+runs the role. Its vocabulary is not the ``claude`` CLI's but this
+repository's, the registry ``controller.harness.ADAPTERS`` (the reviewer
+alias ``claude`` is not accepted), and a routing entry is checked against the
+roles the named adapter declares when the routing is loaded
+(:func:`check_role_harness`). It resolves independently of model and effort,
+from ``--role-harness`` (``role-cli``), the config's role entry
+(``config-role``), its ``default`` (``config-default``), then the built-in
+``claude-code`` (``default``); there is no global option.
+
 ``single_agent`` is never overridable: a review role, and the final
 self-review pass of ``/milestone-implement``, always run with the
 subagent-spawning tools (:data:`SUBAGENT_TOOLS`) disallowed. Model and
@@ -41,6 +51,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from controller import harness
 from controller.decision import command_token
 from controller.errors import RoutingConfigError
 
@@ -235,8 +246,8 @@ def role_for(phase: Any, command: str, registry_complete: bool | None) -> str:
 # Values, role assignments and the config file.
 # ---------------------------------------------------------------------------
 
-#: The two routable fields.
-FIELDS: tuple[str, ...] = ("model", "effort")
+#: The three routable fields.
+FIELDS: tuple[str, ...] = ("model", "effort", "harness")
 
 
 def check_value(value: object) -> str:
@@ -247,6 +258,15 @@ def check_value(value: object) -> str:
         raise ValueError(f"expected a non-empty string, got {value!r}")
     if value.startswith("-"):
         raise ValueError(f"{value!r} begins with '-', so it would be read as an option")
+    return value
+
+
+def check_harness(value: object) -> str:
+    """A harness name: a key of :data:`controller.harness.ADAPTERS`. Unlike a
+    model or an effort, the vocabulary belongs to this repository; the
+    reviewer alias ``claude`` is not a harness name. Raises ``ValueError``."""
+    if not isinstance(value, str) or value not in harness.ADAPTERS:
+        raise ValueError(f"expected a registered harness name, got {value!r}; registered: {sorted(harness.ADAPTERS)}")
     return value
 
 
@@ -265,6 +285,38 @@ def parse_role_assignment(text: str) -> tuple[str, str]:
     if not sep:
         raise ValueError(f"expected ROLE=VALUE, got {text!r}")
     return check_role(role), check_value(value)
+
+
+#: The adapter role the Controller launches each routing role as: the
+#: functional tester is its own, every other routing role is a lifecycle
+#: worker session. Held equal to :data:`ROLES` by a test.
+ADAPTER_ROLE: Mapping[str, str] = MappingProxyType({
+    role: harness.FUNCTIONAL_TESTER if role == FUNCTIONAL_TESTER else harness.WORKER for role in ROLE_ROUTES
+})
+
+
+def check_role_harness(role: str, name: str) -> str:
+    """``name`` must be a registered harness whose adapter declares the
+    adapter role ``role`` is launched as (:data:`ADAPTER_ROLE`). Raises
+    ``ValueError`` naming the role, the harness and what it declares."""
+    check_harness(name)
+    adapter_role = ADAPTER_ROLE[role]
+    declared = harness.ADAPTERS[name].roles
+    if adapter_role not in declared:
+        raise ValueError(
+            f"role {role!r} runs as a {adapter_role!r} and harness {name!r} declares only {list(declared)}"
+        )
+    return name
+
+
+def parse_role_harness(text: str) -> tuple[str, str]:
+    """``ROLE=HARNESS`` (``--role-harness``) -> ``(role, harness)``. Raises
+    ``ValueError`` for a missing ``=``, an unknown role, an unregistered
+    harness or a pair the registry refuses (:func:`check_role_harness`)."""
+    role, sep, name = text.partition("=")
+    if not sep:
+        raise ValueError(f"expected ROLE=HARNESS, got {text!r}")
+    return check_role(role), check_role_harness(role, name)
 
 
 CONFIG_SCHEMA_VERSION = 1
@@ -329,10 +381,44 @@ class _Validator:
             if field not in FIELDS:
                 continue
             try:
-                checked[field] = check_value(value)
+                checked[field] = check_harness(value) if field == "harness" else check_value(value)
             except ValueError as exc:
                 raise self.refuse(f"{where}.{field}: {exc}", f"{where}.{field}", where=f"{where}.{field}") from None
         return MappingProxyType(checked)
+
+    def check_harness_pairs(self, default_where: str, default: Mapping[str, str], roles_where: str,
+                            roles: Mapping[str, Mapping[str, str]]) -> None:
+        """Refuse a ``harness`` the registry does not let its role take: each
+        role entry's own, and ``default``'s against every role with no
+        ``harness`` of its own (first in sorted order, counting the rest).
+        Deliberately ignorant of ``--role-harness`` (D4)."""
+        for role in sorted(roles):
+            name = roles[role].get("harness")
+            if name is not None:
+                self._check_pair(f"{roles_where}.{role}.harness", role, name)
+        name = default.get("harness")
+        if name is None:
+            return
+        covered = [role for role in sorted(ROLES) if "harness" not in roles.get(role, {})]
+        for position, role in enumerate(covered):
+            try:
+                check_role_harness(role, name)
+            except ValueError:
+                others = len(covered) - position - 1
+                self._check_pair(f"{default_where}.harness", role, name,
+                                 also=f" (and {others} further role(s) the default would apply to)" if others else "")
+
+    def _check_pair(self, key: str, role: str, name: str, also: str = "") -> None:
+        try:
+            check_role_harness(role, name)
+        except ValueError as exc:
+            raise self.refuse(f"{key}: {exc}{also}", key, where=key,
+                              **_pair_refusal_evidence(role, name)) from None
+
+
+def _pair_refusal_evidence(role: str, name: str) -> dict[str, Any]:
+    return {"role": role, "adapter_role": ADAPTER_ROLE[role], "harness": name,
+            "declared_roles": list(harness.ADAPTERS[name].roles)}
 
 
 def validate_routing_mapping(
@@ -391,6 +477,7 @@ def validate_routing_mapping(
         role: v.field_entry(f"{where}roles.{role}", entry)
         for role, entry in roles_entry.items() if role in ROLES
     }
+    v.check_harness_pairs(f"{where}default", default, f"{where}roles", roles)
     config = RoutingConfig(path=path, default=default, roles=MappingProxyType(roles))
     return config, v.ignored
 
@@ -441,6 +528,8 @@ SOURCE_CONFIG_ROLE = "config-role"
 SOURCE_CONFIG_DEFAULT = "config-default"
 SOURCE_DEFAULT = "default"
 SOURCE_INHERIT = "inherit"
+#: The harness a role runs on when no routing entry names one.
+DEFAULT_HARNESS = harness.CLAUDE_CODE.name
 SOURCES: tuple[str, ...] = (
     SOURCE_ROLE_CLI, SOURCE_CLI, SOURCE_CONFIG_ROLE, SOURCE_CONFIG_DEFAULT, SOURCE_DEFAULT, SOURCE_INHERIT,
 )
@@ -466,6 +555,8 @@ class ResolvedRoute:
     single_agent: bool
     model_source: str
     effort_source: str
+    harness: str = DEFAULT_HARNESS
+    harness_source: str = SOURCE_DEFAULT
 
     @property
     def disallowed_tools(self) -> tuple[str, ...]:
@@ -480,9 +571,12 @@ class ResolvedRoute:
             "role": self.role,
             "model": self.model,
             "effort": self.effort,
+            "harness": self.harness,
             "single_agent": self.single_agent,
             "fresh_session": True,
-            "sources": {"model": self.model_source, "effort": self.effort_source},
+            "sources": {
+                "model": self.model_source, "effort": self.effort_source, "harness": self.harness_source,
+            },
         }
 
 
@@ -508,7 +602,7 @@ def _resolve_field(
 def resolve_route(
     role: str, *, cli_model: str | None = None, cli_effort: str | None = None,
     cli_role_models: Mapping[str, str] | None = None, cli_role_efforts: Mapping[str, str] | None = None,
-    config: RoutingConfig | None = None,
+    cli_role_harnesses: Mapping[str, str] | None = None, config: RoutingConfig | None = None,
 ) -> ResolvedRoute:
     """``role``'s route after the overrides, model and effort resolved
     independently by the precedence in this module's docstring.
@@ -521,9 +615,13 @@ def resolve_route(
     effort, effort_source = _resolve_field(
         "effort", role, role_cli=cli_role_efforts or {}, cli=cli_effort, config=config, builtin=builtin.effort,
     )
+    route_harness, harness_source = _resolve_field(
+        "harness", role, role_cli=cli_role_harnesses or {}, cli=None, config=config, builtin=DEFAULT_HARNESS,
+    )
     return ResolvedRoute(
         role=role, model=model, effort=effort, single_agent=builtin.single_agent,
         model_source=model_source, effort_source=effort_source,
+        harness=route_harness or DEFAULT_HARNESS, harness_source=harness_source,
     )
 
 
@@ -531,11 +629,17 @@ def _frozen_assignments(assignments: Mapping[str, str]) -> Mapping[str, str]:
     return MappingProxyType({check_role(role): check_value(value) for role, value in dict(assignments).items()})
 
 
+def _frozen_harness_assignments(assignments: Mapping[str, str]) -> Mapping[str, str]:
+    return MappingProxyType({
+        check_role(role): check_role_harness(role, name) for role, name in dict(assignments).items()
+    })
+
+
 @dataclasses.dataclass(frozen=True)
 class RoutingOptions:
     """The operator's routing overrides for one Controller invocation: the
     command line's (``--model``, ``--effort``, ``--role-model``,
-    ``--role-effort``) and the routing config in force, if any -- the
+    ``--role-effort``, ``--role-harness``) and the routing config in force, if any -- the
     ``--routing-config`` file, else the settings file's ``routing`` section
     (settings-and-telemetry CP2, I1). ``config_source`` names which
     (:data:`CONFIG_SOURCES`; ``None`` derives it: ``none`` without a config,
@@ -546,6 +650,7 @@ class RoutingOptions:
     cli_effort: str | None = None
     cli_role_models: Mapping[str, str] = dataclasses.field(default_factory=dict)
     cli_role_efforts: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    cli_role_harnesses: Mapping[str, str] = dataclasses.field(default_factory=dict)
     config: RoutingConfig | None = None
     config_source: str | None = None
 
@@ -561,12 +666,13 @@ class RoutingOptions:
                 check_value(value)
         object.__setattr__(self, "cli_role_models", _frozen_assignments(self.cli_role_models))
         object.__setattr__(self, "cli_role_efforts", _frozen_assignments(self.cli_role_efforts))
+        object.__setattr__(self, "cli_role_harnesses", _frozen_harness_assignments(self.cli_role_harnesses))
 
     def resolve(self, role: str) -> ResolvedRoute:
         return resolve_route(
             role, cli_model=self.cli_model, cli_effort=self.cli_effort,
             cli_role_models=self.cli_role_models, cli_role_efforts=self.cli_role_efforts,
-            config=self.config,
+            cli_role_harnesses=self.cli_role_harnesses, config=self.config,
         )
 
 

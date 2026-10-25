@@ -55,10 +55,11 @@ and stop.
    - Stop on a classification refusal it raises and report it verbatim.
    - Stop, without asking for anything, when the probe says a guarded window of
      the work item is running: a live owner window is never overtaken.
-   - Stop, as a success, on kind `released`: this worktree holds no claim and the
-     checkpoint's entry is `HEAD`'s, so the start is already released (or none was
-     held). Name any dead `release-start` guard as a harmless leftover this command
-     did not touch. State that the pre-release obligation of step 3 is lifted and
+   - Stop, as a success, on kind `released`:
+     the work item has no claim in any worktree and the checkpoint's entry is `HEAD`'s,
+     so the start is already released (or none was held). Name any dead
+     `release-start` guard as a harmless leftover this command did not touch. State
+     that the pre-release obligation of step 3 is lifted and
      that `/request-plan-amendment <work_item_id>` or `/milestone-implement
      <work_item_id>` is next. No sentence is asked and nothing is written.
    - Every other kind (`entry`, `baseline`) goes on to step 3: while a claim

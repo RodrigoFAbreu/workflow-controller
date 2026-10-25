@@ -11677,6 +11677,132 @@ class TestReleaseCheckpointStartCommand(LiveGuardWorkerMixin, unittest.TestCase)
             with self.assertRaises(ws.CheckpointOwnedByOtherWorktreeError):
                 self._observe(repo)
 
+    # -- command-wording (M1, M1b) -------------------------------------------
+    def _amendment_message(self, repo, checkpoints, current):
+        state, _ = TestRequestPlanAmendment._state_with_approved_plan(repo, work_item_id=self.WI)
+        item = state["work_items"][self.WI]
+        item["checkpoints"] = {cid: {"status": status, "start_commit": repo.base}
+                               for cid, status in checkpoints}
+        item["current_checkpoint_id"] = current
+        with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+            self._amend(repo, state)
+        return str(ctx.exception)
+
+    def _unclaimed_in_progress(self, repo, current):
+        """The committed state, no claim, and an uncommitted `IN_PROGRESS` entry for `self.CP`
+        whose pointer `current_checkpoint_id` is `current`."""
+        self._start(repo, claim=False)
+
+        def mutate(s):
+            s = ws.transition_checkpoint_in_progress(
+                s, self.WI, self.CP, start_commit=repo.head(), now="t2")
+            s["work_items"][self.WI]["current_checkpoint_id"] = current
+            return s
+
+        ws.state_transaction(repo.root, mutate)
+
+    def _assert_fresh(self, repo):
+        """`resolve_checkpoint_ownership` on this state: not an adoption, so the text may not
+        promise one."""
+        item = _read_state(repo.root)["work_items"][self.WI]
+        outcome, _, _ = ws.resolve_checkpoint_ownership(
+            repo.root, item, self.WI, self.CP, now="t3")
+        self.assertEqual(outcome, "FRESH")
+
+    def test_m1_the_first_raise_names_an_in_progress_checkpoint(self):
+        with self.subTest("a pointer that is not IN_PROGRESS is not named"), ScratchRepo() as repo:
+            message = self._amendment_message(
+                repo, [("CP1", "COMPLETE"), ("CP3", "IN_PROGRESS"), ("CP2", "IN_PROGRESS")], "CP1")
+            self.assertIn("/release-checkpoint-start wi CP3 ", message)
+            self.assertIn("IN_PROGRESS ('CP3')", message)
+            self.assertNotIn("CP1", message)
+        with self.subTest("a pointer that is IN_PROGRESS is named"), ScratchRepo() as repo:
+            message = self._amendment_message(
+                repo, [("CP3", "IN_PROGRESS"), ("CP2", "IN_PROGRESS")], "CP2")
+            self.assertIn("/release-checkpoint-start wi CP2 ", message)
+            self.assertIn("IN_PROGRESS ('CP2')", message)
+        with self.subTest("no pointer: the first IN_PROGRESS id in dict order"), ScratchRepo() as repo:
+            message = self._amendment_message(
+                repo, [("CP3", "IN_PROGRESS"), ("CP2", "IN_PROGRESS")], None)
+            self.assertIn("/release-checkpoint-start wi CP3 ", message)
+            self.assertIn("IN_PROGRESS ('CP3')", message)
+
+    def test_m1_the_two_added_facts_belong_to_the_in_progress_raise_only(self):
+        with self.subTest("an IN_PROGRESS entry"), ScratchRepo() as repo:
+            message = self._amendment_message(repo, [("CP2", "IN_PROGRESS")], "CP2")
+            self.assertIn("/release-checkpoint-start wi CP2", message)
+            self.assertIn("The release refuses an IN_PROGRESS entry that nothing claims", message)
+            self.assertIn("/milestone-implement wi (step 1c)", message)
+            self.assertIn("Run from the worktree that holds the work item's claim", message)
+            self.assertIn("release that checkpoint instead", message)
+        with self.subTest("the claim arm is unchanged"), ScratchRepo() as repo:
+            state, _ = TestRequestPlanAmendment._state_with_approved_plan(repo, work_item_id=self.WI)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="2026-01-01T00:00:00Z")
+            with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                self._amend(repo, state)
+            message = str(ctx.exception)
+            self.assertTrue(message.endswith(
+                "If the checkpoint's own approved plan forbids completing it and its start was "
+                "never committed, stop its owner session and run the user-only "
+                "/release-checkpoint-start wi CP2 from the worktree that holds the claim"))
+            self.assertNotIn("nothing claims", message)
+            self.assertNotIn("release that checkpoint instead", message)
+
+    def test_m1_epr001_adoption_is_promised_only_when_the_pointer_names_the_entry(self):
+        for name, current in (("no pointer", None), ("a pointer naming another checkpoint", "CP9")):
+            with self.subTest(name), ScratchRepo() as repo:
+                self._unclaimed_in_progress(repo, current)
+                self._assert_fresh(repo)
+                state, _ = TestRequestPlanAmendment._state_with_approved_plan(
+                    repo, work_item_id=self.WI)
+                state["work_items"][self.WI]["checkpoints"] = {
+                    self.CP: {"status": "IN_PROGRESS", "start_commit": repo.base}}
+                state["work_items"][self.WI]["current_checkpoint_id"] = current
+                with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                    self._amend(repo, state)
+                message = " ".join(str(ctx.exception).split())
+                self.assertIn("adopts such an entry only when current_checkpoint_id names it", message)
+                self.assertIn("adoption is not offered", message)
+                self.assertNotIn("adopts it first", message)
+
+    def test_m1_epr002_the_guidance_for_a_claim_on_another_checkpoint_is_true(self):
+        with ScratchRepo() as repo:
+            self._start(repo, claim=False)
+            ws.state_transaction(repo.root, lambda s: ws.transition_checkpoint_in_progress(
+                ws.transition_checkpoint_in_progress(
+                    s, self.WI, "CP1", start_commit=repo.head(), now="t2"),
+                self.WI, "CP2", start_commit=repo.head(), now="t2"))
+            ws.state_transaction(repo.root, lambda s: {
+                **s, "work_items": {**s["work_items"], self.WI: {
+                    **s["work_items"][self.WI], "current_checkpoint_id": "CP9"}}})
+            ws.claim_checkpoint(repo.root, self.WI, "CP2", now="t1")
+            state = _read_state(repo.root)
+            with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                _request_plan_amendment_holding_lifecycle_lock(
+                    state, self.WI, "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z")
+            message = " ".join(str(ctx.exception).split())
+            self.assertIn("/release-checkpoint-start wi CP1 ", message)
+            self.assertIn("if that claim is for another checkpoint, the release of this one "
+                          "refuses with the claim's checkpoint named; release that checkpoint "
+                          "instead", message)
+            with self.assertRaises(ws.CheckpointOwnershipStateMismatchError) as refusal:
+                ws.release_checkpoint_start(repo.root, self.WI, "CP1", now="t-release")
+            self.assertIn("CP2", str(refusal.exception))
+            self.assertEqual(self._observe(repo, "CP2")["kind"], "entry")
+
+    def test_m1b_the_unclaimed_release_refusal_states_the_pointer_condition(self):
+        for name, current in (("no pointer", None), ("a pointer naming another checkpoint", "CP9")):
+            with self.subTest(name), ScratchRepo() as repo:
+                self._unclaimed_in_progress(repo, current)
+                self._assert_fresh(repo)
+                with self.assertRaises(ws.CheckpointOwnershipStateMismatchError) as ctx:
+                    self._plain_release(repo)
+                message = " ".join(str(ctx.exception).split())
+                self.assertIn("nothing claims it, so nothing fences it", message)
+                self.assertIn("step 1c adopts it only when current_checkpoint_id names it", message)
+                self.assertIn("is not releasable until state and claim agree", message)
+                self.assertNotIn("adopts it first", message)
+
     # -- C5 ------------------------------------------------------------------
     def _assert_amendment_accepted(self, repo):
         """The item's headline outcome (#55): once the start is released the amendment

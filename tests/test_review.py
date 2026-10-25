@@ -5,6 +5,7 @@ local attempt markers and no network; no test spends Codex allowance.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -1111,6 +1112,26 @@ class FakeLaunchTest(unittest.TestCase):
         result = self.launch({"exec": {"verdict": "wrong_id_first"}})
         self.assertEqual(result["outcome"], "verdict")
         self.assertEqual(len(self.records("exec")), 2)
+
+    def test_the_operators_brief_reaches_the_prompt_of_the_first_attempt_and_the_retry(self):
+        prompts = []
+
+        def record(ctx, prompt, on_spawn):
+            prompts.append(prompt)
+            return review.CODEX.attempt(ctx, prompt, on_spawn)
+
+        recording = dataclasses.replace(review.CODEX, attempt=record)
+        for brief, expected_in, expected_out in (("Only report crashes.", "Only report crashes.", review.DEFAULT_BRIEF),
+                                                 (None, review.DEFAULT_BRIEF, "Only report crashes.")):
+            prompts.clear()
+            with self.subTest(brief=brief), mock.patch.dict(review.HARNESSES, {"codex": recording}):
+                result = self.launch({"exec": {"verdict": "wrong_id_first"}}, job=f"brief-{bool(brief)}", brief=brief)
+                self.assertEqual(result["outcome"], "verdict")
+                self.assertEqual(len(prompts), 2)  # the first attempt and the bounded retry
+                for prompt in prompts:
+                    self.assertIn(expected_in, prompt)
+                    self.assertNotIn(expected_out, prompt)
+                self.assertIn("did not equal the required values", prompts[1])
 
     def test_a_second_mismatch_ends_the_job_with_the_diff_and_ingests_nothing(self):
         result = self.launch({"exec": {"verdict": "bad_revision"}})

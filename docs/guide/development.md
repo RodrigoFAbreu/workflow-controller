@@ -285,11 +285,20 @@ What it checks:
   script digests of `controller/workflow_contract.py`; the
   `docs/guide/installation.md` stub keeps its three headings, which older
   ADRs and release notes link to.
+- **The harness table.** The region of
+  [`docs/guide/harnesses.md`](harnesses.md) between its two
+  `harness-table` markers must be what `python3 tools/harness_table.py`
+  prints, which reads the adapter registry and the routing check. After a
+  change to the registry, regenerate it with
+  `python3 tools/harness_table.py --write`; `--check` reports a stale region
+  without writing, the way the golden generators take `--check`.
 
 Adding a page: put a new user page in `USER_PAGES`, and in
-`COMMAND_PAGES` too if it shows commands, with the number `ACTIVE_THROUGH`
-holds. The per-page numbers already in the file are historical, so a new
-page uses the current `ACTIVE_THROUGH` value. When a release changes a page,
+`COMMAND_PAGES` too if it shows commands. A page written in the same change
+uses the current `ACTIVE_THROUGH` value; a page that does not exist yet is
+registered at `ACTIVE_THROUGH + 1`, and `ACTIVE_THROUGH` is raised when the
+page lands (the way the harness page was added). The per-page numbers already
+in the file are historical. When a release changes a page,
 update its "Last checked with" line by hand; the check only asserts the line is there and has that shape.
 
 ## Lifecycle scenarios
@@ -545,6 +554,10 @@ The record of the 2.6.0 admission is
    name, reviewer name, family, roles, restriction abilities, usage reporting
    and pinned version. Extend the pinning tests in `tests/test_harness.py` so
    the objects that launch the harness cannot drift from the declaration.
+   Then run `python3 tools/harness_table.py --write`, which rewrites
+   [`docs/guide/harnesses.md`](harnesses.md); the same applies when an existing
+   adapter gains or loses a role or its `pinned_version` changes, which every
+   pin bump does.
 2. Add a converter to `controller/usage_record.py` that builds a `UsageRecord`
    from the harness's own output, following the record's meanings (input
    excludes cached tokens, output includes reasoning) and returning `null` with

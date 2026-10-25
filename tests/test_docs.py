@@ -7,6 +7,7 @@ subprocess while it runs."""
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import importlib.util
 import io
 import json
@@ -28,6 +29,10 @@ _spec = importlib.util.spec_from_file_location("check_docs", REPO_ROOT / "tools"
 check_docs = importlib.util.module_from_spec(_spec)
 sys.modules["check_docs"] = check_docs
 _spec.loader.exec_module(check_docs)
+
+_spec = importlib.util.spec_from_file_location("harness_table", REPO_ROOT / "tools" / "harness_table.py")
+harness_table = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(harness_table)
 
 HEADER = "> For: operators. Last checked with: Controller 1.7.1; Workflow 2.6.0, 2.7.0, 2.8.0 and 2.9.0."
 
@@ -78,7 +83,7 @@ class LiveRepositoryTest(TreeTestCase):
         for pages in (check_docs.USER_PAGES, check_docs.COMMAND_PAGES):
             for page, checkpoint in pages:
                 self.assertIsInstance(page, str)
-                self.assertIn(checkpoint, range(1, 6))
+                self.assertIn(checkpoint, range(1, check_docs.ACTIVE_THROUGH + 2))
         self.assertEqual(check_docs.active(check_docs.USER_PAGES, 1), [])
 
 
@@ -536,6 +541,54 @@ class StubRuleTest(TreeTestCase):
 
     def test_inactive_before_its_checkpoint(self) -> None:
         self.assertEqual(check_docs.check_stub(self.tree.root, 3), [])
+
+
+class HarnessTableRuleTest(TreeTestCase):
+    def render(self):
+        return check_docs_harness_table().render()
+
+    def page(self, region: str | None = None, extra: str = "") -> None:
+        region = self.render() if region is None else region
+        self.tree.write("docs/guide/harnesses.md",
+                        f"# H\n\n{HEADER}\n\n{check_docs_harness_table().BEGIN}\n{region}"
+                        f"{check_docs_harness_table().END}\n{extra}")
+
+    def test_a_current_page_is_clean_and_an_inactive_page_is_not_checked(self) -> None:
+        self.page()
+        self.assertEqual(check_docs.check_harness_table(self.tree.root, 6), [])
+        self.assertEqual(check_docs.check_harness_table(self.tree.root, 5), [])
+        self.assertEqual(check_docs.check_harness_table(Path(self.tree.root) / "none", 5), [])
+
+    def test_each_failure_is_one_line_naming_the_page(self) -> None:
+        mod = check_docs_harness_table()
+        problems = check_docs.check_harness_table(self.tree.root, 6)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("docs/guide/harnesses.md", problems[0])
+        self.page(region="stale\n")
+        problems = check_docs.check_harness_table(self.tree.root, 6)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("python3 tools/harness_table.py --write", problems[0])
+        self.tree.write("docs/guide/harnesses.md", f"# H\n{mod.BEGIN}\n{self.render()}")
+        self.assertEqual(len(check_docs.check_harness_table(self.tree.root, 6)), 1)
+        self.tree.write("docs/guide/harnesses.md", f"# H\n{mod.BEGIN}\n{mod.END}\n{mod.END}\n")
+        self.assertEqual(len(check_docs.check_harness_table(self.tree.root, 6)), 1)
+
+    def test_a_registry_change_without_a_regeneration_fails_the_page(self) -> None:
+        from controller import harness
+        self.page()
+        added = dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER, harness.FUNCTIONAL_TESTER))
+        with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": added}):
+            self.assertEqual(len(check_docs.check_harness_table(self.tree.root, 6)), 1)
+
+    def test_the_rule_runs_when_every_injected_input_is_given(self) -> None:
+        self.page(region="stale\n")
+        problems = check_docs.check_tree(self.tree.root, through=6, build_parser=cli.build_parser, cli_module=cli,
+                                         contracts=workflow_contract.RELEASE_CONTRACTS)
+        self.assertTrue(any("not current" in p for p in problems))
+
+
+def check_docs_harness_table():
+    return harness_table
 
 
 if __name__ == "__main__":

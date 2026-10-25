@@ -21,12 +21,15 @@ Rules:
 5. The compatibility page carries exactly the release digests of
    ``controller.workflow_contract.RELEASE_CONTRACTS``.
 6. The ``docs/guide/installation.md`` stub keeps exactly its three headings.
+7. The generated region of ``docs/guide/harnesses.md`` is what
+   ``tools/harness_table.py`` prints from the adapter registry.
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import io
 import json
 import re
@@ -69,6 +72,7 @@ USER_PAGES: tuple[tuple[str, int], ...] = (
     ("docs/guide/troubleshooting.md", 4),
     ("README.md", 5),
     ("docs/README.md", 5),
+    ("docs/guide/harnesses.md", 6),
 )
 
 #: The user pages outside ``docs/guide/``: the only pages the step-id rule covers.
@@ -91,6 +95,7 @@ INSTALLATION_STUB_HEADINGS = (
     "Upgrade",
     "Moving a target to another Workflow release",
 )
+HARNESS_PAGE = ("docs/guide/harnesses.md", 6)
 ADR_EXIT_TABLE = "docs/adr/0001-controller-generation-1-architecture.md"
 
 #: Pages the link check skips: Workflow commands rewrite the first two, the
@@ -834,6 +839,17 @@ def check_stub(root: Path, through: int) -> list[str]:
     return []
 
 
+def check_harness_table(root: Path, through: int) -> list[str]:
+    _, cp = HARNESS_PAGE
+    if cp > through:
+        return []
+    spec = importlib.util.spec_from_file_location("harness_table", Path(__file__).resolve().with_name("harness_table.py"))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("harness_table", module)
+    spec.loader.exec_module(module)
+    return module.check(root)
+
+
 # ---------------------------------------------------------------------------
 # Entry point.
 # ---------------------------------------------------------------------------
@@ -855,6 +871,7 @@ def check_tree(root: Path, *, through: int = ACTIVE_THROUGH, build_parser=None, 
     problems += check_exit_codes(root, through, cli_module)
     problems += check_digests(root, through, contracts)
     problems += check_stub(root, through)
+    problems += check_harness_table(root, through)
     return problems
 
 

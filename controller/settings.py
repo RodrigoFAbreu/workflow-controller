@@ -400,7 +400,7 @@ def _check_string(path: Path, setting: Setting, value: Any) -> None:
     if not isinstance(value, str) or not setting.minimum <= len(value) <= setting.maximum:
         raise _refuse(path, setting.key, f"{setting.key} must be {expected}, got {json.dumps(value)}",
                       value=value, minimum=setting.minimum, maximum=setting.maximum)
-    if setting.key == REVIEWER_BRIEF_KEY and re.search(r"[\x00-\x08\x0b-\x1f\x7f]", value):
+    if setting.key == REVIEWER_BRIEF_KEY and re.search(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]", value):
         raise _refuse(path, setting.key, f"{setting.key} must not contain a control character other than "
                       f"newline and tab, got {json.dumps(value)}", value=value)
     if setting.key == NOTIFICATIONS_URL_KEY and not re.fullmatch(r"https?://[^\s/?#]+\S*", value):

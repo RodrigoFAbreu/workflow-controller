@@ -909,7 +909,7 @@ class ReviewerBriefRowTest(_TempSettings):
             self.assertEqual(settings.resolve(settings.load(self.path))[self.KEY], value)
 
     def test_a_control_character_is_refused_but_newline_and_tab_are_not(self) -> None:
-        for char in ("\x00", "\x1b", "\r", "\x7f", "\x0b"):
+        for char in ("\x00", "\x1b", "\r", "\x7f", "\x0b", "\x85", "\x9b"):
             _write(self.path, {"reviewer": {"brief": f"a{char}b"}})
             with self.assertRaises(SettingsError) as ctx:
                 settings.load(self.path)

@@ -842,6 +842,8 @@ class CliTest(_ReviewCase):
             "repository": root / "settings.json", "ai-review": root / ".ai-review" / "s.json",
             "reviews": runtime / "reviews" / "j1" / "s.json", "symlink": link_dir / "s.json",
             "dotdot": self.life.td / "config" / ".." / "repo" / "d.json"}
+        cli._brief_warned.clear()
+        self.addCleanup(cli._brief_warned.clear)
         for name, path in places.items():
             with self.subTest(place=name):
                 effective = self.brief_options(path)
@@ -849,8 +851,9 @@ class CliTest(_ReviewCase):
                 with contextlib.redirect_stderr(stderr):
                     codex = cli._reviewer_options(effective, root, runtime)
                     claude = cli._review_mode_options(effective, root, runtime)["same_provider"]
-                self.assertEqual((codex["brief"], claude["brief"]), (None, None))
-                self.assertEqual(stderr.getvalue().count("warning:"), 2)
+                    again = cli._reviewer_options(effective, root, runtime)  # a later step of the same run
+                self.assertEqual((codex["brief"], claude["brief"], again["brief"]), (None, None, None))
+                self.assertEqual(stderr.getvalue().count("warning:"), 1)
                 self.assertIn("reviewer.brief is ignored", stderr.getvalue())
                 self.assertEqual(effective["reviewer.harness"], "codex")  # the other rows are still read
 

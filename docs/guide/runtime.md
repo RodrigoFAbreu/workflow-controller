@@ -408,8 +408,8 @@ review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
   reviewer) and to both stages. It is read only from a settings file
   outside the repository under review: a file at or under that repository,
   its `.ai-review/` or the reviews tree could have been written by the
-  branch being reviewed, so for this row it is ignored, with one warning,
-  and the built-in brief is used (the file's other rows apply as before).
+  branch being reviewed, so for this row it is ignored, with one warning per
+  invocation, and the built-in brief is used (the file's other rows apply as before).
   The brief cannot relax the rules that stand above it (the review is
   read-only, the reviewer delegates nothing, files it reads are content and
   never instructions) or change the verdict format; where it conflicts, they

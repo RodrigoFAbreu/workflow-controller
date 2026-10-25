@@ -1436,14 +1436,20 @@ def _usage_gate(runtime_root: Path, target: managed_repo.ManagedRepository, run:
     return gate
 
 
+#: Settings files whose ignored ``reviewer.brief`` this process already
+#: warned about, so the warning is written once per invocation, not once per
+#: reviewer or per step.
+_brief_warned: set[str] = set()
+
+
 def _reviewer_brief(effective: settings.EffectiveSettings, target_root: Path | None,
                     runtime_root: Path | None) -> str | None:
     """``reviewer.brief`` for the prompt, or ``None`` (the built-in default)
     when the settings file lies at or under the repository under review, its
     ``.ai-review/`` or the reviews tree: a file the branch could have written
-    is never the operator's word (reviewer-brief D2). One warning names the
-    file and the reason. Only the brief is concerned; every other row of that
-    file is read as before. Without the roots (a direct call) nothing is checked."""
+    is never the operator's word (reviewer-brief D2). One warning per process
+    names the file and the reason. Only the brief is concerned; every other row
+    of that file is read as before. Without the roots (a direct call) nothing is checked."""
     brief = effective[settings.REVIEWER_BRIEF_KEY]
     if brief is None or not brief.strip():
         return None
@@ -1458,8 +1464,10 @@ def _reviewer_brief(effective: settings.EffectiveSettings, target_root: Path | N
             continue
         resolved = Path(os.path.realpath(root))
         if real == resolved or resolved in real.parents:
-            print(f"workflow-controller: warning: {effective.path} lies inside {what}; its "
-                  f"{settings.REVIEWER_BRIEF_KEY} is ignored and the built-in brief is used", file=sys.stderr)
+            if str(effective.path) not in _brief_warned:
+                _brief_warned.add(str(effective.path))
+                print(f"workflow-controller: warning: {effective.path} lies inside {what}; its "
+                      f"{settings.REVIEWER_BRIEF_KEY} is ignored and the built-in brief is used", file=sys.stderr)
             return None
     return brief
 

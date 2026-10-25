@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import io
 import json
 import os
@@ -859,7 +860,8 @@ class CliTest(_ReviewCase):
 
     def untrusted_step(self, path: Path, route: str, *, via_env: bool = False):
         """One real ``_run_one_step`` with the settings read from ``path`` (``--settings`` or, with ``via_env``,
-        ``$WORKFLOW_CONTROLLER_SETTINGS``), on the ``codex`` or the ``same-provider`` route; returns the recorded launch."""
+        ``$WORKFLOW_CONTROLLER_SETTINGS``), on the ``codex`` or the ``same-provider`` route, through the real
+        ``launch_review``; returns the args and the ``(harness name, prompt)`` of each real invocation."""
         body = {"reviewer": {"harness": "codex", "brief": "Only report crashes."}}
         if route == "claude":
             body["review"] = {"mode": "single-provider"}
@@ -880,12 +882,38 @@ class CliTest(_ReviewCase):
             stderr = io.StringIO()
             try:
                 with contextlib.redirect_stderr(stderr):
-                    code, _result = self.one_step(args, outcome="empty")  # no verdict: the gate stays open for the next call
+                    code, _result, launches = self.real_launch_step(args)  # no verdict: the gate stays open for the next call
             finally:
                 path.unlink()  # an untracked file in the repository would block the next step
-        self.assertEqual(code, cli.EXIT_INCOMPLETE, _result["status"])
+        self.assertEqual(code, cli.EXIT_INCOMPLETE, _result)
         self.assertIn("reviewer.brief is ignored", stderr.getvalue())
-        return args, self.double.calls[0]
+        return args, launches
+
+    def real_launch_step(self, args):
+        """One real ``_run_one_step`` through the **real** ``review.launch_review``: only the harness's own
+        home, environment and invocation (``attempt``) are replaced, the last by one that records the prompt it is
+        handed and returns no verdict, so no reviewer binary runs and no credential is read. Returns ``(exit code, result, [(harness name, prompt), ...])``."""
+        launches, real_launch = [], review.launch_review
+        stub = self.life.td / "bin" / "stub-reviewer"
+        stub.parent.mkdir(exist_ok=True)
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(0o755)
+
+        def recording(harness_name):
+            def attempt(ctx, prompt, on_spawn):
+                launches.append((harness_name, prompt))
+                return review.Attempt(review.RunResult(0, False, b"", b"", os.getpid(), os.getpid()), "")
+            return dataclasses.replace(review.harness(harness_name), attempt=attempt, build_home=lambda layout, home: "",
+                                       environment=lambda *a, **k: {})
+
+        def launch(**kw):
+            return real_launch(**{**kw, "binary_name": str(stub)})
+
+        with mock.patch.object(worker, "launch", mock.Mock(side_effect=AssertionError("no Claude worker"))), \
+                mock.patch.dict(review.HARNESSES, {name: recording(name) for name in ("codex", "claude")}), \
+                mock.patch.object(review, "launch_review", launch):
+            code, result = cli._run_one_step(args, self.runtime_root, IDENTITY, self.life.inspect())
+        return code, result, launches
 
     def test_a_rejected_brief_reaches_neither_launch_so_each_prompt_is_the_default(self) -> None:
         root, runtime = self.life.root, self.runtime_root
@@ -897,13 +925,9 @@ class CliTest(_ReviewCase):
                     with self.subTest(route=route, place=name, via_env=via_env):
                         cli._brief_warned.clear()
                         self.addCleanup(cli._brief_warned.clear)
-                        args, call = self.untrusted_step(path, route, via_env=via_env)
-                        self.assertEqual(call["harness_name"], harness)
-                        self.assertIsNone(call["brief"])
-                        prompt = review.build_prompt(call["stage"], review.expected_headers(
-                            call["manifest"], call["stage"], call["model"],
-                            review.harness(call["harness_name"]).verdict_family),
-                            bundle_dir=call["bundle_dir"], brief=call["brief"])
+                        args, launches = self.untrusted_step(path, route, via_env=via_env)
+                        self.assertEqual([name for name, _prompt in launches], [harness])
+                        prompt = launches[0][1]
                         self.assertIn(review.DEFAULT_BRIEF, prompt)
                         self.assertNotIn("Only report crashes.", prompt)
                         effective = cli._effective(args)  # the file's other rows stay in force

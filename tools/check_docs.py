@@ -847,7 +847,6 @@ def check_harness_table(root: Path, through: int) -> list[str]:
         return []
     spec = importlib.util.spec_from_file_location("harness_table", Path(__file__).resolve().with_name("harness_table.py"))
     module = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault("harness_table", module)
     spec.loader.exec_module(module)
     return module.check(root)
 

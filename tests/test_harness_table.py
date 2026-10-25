@@ -110,6 +110,19 @@ class RenderTest(unittest.TestCase):
         self.assertTrue(text.endswith("\n") and not text.endswith("\n\n"))
 
 
+class CheckWordingTest(unittest.TestCase):
+    def test_a_missing_wording_is_one_problem_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / ht.PAGE
+            page.parent.mkdir(parents=True)
+            page.write_text(ht.write(f"{ht.BEGIN}\n{ht.END}\n"), encoding="utf-8")
+            odd = dataclasses.replace(harness.CODEX, usage="novel-usage")
+            with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": odd}):
+                problems = ht.check(Path(tmp))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("novel-usage", problems[0])
+
+
 class WriteTest(unittest.TestCase):
     PAGE = f"# Title\n\nbefore\n{ht.BEGIN}\nold\n{ht.END}\nafter\n"
 

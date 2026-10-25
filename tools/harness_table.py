@@ -129,7 +129,10 @@ def check(root: Path) -> list[str]:
         _, region, _ = _split(page.read_text(encoding="utf-8"))
     except ValueError as exc:
         return [f"{PAGE}: {exc}"]
-    expected = render()
+    try:
+        expected = render()
+    except ValueError as exc:
+        return [f"{PAGE}: {exc}"]
     if region == expected:
         return []
     have, want = region.splitlines(), expected.splitlines()

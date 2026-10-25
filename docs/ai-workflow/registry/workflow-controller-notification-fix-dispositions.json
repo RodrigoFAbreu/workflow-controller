@@ -1,0 +1,82 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-notification-fix",
+ "dispositions": {
+  "F-0ab982ba1a57": {
+   "disposition": "dropped",
+   "reason": "single-stage review waits at a \"1\" or \"2.1\" item stay user_gate by design (the safe direction); the goal's lanes are \"2.2\" items"
+  },
+  "F-242f07956d2a": {
+   "disposition": "dropped",
+   "reason": "wording only: D2 rule 2 and its tests already key on the protocol_gate disposition"
+  },
+  "F-385daf2c9b95": {
+   "disposition": "dropped",
+   "reason": "wording only: a citation in the plan; the owner's decision is recorded in #149"
+  },
+  "F-3d1c9288ad39": {
+   "disposition": "dropped",
+   "reason": "pre-existing: fall-through blocked records sent user_gate before this patch; unchanged and pinned by BlockedDispositionProductionPathTest; no follow-up issue filed yet"
+  },
+  "F-3da4089ed702": {
+   "disposition": "dropped",
+   "reason": "279ce8d names the fall-through exception in docs/guide/automation.md; the behaviour is unchanged by design; no follow-up issue filed yet"
+  },
+  "F-6702a2319972": {
+   "disposition": "dropped",
+   "reason": "harmless: _recoverable already filters the event and both _superseded_handled calls receive the runtime root explicitly (controller/job.py:5137, 5576)"
+  },
+  "F-728fb69e60d1": {
+   "disposition": "fixed",
+   "note": "controller/job.py:5272-5285 resolves the runs directory and skips a symlinked run directory or log"
+  },
+  "F-767a688b4125": {
+   "disposition": "dropped",
+   "reason": "test gap only: the code guards the no-protocol case (extra=None if protocol is None)"
+  },
+  "F-785551951c6c": {
+   "disposition": "fixed",
+   "note": "docs/guide/commands.md:235 says review_wait was added later and is not in the ADR"
+  },
+  "F-830756c19131": {
+   "disposition": "fixed",
+   "note": "the plan pins the title 'Waiting: <gate code> (<work item>)' for tester stops (CONTROLLER_NOTIFICATION_FIX_PLAN.md, CP1 tests)"
+  },
+  "F-886233558f2f": {
+   "disposition": "dropped",
+   "reason": "the squash title the plan declares governs the release; branch history is not rewritten"
+  },
+  "F-9ead2235391e": {
+   "disposition": "dropped",
+   "reason": "wording only: those regressions fail at the base commit anyway"
+  },
+  "F-bdcf2a704ffb": {
+   "disposition": "dropped",
+   "reason": "test-results narrative of a bundle file; carries no shipped content"
+  },
+  "F-c13fcb18bfe7": {
+   "disposition": "fixed",
+   "note": "controller/job.py:5273 orders the runs by name (sorted, reverse), not by mtime"
+  },
+  "F-cf12ee666499": {
+   "disposition": "fixed",
+   "note": "279ce8d names the fall-through exception for blocked dispositions in docs/guide/automation.md:157-160"
+  },
+  "F-cfae792d684c": {
+   "disposition": "fixed",
+   "note": "plan D2 rule 2 keys on the protocol_gate disposition, with tests for legacy records"
+  },
+  "F-d8a0d749dfa4": {
+   "disposition": "dropped",
+   "reason": "harmless: _recoverable already filters the event and both _superseded_handled calls receive the runtime root explicitly (controller/job.py:5137, 5576)"
+  },
+  "F-e43e5dc11431": {
+   "disposition": "dropped",
+   "reason": "single-stage review waits at a \"1\" or \"2.1\" item stay user_gate by design (the safe direction); the goal's lanes are \"2.2\" items"
+  },
+  "F-e458ba2a6238": {
+   "disposition": "dropped",
+   "reason": "the code guards the no-protocol case (extra=None if protocol is None); only a pinning test is missing"
+  }
+}
+}

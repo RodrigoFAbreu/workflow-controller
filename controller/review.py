@@ -476,12 +476,14 @@ def build_prompt(stage: str, expected: Mapping[str, str], *, bundle_dir: str, no
     """The review prompt: built from the bundle's own values, the operator's
     ``brief`` (the default when ``None``, empty or blank), placed after the
     instructions and before the verdict format, and the verified
-    ``changes_path`` (:func:`changes_file_for`) with the round when known. The
-    text taken from the bundle is never copied in."""
+    ``changes_path`` (:func:`changes_file_for`) with the round when known, not
+    on a known first external round. The text taken from the bundle is never copied in."""
     spec = STAGES[stage]
     header = "\n".join(f"{label} {value}" for label, value in expected.items())
     guidance = brief.strip() if brief is not None and brief.strip() else DEFAULT_BRIEF
-    rounds = f"{round_rule(spec.reviewer_role, changes_path, external_round)}\n\n" if changes_path else ""
+    # a known first external round has no previous round to report on, whatever the file says
+    previous = bool(changes_path) and external_round != 1
+    rounds = f"{round_rule(spec.reviewer_role, changes_path, external_round)}\n\n" if previous else ""
     text = (
         f"You are the external {spec.name} reviewer. Review the bundle in `{bundle_dir}` (start with its "
         "`MANIFEST.md` and `REVIEW_REQUEST.md`) against the files in the current directory. You may read files and "

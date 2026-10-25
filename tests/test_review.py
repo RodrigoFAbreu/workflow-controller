@@ -209,6 +209,12 @@ class RoundPromptTest(unittest.TestCase):
                     self.assertEqual(prompt.count(middle + review.BRIEF_PRECEDENCE), 1)
                     self.assertEqual(prompt.count("external round"), 1 if given else 0)
 
+    def test_a_known_first_external_round_has_no_round_paragraph(self) -> None:
+        plain = review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b")
+        self.assertEqual(review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b", changes_path=self.PATH,
+                                             external_round=1), plain)
+        self.assertNotIn("CHANGES_SINCE_REVIEW", plain)
+
     def test_no_changes_path_means_no_round_paragraph_and_the_round_alone_adds_nothing(self) -> None:
         plain = review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b")
         self.assertEqual(review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b", external_round=2), plain)

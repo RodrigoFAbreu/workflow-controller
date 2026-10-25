@@ -28686,7 +28686,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-routing-harness-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-routing-harness-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -28799,7 +28799,192 @@
           "workflow_release": "2.19.1"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+        "approved_review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "25f7abd1b76763ac4b2400c32f3d08353e99fb24"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c6a22735cd737583afea2fc69736db97401a9808"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "815626bd9c5fa906627af1b7ad1b3c889503a880"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "58908ffb894ec85366ad9cec5b77aba4182b4f1f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-routing-harness-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c714b2e7f86e6f9c066807d454f6c99e78d31ba7"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "004c9bac49570963493c36e9a8a73deee3b770e0"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "47a5aa63197f054f816ed12cff99bda71ef0a66d"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3e62e267899d091f0cd64612e896f1a1347cef0f"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f76b2e3dede034993656ed707e71e98f2e56c8e1"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6354b69a4ac225b5c5245e58514b07bb358363ee"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2de347a0215e457f4046b12aa09bc5a987ab6f15"
+          },
+          {
+            "path": "tests/test_lifecycle_orchestration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2273b9040f14cdfb7fcb962f108b61c00c961a11"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "11f9a422807aff82d3dcedb55342aae039550680"
+          },
+          {
+            "path": "tests/test_review_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4bf5036eaea4c2aa3ba200f4c714530a64d5769c"
+          },
+          {
+            "path": "tests/test_review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca46b25eb46beba0ff633d9572aad6f206312ba0"
+          },
+          {
+            "path": "tests/test_review_same_provider.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "455426284c51a5c0f04981005aa54e12491bb1b9"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4a17036f15ee76c802ee988e3c77a472d294e344"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7e2cc70c3eee9023d52b668c9d62d0cd80c0633d"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "30ec670afafa9c9dbaf55036f9467615499c9f9a"
+          }
+        ],
+        "reviewed_content_commit": "d24f5ec3af258789d53819bd890a7ca96999a2ec",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T14:13:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+            "ledger": {
+              "local": {
+                "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d9e850bc5ed2174a51b697f69cf3de7e8fcc29697bb0ddba949cfb214c5b28b3",
+                "ledger_entry_sha256": "a11cc787ff3699484dff527f73e776ca38348991381aeae5bdf0a8df246a68c1",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "52c6d3aeacdf5f44c4cd261b0b34c815078de228b3595f267845fedfba6f45d9",
+                "ledger_entry_sha256": "53fa5a8c1430d907f34e2893078ba9a258964acee39d7da74cf4f4ffd3ae492e",
+                "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T14:13:00Z",
+          "workflow_release": "2.19.1"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "c58917f23db5c21846091000573285e1d0ea4a0257668644c0fb36035fced6ab",
@@ -28830,12 +29015,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-10-25T13:43:03Z",
+      "state_revision": 26,
+      "last_transition": "2026-10-25T14:13:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -29014,6 +29199,55 @@
               "at": "2026-10-25T11:39:35Z"
             }
           ]
+        },
+        "F-5f4374bf450d": {
+          "digest": "5f4374bf450dfd26e65d54be2997ec0a2d0359088de1a89aa30c5d3a17661dba",
+          "text": "O1. `docs/guide/commands.md:341` still reads \"All six are accepted by `--role-model`/`--role-effort`, a\n  `--routing-config` file and the settings file's `routing` section\". CP3's done-when asks that every place in the\n  guides listing the routing options also list `--role-harness`, and this sentence is a hit for a `--role-effort`\n  search. The sentence is about which role names are accepted, and it is not wrong as it stands. Still, a reader\n  could take it as the full list of options that accept these roles. Add `--role-harness`, worded so it does not\n  suggest the tester role can take a harness other than `claude-code` yet (the plan-stage round-4 note O2).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T13:59:36Z"
+            }
+          ]
+        },
+        "F-1f712e5db5fb": {
+          "digest": "1f712e5db5fb7a0810d7cb4d029a00a9048c34631ba2ac29c9a809a753118017",
+          "text": "`tests/test_settings.py:985`: consider asserting the unsupported pair’s evidence. This test also passes against the base because its strict loader rejects the unknown field. Disabling pair validation alone does fail it, so existing coverage detects the relevant regression.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T14:11:22Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "ec6362901534daa9edd9f566780c7e5ab13903f88b8a6e702d197eb142bf46c2",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-25T13:59:36Z",
+          "verdict_sha256": "d9e850bc5ed2174a51b697f69cf3de7e8fcc29697bb0ddba949cfb214c5b28b3",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "953170bcf60255fcaa65a61c5cc4d2ffd8cd52cedb1f05058622e8891de60a46",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-25T14:11:22Z",
+          "verdict_sha256": "52c6d3aeacdf5f44c4cd261b0b34c815078de228b3595f267845fedfba6f45d9",
+          "run_ref": "session:local .ai-review/workflow-controller-routing-harness/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

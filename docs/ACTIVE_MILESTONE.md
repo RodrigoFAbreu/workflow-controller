@@ -8,5 +8,6 @@ plan is archived at `docs/milestones/completed/workflow-controller-reviewer-brie
 
 ## Next action
 
-No milestone is active. Setting `reviewer.harness=codex` follows as an operator settings change (ROADMAP RB1); then
-run `/milestone-plan` for the next incomplete milestone in `docs/ROADMAP.md`.
+No milestone is active. The next item is H1 (a routing entry names a harness, issue #158), the first item of the
+harness-neutral roles epic: run `/milestone-plan` for it. H6 follows. Setting `reviewer.harness=codex` stays an operator
+settings change that waits for the owner's decision (ROADMAP RB1).

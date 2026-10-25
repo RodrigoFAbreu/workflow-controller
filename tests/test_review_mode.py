@@ -294,6 +294,29 @@ class JobChoiceTest(rj._ReviewCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(self.double.calls, [])
 
+    def test_the_codex_review_record_carries_the_adapter_name_and_the_reviewer_source(self) -> None:
+        """routing-harness D7: ``worker_route.harness`` is the adapter name for a review too; the ``review``
+        block keeps the reviewer vocabulary."""
+        record = self.mode_step("cross-model")
+        self.assertEqual((record["worker_route"]["harness"], record["worker_route"]["sources"]["harness"]),
+                         ("codex", "reviewer.harness"))
+        self.assertEqual(record["review"]["harness"], "codex")
+
+    def test_the_same_provider_review_record_names_claude_code_and_the_review_mode(self) -> None:
+        same = {**reviewer("claude"), "operator_home": self.reviewer["operator_home"]}
+        lowered = review_mode.Signal("warn", ("plan_approval.require",), False, False)
+        double = self.double = rj.LaunchDouble(self, self.life)
+        forbidden = mock.Mock(side_effect=AssertionError("no Claude worker may launch"))
+        with mock.patch.object(worker, "launch", forbidden), mock.patch.object(review, "launch_review", double), \
+                mock.patch.object(job, "_review_mode_signal", return_value=lowered):
+            record = job.execute_step(
+                self.life.inspect(), identity=rj.IDENTITY, runtime=self.runtime_root, reviewer=None,
+                review_mode_options={"mode": "auto", "source": "default", "same_provider": same})
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertEqual((record["worker_route"]["harness"], record["worker_route"]["sources"]["harness"]),
+                         ("claude-code", "review.mode"))
+        self.assertEqual(record["review"]["harness"], "claude")
+
     def test_a_lowered_choice_without_same_provider_options_is_the_gate(self) -> None:
         lowered = review_mode.Signal("warn", ("plan_approval.require",), False, False)
         with mock.patch.object(job, "_review_mode_signal", return_value=lowered):

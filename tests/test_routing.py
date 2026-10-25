@@ -133,8 +133,9 @@ class RoutingTableTest(unittest.TestCase):
     def test_the_record_shape(self) -> None:
         record = routing.resolve_route("review-plan", cli_effort="high").to_record()
         self.assertEqual(record, {
-            "role": "review-plan", "model": "claude-opus-5-5", "effort": "high", "single_agent": True,
-            "fresh_session": True, "sources": {"model": "default", "effort": "cli"},
+            "role": "review-plan", "model": "claude-opus-5-5", "effort": "high", "harness": "claude-code",
+            "single_agent": True, "fresh_session": True,
+            "sources": {"model": "default", "effort": "cli", "harness": "default"},
         })
         json.dumps(record)
 
@@ -385,6 +386,60 @@ class HarnessFieldTest(unittest.TestCase):
                 routing.validate_routing_mapping(section, path="/s.json", where="routing.",
                                                  require_schema_version=False, unknown=routing.UNKNOWN_IGNORE)
             self.assertEqual(ctx.exception.evidence["key"], key)
+
+
+class HarnessResolutionTest(unittest.TestCase):
+    """workflow-controller-routing-harness D5: the harness resolves by the
+    existing precedence minus the global option, independently of model and
+    effort."""
+
+    ROLE = "review-plan"
+
+    def _resolve(self, *, role_cli: bool = False, role: bool = False, default: bool = False):
+        config = None
+        if role or default:
+            config = _config(default={"harness": "claude-code"} if default else {},
+                             roles={self.ROLE: {"harness": "claude-code"}} if role else {})
+        return routing.resolve_route(
+            self.ROLE, cli_role_harnesses={self.ROLE: "claude-code"} if role_cli else None, config=config)
+
+    def test_each_level_names_its_source_and_the_built_in_is_claude_code(self) -> None:
+        cases = (
+            (dict(role_cli=True, role=True, default=True), "role-cli"),
+            (dict(role=True, default=True), "config-role"),
+            (dict(default=True), "config-default"),
+            ({}, "default"),
+        )
+        for levels, source in cases:
+            with self.subTest(source=source):
+                route = self._resolve(**levels)
+                self.assertEqual((route.harness, route.harness_source), ("claude-code", source))
+
+    def test_a_hand_built_route_defaults_to_claude_code(self) -> None:
+        route = routing.ResolvedRoute(role=self.ROLE, model=None, effort=None, single_agent=True,
+                                      model_source="inherit", effort_source="inherit")
+        self.assertEqual((route.harness, route.harness_source), ("claude-code", "default"))
+
+    def test_the_fields_resolve_independently(self) -> None:
+        route = routing.resolve_route(
+            self.ROLE, cli_role_models={self.ROLE: "m"},
+            config=_config(roles={self.ROLE: {"harness": "claude-code", "effort": "e"}}))
+        self.assertEqual((route.model_source, route.effort_source, route.harness_source),
+                         ("role-cli", "config-role", "config-role"))
+
+    def test_the_role_harness_option_parses_and_refuses(self) -> None:
+        self.assertEqual(routing.parse_role_harness("review-plan=claude-code"), ("review-plan", "claude-code"))
+        for text in ("review-plan", "nobody=claude-code", "review-plan=codex", "review-plan=claude",
+                     "review-plan=", "review-plan=--resume"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                routing.parse_role_harness(text)
+
+    def test_a_hand_built_option_set_cannot_hold_an_invalid_pair(self) -> None:
+        for bad in ({"review-plan": "codex"}, {"nobody": "claude-code"}, {"review-plan": "claude"}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                routing.RoutingOptions(cli_role_harnesses=bad)
+        options = routing.RoutingOptions(cli_role_harnesses={"review-plan": "claude-code"})
+        self.assertEqual(options.resolve("review-plan").harness_source, "role-cli")
 
 
 class RoutingConfigTest(unittest.TestCase):

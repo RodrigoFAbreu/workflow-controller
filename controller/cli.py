@@ -270,6 +270,17 @@ def _role_assignment(text: str) -> tuple[str, str]:
         raise argparse.ArgumentTypeError(str(exc)) from None
 
 
+def _role_harness_assignment(text: str) -> tuple[str, str]:
+    """``--role-harness``'s ``type=``: ``ROLE=HARNESS`` with ``ROLE`` one of
+    ``routing.ROLES`` and a harness the registry lets that role run on. An
+    unknown role, an unregistered harness or a refused pair is a usage error
+    (exit 2), before anything runs."""
+    try:
+        return routing.parse_role_harness(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 class _RoleAssignmentAction(argparse.Action):
     """Collects repeated ``ROLE=VALUE`` assignments into a ``{role: value}``
     dict. Assigning one role twice is ambiguous, so it is a usage error
@@ -346,6 +357,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--role-effort", metavar="ROLE=EFFORT", type=_role_assignment,
                         action=_RoleAssignmentAction, default=None,
                         help="effort for one role's workers (repeatable, once per role)")
+    parser.add_argument("--role-harness", metavar="ROLE=HARNESS", type=_role_harness_assignment,
+                        action=_RoleAssignmentAction, default=None,
+                        help="harness for one role's workers (repeatable, once per role); "
+                        "there is no global --harness")
     parser.add_argument("--routing-config", metavar="PATH", default=None,
                         help="JSON routing config: {\"schema_version\": 1, \"default\": {...}, \"roles\": {...}}")
     parser.add_argument("--settings", metavar="PATH", default=None,
@@ -1352,6 +1367,7 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
         cli_effort=getattr(args, "effort", None),
         cli_role_models=getattr(args, "role_model", None) or {},
         cli_role_efforts=getattr(args, "role_effort", None) or {},
+        cli_role_harnesses=getattr(args, "role_harness", None) or {},
         config=effective.routing_config,
         config_source=_ROUTING_CONFIG_SOURCES[effective.sources[settings.ROUTING_KEY]],
     )

@@ -215,6 +215,24 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
         strip(data)
         self.assertGreater(additions["usage_limit"], 0)
         self.assertGreater(additions["tracked_changes"], 0)
+        # routing-harness CP2 added only the ``harness`` key to each job's ``worker_route`` and to its ``sources``.
+        harness_keys = {"worker_route": 0, "sources": 0}
+
+        def strip_harness(node: object) -> None:
+            if isinstance(node, dict):
+                route = node.get("worker_route")
+                if isinstance(route, dict):
+                    harness_keys["worker_route"] += route.pop("harness", None) is not None
+                    harness_keys["sources"] += route.get("sources", {}).pop("harness", None) is not None
+                for value in node.values():
+                    strip_harness(value)
+            elif isinstance(node, list):
+                for value in node:
+                    strip_harness(value)
+
+        strip_harness(data)
+        self.assertGreater(harness_keys["worker_route"], 0)
+        self.assertEqual(harness_keys["worker_route"], harness_keys["sources"])
         rendered = golden.render(data)
         self.assertIn(self.NOTE_SENTENCE.strip(), rendered)
         # The note travels JSON-encoded inside the rendered golden.

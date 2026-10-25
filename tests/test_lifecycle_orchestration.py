@@ -719,7 +719,9 @@ class FullLifecycleRunTest(_LifecycleTestCase):
                 self.assertEqual(record["worker_route"]["model"], "claude-opus-5-5")
                 self.assertEqual(record["worker_route"]["effort"], "xhigh")
                 self.assertEqual(record["worker_route"]["single_agent"], single_agent)
-                self.assertEqual(record["worker_route"]["sources"], {"model": "default", "effort": "default"})
+                self.assertEqual(record["worker_route"]["harness"], "claude-code")
+                self.assertEqual(record["worker_route"]["sources"],
+                                 {"model": "default", "effort": "default", "harness": "default"})
 
         # Exactly six workers, each handed the task its script is keyed on.
         self.assertEqual(self.processes(lc), 6)

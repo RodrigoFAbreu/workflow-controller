@@ -299,6 +299,8 @@ class HappyPathTest(_ReviewCase):
         self.assertEqual(record["kind"], "review")
         self.assertEqual(record["schema_version"], job.REVIEW_SCHEMA_VERSION)
         self.assertEqual(record["worker_route"]["harness"], "codex")
+        self.assertEqual(record["worker_route"]["sources"]["harness"], "reviewer.harness")
+        self.assertEqual(record["review"]["harness"], "codex")
         self.assertEqual((record["worker_route"]["model"], record["worker_route"]["effort"]), ("gpt-6.1-sol", "high"))
         self.assertEqual(record["review"]["ingested"], "recorded")
         self.assertNotIn("telemetry", record["review"], "a Codex review keeps no figures")

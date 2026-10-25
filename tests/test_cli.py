@@ -3302,6 +3302,18 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
         self.assertEqual(self.settings_path.read_bytes(), before)
 
+    def test_an_unsupported_harness_in_the_settings_file_exits_20_before_any_job_record(self) -> None:
+        job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
+        self.settings_path.parent.mkdir(parents=True)
+        self.settings_path.write_text('{"routing": {"roles": {"functional-tester": {"harness": "codex"}}}}')
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = cli.main(["--runtime-dir", str(self.runtime_root), "--workflow-manager", str(self.stub_manager),
+                             "--settings", str(self.settings_path), "step", str(self.repo)])
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED, err.getvalue())
+        self.assertIn("routing.roles.functional-tester.harness", err.getvalue())
+        self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
+
     def test_non_positive_flags_are_usage_errors(self) -> None:
         parser = cli.build_parser()
         for argv in (["--timeout", "0", "step", "/r"], ["--timeout", "-5", "step", "/r"],

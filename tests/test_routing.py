@@ -17,11 +17,12 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import decision, routing  # noqa: E402
+from controller import decision, harness, routing  # noqa: E402
 from controller.errors import ControllerError, RoutingConfigError  # noqa: E402
 
 #: The roles the milestone scope names, at Opus 5.5 ``xhigh`` by default,
@@ -208,7 +209,7 @@ class PrecedenceTest(unittest.TestCase):
     def test_each_level_beats_every_level_below_it_for_each_field(self) -> None:
         for role in ("review-implementation", "milestone-plan"):
             builtin_route = routing.ROLE_ROUTES[role]
-            for field in routing.FIELDS:
+            for field in ("model", "effort"):  # the harness resolves in CP2
                 for index, level in enumerate(self.LEVELS):
                     present = set(self.LEVELS[index:])
                     with self.subTest(role=role, field=field, winner=level):
@@ -297,6 +298,93 @@ class ValueCheckTest(unittest.TestCase):
                        {"cli_role_efforts": {"review-plan": ""}}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 routing.RoutingOptions(**kwargs)
+
+
+class HarnessFieldTest(unittest.TestCase):
+    """workflow-controller-routing-harness D1-D4: ``harness`` is a third
+    routable field, its vocabulary the registry's, validated against the
+    adapter's declared roles at load."""
+
+    def test_harness_is_the_third_routable_field(self) -> None:
+        self.assertEqual(routing.FIELDS, ("model", "effort", "harness"))
+
+    def test_claude_code_is_accepted_everywhere_a_route_is_named(self) -> None:
+        config = _config(default={"harness": "claude-code", "model": "m", "effort": "e"},
+                         roles={role: {"harness": "claude-code"} for role in routing.ROLES})
+        self.assertEqual(dict(config.default), {"harness": "claude-code", "model": "m", "effort": "e"})
+        self.assertEqual(set(config.roles), set(routing.ROLES))
+        beside = _config(roles={"review-plan": {"model": "m", "effort": "e", "harness": "claude-code"}})
+        self.assertEqual(dict(beside.roles["review-plan"]), {"model": "m", "effort": "e", "harness": "claude-code"})
+
+    def test_the_accepted_pairs_follow_the_registry(self) -> None:
+        accepted = {name: sorted(role for role in routing.ROLES
+                                 if routing.ADAPTER_ROLE[role] in adapter.roles)
+                    for name, adapter in harness.ADAPTERS.items()}
+        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": []})
+        for role in routing.ROLES:
+            self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
+
+    def test_adapter_role_maps_every_routing_role_to_a_declared_one(self) -> None:
+        self.assertEqual(set(routing.ADAPTER_ROLE), set(routing.ROLES))
+        self.assertEqual(routing.ADAPTER_ROLE["functional-tester"], harness.FUNCTIONAL_TESTER)
+        for role in routing.ROLES - {"functional-tester"}:
+            self.assertEqual(routing.ADAPTER_ROLE[role], harness.WORKER)
+        for adapter_role in routing.ADAPTER_ROLE.values():
+            self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
+
+    def test_a_later_codex_declaration_flips_exactly_that_row(self) -> None:
+        wider = harness.dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER, harness.FUNCTIONAL_TESTER))
+        with unittest.mock.patch.dict(harness.ADAPTERS, {"codex": wider}):
+            self.assertEqual(routing.check_role_harness("functional-tester", "codex"), "codex")
+            with self.assertRaises(ValueError):
+                routing.check_role_harness("review-plan", "codex")
+            config = _config(roles={"functional-tester": {"harness": "codex"}})
+            self.assertEqual(dict(config.roles["functional-tester"]), {"harness": "codex"})
+
+    def test_codex_is_refused_in_a_default_and_in_each_kind_of_role(self) -> None:
+        for role in ("milestone-implement", "review-plan", "satisfy-gate", "functional-tester"):
+            with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
+                _config(roles={role: {"harness": "codex"}})
+            self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
+                          f"declares only ['reviewer']", ctx.exception.message)
+            self.assertEqual({k: ctx.exception.evidence[k] for k in ("role", "adapter_role", "harness", "declared_roles")},
+                             {"role": role, "adapter_role": routing.ADAPTER_ROLE[role], "harness": "codex",
+                              "declared_roles": ["reviewer"]})
+        with self.assertRaises(RoutingConfigError) as ctx:
+            _config(default={"harness": "codex"})
+        self.assertIn("role 'apply-functional-review'", ctx.exception.message)
+        self.assertIn("(and 14 further role(s) the default would apply to)", ctx.exception.message)
+
+    def test_a_default_is_checked_only_against_roles_with_no_harness_of_their_own(self) -> None:
+        overrides = {role: {"harness": "claude-code"} for role in routing.ROLES}
+        config = _config(default={"harness": "codex"}, roles=overrides)
+        self.assertEqual(dict(config.default), {"harness": "codex"})
+        overrides.pop("review-plan")
+        with self.assertRaises(RoutingConfigError) as ctx:
+            _config(default={"harness": "codex"}, roles=overrides)
+        self.assertIn("role 'review-plan'", ctx.exception.message)
+        self.assertNotIn("further", ctx.exception.message)
+
+    def test_a_value_that_is_not_a_registered_name_is_refused(self) -> None:
+        for value in ("claude", "", "-x", 5, None, ["claude-code"], "Claude-Code"):
+            with self.subTest(value=value), self.assertRaises(RoutingConfigError) as ctx:
+                _config(roles={"review-plan": {"harness": value}})
+            self.assertIn("roles.review-plan.harness", ctx.exception.message)
+            with self.assertRaises(ValueError):
+                routing.check_harness(value)
+
+    def test_the_settings_section_refuses_with_the_dotted_key_and_refuses_the_entry_whole(self) -> None:
+        for section, key in (
+            ({"roles": {"review-plan": {"model": "m", "harness": "codex"}}}, "routing.roles.review-plan.harness"),
+            ({"default": {"harness": "codex"}}, "routing.default.harness"),
+            ({"roles": {"review-plan": {"harness": 5}}}, "routing.roles.review-plan.harness"),
+            ({"roles": {"review-plan": {"harness": ""}}}, "routing.roles.review-plan.harness"),
+            ({"default": {"harness": "-x"}}, "routing.default.harness"),
+        ):
+            with self.subTest(section=section), self.assertRaises(RoutingConfigError) as ctx:
+                routing.validate_routing_mapping(section, path="/s.json", where="routing.",
+                                                 require_schema_version=False, unknown=routing.UNKNOWN_IGNORE)
+            self.assertEqual(ctx.exception.evidence["key"], key)
 
 
 class RoutingConfigTest(unittest.TestCase):

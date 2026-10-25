@@ -27694,7 +27694,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-brief-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-brief-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -27834,12 +27834,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 20,
-      "last_transition": "2026-10-25T06:30:15Z",
+      "state_revision": 22,
+      "last_transition": "2026-10-25T06:46:54Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -28027,20 +28027,48 @@
               "at": "2026-10-25T05:51:15Z"
             }
           ]
+        },
+        "F-224dd4a127dd": {
+          "digest": "224dd4a127ddbb676446d4ac9c3da04eecc7192f67ff5b5be9197fe7caa3b609",
+          "text": "O1: `docs/ACTIVE_MILESTONE.md` still says \"Implementation revision 1 is in implementation review\" and its next action names revision 1; the item is at revision 3. Narrative only; refresh it at the next state-changing step.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "42e273117ee9df7b48fe81a1f388c2a37d5d48101a1e1e77b1a05061cb4d2795",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T06:37:03Z"
+            }
+          ]
+        },
+        "F-767220941aec": {
+          "digest": "767220941aec9e03f14102f978f1367d95a4a7a058a67d91376beed2d8c2016b",
+          "text": "O2: `TEST_RESULTS.md` is still headed \"implementation revision 1\" at code head `d552af2`; the revision-2 and revision-3 targeted re-runs and mutation results are recorded only in `IMPLEMENTATION_SUMMARY.md`. Only test files changed since `d552af2`, so the full-suite result still stands, but the file could say so.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "42e273117ee9df7b48fe81a1f388c2a37d5d48101a1e1e77b1a05061cb4d2795",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T06:37:03Z"
+            }
+          ]
         }
       },
       "consumed_plan_review_content_ids": [
         "9440becb343a0a7696ae3f0fad5bbc611d1efc9a09bc0ce250703c9684433ec2"
       ],
       "implementation_review_stages": {
-        "review_content_id": "4b55f1cc21ea9276a08bc6871fb1c852986bdc198cf5d2d040ee31676754ae34",
+        "review_content_id": "42e273117ee9df7b48fe81a1f388c2a37d5d48101a1e1e77b1a05061cb4d2795",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "d012ab91e0213147283dda052973da45384d0c4c242824c3f422c61dff1db07b",
+          "bundle_id": "9de2570c2593695bc23b188910ef69fe2bf29c5cc33511f8f6368428a8f42887",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-25T05:51:15Z",
-          "verdict_sha256": "2530e2bc8e38ff6f8d7bc1324319f1ae05028e0e36ba598510ca53e1ac0628d0",
-          "run_ref": "session:local .ai-review/workflow-controller-reviewer-brief/feedback/REVIEW_FEEDBACK.md",
+          "round": 3,
+          "completed_at": "2026-10-25T06:37:03Z",
+          "verdict_sha256": "3998c0e485213db12900dd87d3c09540fde8d3ce171d0994f1c5e598b734c2ce",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-reviewer-brief/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null

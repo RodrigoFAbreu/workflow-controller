@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.20.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.21.0; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.21.0 | A routing entry gains a `harness` field (the `routing` section of the settings file, a routing config file, and the new option `--role-harness ROLE=HARNESS`), default `claude-code`, checked against the roles the harness adapter declares: `claude-code` is accepted for every routing role, `codex` for none; an unknown harness or an undeclared role and harness pair is a named refusal at load with exit 20 from every source; precedence is `--role-harness`, the routing config's role entry, its default, the settings, then `claude-code`; `ResolvedRoute` and the job record gain `harness` and `harness_source`; launch ignores the resolved harness; settings generation 15 (#158) | [1.21.0](releases/1.21.0.md) |
 | 1.20.0 | New setting `reviewer.brief` (optional string, at most 2000 characters; settings generation 14) and a built-in default brief added to every Controller-run external review prompt (Codex and same-provider Claude reviewer, plan and implementation stages, retry prompt): judge only what the milestone changed, call a finding Blocking or Important only for real harm, treat wording, polish, double faults and extra hardening as Optional; a brief is used only from a settings file outside the target repository, its worktree and the review bundle or disposable copy, else the default is used and the run says so once; a control character other than newline and tab exits 20; no per-command option (#150) | [1.20.0](releases/1.20.0.md) |
 | 1.19.3 | Fix: a wait for the external review verdict and the functional-review tester stops (except `isolation_breach`) send the new info event `review_wait` (INFO, LOW) instead of `user_gate`, which stays for approvals, acceptance, merges that need the owner, BLOCK-resolution gates and legacy gates; a gate's job record keeps the Workflow's decision in a new `protocol_gate` field; `checks_pending` is unchanged (#149) | [1.19.3](releases/1.19.3.md) |
 | 1.19.2 | Fix: `verify-claude` names a host write in a sandbox-start error instead of hiding it behind `inconclusive`, keeps its host-listener folder short whatever `TMPDIR` is (no more `AF_UNIX path too long`), takes `--claude-binary` without a `claude` on `PATH`, and turns an `OSError` during setup into a named refusal with exit 20 instead of a traceback; the live tests skip without credentials (#132, #133) | [1.19.2](releases/1.19.2.md) |

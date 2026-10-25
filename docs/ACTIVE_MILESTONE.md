@@ -9,5 +9,6 @@ is archived at `docs/milestones/completed/workflow-controller-routing-harness.md
 
 ## Next action
 
-No milestone is active. Next is H6 in `docs/ROADMAP.md` (the harness-neutral roles epic, owner decision 2026-10-24);
-run `/milestone-plan` for it. Setting `reviewer.harness=codex` remains an operator settings change (ROADMAP RB1).
+No milestone is active. The next item is RB2 (a round-aware external-review prompt and the verdict format the
+Workflow's ingest enforces, issue #161): run `/milestone-plan` for it. H6 follows. Setting `reviewer.harness=codex` stays an
+operator settings change after one trial milestone (ROADMAP RB2).

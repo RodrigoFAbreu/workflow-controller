@@ -10682,6 +10682,16 @@ real_transaction = ws.state_transaction
 real_release_guard = ws.release_guard
 real_lifecycle_lock = ws.lifecycle_lock
 real_owner_mutation = ws.owner_mutation
+real_claim_path = ws.claim_path
+
+
+class _CrashAtUnlink(type(Path())):
+    def unlink(self, *args, **kwargs):
+        os._exit(0)
+
+
+def claim_path(*args, **kwargs):
+    return _CrashAtUnlink(real_claim_path(*args, **kwargs))
 
 
 def transaction(*args, **kwargs):
@@ -10716,6 +10726,8 @@ ws.state_transaction = transaction
 ws.release_guard = release_guard
 ws.lifecycle_lock = lifecycle_lock
 ws.owner_mutation = owner_mutation
+if mode == "crash_at_unlink":
+    ws.claim_path = claim_path
 try:
     ws.release_checkpoint_start(repo_root, work_item_id, checkpoint_id, now="t-worker")
     say(event="done", outcome="success")
@@ -11232,6 +11244,544 @@ class TestReleaseCheckpointStart(LiveGuardWorkerMixin, unittest.TestCase):
                                          "Workflow-Work-Item": self.WI})
             (repo.root / _STATE_REL).write_bytes(saved)
             self._refuses(repo, ws.CheckpointOwnershipStateMismatchError)
+
+    # -- interleaving-pins P1 (#97 item 4) -------------------------------------
+    def _spy_guard_lock(self):
+        """Patch `owner_mutation` and `guard_mutation_lock` with spies. Returns the list
+        the lock spy appends to: `(function that entered the lock, whether the
+        `owner_mutation` body was open)`."""
+        body = {"open": False}
+        entered = []
+        real_window, real_lock = ws.owner_mutation, ws.guard_mutation_lock
+
+        @contextlib.contextmanager
+        def window(*args, **kwargs):
+            with real_window(*args, **kwargs):
+                body["open"] = True
+                try:
+                    yield
+                finally:
+                    body["open"] = False
+
+        @contextlib.contextmanager
+        def lock(*args, **kwargs):
+            entered.append((sys._getframe(2).f_code.co_name, body["open"]))
+            with real_lock(*args, **kwargs):
+                yield
+
+        for name, spy in (("owner_mutation", window), ("guard_mutation_lock", lock)):
+            patcher = mock.patch.object(ws, name, spy)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return entered
+
+    def test_p1_the_release_window_takes_no_guardlock_inside_its_body(self):
+        """The guard re-read of `release_checkpoint_start` takes no checkpoint guardlock (6)
+        inside the body of its `owner_mutation` window: that would derive an undeclared
+        (5)->(6) edge. The three entries outside the body are the probe, the guard's
+        acquire and the lock under its release (`release_guard`'s `_release_guard_path`), so a spy that misses the release-time edge fails here."""
+        outside = [("guard_holder_is_running", False), ("acquire_guard", False),
+                   ("_release_guard_path", False)]
+        real_transaction, real_path = ws.state_transaction, ws.claim_path
+
+        def rotate_claim_after_write(repo):
+            def write_then_change(*args, **kwargs):
+                result = real_transaction(*args, **kwargs)
+                self._rewrite(ws.claim_path(repo.root, self.WI), owner_token="rotated")
+                return result
+            return write_then_change
+
+        scenarios = {
+            "a kind entry success": ({}, None, None),
+            "a kind baseline success": ({"window": False}, None, None),
+            "a failed unlink": (
+                {}, ws.CheckpointOwnershipUnavailableError,
+                lambda repo: mock.patch.object(
+                    ws, "claim_path", lambda *a, **k: _UnlinkFails(real_path(*a, **k)))),
+            "a refusal inside the restore mutator": (
+                {}, ws.CheckpointOwnershipStateMismatchError,
+                lambda repo: repo.commit("done", trailers={
+                    "Workflow-Checkpoint": self.CP, "Workflow-Work-Item": self.WI})),
+            "the re-read refusal": (
+                {}, ws.CheckpointOwnershipUnavailableError,
+                lambda repo: mock.patch.object(
+                    ws, "state_transaction", rotate_claim_after_write(repo))),
+        }
+        for name, (start_kwargs, error, prepare) in scenarios.items():
+            with self.subTest(name), ScratchRepo() as repo:
+                self._start(repo, **start_kwargs)
+                patch = prepare(repo) if prepare else None
+                entered = self._spy_guard_lock()
+                with contextlib.ExitStack() as stack:
+                    if isinstance(patch, contextlib.AbstractContextManager):
+                        stack.enter_context(patch)
+                    if error is None:
+                        self._release(repo)
+                    else:
+                        with self.assertRaises(error):
+                            self._release(repo)
+                self.assertEqual([e for e in entered if not e[1]], outside)
+                self.assertEqual([e for e in entered if e[1]], [])
+
+    # -- interleaving-pins P2 (#97 item 5) -------------------------------------
+    # The seams are patches of existing function boundaries, installed by the test or
+    # by the worker source: `S-write` (`state_transaction`, kind `entry` only),
+    # `S-unlink` (`claim_path`, whose `unlink` is the injection point) and `S-gap`
+    # (`release_guard`, the one call between the unlink and the guard's release). The
+    # entry branch's gap is T4's "after the unlink" subtest.
+    def _baseline_start(self, repo, demoted):
+        self._start(repo, demoted=demoted, window=False)
+        return self.DEMOTED if demoted else None
+
+    def test_p2_the_entry_absent_branch_writes_no_state(self):
+        """Why `S-write` cannot fire on kind `baseline`: no `state_transaction` call."""
+        real = ws.state_transaction
+        for demoted in (False, True):
+            with self.subTest(demoted=demoted), ScratchRepo() as repo:
+                expected = self._baseline_start(repo, demoted)
+                before = (repo.root / _STATE_REL).read_bytes()
+                calls = []
+
+                def counting(*args, **kwargs):
+                    calls.append(args)
+                    return real(*args, **kwargs)
+
+                with mock.patch.object(ws, "state_transaction", counting):
+                    self._release(repo)
+                self.assertEqual(calls, [])
+                self.assertEqual((repo.root / _STATE_REL).read_bytes(), before)
+                self._released(repo, expected)
+
+    def test_p2_a_crash_at_the_unlink_of_the_entry_absent_branch(self):
+        """`S-unlink` (the worker's `crash_at_unlink`): the claim is kept under a guard
+        whose holder is gone, and the next call completes."""
+        for demoted in (False, True):
+            with self.subTest(demoted=demoted), ScratchRepo() as repo:
+                expected = self._baseline_start(repo, demoted)
+                before = (repo.root / _STATE_REL).read_bytes()
+                self._crash_in(repo, "crash_at_unlink")
+                self.assertEqual((repo.root / _STATE_REL).read_bytes(), before)
+                self.assertIsNotNone(ws.resolve_claim(repo.root, self.WI))
+                self.assertIsNotNone(ws.read_guard(repo.root, self.WI))
+                self._release(repo)
+                self._released(repo, expected)
+
+    def test_p2_a_crash_in_the_gap_after_the_unlink_of_the_entry_absent_branch(self):
+        """`S-gap` (the worker's `crash_after_unlink`) on kind `baseline`: no claim, a
+        leftover guard with no holder, and the next call refuses and changes nothing."""
+        for demoted in (False, True):
+            with self.subTest(demoted=demoted), ScratchRepo() as repo:
+                self._baseline_start(repo, demoted)
+                before = (repo.root / _STATE_REL).read_bytes()
+                self._crash_in(repo, "crash_after_unlink")
+                self.assertEqual((repo.root / _STATE_REL).read_bytes(), before)
+                self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+                leftover = ws.read_guard(repo.root, self.WI)
+                self.assertIsNotNone(leftover)
+                self._refuses(repo, ws.CheckpointNotInProgressLocallyError, "nothing to release")
+                fresh = ws.acquire_guard(repo.root, self.WI, holder_owner_token="any",
+                                         checkpoint_id=self.CP, step="1d",
+                                         step_class=ws.DESTRUCTIVE, now="t5")
+                self.assertNotEqual(fresh["lease_id"], leftover["lease_id"])
+                ws.release_guard(repo.root, self.WI, fresh)
+
+    def test_p2_a_failed_unlink_of_the_entry_absent_branch(self):
+        """`S-unlink` (T7's analogue, in process): the call raises, the claim stays, the
+        guard is released, and the next call completes."""
+        for demoted in (False, True):
+            with self.subTest(demoted=demoted), ScratchRepo() as repo:
+                expected = self._baseline_start(repo, demoted)
+                before = (repo.root / _STATE_REL).read_bytes()
+                real = ws.claim_path
+                with mock.patch.object(ws, "claim_path",
+                                       lambda *a, **k: _UnlinkFails(real(*a, **k))):
+                    with self.assertRaises(ws.CheckpointOwnershipUnavailableError) as ctx:
+                        self._release(repo)
+                self.assertIn("claim was not unlinked", str(ctx.exception))
+                self.assertEqual((repo.root / _STATE_REL).read_bytes(), before)
+                self.assertIsNotNone(ws.resolve_claim(repo.root, self.WI))
+                self.assertIsNone(ws.read_guard(repo.root, self.WI))
+                self._release(repo)
+                self._released(repo, expected)
+
+
+def _with_entry(state, work_item_id, checkpoint_id, entry):
+    state = copy.deepcopy(state)
+    state["work_items"][work_item_id]["checkpoints"][checkpoint_id] = dict(entry)
+    return state
+
+
+class TestReleaseCheckpointStartCommand(LiveGuardWorkerMixin, unittest.TestCase):
+    """checkpoint-start-command (#55, `D-Literal`/`D-Functions`/`D-Engine-Keyword`/
+    `D-Amendment-Message`): the observation, the confirmation bound to the
+    claim that was shown, and the release the command performs."""
+
+    WI, CP = TestReleaseCheckpointStart.WI, TestReleaseCheckpointStart.CP
+    _REGISTRY = TestReleaseCheckpointStart._REGISTRY
+    DEMOTED = TestReleaseCheckpointStart.DEMOTED
+    for _name in ("_item", "_commit_state", "_start", "_snapshot", "_entry", "_head_entry",
+                  "_run_worker", "_events", "_crash_in", "_rewrite",
+                  "_start_over_committed_state"):
+        locals()[_name] = TestReleaseCheckpointStart.__dict__[_name]
+    del _name
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._release_worker = cls._worker_dir / "_release_start_worker.py"
+        cls._release_worker.write_text(_RELEASE_START_WORKER_SOURCE)
+
+    def tearDown(self):
+        self.assertEqual(ws.held_primitives(), ())
+        self.assertEqual(ws._guard_holder_locks, {})
+
+    def _ref(self, repo):
+        return ws.resolve_claim(repo.root, self.WI)["owner_token"][:12]
+
+    def _sentence(self, repo):
+        return ws.checkpoint_start_release_confirmation(self.WI, self.CP, self._ref(repo))
+
+    def _observe(self, repo, checkpoint=None):
+        return ws.observe_checkpoint_start_release(repo.root, self.WI, checkpoint or self.CP)
+
+    def _confirmed(self, repo, text):
+        return ws.release_checkpoint_start_confirmed(
+            repo.root, self.WI, self.CP, user_confirmation=text, now="t-release")
+
+    def _plain_release(self, repo):
+        ws.release_checkpoint_start(repo.root, self.WI, self.CP, now="t-release")
+
+    # -- C1 ------------------------------------------------------------------
+    def test_c1_the_literal(self):
+        sentence = ws.checkpoint_start_release_confirmation("wi", "CP2", "abcdef012345")
+        self.assertEqual(
+            sentence,
+            "Release checkpoint start CP2 of wi held under claim abcdef012345; its owner session "
+            "is stopped and stays stopped until this release has completed.")
+
+        def check(text, work_item="wi", checkpoint="CP2", ref="abcdef012345"):
+            ws.validate_checkpoint_start_release_confirmation(
+                text, work_item_id=work_item, checkpoint_id=checkpoint, claim_ref=ref)
+
+        check(sentence)
+        check("yes. " + sentence + " thanks")
+        check(sentence.upper())
+        check(sentence.replace("Release", "rElEaSe"))
+        check("  " + sentence.replace(" ", "\n  ") + "  ")
+        cut = sentence.split(" and stays stopped")[0] + "."
+        for name, text, kwargs in (
+                ("empty", "", {}),
+                ("not text", None, {}),
+                ("a stale claim reference", sentence, {"ref": "000000000000"}),
+                ("another work item", sentence, {"work_item": "other"}),
+                ("an id that extends the work item",
+                 sentence.replace("of wi held", "of wi-2 held"), {}),
+                ("another checkpoint", sentence, {"checkpoint": "CP3"}),
+                ("a checkpoint that extends it", sentence.replace("CP2 of", "CP22 of"), {}),
+                ("the attestation cut", cut, {}),
+                ("the attestation removed", sentence.split(";")[0] + ".", {}),
+                ("reordered", "Release checkpoint start of wi CP2 held under claim abcdef012345; "
+                              "its owner session is stopped and stays stopped until this release "
+                              "has completed.", {}),
+                ("a longer reference", sentence.replace("abcdef012345", "abcdef0123456"), {})):
+            with self.subTest(name), self.assertRaises(ws.UserConfirmationRejectedError) as ctx:
+                check(text, **kwargs)
+            self.assertIn(ws.checkpoint_start_release_confirmation(
+                kwargs.get("work_item", "wi"), kwargs.get("checkpoint", "CP2"),
+                kwargs.get("ref", "abcdef012345")), str(ctx.exception))
+
+    # -- C2 ------------------------------------------------------------------
+    def test_c2_the_observation(self):
+        with self.subTest("entry"), ScratchRepo() as repo:
+            self._start(repo)
+            seen = self._observe(repo)
+            self.assertEqual(seen["kind"], "entry")
+            self.assertEqual(seen["claim_ref"], self._ref(repo))
+            claim = ws.resolve_claim(repo.root, self.WI)
+            self.assertEqual(seen["claim"]["checkpoint_id"], self.CP)
+            self.assertEqual(seen["claim"]["claimed_at"], claim["claimed_at"])
+            self.assertEqual(seen["claim"]["worktree_root"], claim["worktree_root"])
+            self.assertIsNone(seen["guard"])
+            self.assertFalse(seen["running"])
+        with self.subTest("baseline"), ScratchRepo() as repo:
+            self._start(repo, window=False)
+            self.assertEqual(self._observe(repo)["kind"], "baseline")
+        with self.subTest("a guard leftover of an interrupted release"), ScratchRepo() as repo:
+            self._start(repo)
+            self._crash_in(repo, "crash_after_write")
+            seen = self._observe(repo)
+            self.assertEqual(seen["kind"], "baseline")
+            self.assertEqual(seen["guard"]["step"], "release-start")
+            self.assertEqual(seen["guard"]["step_class"], ws.DESTRUCTIVE)
+            self.assertFalse(seen["running"])
+        with self.subTest("a live holder"), ScratchRepo() as repo:
+            _, token = self._start(repo)
+            proc, _ = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE)
+            seen = self._observe(repo)
+            self.assertTrue(seen["running"])
+            self.assertEqual(seen["guard"]["step"], "1f-commit")
+            self._end_window(proc)
+        for demoted, expected in ((False, None), (True, self.DEMOTED)):
+            with self.subTest(f"released, demoted={demoted}"), ScratchRepo() as repo:
+                self._start(repo, demoted=demoted)
+                self._plain_release(repo)
+                seen = self._observe(repo)
+                self.assertEqual(seen["kind"], "released")
+                self.assertIsNone(seen["claim"])
+                self.assertIsNone(seen["claim_ref"])
+                self.assertEqual(self._entry(repo), expected)
+        with self.subTest("an IN_PROGRESS entry with no claim is not released"), \
+                ScratchRepo() as repo:
+            self._start(repo, claim=False)
+            ws.state_transaction(repo.root, lambda s: ws.transition_checkpoint_in_progress(
+                s, self.WI, self.CP, start_commit=repo.head(), now="t2"))
+            with self.assertRaises(ws.CheckpointOwnershipStateMismatchError):
+                self._observe(repo)
+        with self.subTest("no claim and an entry that differs from HEAD's"), ScratchRepo() as repo:
+            self._start(repo, claim=False)
+            ws.state_transaction(repo.root, lambda s: _with_entry(
+                s, self.WI, self.CP, {"status": "COMPLETE"}))
+            with self.assertRaises(ws.CheckpointNotInProgressLocallyError):
+                self._observe(repo)
+        with self.subTest("no claim and HEAD records COMPLETE"), ScratchRepo() as repo:
+            self._start(repo, claim=False)
+            self._commit_state(repo, {"status": "COMPLETE", "start_commit": "f" * 40})
+            with self.assertRaises(ws.CheckpointNotInProgressLocallyError):
+                self._observe(repo)
+        with self.subTest("classification refusals pass through"), ScratchRepo() as repo:
+            self._commit_state(repo)
+            other = repo.worktree("b")
+            ws.claim_checkpoint(other, self.WI, self.CP, now="t1")
+            ws.state_transaction(repo.root, lambda s: ws.transition_checkpoint_in_progress(
+                s, self.WI, self.CP, start_commit=repo.head(), now="t2"))
+            with self.assertRaises(ws.CheckpointOwnedByOtherWorktreeError):
+                self._observe(repo)
+        with self.subTest("an unknown id and a work item with no entry"), ScratchRepo() as repo:
+            self._start(repo)
+            with self.assertRaises(ws.CheckpointOwnershipStateMismatchError):
+                self._observe(repo, "UNKNOWN")
+            with self.assertRaises(ws.CheckpointNotInProgressLocallyError):
+                ws.observe_checkpoint_start_release(repo.root, "ghost", self.CP)
+        with self.subTest("the observation writes nothing"), ScratchRepo() as repo:
+            self._start(repo)
+            before = self._snapshot(repo)
+            self._observe(repo)
+            self.assertEqual(self._snapshot(repo), before)
+
+    # -- C3 ------------------------------------------------------------------
+    def test_c3_the_confirmed_release(self):
+        with self.subTest("a wrong confirmation changes nothing"), ScratchRepo() as repo:
+            self._start(repo)
+            before = self._snapshot(repo)
+            for text in ("", "yes", self._sentence(repo).replace("stays stopped", "stays")):
+                with self.assertRaises(ws.UserConfirmationRejectedError):
+                    self._confirmed(repo, text)
+            self.assertEqual(self._snapshot(repo), before)
+        with self.subTest("the right one releases and returns the observation"), \
+                ScratchRepo() as repo:
+            self._start(repo)
+            sentence, ref = self._sentence(repo), self._ref(repo)
+            seen = self._confirmed(repo, sentence)
+            self.assertEqual(seen["kind"], "entry")
+            self.assertEqual(seen["claim_ref"], ref)
+            self.assertIsNone(self._entry(repo))
+            self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+            self.assertIsNone(ws.read_guard(repo.root, self.WI))
+        with self.subTest("a confirmation for an earlier claim of the same checkpoint"), \
+                ScratchRepo() as repo:
+            self._start(repo)
+            stale = self._sentence(repo)
+            self._plain_release(repo)
+            self._start_over_committed_state(repo)
+            before = self._snapshot(repo)
+            with self.assertRaises(ws.UserConfirmationRejectedError):
+                self._confirmed(repo, stale)
+            self.assertEqual(self._snapshot(repo), before)
+            self._confirmed(repo, self._sentence(repo))
+        with self.subTest("the engine keyword refuses a claim that changed"), ScratchRepo() as repo:
+            self._start(repo)
+            before = self._snapshot(repo)
+            with self.assertRaises(ws.CheckpointOwnershipStateMismatchError) as ctx:
+                ws.release_checkpoint_start(repo.root, self.WI, self.CP, now="t",
+                                            confirmed_claim_ref="000000000000")
+            self.assertIn("changed since you confirmed", str(ctx.exception))
+            self.assertEqual(self._snapshot(repo), before)
+            ws.release_checkpoint_start(repo.root, self.WI, self.CP, now="t",
+                                        confirmed_claim_ref=self._ref(repo))
+            self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+        with self.subTest("the claim rotated after the observation"), ScratchRepo() as repo:
+            self._start(repo)
+            sentence = self._sentence(repo)
+            real = ws.observe_checkpoint_start_release
+
+            def observe_then_rotate(*args, **kwargs):
+                seen = real(*args, **kwargs)
+                self._rewrite(ws.claim_path(repo.root, self.WI), owner_token="rotated" + "0" * 20)
+                return seen
+
+            with mock.patch.object(ws, "observe_checkpoint_start_release", observe_then_rotate):
+                with self.assertRaises(ws.CheckpointOwnershipStateMismatchError):
+                    self._confirmed(repo, sentence)
+            self.assertEqual(self._entry(repo)["status"], "IN_PROGRESS")
+        with self.subTest("without the keyword the engine is unchanged"), ScratchRepo() as repo:
+            self._start(repo)
+            self._plain_release(repo)
+            self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+        with self.subTest("a live window is never overtaken"), ScratchRepo() as repo:
+            _, token = self._start(repo)
+            sentence = self._sentence(repo)
+            proc, _ = self._hold(repo.root, token, "1f-commit", ws.DESTRUCTIVE)
+            with self.assertRaises(ws.CheckpointOwnershipUnavailableError):
+                self._confirmed(repo, sentence)
+            self._end_window(proc)
+
+    # -- C4 ------------------------------------------------------------------
+    def _amend(self, repo, state):
+        return _request_plan_amendment_holding_lifecycle_lock(
+            state, "wi", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z")
+
+    def test_c4_the_amendment_refusal_names_the_command(self):
+        helper = TestRequestPlanAmendment._state_with_approved_plan
+        with self.subTest("an IN_PROGRESS entry"), ScratchRepo() as repo:
+            state, _ = helper(repo)
+            state["work_items"]["wi"]["checkpoints"]["CP2"] = {
+                "status": "IN_PROGRESS", "start_commit": repo.base}
+            state["work_items"]["wi"]["current_checkpoint_id"] = "CP2"
+            with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                self._amend(repo, state)
+            message = str(ctx.exception)
+            self.assertIn("/release-checkpoint-start wi CP2", message)
+            self.assertIn("from the worktree that holds the claim", message)
+            self.assertIn("never committed", message)
+        with self.subTest("an outstanding claim"), ScratchRepo() as repo:
+            state, _ = helper(repo)
+            ws.claim_checkpoint(repo.root, "wi", "CP2", now="2026-01-01T00:00:00Z")
+            with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                self._amend(repo, state)
+            message = str(ctx.exception)
+            self.assertIn("/release-checkpoint-start wi CP2", message)
+            self.assertIn("from the worktree that holds the claim", message)
+            self.assertIn("never committed", message)
+        with self.subTest("the entry has no claim: the release refuses by name"), \
+                ScratchRepo() as repo:
+            self._start(repo, claim=False)
+            ws.state_transaction(repo.root, lambda s: ws.transition_checkpoint_in_progress(
+                s, self.WI, self.CP, start_commit=repo.head(), now="t2"))
+            with self.assertRaises(ws.CheckpointOwnershipStateMismatchError):
+                self._observe(repo)
+        with self.subTest("the claim is another worktree's: the release refuses by name"), \
+                ScratchRepo() as repo:
+            self._commit_state(repo)
+            other = repo.worktree("b")
+            ws.claim_checkpoint(other, self.WI, self.CP, now="t1")
+            with self.assertRaises(ws.CheckpointOwnedByOtherWorktreeError):
+                self._observe(repo)
+
+    # -- C5 ------------------------------------------------------------------
+    def _assert_amendment_accepted(self, repo):
+        """The item's headline outcome (#55): once the start is released the amendment
+        is no longer refused with `AmendmentCheckpointActiveError`."""
+        state, _ = TestRequestPlanAmendment._state_with_approved_plan(repo, work_item_id=self.WI)
+        new_state = self._amend(repo, state)
+        self.assertEqual(new_state["work_items"][self.WI]["phase"], "AMENDING_PLAN")
+
+    def test_c5_end_to_end_in_a_scratch_repository(self):
+        with self.subTest("first flow: the command's steps in order"), ScratchRepo() as repo:
+            self._start(repo)
+            repo.commit("merge of main")                                   # benign HEAD movement
+            head = repo.head()
+            seen = self._observe(repo)
+            self.assertEqual(seen["kind"], "entry")
+            sentence = ws.checkpoint_start_release_confirmation(self.WI, self.CP, seen["claim_ref"])
+            with self.assertRaises(ws.UserConfirmationRejectedError):
+                self._confirmed(repo, "release it")
+            self.assertEqual(self._entry(repo)["status"], "IN_PROGRESS")
+            self._confirmed(repo, sentence)
+            self.assertIsNone(self._entry(repo))
+            self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+            self.assertEqual(repo.head(), head)
+            self.assertEqual(_git_in(repo.root, "diff", "--cached", "--name-only"), "")
+            self.assertEqual(self._observe(repo)["kind"], "released")
+            self._assert_amendment_accepted(repo)
+        with self.subTest("second flow: an interrupted release is finished by the same steps"), \
+                ScratchRepo() as repo:
+            self._start(repo)
+            self._crash_in(repo, "crash_after_write")
+            self.assertIsNone(self._entry(repo))
+            self.assertEqual(self._observe(repo)["kind"], "baseline")
+            before = self._snapshot(repo)
+            with self.assertRaises(ws.UserConfirmationRejectedError):
+                self._confirmed(repo, "stale")
+            self.assertEqual(self._snapshot(repo), before)
+            self._confirmed(repo, self._sentence(repo))
+            self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+            self.assertEqual(self._observe(repo)["kind"], "released")
+        with self.subTest("a commit carrying the trailer still refuses"), ScratchRepo() as repo:
+            self._start(repo)
+            repo.commit("done", trailers={"Workflow-Checkpoint": self.CP,
+                                          "Workflow-Work-Item": self.WI})
+            sentence = self._sentence(repo)
+            before = self._snapshot(repo)
+            with self.assertRaises(ws.CheckpointOwnershipStateMismatchError):
+                self._confirmed(repo, sentence)
+            self.assertEqual(self._snapshot(repo), before)
+        with self.subTest("a COMPLETE working entry names both next steps"), ScratchRepo() as repo:
+            self._start(repo)
+            ws.state_transaction(repo.root, lambda s: ws.complete_checkpoint(
+                s, self.WI, self.CP, self._REGISTRY, now="t3", repo_root=repo.root))
+            with self.assertRaises(ws.CheckpointNotInProgressLocallyError) as ctx:
+                self._observe(repo)
+            self.assertIn("step 1c", str(ctx.exception))
+            self.assertIn("resume step 1f", str(ctx.exception))
+        for case in ("after the claim unlink", "report lost"):
+            with self.subTest(f"third flow, terminal recovery: {case}"), ScratchRepo() as repo:
+                self._start(repo)
+                if case == "after the claim unlink":
+                    self._crash_in(repo, "crash_after_unlink")
+                else:
+                    self._plain_release(repo)
+                before = self._snapshot(repo)
+                for _ in range(3):
+                    self.assertEqual(self._confirmed(repo, "")["kind"], "released")
+                    self.assertEqual(self._snapshot(repo), before)
+                self.assertIsNone(ws.resolve_claim(repo.root, self.WI))
+                self._assert_amendment_accepted(repo)
+
+    # -- interleaving-pins P4 (#100) -------------------------------------------
+    def _amendment_state_over_disk_entry(self, repo, approved):
+        """The amendment state of `_assert_amendment_accepted` (`approved`, built once per
+        repository), with the work item's `checkpoints` and pointers replaced wholesale
+        by the entry on disk."""
+        state = copy.deepcopy(approved)
+        disk = _read_state(repo.root)["work_items"][self.WI]
+        item = state["work_items"][self.WI]
+        item["checkpoints"] = copy.deepcopy(disk.get("checkpoints") or {})
+        item["current_checkpoint_id"] = disk.get("current_checkpoint_id")
+        item["last_completed_checkpoint_id"] = disk.get("last_completed_checkpoint_id")
+        return state
+
+    def test_p4_the_in_progress_arm_over_the_real_entry_before_and_after_a_release(self):
+        for demoted in (False, True):
+            with self.subTest(demoted=demoted), ScratchRepo() as repo:
+                self._start(repo, demoted=demoted)
+                approved, _ = TestRequestPlanAmendment._state_with_approved_plan(
+                    repo, work_item_id=self.WI)
+                self.assertEqual(self._entry(repo)["status"], "IN_PROGRESS")
+                with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                    self._amend(repo, self._amendment_state_over_disk_entry(repo, approved))
+                message = str(ctx.exception)
+                self.assertIn("has a checkpoint IN_PROGRESS", message)
+                self.assertNotIn("outstanding checkpoint claim", message)
+                self.assertIn(f"/release-checkpoint-start {self.WI} {self.CP}", message)
+                self._plain_release(repo)
+                state = self._amendment_state_over_disk_entry(repo, approved)
+                self.assertNotEqual((state["work_items"][self.WI]["checkpoints"].get(self.CP)
+                                     or {}).get("status"), "IN_PROGRESS")
+                new_state = self._amend(repo, state)
+                item = new_state["work_items"][self.WI]
+                self.assertEqual(item["phase"], "AMENDING_PLAN")
+                self.assertNotEqual((item["checkpoints"].get(self.CP) or {}).get("status"),
+                                    "IN_PROGRESS")
 
 
 class TestExplicitTakeover(unittest.TestCase):
@@ -15305,6 +15855,22 @@ class TestAmendmentResolutionReservation(unittest.TestCase):
             with self.assertRaises(ws.AmendmentCheckpointActiveError):
                 _open_amendment_approval(repo, wt_a)
             self.assertIsNone(ws.read_plan_approval_journal(wt_a))
+
+    def test_the_journal_refusal_names_no_release_command(self):
+        """The plan-approval raise comes after the amendment is open, so a released start
+        does not lift it the way it does before the amendment is requested: it names no
+        `/release-checkpoint-start`."""
+        with ScratchRepo() as repo:
+            wt_a = self._amended(repo)
+            with ws.lifecycle_lock(repo.root, "wi"):
+                ws._claim_or_refuse(repo.root, "wi",
+                                    ws._build_claim_record(repo.root, "wi", "CP2", "t1"))
+            with self.assertRaises(ws.AmendmentCheckpointActiveError) as ctx:
+                _open_amendment_approval(repo, wt_a)
+            message = str(ctx.exception)
+            self.assertIn("open amendment and a live checkpoint claim", message)
+            self.assertIn("plan-approval transaction", message)
+            self.assertNotIn("release-checkpoint-start", message)
 
 
 class TestApplyPlanApprovalAmendmentBranch(unittest.TestCase):

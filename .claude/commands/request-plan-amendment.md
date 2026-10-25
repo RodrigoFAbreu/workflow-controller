@@ -190,7 +190,10 @@ and wait.
      `clear amendment witness <wi> <sha256>`, which
      `workflow_state.clear_amendment_witness` accepts, and only then;
    - `AmendmentCheckpointActiveError`: a checkpoint claim is live in some
-     worktree -- finish or release it there first;
+     worktree -- finish or release it there first. For a start that was never
+     committed and that the approved plan forbids completing, stop its owner
+     session and run the user-only `/release-checkpoint-start <work-item-id>
+     <checkpoint-id>` from the worktree that holds the claim;
    - `StaleLifecycleStateError`: the previous amendment was resolved
      elsewhere and this worktree's `HEAD` does not show it -- merge the
      resolved amendment first;

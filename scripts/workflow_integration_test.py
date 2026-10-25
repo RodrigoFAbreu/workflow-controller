@@ -1453,7 +1453,7 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # and restate the six user-only guards (D-Guard); `apply-pr-review.md` and `prepare-review.md` gain
     # `$ARGUMENTS` (D-Args); the five rows below are first recorded hashes -- intentional content changes.
     "adopt-gate-policy.md": "c3787bfc199956d4ffb57500448da6ef2aaf613f51d696d4785a6764a48ab247",
-    "request-plan-amendment.md": "ffdc4d7901132022ac74524bd9fabd7354ee6bc96082d3836276fe25b16fbd15",
+    "request-plan-amendment.md": "c7e7d800a66ad762639e675234822425f4c588d029649f78f97fb12edf9d6223",
     # workflow-2.18.4 (review-followups-4, CP2): step 3 of the next two rows says the unknown-id
     # refusal is the same `...WrongPhaseError` with the message "<id> names no work item" --
     # intentional content change.
@@ -2768,13 +2768,13 @@ class TestGoldenCommandFileHashes(unittest.TestCase):
 
 
 class TestUserOnlyCommandLineWidth(unittest.TestCase):
-    """workflow-2.18.2 (review-followups-2, 64c): the guard lines of the six user-only command
+    """workflow-2.18.2 (review-followups-2, 64c): the guard lines of the seven user-only command
     bodies stay at the files' usual width. Exempt: the front matter, code-fence lines, table rows,
     headings, and a line whose only content past its indentation is one span with no space inside
     it (it cannot be broken at a space)."""
 
     FILES = ("accept-milestone.md", "approve-review.md", "adopt-gate-policy.md",
-             "request-plan-amendment.md", "resume-implementation.md", "retire-legacy-work-item.md")
+             "release-checkpoint-start.md", "request-plan-amendment.md", "resume-implementation.md", "retire-legacy-work-item.md")
     LIMIT = 90
 
     def test_no_prose_line_exceeds_the_limit(self):
@@ -3250,6 +3250,45 @@ class TestPlanApprovalCommitTrailerFinalParagraphConformance(unittest.TestCase):
         self._assert_trailer_paragraph_wording(text, record=False)
         self.assertIn("OPUS-R129-001", text)
         self.assertIn("discover_technical_approval_commit", text)
+
+
+class TestReleaseCheckpointStartCommandFile(unittest.TestCase):
+    """checkpoint-start-command (workflow-2.19.0, C6): the command file carries the user-only
+    guard, the pre-release wording before it asks for the sentence, and the `released` outcome."""
+
+    FILE = "release-checkpoint-start.md"
+
+    def _text(self):
+        return " ".join(_command_text(self.FILE).split())
+
+    def test_it_is_user_only_and_takes_both_ids_from_its_arguments(self):
+        frontmatter = _command_text(self.FILE).split("---\n", 2)[1]
+        self.assertIn("disable-model-invocation: true", frontmatter)
+        self.assertIn("state_writer: true", frontmatter)
+        self.assertIn("$ARGUMENTS", _command_text(self.FILE))
+
+    def test_the_pre_release_wording_comes_before_the_sentence_is_printed(self):
+        text = self._text()
+        sentence = text.index("Release checkpoint start <checkpoint_id> of <work_item_id>")
+        for needle in ("must be finished by running this command again",
+                       "until the command has reported success",
+                       "The owner session is any session other than the one running this command",
+                       "counts as stopped only while it runs nothing else for the work item"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, text)
+                self.assertLess(text.index(needle), sentence)
+
+    def test_the_released_outcome_is_a_read_only_success(self):
+        text = self._text()
+        self.assertIn("already released", text)
+        self.assertIn("the pre-release obligation of step 3 is lifted", text)
+        self.assertIn("No sentence is asked and nothing is written", text)
+
+    def test_it_is_listed_in_the_contract_and_the_operator_reference(self):
+        root = _repo_root() / "docs" / "ai-workflow"
+        self.assertIn("- `/release-checkpoint-start`\n", (root / "COMMAND_FILES.md").read_text())
+        self.assertIn("### `/release-checkpoint-start <work-item-id> <checkpoint-id>` \u2014 user-only",
+                      _operator_reference_text())
 
 
 class TestTrailerParagraphWordingConformance(unittest.TestCase):
@@ -7327,7 +7366,7 @@ class TestRetiredScopedRemediationLeavesNoLiveSurface(unittest.TestCase):
         text = (_repo_root() / "docs/ai-workflow/WORKFLOW_V2_1_OPERATOR_REFERENCE.md").read_text()
         sections = re.findall(r"(?m)^### `/([a-z0-9-]+)", text)
         on_disk = sorted(p.stem for p in (_repo_root() / ".claude" / "commands").glob("*.md"))
-        self.assertEqual(len(on_disk), 22)
+        self.assertEqual(len(on_disk), 23)
         self.assertNotIn("accept-scoped-remediation", sections)
         self.assertNotIn("accept-scoped-remediation", on_disk)
         # Every live command has exactly one section, and vice versa.
@@ -7746,11 +7785,11 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         equality is derived; the count is a hardcoded tripwire."""
         text = _operator_reference_text()
         self.assertNotIn("not\nhand-maintained", text)
-        self.assertIn("assertEqual(len(on_disk), 22)", text)
+        self.assertIn("assertEqual(len(on_disk), 23)", text)
         for stale in ("holds 16", "all 16", "number 16", "roster of 16", "len(on_disk), 16"):
             self.assertNotIn(stale, text, stale)
-        for current in ("holds 22 files today, and all 22", "number 22 itself",
-                        "len(on_disk), 22", "roster of 22"):
+        for current in ("holds 23 files today, and all 23", "number 23 itself",
+                        "len(on_disk), 23", "roster of 23"):
             self.assertIn(current, text, current)
         self.assertIn("hardcoded tripwire", text)
         # And the claim it makes about the derivation is itself true.
@@ -7821,6 +7860,9 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         # workflow-2.9.0, `/resume-implementation`: the technical approval's status and a stable
         # refusal-class prefix, not code symbols.
         "technical_approval.status",
+        # checkpoint-start-command (workflow-2.19.0), `/release-checkpoint-start`: a claim
+        # field and the observation's reference key, not code symbols.
+        "claim_ref", "owner_token",
         "work_item_kind", "work_item_type", "work_items", "worktree_root",
         "test_the_operator_reference_command_count_matches_reality",
         # workflow-2.4.0, D-Plan-Amendment-3: amendment_history entry/
@@ -8777,7 +8819,7 @@ class TestCommandFilesContractDocument(unittest.TestCase):
             for filename in _command_filenames()
             if self._frontmatter(filename).get("disable-model-invocation") == "true"
         }
-        self.assertEqual(len(listed), 6)
+        self.assertEqual(len(listed), 7)
         self.assertEqual(listed, flagged)
 
     def test_the_neutral_documents_pass_the_neutrality_pattern(self):
@@ -8828,6 +8870,10 @@ class TestHarnessNeutralCommandBodies(unittest.TestCase):
         "request-plan-amendment.md": (
             "the exact literal word `amendment`", "refuse to write anything unless",
             "Never fabricate, infer, or carry over either", "ask for it naming the exact `work_item_id`"),
+        "release-checkpoint-start.md": (
+            "validate_checkpoint_start_release_confirmation", "stays stopped until this release",
+            "refuse to write anything unless", "Never fabricate, infer or carry over this text",
+            "ask for it, naming the exact sentence, and stop"),
         "resume-implementation.md": (
             "validate_user_only_confirmation", 'stage="resumption"', "the word `resumption`",
             "refuse to write anything unless", "Never fabricate, infer or carry over this text",

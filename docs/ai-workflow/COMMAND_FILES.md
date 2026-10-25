@@ -78,11 +78,12 @@ the appended copy is redundant.
 
 ## The user-only commands
 
-Six commands carry `disable-model-invocation: true`:
+Seven commands carry `disable-model-invocation: true`:
 
 - `/accept-milestone`
 - `/adopt-gate-policy`
 - `/approve-review`
+- `/release-checkpoint-start`
 - `/request-plan-amendment`
 - `/resume-implementation`
 - `/retire-legacy-work-item`

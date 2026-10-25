@@ -26836,7 +26836,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-notification-fix-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-notification-fix-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 10,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -26976,12 +26976,12 @@
           "external": 4
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 43,
-      "last_transition": "2026-10-24T23:20:29Z",
+      "state_revision": 45,
+      "last_transition": "2026-10-25T00:15:26Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -27236,7 +27236,48 @@
               "at": "2026-10-24T22:47:56Z"
             }
           ]
+        },
+        "F-bdcf2a704ffb": {
+          "digest": "bdcf2a704ffb2678ba7d915d151b66645daf4521d669a2731c17363238944eba",
+          "text": "`TEST_RESULTS.md`'s round-1 paragraph ends the full-suite sentence with \"(`tests.test_milestone_branch` passes alone)\". It does not say why that module is mentioned. If it failed or errored in the full run, the paragraph should list it as a third, load-related result; if not, the parenthesis can go.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c0be41d71607c46c014e2a1547fa9552b2ec4f5efb1a9e0dff0c9cde9ca8ef9d",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T00:00:07Z"
+            }
+          ]
+        },
+        "F-cf12ee666499": {
+          "digest": "cf12ee66649934b33b4464a97ec84dd771cd837ea9d86286cbf5767d4877c5bd",
+          "text": "**O1 — Pre-existing documentation mismatch.** [automation.md:156](/tmp/claude-c1/nf1-impl-copy1/docs/guide/automation.md:156) says Workflow `blocked` dispositions send `lane_blocked`, while `BlockedDispositionProductionPathTest` deliberately pins `user_gate` for fall-through records. Clarify this compatibility exception without changing the preserved branches.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c0be41d71607c46c014e2a1547fa9552b2ec4f5efb1a9e0dff0c9cde9ca8ef9d",
+              "verdict": "REVISE",
+              "at": "2026-10-25T00:15:26Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "c0be41d71607c46c014e2a1547fa9552b2ec4f5efb1a9e0dff0c9cde9ca8ef9d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "a230966501582f05d45e46411abab1a5f9007ad4b1b965b25b3bd555684d5202",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T00:00:07Z",
+          "verdict_sha256": "fa7432ffa154c127a2216bff5e4a8fc93caa401ecbe8c0f83e4969e2170cffb8",
+          "run_ref": "session:local .ai-review/workflow-controller-notification-fix/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

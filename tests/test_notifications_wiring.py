@@ -956,6 +956,19 @@ class SupersededNoticeTest(unittest.TestCase):
         self.log("20261012T000000Z-earlier", "sent")
         self.assertEqual(self.deliver(self.hub(), self.event), [])
 
+    def test_a_delivered_notice_under_an_unrelated_key_never_suppresses_the_review_wait(self) -> None:
+        # Only the stop's own superseded key vetoes: an unrelated delivered notice, in any recent run's log, does not.
+        for status in ("sent", "conflict"):
+            with self.subTest(status=status):
+                self.setUp()
+                self.log("20261012T000000Z-earlier", status, key="some-other-key")
+                self.log("20261012T000001Z-later", "sent", key=notify.idempotency_key("user_gate", self.REPO, "other"))
+                self.assertFalse(self.handled(spent=False))
+                hub = self.hub()
+                self.assertEqual(self.deliver(hub, self.event), ["review_wait"])
+                self.assertEqual(self.deliver(hub, self.event), [])
+                notify.uninstall()
+
     def test_a_failed_or_rejected_old_user_gate_does_not_veto_a_fresh_send_but_recovery_replays_nothing(self) -> None:
         for status in ("failed", "rejected"):
             with self.subTest(status=status):

@@ -6887,6 +6887,10 @@ def _run_review_job(
     manifest = review.parse_manifest(manifest_path.read_text("utf-8"))
     review.expected_headers(manifest, stage, reviewer["model"], harness.verdict_family)  # a missing bundle value refuses
     feedback_dir = (root / feedback.path).parent if feedback.path else None
+    changes_path = review.changes_file_for(root, bundle.path, manifest, review.STAGES[stage].reviewer_role)
+    snapshot = info.document.get("snapshot") if isinstance(info.document, dict) else None
+    split = review_rounds.split_rounds(snapshot, stage)
+    external_round = split.external + 1 if split is not None else None
 
     prefix = "reviewer.same_provider_" if harness.name == review_mode.SAME_PROVIDER_HARNESS else "reviewer."
     route = routing.ResolvedRoute(role=review.REVIEW_ROLE, model=reviewer["model"], effort=reviewer["effort"],
@@ -6926,6 +6930,7 @@ def _run_review_job(
             "timeout_seconds": reviewer["timeout_seconds"], "operator_home": str(operator_home),
             "captured_digest": review._sha256_file(operator_home / harness.credential_file), "bundle": bundle.path,
             "mode": mode, "mode_source": mode_source,
+            **({"external_round": external_round} if external_round is not None else {}),
             **({"lowered": True, "signal_key": list(choice.signal.key(stage))} if lowered else {}),
         },
         "created_at": now,
@@ -7022,7 +7027,8 @@ def _run_review_job(
             binary_name=reviewer["binary"], operator_home=operator_home, stage=stage, manifest=manifest,
             bundle_dir=bundle.path, model=reviewer["model"], effort=reviewer["effort"],
             timeout=float(reviewer["timeout_seconds"]), feedback_dir=feedback_dir, state_identity=identity_now,
-            brief=reviewer.get("brief"), on_spawn=on_spawn, out=out)
+            brief=reviewer.get("brief"), changes_path=changes_path, external_round=external_round,
+            on_spawn=on_spawn, out=out)
     except ReviewLaunchRefusedError as exc:
         # The boundary refused. Before the exec was spawned nothing was started (released, no charge);
         # after it (the retry's re-check), the first run spent allowance and is charged.

@@ -2,13 +2,16 @@
 
 ## Status
 
-**Complete.** `workflow-controller-routing-harness` (H1, issue #158) was accepted on 2026-10-25 by gate policy
-(`policy:bae758b4f4ce`): a routing entry, a `--routing-config` file and `--role-harness ROLE=HARNESS` name a harness,
-accepted for `claude-code` on every routing role and for `codex` on none yet (settings table generation 15). The plan
-is archived at `docs/milestones/completed/workflow-controller-routing-harness.md`.
+**In progress.** `workflow-controller-review-prompt-rounds` (RB2, issue #161): a round-aware external-review prompt and
+the verdict format the Workflow's ingest enforces. Plan revision 2 is approved (policy, `c975470`); the plan is
+`docs/ai-workflow/CONTROLLER_REVIEW_PROMPT_ROUNDS_PLAN.md`.
+
+- CP1 (the prompt paragraphs, the changes-file check and the wiring): complete. `controller/review.py` has
+  `BUNDLE_TEXT_RULE`, `VERDICT_FORMAT_RULES`, `changes_file_for` and the round paragraph; `_run_review_job` passes
+  `changes_path` and `external_round` to `launch_review` and records `review.external_round`. Verified by the four
+  review test modules, the golden `--check` and the full suite.
+- CP2 (the guides and the roadmap): not started.
 
 ## Next action
 
-No milestone is active. The next item is RB2 (a round-aware external-review prompt and the verdict format the
-Workflow's ingest enforces, issue #161): run `/milestone-plan` for it. H6 follows. Setting `reviewer.harness=codex` stays an
-operator settings change after one trial milestone (ROADMAP RB2).
+Run `/milestone-implement workflow-controller-review-prompt-rounds` for CP2.

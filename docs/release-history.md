@@ -1,6 +1,6 @@
 # Release history
 
-> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.19.2; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
+> For: anyone who wants to know what each Controller release changed. Last checked with: Controller 1.19.3; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.10.0, 2.11.0, 2.12.0 and 2.13.0.
 
 One line per release, newest first. Release notes exist from 1.3.0 and are
 linked. Which Workflow each release admits is on the
@@ -8,6 +8,7 @@ linked. Which Workflow each release admits is on the
 
 | Release | What changed | Notes |
 |---|---|---|
+| 1.19.3 | Fix: a wait for the external review verdict and the functional-review tester stops (except `isolation_breach`) send the new info event `review_wait` (INFO, LOW) instead of `user_gate`, which stays for approvals, acceptance, merges that need the owner, BLOCK-resolution gates and legacy gates; a gate's job record keeps the Workflow's decision in a new `protocol_gate` field; `checks_pending` is unchanged (#149) | [1.19.3](releases/1.19.3.md) |
 | 1.19.2 | Fix: `verify-claude` names a host write in a sandbox-start error instead of hiding it behind `inconclusive`, keeps its host-listener folder short whatever `TMPDIR` is (no more `AF_UNIX path too long`), takes `--claude-binary` without a `claude` on `PATH`, and turns an `OSError` during setup into a named refusal with exit 20 instead of a traceback; the live tests skip without credentials (#132, #133) | [1.19.2](releases/1.19.2.md) |
 | 1.19.1 | Fix: the functional tester's sandbox layout now puts its writable folders outside the clone (`<sandbox>/writable/<name>/`) behind links, so no allowed write sits below a denied path and Claude Code 2.1.304 and later pass `verify-claude`; the post-run walk accepts only the Controller's own intact links; `verify-claude` gains a `link` probe; the settings check compares resolved paths (#129) | [1.19.1](releases/1.19.1.md) |
 | 1.19.0 | New command `workflow-controller verify-claude [--force]` runs three live probes (boundary, retry, missing_component) against the `claude` a launch would run and, on a clean pass, records its SHA-256 digest in `verified-claude-builds.json` in the runtime root; the functional-tester launch admits the built-in list (Claude Code 2.1.303) plus recorded digests and executes the one file it hashed and probed (#113, #114); exit 20 on a refusal; builds from 2.1.304 are refused until #129 ships | [1.19.0](releases/1.19.0.md) |

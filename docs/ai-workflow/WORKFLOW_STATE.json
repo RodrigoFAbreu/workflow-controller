@@ -30357,12 +30357,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-table-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-table-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 3,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "80920da8673a8c6be4a86357622a1df7f1966863",
-      "reviewed_implementation_head": "fb3691ecfc4b9bc0dae6f34802aa59817b789800",
+      "reviewed_implementation_head": "1ffe1fbf17f92a6c4e1a9473300cf3636caf1b15",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -30501,8 +30501,8 @@
           "external": 0
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-10-25T23:00:31Z",
+      "state_revision": 19,
+      "last_transition": "2026-10-25T23:33:10Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

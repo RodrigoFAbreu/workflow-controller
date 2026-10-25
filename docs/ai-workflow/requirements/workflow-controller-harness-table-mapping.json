@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-harness-table",
+  "requirements": {
+    "R1": {
+      "description": "A page holds a role-by-harness table generated from controller.harness and routing.check_role_harness, with every cell read from the registry (#166)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "python3 tools/check_docs.py (and so the test run) fails when the table region of the page is not what the generator prints, and the generator can rewrite the region (#166)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The documentation map links the page, the development guide documents the rule and the regenerate command, and the roadmap marks H6 done (#166)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

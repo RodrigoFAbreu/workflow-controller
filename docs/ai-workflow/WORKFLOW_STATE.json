@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-harness-table",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -30346,6 +30346,276 @@
         },
         "evaluated_at": "2026-10-25T19:21:17Z",
         "workflow_release": "2.19.2"
+      }
+    },
+    "workflow-controller-harness-table": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-harness-table",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_HARNESS_TABLE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-table-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-table-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "80920da8673a8c6be4a86357622a1df7f1966863",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+        "approved_review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_HARNESS_TABLE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e19f18732e7144f54a5aaa2eb4b96e1c39720a28"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-table-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5ec1edb7b41e5db1134b1ba35f8911ed31385226"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-harness-table-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5c62b6335ea65e1ed0c14ee111ab2ae3b0c815b7"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-25T21:25:48Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+            "ledger": {
+              "local": {
+                "bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "2eafc8cf8e366f3d005dfdd8b09ec7be5661695c367b2ce8970ad1985efe69c2",
+                "ledger_entry_sha256": "5ddf813d44436029af7fc561f4f094bfd006bcb46f758b1ea0b773f40ec83524",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "dff098aced4a2691e719d1beb5b876ccb5b3e815cfeb19192156ad11a8e79e4b",
+                "ledger_entry_sha256": "03bf0b1a40c627da5e42fc3684b606ddaa11c7f018589567ddb6a3f4a27831a7",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-25T21:25:48Z",
+          "workflow_release": "2.19.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-25T21:18:43Z",
+          "verdict_sha256": "2eafc8cf8e366f3d005dfdd8b09ec7be5661695c367b2ce8970ad1985efe69c2",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-25T21:24:02Z",
+          "verdict_sha256": "dff098aced4a2691e719d1beb5b876ccb5b3e815cfeb19192156ad11a8e79e4b",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-10-25T21:25:48Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-25T21:16:41Z",
+        "consumed": {
+          "review_content_id": "77bdaeb3b02a6db6bee79b41e167ae9e4db236021592a71503eb88b323f6764a",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+          "bundle_id": "74a7e75623959c908561d148968cbf85c102578ae2c2e69e9bd405d9acf01cf6",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "539ee316fbf4d32b9a91e3b9b3c4ba280d675f1c85f4579ae151a228708457b7",
+        "77bdaeb3b02a6db6bee79b41e167ae9e4db236021592a71503eb88b323f6764a"
+      ],
+      "optional_findings": {
+        "F-03b644d40e37": {
+          "digest": "03b644d40e372c8ecc0c9b43adb4edbd099066ee4707f15dd7ec0457ef436570",
+          "text": "O1. Name one implementation of the region comparison: `check_docs.check_harness_table` should call `harness_table.check(root)` (or a shared helper) rather than re-implementing marker parsing, so `--check` and the documentation check cannot disagree about what a missing, duplicated or reversed marker is.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "539ee316fbf4d32b9a91e3b9b3c4ba280d675f1c85f4579ae151a228708457b7",
+              "verdict": "REVISE",
+              "at": "2026-10-25T21:11:04Z"
+            }
+          ]
+        },
+        "F-18f62e7fcc6b": {
+          "digest": "18f62e7fcc6bb5dfbf1b5bf16a8dfe924322a9563aedcd9917eb34c58d8f2719",
+          "text": "O2. State that `tools/harness_table.py` reads `harness.ADAPTERS` (and calls `routing.check_role_harness`) through the module attribute at call time, never `from controller.harness import ADAPTERS`; the CP1 registry-change and unknown-key tests depend on it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "539ee316fbf4d32b9a91e3b9b3c4ba280d675f1c85f4579ae151a228708457b7",
+              "verdict": "REVISE",
+              "at": "2026-10-25T21:11:04Z"
+            }
+          ]
+        },
+        "F-7bbfcdc3f7b2": {
+          "digest": "7bbfcdc3f7b22f31b158feadcc495cca250df01e3a1c813b84ac20a9202ebdf1",
+          "text": "O3. D1's \"`KeyError`-derived `ValueError`\" is unclear; say \"raises `ValueError` naming the missing key\" (whether it chains from the `KeyError` is an implementation detail).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "539ee316fbf4d32b9a91e3b9b3c4ba280d675f1c85f4579ae151a228708457b7",
+              "verdict": "REVISE",
+              "at": "2026-10-25T21:11:04Z"
+            }
+          ]
+        },
+        "F-2cbc84426802": {
+          "digest": "2cbc844268029580c60977b5d8668ebe83ea0a5e0607ea80f091e0596b136951",
+          "text": "O4. Consider linking the new page from `docs/guide/workers.md` (the adapter registry paragraph) and from `docs/guide/runtime.md`'s routing section, where the accepted role and harness pairs are described in prose, so a reader of those pages finds the table.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "539ee316fbf4d32b9a91e3b9b3c4ba280d675f1c85f4579ae151a228708457b7",
+              "verdict": "REVISE",
+              "at": "2026-10-25T21:11:04Z"
+            }
+          ]
+        },
+        "F-4919985de7a4": {
+          "digest": "4919985de7a4c8c42ac5c385307540cf1f6f237bd09f5b178ff722aebcfdea02",
+          "text": "O1. `check_tree` performs its `sys.path.insert(0, REPO_ROOT)` only inside\n  `if build_parser is None or cli_module is None or contracts is None`. \"Imported\n  the way the Controller modules already are, after the path insert\" read\n  literally puts the `harness_table` import inside that branch, so a caller that\n  injects all three would hit an unbound name (no test does so today). Say the\n  import is unconditional (or that `check_harness_table` imports the generator\n  itself), and that `tools/harness_table.py` inserts the repository root into\n  `sys.path` itself, so `python3 tools/harness_table.py` works from a checkout\n  without `PYTHONPATH`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "77bdaeb3b02a6db6bee79b41e167ae9e4db236021592a71503eb88b323f6764a",
+              "verdict": "REVISE",
+              "at": "2026-10-25T21:14:58Z"
+            }
+          ]
+        },
+        "F-1703921f9346": {
+          "digest": "1703921f93464338640c9bb251dcd938438630834d1b8e26597ea6f1f916bab3",
+          "text": "O1. Name how `check_harness_table` imports the generator. `tests/test_docs.py`\n  loads `tools/check_docs.py` with `importlib.util.spec_from_file_location`, so\n  `tools/` is not on `sys.path` under the test run, and `tools/` has no\n  `__init__.py`. A bare `import harness_table` works for\n  `python3 tools/check_docs.py` (the script directory is `sys.path[0]`) but raises\n  `ModuleNotFoundError` under the suite. Use `from tools import harness_table`\n  after the repository-root insert (a namespace package), or load it by path the\n  way the tests load `check_docs`; the CP1 synthetic tests would catch the bare\n  form, so this only saves a round trip.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T21:18:43Z"
+            }
+          ]
+        },
+        "F-41c99b10a711": {
+          "digest": "41c99b10a711dc18033196856430b793ba514832a9eb3ea6957c37e8eadb3e1a",
+          "text": "**O1. Add a routing-map mutation test.** CP1 explicitly tests registry mutations but not an isolated change to `routing.ADAPTER_ROLE`. Patch one mapping, verify its displayed adapter role and acceptance cells change, then verify the old page fails and regeneration restores currency.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T21:24:02Z"
+            }
+          ]
+        }
       }
     }
   }

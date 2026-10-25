@@ -28686,14 +28686,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-routing-harness-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-routing-harness-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 4,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "f8b9fc4be7ae9a42c1e684fdc8dbcf36b65e0e21",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP2",
+      "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -28702,6 +28702,10 @@
         "CP2": {
           "status": "COMPLETE",
           "start_commit": "96f3c839d9ee15c7c8b02d9ebadba6b033a301f0"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "4c1e5b229c824fb3f36d8a0d4e79dcb7dbf4d4d7"
         }
       },
       "current_bundle_id": "28844b666b2b2798bf5f8a365dcdc1513e2ceab31f3756cd24330ff09b294dd3",
@@ -28830,8 +28834,8 @@
           "external": 0
         }
       },
-      "state_revision": 20,
-      "last_transition": "2026-10-25T13:21:46Z",
+      "state_revision": 22,
+      "last_transition": "2026-10-25T13:23:28Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

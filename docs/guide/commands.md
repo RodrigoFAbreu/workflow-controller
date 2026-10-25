@@ -32,7 +32,8 @@ only *before* the subcommand: `--runtime-dir`, `--work-item`,
 passed through unchanged), `--timeout` (seconds; the default is the `worker.timeout_seconds`
 setting, which is no limit unless set, see
 [Concurrency and worker lifecycle](workers.md#concurrency-and-worker-lifecycle)), `--model`, `--effort`,
-`--role-model ROLE=MODEL`, `--role-effort ROLE=EFFORT`, `--routing-config
+`--role-model ROLE=MODEL`, `--role-effort ROLE=EFFORT`,
+`--role-harness ROLE=HARNESS`, `--routing-config
 PATH` (see [Worker routing](#worker-routing)), `--settings PATH` (the
 user settings file, see
 [The settings file](runtime.md#the-settings-file)), `--allow-dirty-source`, `--json`.
@@ -347,8 +348,8 @@ A `satisfy-gate` value you pinned earlier now applies to plan and implementation
 acceptance takes its own built-in route until you name `satisfy-gate-acceptance`.
 
 "Inherit" means no flag is passed, so the `claude` CLI's own
-configuration applies. Model and effort are resolved separately, and the
-first of these that sets a value wins:
+configuration applies. Model, effort and harness are resolved separately, and
+the first of these that sets a value wins:
 
 1. `--role-model ROLE=MODEL` / `--role-effort ROLE=EFFORT` (each
    repeatable, once per role);
@@ -360,11 +361,26 @@ first of these that sets a value wins:
 5. the built-in value in the table above;
 6. inherit.
 
+The harness has its own list, shorter by one and ending in a built-in value:
+
+1. `--role-harness ROLE=HARNESS` (repeatable, once per role);
+2. the routing config's entry for the role;
+3. that config's `default` entry;
+4. the built-in `claude-code`.
+
+There is no `--harness` for every role: a single harness cannot be valid for
+every role unless it is `claude-code`, so such an option would be redundant or
+always refused. A harness is accepted for a role only when its adapter declares
+the adapter role the routing role runs as; today that is `claude-code` for every
+role and `codex` for none (see
+[The routing section](runtime.md#the-routing-section)). An unregistered harness
+or a refused pair is a usage error (exit 2) on the command line.
+
 For example, `workflow-controller --role-effort review-implementation=max run <repo>`
 raises only the implementation reviewer's effort, and
 `workflow-controller --routing-config routing.json run <repo>` reads a
 file shaped like this (both `default` and `roles` are optional; each
-entry sets `model`, `effort` or both):
+entry sets `model`, `effort`, `harness` or any of them):
 
 ```json
 {

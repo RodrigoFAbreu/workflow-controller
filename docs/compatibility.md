@@ -93,6 +93,20 @@ A test keeps this table equal to the digests in the Controller's code.
 
 With `reviewer.harness` set, 1.10.0 writes a review job record into the runtime's `jobs` directory with job `schema_version` 2. Controller 1.9.0 and earlier refuse such a record (`unknown_schema_version`) instead of misreading it, so a runtime that holds one cannot be read by 1.9.0. If a review job is not settled, `resume` it with 1.10.0 first, then downgrade. Records written by 1.9.0 (version 1) stay readable by 1.10.0. The settings file is table generation 6; a 1.9.x Controller sharing it warns about the unknown `reviewer` section and ignores it.
 
+## Routing a harness
+
+Since 1.21.0 a routing entry may name a `harness` and the command line gains
+`--role-harness`. The settings file is table generation 15; a Controller before
+1.21.0 sharing it warns once about the unknown `harness` key and ignores it, its
+`settings clean` refuses, and a `--routing-config` file with `harness` is
+refused by it. This release accepts `claude-code` for every routing role and
+`codex` for none, and refuses any other pair at load (exit 20, before a job
+record exists). A later release that lets Codex take a role makes a file holding
+that pair valid for it and refused by 1.21.0: update the Controller or remove the
+entry. A same-provider review record's `worker_route.harness` reads `claude-code`
+since 1.21.0 (it read `claude`); a reader that matched the old value needs the
+new one.
+
 ## Shell aliases and worker commands
 
 Since 1.10.0 a worker is told to use `command rm -f` and `command cp -f` in background commands, so an `rm -i` or `cp -i` alias in the operator's shell cannot make it wait for an answer. A script of your own that a worker runs needs the same.

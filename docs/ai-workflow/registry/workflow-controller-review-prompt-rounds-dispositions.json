@@ -1,0 +1,16 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-review-prompt-rounds",
+ "dispositions": {
+  "F-13fc604ba2fe": {"disposition": "fixed", "note": "approved plan: D2 and CP1 both use the keyword external_round"},
+  "F-296d95e469dc": {"disposition": "fixed", "note": "approved plan: CP2 lists docs/guide/runtime.md as checked and edited only if untrue"},
+  "F-bcb78a09755e": {"disposition": "fixed", "note": "approved plan D1: the last exact role heading outside a fenced block counts; CP1 tests the hostile embedded-heading case"},
+  "F-a57f4a6da36d": {"disposition": "dropped", "reason": "wording slip in a historical plan paragraph (D1 says D4 for D5); CP1 and the code state the two always-present paragraphs correctly"},
+  "F-da035c4d461d": {"disposition": "dropped", "reason": "BUNDLE_TEXT_RULE uses the 'where to look first' wording and D4 keeps an approval a whole-bundle review; the plan's principle line is a summary only"},
+  "F-a3c611113c4a": {"disposition": "dropped", "reason": "needs a malformed or foreign changes file and the worst outcome is a pointer to a section the reviewer cannot find; no change beyond CP1's tests"},
+  "F-37bdaa3d3493": {"disposition": "dropped", "reason": "low risk: split_rounds is unit-tested on real snapshot shapes (SplitRoundsTest) and the job glue is a single snapshot lookup shared with the cap gate"},
+  "F-501dd8f62d57": {"disposition": "dropped", "reason": "carried from round 1; same reason: the extraction is the one lookup the cap gate already uses and split_rounds is tested on real snapshot shapes"},
+  "F-994dafb7163b": {"disposition": "fixed", "note": "docs/guide/workers.md now says two further parts and names two; docs/run.md count checked in the same pass"},
+  "F-f6f10033b41d": {"disposition": "fixed", "note": "same correction as F-994dafb7163b in docs/guide/workers.md and docs/run.md"}
+ }
+}

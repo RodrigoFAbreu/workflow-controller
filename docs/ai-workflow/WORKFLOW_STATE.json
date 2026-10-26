@@ -33873,12 +33873,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-verification-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-verification-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 1,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "f4d34b17a7631d322ee13f2f01c39a508c552b36",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "425dbfa996e6b452af718005f3144ce93bba2307",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -34017,8 +34017,8 @@
           "external": 0
         }
       },
-      "state_revision": 13,
-      "last_transition": "2026-10-26T20:32:44Z",
+      "state_revision": 14,
+      "last_transition": "2026-10-26T20:51:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

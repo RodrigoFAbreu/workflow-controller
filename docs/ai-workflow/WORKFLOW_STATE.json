@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-reviewer-family",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -34556,6 +34556,219 @@
         },
         "evaluated_at": "2026-10-26T21:33:53Z",
         "workflow_release": "2.21.0"
+      }
+    },
+    "workflow-controller-reviewer-family": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-reviewer-family",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_REVIEWER_FAMILY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-family-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-family-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "71c1a15d30bcda125133cfeb82d740bbdbba118c",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+        "approved_review_content_id": "f4529e8297f18fb8b2294448174c71aa2c3dd6e39cae2a2f69ca30ac42d23034",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_REVIEWER_FAMILY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1501f039a4c058b7a7e3210539faceaf74ea632f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-reviewer-family-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2a2fe886684922fd6294fc3c9347c926aa9e49c3"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-reviewer-family-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "02a8e5d3706eedff2e803021df5e40708cfebd13"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T22:36:07Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f4529e8297f18fb8b2294448174c71aa2c3dd6e39cae2a2f69ca30ac42d23034",
+            "ledger": {
+              "local": {
+                "bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "22e5019030f963f2a204a21441b1ac9f835470b628cb00c7a283cbd20de2adb6",
+                "ledger_entry_sha256": "f9127727ec08f128ee7fb737c8b157fe991b2c14c4912456d672e4cc1c500350",
+                "run_ref": "session:local .ai-review/workflow-controller-reviewer-family/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "12f904920dff9aca742e210618b574f5bc5d532732ffe84fcd0c29c9fceb0162",
+                "ledger_entry_sha256": "94841c0eaaf7b9e823cfe114a61aed287db4e5534548be8244b2df546c9d9e4c",
+                "run_ref": "codex:20261026T223234Z-62d9fca1",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T22:36:07Z",
+          "workflow_release": "2.21.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f4529e8297f18fb8b2294448174c71aa2c3dd6e39cae2a2f69ca30ac42d23034",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T22:32:09Z",
+          "verdict_sha256": "22e5019030f963f2a204a21441b1ac9f835470b628cb00c7a283cbd20de2adb6",
+          "run_ref": "session:local .ai-review/workflow-controller-reviewer-family/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T22:34:34Z",
+          "verdict_sha256": "12f904920dff9aca742e210618b574f5bc5d532732ffe84fcd0c29c9fceb0162",
+          "run_ref": "codex:20261026T223234Z-62d9fca1",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-26T22:36:07Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-26T22:30:10Z",
+        "consumed": {
+          "review_content_id": "f266a56cc2df4e6d9664f8cf73fbc22b6a0d3a30866fc00a419eaceb7d70a6b2",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f4529e8297f18fb8b2294448174c71aa2c3dd6e39cae2a2f69ca30ac42d23034",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "f4529e8297f18fb8b2294448174c71aa2c3dd6e39cae2a2f69ca30ac42d23034",
+          "bundle_id": "994a1c47b905cd6478dac1f883335c791379e63e0baa26524f456b04d23b0e08",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "f266a56cc2df4e6d9664f8cf73fbc22b6a0d3a30866fc00a419eaceb7d70a6b2"
+      ],
+      "optional_findings": {
+        "F-4a62efb8099e": {
+          "digest": "4a62efb8099e6cac465ff081d605939deb9db06932d98ea5f4bb73beae617883",
+          "text": "The patched-registry tests in CP1 (\"whose routing sends every worker role to\" a worker-capable `codex`) cannot be built from `--role-harness` alone. `RoutingOptions.__post_init__` runs `check_route_values` for every role, and the built-in worker routes carry Claude models and efforts (`claude-opus-5-5`, `claude-haiku-5-5`/`high`, `claude-sonnet-5-5`/`medium`) that the `codex` adapter does not declare (it declares only `gpt-6.1-sol` and `high`/`xhigh`). So construction raises `RoutingConfigError`. Say that the fixture also patches the adapter's models and efforts, or routes them (role models/efforts or `harness.models`).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f266a56cc2df4e6d9664f8cf73fbc22b6a0d3a30866fc00a419eaceb7d70a6b2",
+              "verdict": "REVISE",
+              "at": "2026-10-26T22:28:33Z"
+            }
+          ]
+        },
+        "F-d5f0d281cb80": {
+          "digest": "d5f0d281cb80774398ca3a83a1dc4c11b6ce561c885557810b1d9fc37f75e45f",
+          "text": "D4 says `explain` \"already builds\" the run's `RoutingOptions` as `_routing_options(args)`. It does not: `cmd_explain` (`controller/cli.py:1071`) never calls it today; only `step`/`run` do (lines 2177, 2263). CP1 already says to add the call, so this is wording only. Also, building it in `explain` adds `RoutingOptions`' route validation to `explain`. Say whether a routing config that `step` would refuse with exit 20 is also refused by `explain`, or reported, so that D6's \"nothing a user sees changes\" stays accurate.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f266a56cc2df4e6d9664f8cf73fbc22b6a0d3a30866fc00a419eaceb7d70a6b2",
+              "verdict": "REVISE",
+              "at": "2026-10-26T22:28:33Z"
+            }
+          ]
+        },
+        "F-eb1a839be4a5": {
+          "digest": "eb1a839be4a5c52f54befc97035a76e2115891a57cff37120a0b4b0e1348f9f9",
+          "text": "D1's \"`routing` imports `harness` only\" is inexact: `controller/routing.py` also imports `controller.decision` and `controller.errors`. Neither imports `review_mode`, so the no-cycle conclusion holds. Only the sentence needs correcting.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f266a56cc2df4e6d9664f8cf73fbc22b6a0d3a30866fc00a419eaceb7d70a6b2",
+              "verdict": "REVISE",
+              "at": "2026-10-26T22:28:33Z"
+            }
+          ]
+        }
       }
     }
   }

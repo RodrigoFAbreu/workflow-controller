@@ -39,6 +39,9 @@ USAGE_WORDING = {
     harness.USAGE_NONE: "not reported",
 }
 
+#: The "Build verification" cell of an adapter that declares no command.
+NO_VERIFICATION_WORDING = "none: launch checks only"
+
 
 def _yes_no(value: bool) -> str:
     return "yes" if value else "no"
@@ -77,6 +80,7 @@ def render() -> str:
         _yes_no(a.can_restrict_tools),
         _wording(USAGE_WORDING, a.usage, "usage mode"),
         a.pinned_version,
+        f"`{a.build_verification}`" if a.build_verification is not None else NO_VERIFICATION_WORDING,
         _yes_no(a.fails_closed_on_unknown_version),
         ", ".join(f"`{m}`" for m in a.models),
         ", ".join(f"`{e}`" for e in a.efforts),
@@ -92,7 +96,7 @@ def render() -> str:
 
     lines = _table(
         ["Harness", "`reviewer.harness`", "Family", "Roles", "Restricts subagents", "Restricts tools",
-         "Usage", "Pinned version", "Unknown version refused", "Models", "Efforts"],
+         "Usage", "Captured with", "Build verification", "Unknown version refused", "Models", "Efforts"],
         harness_rows,
     )
     lines.append("")

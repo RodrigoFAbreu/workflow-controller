@@ -41,8 +41,14 @@ class HarnessAdapter:
     can_restrict_agents: bool
     can_restrict_tools: bool
     usage: str
+    #: The build the harness's captures (``tests/harness_contract/``) were taken
+    #: from, for information. Nothing compares it at launch.
     pinned_version: str
     fails_closed_on_unknown_version: bool
+    #: The Controller command that admits a build of this harness where the
+    #: Controller checks one, or ``None`` (H7). A declaration only: nothing reads
+    #: it at launch, and it covers just the launches that check a build.
+    build_verification: str | None
     #: The model ids and effort levels the harness accepts (H8). A route is
     #: checked against them by ``routing.check_route_values``; the operator
     #: adds a model with the ``harness.models`` setting, never an effort.
@@ -62,6 +68,9 @@ CLAUDE_CODE = HarnessAdapter(
     roles=(WORKER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_REPORTED, pinned_version="2.1.296 (Claude Code)",
     fails_closed_on_unknown_version=True,
+    # ``verify-claude`` admits the functional-tester launch only (it reads the
+    # digests it records); the worker and reviewer launches run any build on PATH.
+    build_verification="verify-claude",
     models=("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1", "opus", "sonnet", "haiku"),
     efforts=("low", "medium", "high", "xhigh", "max"),
 )
@@ -70,6 +79,10 @@ CODEX = HarnessAdapter(
     roles=(REVIEWER,), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_DERIVED, pinned_version="codex-cli 0.163.0",
     fails_closed_on_unknown_version=True,
+    # No command yet: Codex keeps the fail-closed feature, layer, state and flag
+    # checks of its review launch until ``verify-codex`` ships (C10g-2), which
+    # then changes this one value.
+    build_verification=None,
     # tests/harness_contract/codex/: exec_argv.json (model gpt-6.1-sol, effort
     # high) and sandbox_probe.txt (the catalog's effort xhigh).
     models=("gpt-6.1-sol",),

@@ -2,7 +2,7 @@
 
 ## Status
 
-**In implementation.** `workflow-controller-codex-build-pin` (RB3, issue #168; plan `docs/ai-workflow/CONTROLLER_CODEX_BUILD_PIN_PLAN.md`)
+**In implementation review.** `workflow-controller-codex-build-pin` (RB3, issue #168; plan `docs/ai-workflow/CONTROLLER_CODEX_BUILD_PIN_PLAN.md`)
 moves the pinned Codex boundary to `codex-cli 0.163.0`.
 
 | checkpoint | state |
@@ -13,4 +13,4 @@ moves the pinned Codex boundary to `codex-cli 0.163.0`.
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-codex-build-pin` to enter self-review.
+The implementation is complete and self-reviewed; implementation revision 1 is in local implementation review.

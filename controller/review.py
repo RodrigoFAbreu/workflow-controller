@@ -21,11 +21,11 @@ What lives here:
 0.162.1`` on 2026-10-15 (seven real ``codex exec`` runs, the sandbox probe, the
 composing command, the home's state entries, the environment and the flags); the
 feature list and the ``--disable`` acceptance were re-measured on ``codex-cli
-0.163.0`` on 2026-10-26. Its captures are under ``tests/harness_contract/codex/`` and every constant below is
-taken from them; ``tests/test_fake_codex_contract.py`` pins the digests and the
-captured invocation. ``PRE_STEP_CAPTURED`` is therefore true and ``HARNESSES``
-registers Codex. A Codex upgrade that renames a feature, a layer type or a state
-entry fails closed with that name.
+0.163.0`` on 2026-10-26. Its captures are under ``tests/harness_contract/codex/``
+and every constant below is taken from them; ``tests/test_fake_codex_contract.py``
+pins the digests and the captured invocation. ``PRE_STEP_CAPTURED`` is therefore
+true and ``HARNESSES`` registers Codex. A Codex upgrade that enables or renames a
+feature, or renames a layer type or a state entry, fails closed with that name.
 """
 
 from __future__ import annotations

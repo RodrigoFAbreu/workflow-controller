@@ -1,0 +1,22 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-harness-verification",
+ "dispositions": {
+  "F-158d6b46ab9b": {
+   "disposition": "dropped",
+   "reason": "Plan wording about which tests fail against the base; the implementation states which new tests are mutation-checked and the Codex implementation review confirmed the mutation results."
+  },
+  "F-78c86309310c": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-99d2645a8eac": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-fa00ed05a503": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  }
+ }
+}

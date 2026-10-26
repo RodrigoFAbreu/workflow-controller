@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-checks-wait",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -32255,6 +32255,304 @@
         },
         "evaluated_at": "2026-10-26T06:17:53Z",
         "workflow_release": "2.20.0"
+      }
+    },
+    "workflow-controller-checks-wait": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-checks-wait",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CHECKS_WAIT_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-checks-wait-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checks-wait-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "8552217a37030c590533e35b525290a6bfb9de09",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+        "approved_review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CHECKS_WAIT_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c3454045fa8d6fbcc6acd96f2afc462e2379725"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checks-wait-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0653c1256bb7da4670cf41fc14223440996c9a71"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-checks-wait-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4df47eacaf323f6adc1524bcd7092a74ea5322d2"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T09:30:17Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+            "ledger": {
+              "local": {
+                "bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "92e5e7af9008d0fd4894bc1b351dd2b646467f72d1ed971ec552ffd8865cd4df",
+                "ledger_entry_sha256": "3f2bae3173f84f4deae56941ea0dd5620c4aaa944256a6c5623b0305583b00d6",
+                "run_ref": "session:local .ai-review/workflow-controller-checks-wait/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "2e4f4255d45a82c6a497728e832068289bf5a8cc51c2958eed89aa050034b7ab",
+                "ledger_entry_sha256": "89b80f0df2bcc780a2ba8eb4b005eeee0d1a02af8c9e22994505905b2c520db9",
+                "run_ref": "session:local .ai-review/workflow-controller-checks-wait/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T09:30:17Z",
+          "workflow_release": "2.20.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-26T09:21:49Z",
+          "verdict_sha256": "92e5e7af9008d0fd4894bc1b351dd2b646467f72d1ed971ec552ffd8865cd4df",
+          "run_ref": "session:local .ai-review/workflow-controller-checks-wait/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-26T09:28:40Z",
+          "verdict_sha256": "2e4f4255d45a82c6a497728e832068289bf5a8cc51c2958eed89aa050034b7ab",
+          "run_ref": "session:local .ai-review/workflow-controller-checks-wait/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-10-26T09:30:17Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-26T09:18:37Z",
+        "consumed": {
+          "review_content_id": "75f031bf7532a03e91bee7030f416ae6ebc61a022e323e07c793de041fdcee83",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+          "bundle_id": "99a6dfadd3b2debd3a818c840e3369e8719fbd1f6a7b323c91a7e05d4a2f31d9",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0e842a49e4451a01cc89ca7f94afe29b3340d296a8dedf85c97aef656669f502",
+        "75f031bf7532a03e91bee7030f416ae6ebc61a022e323e07c793de041fdcee83"
+      ],
+      "optional_findings": {
+        "F-c0e5a576420d": {
+          "digest": "c0e5a576420d2a949a587580906eee3eedd638aaa96b3eae59e8d36d4ebd794b",
+          "text": "D2's age is measured from the binding's newest event, not from when the checks began. A re-run started by hand on GitHub writes no binding event. If that re-run starts more than four hours after the last push or edit, the first spent wait jumps straight to `lane_blocked`. That is rarer and no worse than the base, where every spent wait is CRITICAL. Still, the automation.md sentence should say what the age is measured from (the last push or pull-request edit the Controller recorded), so an operator can read a long `lane_blocked` correctly.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0e842a49e4451a01cc89ca7f94afe29b3340d296a8dedf85c97aef656669f502",
+              "verdict": "REVISE",
+              "at": "2026-10-26T09:10:58Z"
+            }
+          ]
+        },
+        "F-1ebedad5b23a": {
+          "digest": "1ebedad5b23abdd214ddf21b5827b91c6c66483f6a6db582bd2ea72650e1584e",
+          "text": "docs/guide/commands.md:237 says ADR 0012 covers every event type \"except `review_wait`, added later\". CP2 should add `checks_wait` to that exception with a one-line description (a spent wait for a pull request's checks). Otherwise the page says the ADR describes `checks_wait`, and it does not.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0e842a49e4451a01cc89ca7f94afe29b3340d296a8dedf85c97aef656669f502",
+              "verdict": "REVISE",
+              "at": "2026-10-26T09:10:58Z"
+            }
+          ]
+        },
+        "F-eaea7f77279d": {
+          "digest": "eaea7f77279d1a78d1e15d7d599e0d79e822554cfd9db44e3999147141e57539",
+          "text": "docs/ROADMAP.md:452 (the C10b \"done\" note: \"pending checks send nothing, or `lane_blocked` once a wait budget is spent\") will read as current behaviour after this change. CP2's search covers only the guides. Either amend that clause in place (\"until NF2\") or name it in CP2's done-when.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0e842a49e4451a01cc89ca7f94afe29b3340d296a8dedf85c97aef656669f502",
+              "verdict": "REVISE",
+              "at": "2026-10-26T09:10:58Z"
+            }
+          ]
+        },
+        "F-5e15c0c7dc3e": {
+          "digest": "5e15c0c7dc3e3e1e3485f009ed0dfb0f5e677295258c8d48699a70e70f12ffb1",
+          "text": "D3: say in CP1 that `_run_pr_report` takes the age from `_binding_events(runtime_root, key, binding)`, which is already in reach there. Then the two paths provably share the D2 measure, rather than the job path using, say, the record's `updated_at`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0e842a49e4451a01cc89ca7f94afe29b3340d296a8dedf85c97aef656669f502",
+              "verdict": "REVISE",
+              "at": "2026-10-26T09:10:58Z"
+            }
+          ]
+        },
+        "F-45db7d2546b2": {
+          "digest": "45db7d2546b2eea68654515230d1fe664314bee457d23e6669eba9e7f53cf560",
+          "text": "D2 and CP2 describe the newest binding event as \"the last push or pull-request edit the Controller recorded\". The log also takes `ready` (the pull request marked ready, milestone_branch.py:2096), `merge_refused`, `acknowledged`, `rebind` and others, and any of them can be the newest. The measure is still sound, because a later event only makes the age shorter, which is the safe direction. Still, the automation.md sentence would be exact as \"the last change the Controller recorded on the binding (a push, the pull request marked ready or edited)\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "75f031bf7532a03e91bee7030f416ae6ebc61a022e323e07c793de041fdcee83",
+              "verdict": "REVISE",
+              "at": "2026-10-26T09:17:30Z"
+            }
+          ]
+        },
+        "F-5574dbac7cdc": {
+          "digest": "5574dbac7cdc200ee73b1c2692c4450fe825848e0beae47fae7fdd166c869ccd",
+          "text": "`_notify_branch_gate` takes no clock today. CP1 should say where \"the clock when the step ended\" comes from (for example the `Context.clock` the preflight used, or `job._now`), so the long-age tests can drive it without patching a module global.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "75f031bf7532a03e91bee7030f416ae6ebc61a022e323e07c793de041fdcee83",
+              "verdict": "REVISE",
+              "at": "2026-10-26T09:17:30Z"
+            }
+          ]
+        },
+        "F-017ece930f66": {
+          "digest": "017ece930f66051dc65bce49c81cda3ab590f79258e3efa55efaab034c3f4454",
+          "text": "CP1's focused check, `python3 -m unittest tests.test_notify tests.test_notifications_wiring`, leaves out `tests.test_pr_report`, which now holds the job-record mapping tests. The full-suite clause covers it, but adding `tests.test_pr_report` to the focused command would make the quick check match the declared files.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T09:21:49Z"
+            }
+          ]
+        },
+        "F-341f20ea9be2": {
+          "digest": "341f20ea9be2df39639de4d5a974d001964d36541d32cee7bd33cb7ba7988777",
+          "text": "On the job-record path, CP1 says how `_run_pr_report` gets the age but not which clock ends it. The function stamps the record with `_now()` (job.py:7346) but has `ctx.clock` in hand. Using `ctx.clock()` would let the long-age job-record test use the same fake clock as the branch-gate test, instead of back-dating the binding event.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T09:21:49Z"
+            }
+          ]
+        },
+        "F-a0cb49a91904": {
+          "digest": "a0cb49a919044ef2d5a5ecaead0c6bb397d09666f262a309fb351ce6f62632b0",
+          "text": "CP1’s navigation references need two small corrections: at plan line 46, `_notify_branch_gate`’s caller is `_execute_step_locked` (`controller/job.py:8046`), not `_run_branch_step`; the named notification test class is `ReportNotificationTest` (`tests/test_pr_report.py:574`), not `PrReportNotificationTest`. The intended changes remain clear and executable.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "acb47515f2dfb49bd0944c452b4f557d05134d224c904cdf2c1138b15582bde0",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T09:28:40Z"
+            }
+          ]
+        }
       }
     }
   }

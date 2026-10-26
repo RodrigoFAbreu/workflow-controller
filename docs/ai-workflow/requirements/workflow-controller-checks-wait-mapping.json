@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-checks-wait",
+  "requirements": {
+    "R1": {
+      "description": "A spent checks_pending wait, or a checks_pending stop that cannot wait (no auto-merge), sends checks_wait (INFO, LOW) on the branch-gate path and the job-record path; a waitable gate whose step did not wait sends nothing (#170)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A checks_pending stop becomes lane_blocked only when the checks have been pending over four hours; the identity, the supersedes guard and the other wait codes are unchanged (#170)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The guides and the roadmap state the new rule; NF2 is done (#170)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

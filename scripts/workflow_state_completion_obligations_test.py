@@ -4152,5 +4152,1217 @@ class RetentionReport(unittest.TestCase):
             self.assertEqual([a["name"] for a in report["archives"]], ["w00.tar.zst", "w01.tar.zst"])
 
 
+
+# ---------------------------------------------------------------------------
+# workflow-2.21.0: the retention archive (workflow_retention archive)
+# ---------------------------------------------------------------------------
+
+import contextlib  # noqa: E402
+import errno  # noqa: E402
+import io  # noqa: E402
+import sys  # noqa: E402
+import tarfile  # noqa: E402
+import threading  # noqa: E402
+
+_HAVE_ZSTD = shutil.which("zstd") is not None
+_AS_ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
+_REAL = {name: getattr(os, name) for name in ("unlink", "utime", "symlink", "rename", "mkdir", "rmdir", "link")}
+_RA_MUTATING = ("rename", "replace", "unlink", "rmdir", "mkdir", "link", "symlink", "utime", "chmod", "chown",
+                "truncate", "ftruncate", "write", "mkfifo", "mknod")
+
+
+def _ra_target(root, args, kwargs, position=0):
+    """The absolute path a mutating call names, or None when it names none."""
+    if len(args) <= position:
+        return None
+    path = args[position]
+    if isinstance(path, int):
+        try:
+            return os.readlink(f"/proc/self/fd/{path}")
+        except OSError:
+            return None
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        return None
+    path = os.fsdecode(path)
+    if not os.path.isabs(path):
+        dir_fd = kwargs.get("dir_fd", kwargs.get("src_dir_fd"))
+        if dir_fd is None:
+            return os.path.abspath(path)
+        try:
+            return os.path.join(os.readlink(f"/proc/self/fd/{dir_fd}"), path)
+        except OSError:
+            return None
+    return path
+
+
+@contextlib.contextmanager
+def _ra_write_guard(root, violations):
+    """A18: every mutating call of `os`/`shutil` whose target is under the
+    repository root is recorded and refused."""
+    root = os.path.realpath(root)
+    real = {name: getattr(os, name) for name in _RA_MUTATING if hasattr(os, name)}
+    real_open, real_rmtree = os.open, shutil.rmtree
+
+    def under(path):
+        return path is not None and (os.path.realpath(path) == root or os.path.realpath(path).startswith(root + os.sep))
+
+    def wrap(name):
+        def call(*args, **kwargs):
+            positions = (0, 1) if name in ("rename", "replace", "link", "symlink") else (0,)
+            for position in positions:
+                if name == "symlink" and position == 0:
+                    continue
+                if under(_ra_target(root, args, kwargs, position)):
+                    violations.append((name, args))
+                    raise AssertionError(f"a write to the repository: os.{name}{args}")
+            return real[name](*args, **kwargs)
+        return call
+
+    def open_(path, flags, *args, **kwargs):
+        if flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND) \
+                and under(_ra_target(root, (path,), kwargs)):
+            violations.append(("open", (path, flags)))
+            raise AssertionError(f"a write to the repository: os.open({path!r}, {flags})")
+        return real_open(path, flags, *args, **kwargs)
+
+    def rmtree(path, *args, **kwargs):
+        if under(os.path.abspath(os.fsdecode(path))):
+            violations.append(("rmtree", (path,)))
+            raise AssertionError(f"a write to the repository: shutil.rmtree({path!r})")
+        return real_rmtree(path, *args, **kwargs)
+
+    patches = [unittest.mock.patch.object(os, name, wrap(name)) for name in real]
+    patches += [unittest.mock.patch.object(os, "open", open_), unittest.mock.patch.object(shutil, "rmtree", rmtree)]
+    with contextlib.ExitStack() as stack:
+        for patch in patches:
+            stack.enter_context(patch)
+        yield
+
+
+def _ra_snap(*roots, times=True):
+    """Path, kind, mode, size, mtime_ns, ctime_ns and hash of everything below
+    (`times=False` leaves the directories' own timestamps out)."""
+    seen = {}
+    for root in roots:
+        for directory, dirs, names in os.walk(root, followlinks=False):
+            dirs.sort()
+            for name in sorted(names + dirs):
+                full = os.path.join(directory, name)
+                info = os.lstat(full)
+                digest = None
+                if stat.S_ISLNK(info.st_mode):
+                    digest = os.readlink(full)
+                elif stat.S_ISREG(info.st_mode):
+                    digest = hashlib.sha256(Path(full).read_bytes()).hexdigest()
+                if times:
+                    seen[full] = (stat.S_IFMT(info.st_mode), stat.S_IMODE(info.st_mode), info.st_size,
+                                  info.st_mtime_ns, info.st_ctime_ns, digest)
+                else:
+                    seen[full] = (stat.S_IFMT(info.st_mode), stat.S_IMODE(info.st_mode),
+                                  None if stat.S_ISDIR(info.st_mode) else info.st_size, digest)
+    return seen
+
+
+class _Killed(BaseException):
+    pass
+
+
+class _Result:
+    def __init__(self, code, result=None, error=None):
+        self.code, self.result, self.error = code, result, error
+
+    @property
+    def err_code(self):
+        return self.error.code if self.error else None
+
+
+class _RA(_RR):
+    """`_RR` plus a review folder per item, the real archive engine through
+    `archive_item` (the engine's refusals as `_Result`s) and the write guard."""
+
+    def __init__(self, items=None, **kwargs):
+        super().__init__(items if items is not None else _rr_many(7), **kwargs)
+        self.violations = []
+
+    def __enter__(self):
+        super().__enter__()
+        self.outside = Path(tempfile.mkdtemp(prefix="wfo-outside-"))
+        (self.outside / "sentinel").write_text("SENTINEL-OUTSIDE-BYTES" * 7)
+        (self.outside / "tree").mkdir()
+        (self.outside / "tree" / "inner").write_text("outside inner")
+        self.adir = self.archive_root / "widgets"
+        return self
+
+    def __exit__(self, *exc):
+        for path in (self.root, self.archive_root, self.outside):
+            for directory, dirs, _ in os.walk(path):
+                for name in dirs:
+                    with contextlib.suppress(OSError):
+                        os.chmod(os.path.join(directory, name), 0o755)
+        shutil.rmtree(self.outside, ignore_errors=True)
+        super().__exit__(*exc)
+
+    def folder(self, item="w00", links=True):
+        """A populated review folder: files, nested directories, an empty one,
+        a symlink to a file and one to a directory outside the tree."""
+        _write(self.repo, f".ai-review/{item}/a.txt", f"hello {item}\n")
+        _write(self.repo, f".ai-review/{item}/sub/b.txt", "bbb\n")
+        _write(self.repo, f".ai-review/{item}/sub/deeper/c.bin", "c" * 3000)
+        (self.root / ".ai-review" / item / "empty").mkdir(exist_ok=True)
+        if links:
+            os.symlink("a.txt", self.root / ".ai-review" / item / "ln")
+            os.symlink(self.outside / "tree", self.root / ".ai-review" / item / "dirlink")
+        return self.root / ".ai-review" / item
+
+    def call(self, item="w00", apply=False, **kwargs):
+        kwargs.setdefault("archive_root", self.archive_root)
+        kwargs.setdefault("repo_root", self.root)
+        kwargs.setdefault("now", _RR_NOW)
+        repo_root = kwargs.pop("repo_root")
+        try:
+            with _ra_write_guard(self.root, self.violations):
+                result = wr.archive_item(repo_root, item, apply=apply, run=self.run, resolve=self.resolve, **kwargs)
+        except wr.RetentionError as exc:
+            self.last_error = exc
+            return _Result(2, error=exc)
+        finally:
+            assert not self.violations, self.violations
+        return _Result(0, result)
+
+    def main(self, item, *args, zstd=None):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                _ra_write_guard(self.root, self.violations):
+            code = wr.main(["archive", item, "--repo-root", str(self.root), "--archive-root", str(self.archive_root),
+                            *args], run=self.run, resolve=self.resolve, now=_RR_NOW, zstd=zstd)
+        assert not self.violations, self.violations
+        return code, out.getvalue(), err.getvalue()
+
+    def snap(self, times=True):
+        return _ra_snap(self.root, self.archive_root, times=times)
+
+    def direct(self, item, apply):
+        """`archive_item` without the guard (for the threaded case)."""
+        try:
+            return _Result(0, wr.archive_item(self.root, item, apply=apply, archive_root=self.archive_root,
+                                              now=_RR_NOW, run=self.run, resolve=self.resolve))
+        except wr.RetentionError as exc:
+            return _Result(2, error=exc)
+
+    def refused(self, test, result, code, item_folder=None):
+        test.assertEqual(result.code, 2, result.result)
+        test.assertEqual(result.err_code, code, getattr(result.error, "message", None))
+
+
+def _ra_extract(archive, into):
+    out = subprocess.run(["zstd", "-dc", str(archive)], capture_output=True, check=True).stdout
+    with tarfile.open(fileobj=io.BytesIO(out), mode="r:") as tar:
+        names = [m.name for m in tar.getmembers()]
+        tar.extractall(into, filter="tar")
+    return names
+
+
+@unittest.skipUnless(_HAVE_ZSTD, "the archive tests need the zstd program on PATH")
+class RetentionArchive(unittest.TestCase):
+    def setUp(self):
+        self._dirs = []
+
+    def tearDown(self):
+        for directory in self._dirs:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def ra(self, items=None, **kwargs):
+        rr = _RA(items, **kwargs)
+        self.addCleanup(rr.__exit__, None, None, None)
+        rr.__enter__()
+        return rr
+
+    def stand_in(self, body):
+        """A `zstd` stand-in script (`$real` is the real program)."""
+        directory = Path(tempfile.mkdtemp(prefix="wfo-zstd-"))
+        self._dirs.append(directory)
+        script = directory / "zstd"
+        script.write_text("#!/bin/sh\nreal=" + shutil.which("zstd") + "\n" + body)
+        script.chmod(0o755)
+        return str(script), directory
+
+    def hook(self, name, before=None, after=None):
+        """Wraps `os.<name>`: `before(*args, **kwargs)` runs ahead of the real call."""
+        real = getattr(os, name)
+
+        def call(*args, **kwargs):
+            if before is not None:
+                before(*args, **kwargs)
+            result = real(*args, **kwargs)
+            if after is not None:
+                after(result, *args, **kwargs)
+            return result
+        patch = unittest.mock.patch.object(os, name, call)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return real
+
+    # -- A1 -------------------------------------------------------------
+
+    def test_a1_the_dry_run_is_the_default_lists_everything_and_writes_nothing(self):
+        rr = self.ra()
+        folder = rr.folder()
+        before, folder_before = rr.snap(), _ra_snap(folder)
+        result = rr.call()
+        self.assertEqual(result.code, 0)
+        data = result.result
+        self.assertEqual(data["mode"], "dry-run")
+        self.assertEqual(data["result"], {"archived": False})
+        self.assertEqual([(e["path"], e["type"]) for e in data["review_folder"]["entries"]],
+                         [("a.txt", "file"), ("dirlink", "symlink"), ("empty", "dir"), ("ln", "symlink"),
+                          ("sub", "dir"), ("sub/b.txt", "file"), ("sub/deeper", "dir"), ("sub/deeper/c.bin", "file")])
+        self.assertEqual(data["review_folder"]["files"], 3)
+        self.assertEqual(data["review_folder"]["bytes"], len("hello w00\n") + 4 + 3000)
+        self.assertEqual(data["target"]["archive"], str(rr.adir / "w00.tar.zst"))
+        self.assertEqual(data["target"]["temporary"], str(rr.adir / ".w00.partial"))
+        self.assertEqual(data["target"]["index"], str(rr.adir / "index.jsonl"))
+        self.assertEqual(data["pull_request"], {"number": 7, "url": "https://github.com/acme/widgets/pull/7"})
+        self.assertTrue(data["zstd"].endswith("zstd"))
+        self.assertGreater(len(before), 20)
+        self.assertEqual(rr.snap(), before)
+        self.assertEqual(_ra_snap(folder), folder_before)
+        code, out, err = rr.main("w00")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("dry run: nothing was written; pass --apply to archive", out)
+        self.assertIn("sub/deeper/c.bin", out)
+        code, out, _ = rr.main("w00", "--json")
+        self.assertEqual(json.loads(out)["mode"], "dry-run")
+        self.assertEqual(rr.snap(), before)
+
+    # -- A2, A3 ---------------------------------------------------------
+
+    def test_a2_apply_archives_the_folder_exactly_and_touches_nothing_else(self):
+        rr = self.ra()
+        folder = rr.folder()
+        rr.folder("w01")
+        _run(["git", "add", "-f", ".ai-review/w01/a.txt"], cwd=rr.root)  # a tracked file elsewhere
+        others_before = _ra_snap(rr.root / ".ai-review" / "w01")
+        folder_before = _ra_snap(folder)
+        tracked_before = subprocess.run(["git", "ls-files"], cwd=rr.root, capture_output=True, text=True).stdout
+        result = rr.call(apply=True)
+        self.assertEqual(result.code, 0, result.error)
+        archive = rr.adir / "w00.tar.zst"
+        self.assertTrue(archive.is_file())
+        self.assertEqual(_ra_snap(folder), folder_before)
+        self.assertEqual(_ra_snap(rr.root / ".ai-review" / "w01"), others_before)
+        self.assertEqual(subprocess.run(["git", "ls-files"], cwd=rr.root, capture_output=True, text=True).stdout,
+                         tracked_before)
+        self.assertEqual(sorted(os.listdir(rr.adir)), ["index.jsonl", "w00.tar.zst"])
+        extracted = Path(tempfile.mkdtemp(prefix="wfo-extract-"))
+        self._dirs.append(extracted)
+        names = _ra_extract(archive, extracted)
+        self.assertEqual(names, ["w00", "w00/a.txt", "w00/dirlink", "w00/ln", "w00/empty", "w00/sub",
+                                 "w00/sub/b.txt", "w00/sub/deeper", "w00/sub/deeper/c.bin"])
+        got = extracted / "w00"
+        self.assertTrue(os.path.islink(got / "dirlink"))
+        self.assertEqual(os.readlink(got / "dirlink"), str(rr.outside / "tree"))
+        self.assertEqual(os.readlink(got / "ln"), "a.txt")
+        self.assertEqual((got / "a.txt").read_text(), "hello w00\n")
+        self.assertEqual((got / "sub/deeper/c.bin").read_text(), "c" * 3000)
+        self.assertTrue((got / "empty").is_dir())
+        lines = (rr.adir / "index.jsonl").read_text().splitlines()
+        self.assertEqual(len(lines), 1)
+        line = json.loads(lines[0])
+        self.assertEqual(line, {"archived_at": "2026-11-01T12:00:00Z", "bytes": archive.stat().st_size, "files": 3,
+                                "pull_request": {"number": 7, "url": "https://github.com/acme/widgets/pull/7"},
+                                "work_item_id": "w00"})
+        self.assertEqual(lines[0], json.dumps(line, sort_keys=True))
+        self.assertEqual(result.result["result"]["bytes"], archive.stat().st_size)
+        self.assertEqual((rr.adir / "index.jsonl").stat().st_mode & 0o777, 0o600)
+
+    def test_a3_the_report_afterwards_sees_the_archive_and_its_mtime_is_the_temporarys(self):
+        rr = self.ra()
+        rr.folder()
+        seen = {}
+        real_link = os.link
+
+        def link(src, dst, *args, **kwargs):
+            seen["tmp_mtime"] = os.stat(src, dir_fd=kwargs["src_dir_fd"]).st_mtime_ns
+            return real_link(src, dst, *args, **kwargs)
+        with unittest.mock.patch.object(os, "link", link):
+            self.assertEqual(rr.call(apply=True).code, 0)
+        archive = rr.adir / "w00.tar.zst"
+        self.assertEqual(archive.stat().st_mtime_ns, seen["tmp_mtime"])
+        report = rr.build()
+        record = next(r for r in report["finished"] if r["work_item_id"] == "w00")
+        self.assertTrue(record["archive"]["present"])
+        self.assertFalse(record["archive"]["prunable"])
+        self.assertTrue(record["review_folder"]["present"])
+        self.assertEqual(report["archives"][0]["name"], "w00.tar.zst")
+        # a second run changes nothing, the archive's mtime included (A7)
+        before = rr.snap()
+        again = rr.call(apply=True)
+        rr.refused(self, again, "already_archived")
+        self.assertIn("nothing to do", again.error.next_step)
+        self.assertEqual(rr.snap(), before)
+
+    # -- A4 -------------------------------------------------------------
+
+    def test_a4_every_selection_refusal_has_its_code_and_writes_nothing(self):
+        from workflow_forge import ForgeUnavailableError
+        items = {**_rr_many(7), "busy": _rr_item(phase="IMPLEMENTING"),
+                 "nopr": _rr_item(last="2026-08-01T00:00:00Z"),
+                 "failing": _rr_item(last="2026-08-02T00:00:00Z"),
+                 "runtime": _rr_item(), "archive": _rr_item()}
+        outcomes = {_rr_commit("nopr"): "none", _rr_commit("failing"): ForgeUnavailableError("gh gone")}
+        rr = self.ra(items, outcomes=outcomes)
+        for name in ("w00", "w01", "w02", "busy", "nopr", "failing"):
+            rr.folder(name, links=False)
+
+        def expect(item, code, *, apply=False, message=None, **kwargs):
+            before = rr.snap()
+            result = rr.call(item, apply=apply, **kwargs)
+            rr.refused(self, result, code)
+            self.assertEqual(rr.snap(), before, f"{code} wrote something")
+            return result
+
+        for apply in (False, True):
+            with self.subTest(apply=apply):
+                expect("busy", "not_finished:open_phase", apply=apply)
+                expect("nopr", "not_finished:no_pull_request", apply=apply)
+                expect("failing", "not_finished:query_failed:forge_unavailable", apply=apply)
+                expect("w06", "kept_recent", apply=apply)
+                expect("w99", "unknown_item", apply=apply)
+                expect("runtime", "invalid_id", apply=apply)
+                expect("archive", "invalid_id", apply=apply)
+                expect("Bad Id", "invalid_id", apply=apply)
+                expect("w03", "review_folder_absent", apply=apply)
+                # a symlinked folder is absent
+                os.symlink(rr.outside / "tree", rr.root / ".ai-review" / "w03")
+                expect("w03", "review_folder_absent", apply=apply)
+                os.unlink(rr.root / ".ai-review" / "w03")
+        # tracked file under the folder
+        _run(["git", "add", "-f", ".ai-review/w01/a.txt"], cwd=rr.root)
+        for apply in (False, True):
+            expect("w01", "tracked_files", apply=apply)
+        # an existing archive, an existing index line, a bad index, a leftover temporary
+        rr.archive("w02.tar.zst", 100)
+        for apply in (False, True):
+            expect("w02", "already_archived", apply=apply)
+        os.unlink(rr.adir / "w02.tar.zst")
+        (rr.adir / "index.jsonl").write_text(json.dumps({"work_item_id": "w02"}) + "\n")
+        for apply in (False, True):
+            result = expect("w02", "already_indexed", apply=apply)
+            self.assertIn("pruned or removed by hand", result.error.next_step)
+        (rr.adir / "index.jsonl").write_text('{"work_item_id": "w02"}\nnot json\n')
+        for apply in (False, True):
+            expect("w02", "index_invalid", apply=apply)
+        (rr.adir / "index.jsonl").unlink()
+        (rr.adir / ".w02.partial").write_text("someone else's")
+        for apply in (False, True):
+            expect("w02", "partial_present", apply=apply)
+        self.assertEqual((rr.adir / ".w02.partial").read_text(), "someone else's")
+        (rr.adir / ".w02.partial").unlink()
+        # an unsupported entry
+        fifo = rr.root / ".ai-review" / "w02" / "pipe"
+        os.mkfifo(fifo)
+        for apply in (False, True):
+            expect("w02", "unsupported_entry", apply=apply)
+        os.unlink(fifo)
+        os.link(rr.root / ".ai-review" / "w02" / "a.txt", rr.root / ".ai-review" / "w02" / "twin")
+        for apply in (False, True):
+            expect("w02", "unsupported_entry", apply=apply)
+        os.unlink(rr.root / ".ai-review" / "w02" / "twin")
+        # a symlinked per-repository directory
+        shutil.rmtree(rr.adir)
+        os.symlink(rr.outside / "tree", rr.adir)
+        for apply in (False, True):
+            expect("w02", "archive_dir_unsafe", apply=apply)
+        # a repository named ..
+        os.unlink(rr.adir)
+        _run(["git", "remote", "set-url", "origin", "https://github.com/acme/...git"], cwd=rr.root)
+        for apply in (False, True):
+            result = rr.call("w02", apply=apply)
+            self.assertEqual(result.err_code, "repository_unknown")
+        # a repository that is not a Workflow repository / no origin
+        _run(["git", "remote", "remove", "origin"], cwd=rr.root)
+        self.assertEqual(rr.call("w02").err_code, "repository_unknown")
+
+    def test_a4b_the_text_form_of_a_refusal_and_exit_two(self):
+        rr = self.ra()
+        rr.folder()
+        code, out, err = rr.main("w06")
+        self.assertEqual((code, out), (2, ""))
+        self.assertTrue(err.startswith("error: kept_recent: "), err)
+        self.assertIn("\nnext step: ", err)
+        code, _, err = rr.main("w00", "--bogus")
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("error: usage: "), err)
+
+    # -- A5 -------------------------------------------------------------
+
+    def _fails(self, rr, code, item="w00", **kwargs):
+        before = rr.snap(times=False)
+        folder_before = _ra_snap(rr.root / ".ai-review" / item)
+        result = rr.call(item, apply=True, **kwargs)
+        rr.refused(self, result, code)
+        self.assertEqual(rr.snap(times=False), before, f"{code} left the archive directory changed")
+        self.assertEqual(_ra_snap(rr.root / ".ai-review" / item), folder_before)
+        return result
+
+    def test_a5_the_index_count_and_the_result_state_what_was_archived_not_what_the_selection_scan_saw(self):
+        rr = self.ra()
+        folder = rr.folder()
+        real_popen, fired = subprocess.Popen, []
+
+        def popen(argv, *args, **kwargs):
+            if "-T1" in argv and not fired:
+                fired.append(True)
+                (folder / "late.txt").write_text("late arrival\n")
+            return real_popen(argv, *args, **kwargs)
+        with unittest.mock.patch.object(subprocess, "Popen", popen):
+            result = rr.call(apply=True)
+        self.assertEqual(result.code, 0, result.error)
+        self.assertTrue(fired)
+        extracted = Path(tempfile.mkdtemp(prefix="wfo-extract-"))
+        self._dirs.append(extracted)
+        names = _ra_extract(rr.adir / "w00.tar.zst", extracted)
+        self.assertIn("w00/late.txt", names)
+        archived = [n for n in names if (extracted / n).is_file() and not os.path.islink(extracted / n)]
+        line = json.loads((rr.adir / "index.jsonl").read_text().splitlines()[0])
+        self.assertEqual(line["files"], len(archived))
+        self.assertEqual(line["files"], 4)
+        self.assertEqual(result.result["result"]["index_line"]["files"], 4)
+        self.assertEqual(result.result["review_folder"]["files"], 4)
+        self.assertIn("late.txt", [e["path"] for e in result.result["review_folder"]["entries"]])
+
+    @unittest.skipIf(os.geteuid() == 0, "root reads a mode-000 file, so the refusal cannot be provoked")
+    def test_a5_a_file_this_user_cannot_read_is_unreadable_with_an_access_next_step_and_nothing_is_kept(self):
+        rr = self.ra()
+        folder = rr.folder()
+        os.chmod(folder / "a.txt", 0)
+        self.addCleanup(os.chmod, folder / "a.txt", 0o644)
+        before = _ra_snap(rr.archive_root, times=False)
+        result = rr.call(apply=True)
+        rr.refused(self, result, "unreadable")
+        self.assertIn("a.txt", result.error.message)
+        self.assertIn("grant read access", result.error.next_step)
+        self.assertNotIn("run it again", result.error.next_step)
+        self.assertEqual(_ra_snap(rr.archive_root, times=False), before)
+
+    def test_a5_zstd_missing_is_refused_in_both_modes_with_an_empty_path(self):
+        rr = self.ra()
+        rr.folder()
+        bin_dir = Path(tempfile.mkdtemp(prefix="wfo-bin-"))
+        self._dirs.append(bin_dir)
+        os.symlink(shutil.which("git"), bin_dir / "git")      # git stays, zstd goes
+        with unittest.mock.patch.dict(os.environ, {"PATH": str(bin_dir)}):
+            for apply in (False, True):
+                before = rr.snap()
+                result = rr.call(apply=apply)
+                rr.refused(self, result, "zstd_missing")
+                self.assertIn("install zstd", result.error.next_step)
+                self.assertEqual(rr.snap(), before)
+
+    def test_a5_a_failed_pack_reaps_its_child_and_a_truncated_stream_is_not_placed(self):
+        rr = self.ra()
+        rr.folder()
+        stand_in, directory = self.stand_in(
+            'if [ "$1" = "-dc" ]; then exec "$real" "$@"; fi\necho $$ > "$(dirname "$0")/pid"\ncat > /dev/null\nexit 1\n')
+        result = self._fails(rr, "pack_failed", zstd=stand_in)
+        pid = int((directory / "pid").read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
+        self.assertIn("zstd exited 1", result.error.message)
+        stand_in, directory = self.stand_in(
+            'if [ "$1" = "-dc" ]; then exec "$real" "$@"; fi\n"$real" "$@" | head -c 40\n')
+        self._fails(rr, "verify_failed", zstd=stand_in)
+        # a stand-in that writes a valid stream of the wrong content
+        stand_in, directory = self.stand_in(
+            'if [ "$1" = "-dc" ]; then exec "$real" "$@"; fi\ncat > /dev/null\nprintf x | "$real" -q -c\n')
+        self._fails(rr, "verify_failed", zstd=stand_in)
+
+    def test_a5_an_index_that_cannot_be_appended_to_leaves_no_archive(self):
+        rr = self.ra()
+        rr.folder()
+        index = rr.adir / "index.jsonl"
+        index.write_text('{"work_item_id": "w02"}\n')
+        index.chmod(0o444)
+        if _AS_ROOT:
+            self.skipTest("running as root: a read-only file is still writable")
+        result = self._fails(rr, "index_failed")
+        self.assertEqual(index.read_text(), '{"work_item_id": "w02"}\n')
+
+    def test_a5_a_temporary_made_by_another_run_between_the_check_and_the_open_is_left_alone(self):
+        rr = self.ra()
+        rr.folder()
+
+        def before(path, flags, *args, **kwargs):
+            if path == ".w00.partial" and flags & os.O_EXCL:
+                (rr.adir / ".w00.partial").write_text("another run's")
+        self.hook("open", before)
+        before_snap = rr.snap(times=False)
+        result = rr.call(apply=True)
+        rr.refused(self, result, "partial_present")
+        self.assertEqual((rr.adir / ".w00.partial").read_text(), "another run's")
+        self.assertEqual(sorted(os.listdir(rr.adir)), [".w00.partial"])
+
+    def test_a5_a_final_name_created_between_the_check_and_the_link_is_left_alone(self):
+        rr = self.ra()
+        rr.folder()
+
+        def before(src, dst, **kwargs):
+            (rr.adir / "w00.tar.zst").write_text("foreign")
+        self.hook("link", before)
+        result = rr.call(apply=True)
+        rr.refused(self, result, "already_archived")
+        self.assertEqual((rr.adir / "w00.tar.zst").read_text(), "foreign")
+        self.assertEqual(sorted(os.listdir(rr.adir)), ["w00.tar.zst"])
+
+    def test_a5_an_index_append_that_fails_partway_is_rolled_back(self):
+        for pre_existing in (True, False):
+            with self.subTest(pre_existing=pre_existing):
+                rr = self.ra()
+                rr.folder()
+                index = rr.adir / "index.jsonl"
+                if pre_existing:
+                    index.write_text('{"work_item_id": "w02"}\n')
+                real_write = os.write
+
+                def write(fd, data, _real=real_write):
+                    if os.readlink(f"/proc/self/fd/{fd}").endswith("index.jsonl"):
+                        _real(fd, data[:len(data) // 2])
+                        raise OSError(errno.ENOSPC, "No space left on device")
+                    return _real(fd, data)
+                with unittest.mock.patch.object(os, "write", write):
+                    result = self._fails(rr, "index_failed")
+                self.assertNotIn("w00.tar.zst", os.listdir(rr.adir))
+                self.assertEqual(os.path.exists(index), pre_existing)
+                if pre_existing:
+                    self.assertEqual(index.read_bytes(), b'{"work_item_id": "w02"}\n')
+
+    def test_a5_the_states_a_killed_run_leaves_are_refused_with_the_documented_next_step(self):
+        rr = self.ra()
+        rr.folder()
+        self.assertEqual(rr.call(apply=True).code, 0)
+        archive, index = rr.adir / "w00.tar.zst", rr.adir / "index.jsonl"
+        line = index.read_text()
+
+        def both(code):
+            for apply in (False, True):
+                before = rr.snap()
+                result = rr.call(apply=apply)
+                rr.refused(self, result, code)
+                self.assertEqual(rr.snap(), before)
+            return result
+        # (i) killed before the link: only the temporary
+        archive.unlink()
+        index.unlink()
+        (rr.adir / ".w00.partial").write_text("half")
+        self.assertIn("remove that file by hand", both("partial_present").error.next_step)
+        # (ii) killed after the link, before the unlink: both names, no index line
+        os.unlink(rr.adir / ".w00.partial")
+        rr.archive("w00.tar.zst", 10)
+        os.link(archive, rr.adir / ".w00.partial")
+        step = both("already_archived").error.next_step
+        self.assertIn(".w00.partial", step)
+        self.assertIn("has no line for w00", step)
+        # (iii) killed after the unlink, before the append: the archive, no line
+        os.unlink(rr.adir / ".w00.partial")
+        step = both("already_archived").error.next_step
+        self.assertIn("has no line for w00", step)
+        self.assertIn("the folder is intact", step)
+        # following it gives a state the engine runs from
+        archive.unlink()
+        self.assertEqual(rr.call(apply=True).code, 0)
+        # (iv) killed in the middle of the append: half a line and the final archive
+        index.write_text(line[:30])
+        result = both("index_invalid")
+        # the line completed: archived, nothing to do
+        index.write_text(line)
+        self.assertIn("nothing to do", both("already_archived").error.next_step)
+        # the half line removed instead: the no-line case
+        index.write_text("")
+        self.assertIn("has no line for w00", both("already_archived").error.next_step)
+        archive.unlink()
+        self.assertEqual(rr.call(apply=True).code, 0)
+
+    # -- A8, A9, A10 ----------------------------------------------------
+
+    def test_a8_the_reports_half_of_the_obligations(self):
+        items = {**_rr_many(7), "runtime": _rr_item(), "archive": _rr_item()}
+        rr = self.ra(items)
+        reasons = rr.reasons(rr.build())
+        self.assertEqual((reasons["runtime"], reasons["archive"]), ("invalid_id", "invalid_id"))
+        for name in ("..", "."):
+            with unittest.mock.patch.object(wr.workflow_forge, "origin_repository", lambda root, name=name: f"acme/{name}"):
+                with self.assertRaises(wr.RetentionError) as caught:
+                    rr.build()
+                self.assertEqual(caught.exception.code, "repository_unknown")
+        shutil.rmtree(rr.adir)
+        os.symlink(rr.outside / "tree", rr.adir)
+        rr.archive_link = rr.outside / "tree" / "w00.tar.zst"
+        rr.archive_link.write_bytes(b"x" * 50)
+        report = rr.build()
+        self.assertFalse(report["complete"])
+        self.assertEqual([e["path"] for e in report["read_errors"]], [str(rr.adir)])
+        self.assertEqual(report["archives"], [])
+        self.assertFalse(next(r for r in report["finished"] if r["work_item_id"] == "w00")["archive"]["present"])
+
+    def test_a9_a_real_interpreter_dry_run_leaves_no_bytecode_and_no_origin_is_refused(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "PYTHONPATH")}
+        copy = Path(tempfile.mkdtemp(prefix="wfo-scripts-"))
+        self._dirs.append(copy)
+        for name in ("workflow_retention.py", "workflow_forge.py"):
+            shutil.copy(Path(wr.__file__).resolve().parent / name, copy / name)
+        items = {**_rr_many(7), "busy": _rr_item(phase="IMPLEMENTING")}
+        rr = self.ra(items)
+        rr.folder("busy")
+        before = rr.snap()
+        proc = subprocess.run(["python3", "-I", str(copy / "workflow_retention.py"), "archive", "busy",
+                               "--repo-root", str(rr.root), "--archive-root", str(rr.archive_root)],
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("error: not_finished:open_phase", proc.stderr)
+        self.assertEqual(_rr_find_pycache(copy, rr.root, rr.archive_root), [])
+        self.assertEqual(rr.snap(), before)
+        _run(["git", "remote", "remove", "origin"], cwd=rr.root)
+        proc = subprocess.run(["python3", "-I", str(copy / "workflow_retention.py"), "archive", "w00",
+                               "--repo-root", str(rr.root), "--archive-root", str(rr.archive_root)],
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("error: repository_unknown", proc.stderr)
+        self.assertEqual(_rr_find_pycache(copy, rr.root, rr.archive_root), [])
+
+    def test_a10_the_dry_run_is_deterministic(self):
+        rr = self.ra()
+        rr.folder()
+        first = rr.main("w00", "--json")
+        second = rr.main("w00", "--json")
+        self.assertEqual(first, second)
+        self.assertEqual(first[0], 0)
+        self.assertTrue(first[1].endswith("\n"))
+        self.assertEqual(first[1], json.dumps(json.loads(first[1]), sort_keys=True) + "\n")
+        text = rr.main("w00")
+        self.assertEqual(text, rr.main("w00"))
+
+    # -- A11 ------------------------------------------------------------
+
+    def test_a11_a_folder_that_moves_while_it_is_read_is_never_placed(self):
+        folder_moments = ("before the file's open", "after its read", "after verification")
+        changes = ("add", "same-size change with mtime restored", "remove")
+        for moment in folder_moments:
+            for change in changes:
+                with self.subTest(moment=moment, change=change):
+                    rr = self.ra()
+                    folder = rr.folder(links=False)
+                    stamp = os.stat(folder / "a.txt")
+                    fired = []
+                    after_hook = {}
+
+                    def mutate():
+                        if fired:
+                            return
+                        fired.append(True)
+                        if change == "add":
+                            (folder / "added.txt").write_text("new")
+                        elif change == "remove":
+                            _REAL["unlink"](folder / "a.txt")
+                        else:
+                            (folder / "a.txt").write_text("HELLO W00\n")
+                            _REAL["utime"](folder / "a.txt", ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                        after_hook["folder"] = _ra_snap(folder)
+
+                    if moment == "after verification":
+                        scans = []
+                        real_scan = wr._scan
+
+                        def scan(*args, **kwargs):
+                            scans.append(1)
+                            if len(scans) == 2:
+                                mutate()
+                            return real_scan(*args, **kwargs)
+                        patch = unittest.mock.patch.object(wr, "_scan", scan)
+                    else:
+                        target = "a.txt" if moment == "before the file's open" else "b.txt"
+                        real_open = os.open
+
+                        def open_(path, flags, *args, _t=target, _real=real_open, **kwargs):
+                            if path == _t and kwargs.get("dir_fd") is not None and flags & os.O_NOFOLLOW:
+                                mutate()
+                            return _real(path, flags, *args, **kwargs)
+                        patch = unittest.mock.patch.object(os, "open", open_)
+                    before = rr.snap(times=False)
+                    with patch:
+                        result = rr.call(apply=True)
+                    rr.refused(self, result, "folder_changed")
+                    self.assertTrue(fired)
+                    self.assertEqual(rr.snap(times=False).get(str(rr.adir / "w00.tar.zst")), None)
+                    self.assertEqual(sorted(os.listdir(rr.adir)), [])
+                    self.assertEqual(_ra_snap(folder), after_hook["folder"])
+
+    # -- A12 ------------------------------------------------------------
+
+    def test_a12_a_symlinked_review_root_is_never_read_by_the_engine_or_the_report(self):
+        rr = self.ra()
+        outside_ai = rr.outside / "ext-review"
+        (outside_ai / "w00" / "sub").mkdir(parents=True)
+        (outside_ai / "w00" / "big").write_bytes(b"z" * 54321)
+        (outside_ai / "w00" / "sub" / "x").write_text("x")
+        os.symlink(outside_ai, rr.root / ".ai-review")
+        outside_before = _ra_snap(rr.outside)
+        for apply in (False, True):
+            before = rr.snap()
+            rr.refused(self, rr.call(apply=apply), "path_unsafe")
+            self.assertEqual(rr.snap(), before)
+        self.assertEqual(_ra_snap(rr.outside), outside_before)
+        code, out, err = rr.cli("--json")
+        self.assertEqual(code, 0, err)
+        report = json.loads(out)
+        self.assertNotIn("54321", out)
+        self.assertFalse(report["complete"])
+        self.assertEqual([e["path"] for e in report["read_errors"]], [str(rr.root / ".ai-review")])
+        for record in report["finished"] + report["kept_recent"]:
+            self.assertEqual(record["review_folder"]["files"], 0)
+            self.assertFalse(record["review_folder"]["present"])
+        self.assertEqual(_ra_snap(rr.outside), outside_before)
+
+    def test_a12_a_directory_link_inside_the_folder_is_packed_as_a_link(self):
+        rr = self.ra()
+        rr.folder()
+        before = _ra_snap(rr.outside)
+        self.assertEqual(rr.call(apply=True).code, 0)
+        raw = subprocess.run(["zstd", "-dc", str(rr.adir / "w00.tar.zst")], capture_output=True, check=True).stdout
+        self.assertNotIn(b"SENTINEL", raw)
+        self.assertNotIn(b"outside inner", raw)
+        self.assertEqual(_ra_snap(rr.outside), before)
+
+    def test_a12_a_file_replaced_by_a_symlink_after_the_walk_is_opened_with_no_follow(self):
+        rr = self.ra()
+        folder = rr.folder(links=False)
+        sentinel = rr.outside / "sentinel"
+        sentinel_ino = os.stat(sentinel).st_ino
+        opens, reads, inodes, fired = [], [], [], []
+        real_open, real_read, real_fstat = os.open, os.read, os.fstat
+
+        def open_(path, flags, *args, **kwargs):
+            if path == "a.txt" and kwargs.get("dir_fd") is not None and not fired:
+                fired.append(True)
+                _REAL["unlink"](folder / "a.txt")
+                _REAL["symlink"](sentinel, folder / "a.txt")
+            try:
+                fd = real_open(path, flags, *args, **kwargs)
+            except OSError as exc:
+                opens.append((path, flags, exc.errno))
+                raise
+            opens.append((path, flags, None))
+            return fd
+
+        def read(fd, n):
+            data = real_read(fd, n)
+            reads.append(data)
+            return data
+
+        def fstat(fd):
+            info = real_fstat(fd)
+            inodes.append(info.st_ino)
+            return info
+        with unittest.mock.patch.object(os, "open", open_), unittest.mock.patch.object(os, "read", read), \
+                unittest.mock.patch.object(os, "fstat", fstat):
+            result = rr.call(apply=True)
+        rr.refused(self, result, "folder_changed")
+        (substituted,) = [o for o in opens if o[0] == "a.txt"]
+        self.assertEqual(substituted[2], errno.ELOOP)
+        self.assertTrue(substituted[1] & os.O_NOFOLLOW)
+        self.assertFalse(any(b"SENTINEL" in data for data in reads))
+        self.assertNotIn(sentinel_ino, inodes)
+        self.assertEqual(os.listdir(rr.adir), [])
+
+    def test_a12_the_archive_directory_swapped_for_a_link_before_its_open_is_not_followed(self):
+        rr = self.ra()
+        rr.folder()
+        outside_before = _ra_snap(rr.outside)
+        seen = []
+        real_open = os.open
+
+        def open_(path, flags, *args, **kwargs):
+            if path == "widgets" and kwargs.get("dir_fd") is not None:
+                seen.append(1)
+                if len(seen) == 2:
+                    _REAL["rename"](rr.adir, str(rr.adir) + ".moved")
+                    _REAL["symlink"](rr.outside / "tree", rr.adir)
+            return real_open(path, flags, *args, **kwargs)
+        with unittest.mock.patch.object(os, "open", open_):
+            result = rr.call(apply=True)
+        rr.refused(self, result, "archive_dir_unsafe")
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(_ra_snap(rr.outside), outside_before)
+
+    def test_a12_a_tracked_entry_at_the_folder_is_refused_and_the_report_misses_a_gitlink(self):
+        rr = self.ra()
+        rr.folder(links=False)
+        sha = rr.repo.head()
+
+        def tracked(*args):
+            before = rr.snap()
+            for apply in (False, True):
+                rr.refused(self, rr.call(apply=apply), "tracked_files")
+            self.assertEqual(rr.snap(), before)
+        _run(["git", "update-index", "--add", "--cacheinfo", f"160000,{sha},.ai-review/w00"], cwd=rr.root)
+        record = next(r for r in rr.build()["finished"] if r["work_item_id"] == "w00")
+        self.assertEqual(record["review_folder"]["tracked_files"], 0)   # the report's blind spot
+        tracked()
+        _run(["git", "update-index", "--force-remove", ".ai-review/w00"], cwd=rr.root)
+        for rel in (".ai-review/w00/a.txt", ".ai-review/w00/sub/deeper/c.bin"):
+            _run(["git", "add", "-f", rel], cwd=rr.root)
+            tracked()
+            _run(["git", "rm", "-q", "--cached", rel], cwd=rr.root)
+        self.assertEqual(rr.call().code, 0)
+
+    # -- A13 ------------------------------------------------------------
+
+    def test_a13_the_destination_must_be_outside_the_repository(self):
+        rr = self.ra()
+        rr.folder()
+        inside = rr.root / "inside"
+        inside.mkdir()
+        os.symlink(inside, rr.root / "link-in")
+        os.symlink(inside, rr.outside / "pointer")
+        cases = {"existing directory inside": inside, "child not yet existing": rr.root / "nope" / "deeper",
+                 "symlink inside to inside": rr.root / "link-in",
+                 "symlink outside to inside": rr.outside / "pointer"}
+        for name, root in cases.items():
+            for apply in (False, True):
+                with self.subTest(case=name, apply=apply):
+                    before = rr.snap()
+                    rr.refused(self, rr.call(apply=apply, archive_root=root), "archive_inside_repository")
+                    self.assertEqual(rr.snap(), before)
+        self.assertFalse((rr.root / "nope").exists())
+        # controls: a repository reached through a link, an archive root that is a link outside
+        link_repo = rr.outside / "repo-link"
+        os.symlink(rr.root, link_repo)
+        self.assertEqual(rr.call(apply=True, repo_root=link_repo).code, 0)
+        self.assertTrue((rr.adir / "w00.tar.zst").is_file())
+        real_root = Path(tempfile.mkdtemp(prefix="wfo-realroot-"))
+        self._dirs.append(real_root)
+        os.symlink(real_root, rr.outside / "root-link")
+        rr.folder("w01")
+        self.assertEqual(rr.call("w01", apply=True, archive_root=rr.outside / "root-link").code, 0)
+        self.assertTrue((real_root / "widgets" / "w01.tar.zst").is_file())
+
+    def test_a13_the_chain_walk_has_its_own_codes_in_both_modes(self):
+        rr = self.ra()
+        rr.folder()
+        base = Path(tempfile.mkdtemp(prefix="wfo-chain-"))
+        self._dirs.append(base)
+        self.addCleanup(lambda: [os.chmod(p, 0o755) for p in base.iterdir() if p.is_dir() and not p.is_symlink()])
+        # an execute-only ancestor cannot be opened for fsync
+        if _AS_ROOT:
+            self.skipTest("running as root: permission bits do not apply")
+        (base / "anc" / "root").mkdir(parents=True)
+        os.chmod(base / "anc", 0o311)
+        for apply in (False, True):
+            with self.subTest(case="execute-only", apply=apply):
+                before = rr.snap()
+                result = rr.call(apply=apply, archive_root=base / "anc" / "root")
+                rr.refused(self, result, "unreadable")
+                self.assertEqual(rr.snap(), before)
+        # an ancestor swapped for a link after the resolution
+        for apply in (False, True):
+            with self.subTest(case="swapped", apply=apply):
+                name = f"swap{int(apply)}"
+                (base / name / "root").mkdir(parents=True)
+                real_open, fired = os.open, []
+
+                def open_(path, flags, *args, _n=name, _real=real_open, **kwargs):
+                    if path == _n and kwargs.get("dir_fd") is not None and not fired:
+                        fired.append(True)
+                        _REAL["rename"](base / _n, base / f"{_n}.moved")
+                        _REAL["symlink"](base / f"{_n}.moved", base / _n)
+                    return _real(path, flags, *args, **kwargs)
+                before = rr.snap()
+                with unittest.mock.patch.object(os, "open", open_):
+                    result = rr.call(apply=apply, archive_root=base / name / "root")
+                rr.refused(self, result, "archive_dir_unsafe")
+                self.assertEqual(rr.snap(), before)
+                self.assertEqual(os.listdir(base / f"{name}.moved" / "root"), [])
+
+    # -- A14 ------------------------------------------------------------
+
+    def test_a14_two_items_share_the_index_safely(self):
+        for pre_existing in (True, False):
+            with self.subTest(pre_existing=pre_existing):
+                rr = self.ra()
+                rr.folder("w00")
+                rr.folder("w01")
+                index = rr.adir / "index.jsonl"
+                other = b'{"work_item_id": "w02"}\n'
+                if pre_existing:
+                    index.write_bytes(other)
+                at_append, release = threading.Event(), threading.Event()
+                real_write = os.write
+
+                def write(fd, data, _real=real_write):
+                    if os.readlink(f"/proc/self/fd/{fd}").endswith("index.jsonl") and not at_append.is_set():
+                        at_append.set()
+                        release.wait(30)
+                        _real(fd, data[:len(data) // 2])
+                        raise OSError(errno.ENOSPC, "No space left on device")
+                    return _real(fd, data)
+                outcome = {}
+                with _ra_write_guard(rr.root, rr.violations), unittest.mock.patch.object(os, "write", write):
+                    thread = threading.Thread(target=lambda: outcome.update(first=rr.direct("w00", True)))
+                    thread.start()
+                    self.assertTrue(at_append.wait(30))
+                    folder_before = _ra_snap(rr.root / ".ai-review" / "w01")
+                    second = rr.direct("w01", True)
+                    release.set()
+                    thread.join(30)
+                rr.refused(self, second, "archive_busy")
+                self.assertEqual(_ra_snap(rr.root / ".ai-review" / "w01"), folder_before)
+                rr.refused(self, outcome["first"], "index_failed")
+                self.assertEqual(sorted(os.listdir(rr.adir)), ["index.jsonl"] if pre_existing else [])
+                if pre_existing:
+                    self.assertEqual(index.read_bytes(), other)
+                # sequentially afterwards both succeed and no earlier line is erased
+                self.assertEqual(rr.call("w00", apply=True).code, 0)
+                self.assertEqual(rr.call("w01", apply=True).code, 0)
+                lines = index.read_bytes().splitlines()
+                self.assertEqual([json.loads(l)["work_item_id"] for l in lines],
+                                 (["w02"] if pre_existing else []) + ["w00", "w01"])
+                if pre_existing:
+                    self.assertEqual(lines[0] + b"\n", other)
+
+    # -- A15 ------------------------------------------------------------
+
+    def _index_variants(self, rr):
+        """Name -> a function that puts something unsafe at `index.jsonl`."""
+        target = rr.outside / "other.jsonl"
+        target.write_text('{"work_item_id": "elsewhere"}\n')
+        repo_file = rr.root / "tracked.jsonl"
+        repo_file.write_text('{"work_item_id": "in-repo"}\n')
+
+        def fresh():
+            if os.path.lexists(rr.adir / "index.jsonl"):
+                _REAL["unlink"](rr.adir / "index.jsonl") if not (rr.adir / "index.jsonl").is_dir() \
+                    or (rr.adir / "index.jsonl").is_symlink() else os.rmdir(rr.adir / "index.jsonl")
+
+        def symlink_outside():
+            fresh()
+            os.symlink(target, rr.adir / "index.jsonl")
+
+        def symlink_repo():
+            fresh()
+            os.symlink(repo_file, rr.adir / "index.jsonl")
+
+        def hardlink():
+            fresh()
+            (rr.adir / "index.jsonl").write_text('{"work_item_id": "w02"}\n')
+            os.link(rr.adir / "index.jsonl", rr.outside / "shared.jsonl")
+
+        def directory():
+            fresh()
+            (rr.adir / "index.jsonl").mkdir()
+
+        def fifo():
+            fresh()
+            os.mkfifo(rr.adir / "index.jsonl")
+        return {"symlink to an outside file": symlink_outside, "symlink to a repository file": symlink_repo,
+                "hard link": hardlink, "directory": directory, "FIFO": fifo}, target, repo_file
+
+    def test_a15_an_index_that_is_not_an_ordinary_file_is_refused_before_any_write(self):
+        rr = self.ra()
+        rr.folder()
+        variants, target, repo_file = self._index_variants(rr)
+        for name, make in variants.items():
+            make()
+            watched = {p: p.read_bytes() for p in (target, repo_file, rr.outside / "shared.jsonl") if p.exists()}
+            for apply in (False, True):
+                with self.subTest(case=name, apply=apply):
+                    before = rr.snap()
+                    rr.refused(self, rr.call(apply=apply), "index_unsafe")
+                    self.assertEqual(rr.snap(), before)
+                    self.assertEqual({p: p.read_bytes() for p in watched}, watched)
+        os.unlink(rr.adir / "index.jsonl") if os.path.lexists(rr.adir / "index.jsonl") and not (rr.adir / "index.jsonl").is_dir() else None
+        # a missing final newline is an invalid index, not an unsafe one
+        shutil.rmtree(rr.adir / "index.jsonl", ignore_errors=True)
+        (rr.adir / "index.jsonl").write_text('{"work_item_id": "w02"}')
+        rr.refused(self, rr.call(apply=True), "index_invalid")
+
+    def test_a15_the_substitutions_made_after_the_selection_are_refused_by_the_open_itself(self):
+        rr = self.ra()
+        rr.folder()
+        variants, target, repo_file = self._index_variants(rr)
+        for name in ("symlink to an outside file", "symlink to a repository file", "hard link", "directory", "FIFO"):
+            make = variants[name]
+            with self.subTest(case=name):
+                (rr.adir / "index.jsonl").write_text('{"work_item_id": "w02"}\n') \
+                    if not os.path.lexists(rr.adir / "index.jsonl") else None
+                real_open, fired = os.open, []
+
+                def open_(path, flags, *args, _make=make, _real=real_open, **kwargs):
+                    if path == "index.jsonl" and flags & os.O_RDWR and not fired:
+                        fired.append(True)
+                        _make()
+                    return _real(path, flags, *args, **kwargs)
+                watched = {p: p.read_bytes() for p in (target, repo_file) if p.exists()}
+                with unittest.mock.patch.object(os, "open", open_):
+                    result = rr.call(apply=True)
+                self.assertTrue(fired)
+                rr.refused(self, result, "index_unsafe")
+                self.assertFalse((rr.adir / "w00.tar.zst").exists())
+                self.assertFalse((rr.adir / ".w00.partial").exists())
+                self.assertEqual({p: p.read_bytes() for p in watched}, watched)
+                shutil.rmtree(rr.adir / "index.jsonl", ignore_errors=True)
+                if os.path.lexists(rr.adir / "index.jsonl"):
+                    os.unlink(rr.adir / "index.jsonl")
+
+    # -- A16 ------------------------------------------------------------
+
+    def _order(self, rr, **kwargs):
+        """Runs `--apply` recording the durability-relevant calls in order."""
+        events = []
+        real = {name: getattr(os, name) for name in ("fsync", "mkdir", "link", "rmdir", "write", "unlink")}
+
+        def label(fd):
+            try:
+                return os.readlink(f"/proc/self/fd/{fd}")
+            except OSError:
+                return "?"
+
+        def make(name):
+            def call(*args, **kw):
+                if name == "fsync":
+                    events.append(("fsync", label(args[0])))
+                elif name == "mkdir":
+                    events.append(("mkdir", args[0]))
+                elif name == "link":
+                    events.append(("link", args[1]))
+                elif name == "rmdir":
+                    events.append(("rmdir", args[0]))
+                elif name == "write" and label(args[0]).endswith("index.jsonl"):
+                    events.append(("append", "index.jsonl"))
+                elif name == "unlink":
+                    events.append(("unlink", args[0]))
+                inject = kwargs_inject.get(name)
+                if inject is not None and inject(len([e for e in events if e[0] == name])):
+                    raise OSError(errno.EIO, "injected")
+                return real[name](*args, **kw)
+            return call
+        kwargs_inject = kwargs.pop("inject", {})
+        patches = [unittest.mock.patch.object(os, name, make(name)) for name in real]
+        with contextlib.ExitStack() as stack:
+            for patch in patches:
+                stack.enter_context(patch)
+            result = rr.call(apply=True, **kwargs)
+        events.append(("exit", result.code))
+        return result, events
+
+    def _chain_of(self, path):
+        parts = [p for p in os.path.realpath(path).split(os.sep) if p]
+        return ["/"] + [os.sep + os.sep.join(parts[:i]) for i in range(1, len(parts) + 1)]
+
+    def _assert_durable_order(self, events, adir, index_created=True):
+        chain = self._chain_of(adir)
+        fsyncs = [(n, e[1]) for n, e in enumerate(events) if e[0] == "fsync"]
+        tmp_at = next(n for n, path in fsyncs if path.endswith(".w00.partial"))
+        link_at = next(n for n, e in enumerate(events) if e[0] == "link")
+        self.assertLess(tmp_at, link_at)
+        for i in range(1, len(chain)):
+            own = next((n for n, path in fsyncs if path == chain[i]), None)
+            self.assertIsNotNone(own, f"{chain[i]} was never fsynced")
+            parent = next((n for n, path in fsyncs if path == chain[i - 1] and n > own), None)
+            self.assertIsNotNone(parent, f"the parent of {chain[i]} was not fsynced after it")
+            self.assertLess(parent, tmp_at)
+        tail = [(e[0], e[1]) for e in events[link_at + 1:] if e[0] in ("fsync", "append", "exit")]
+        expected = [("fsync", adir), ("append", "index.jsonl"), ("fsync", adir + "/index.jsonl")]
+        if index_created:
+            expected.append(("fsync", adir))
+        expected.append(("exit", 0))
+        self.assertEqual(tail, expected)
+
+    def test_a16_everything_new_is_durable_before_the_run_counts_as_archived(self):
+        rr = self.ra()
+        rr.folder()
+        base = Path(tempfile.mkdtemp(prefix="wfo-durable-"))
+        self._dirs.append(base)
+        root = base / "a" / "b"
+        adir = str(Path(os.path.realpath(base)) / "a" / "b" / "widgets")
+        result, events = self._order(rr, archive_root=root)
+        self.assertEqual(result.code, 0, result.error)
+        self.assertEqual([e[1] for e in events if e[0] == "mkdir"], ["a", "b", "widgets"])
+        self._assert_durable_order(events, adir)
+        # an injected failure at each fsync (and at each mkdir) leaves nothing this run created
+        total = len([e for e in events if e[0] == "fsync"])
+        for k in range(1, total + 1):
+            with self.subTest(fsync=k):
+                fresh = Path(tempfile.mkdtemp(prefix="wfo-durable-"))
+                self._dirs.append(fresh)
+                before = _ra_snap(fresh)
+                result, got = self._order(rr, archive_root=fresh / "a" / "b", inject={"fsync": lambda n, k=k: n == k})
+                self.assertIn(result.err_code, ("place_failed", "index_failed"), (k, got))
+                self.assertEqual(_ra_snap(fresh), before)
+        for j in (1, 2, 3):
+            with self.subTest(mkdir=j):
+                fresh = Path(tempfile.mkdtemp(prefix="wfo-durable-"))
+                self._dirs.append(fresh)
+                result, got = self._order(rr, archive_root=fresh / "a" / "b", inject={"mkdir": lambda n, j=j: n == j})
+                self.assertEqual(result.err_code, "place_failed")
+                self.assertEqual(os.listdir(fresh), [])
+
+    def test_a16_a_hierarchy_another_run_made_is_made_durable_by_this_one(self):
+        rr = self.ra()
+        rr.folder()
+        real_mkdir = os.mkdir
+
+        def adopting_mkdir(name, *args, **kwargs):
+            if name == "b" and kwargs.get("dir_fd") is not None:
+                with contextlib.suppress(FileExistsError):
+                    real_mkdir("b", 0o755, dir_fd=kwargs["dir_fd"])   # an unfinished second run's, never synced
+            return real_mkdir(name, *args, **kwargs)
+
+        for case in ("adopted", "pre-existing"):
+            with self.subTest(case=case), contextlib.ExitStack() as stack:
+                if case == "adopted":
+                    stack.enter_context(unittest.mock.patch.object(os, "mkdir", adopting_mkdir))
+
+                def fresh_root():
+                    fresh = Path(tempfile.mkdtemp(prefix="wfo-durable-"))
+                    self._dirs.append(fresh)
+                    if case == "pre-existing":
+                        (fresh / "a" / "b" / "widgets").mkdir(parents=True)
+                    return fresh
+                fresh = fresh_root()
+                adir = str(Path(os.path.realpath(fresh)) / "a" / "b" / "widgets")
+                result, events = self._order(rr, archive_root=fresh / "a" / "b")
+                self.assertEqual(result.code, 0, result.error)
+                self._assert_durable_order(events, adir)
+                # an injection at each chain fsync is place_failed and keeps what this run did not create
+                for k in range(1, 2 * (len(self._chain_of(adir)) - 1) + 1):
+                    again = fresh_root()
+                    result, got = self._order(rr, archive_root=again / "a" / "b",
+                                              inject={"fsync": lambda n, k=k: n == k})
+                    self.assertEqual(result.err_code, "place_failed", (case, k))
+                    self.assertFalse((again / "a" / "b" / "widgets" / "w00.tar.zst").exists())
+                    self.assertFalse((again / "a" / "b" / "widgets" / ".w00.partial").exists())
+                    if case == "pre-existing":
+                        self.assertTrue((again / "a" / "b" / "widgets").is_dir())
+                    else:
+                        self.assertTrue((again / "a" / "b").is_dir())     # the adopted directory stays
+
+    # -- A18 ------------------------------------------------------------
+
+    def test_a18_the_write_guard_catches_a_write_under_the_repository(self):
+        rr = self.ra()
+        folder = rr.folder()
+        with _ra_write_guard(rr.root, rr.violations):
+            for action in (lambda: os.unlink(folder / "a.txt"), lambda: os.rename(folder / "a.txt", folder / "z"),
+                           lambda: os.utime(folder / "a.txt"), lambda: shutil.rmtree(folder),
+                           lambda: os.open(folder / "a.txt", os.O_WRONLY), lambda: os.chmod(folder, 0o700),
+                           lambda: os.symlink("x", folder / "newlink"), lambda: os.mkdir(folder / "d")):
+                with self.assertRaises(AssertionError):
+                    action()
+            os.open(folder / "a.txt", os.O_RDONLY)  # a read is allowed
+        self.assertEqual(len(rr.violations), 8)
+        rr.violations.clear()
+        self.assertEqual((folder / "a.txt").read_text(), "hello w00\n")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -432,10 +432,10 @@ launches nothing:
 | Harness | Reviewer name | Family | Roles | Usage | Pinned version |
 |---|---|---|---|---|---|
 | `claude-code` | `claude` | `anthropic` | worker, reviewer, functional-tester | `reported` | `2.1.296 (Claude Code)` |
-| `codex` | `codex` | `openai` | reviewer | `derived` | `codex-cli 0.162.1` |
+| `codex` | `codex` | `openai` | reviewer | `derived` | `codex-cli 0.163.0` |
 
 Each adapter also declares whether it can restrict sub-agents and tools, and
-that it fails closed on a version other than its pin. The functional tester (1.18.0) is a role of its own and only `claude-code` declares it, so a Codex
+that it fails closed when a build changes a checked surface (a feature, a layer, a state entry or a flag), not on the version string itself: the Codex pin is `codex-cli 0.163.0`, and until a person re-measures it after an update that changed a surface, the Codex review is run by hand. The functional tester (1.18.0) is a role of its own and only `claude-code` declares it, so a Codex
 tester is not available ([automation](automation.md#protocol-mode-workflow-27-and-later)). A role an adapter does not
 declare is refused with `HarnessRoleError` (`codex` cannot be a worker), and a
 name that is not registered with `UnknownHarnessError`, both naming what is

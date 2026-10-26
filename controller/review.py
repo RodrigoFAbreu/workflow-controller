@@ -19,12 +19,13 @@ What lives here:
 
 **Pre-step status.** D12's operator pre-step was run against ``codex-cli
 0.162.1`` on 2026-10-15 (seven real ``codex exec`` runs, the sandbox probe, the
-composing command, the home's state entries, the environment and the flags). Its
-captures are under ``tests/harness_contract/codex/`` and every constant below is
-taken from them; ``tests/test_fake_codex_contract.py`` pins the digests and the
-captured invocation. ``PRE_STEP_CAPTURED`` is therefore true and ``HARNESSES``
-registers Codex. A Codex upgrade that renames a feature, a layer type or a state
-entry fails closed with that name.
+composing command, the home's state entries, the environment and the flags); the
+feature list and the ``--disable`` acceptance were re-measured on ``codex-cli
+0.163.0`` on 2026-10-26. Its captures are under ``tests/harness_contract/codex/``
+and every constant below is taken from them; ``tests/test_fake_codex_contract.py``
+pins the digests and the captured invocation. ``PRE_STEP_CAPTURED`` is therefore
+true and ``HARNESSES`` registers Codex. A Codex upgrade that enables or renames a
+feature, or renames a layer type or a state entry, fails closed with that name.
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ from .errors import ControllerError, ReviewLaunchRefusedError
 # ---------------------------------------------------------------------------
 
 #: The Codex version the constants below were taken from.
-PINNED_VERSION = "codex-cli 0.162.1"
+PINNED_VERSION = "codex-cli 0.163.0"
 
 #: True since D12's operator pre-step (a real ``codex exec`` capture, the
 #: sandbox probe, and the command that composes the configuration layers) was
@@ -80,7 +81,7 @@ SERVICE_TIER = "default"
 #: network-off policy, the model and the effort (``sandbox_probe.txt`` P3). The
 #: review prompt discourages spawning and the Controller reports each spawn with
 #: its token usage (ADR 0013). Taken from
-#: ``tests/harness_contract/codex/features_list.0.162.1.txt`` and ``flags.txt``.
+#: ``tests/harness_contract/codex/features_list.0.163.0.txt`` and ``flags.txt``.
 TOOL_ALLOWLIST = frozenset({
     "code_mode_host", "shell_tool", "unified_exec", "unified_exec_tty", "view_image",
     "api_key_model_discovery", "auth_elicitation", "compaction_image_budget", "content_item_kinds",
@@ -97,8 +98,8 @@ TOOL_ALLOWLIST = frozenset({
 #: accepted by the pinned Codex and an unknown ``--disable`` name exits 1, so the
 #: set fails closed on a rename (``flags.txt``).
 DISABLED_FEATURES = tuple(sorted({
-    "apps", "browser_annotation_api", "browser_use", "browser_use_external", "browser_use_full_cdp_access",
-    "computer_use", "daemon_auto_start", "fast_mode", "goals", "guardian_approval",
+    "api_key_cyber_access_programs", "apps", "browser_annotation_api", "browser_use", "browser_use_external", "browser_use_full_cdp_access",
+    "cli_daybreak", "code_mode_interrupt", "computer_use", "daemon_auto_start", "fast_mode", "goals", "guardian_approval",
     "guardian_reuse_parent_compaction", "hooks", "image_generation", "in_app_browser", "in_app_chat",
     "in_app_dictation", "in_app_local_automation", "in_app_updates", "in_app_voice", "instant_interrupt",
     "multi_agent", "plugin_sharing", "plugins", "realtime_conversation", "remote_plugin", "shell_snapshot",

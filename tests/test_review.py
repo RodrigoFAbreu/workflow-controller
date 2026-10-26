@@ -25,7 +25,7 @@ from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import fake_codex, fixtures, process_fixtures  # noqa: E402
 
 CODEX_CAPTURES = REPO_ROOT / "tests" / "harness_contract" / "codex"
-FEATURES_CAPTURE = CODEX_CAPTURES / "features_list.0.162.1.txt"
+FEATURES_CAPTURE = CODEX_CAPTURES / "features_list.0.163.0.txt"
 
 MANIFEST = {
     "bundle_id": "b" * 64, "base_commit": "c" * 40, "work_item_id": "item-1", "review_content_id": "d" * 64,
@@ -369,6 +369,31 @@ class RegistryAndContractTest(unittest.TestCase):
         # the override was ignored: the preflight sees the capture as it is
         with self.assertRaises(ReviewLaunchRefusedError):
             review.check_features(FEATURES_CAPTURE.read_text())
+
+    BUILD_0_163_0_FEATURES = ("api_key_cyber_access_programs", "cli_daybreak", "code_mode_interrupt")
+
+    def test_a_feature_new_in_0_163_0_that_is_neither_allowlisted_nor_disabled_is_refused(self):
+        """The fail-closed property: dropping one of the three names from the overrides leaves it enabled."""
+        for name in self.BUILD_0_163_0_FEATURES:
+            listing = "\n".join(
+                line.rsplit(None, 1)[0] + " false" if line.split()[0] in review.DISABLED_FEATURES
+                and line.split()[0] != name else line
+                for line in FEATURES_CAPTURE.read_text().splitlines()) + "\n"
+            with self.subTest(name), self.assertRaises(ReviewLaunchRefusedError) as raised:
+                review.check_features(listing)
+            self.assertIn(raised.exception.evidence["entry"], self.BUILD_0_163_0_FEATURES)
+
+    def test_the_features_new_in_0_163_0_are_disabled_and_the_argv_carries_them(self):
+        base = review.argv("exec", binary=Path("/x/codex"), **self.KW)
+        for name in self.BUILD_0_163_0_FEATURES:
+            with self.subTest(name):
+                self.assertIn(name, review.DISABLED_FEATURES)
+                self.assertNotIn(name, review.TOOL_ALLOWLIST)
+                at = base.index(name)
+                self.assertEqual(base[at - 1], "--disable")
+                command = base[:at - 1] + base[at + 1:]
+                with self.assertRaises(ReviewLaunchRefusedError):
+                    review.check_argv("exec", command, **self.KW)
 
     KW = dict(tree=Path("/t"), verdict=Path("/v.md"), tmpdir=Path("/m"))
 

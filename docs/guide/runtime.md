@@ -385,10 +385,11 @@ review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
   external review gates of a work item, in a disposable copy of the
   worktree, and hand its verdict to the Workflow. A name that is not
   registered stops the review step with exit `20`; it is never ignored.
-  The `codex` harness was pinned against `codex-cli 0.162.1` (ADR 0013,
-  "What the pre-step fixed"); a different Codex version that renames a
-  feature, a configuration layer or a state entry stops the launch with the
-  name, until the pinned set is updated;
+  The `codex` harness was pinned against `codex-cli 0.163.0` (ADR 0013,
+  "What the pre-step fixed", recorded on 0.162.1); a Codex update that enables
+  or renames a feature, or changes a configuration layer or a state entry,
+  stops the launch with the name, until the pinned set is updated, and the
+  Codex review is done by hand in the meantime;
 - `reviewer.model` and `reviewer.effort` fall back to the built-ins when
   unset. They are not the worker `routing` section, which does not apply
   to a review;

@@ -1,0 +1,46 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-build-pin",
+ "dispositions": {
+  "F-3bf46bfeb44e": {
+   "disposition": "dropped",
+   "reason": "IMPLEMENTATION_SUMMARY.md and TEST_RESULTS.md are bundle narrative files regenerated each round; they ship nothing and the fix is recorded in docs/ACTIVE_MILESTONE.md."
+  },
+  "F-578e12b412da": {
+   "disposition": "dropped",
+   "reason": "Moot: revision 4 of the plan keeps the retained exec_argv.json capture and adds the three disable pairs in the comparison; no live capture is re-taken."
+  },
+  "F-7370934cd92d": {
+   "disposition": "dropped",
+   "reason": "rollouts_multi.jsonl is retained unchanged and stays unpinned as before; nothing in this change touches it."
+  },
+  "F-80d504197c73": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-854b6debd227": {
+   "disposition": "dropped",
+   "reason": "Plan wording about a test that overlaps existing ones; the implementation added only the 0.163.0-specific tests, so no duplicate shipped."
+  },
+  "F-9e2098fb6cf9": {
+   "disposition": "fixed",
+   "note": "docs/ROADMAP.md no longer names codex-cli 0.162.1 anywhere (checked at the accepted head)."
+  },
+  "F-a155ec01897c": {
+   "disposition": "fixed",
+   "note": "docs/guide/harnesses.md now explains the real 'Unknown version refused' column (line 33)."
+  },
+  "F-ec751656de9d": {
+   "disposition": "fixed",
+   "note": "docs/guide/harnesses.md gained a sentence saying where the column is explained (functional-round docs fix 0cb518a)."
+  },
+  "F-edd5c4c55b82": {
+   "disposition": "fixed",
+   "note": "The harnesses page now says the column records the declaration and does not mean a version string is compared, until H7 decides."
+  },
+  "F-fa3d148d88a8": {
+   "disposition": "dropped",
+   "reason": "Cosmetic: one unwrapped markdown line that renders the same."
+  }
+ }
+}

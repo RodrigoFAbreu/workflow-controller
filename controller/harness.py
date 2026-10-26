@@ -68,7 +68,7 @@ CLAUDE_CODE = HarnessAdapter(
 CODEX = HarnessAdapter(
     name="codex", reviewer_name="codex", family="openai",
     roles=(REVIEWER,), can_restrict_agents=True, can_restrict_tools=True,
-    usage=USAGE_DERIVED, pinned_version="codex-cli 0.162.1",
+    usage=USAGE_DERIVED, pinned_version="codex-cli 0.163.0",
     fails_closed_on_unknown_version=True,
     # tests/harness_contract/codex/: exec_argv.json (model gpt-6.1-sol, effort
     # high) and sandbox_probe.txt (the catalog's effort xhigh).

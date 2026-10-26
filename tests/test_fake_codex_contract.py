@@ -49,7 +49,7 @@ class FakeCodexContractTest(unittest.TestCase):
         return subprocess.run([str(self.fake(scenario)), *args], cwd=self.work, env=self.env, input=stdin,
                               capture_output=True, text=True, timeout=60, check=False)
 
-    CAPTURES = ("features_list.0.162.1.txt", "exec_argv.json", "rollout_excerpt.jsonl", "stderr_shapes.txt",
+    CAPTURES = ("features_list.0.163.0.txt", "exec_argv.json", "rollout_excerpt.jsonl", "stderr_shapes.txt",
                 "compose.txt", "state_entries.txt", "env.txt", "flags.txt", "sandbox_probe.txt")
 
     def test_every_capture_digest_is_the_one_the_readme_records(self):
@@ -68,13 +68,22 @@ class FakeCodexContractTest(unittest.TestCase):
 
     def test_review_argv_is_the_captured_recommended_invocation(self):
         """`review.argv("exec", ...)` equals the real command line the pre-step ran with the recommended
-        overrides (`exec_argv.json` `recommended_run`), paths aside and without the operator-rule `-m`."""
+        overrides (`exec_argv.json` `recommended_run`), paths aside and without the operator-rule `-m`.
+
+        `exec_argv.json` is the 0.162.1 capture and is not rewritten; the three `--disable` pairs for the features
+        0.163.0 added (`review.DISABLED_FEATURES`, evidenced by the 2026-10-26 probe) are inserted into its sorted
+        `--disable` run."""
         from controller import review
         captured = json.loads((CODEX_FIXTURES / "exec_argv.json").read_text())["recommended_run"]["argv"]
         tree, tmpdir, verdict = "/home/rodrigo/.cache/c7-prestep/work/tree-probe3", \
             "/home/rodrigo/.cache/c7-prestep/work/homes/x3/tmp", "/home/rodrigo/.cache/c7-prestep/work/homes/x3/verdict.md"
         at = captured.index("-m")
         without_m = captured[:at] + captured[at + 2:]
+        first = without_m.index("--disable")
+        last = len(without_m) - 1 - without_m[::-1].index("--disable")
+        run = sorted({without_m[i + 1] for i in range(first, last + 1, 2)}
+                     | {"api_key_cyber_access_programs", "cli_daybreak", "code_mode_interrupt"})
+        without_m = without_m[:first] + [x for name in run for x in ("--disable", name)] + without_m[last + 2:]
         built = review.argv("exec", binary=Path(captured[0]), tree=Path(tree), verdict=Path(verdict),
                             tmpdir=Path(tmpdir), prompt="-")
         self.assertEqual(built, without_m)
@@ -129,7 +138,7 @@ class FakeCodexContractTest(unittest.TestCase):
         self.assertFalse(state["browser_use"])
         self.assertFalse(state["hooks"])
         self.assertTrue(state["computer_use"])
-        capture = (CODEX_FIXTURES / "features_list.0.162.1.txt").read_text().splitlines()
+        capture = (CODEX_FIXTURES / "features_list.0.163.0.txt").read_text().splitlines()
         self.assertEqual(len(state), len([line for line in capture if line.split()]))
 
     def test_mcp_list_reports_the_composed_servers_without_running_them(self):

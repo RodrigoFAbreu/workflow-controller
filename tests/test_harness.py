@@ -26,7 +26,7 @@ class DeclaredFactsTest(unittest.TestCase):
         a = harness.ADAPTERS["codex"]
         self.assertEqual(
             (a.name, a.reviewer_name, a.family, a.roles, a.usage, a.pinned_version, a.fails_closed_on_unknown_version),
-            ("codex", "codex", "openai", ("reviewer",), "derived", "codex-cli 0.162.1", True),
+            ("codex", "codex", "openai", ("reviewer",), "derived", "codex-cli 0.163.0", True),
         )
 
     def test_registry_is_closed(self) -> None:

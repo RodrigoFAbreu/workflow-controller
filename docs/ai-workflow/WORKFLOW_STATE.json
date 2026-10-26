@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-build-pin",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -33020,6 +33020,277 @@
         },
         "evaluated_at": "2026-10-26T11:05:37Z",
         "workflow_release": "2.20.0"
+      }
+    },
+    "workflow-controller-codex-build-pin": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-build-pin",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_BUILD_PIN_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-build-pin-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-build-pin-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "47453526deb37f06396a103c0623652ccf8c6863",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+        "approved_review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_BUILD_PIN_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7638e7a9badd3d40c47d00e88a358cdec4016b33"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-build-pin-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "854c2eeb21600bdeb5cb4bab7dc7aaeba2daf3cc"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-build-pin-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "106e1294b0db386f0b0cd658f5b0a2f2ac066800"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T13:15:01Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
+            "ledger": {
+              "local": {
+                "bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "fa4cb99f1fc934d2b4ced8e38b2d924262247fa09155e758ca17a39d5761d802",
+                "ledger_entry_sha256": "5a732a07420dc17644992844a3cc0b4067e3b18b3c2091f0fb10fd4f4b347405",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "cd282cb0551ed866e62b445d5cfaf87376ac1ba0f80819da78237b2582d2cb0f",
+                "ledger_entry_sha256": "069309cad6d59f7ca78283cbf0cfd877b93f35f032081ec62717601e4d4ad767",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T13:15:01Z",
+          "workflow_release": "2.20.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-26T13:07:13Z",
+          "verdict_sha256": "fa4cb99f1fc934d2b4ced8e38b2d924262247fa09155e758ca17a39d5761d802",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-26T13:11:53Z",
+          "verdict_sha256": "cd282cb0551ed866e62b445d5cfaf87376ac1ba0f80819da78237b2582d2cb0f",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-10-26T13:15:01Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-26T13:04:38Z",
+        "consumed": {
+          "review_content_id": "bf6218ba7be78bece1f281adfb6987352b55245701821a454862bb0a9fb81e47",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
+          "bundle_id": "36cf462073e021c551351de309ab1302ce9ed9cb29184050cd079d7522d8d229",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0dd183b82488e6aceff3cee1aaf589601702eed6ec75ee2b7e7390604d6a8405",
+        "3088d125a8a5e89ad8d4b0c5ba328a0abe2c6bc5ce409c00feb15965fd5ea716",
+        "bf6218ba7be78bece1f281adfb6987352b55245701821a454862bb0a9fb81e47"
+      ],
+      "optional_findings": {
+        "F-7370934cd92d": {
+          "digest": "7370934cd92d7de4e79c19583fe7fd386d199bdb1b808681b1dbe9f0cc0b2436",
+          "text": "**O1. `rollouts_multi.jsonl` has no digest.** CP1 lists it, replaces it and asks to \"recompute every digest in its table\". But `tests/harness_contract/codex/README.md` has no row for it, and `test_fake_codex_contract.CAPTURES` leaves it out. If the re-measured file is meant to be pinned like the others, say so and add it to the table and to `CAPTURES`. Otherwise say it stays unpinned.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd183b82488e6aceff3cee1aaf589601702eed6ec75ee2b7e7390604d6a8405",
+              "verdict": "REVISE",
+              "at": "2026-10-26T12:49:36Z"
+            }
+          ]
+        },
+        "F-578e12b412da": {
+          "digest": "578e12b412da2d420bd7dfb17be9a6d0e492f60a582a4f0ad732a1966218d5e8",
+          "text": "**O2. `exec_argv.json` is captured before the feature placement is final.** `test_review_argv_is_the_captured_recommended_invocation` requires `review.argv(\"exec\", ...)` to equal the captured command line. CP1 captures it with all three `--disable` pairs. If D2's probe moves `code_mode_interrupt` to `TOOL_ALLOWLIST`, that capture no longer equals the pinned argv. Say in CP1 that the real `exec` capture is re-taken after a probe moves a feature, or that the probe runs first and the capture uses the final argv.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd183b82488e6aceff3cee1aaf589601702eed6ec75ee2b7e7390604d6a8405",
+              "verdict": "REVISE",
+              "at": "2026-10-26T12:49:36Z"
+            }
+          ]
+        },
+        "F-854b6debd227": {
+          "digest": "854b6debd2279a1385ee6f9e797ea465fdefaa9ae20e9aa0d1ea916447970cc7",
+          "text": "**O3. CP2 test (a) largely repeats the existing tests.** `test_the_capture_passes_the_drift_check_once_the_overrides_took` and `test_every_enabled_feature_of_the_capture_is_allowlisted_or_disabled` (`tests/test_review.py:343-358`) already check the same thing once `FEATURES_CAPTURE` points at the 0.163.0 file. Naming them as (a) would avoid a duplicate test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd183b82488e6aceff3cee1aaf589601702eed6ec75ee2b7e7390604d6a8405",
+              "verdict": "REVISE",
+              "at": "2026-10-26T12:49:36Z"
+            }
+          ]
+        },
+        "F-9e2098fb6cf9": {
+          "digest": "9e2098fb6cf96d2535ce5d289c6bf10ea12bb3bb4bab19a04bde0312024d5d71",
+          "text": "**O1. The ROADMAP H7 row still says \"now pinned to `codex-cli 0.162.1`\".** CP3 edits `docs/ROADMAP.md` to mark RB3 done, but the Done-when search covers only the guides, so the H7 row (`docs/ROADMAP.md:166`) would keep the old build. Add it to CP3's edit, or reword it without a version.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3088d125a8a5e89ad8d4b0c5ba328a0abe2c6bc5ce409c00feb15965fd5ea716",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T12:52:46Z"
+            }
+          ]
+        },
+        "F-edd5c4c55b82": {
+          "digest": "edd5c4c55b82e8a5c6dd1629d0ba064adec4e9b90c814ee110a30c9bcd89af44",
+          "text": "**O2. The generated harnesses column reads \"Unknown version refused: yes\".** D4 rewords only the prose around it and keeps `fails_closed_on_unknown_version=True`, so the column still claims a refusal that no code makes. That is acceptable for this one-concern fix, but the prose next to it should say plainly that the column records the declaration, not a version check, until H7 decides what it means.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3088d125a8a5e89ad8d4b0c5ba328a0abe2c6bc5ce409c00feb15965fd5ea716",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T12:52:46Z"
+            }
+          ]
+        },
+        "F-a155ec01897c": {
+          "digest": "a155ec01897c8494ae700c22037d685662b71e490580cbbae5a7d03703bce234",
+          "text": "**O1. D4 and CP3 name a column the page does not have.** D4 says to word the prose around harnesses.md's generated \"fails closed\" column. The generated header calls that column \"Unknown version refused\" (from `fails_closed_on_unknown_version`). Use the real column name so the implementer finds the right column. The cell itself stays `yes`, because the declaration is not changed here.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bf6218ba7be78bece1f281adfb6987352b55245701821a454862bb0a9fb81e47",
+              "verdict": "REVISE",
+              "at": "2026-10-26T13:03:15Z"
+            }
+          ]
+        },
+        "F-ec751656de9d": {
+          "digest": "ec751656de9db9f1ebb13225b2414897f2ae1c3a8f311390516c1fa108f3751b",
+          "text": "**O1. `docs/guide/harnesses.md` has no prose about the \"Unknown version refused\" column yet.** D4 and CP3 say to word \"the prose around\" that column. Today the column appears only in the generated header (line 47). The page's opening paragraph (lines 9-11) says the declaration records \"which version the Controller has verified\". So CP3 will add a sentence rather than reword one. Say where it goes (for example in \"Reading the tables\"), and fix the opening clause the same way, so the page does not still imply a version check.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T13:07:13Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-build-pin",
+  "requirements": {
+    "R1": {
+      "description": "The 0.163.0 feature list from the operator's free probes of 2026-10-26 replaces the 0.162.1 one, the other captures and their digests are retained, and the README states what was and was not re-verified (#168)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The pinned version, its copies and the fake Codex move to 0.163.0, all three new features are unconditionally in the disable set, the retained-capture argv test accounts for the three added pairs, and a later unlisted feature still fails closed (#168)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The guides state the new build and the next-update behaviour; RB3 is done and H7 is next (#168)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

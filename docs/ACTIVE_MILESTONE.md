@@ -11,4 +11,5 @@ verification", and the guides say the recorded version is informational. Nothing
 
 ## Next action
 
-No milestone is active. Next is H2 of the harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.
+No milestone is active. Next is H2 of the harness-neutral roles epic in `docs/ROADMAP.md`
+([#185](https://github.com/RodrigoFAbreu/workflow-controller/issues/185)); run `/milestone-plan` for it.

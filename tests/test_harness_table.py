@@ -54,19 +54,39 @@ class RenderTest(unittest.TestCase):
             self.assertEqual(row[5], "yes" if a.can_restrict_tools else "no")
             self.assertEqual(row[6], ht.USAGE_WORDING[a.usage])
             self.assertEqual(row[7], a.pinned_version)
-            self.assertEqual(row[8], "yes" if a.fails_closed_on_unknown_version else "no")
-            self.assertEqual(row[9], ", ".join(f"`{m}`" for m in a.models))
-            self.assertEqual(row[10], ", ".join(f"`{e}`" for e in a.efforts))
+            self.assertEqual(row[8], f"`{a.build_verification}`" if a.build_verification else ht.NO_VERIFICATION_WORDING)
+            self.assertEqual(row[9], "yes" if a.fails_closed_on_unknown_version else "no")
+            self.assertEqual(row[10], ", ".join(f"`{m}`" for m in a.models))
+            self.assertEqual(row[11], ", ".join(f"`{e}`" for e in a.efforts))
+
+    def test_the_version_and_verification_columns_follow_usage(self) -> None:
+        text = ht.render()
+        header = next(l for l in text.splitlines() if l.startswith("| Harness"))
+        cells = [c.strip() for c in header.strip("|").split("|")]
+        self.assertEqual(cells[cells.index("Usage"):cells.index("Usage") + 4],
+                         ["Usage", "Captured with", "Build verification", "Unknown version refused"])
+        self.assertNotIn("Pinned version", header)
+        first = table_rows(text)[0]
+        self.assertEqual([r[8] for r in first], ["`verify-claude`", "none: launch checks only"])
+
+    def test_a_declared_codex_command_changes_exactly_that_cell(self) -> None:
+        before = table_rows(ht.render())[0]
+        added = dataclasses.replace(harness.CODEX, build_verification="verify-codex")
+        with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": added}):
+            after = table_rows(ht.render())[0]
+        self.assertEqual(after[1][8], "`verify-codex`")
+        self.assertEqual(after[0], before[0])
+        self.assertEqual(after[1][:8] + after[1][9:], before[1][:8] + before[1][9:])
 
     def test_the_models_and_efforts_cells_follow_the_registry(self) -> None:
         before = table_rows(ht.render())[0]
         added = dataclasses.replace(harness.CODEX, models=harness.CODEX.models + ("extra-model",))
         with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": added}):
             after = table_rows(ht.render())[0]
-        changed = [(b[0], a[9]) for b, a in zip(before, after) if b != a]
+        changed = [(b[0], a[10]) for b, a in zip(before, after) if b != a]
         self.assertEqual(changed, [("`codex`", ", ".join(f"`{m}`" for m in added.models))])
-        self.assertEqual([b[:9] for b in before], [a[:9] for a in after])
-        self.assertEqual([b[10] for b in before], [a[10] for a in after])
+        self.assertEqual([b[:10] for b in before], [a[:10] for a in after])
+        self.assertEqual([b[11] for b in before], [a[11] for a in after])
 
     def test_an_adapter_that_cannot_review_shows_a_dash(self) -> None:
         silent = dataclasses.replace(harness.CODEX, name="silent", reviewer_name=None, roles=(harness.WORKER,))

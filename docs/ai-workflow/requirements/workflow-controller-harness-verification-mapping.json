@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-harness-verification",
+  "requirements": {
+    "R1": {
+      "description": "A harness adapter declares the command that verifies a build of its harness, or none, and every declared command exists (H7)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The generated harness table shows the informational captured-with build and the build verification, with no launch behaviour change (H7)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The guides and the roadmap describe the declaration and the informational version, shipped as a chore with no release (H7)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

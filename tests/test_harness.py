@@ -8,7 +8,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from controller import harness, review, review_mode, telemetry
+from controller import cli, functional_review, harness, review, review_mode, telemetry
 from controller.errors import ControllerError, HarnessRoleError, UnknownHarnessError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,15 +18,15 @@ class DeclaredFactsTest(unittest.TestCase):
     def test_claude_code(self) -> None:
         a = harness.ADAPTERS["claude-code"]
         self.assertEqual(
-            (a.name, a.reviewer_name, a.family, a.roles, a.can_restrict_agents, a.can_restrict_tools, a.usage, a.pinned_version, a.fails_closed_on_unknown_version),
-            ("claude-code", "claude", "anthropic", ("worker", "reviewer", "functional-tester"), True, True, "reported", "2.1.296 (Claude Code)", True),
+            (a.name, a.reviewer_name, a.family, a.roles, a.can_restrict_agents, a.can_restrict_tools, a.usage, a.pinned_version, a.fails_closed_on_unknown_version, a.build_verification),
+            ("claude-code", "claude", "anthropic", ("worker", "reviewer", "functional-tester"), True, True, "reported", "2.1.296 (Claude Code)", True, "verify-claude"),
         )
 
     def test_codex(self) -> None:
         a = harness.ADAPTERS["codex"]
         self.assertEqual(
-            (a.name, a.reviewer_name, a.family, a.roles, a.usage, a.pinned_version, a.fails_closed_on_unknown_version),
-            ("codex", "codex", "openai", ("reviewer",), "derived", "codex-cli 0.163.0", True),
+            (a.name, a.reviewer_name, a.family, a.roles, a.usage, a.pinned_version, a.fails_closed_on_unknown_version, a.build_verification),
+            ("codex", "codex", "openai", ("reviewer",), "derived", "codex-cli 0.163.0", True, None),
         )
 
     def test_registry_is_closed(self) -> None:
@@ -77,6 +77,45 @@ class PinnedDeclarationsTest(unittest.TestCase):
         worker = harness.worker_adapter()
         self.assertEqual(review_mode.WORKER_FAMILY, worker.family)
         self.assertEqual(review_mode.SAME_PROVIDER_HARNESS, worker.reviewer_name)
+
+
+class BuildVerificationTest(unittest.TestCase):
+    def test_every_declared_command_is_a_controller_command(self) -> None:
+        for adapter in harness.ADAPTERS.values():
+            if adapter.build_verification is not None:
+                with self.subTest(adapter=adapter.name):
+                    self.assertIn(adapter.build_verification, cli._DISPATCH)
+
+    def test_the_claude_command_is_the_one_the_refusal_names(self) -> None:
+        with self.assertRaises(functional_review.TesterUnavailable) as ctx:
+            functional_review.identity_check("/x/claude", is_native=lambda path: False)
+        self.assertIn(f"`workflow-controller {harness.CLAUDE_CODE.build_verification}`", str(ctx.exception))
+
+    def test_nothing_else_under_controller_reads_the_field(self) -> None:
+        for path in sorted((ROOT / "controller").glob("*.py")):
+            if path.name == "harness.py":
+                continue
+            with self.subTest(module=path.name):
+                self.assertNotIn("build_verification", path.read_text())
+
+    def test_the_command_admits_the_functional_tester_launch_only(self) -> None:
+        # The statement in the declaration and the guides: only launch_functional
+        # reads the recorded digests or runs the identity check.
+        digest_readers, probe_callers = set(), set()
+        for path in sorted((ROOT / "controller").glob("*.py")):
+            if path.name in ("claude_build.py", "functional_review.py"):
+                continue
+            tree = ast.parse(path.read_text())
+            for fn in ast.walk(tree):
+                if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for node in ast.walk(fn):
+                    if isinstance(node, ast.Attribute) and node.attr == "recorded_digests" and path.name != "cli.py":
+                        digest_readers.add((path.name, fn.name))
+                    if isinstance(node, ast.Attribute) and node.attr in ("identity_check", "static_probe"):
+                        probe_callers.add((path.name, fn.name))
+        self.assertEqual(digest_readers, {("review.py", "launch_functional")})
+        self.assertEqual(probe_callers, {("review.py", "launch_functional")})
 
 
 class LookupTest(unittest.TestCase):

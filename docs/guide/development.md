@@ -551,13 +551,16 @@ The record of the 2.6.0 admission is
 **A harness** is one adapter, one converter and one captured sample:
 
 1. Add a `HarnessAdapter` to `controller/harness.py` and to `ADAPTERS`: its
-   name, reviewer name, family, roles, restriction abilities, usage reporting
-   and pinned version. Extend the pinning tests in `tests/test_harness.py` so
+   name, reviewer name, family, roles, restriction abilities, usage reporting,
+   the command that verifies a build of it (`build_verification`, or `None`
+   when the Controller checks no build), and the version its captures were taken
+   from (`pinned_version`, informational). Extend the pinning tests in `tests/test_harness.py` so
    the objects that launch the harness cannot drift from the declaration.
    Then run `python3 tools/harness_table.py --write`, which rewrites
    [`docs/guide/harnesses.md`](harnesses.md); the same applies when an existing
    adapter gains or loses a role or its `pinned_version` changes, which every
-   pin bump does.
+   pin bump does (a pin bump changes the informational version only, not
+   which builds launch).
 2. Add a converter to `controller/usage_record.py` that builds a `UsageRecord`
    from the harness's own output, following the record's meanings (input
    excludes cached tokens, output includes reasoning) and returning `null` with

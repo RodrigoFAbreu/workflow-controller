@@ -125,14 +125,15 @@ authority; these configurations are newly refused:
 The refusal is exit 20 with a message such as `role 'review-plan' routes the model
 'gpt-5' to the harness 'claude-code', which declares [...]`, followed by the source
 of the model, the effort and the harness. The fix for a model is to add it to the
-`harness.models` entry of the settings file (there is no command):
+`harness.models` entry of the settings file (there is no command), the
+`models` key of its `harness` section:
 
 ```json
-"harness.models": {"claude-code": ["your-model-name"]}
+"harness": {"models": {"claude-code": ["your-model-name"]}}
 ```
 
 An unsupported effort is changed in the routing; no setting adds an effort. The
-settings file is table generation 16: the fill adds `"harness.models": {}`, and a
+settings file is table generation 16: the fill adds `"harness": {"models": {}}`, and a
 Controller before 1.22.0 sharing the file warns about the unknown key, ignores it,
 and its `settings clean` refuses.
 

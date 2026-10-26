@@ -698,10 +698,10 @@ unset model or effort inherits and is never refused. Otherwise the run or step
 is refused with exit `20`, for example `role 'review-plan' routes the model
 'gpt-5' to the harness 'claude-code', which declares [...]`, followed by where
 each of the three values came from. To use a model the adapter does not list,
-add it to the settings file:
+add it to the `models` key of the settings file's `harness` section:
 
 ```json
-"harness.models": {"claude-code": ["claude-opus-5-6"]}
+"harness": {"models": {"claude-code": ["claude-opus-5-6"]}}
 ```
 
 An unsupported effort is changed in the routing; no setting extends the effort

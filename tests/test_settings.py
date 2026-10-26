@@ -135,15 +135,15 @@ V14_ROWS = (
     ("reviewer.brief", "optional-string", None, 0, 2000, 14),
 )
 
-#: The row generation 15 added (workflow-controller-harness-models D4),
+#: The row generation 16 added (workflow-controller-harness-models D4),
 #: before ``routing``.
-V15_ROWS = (
-    ("harness.models", "harness-models", {}, None, None, 15),
+V16_ROWS = (
+    ("harness.models", "harness-models", {}, None, None, 16),
 )
 
 #: This release's table, pinned.
 TABLE_ROWS = (V1_TABLE[:-1] + V2_ROWS + V4_ROWS + V5_ROWS + V6_ROWS + V7_ROWS + V8_ROWS + V12_ROWS + V13_ROWS
-              + V14_ROWS + V15_ROWS + V1_TABLE[-1:])
+              + V14_ROWS + V16_ROWS + V1_TABLE[-1:])
 
 #: Every generation's type and bounds of each key, oldest first. A release
 #: that changes a default appends nothing here (the rule forbids changing
@@ -988,7 +988,7 @@ class HarnessModelsRowTest(_TempSettings):
         settings.fill(self.path)
         data = _read(self.path)
         self.assertEqual(data["harness"], {"models": {}})
-        self.assertEqual(data["_defaults_written"][self.KEY], {"value": {}, "generation": 15})
+        self.assertEqual(data["_defaults_written"][self.KEY], {"value": {}, "generation": 16})
         self.assertEqual(data["run"]["max_steps"], 7)
         self.assertEqual(data["_table_generation"], 16)
 

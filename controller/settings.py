@@ -207,7 +207,7 @@ TABLE: tuple[Setting, ...] = (
     Setting("reviewer.brief", TYPE_OPTIONAL_STRING, None, 0, 2000, None, 14),
     # workflow-controller-harness-models D4: models the operator adds to a
     # harness's declared list; never an effort.
-    Setting(HARNESS_MODELS_KEY, TYPE_HARNESS_MODELS, {}, None, None, None, 15),
+    Setting(HARNESS_MODELS_KEY, TYPE_HARNESS_MODELS, {}, None, None, None, 16),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort, --role-harness", 1),
 )

@@ -2,8 +2,9 @@
 
 ## Status
 
-**In progress.** `workflow-controller-harness-models` (H8) is being implemented from
-`docs/ai-workflow/CONTROLLER_HARNESS_MODELS_PLAN.md` (revision 2, plan approved by gate policy).
+**In implementation review.** `workflow-controller-harness-models` (H8) is implemented from
+`docs/ai-workflow/CONTROLLER_HARNESS_MODELS_PLAN.md` (revision 2, plan approved by gate policy); every checkpoint is
+complete and the self-review findings are applied.
 
 - CP1 -- the declarations, the check and the refusal at load: complete. `HarnessAdapter` declares `models` and
   `efforts`; `routing.check_route_values` judges a resolved route and `RoutingOptions` refuses an unsupported pair with
@@ -15,4 +16,4 @@
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-harness-models` to enter self-review.
+The implementation review of implementation revision 1 (local, then external).

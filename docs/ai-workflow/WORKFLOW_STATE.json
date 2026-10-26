@@ -30357,7 +30357,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-table-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-table-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -30466,7 +30466,138 @@
           "workflow_release": "2.19.2"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "9d9ddaa1b8969ff87bb69b5d5593f1bd7ef1adfc1304ead94b7b41769cf44478",
+        "approved_review_content_id": "59c3371ea3248889fad9c265a864a3ed8c11e25259abb3b76b14f569c3f33f76",
+        "review_content_manifest": [
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e3a54a370ec328584f39b4ce159ea4ce0f12145"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-table-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2ab80af6164eb580928cb7f564c0503302352934"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ad132bc497a25302f89162c9fc3a94ee4e0c6d1a"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5b411c7c3fe60d2c5f6bf20fe83ee6b20f6de410"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "91fa48efa9ec73966231f4fb726f7f9a593a4f43"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0b3d98521d0bc7eeb6e8e893c4a1d0f8ed2efa1b"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6eb00360c324bb5675134cb37cd0615d250bcd9e"
+          },
+          {
+            "path": "tests/test_harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4330cac1ea40620665957335c75f6357aa91267a"
+          },
+          {
+            "path": "tools/check_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d8506560e75937a5991a5b60725673a9e079fd66"
+          },
+          {
+            "path": "tools/harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "83f39b0404ae85a88fbdb00a3263932b856e165a"
+          }
+        ],
+        "reviewed_content_commit": "1ffe1fbf17f92a6c4e1a9473300cf3636caf1b15",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T00:19:26Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "59c3371ea3248889fad9c265a864a3ed8c11e25259abb3b76b14f569c3f33f76",
+            "ledger": {
+              "local": {
+                "bundle_id": "9d9ddaa1b8969ff87bb69b5d5593f1bd7ef1adfc1304ead94b7b41769cf44478",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "359fd2e2225c1c6ad5bbd69eb84137bd4ee21f3371630f94da8732f526304f7d",
+                "ledger_entry_sha256": "840707684afb7db937ab007f0872f1d5d0840d99acc6c1aa144a2f17074be70b",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "9d9ddaa1b8969ff87bb69b5d5593f1bd7ef1adfc1304ead94b7b41769cf44478",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "5391b93521d60e3656651e9baea563255ef04d53533136238585f11eb9e99f02",
+                "ledger_entry_sha256": "095bedb0c3c8bbdab98e3377f9a9c10fb884458ec11b53979892ad03bab62743",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T00:19:26Z",
+          "workflow_release": "2.19.2"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "6732b4bc9c85a9cec800eb7509b3b31fb6519054b49cb3c898126042a5a65a24",
@@ -30497,12 +30628,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-10-25T23:33:10Z",
+      "state_revision": 22,
+      "last_transition": "2026-10-26T00:19:26Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -30694,6 +30825,69 @@
               "at": "2026-10-25T23:00:31Z"
             }
           ]
+        },
+        "F-c9c29c40606d": {
+          "digest": "c9c29c40606d9a548070e5794297801fa95284316255fed0d218950eaf5a42aa",
+          "text": "**O1. `TEST_RESULTS.md` still describes implementation revision 1 at `fb3691e`.** It was not regenerated for the\n  post-fix round. The round-2 verification (75 tests, `check_docs.py` exit 0, and a full suite with only the two\n  known Git 2.56 trailer failures) is recorded only in `IMPLEMENTATION_SUMMARY.md`, \"Round 1 response\". A reader of\n  `TEST_RESULTS.md` alone sees the revision-1 count (74 tests).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "59c3371ea3248889fad9c265a864a3ed8c11e25259abb3b76b14f569c3f33f76",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T23:35:24Z"
+            }
+          ]
+        },
+        "F-7a9f854d9a61": {
+          "digest": "7a9f854d9a613e4f021680e90e6ca1fa8ba6f9cefb9d3e0c7dade475f2b259f0",
+          "text": "**O2. The comment above `ACTIVE_THROUGH` in `tools/check_docs.py` now describes the past.** It says \"A page\n  registered one number ahead (the harness page, 6) is not checked until the constant is raised with the page\", but\n  the constant is now 6 and the harness page is checked. Stating the general rule, without naming the harness page as\n  the page that is ahead, would keep the comment true.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "59c3371ea3248889fad9c265a864a3ed8c11e25259abb3b76b14f569c3f33f76",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T23:35:24Z"
+            }
+          ]
+        },
+        "F-6c26667d4f93": {
+          "digest": "6c26667d4f93bfef9166780d18f2e8d22963957ed9ed9bc3352528b050e4ddc0",
+          "text": "**O3. Round 1's O3 still stands.** `runtime.md` keeps a hand-written list of the accepted pairs next to the new\n  link to the generated table. The deferral to C10g-3 is reasonable, but `development.md`'s \"Adding a harness\" step\n  still does not tell that item to edit the list.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "59c3371ea3248889fad9c265a864a3ed8c11e25259abb3b76b14f569c3f33f76",
+              "verdict": "APPROVE",
+              "at": "2026-10-25T23:35:24Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "59c3371ea3248889fad9c265a864a3ed8c11e25259abb3b76b14f569c3f33f76",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "9d9ddaa1b8969ff87bb69b5d5593f1bd7ef1adfc1304ead94b7b41769cf44478",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-25T23:35:24Z",
+          "verdict_sha256": "359fd2e2225c1c6ad5bbd69eb84137bd4ee21f3371630f94da8732f526304f7d",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "9d9ddaa1b8969ff87bb69b5d5593f1bd7ef1adfc1304ead94b7b41769cf44478",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T00:17:46Z",
+          "verdict_sha256": "5391b93521d60e3656651e9baea563255ef04d53533136238585f11eb9e99f02",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-table/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

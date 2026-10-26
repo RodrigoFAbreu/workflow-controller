@@ -216,9 +216,46 @@ class GateClassificationTest(unittest.TestCase):
         self.assertIsNone(job.derive_branch_gate_event(g, binding(), waited=False, spent=False))
         self.assertIsNone(job.derive_branch_gate_event(g, binding(), waited=True, spent=False))
         event = job.derive_branch_gate_event(g, binding(), waited=True, spent=True)
-        self.assertEqual(event.event_type, "lane_blocked")
+        self.assertEqual((event.event_type, event.supersedes), ("checks_wait", "lane_blocked"))
         dirty = job.derive_branch_gate_event(gate("merge_pending"), binding(), waited=False, spent=False)
         self.assertEqual(dirty.event_type, "lane_blocked")
+
+    def test_a_spent_checks_wait_is_a_blocker_only_when_the_checks_have_been_pending_long(self) -> None:
+        g = gate("checks_pending", waitable=True)
+        limit = job.CHECKS_PENDING_LONG_SECONDS
+        self.assertEqual(limit, 4 * 3600)
+        for seconds, expected in ((None, "checks_wait"), (0, "checks_wait"), (limit, "checks_wait"),
+                                  (limit + 1, "lane_blocked")):
+            with self.subTest(pending_seconds=seconds):
+                event = job.derive_branch_gate_event(g, binding(), waited=True, spent=True, pending_seconds=seconds)
+                self.assertEqual(event.event_type, expected)
+                self.assertEqual(event.supersedes, "lane_blocked" if expected == "checks_wait" else None)
+        short = job.derive_branch_gate_event(g, binding(), waited=True, spent=True, pending_seconds=60)
+        self.assertEqual(short.title, "Waiting for the pull request's checks (wi-1)")
+        self.assertEqual(short.message, "checks_pending message Next: do the exit")
+        self.assertEqual(notify.resolve("checks_wait", None).severity, "LOW")
+        self.assertEqual(notify.resolve("checks_wait", None).category, "INFO")
+
+    def test_a_checks_pending_gate_that_cannot_wait_follows_the_same_rule(self) -> None:
+        g = gate("checks_pending")  # no auto-merge: classify returns a blocker, whether or not the step waited
+        for waited in (False, True):
+            short = job.derive_branch_gate_event(g, binding(), waited=waited, spent=waited, pending_seconds=60)
+            long = job.derive_branch_gate_event(g, binding(), waited=waited, spent=waited,
+                                                pending_seconds=job.CHECKS_PENDING_LONG_SECONDS + 1)
+            missing = job.derive_branch_gate_event(g, binding(), waited=waited, spent=waited)
+            self.assertEqual((short.event_type, long.event_type, missing.event_type),
+                             ("checks_wait", "lane_blocked", "checks_wait"))
+            self.assertEqual(short.ident, long.ident)
+        dirty = job.derive_branch_gate_event(gate("merge_pending"), binding(), waited=False, spent=False,
+                                             pending_seconds=60)
+        self.assertEqual(dirty.event_type, "lane_blocked")
+
+    def test_the_age_is_measured_from_the_newest_binding_event(self) -> None:
+        events = [{"at": "2026-10-26T00:00:00Z"}, {"at": "2026-10-26T01:00:00Z"}]
+        self.assertEqual(job._pending_seconds(events, "2026-10-26T01:30:00Z"), 1800)
+        self.assertEqual(job._pending_seconds(events, "2026-10-26T00:30:00Z"), 0)
+        for log, now in (([], "2026-10-26T01:30:00Z"), (events, None), (events, "garbage"), ([{}], "2026-10-26T01:30:00Z")):
+            self.assertIsNone(job._pending_seconds(log, now))
 
 
 class BranchGateIdentityTest(unittest.TestCase):
@@ -819,7 +856,14 @@ class ReviewWaitDeriveTest(unittest.TestCase):
         [event] = job.derive_job_event(blocked)
         self.assertEqual(event.event_type, "lane_blocked")
         pending = {"kind": job.PR_REPORT_KIND, "pr_report": {"outcome": job.pr_report.PENDING, "wait": {"waited": True}}}
-        self.assertEqual(types(job.derive_job_event(wait_record(**pending))), ["lane_blocked"])
+        [short] = job.derive_job_event(wait_record(**pending))
+        self.assertEqual((short.event_type, short.supersedes), ("checks_wait", "lane_blocked"))
+        self.assertEqual(short.title, "Waiting for the pull request's checks (wi-1)")
+        pending["pr_report"]["wait"] = {"waited": True, "pending_seconds": job.CHECKS_PENDING_LONG_SECONDS + 1}
+        [long] = job.derive_job_event(wait_record(**pending))
+        self.assertEqual((long.event_type, long.supersedes, long.ident), ("lane_blocked", None, short.ident))
+        pending["pr_report"]["wait"] = {"waited": True, "pending_seconds": "unreadable"}
+        self.assertEqual(types(job.derive_job_event(wait_record(**pending))), ["checks_wait"])
         pending["pr_report"]["wait"] = {"waited": False}
         self.assertEqual(job.derive_job_event(wait_record(**pending)), [])
 
@@ -993,6 +1037,68 @@ class SupersededNoticeTest(unittest.TestCase):
         self.log(run, "notifier_active", key="x")
         self.log(run, "sent")
         self.assertFalse(job._recoverable({"run_id": run}, self.root, self.event, self.REPO, None))
+
+
+class ChecksWaitUpgradeTest(unittest.TestCase):
+    """The stop that used to send ``lane_blocked`` and now sends ``checks_wait`` (#170): the same
+    supersede rule as ``review_wait``, and a ``checks_wait`` already sent never blocks the later long ``lane_blocked``."""
+
+    REPO = "target-repo"
+
+    @staticmethod
+    def pending_record(**wait) -> dict:
+        return job_record(job.STATUS_GATE_BLOCKED, human_gate_pending={
+            "phase": "AWAITING_FUNCTIONAL_REVIEW", "what_is_required": "Pending checks.", "safe_resume_command": "step"},
+            kind=job.PR_REPORT_KIND, pr_report={"outcome": job.pr_report.PENDING, "wait": {"waited": True, **wait}})
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.root = self.tmp / "runtime"
+        (self.root / "runs").mkdir(parents=True)
+        self.event = job.derive_job_event(self.pending_record())[0]
+        self.assertEqual((self.event.event_type, self.event.supersedes), ("checks_wait", "lane_blocked"))
+        self.old_key = notify.idempotency_key("lane_blocked", self.REPO, self.event.ident)
+
+    def log(self, run_id: str, status: str) -> None:
+        path = self.root / "runs" / run_id
+        path.mkdir(parents=True, exist_ok=True)
+        with open(path / "notifications.jsonl", "a") as handle:
+            handle.write(json.dumps({"idempotency_key": self.old_key, "status": status}) + "\n")
+
+    def deliver(self, hub: FakeSignalHub, event: job.DerivedEvent) -> list[str]:
+        hub.requests.clear()
+        job._send_derived([event], self.REPO, run_id="20261012T999999Z-now")
+        self.assertTrue(notify.flush(10))
+        return [r["body"]["metadata"]["event_type"] for r in hub.requests]
+
+    def hub(self) -> FakeSignalHub:
+        hub = FakeSignalHub().start()
+        self.addCleanup(hub.stop)
+        install_notifier(self, hub, self.root)
+        return hub
+
+    def test_a_checks_wait_is_sent_low_and_only_once_across_steps(self) -> None:
+        hub = self.hub()
+        self.assertEqual(self.deliver(hub, self.event), ["checks_wait"])
+        self.assertEqual(hub.requests[0]["body"]["severity"], "LOW")
+        self.assertEqual(self.deliver(hub, self.event), [])
+
+    def test_a_lane_blocked_delivered_in_an_earlier_run_is_not_announced_again_as_checks_wait(self) -> None:
+        self.log("20261012T000000Z-earlier", "sent")
+        self.assertEqual(self.deliver(self.hub(), self.event), [])
+
+    def test_a_stop_whose_lane_blocked_was_never_handled_sends_one_checks_wait(self) -> None:
+        self.log("20261012T000000Z-earlier", "failed")
+        self.assertEqual(self.deliver(self.hub(), self.event), ["checks_wait"])
+
+    def test_a_checks_wait_already_sent_does_not_stop_the_later_long_lane_blocked(self) -> None:
+        hub = self.hub()
+        self.assertEqual(self.deliver(hub, self.event), ["checks_wait"])
+        long = job.derive_job_event(self.pending_record(pending_seconds=job.CHECKS_PENDING_LONG_SECONDS + 1))[0]
+        self.assertEqual((long.event_type, long.supersedes, long.ident), ("lane_blocked", None, self.event.ident))
+        self.assertEqual(self.deliver(hub, long), ["lane_blocked"])
 
 
 class TesterStopSupersededNoticeTest(SupersededNoticeTest):
@@ -1336,8 +1442,23 @@ class BranchWiringTest(test_trunk_preflight.RunWaitTest):
         self.assertEqual(len(summary), 1)
         self.assertEqual(summary[0]["sent"], 3)
 
-    def test_a_spent_wait_sends_one_blocker_and_a_zero_wait_sends_nothing(self) -> None:
+    def test_a_spent_wait_sends_one_checks_wait_not_a_blocker(self) -> None:
         self.accepted()
+        settings = self.tmp_root / "settings.json"
+        settings.write_text(json.dumps({"merge": {"wait_seconds": 50}}))
+        with self.waiting(), unittest.mock.patch.dict(os.environ, {"WORKFLOW_CONTROLLER_SETTINGS": str(settings)}):
+            result = self.cli_hub("run")
+        self.assertEqual(result.code, cli.EXIT_GATE, result.stderr)
+        self.assertEqual(self.sent_types(), ["checks_wait"])
+        self.assertEqual(self.hub.requests[0]["body"]["severity"], "LOW")
+
+    def test_a_spent_wait_on_checks_pending_long_sends_one_blocker(self) -> None:
+        self.accepted()
+        self.cli_hub("step")  # the PR is readied and its title updated: checks_pending, which sends nothing
+        self.assertEqual(self.sent_types(), [])
+        path = self.lc.runtime / mb.events_rel(self.key, test_trunk_preflight.WI)
+        path.write_text("".join(json.dumps({**e, "at": "2020-01-01T00:00:00Z"}) + "\n" for e in self.binding_events()))
+        self.hub.requests.clear()
         settings = self.tmp_root / "settings.json"
         settings.write_text(json.dumps({"merge": {"wait_seconds": 50}}))
         with self.waiting(), unittest.mock.patch.dict(os.environ, {"WORKFLOW_CONTROLLER_SETTINGS": str(settings)}):

@@ -2,15 +2,11 @@
 
 ## Status
 
-**Complete.** `workflow-controller-harness-models` (H8) was accepted on 2026-10-26 by gate policy
-(`policy:bae758b4f4ce`): each harness adapter declares its supported models and efforts, a resolved route is checked
-against them and an unsupported pair is refused at load with exit 20 before any job record, and the `harness.models`
-setting (table generation 16) adds a model without a release. The plan is archived at
-`docs/milestones/completed/workflow-controller-harness-models.md`.
+**Complete.** `workflow-controller-checks-wait` (NF2, issue #170) was accepted on 2026-10-26 by gate policy
+(`policy:bae758b4f4ce`): a spent pending-checks wait, or a pending-checks stop in a repository without auto-merge, sends
+the info event `checks_wait` (INFO, LOW), and `lane_blocked` only once the checks have been pending over four hours. The
+plan is archived at `docs/milestones/completed/workflow-controller-checks-wait.md`.
 
 ## Next action
 
-No milestone is active. Next is NF2 in `docs/ROADMAP.md` ([#170](https://github.com/RodrigoFAbreu/workflow-controller/issues/170): a spent
-`checks_pending` wait is an info event; critical only when a check fails or the wait is much longer), then RB3
-([#168](https://github.com/RodrigoFAbreu/workflow-controller/issues/168)), then H7 of the harness-neutral roles epic
-(owner decision 2026-10-24); run `/milestone-plan` for NF2.
+No milestone is active. Next is RB3 (issue #168) in `docs/ROADMAP.md`; run `/milestone-plan` for it.

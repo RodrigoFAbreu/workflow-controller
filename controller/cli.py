@@ -34,7 +34,7 @@ from controller import (
     telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
-from controller.errors import ControllerError, LifecycleWorkerActiveError, SourceSnapshotError
+from controller.errors import ControllerError, LifecycleWorkerActiveError, RoutingConfigError, SourceSnapshotError
 
 #: The three read-only commands. Positive guard: everything not in this set
 #: requires a pinned identity (`source_kind != "unpinned"`), by construction
@@ -1130,10 +1130,14 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     mode_report = None
     if decision.gate is not None and decision.protocol is not None:
         effective_settings = _effective(args)
+        try:
+            report_routing = _routing_options(args)
+        except RoutingConfigError:  # `step` refuses such a route (exit 20); `explain` never does
+            report_routing = routing.NO_OVERRIDES
         mode_report = job.review_mode_report(
             runtime_root, target, None if work_item is target_state.NoWorkItemYet else work_item.work_item_id,
             decision, _reviewer_options(effective_settings, target.root, runtime_root),
-            _review_mode_options(effective_settings, target.root, runtime_root))
+            _review_mode_options(effective_settings, target.root, runtime_root), route_options=report_routing)
     if mode_report is not None and mode_report["choice"] == "review":
         # Round-caps D2: the step stops at the external cap instead of launching this review.
         capped = job.external_review_cap_gate(target, work_item, decision, _round_caps(_effective(args)))

@@ -282,6 +282,28 @@ class ExternalCapTest(_ReviewCase):
         self.assertIn("review_round_cap_reached: ", out.getvalue())
         self.assertNotIn("review mode", out.getvalue().lower().replace("review_mode", ""))
 
+    def test_explain_passes_the_routing_to_the_mode_report(self) -> None:
+        from controller import routing
+        from controller.errors import RoutingConfigError
+        from tests.test_cli import _Args
+        args = _Args(str(self.life.root), workflow_manager=str(self.life.stub))
+        args.effective_settings = settings.resolve(
+            settings.empty(self.life.td / "settings.toml"), cli={"reviewer.harness": "codex"})
+        built = routing.RoutingOptions(cli_role_harnesses={"milestone-plan": "claude-code"})
+        for outcome, expected in ((built, built), (RoutingConfigError("bad route"), routing.NO_OVERRIDES)):
+            seen: list = []
+            real = job.review_mode_report
+
+            def spy(*a, **k):
+                seen.append(k.get("route_options"))
+                return real(*a, **k)
+
+            side = {"return_value": outcome} if outcome is built else {"side_effect": outcome}
+            with mock.patch.object(cli, "_routing_options", **side), mock.patch.object(job, "review_mode_report", spy), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                cli.cmd_explain(args, self.runtime_root, IDENTITY)
+            self.assertEqual(seen, [expected])
+
 
 class HappyPathTest(_ReviewCase):
     def test_an_exact_verdict_is_ingested_and_the_phase_advances_with_no_claude_worker(self) -> None:

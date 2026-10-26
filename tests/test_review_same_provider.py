@@ -478,7 +478,7 @@ class DefaultPolicyRefusalTest(SameProviderCase):
 class ReportTest(SameProviderCase):
     """``job.review_mode_report``: what ``explain`` says the next step does, read-only (review-modes D7)."""
 
-    def report(self, mode="auto", capture="lowering_only", *, reviewer_options=None):
+    def report(self, mode="auto", capture="lowering_only", *, reviewer_options=None, route_options=None):
         from controller import protocol_decision, target_state
         target = self.life.inspect()
         item = target_state.select_work_item(target_state.read(target), work_item_id=rj.WID)
@@ -486,7 +486,18 @@ class ReportTest(SameProviderCase):
         read = None if capture is None else signal(capture)
         options = {"mode": mode, "source": "cli", "same_provider": self.same}
         with mock.patch.object(job, "_review_mode_signal", return_value=read):
-            return job.review_mode_report(self.runtime_root, target, rj.WID, decision, reviewer_options, options)
+            extra = {} if route_options is None else {"route_options": route_options}
+            return job.review_mode_report(self.runtime_root, target, rj.WID, decision, reviewer_options, options,
+                                          **extra)
+
+    def test_the_report_follows_the_routed_workers_family(self) -> None:
+        from tests.test_review_mode import WORKER_ROLES, codex_workers
+        claude = {"harness": "claude", "model": "m", "effort": "e", "timeout_seconds": 60, "binary": "claude"}
+        self.assertEqual(self.report("cross-model", None, reviewer_options=claude)["choice"], "refused")
+        patch, routed = codex_workers(WORKER_ROLES)
+        self.addCleanup(patch.stop)
+        report = self.report("cross-model", None, reviewer_options=claude, route_options=routed)
+        self.assertEqual((report["choice"], report["harness"]), ("review", "claude"))
 
     def test_each_choice_is_reported_with_the_mode_and_its_source(self) -> None:
         self.assertEqual(self.report("manual"), {

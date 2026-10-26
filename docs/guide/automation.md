@@ -401,7 +401,10 @@ a human acceptance gate (`/accept-milestone`; the Controller reports nothing the
 Controller itself ends in (`pr_report_no_pull_request`, `pr_report_forge_unavailable`,
 `pr_report_refused`, `pr_report_stale`), and the functional review's own faults (below). Pending checks are never a decision for a
 person: a step that did not wait ends on `pr_checks_pending` with no notification, and a `run` whose
-`merge.wait_seconds` budget ran out with only the checks pending sends `lane_blocked`. A red pull request found after acceptance, in
+`merge.wait_seconds` budget ran out with only the checks pending sends `checks_wait` (`INFO`/`LOW`, "Waiting for the pull request's checks (<work item>)"); so does a stop in a repository without auto-merge. Either
+sends `lane_blocked` only when the checks have been pending over four hours, counted from the last change the Controller
+recorded on the binding (a push, or the pull request marked ready or edited). A `lane_blocked` an earlier version delivered
+for the same stop is not followed by a `checks_wait`. A red pull request found after acceptance, in
 the merge flow, still ends at that flow's `checks_failing` stop, with a person (roadmap step C10d).
 
 **The automated functional review.** At row 38e (`functional.evidence.external`, the Workflow

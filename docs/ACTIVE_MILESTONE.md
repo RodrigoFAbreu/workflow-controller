@@ -10,8 +10,10 @@ have been pending over four hours.
 - CP1 (`checks_wait` and the long escalation): complete. `controller/notify.py` and `controller/job.py` carry the event and
   the age rule on both paths; the new and moved tests pass, and the full suite is green but for the known Git 2.56 trailer
   tests and the scenario tests that already fail at the base commit.
-- CP2 (the guides and the roadmap): not started.
+- CP2 (the guides and the roadmap): complete. `docs/guide/commands.md` and `docs/guide/automation.md` describe `checks_wait`
+  and the four-hour escalation, and `docs/ROADMAP.md` marks NF2 done; `python3 tools/check_docs.py` passes.
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-checks-wait` for CP2.
+Run `/milestone-implement workflow-controller-checks-wait` again: every checkpoint is complete, so it enters the
+self-review of the implementation.

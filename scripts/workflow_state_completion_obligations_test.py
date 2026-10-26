@@ -10,7 +10,8 @@
 356/357/358/360/361), covering the `WFO-STATE-SERIALIZATION` obligation
 `WF8b` continued scope declares, plus `verify_wfo_ledger_coverage`
 (`WFO-LEDGER-COVERAGE`, `WFR-68`, `WF8c` item (m)), and the backlog module
-`workflow_backlog` (`Backlog*` groups: parser, schema, selection, edit, page).
+`workflow_backlog` (`Backlog*` groups: parser, schema, selection, edit, page), and the retention
+report `workflow_retention` (`RetentionReport`, workflow-2.20.0).
 
 Runs entirely against disposable scratch Git repositories, mirroring
 `workflow_state_test.py`'s own pattern. `resolve_completion_obligations`'s
@@ -43,6 +44,7 @@ from pathlib import Path
 
 import workflow_backlog as wb
 import workflow_fingerprint as fingerprint
+import workflow_retention as wr
 import workflow_state as ws
 
 
@@ -3649,6 +3651,505 @@ class BacklogDocument(unittest.TestCase):
             d.write("docs/ROADMAP.md", d.read("docs/ROADMAP.md") + b"hand edit\n")
             sub = d.root / "docs"
             self.assertEqual(copy("check", cwd=sub).returncode, 1)
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.20.0: the retention report (workflow_retention)
+# ---------------------------------------------------------------------------
+
+_RR_NOW = __import__("datetime").datetime(2026, 11, 1, 12, 0, 0, tzinfo=__import__("datetime").timezone.utc)
+
+
+def _rr_commit(item_id: str) -> str:
+    return hashlib.sha1(item_id.encode()).hexdigest()
+
+
+def _rr_raw(state: str, number: int = 7) -> str:
+    if state == "none":
+        return "[]"
+    return json.dumps([{"number": number, "url": f"https://github.com/acme/widgets/pull/{number}",
+                        "state": state.upper(), "headRefOid": "a" * 40}])
+
+
+def _rr_item(phase="MILESTONE_COMPLETE", last="2026-10-01T00:00:00Z", parent=None, anchor=True, **extra):
+    item = {"phase": phase, "last_transition": last, "parent_work_item_id": parent}
+    if anchor is True:
+        item["reviewed_implementation_head"] = "PLACEHOLDER"
+    item.update(extra)
+    return item
+
+
+def _rr_snapshot(*roots):
+    seen = {}
+    for root in roots:
+        for directory, dirs, names in os.walk(root):
+            dirs.sort()
+            for name in names + dirs:
+                full = os.path.join(directory, name)
+                if os.path.islink(full):
+                    seen[full] = ("link", os.readlink(full))
+                elif os.path.isfile(full):
+                    seen[full] = ("file", hashlib.sha256(Path(full).read_bytes()).hexdigest())
+                else:
+                    seen[full] = ("dir",)
+    return seen
+
+
+def _rr_find_pycache(*roots):
+    return sorted(os.path.join(d, n) for root in roots for d, dirs, _ in os.walk(root) for n in dirs
+                  if n == "__pycache__")
+
+
+class _RR:
+    """A scratch repository with a `github.com` origin, a hand-built state
+    file, an archive root, and the forge seam (no network, no `gh`)."""
+
+    def __init__(self, items, origin=True, outcomes=None):
+        self.items, self.origin, self.outcomes = items, origin, outcomes or {}
+        self.queried = []
+
+    def __enter__(self):
+        self.repo = ScratchRepo().__enter__()
+        self.root = self.repo.root
+        if self.origin:
+            _run(["git", "remote", "add", "origin", "https://github.com/acme/widgets.git"], cwd=self.root)
+        self.archive_root = Path(tempfile.mkdtemp(prefix="wfo-archive-"))
+        (self.archive_root / "widgets").mkdir()
+        self.write_state(self.items)
+        return self
+
+    def __exit__(self, *exc):
+        shutil.rmtree(self.archive_root, ignore_errors=True)
+        self.repo.__exit__(*exc)
+
+    def write_state(self, items):
+        entries = {}
+        for key, item in items.items():
+            item = dict(item)
+            if item.get("reviewed_implementation_head") == "PLACEHOLDER":
+                item["reviewed_implementation_head"] = _rr_commit(key)
+            entries[key] = item
+        _write(self.repo, "docs/ai-workflow/WORKFLOW_STATE.json", json.dumps({"work_items": entries}))
+
+    def run(self, argv, timeout):
+        commit = argv[argv.index("--search") + 1]
+        self.queried.append(commit)
+        outcome = self.outcomes.get(commit, "merged")
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return _rr_raw(outcome)
+
+    @staticmethod
+    def resolve(repo_root):
+        return {"path": "/usr/bin/gh", "sha256": "0" * 64}
+
+    def build(self, ttl_days=30, now=_RR_NOW):
+        return wr.build_report(self.root, archive_root=self.archive_root, ttl_days=ttl_days, now=now,
+                               run=self.run, resolve=self.resolve)
+
+    def cli(self, *args, capture=True):
+        import contextlib
+        import io
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = wr.main(["report", "--repo-root", str(self.root), "--archive-root", str(self.archive_root), *args],
+                           run=self.run, resolve=self.resolve, now=_RR_NOW)
+        return code, out.getvalue(), err.getvalue()
+
+    def archive(self, name, age_seconds, size=10):
+        path = self.archive_root / "widgets" / name
+        path.write_bytes(b"x" * size)
+        stamp = _RR_NOW.timestamp() - age_seconds
+        os.utime(path, (stamp, stamp))
+        return path
+
+    def reasons(self, report):
+        return {r["work_item_id"]: r["reason"] for r in report["not_finished"]}
+
+
+def _rr_many(count, **extra):
+    return {f"w{n:02d}": _rr_item(last=f"2026-09-{n + 1:02d}T00:00:00Z", **extra) for n in range(count)}
+
+
+class RetentionReport(unittest.TestCase):
+    def test_t1_merged_is_finished_open_phase_is_not_and_the_stored_fact_is_ignored(self):
+        items = _rr_many(5)
+        items["busy"] = _rr_item(phase="IMPLEMENTING")
+        items["stale-merged"] = _rr_item(last="2026-08-01T00:00:00Z", gate_evidence={"pr": {"state": "merged"}})
+        items["stale-open"] = _rr_item(last="2026-08-02T00:00:00Z", gate_evidence={"pr": {"state": "open"}})
+        outcomes = {_rr_commit("stale-merged"): "open"}
+        with _RR(items, outcomes=outcomes) as rr:
+            report = rr.build()
+            self.assertEqual(rr.reasons(report)["busy"], "open_phase")
+            self.assertEqual(rr.reasons(report)["stale-merged"], "pr_not_merged:open")
+            finished = [r["work_item_id"] for r in report["finished"]]
+            self.assertIn("stale-open", finished)
+            self.assertNotIn("stale-merged", finished)
+            self.assertNotIn("busy", finished)
+
+    def test_t2_a_parent_or_child_that_is_not_complete_is_family_open(self):
+        items = {"parent": _rr_item(), "kid": _rr_item(parent="parent", last="2026-10-02T00:00:00Z"),
+                 "slow-kid": _rr_item(phase="PLANNING", parent="parent"),
+                 "orphan": _rr_item(parent="missing"),
+                 "child-of-open": _rr_item(parent="open-parent"), "open-parent": _rr_item(phase="IMPLEMENTING")}
+        with _RR(items) as rr:
+            reasons = rr.reasons(rr.build())
+            self.assertEqual(reasons["parent"], "family_open")
+            self.assertEqual(reasons["orphan"], "family_open")
+            self.assertEqual(reasons["child-of-open"], "family_open")
+            self.assertEqual(reasons["slow-kid"], "open_phase")
+            self.assertEqual(reasons["open-parent"], "open_phase")
+
+    def test_t3_the_three_newest_merged_are_kept_with_ties_broken_by_id(self):
+        items = _rr_many(4)
+        for key in ("tie-b", "tie-a"):
+            items[key] = _rr_item(last="2026-10-20T00:00:00Z")
+        with _RR(items) as rr:
+            report = rr.build()
+            self.assertEqual([r["work_item_id"] for r in report["kept_recent"]], ["tie-a", "tie-b", "w03"])
+            self.assertEqual([r["work_item_id"] for r in report["finished"]], ["w02", "w01", "w00"])
+            self.assertEqual(report["totals"]["finished"], 3)
+
+    def test_t4_every_query_outcome_and_a_missing_anchor_is_not_finished_with_its_reason(self):
+        from workflow_forge import ForgeUnavailableError, ForgeUndecidableError
+        items = {"ok-a": _rr_item(last="2026-10-09T00:00:00Z"), "unavail": _rr_item(last="2026-10-08T00:00:00Z"),
+                 "undecid": _rr_item(last="2026-10-07T00:00:00Z"), "boom": _rr_item(last="2026-10-06T00:00:00Z"),
+                 "nopr": _rr_item(last="2026-10-05T00:00:00Z"), "shut": _rr_item(last="2026-10-04T00:00:00Z"),
+                 "ok-b": _rr_item(last="2026-10-03T00:00:00Z"), "anchorless": _rr_item(anchor=False),
+                 "busy": _rr_item(phase="IMPLEMENTING"), "Bad Id": _rr_item()}
+        outcomes = {_rr_commit("unavail"): ForgeUnavailableError("gh gone"),
+                    _rr_commit("undecid"): ForgeUndecidableError("two"), _rr_commit("boom"): RuntimeError("x"),
+                    _rr_commit("nopr"): "none", _rr_commit("shut"): "closed"}
+        with _RR(items, outcomes=outcomes) as rr:
+            reasons = rr.reasons(rr.build())
+            self.assertEqual(reasons["unavail"], "query_failed:forge_unavailable")
+            self.assertEqual(reasons["undecid"], "query_failed:forge_undecidable")
+            self.assertEqual(reasons["boom"], "query_failed:unexpected")
+            self.assertEqual(reasons["nopr"], "no_pull_request")
+            self.assertEqual(reasons["shut"], "pr_not_merged:closed")
+            self.assertEqual(reasons["anchorless"], "no_anchor")
+            self.assertEqual(reasons["Bad Id"], "invalid_id")
+            self.assertEqual(set(rr.queried), {_rr_commit(k) for k in ("ok-a", "unavail", "undecid", "boom", "nopr", "shut", "ok-b")})
+            # newest first, one at a time
+            self.assertEqual(rr.queried[0], _rr_commit("ok-a"))
+            self.assertEqual(rr.queried[-1], _rr_commit("ok-b"))
+            self.assertEqual(len(rr.queried), 7)
+
+    def test_t4b_the_anchor_is_the_technical_approval_commit_only_with_its_identity(self):
+        approved = {"reviewed_content_commit": "b" * 40, "approved_review_content_id": "c" * 64}
+        half = {"reviewed_content_commit": "d" * 40}
+        items = {"with-id": _rr_item(technical_approval=approved), "without-id": _rr_item(technical_approval=half)}
+        with _RR(items) as rr:
+            rr.build()
+            self.assertIn("b" * 40, rr.queried)
+            self.assertIn(_rr_commit("without-id"), rr.queried)
+            self.assertNotIn("d" * 40, rr.queried)
+
+    def test_t5_folder_sizes_symlinks_and_tracked_files(self):
+        items = _rr_many(4)
+        with _RR(items) as rr:
+            _write(rr.repo, ".ai-review/w00/a.txt", "12345")
+            _write(rr.repo, ".ai-review/w00/sub/b.txt", "123")
+            elsewhere = Path(tempfile.mkdtemp(prefix="wfo-elsewhere-"))
+            self.addCleanup(shutil.rmtree, elsewhere, True)
+            (elsewhere / "big").write_text("x" * 1000)
+            os.symlink(elsewhere / "big", rr.root / ".ai-review/w00/link")
+            os.symlink(elsewhere, rr.root / ".ai-review/w00/dirlink")
+            os.symlink(elsewhere, rr.root / ".ai-review/w01")
+            _write(rr.repo, ".ai-review/w02/t.txt", "1")
+            _run(["git", "add", "-f", ".ai-review/w02/t.txt"], cwd=rr.root)
+            by_id = {r["work_item_id"]: r for r in rr.build()["finished"] + rr.build()["kept_recent"]}
+            self.assertEqual(by_id["w00"]["review_folder"], {"present": True, "complete": True, "files": 2, "bytes": 8, "tracked_files": 0})
+            self.assertFalse(by_id["w01"]["review_folder"]["present"])
+            self.assertEqual(by_id["w02"]["review_folder"]["tracked_files"], 1)
+            self.assertEqual(by_id["w03"]["review_folder"], {"present": False, "complete": True, "files": 0, "bytes": 0, "tracked_files": 0})
+
+    def test_t6_archive_presence_age_and_prunable(self):
+        items = _rr_many(6)
+        day = 86400
+        with _RR(items) as rr:
+            rr.archive("w00.tar.zst", 30 * day)
+            rr.archive("w01.tar.zst", 30 * day + 23 * 3600)
+            rr.archive("w02.tar.zst", 31 * day + 1)
+            real = rr.archive_root / "widgets" / "real"
+            real.write_bytes(b"x")
+            os.symlink(real, rr.archive_root / "widgets" / "w03.tar.zst")
+            rr.archive("w04.tar.zst", 100 * day)          # recent (kept) item
+            rr.archive("w99.tar.zst", 40 * day)           # no such item
+            rr.archive("notes.txt", 40 * day)
+            report = rr.build()
+            archive = {r["work_item_id"]: r["archive"] for r in report["finished"]}
+            self.assertFalse(archive["w00"]["prunable"])
+            self.assertEqual(archive["w00"]["age_days"], 30)
+            self.assertFalse(archive["w01"]["prunable"])
+            self.assertEqual(archive["w01"]["age_days"], 30)
+            self.assertTrue(archive["w02"]["prunable"])
+            self.assertEqual(archive["w02"]["age_days"], 31)
+            self.assertEqual(archive["w02"]["modified"], "2026-10-01T11:59:59Z")
+            self.assertEqual(archive["w02"]["bytes"], 10)
+            self.assertEqual(report["kept_recent"][0]["work_item_id"], "w05")
+            self.assertEqual({a["name"]: a["item"] for a in report["archives"]},
+                             {"w00.tar.zst": "finished", "w01.tar.zst": "finished", "w02.tar.zst": "finished",
+                              "w04.tar.zst": "recent", "w99.tar.zst": "other"})
+            self.assertEqual(report["totals"]["prunable"], 3)
+            self.assertEqual(report["totals"]["archives"], 5)
+            self.assertEqual(rr.build(ttl_days=60)["totals"]["prunable"], 1)
+
+    def test_t6b_an_archive_of_a_reopened_item_is_open_and_an_absent_archive_is_null(self):
+        items = {"reopened": _rr_item(phase="IMPLEMENTING"), **_rr_many(4)}
+        with _RR(items) as rr:
+            rr.archive("reopened.tar.zst", 90 * 86400)
+            report = rr.build()
+            self.assertEqual([a["item"] for a in report["archives"]], ["open"])
+            self.assertEqual(report["finished"][0]["archive"],
+                             {"present": False, "readable": True, "bytes": None, "modified": None, "age_days": None,
+                              "prunable": False})
+
+    def _every_failure_path(self):
+        from workflow_forge import ForgeUnavailableError, ForgeUndecidableError
+        items = {"a": _rr_item(), "b": _rr_item(), "c": _rr_item(), "d": _rr_item(), "e": _rr_item(),
+                 "f": _rr_item(), "g": _rr_item(), "h": _rr_item(anchor=False), "i": _rr_item(phase="IMPLEMENTING")}
+        outcomes = {_rr_commit("a"): ForgeUnavailableError("x"), _rr_commit("b"): ForgeUndecidableError("x"),
+                    _rr_commit("c"): RuntimeError("x"), _rr_commit("d"): "none", _rr_commit("e"): "closed"}
+        return items, outcomes
+
+    def _populate(self, rr):
+        _write(rr.repo, ".ai-review/a/x.txt", "data")
+        rr.archive("a.tar.zst", 10 * 86400)
+        rr.archive("zzz.tar.zst", 50 * 86400)
+
+    def test_t7_nothing_is_written_on_any_path(self):
+        items, outcomes = self._every_failure_path()
+        with _RR(items, outcomes=outcomes) as rr:
+            self._populate(rr)
+            before = _rr_snapshot(rr.root, rr.archive_root)
+            self.assertGreater(len(before), 20)
+            self.assertTrue(any(k.endswith("x.txt") for k in before))
+            self.assertTrue(any(k.endswith("zzz.tar.zst") for k in before))
+            rr.build()
+            self.assertEqual(rr.cli("--json")[0], 0)
+            self.assertEqual(rr.cli()[0], 0)
+            self.assertEqual(_rr_snapshot(rr.root, rr.archive_root), before)
+
+    def test_t7b_nothing_is_written_when_every_query_fails_or_a_refusal_happens(self):
+        from workflow_forge import ForgeUnavailableError
+        items = _rr_many(6)
+        every = {_rr_commit(k): ForgeUnavailableError("x") for k in items}
+        with _RR(items, outcomes=every) as rr:
+            self._populate(rr)
+            before = _rr_snapshot(rr.root, rr.archive_root)
+            self.assertEqual(rr.cli()[0], 0)
+            self.assertEqual(rr.build()["finished"], [])
+            for bad in ("0", "abc"):
+                self.assertEqual(rr.cli("--ttl-days", bad)[0], 2)
+                self.assertEqual(_rr_snapshot(rr.root, rr.archive_root), before)
+            self.assertEqual(_rr_snapshot(rr.root, rr.archive_root), before)
+        with _RR(items, origin=False) as rr:
+            self._populate(rr)
+            state_path = rr.root / "docs/ai-workflow/WORKFLOW_STATE.json"
+
+            def refused_leaves_everything_as_it_was():
+                before = _rr_snapshot(rr.root, rr.archive_root)
+                self.assertEqual(rr.cli()[0], 2)
+                self.assertEqual(_rr_snapshot(rr.root, rr.archive_root), before)
+
+            refused_leaves_everything_as_it_was()          # repository_unknown
+            os.unlink(state_path)
+            refused_leaves_everything_as_it_was()          # state_missing
+            _write(rr.repo, "docs/ai-workflow/WORKFLOW_STATE.json", "{not json")
+            refused_leaves_everything_as_it_was()          # state_invalid
+
+    def _deny(self, path):
+        mode = os.stat(path).st_mode
+        os.chmod(path, 0)
+
+        def restore():
+            try:
+                os.chmod(path, mode)
+            except FileNotFoundError:
+                pass
+
+        self.addCleanup(restore)
+
+    def test_t7c_unreadable_review_and_archive_paths_are_marked_incomplete_and_nothing_is_written(self):
+        if os.geteuid() == 0:
+            self.skipTest("permission denial cannot be provoked as root")
+        with _RR(_rr_many(4)) as rr:
+            _write(rr.repo, ".ai-review/w00/a.txt", "12345")
+            _write(rr.repo, ".ai-review/w00/sub/b.txt", "123")
+            _write(rr.repo, ".ai-review/w00/sub/deep/c.txt", "12")
+            _write(rr.repo, ".ai-review/w01/keep.txt", "1")
+            rr.archive("w00.tar.zst", 40 * 86400, size=20)
+            clean = {r["work_item_id"]: r for r in rr.build()["finished"] + rr.build()["kept_recent"]}
+            self.assertEqual(clean["w00"]["review_folder"]["bytes"], 10)
+            self.assertTrue(rr.build()["complete"])
+            before = _rr_snapshot(rr.root, rr.archive_root)
+            sub = rr.root / ".ai-review/w00/sub"
+            self._deny(sub)
+            for args in ((), ("--json",)):
+                code, out, err = rr.cli(*args)
+                self.assertEqual(code, 0)
+                self.assertTrue(err.startswith("warning: incomplete: 1 path(s)"), err)
+                self.assertIn("INCOMPLETE" if not args else '"complete": false', out)
+            report = rr.build()
+            by_id = {r["work_item_id"]: r for r in report["finished"] + report["kept_recent"]}
+            self.assertFalse(by_id["w00"]["review_folder"]["complete"])
+            self.assertEqual(by_id["w00"]["review_folder"]["bytes"], 5)
+            self.assertTrue(by_id["w01"]["review_folder"]["complete"])
+            self.assertFalse(report["complete"])
+            self.assertEqual([e["path"] for e in report["read_errors"]], [str(sub)])
+            self.assertIn("PermissionError", report["read_errors"][0]["error"])
+            os.chmod(sub, 0o755)
+            nested = sub / "deep"
+            self._deny(nested)
+            self.assertEqual([e["path"] for e in rr.build()["read_errors"]], [str(nested)])
+            os.chmod(nested, 0o755)
+            # an unreadable file's directory: entries cannot be examined
+            self._deny(rr.root / ".ai-review/w00/sub")
+            os.chmod(rr.root / ".ai-review/w00/sub", 0o644)
+            self.assertFalse(rr.build()["complete"])
+            os.chmod(rr.root / ".ai-review/w00/sub", 0o755)
+            # the archive root cannot be searched: absence is not claimed
+            self._deny(rr.archive_root)
+            report = rr.build()
+            self.assertFalse(report["complete"])
+            self.assertEqual(report["archives"], [])
+            archive = {r["work_item_id"]: r["archive"] for r in report["finished"]}
+            self.assertFalse(archive["w00"]["readable"])
+            self.assertFalse(report["read_errors"] == [])
+            self.assertTrue(all("PermissionError" in e["error"] for e in report["read_errors"]))
+            code, out, err = rr.cli("--json")
+            self.assertEqual(code, 0)
+            self.assertFalse(json.loads(out)["complete"])
+            self.assertIn("warning: incomplete", err)
+            os.chmod(rr.archive_root, 0o755)
+            # the archive directory itself cannot be listed
+            self._deny(rr.archive_root / "widgets")
+            report = rr.build()
+            self.assertFalse(report["complete"])
+            self.assertEqual(report["archives"], [])
+            self.assertIn(str(rr.archive_root / "widgets"), [e["path"] for e in report["read_errors"]])
+            os.chmod(rr.archive_root / "widgets", 0o755)
+            self.assertEqual(_rr_snapshot(rr.root, rr.archive_root), before)
+            self.assertTrue(rr.build()["complete"])
+
+    def test_t8_cli_json_text_and_refusals(self):
+        items = _rr_many(5)
+        items["busy"] = _rr_item(phase="IMPLEMENTING")
+        with _RR(items) as rr:
+            rr.archive("w00.tar.zst", 40 * 86400)
+            code, out, err = rr.cli("--json")
+            self.assertEqual((code, err), (0, ""))
+            self.assertTrue(out.endswith("\n"))
+            report = json.loads(out)
+            self.assertEqual(sorted(report), ["archive_dir", "archives", "complete", "finished", "generated_at",
+                                              "keep_recent", "kept_recent", "kind", "not_finished", "read_errors",
+                                              "repository", "schema_version", "totals", "ttl_days"])
+            self.assertEqual((report["complete"], report["read_errors"]), (True, []))
+            self.assertEqual(report["repository"], "acme/widgets")
+            self.assertEqual(report["kind"], "retention-report")
+            self.assertEqual(report["generated_at"], "2026-11-01T12:00:00Z")
+            self.assertEqual(sorted(report["finished"][0]), ["archive", "last_transition", "pull_request",
+                                                             "review_folder", "work_item_id"])
+            self.assertEqual(sorted(report["kept_recent"][0]), ["last_transition", "pull_request",
+                                                                "review_folder", "work_item_id"])
+            self.assertEqual(report["finished"][0]["pull_request"],
+                             {"number": 7, "url": "https://github.com/acme/widgets/pull/7"})
+            self.assertEqual(sorted(report["totals"]), ["archives", "finished", "finished_folder_bytes", "prunable"])
+            self.assertEqual(out, json.dumps(report, sort_keys=True) + "\n")
+            code, text, err = rr.cli()
+            self.assertEqual(code, 0)
+            for needle in ("acme/widgets", "Finished (2)", "Kept as recent (3)", "Not finished (1)",
+                           "open_phase: 1", "prunable (1)", "w00.tar.zst"):
+                self.assertIn(needle, text)
+            for argv in (["--ttl-days", "0"], ["--ttl-days", "abc"], ["--ttl-days", "3651"], ["--bogus"]):
+                code, out, err = rr.cli(*argv)
+                self.assertEqual(code, 2, argv)
+                self.assertEqual(out, "")
+                self.assertTrue(err.startswith("error: usage: "), err)
+                self.assertIn("\nnext step: ", err)
+            self.assertEqual(rr.cli("--ttl-days", "3650")[0], 0)
+
+    def test_t8b_refusal_codes(self):
+        with _RR({}, origin=False) as rr:
+            code, out, err = rr.cli()
+            self.assertEqual((code, out), (2, ""))
+            self.assertTrue(err.startswith("error: repository_unknown: "), err)
+            os.unlink(rr.root / "docs/ai-workflow/WORKFLOW_STATE.json")
+            self.assertTrue(rr.cli()[2].startswith("error: state_missing: "))
+            _write(rr.repo, "docs/ai-workflow/WORKFLOW_STATE.json", "[]")
+            self.assertTrue(rr.cli()[2].startswith("error: state_invalid: "))
+            _write(rr.repo, "docs/ai-workflow/WORKFLOW_STATE.json", "{")
+            self.assertTrue(rr.cli()[2].startswith("error: state_invalid: "))
+
+    def test_t8c_a_real_subprocess_without_origin_exits_2_with_repository_unknown(self):
+        with _RR(_rr_many(1), origin=False) as rr:
+            script = Path(wr.__file__).resolve()
+            proc = subprocess.run(["python3", "-I", str(script), "report", "--repo-root", str(rr.root),
+                                   "--archive-root", str(rr.archive_root)], capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 2, proc.stderr)
+            self.assertIn("error: repository_unknown", proc.stderr)
+            self.assertIn("next step:", proc.stderr)
+            usage = subprocess.run(["python3", "-I", str(script)], capture_output=True, text=True)
+            self.assertEqual(usage.returncode, 2)
+            self.assertIn("error: usage", usage.stderr)
+
+    def _child_env(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "PYTHONPATH")}
+        return env
+
+    def _scripts_copy(self):
+        copy = Path(tempfile.mkdtemp(prefix="wfo-scripts-"))
+        self.addCleanup(shutil.rmtree, copy, True)
+        for name in ("workflow_retention.py", "workflow_forge.py"):
+            shutil.copy(Path(wr.__file__).resolve().parent / name, copy / name)
+        return copy
+
+    def test_t9_bytecode_contract_from_fresh_interpreters(self):
+        env = self._child_env()
+        # (a) the CLI form leaves no __pycache__ anywhere
+        with _RR(_rr_many(1), origin=False) as rr:
+            copy = self._scripts_copy()
+            self.assertEqual(_rr_find_pycache(copy, rr.root, rr.archive_root), [])
+            proc = subprocess.run(["python3", "-I", str(copy / "workflow_retention.py"), "report",
+                                   "--repo-root", str(rr.root), "--archive-root", str(rr.archive_root)],
+                                  capture_output=True, text=True, env=env)
+            self.assertEqual(proc.returncode, 2, proc.stderr)
+            self.assertEqual(_rr_find_pycache(copy, rr.root, rr.archive_root), [])
+        # (b) the import form with the assignment before the import leaves none
+        code = ("import sys\nsys.dont_write_bytecode = True\nsys.path.insert(0, sys.argv[1])\n"
+                "import datetime, workflow_retention as w\n"
+                "w.build_report(sys.argv[2], archive_root=sys.argv[3], now=datetime.datetime.now(datetime.timezone.utc),\n"
+                "               run=lambda argv, timeout: '[]', resolve=lambda r: {'path': '/usr/bin/gh', 'sha256': '0'})\n")
+        with _RR({}) as rr:
+            copy = self._scripts_copy()
+            proc = subprocess.run(["python3", "-I", "-c", code, str(copy), str(rr.root), str(rr.archive_root)],
+                                  capture_output=True, text=True, env=env)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(_rr_find_pycache(copy, rr.root, rr.archive_root), [])
+        # (c) control: the same import without the assignment does create one
+        copy = self._scripts_copy()
+        proc = subprocess.run(["python3", "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import workflow_retention",
+                               str(copy)], capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(len(_rr_find_pycache(copy)), 1)
+
+    def test_t10_the_output_is_a_pure_function_of_state_folders_archives_and_now(self):
+        items = {**_rr_many(6), "busy": _rr_item(phase="IMPLEMENTING")}
+        with _RR(items) as rr:
+            for name in ("w00", "w01"):
+                rr.archive(f"{name}.tar.zst", 40 * 86400)
+            _write(rr.repo, ".ai-review/w00/a", "1")
+            first = rr.cli("--json")[1]
+            rr.write_state(dict(reversed(list(items.items()))))
+            for name in ("w00", "w01"):
+                os.unlink(rr.archive_root / "widgets" / f"{name}.tar.zst")
+            for name in ("w01", "w00"):
+                rr.archive(f"{name}.tar.zst", 40 * 86400)
+            self.assertEqual(rr.cli("--json")[1], first)
+            report = json.loads(first)
+            self.assertEqual([a["name"] for a in report["archives"]], ["w00.tar.zst", "w01.tar.zst"])
 
 
 if __name__ == "__main__":

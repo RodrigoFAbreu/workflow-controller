@@ -29,6 +29,12 @@ runs: exit `20` in a settings file or a `--routing-config` file, a usage error
 (exit `2`) for `--role-harness`. See [the routing section](runtime.md#the-routing-section) for the file
 format and [worker routing](commands.md#worker-routing) for the options.
 
+The `Pinned version` column is the build the Controller's captures were taken
+from. `Unknown version refused` does not mean a version string is compared: the
+launch is refused when an update changes a checked surface (an enabled feature,
+a configuration layer, a state entry or a flag), and an update that changes none
+of them is accepted. See [common problems](../common-problems.md#a-worker-failed-or-stopped-exit-30-or-35).
+
 The `Models` and `Efforts` columns list what the adapter declares. A route is
 refused at load, before any job record is written, when its model or effort is
 not in the list of the harness that runs it (see

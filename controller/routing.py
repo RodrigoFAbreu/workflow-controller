@@ -30,9 +30,12 @@ from ``--role-harness`` (``role-cli``), the config's role entry
 ``single_agent`` is never overridable: a review role, and the final
 self-review pass of ``/milestone-implement``, always run with the
 subagent-spawning tools (:data:`SUBAGENT_TOOLS`) disallowed. Model and
-effort strings are passed through to the ``claude`` CLI unvalidated -- it
-is the authority over which models and effort levels exist, as it already
-is for ``--permission-mode`` -- except that a value must be a non-empty
+effort strings are checked against the harness that will run the role
+(:func:`check_route_values`, H8): the adapter's declared ``models`` and
+``efforts``, plus the models the ``harness.models`` setting adds, so a route
+the harness cannot take is refused when the options are built, before any job
+record is written; the ``claude`` CLI is no longer the only authority. A value
+must also be a non-empty
 string that does not begin with ``-``, so it can never be read as an
 option of its own (:func:`check_value`). Role *names* are a closed set
 (:data:`ROLES`).
@@ -625,6 +628,36 @@ def resolve_route(
     )
 
 
+def check_route_values(
+    role: str, harness_name: str, model: str | None, effort: str | None,
+    extra_models: Mapping[str, tuple[str, ...]],
+) -> None:
+    """Judge a resolved route against the harness that runs it (H8).
+    ``None`` for the model or the effort means "inherit" and is never
+    refused. A model passes when the adapter declares it or ``extra_models``
+    (the ``harness.models`` setting) adds it for that harness; an effort
+    passes when the adapter declares it. Raises ``ValueError`` naming the
+    role, the harness, the field, the value and what the harness declares.
+    Reads the registry at call time."""
+    adapter = harness.get(harness_name)
+    if model is not None:
+        allowed = tuple(adapter.models) + tuple(extra_models.get(harness_name, ()))
+        if model not in allowed:
+            raise ValueError(
+                f"role {role!r} routes the model {model!r} to the harness {harness_name!r}, "
+                f"which declares {list(allowed)}"
+            )
+    if effort is not None and effort not in adapter.efforts:
+        raise ValueError(
+            f"role {role!r} routes the effort {effort!r} to the harness {harness_name!r}, "
+            f"which declares {list(adapter.efforts)}"
+        )
+
+
+def _source_words(source: str) -> str:
+    return "the built-in default" if source == SOURCE_DEFAULT else f"the {source} value"
+
+
 def _frozen_assignments(assignments: Mapping[str, str]) -> Mapping[str, str]:
     return MappingProxyType({check_role(role): check_value(value) for role, value in dict(assignments).items()})
 
@@ -653,6 +686,8 @@ class RoutingOptions:
     cli_role_harnesses: Mapping[str, str] = dataclasses.field(default_factory=dict)
     config: RoutingConfig | None = None
     config_source: str | None = None
+    #: The ``harness.models`` setting: models added per harness name (H8).
+    harness_models: Mapping[str, tuple[str, ...]] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.config_source is None:
@@ -667,6 +702,27 @@ class RoutingOptions:
         object.__setattr__(self, "cli_role_models", _frozen_assignments(self.cli_role_models))
         object.__setattr__(self, "cli_role_efforts", _frozen_assignments(self.cli_role_efforts))
         object.__setattr__(self, "cli_role_harnesses", _frozen_harness_assignments(self.cli_role_harnesses))
+        object.__setattr__(self, "harness_models", MappingProxyType({
+            name: tuple(models) for name, models in dict(self.harness_models).items()
+        }))
+        for role in sorted(ROLES):
+            route = self.resolve(role)
+            try:
+                check_route_values(role, route.harness, route.model, route.effort, self.harness_models)
+            except ValueError as exc:
+                raise RoutingConfigError(
+                    f"{exc} (model from {_source_words(route.model_source)}, effort from "
+                    f"{_source_words(route.effort_source)}, harness from {_source_words(route.harness_source)})"
+                    + ("; add a model the harness accepts with the harness.models setting"
+                       if "routes the model" in str(exc) else ""),
+                    evidence={
+                        "role": role, "harness": route.harness, "model": route.model, "effort": route.effort,
+                        "sources": {
+                            "model": route.model_source, "effort": route.effort_source,
+                            "harness": route.harness_source,
+                        },
+                    },
+                ) from exc
 
     def resolve(self, role: str) -> ResolvedRoute:
         return resolve_route(

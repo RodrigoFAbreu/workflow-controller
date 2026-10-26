@@ -31208,6 +31208,1054 @@
         "evaluated_at": "2026-10-26T00:44:28Z",
         "workflow_release": "2.19.2"
       }
+    },
+    "workflow-controller-harness-models": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-harness-models",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_HARNESS_MODELS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-models-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-models-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 2,
+      "implementation_revision": 1,
+      "functional_review_round": null,
+      "base_commit": "798ba8632d889569757c51f98c6d49ca56197589",
+      "reviewed_implementation_head": "d828a4371356ef90ab437cf3da89dbafc2ec243e",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP3",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "e29c92c5f1dac4652fde967a538d33f92b8cf5a3"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "62bf1b8f7e60958d6763832e3415f3370ac00f2e"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "6cd6df115b98f2c95f7c689df75ca8aa1b73e9aa"
+        }
+      },
+      "current_bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+        "approved_review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_HARNESS_MODELS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "faca669a95c1c8b062c08166b568cd13c9778d3e"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-models-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e278315c9ab4e23f1c35507a395a0b53b0526849"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-harness-models-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "09b01b28f17477e644c9ffc9d7e94f412596557b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T02:29:10Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+            "ledger": {
+              "local": {
+                "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "31239a43c5ac26cb91fd8bbbefec4984cb4b47fd2402ce82f146df5b15f0fa16",
+                "ledger_entry_sha256": "0f5a909f36208d36aa3ac778b3b79b4e3fb8251fbdc6a53958953ae0f0d4dec4",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "d95a8c4ae630689dcf62d1c239d73491d1aeeb7ae43fc75e8fc10ac3741deb38",
+                "ledger_entry_sha256": "875136fa242eb4db33cc69a152c7fd0ab5b7da12dc6c7dec9e31d846c1aa2308",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T02:29:10Z",
+          "workflow_release": "2.20.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+        "approved_review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0522c92a1ee77cb406dc2806bea1320c796251f"
+          },
+          {
+            "path": "controller/harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c13984f4c67fafcd228e18a646bda5200016f7c"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "352332f0d6712957b436e53655edd2f561877730"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5e15929825d2b4ee9b2001e4f85e4680b8501731"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "34e5c0469f8b0ef5ad6c78ada45bb5b9b18db62c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-models-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "41ca8943817083fd43704b497da890d8a5f26ca9"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b85dcafce3b8a5cbf09aa80f0e7b9f71b580a011"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88f067dcafc6aec3cb064e7519ff7b73e9c77460"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a61f6bb5b5656058611c5c9bc8bfa39589f8c538"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8de3a056d9d4ba8b15afb17197a64fe4d06f5b5"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "45b00ec1d5da3c16d51cb473bc452f8808a17757"
+          },
+          {
+            "path": "tests/fixtures/lane_routing.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a1b811e204080092515bd2cd3ba9065aacbdba58"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5835c272fbfb8d4cc650aefcca4503f8731b3ccb"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f0022485e662cb6b1a0c13f466bfa8744d857810"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "94968b096944eee97ed3108619db0830d42fdf0b"
+          },
+          {
+            "path": "tests/test_harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2555a84dca5cb1d3c0f1f39dc43c1136a14816de"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "71e84b048e87b0674fdce1dea76eb1a3eb2ff9d3"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "830410f6d845c9cd0c40aad78a6f703dfde9eeb7"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a70c42e02f25925cdc9cba5f2101983bf1342f43"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f31ee2751559fa6b843e02077adda60b7dd5cfe3"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "94d7bcbdbb77a225287a1e9b745b2566a1b2722b"
+          },
+          {
+            "path": "tools/harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "865f99d3a1d7e9fd8c5914b3b53ad51dce3b6b1b"
+          }
+        ],
+        "reviewed_content_commit": "d828a4371356ef90ab437cf3da89dbafc2ec243e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T04:47:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "ledger": {
+              "local": {
+                "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "68694a3725511999a4628629c64a96865142b26dfb8f102241c457d63bbdbc5a",
+                "ledger_entry_sha256": "3915b0a8980711f11f4a379ebaa560cbb78fe6fff1812eff79641709d728c8c6",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ca7b6cbea73b1b090c068b0e8dec6d27f56e735690910e4b53da76bad3c98933",
+                "ledger_entry_sha256": "62a86f15b5128a872d8c3ad6c0066fc792e49e29c1e5282ac8ac97382da42e1e",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T04:47:38Z",
+          "workflow_release": "2.20.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T02:18:54Z",
+          "verdict_sha256": "31239a43c5ac26cb91fd8bbbefec4984cb4b47fd2402ce82f146df5b15f0fa16",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T02:26:33Z",
+          "verdict_sha256": "d95a8c4ae630689dcf62d1c239d73491d1aeeb7ae43fc75e8fc10ac3741deb38",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 2
+        },
+        "implementation": {
+          "local": 1,
+          "external": 1
+        }
+      },
+      "state_revision": 21,
+      "last_transition": "2026-10-26T06:17:53Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-26T02:15:09Z",
+        "consumed": {
+          "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+          "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+          "plan_revision": 2
+        }
+      },
+      "optional_findings": {
+        "F-0c2ba7582873": {
+          "digest": "0c2ba75828739c74c68a420c9972c84301749c1c2376acd7b739be1f857a91a8",
+          "text": "**O1. The Codex efforts are left to the implementer's reading.** D1 says `codex` declares \"the efforts observed in `tests/harness_contract/codex/`\". The captured runs show only `high` (exec_argv.json, compose.txt, rollout_excerpt.jsonl, stderr_shapes.txt). `xhigh` appears only in sandbox_probe.txt, as the catalog's `multi_agent_reasoning_effort`, which no run used. Naming the value in the plan (`(\"high\",)`, or `(\"high\", \"xhigh\")` with the reason) would remove the judgement call. Nothing routes a worker to Codex today, so either choice is safe.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-368897772de9": {
+          "digest": "368897772de90fac3f45307d1fbac2aff8e9de6cb160a155817bf37780491688",
+          "text": "**O2. There is no command that sets `harness.models`.** D5 asks the release notes and docs to give \"the command to set it\". The `settings` command has only `show`, `path` and `clean`, and D4 says the row has no CLI flag. The docs can only show the JSON entry to add to the settings file. The wording could say \"the entry to add\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-75cd10c37ccc": {
+          "digest": "75cd10c37cccf4621af5f5fa8f298ed1e5d6613ca54cef6a26d1744ae01d6cef",
+          "text": "**O3. The aliases still fail at launch for the functional tester.** D1 declares `opus`, `sonnet` and `haiku` for claude-code, so H8 accepts `functional-tester` routed to `sonnet`. `review.functional_argv` then refuses any model that is not a full `claude-` id at launch, which is the mid-run failure the Goal describes. This behaviour is older than H8, and H8 does not make it worse. A Risks or Out-of-scope note, or a follow-up issue, would record the gap.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-c7d582c1d2af": {
+          "digest": "c7d582c1d2af33456d18d12af0445eb6a9645cba3d28a9c50a4b4679e75e816f",
+          "text": "**O4. The registry's protected-path note names `job.py`, but no checkpoint edits it.** The `controller/` exclusion reason in workflow-controller-harness-models-artifacts.json says \"this milestone edits routing.py, settings.py, cli.py and job.py\". No checkpoint's `**Files:**` lists `controller/job.py`, and nothing in the decisions needs it. The note is harmless, but it does not match the plan.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-93f618f294eb": {
+          "digest": "93f618f294eb0ab040f53ccc6842877f426b02979fb1230e110bec9f3405b4b1",
+          "text": "**O1 — Make the placeholder migration inventory explicit, including efforts.** D7 discusses model placeholders and CP1 defers discovery to running the suite. Existing cases also route undeclared efforts: `tests/test_job.py:1051` uses `e-cli`, `e-role`, and `e-config-default`. List the affected cases and their model/effort replacements so the migration scope is reviewable.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "REVISE",
+              "at": "2026-10-26T02:12:46Z"
+            }
+          ]
+        },
+        "F-272c0e1744a8": {
+          "digest": "272c0e1744a826528b2da372a56a084421a3987d32014b33d5c0a3dd8cfb5fe3",
+          "text": "**O1. D7's inventory is not complete, though its catch-all covers the rest.** D7 says the migration scope \"is fixed here\", and lists the models `m`, `other`, `gpt`, `x`. Some placeholder models that reach `RoutingOptions` are not in that list. In `tests/test_cli.py`: `claude-sonnet-5` at lines 953, 3270 and 3287 (a settings/config routing run that records `worker_route`), and `rm` at line 900. In `tests/test_job.py`: `m-cli`, `m-role` and `m-config-role` at lines 1054-1060, a test that tells four sources apart. These would be refused under D3. D7's rule that \"any case outside this inventory\" is listed in the commit message covers them. Naming them now would make the stated fixed scope true and settle the mapping for the four-source test (for example the four full ids).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:18:54Z"
+            }
+          ]
+        },
+        "F-f5fddc50b1c7": {
+          "digest": "f5fddc50b1c7fab788b39b5a856943498ce65970351c9a3c2f3467df3afdf6df",
+          "text": "**O2. The Codex efforts are still left to the implementer's reading (round 1's O1, unchanged in revision 2).** The captured Codex runs show only `high` (`exec_argv.json`, `compose.txt`, `rollout_excerpt.jsonl`, `stderr_shapes.txt`). `xhigh` appears only in `sandbox_probe.txt`, as a catalog value no run used. Naming the declared tuple in D1 would remove the judgement call. Nothing routes a worker to Codex yet, so either choice is safe.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:18:54Z"
+            }
+          ]
+        },
+        "F-c59f3b19410b": {
+          "digest": "c59f3b19410be9818e6eec31f06f09528bdea8e47721773ec8b087f2e964174b",
+          "text": "**O3. The artifacts file's justification for the `controller/` exclusion names the wrong files.** It says the milestone \"edits routing.py, settings.py, cli.py and job.py\". The plan edits `harness.py`, `routing.py`, `settings.py` and `cli.py`, and not `job.py`. It is prose only and affects no classification.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:18:54Z"
+            }
+          ]
+        },
+        "F-96fbe8414907": {
+          "digest": "96fbe84149077b1cea55917905252f0f868402926992bcb2169d649041a978e0",
+          "text": "**O1 — Complete D7’s placeholder inventory.** Plan line 30 omits `claude-sonnet-5`, routed by tests at `tests/test_cli.py:948` and `:3284`, and `m-role`, `m-cli` and `m-config-role` at `tests/test_job.py:1051`. Include their replacements. The named files and full-suite checkpoint already cover discovery, so this does not block execution.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:26:33Z"
+            }
+          ]
+        },
+        "F-200559e0ae47": {
+          "digest": "200559e0ae47dc15af4dcff9b05f5f9b4626bf78dd467476c0e73c862bac6de7",
+          "text": "**O1: stale docstring on `routing.check_value`.** `controller/routing.py:256-259` still says a model or effort value's \"vocabulary is the `claude` CLI's to judge\". Since H8, `check_route_values` judges it against the harness. The module docstring was corrected but this function's docstring was not. Reword it to say the function checks only the shape, and that `check_route_values` checks the vocabulary.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:41:14Z"
+            }
+          ]
+        },
+        "F-f4d0ab3b16b9": {
+          "digest": "f4d0ab3b16b9a53085ac2f2f1f05711f68222eb677336a786e19536f69ca39a4",
+          "text": "**O2: the refusal hint is chosen by matching message text.** `RoutingOptions.__post_init__` adds the `harness.models` hint when `\"routes the model\"` appears in the `ValueError` text. Both strings are in one module and tests cover them, but a field marker would be sturdier: for example, `check_route_values` could raise with the field as an attribute or argument, or the caller could check the model and the effort separately.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:41:14Z"
+            }
+          ]
+        },
+        "F-8178c83f7ed8": {
+          "digest": "8178c83f7ed86a19fd19974bda90f0a72d16b71a05ef50c6490bf7d8ae3229cc",
+          "text": "`docs/common-problems.md:145` says “nothing was written or launched.” Dispatch can write runtime identity and fill settings before routing refuses. Narrow this to “no job record was written or worker launched.”",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:46:02Z"
+            }
+          ]
+        },
+        "F-1580a43b302a": {
+          "digest": "1580a43b302a109a15517ebe31bf4b68df0c5ec600d3ff39d756b469a94d83d3",
+          "text": "Bundle `TEST_RESULTS.md:42` overstates that every new test fails against the base. The inherit and valid-fixture positive controls pass there, as expected; describe the feature-specific failures instead.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:46:02Z"
+            }
+          ]
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e"
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-26T04:41:14Z",
+          "verdict_sha256": "68694a3725511999a4628629c64a96865142b26dfb8f102241c457d63bbdbc5a",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-26T04:46:02Z",
+          "verdict_sha256": "ca7b6cbea73b1b090c068b0e8dec6d27f56e735690910e4b53da76bad3c98933",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:52Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "rc=20; message names model 'nonsense', claude-code, seven ids, 'model from the cli value', ends with harness.models hint."
+            },
+            "log_digest": "9d3d5c136653d54cb6eacc8daea2b8f85aa4923cdfcfef48e5abc864acb934d6",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:52Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:52Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "rc=20; names 'turbo' and the five efforts, 'effort from the cli value', no harness.models hint."
+            },
+            "log_digest": "1d8363fe6a422b777a32146a40aeb97764d163ab3a4cefc63c5f63a6918a1096",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:52Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:52Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "rc=20; role 'review-plan', 'model from the role-cli value'."
+            },
+            "log_digest": "2041d23aadb35be803e580553bf1e5c9e27835648d96dec56e62de96af858093",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:52Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:52Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "rc=20; names gpt-5, model and effort from the config-default value."
+            },
+            "log_digest": "cd49e9150535f0b95ce62511c5d4d0619a830f2fb3d352f3919887edf13e3d75",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:52Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:52Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "No routing refusal; ends with 'not a Workflow-managed repository' (rc=20)."
+            },
+            "log_digest": "3813ad739e29cd2d6d9e18ef0c4cdc0b5506eb6233bb3b46a9bfe5844e5cac14",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:53Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:53Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "With harness.models claude-code=[gpt-5], route.json accepted; same not-Workflow-managed ending."
+            },
+            "log_digest": "7a2ca8b4646844c2e9bb9e9f1d141e9fe8b35ed72fd0967d6453dd9068377de3",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:53Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:53Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "With a codex-only entry the config is refused again, rc=20."
+            },
+            "log_digest": "088a4dbc2cce4cc59b943d4a9a1046596f3c77c93ef678d0a30f4847d2995ce1",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:53Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:53Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "ls rt shows only identity.json, notifications.jsonl, source."
+            },
+            "log_digest": "d53227f9e004079d24762c5e01b538bdf6349ee60831ac1f910dfd356ce2f540",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:53Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:53Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "Bad shape, '' and '-x' each refused with rc=20 naming harness.models.claude-code (exact wording for '' and '-x' differs from the string example but names the key)."
+            },
+            "log_digest": "b1f9a32a2d4b1e96510c63f67f8316edf70932b53cc2287ad73a8e25c644050e",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:53Z"
+          },
+          "flow-10": {
+            "flow_id": "flow-10",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:53Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "show succeeds with warning about harness.models.nope and 'harness.models = {} (file)'; clean prints 'removed from ...: harness.models.nope'."
+            },
+            "log_digest": "9f1ba5de1804659a59f83b75dc2ab7bab4109cdcc3cd5036fba2d0dd518b6ed2",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:53Z"
+          },
+          "flow-11": {
+            "flow_id": "flow-11",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:54Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "On a fresh '{}' settings file, show prints 'harness.models = {} (default)'. (The first run printed '(file)' only because empty.json had been filled by earlier commands in the same run.)"
+            },
+            "log_digest": "5a4a7a48c402b4cf685b618f88831ef749a43e059678973806ea951bb2dc90d2",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:54Z"
+          },
+          "flow-12": {
+            "flow_id": "flow-12",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:54Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "A generation-15 file with run.max_steps=7 and review.round_cap=9, after 'settings clean', gains \"harness\": {\"models\": {}} and _table_generation 16; other values are unchanged."
+            },
+            "log_digest": "bc8eca6cff943430c3eb34a12589fe4a76063488b94e3b2df5b686248cf18ebe",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:54Z"
+          },
+          "flow-13": {
+            "flow_id": "flow-13",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:54Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "harness_table --check rc=0; table has Models/Efforts columns with the expected values; prose mentions harness.models. Minor: page header still says 'Last checked with: Controller 1.21.1'."
+            },
+            "log_digest": "a248a2ad2509568f96e6162a05eee434970da91fc4b52c694dfc509614c1a7c9",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:54Z"
+          },
+          "flow-14": {
+            "flow_id": "flow-14",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:54Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "check_docs rc=0; compatibility 'Upgrading to 1.22.0' lists configs, exit 20, message, JSON entry; common-problems links to it; commands.md describes validation."
+            },
+            "log_digest": "42cd9256e109c6ad98590411d2ff13e4083dfba727155614bf9bce7a46fe8360",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:54Z"
+          },
+          "flow-15": {
+            "flow_id": "flow-15",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:54Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "Prints ok."
+            },
+            "log_digest": "d348411168bbbda1db5a6e201b670e266414803d63cfc948839771173e777e48",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:54Z"
+          },
+          "flow-16": {
+            "flow_id": "flow-16",
+            "status": "passed",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "ran_at": "2026-10-26T04:50:54Z",
+            "summary": {
+              "checklist_blob": "aa233e6cf7cab5f8b3f47436d74aafafd3bbe436",
+              "text": "186 tests in the four modules, OK. The full suite was not run."
+            },
+            "log_digest": "9b3bc68b23daf504f1694c0472765bb7604d5127a50fa88339f172b2227da30a",
+            "run_ref": "controller:20261026T044958Z-ffbb8a04",
+            "reporter": "workflow-controller 1.21.1",
+            "identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:50:55Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 173,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/173"
+          },
+          "state": "open",
+          "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+          "observed_at": "2026-10-26T06:17:53Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "d828a4371356ef90ab437cf3da89dbafc2ec243e",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-26T06:17:53Z",
+            "raw_sha256": "5423011cb63857eaa82a0cf937a897082a0f58b5145d94a9059d4b55f543a6c0",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "ee41906bbfa95411ddc2e55d9fe19c9ca8bccaebfaf12b1c0bba30050311b40e"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 173,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/173"
+          },
+          "state": "open",
+          "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+          "observed_at": "2026-10-26T05:14:16Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "d828a4371356ef90ab437cf3da89dbafc2ec243e",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.21.1"
+            },
+            "fetched_at": "2026-10-26T05:14:16Z",
+            "raw_sha256": "5423011cb63857eaa82a0cf937a897082a0f58b5145d94a9059d4b55f543a6c0",
+            "run_ref": "controller:20261026T051416Z-39e4b637"
+          },
+          "fact_id": "e9454e05cd5fbc01b095a5e96c104c70fae0f8c12891669995c0d2bbefebf567"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-10', 'flow-11', 'flow-12', 'flow-13', 'flow-14', 'flow-15', 'flow-16', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #173 at 025d30e77a022803ba8acb96e2046aacc5f6232a is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "d828a4371356ef90ab437cf3da89dbafc2ec243e",
+          "anchor_identity": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "recorded_at": "2026-10-26T04:47:38Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "e0179cfc935c0132d117bc87e0740a2e7b12f43b47f0e496cf25f33cf0e0aee2",
+              "log_digest": "9d3d5c136653d54cb6eacc8daea2b8f85aa4923cdfcfef48e5abc864acb934d6",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-10": {
+              "evidence_id": "894b329bc09138d43aa6b46bb8540655d06903ee0fe04a599ac23384eac6829c",
+              "log_digest": "9f1ba5de1804659a59f83b75dc2ab7bab4109cdcc3cd5036fba2d0dd518b6ed2",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-11": {
+              "evidence_id": "0ff08b597f6a5b2b1ce5b0e8ad297c001e6388ac9fda5a442313547b2926eb6f",
+              "log_digest": "5a4a7a48c402b4cf685b618f88831ef749a43e059678973806ea951bb2dc90d2",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-12": {
+              "evidence_id": "81ffbee3b6f15096e46d458a33bb55f124847ad4bada5ec85f35193bbab5b573",
+              "log_digest": "bc8eca6cff943430c3eb34a12589fe4a76063488b94e3b2df5b686248cf18ebe",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-13": {
+              "evidence_id": "fdf9ed02d66290fff220a42eaa6b5ff185a3f71d633b93bbc64e8df483e622cf",
+              "log_digest": "a248a2ad2509568f96e6162a05eee434970da91fc4b52c694dfc509614c1a7c9",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-14": {
+              "evidence_id": "6e16004e97d9b84db05ea7022d0c3c7737178fc3e53068aecbb10d31cf4e3a88",
+              "log_digest": "42cd9256e109c6ad98590411d2ff13e4083dfba727155614bf9bce7a46fe8360",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-15": {
+              "evidence_id": "1b31191dbeeccd77ed4843283cbf4b72db55d72e32c77a9ff95efb1c799c6409",
+              "log_digest": "d348411168bbbda1db5a6e201b670e266414803d63cfc948839771173e777e48",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-16": {
+              "evidence_id": "eb79ed1f703fa35cbc6f00f3b82e223fe4d347adab12ca779935ea867aa2ee8a",
+              "log_digest": "9b3bc68b23daf504f1694c0472765bb7604d5127a50fa88339f172b2227da30a",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-2": {
+              "evidence_id": "04d7af9f33615901d319f6709cd802b3931128f85d22297cdfae75626a907011",
+              "log_digest": "1d8363fe6a422b777a32146a40aeb97764d163ab3a4cefc63c5f63a6918a1096",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-3": {
+              "evidence_id": "fedbd23fd43f67e0dfce8bb6176eb9ae776a5566325526ce15de443fa025bc7b",
+              "log_digest": "2041d23aadb35be803e580553bf1e5c9e27835648d96dec56e62de96af858093",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-4": {
+              "evidence_id": "19f1f6293b04057d016f7fb32e4692eb95c46a7248bc384dfc76b32bce60e784",
+              "log_digest": "cd49e9150535f0b95ce62511c5d4d0619a830f2fb3d352f3919887edf13e3d75",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-5": {
+              "evidence_id": "261e333f94ed7ccf3a979ae68c8920858e4adbc07a53e8bf402232ca22a4c675",
+              "log_digest": "3813ad739e29cd2d6d9e18ef0c4cdc0b5506eb6233bb3b46a9bfe5844e5cac14",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-6": {
+              "evidence_id": "a88c9f71c40bc20c120912f44608e19703703c19a9a1860bbfdd07cc3a5d55dd",
+              "log_digest": "7a2ca8b4646844c2e9bb9e9f1d141e9fe8b35ed72fd0967d6453dd9068377de3",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-7": {
+              "evidence_id": "a52eb5ead244c5fbbf3e789a3b2255cacfbc8412a78151776728150914ec6fb0",
+              "log_digest": "088a4dbc2cce4cc59b943d4a9a1046596f3c77c93ef678d0a30f4847d2995ce1",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-8": {
+              "evidence_id": "00844d2372632df2be99a45cb563ea7ac80a8f78d1ad1f423741f5ce464fe2a5",
+              "log_digest": "d53227f9e004079d24762c5e01b538bdf6349ee60831ac1f910dfd356ce2f540",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            },
+            "flow-9": {
+              "evidence_id": "8a797e851a4cdc7ca8913fb7c9c6373e6620f8e7ff55aaa79474f1f346097c6a",
+              "log_digest": "b1f9a32a2d4b1e96510c63f67f8316edf70932b53cc2287ad73a8e25c644050e",
+              "run_ref": "controller:20261026T044958Z-ffbb8a04"
+            }
+          },
+          "pr": {
+            "fact_id": "ee41906bbfa95411ddc2e55d9fe19c9ca8bccaebfaf12b1c0bba30050311b40e",
+            "head": "025d30e77a022803ba8acb96e2046aacc5f6232a",
+            "provenance": "workflow_gh",
+            "raw_sha256": "5423011cb63857eaa82a0cf937a897082a0f58b5145d94a9059d4b55f543a6c0"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-26T06:17:53Z",
+        "workflow_release": "2.20.0"
+      }
     }
   }
 }

@@ -54,7 +54,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from controller import forge, gitrepo, notify, release_txn, routing, runtime, workflow_contract
+from controller import forge, gitrepo, harness, notify, release_txn, routing, runtime, workflow_contract
 from controller.errors import RoutingConfigError, RuntimeContainmentError, SettingsError
 
 SCHEMA_VERSION = 1
@@ -78,6 +78,8 @@ TYPE_OPTIONAL_STRING = "optional-string"
 TYPE_NOTIFICATIONS = "notifications"
 #: The routing section (:func:`controller.routing.validate_routing_mapping`).
 TYPE_ROUTING = "routing"
+#: ``harness.models``: registered harness name -> list of model strings.
+TYPE_HARNESS_MODELS = "harness-models"
 #: A string among the row's closed ``choices`` (review-modes D1).
 TYPE_CHOICE = "choice"
 
@@ -86,6 +88,7 @@ ROUTING_KEY = "routing"
 REVIEW_MODES = ("auto", "cross-model", "single-provider", "manual")
 NOTIFICATIONS_EVENTS_KEY = "notifications.events"
 NOTIFICATIONS_URL_KEY = "notifications.url"
+HARNESS_MODELS_KEY = "harness.models"
 REVIEWER_BRIEF_KEY = "reviewer.brief"
 
 #: Where an effective value came from (``settings show``, the job record).
@@ -202,6 +205,9 @@ TABLE: tuple[Setting, ...] = (
     # scope for the external reviewer's prompt; unset, empty or blank means
     # the built-in ``review.DEFAULT_BRIEF``.
     Setting("reviewer.brief", TYPE_OPTIONAL_STRING, None, 0, 2000, None, 14),
+    # workflow-controller-harness-models D4: models the operator adds to a
+    # harness's declared list; never an effort.
+    Setting(HARNESS_MODELS_KEY, TYPE_HARNESS_MODELS, {}, None, None, None, 16),
     Setting(ROUTING_KEY, TYPE_ROUTING, {"default": {}, "roles": {}}, None, None,
             "--routing-config, --model, --effort, --role-model, --role-effort, --role-harness", 1),
 )
@@ -223,8 +229,9 @@ TABLE: tuple[Setting, ...] = (
 #: and ``functional.timeout_seconds`` and the role ``functional-tester``
 #: (workflow-controller-automated-functional-review D8). 14: the row
 #: ``reviewer.brief`` (workflow-controller-reviewer-brief D1). 15: the routing
-#: field ``harness`` (workflow-controller-routing-harness D6).
-TABLE_GENERATION = 15
+#: field ``harness`` (workflow-controller-routing-harness D6). 16: the row
+#: ``harness.models`` (workflow-controller-harness-models D4).
+TABLE_GENERATION = 16
 
 
 def _table() -> dict[str, Setting]:
@@ -445,6 +452,33 @@ def _check_events(path: Path, value: Any) -> tuple[dict, list[str]]:
                       str(exc), reason=exc.reason) from None
 
 
+def _check_harness_models(path: Path, value: Any) -> tuple[dict, list[str]]:
+    """The clean ``harness.models`` mapping and the harness names left out
+    because no registered adapter has them (reported as unknown keys, so a
+    file shared with a newer release stays usable). A value that is not an
+    object of lists of model strings is refused."""
+    key = HARNESS_MODELS_KEY
+    if not isinstance(value, dict):
+        raise _refuse(path, key, f"{key} must be an object of lists of model strings, got {json.dumps(value)}")
+    clean: dict[str, list[str]] = {}
+    ignored: list[str] = []
+    for name in sorted(value):
+        where = f"{key}.{name}"
+        models = value[name]
+        if not isinstance(models, list):
+            raise _refuse(path, where, f"{where} must be a list of model strings, got {json.dumps(models)}")
+        for model in models:
+            try:
+                routing.check_value(model)
+            except ValueError as exc:
+                raise _refuse(path, where, f"{where} holds an unusable model: {exc}") from None
+        if name in harness.ADAPTERS:
+            clean[name] = list(models)
+        else:
+            ignored.append(name)
+    return clean, ignored
+
+
 def _check_routing(path: Path, value: Any) -> tuple[routing.RoutingConfig, list[str]]:
     try:
         return routing.validate_routing_mapping(
@@ -507,6 +541,10 @@ def _validate(data: dict, path: Path) -> _Checked:
             clean_events, ignored = _check_events(path, value)
             unknown.extend(_events_unknown(value, ignored))
             value = clean_events
+        elif setting.type == TYPE_HARNESS_MODELS:
+            value, ignored = _check_harness_models(path, value)
+            base = _segments(HARNESS_MODELS_KEY)
+            unknown.extend((f"{HARNESS_MODELS_KEY}.{name}", (*base, name)) for name in ignored)
         else:
             _check_setting(path, setting, value)
         values[setting.key] = value

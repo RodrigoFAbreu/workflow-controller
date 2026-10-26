@@ -1050,19 +1050,19 @@ class WorkerRouteTest(unittest.TestCase):
 
     def test_the_sources_name_the_winning_level(self) -> None:
         config = routing.parse_routing_config(json.dumps({
-            "schema_version": 1, "default": {"effort": "e-config-default"},
-            "roles": {"review-plan": {"model": "m-config-role"}},
+            "schema_version": 1, "default": {"effort": "max"},
+            "roles": {"review-plan": {"model": "opus"}},
         }), path="<test>")
         cases = (
             (routing.NO_OVERRIDES, ("claude-opus-5-5", "default"), ("xhigh", "default")),
-            (routing.RoutingOptions(cli_role_models={"review-plan": "m-role"}, cli_effort="e-cli"),
-             ("m-role", "role-cli"), ("e-cli", "cli")),
-            (routing.RoutingOptions(cli_model="m-cli", cli_role_efforts={"review-plan": "e-role"}),
-             ("m-cli", "cli"), ("e-role", "role-cli")),
-            (routing.RoutingOptions(config=config), ("m-config-role", "config-role"),
-             ("e-config-default", "config-default")),
-            (routing.RoutingOptions(cli_role_models={"apply-plan-review": "other"}, config=config),
-             ("m-config-role", "config-role"), ("e-config-default", "config-default")),
+            (routing.RoutingOptions(cli_role_models={"review-plan": "sonnet"}, cli_effort="low"),
+             ("sonnet", "role-cli"), ("low", "cli")),
+            (routing.RoutingOptions(cli_model="haiku", cli_role_efforts={"review-plan": "high"}),
+             ("haiku", "cli"), ("high", "role-cli")),
+            (routing.RoutingOptions(config=config), ("opus", "config-role"),
+             ("max", "config-default")),
+            (routing.RoutingOptions(cli_role_models={"apply-plan-review": "haiku"}, config=config),
+             ("opus", "config-role"), ("max", "config-default")),
         )
         harness_config = routing.parse_routing_config(json.dumps({
             "schema_version": 1, "roles": {"review-plan": {"harness": "claude-code"}}}), path="<test>")

@@ -1,0 +1,58 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-harness-models",
+ "dispositions": {
+  "F-0c2ba7582873": {
+   "disposition": "dropped",
+   "reason": "Codex efforts are declared as (\"high\", \"xhigh\") in controller/harness.py with the captured contract named in the comment; nothing routes a worker to Codex today, so either value set is safe (the reviewer's own words)."
+  },
+  "F-1580a43b302a": {
+   "disposition": "dropped",
+   "reason": "TEST_RESULTS.md is a bundle narrative file regenerated every round; it ships nothing. The positive controls passing on the base is expected."
+  },
+  "F-200559e0ae47": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-272c0e1744a8": {
+   "disposition": "dropped",
+   "reason": "D7 is plan prose; its catch-all and the full-suite checkpoint found and migrated every placeholder (see the tests in the implementation diff), so the inventory in the plan text adds nothing to the shipped change."
+  },
+  "F-368897772de9": {
+   "disposition": "fixed",
+   "note": "docs/compatibility.md says there is no command and shows the harness.models settings-file entry to add; D4 keeps the row without a CLI flag."
+  },
+  "F-75cd10c37ccc": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-8178c83f7ed8": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-93f618f294eb": {
+   "disposition": "dropped",
+   "reason": "Same as F-272c0e1744a8: the undeclared efforts in tests/test_job.py were migrated by the implementation."
+  },
+  "F-96fbe8414907": {
+   "disposition": "dropped",
+   "reason": "Same as F-272c0e1744a8: the placeholders named were migrated by the implementation."
+  },
+  "F-c59f3b19410b": {
+   "disposition": "dropped",
+   "reason": "Prose in the artifacts registry file only; it affects no classification and the file is historical after acceptance."
+  },
+  "F-c7d582c1d2af": {
+   "disposition": "dropped",
+   "reason": "Same as F-c59f3b19410b: harmless registry prose, no classification effect."
+  },
+  "F-f4d0ab3b16b9": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-f5fddc50b1c7": {
+   "disposition": "dropped",
+   "reason": "Same as F-0c2ba7582873: the implementation declares the Codex efforts from the captured contract; nothing routes to Codex yet."
+  }
+ }
+}

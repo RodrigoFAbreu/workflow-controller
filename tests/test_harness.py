@@ -37,6 +37,23 @@ class DeclaredFactsTest(unittest.TestCase):
             harness.CODEX.family = "x"  # type: ignore[misc]
 
 
+class DeclaredModelsAndEffortsTest(unittest.TestCase):
+    def test_every_adapter_declares_models_and_efforts(self) -> None:
+        for adapter in harness.ADAPTERS.values():
+            with self.subTest(adapter=adapter.name):
+                self.assertTrue(adapter.models)
+                self.assertTrue(adapter.efforts)
+
+    def test_claude_code_efforts_are_the_reviewer_efforts(self) -> None:
+        self.assertEqual(harness.CLAUDE_CODE.efforts, review.CLAUDE_EFFORTS)
+
+    def test_launch_defaults_are_declared_by_their_adapter(self) -> None:
+        self.assertIn(review.DEFAULT_MODEL, harness.CODEX.models)
+        self.assertIn(review.DEFAULT_EFFORT, harness.CODEX.efforts)
+        self.assertIn(review.CLAUDE_DEFAULT_MODEL, harness.CLAUDE_CODE.models)
+        self.assertIn(review.CLAUDE_DEFAULT_EFFORT, harness.CLAUDE_CODE.efforts)
+
+
 class DerivedValuesTest(unittest.TestCase):
     def test_derived_equal_old_literals(self) -> None:
         self.assertEqual(dict(review_mode.HARNESS_FAMILY), {"codex": "openai", "claude": "anthropic"})

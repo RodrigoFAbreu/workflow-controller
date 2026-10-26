@@ -32266,12 +32266,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checks-wait-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checks-wait-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 3,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "8552217a37030c590533e35b525290a6bfb9de09",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "8d5d97e44646c3606220b0b0d842cb8817e89ab7",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -32410,8 +32410,8 @@
           "external": 0
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-10-26T10:00:54Z",
+      "state_revision": 17,
+      "last_transition": "2026-10-26T10:14:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

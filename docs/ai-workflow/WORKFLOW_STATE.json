@@ -33873,7 +33873,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-verification-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-verification-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 1,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -33982,7 +33982,126 @@
           "workflow_release": "2.21.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "b4bb7c756a76aa8312708b158243a4cec7e1280606827ef2d4d46cb4e0530bda",
+        "approved_review_content_id": "e4c544beaf419e3c0681ddfcd62959752db1eb6dac59a062d59705071430ba3e",
+        "review_content_manifest": [
+          {
+            "path": "controller/harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "343e384c3bd23c8ec88f554c2636c570b105e396"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-verification-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9e64264b54622b3dc15c7f72d9faa6801c60a2f9"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "34b96c76a7d012d326d960d3a553f32832003c40"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "afcc9ac262c1acb9e37b139ceaeb1ced5ab0f477"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a5826039af9af4603d32ae842ac1ad77751cbdf5"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bf63b1171ddd7d7b0baf3c7c25c9eba0543736cb"
+          },
+          {
+            "path": "tests/test_harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca693d308f9d8b693d89008f5adc221153719b39"
+          },
+          {
+            "path": "tools/harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "807641da86ed9abefbb554d0e7918071ce3f463f"
+          }
+        ],
+        "reviewed_content_commit": "425dbfa996e6b452af718005f3144ce93bba2307",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T21:07:54Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e4c544beaf419e3c0681ddfcd62959752db1eb6dac59a062d59705071430ba3e",
+            "ledger": {
+              "local": {
+                "bundle_id": "b4bb7c756a76aa8312708b158243a4cec7e1280606827ef2d4d46cb4e0530bda",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "22680f86f556edd4092a57de11a93c9bcb2cac10b06b138c19601ffcb9b2b57e",
+                "ledger_entry_sha256": "64bcc0609d9d2f02eec03631ab5a56cb167ccf6e82c0659dccd5a0e5257ce584",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-verification/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "b4bb7c756a76aa8312708b158243a4cec7e1280606827ef2d4d46cb4e0530bda",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "5ddc3ff27ed8b0f9573af892dd13b0809d3c1ff71223d5de1be080b8045371ce",
+                "ledger_entry_sha256": "df5f593345c443f01a2d86ae550519ee29a1e9ffbb19fcc0294ecc8bb0b4dfff",
+                "run_ref": "codex:20261026T210443Z-b3252526",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T21:07:54Z",
+          "workflow_release": "2.21.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
@@ -34013,12 +34132,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-10-26T20:51:13Z",
+      "state_revision": 17,
+      "last_transition": "2026-10-26T21:07:54Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -34069,6 +34188,55 @@
               "at": "2026-10-26T19:32:13Z"
             }
           ]
+        },
+        "F-99d2645a8eac": {
+          "digest": "99d2645a8eace48f056858cb657a2ccbef38981d8847ce421df6851c97cacf79",
+          "text": "**LIR-R1-001: the scope scan test matches attribute access only, so a name import passes it.** `tests/test_harness.py` `BuildVerificationTest.test_the_command_admits_the_functional_tester_launch_only` collects `ast.Attribute` nodes named `recorded_digests`, `identity_check` or `static_probe` inside function bodies. A module under `controller/` that writes `from controller.claude_build import recorded_digests as _rd` and calls `_rd(root)` inside a function is not seen. This was checked by mutation: that code appended to a scratch copy of `controller/worker.py` left `BuildVerificationTest` at `OK`. The codebase uses name imports of functions elsewhere (`from controller.managed_repo import installed_workflow_version`), so the pattern is plausible. A reference at module level is not seen either. Have the scan also refuse an `ast.ImportFrom` of any of the three names from `claude_build`/`functional_review` outside the two defining modules (and `cli.py` for `recorded_digests`). This is a hardening of the pin and not a defect in what ships: today the only reader is `review.launch_functional`, as checked by `grep`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "e4c544beaf419e3c0681ddfcd62959752db1eb6dac59a062d59705071430ba3e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T21:04:16Z"
+            }
+          ]
+        },
+        "F-fa00ed05a503": {
+          "digest": "fa00ed05a503ac40ed9dff140f5e32379c992fac96939024119696a2bec3da12",
+          "text": "`tests/test_harness.py:107`: The launch-scope scan recognizes attribute access but misses imported names. An in-memory mutation adding `from controller.claude_build import recorded_digests as digests; digests(None)` inside a worker function passed; equivalent attribute access failed. Supporting imported aliases would strengthen future regression detection. Current launch-scope claims hold.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "e4c544beaf419e3c0681ddfcd62959752db1eb6dac59a062d59705071430ba3e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T21:06:40Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "e4c544beaf419e3c0681ddfcd62959752db1eb6dac59a062d59705071430ba3e",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "b4bb7c756a76aa8312708b158243a4cec7e1280606827ef2d4d46cb4e0530bda",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-26T21:04:16Z",
+          "verdict_sha256": "22680f86f556edd4092a57de11a93c9bcb2cac10b06b138c19601ffcb9b2b57e",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-verification/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "b4bb7c756a76aa8312708b158243a4cec7e1280606827ef2d4d46cb4e0530bda",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-26T21:06:40Z",
+          "verdict_sha256": "5ddc3ff27ed8b0f9573af892dd13b0809d3c1ff71223d5de1be080b8045371ce",
+          "run_ref": "codex:20261026T210443Z-b3252526",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

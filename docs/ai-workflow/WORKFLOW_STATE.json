@@ -33031,12 +33031,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-build-pin-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-build-pin-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": 2,
+      "implementation_revision": 3,
       "functional_review_round": null,
       "base_commit": "47453526deb37f06396a103c0623652ccf8c6863",
-      "reviewed_implementation_head": "d9c674855be0fc12585033475ff57f5bc9a8a9f7",
+      "reviewed_implementation_head": "9cfbf7b4678e3b0154414e53c7c635ce613c0895",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
@@ -33328,8 +33328,8 @@
           "external": 1
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-10-26T15:22:48Z",
+      "state_revision": 30,
+      "last_transition": "2026-10-26T15:23:29Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

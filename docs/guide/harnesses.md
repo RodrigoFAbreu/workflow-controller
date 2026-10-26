@@ -29,8 +29,15 @@ runs: exit `20` in a settings file or a `--routing-config` file, a usage error
 (exit `2`) for `--role-harness`. See [the routing section](runtime.md#the-routing-section) for the file
 format and [worker routing](commands.md#worker-routing) for the options.
 
-The `Pinned version` column is the build the Controller's captures were taken
-from (`codex-cli 0.163.0` for Codex). `Unknown version refused` does not mean a version string is compared: the
+The `Captured with` column is the build the Controller's captures were taken
+from (`codex-cli 0.163.0` for Codex); it is for information and is not compared
+at launch. The `Build verification` column names the Controller command that
+admits a build of that harness where the Controller checks one. For Claude Code
+that is `verify-claude`, and it admits the functional-tester launch only: the
+worker and reviewer launches run any build on `PATH`. Codex has none
+(`none: launch checks only`): its launch is refused by the checks of its
+surfaces described next, until `verify-codex` ships. `Unknown version refused`
+keeps its meaning and does not mean a version string is compared: the
 launch is refused when an update changes a checked surface (an enabled feature,
 a configuration layer, a state entry or a flag), and an update that changes none
 of them is accepted. After a refusal, review by hand until the pin is

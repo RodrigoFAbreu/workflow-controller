@@ -30,10 +30,11 @@ runs: exit `20` in a settings file or a `--routing-config` file, a usage error
 format and [worker routing](commands.md#worker-routing) for the options.
 
 The `Pinned version` column is the build the Controller's captures were taken
-from. `Unknown version refused` does not mean a version string is compared: the
+from (`codex-cli 0.163.0` for Codex). `Unknown version refused` does not mean a version string is compared: the
 launch is refused when an update changes a checked surface (an enabled feature,
 a configuration layer, a state entry or a flag), and an update that changes none
-of them is accepted. See [common problems](../common-problems.md#a-worker-failed-or-stopped-exit-30-or-35).
+of them is accepted. After a refusal, review by hand until the pin is
+re-measured. See [common problems](../common-problems.md#a-worker-failed-or-stopped-exit-30-or-35).
 
 The `Models` and `Efforts` columns list what the adapter declares. A route is
 refused at load, before any job record is written, when its model or effort is

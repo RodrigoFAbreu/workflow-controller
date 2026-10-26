@@ -258,6 +258,7 @@ file is never an error: every setting then takes its built-in default.
 | `reviewer.same_provider_model` | string or `null` | `null` (built-in `claude-opus-5-5`) | 1 to 128 characters | none |
 | `reviewer.same_provider_effort` | string or `null` | `null` (built-in `high`) | 1 to 32 characters | none |
 | `reviewer.brief` | string or `null` | `null` (built-in severity bar) | 0 to 2000 characters, no control character | none |
+| `harness.models` | object | `{}` | a map from a harness name (`claude-code`, `codex`) to a list of model names, each non-empty and not starting with `-` | none |
 | `routing` | object | `{"default": {}, "roles": {}}` | see [The routing section](#the-routing-section) | `--routing-config`, `--model`, `--effort`, `--role-model`, `--role-effort`, `--role-harness` |
 
 Each default is the value the Controller used before the file existed,
@@ -607,6 +608,10 @@ The release that adds `reviewer.brief` is table generation 14: it adds the row t
 unset (`null`), and moves nothing else. An older Controller sharing the file afterwards warns about the unknown key,
 ignores it, and its `settings clean` refuses.
 
+The release that adds `harness.models` is table generation 16: it adds the row to a file filled by an earlier
+release, as `{}`, and moves nothing else. An older Controller sharing the file afterwards warns about the unknown key,
+ignores it, and its `settings clean` refuses.
+
 So a value you set yourself never moves. A value is never moved back to
 an older default either: an older release sharing the file leaves a newer
 release's value alone. `_table_generation` records the newest release
@@ -682,6 +687,27 @@ launches. A `default.harness` is checked against every role that has no `harness
 of its own, so it is refused even when `--role-harness` would override every one
 of them. The built-in `claude-code` applies when nothing names a harness, and no
 `harness` default is written into the file.
+
+A model and an effort are checked against the harness the same way, once the
+three values of a role are resolved (the command line, the routing config in
+force and the built-in table together), before any job record is written. A
+model passes when the harness's adapter declares it (the
+[harness page](harnesses.md) lists them) or when the `harness.models` setting
+adds it for that harness; an effort passes when the adapter declares it. An
+unset model or effort inherits and is never refused. Otherwise the run or step
+is refused with exit `20`, for example `role 'review-plan' routes the model
+'gpt-5' to the harness 'claude-code', which declares [...]`, followed by where
+each of the three values came from. To use a model the adapter does not list,
+add it to the settings file:
+
+```json
+"harness.models": {"claude-code": ["claude-opus-5-6"]}
+```
+
+An unsupported effort is changed in the routing; no setting extends the effort
+list. A harness name no adapter has is left out of `harness.models` and
+reported as an unknown key. The reviewer settings (`reviewer.model`,
+`reviewer.effort`, `reviewer.same_provider_*`) keep their own checks at launch.
 
 The resolved harness is recorded in each job's `worker_route` as `harness`, with
 `sources.harness`, using the adapter name for every job kind. A same-provider

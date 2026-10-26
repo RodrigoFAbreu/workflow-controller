@@ -96,7 +96,7 @@ With `reviewer.harness` set, 1.10.0 writes a review job record into the runtime'
 ## Routing a harness
 
 Since 1.21.0 a routing entry may name a `harness` and the command line gains
-`--role-harness`. The settings file is table generation 15; a Controller before
+`--role-harness`. The settings file is table generation 15 (generation 16 since 1.22.0, below); a Controller before
 1.21.0 sharing it warns once about the unknown `harness` key and ignores it, its
 `settings clean` refuses, and a `--routing-config` file with `harness` is
 refused by it. This release accepts `claude-code` for every routing role and
@@ -106,6 +106,35 @@ that pair valid for it and refused by 1.21.0: update the Controller or remove th
 entry. A same-provider review record's `worker_route.harness` reads `claude-code`
 since 1.21.0 (it read `claude`); a reader that matched the old value needs the
 new one.
+
+## Upgrading to 1.22.0
+
+Each harness adapter now declares the models and efforts it supports, and a route
+whose model or effort the chosen harness does not declare is refused at the next
+`run` or `step`, before any job record is written. Until 1.21.x a routing file or
+settings file could name any model or effort and the `claude` CLI was the
+authority; these configurations are newly refused:
+
+- a model the harness does not declare (for `claude-code`: anything but
+  `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`,
+  `opus`, `sonnet`, `haiku`), including the built-in default of a role routed to a
+  harness that does not declare it;
+- an effort the harness does not declare (for `claude-code`: anything but `low`,
+  `medium`, `high`, `xhigh`, `max`).
+
+The refusal is exit 20 with a message such as `role 'review-plan' routes the model
+'gpt-5' to the harness 'claude-code', which declares [...]`, followed by the source
+of the model, the effort and the harness. The fix for a model is to add it to the
+`harness.models` entry of the settings file (there is no command):
+
+```json
+"harness.models": {"claude-code": ["your-model-name"]}
+```
+
+An unsupported effort is changed in the routing; no setting adds an effort. The
+settings file is table generation 16: the fill adds `"harness.models": {}`, and a
+Controller before 1.22.0 sharing the file warns about the unknown key, ignores it,
+and its `settings clean` refuses.
 
 ## Shell aliases and worker commands
 

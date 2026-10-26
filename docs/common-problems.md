@@ -140,6 +140,10 @@ The repository's Workflow release changed after the command started, usually bec
 
 A work item whose state names a registry file that does not exist is refused before any decision. Finish the planning command in a supervised session, then run again. See [troubleshooting](guide/troubleshooting.md#common-situations).
 
+## A run or step refuses a model or effort (exit 20)
+
+Since 1.22.0 the message reads `role '<role>' routes the model '<value>' to the harness '<harness>', which declares [...]` (or the effort), followed by where the model, effort and harness came from, and nothing was written or launched. A model the harness does not list is added to the `harness.models` entry of the settings file; an effort it does not list is changed in the routing. See [Upgrading to 1.22.0](compatibility.md#upgrading-to-1220) and [the routing section](guide/runtime.md#the-routing-section).
+
 ## The settings file is refused (exit 20)
 
 The message names the file and the key. Fix that key by hand and run again, or move the file aside and the next `step`, `run`, `resume` or `milestone-binding` creates a fresh one. `workflow-controller settings path` prints the file in use. See [troubleshooting](guide/troubleshooting.md#the-settings-file-is-refused-settingserror).

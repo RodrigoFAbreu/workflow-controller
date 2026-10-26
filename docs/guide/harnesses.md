@@ -29,6 +29,14 @@ runs: exit `20` in a settings file or a `--routing-config` file, a usage error
 (exit `2`) for `--role-harness`. See [the routing section](runtime.md#the-routing-section) for the file
 format and [worker routing](commands.md#worker-routing) for the options.
 
+The `Models` and `Efforts` columns list what the adapter declares. A route is
+refused at load, before any job record is written, when its model or effort is
+not in the list of the harness that runs it (see
+[the routing section](runtime.md#the-routing-section)). The effort list is fixed
+by the adapter; a model outside the list is added with the `harness.models`
+setting, which maps a harness name to a list of model names and is not shown in
+the table.
+
 The tables change when an adapter gains or loses a role, so a role that is
 `no` today (the Codex worker, the Codex tester) becomes `yes` in the same change
 that declares it.
@@ -36,10 +44,10 @@ that declares it.
 ## The tables
 
 <!-- harness-table:begin -->
-| Harness | `reviewer.harness` | Family | Roles | Restricts subagents | Restricts tools | Usage | Pinned version | Unknown version refused |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `claude-code` | `claude` | anthropic | `worker`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | yes |
-| `codex` | `codex` | openai | `reviewer` | yes | yes | computed from the harness's output | codex-cli 0.162.1 | yes |
+| Harness | `reviewer.harness` | Family | Roles | Restricts subagents | Restricts tools | Usage | Pinned version | Unknown version refused | Models | Efforts |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `claude-code` | `claude` | anthropic | `worker`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `codex` | `codex` | openai | `reviewer` | yes | yes | computed from the harness's output | codex-cli 0.162.1 | yes | `gpt-6.1-sol` | `high`, `xhigh` |
 
 | Routing role | Runs as | `claude-code` | `codex` |
 | --- | --- | --- | --- |

@@ -78,6 +78,8 @@ def render() -> str:
         _wording(USAGE_WORDING, a.usage, "usage mode"),
         a.pinned_version,
         _yes_no(a.fails_closed_on_unknown_version),
+        ", ".join(f"`{m}`" for m in a.models),
+        ", ".join(f"`{e}`" for e in a.efforts),
     ] for a in adapters]
     route_rows = [
         [f"`{role}`", f"`{routing.ADAPTER_ROLE[role]}`"] + [_yes_no(_accepted(role, a.name)) for a in adapters]
@@ -90,7 +92,7 @@ def render() -> str:
 
     lines = _table(
         ["Harness", "`reviewer.harness`", "Family", "Roles", "Restricts subagents", "Restricts tools",
-         "Usage", "Pinned version", "Unknown version refused"],
+         "Usage", "Pinned version", "Unknown version refused", "Models", "Efforts"],
         harness_rows,
     )
     lines.append("")

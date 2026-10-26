@@ -55,6 +55,18 @@ class RenderTest(unittest.TestCase):
             self.assertEqual(row[6], ht.USAGE_WORDING[a.usage])
             self.assertEqual(row[7], a.pinned_version)
             self.assertEqual(row[8], "yes" if a.fails_closed_on_unknown_version else "no")
+            self.assertEqual(row[9], ", ".join(f"`{m}`" for m in a.models))
+            self.assertEqual(row[10], ", ".join(f"`{e}`" for e in a.efforts))
+
+    def test_the_models_and_efforts_cells_follow_the_registry(self) -> None:
+        before = table_rows(ht.render())[0]
+        added = dataclasses.replace(harness.CODEX, models=harness.CODEX.models + ("extra-model",))
+        with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": added}):
+            after = table_rows(ht.render())[0]
+        changed = [(b[0], a[9]) for b, a in zip(before, after) if b != a]
+        self.assertEqual(changed, [("`codex`", ", ".join(f"`{m}`" for m in added.models))])
+        self.assertEqual([b[:9] for b in before], [a[:9] for a in after])
+        self.assertEqual([b[10] for b in before], [a[10] for a in after])
 
     def test_an_adapter_that_cannot_review_shows_a_dash(self) -> None:
         silent = dataclasses.replace(harness.CODEX, name="silent", reviewer_name=None, roles=(harness.WORKER,))

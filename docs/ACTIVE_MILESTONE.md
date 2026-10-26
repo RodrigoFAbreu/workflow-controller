@@ -13,7 +13,9 @@ have been pending over four hours.
 - CP2 (the guides and the roadmap): complete. `docs/guide/commands.md` and `docs/guide/automation.md` describe `checks_wait`
   and the four-hour escalation, and `docs/ROADMAP.md` marks NF2 done; `python3 tools/check_docs.py` passes.
 
+- Self-review: one test added, a long-pending spent wait sending `lane_blocked` through the branch-gate path's real
+  wiring (`BranchWiringTest`), which the plan named and only the short case covered.
+
 ## Next action
 
-Run `/milestone-implement workflow-controller-checks-wait` again: every checkpoint is complete, so it enters the
-self-review of the implementation.
+The implementation is complete and in review: implementation revision 1 goes to the local implementation review.

@@ -1452,6 +1452,21 @@ class BranchWiringTest(test_trunk_preflight.RunWaitTest):
         self.assertEqual(self.sent_types(), ["checks_wait"])
         self.assertEqual(self.hub.requests[0]["body"]["severity"], "LOW")
 
+    def test_a_spent_wait_on_checks_pending_long_sends_one_blocker(self) -> None:
+        self.accepted()
+        self.cli_hub("step")  # the PR is readied and its title updated: checks_pending, which sends nothing
+        self.assertEqual(self.sent_types(), [])
+        path = self.lc.runtime / mb.events_rel(self.key, test_trunk_preflight.WI)
+        path.write_text("".join(json.dumps({**e, "at": "2020-01-01T00:00:00Z"}) + "\n" for e in self.binding_events()))
+        self.hub.requests.clear()
+        settings = self.tmp_root / "settings.json"
+        settings.write_text(json.dumps({"merge": {"wait_seconds": 50}}))
+        with self.waiting(), unittest.mock.patch.dict(os.environ, {"WORKFLOW_CONTROLLER_SETTINGS": str(settings)}):
+            result = self.cli_hub("run")
+        self.assertEqual(result.code, cli.EXIT_GATE, result.stderr)
+        self.assertEqual(self.sent_types(), ["lane_blocked"])
+        self.assertEqual(self.hub.requests[0]["body"]["severity"], "CRITICAL")
+
     def test_a_dirty_merge_conflict_is_a_blocker_at_once(self) -> None:
         number = self.accepted()
         self.cli_hub("step")

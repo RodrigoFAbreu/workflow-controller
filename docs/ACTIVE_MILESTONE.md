@@ -17,6 +17,8 @@ The implementation is complete and technically approved (implementation revision
 
 ## Functional review checklist
 
+**Functional round 1 (automated tester):** flow 8 failed on the docs, a usability defect (the harness and worker guides named no 0.163.0 and no manual-review fallback; the runtime bullet had no explicit fallback). Fixed in `docs/guide/workers.md`, `harnesses.md` and `runtime.md`; flows 1-7 and 9-10 passed and need no re-test. Re-test flow 8. Nothing deferred to a remediation child.
+
 Scope: RB3 (#168) only, the pin moves to `codex-cli 0.163.0`. Everything runs offline in the read-only clone against the repository's fake Codex; no real `codex`, `claude`, `gh` or network is needed, and no flow writes inside the clone. Run each command from the clone root with `export PYTHONDONTWRITEBYTECODE=1` (no `__pycache__` writes).
 
 **Setup:** none beyond `python3` and the clone. No feature flags, no seeded data (the captures under `tests/harness_contract/codex/` are the data).

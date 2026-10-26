@@ -231,6 +231,20 @@ class NoPolicyGoldenMergeRowsTest(unittest.TestCase):
                     strip_harness(value)
 
         strip_harness(data)
+        # harness-models CP2 added only the ``harness.models`` row to each job's ``controller_settings`` values and sources.
+        models_rows = {"count": 0}
+
+        def strip_models(node: object) -> None:
+            if isinstance(node, dict):
+                models_rows["count"] += node.pop("harness.models", None) is not None
+                for value in node.values():
+                    strip_models(value)
+            elif isinstance(node, list):
+                for value in node:
+                    strip_models(value)
+
+        strip_models(data)
+        self.assertGreater(models_rows["count"], 0)
         self.assertGreater(harness_keys["worker_route"], 0)
         self.assertEqual(harness_keys["worker_route"], harness_keys["sources"])
         rendered = golden.render(data)

@@ -1370,6 +1370,7 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
         cli_role_harnesses=getattr(args, "role_harness", None) or {},
         config=effective.routing_config,
         config_source=_ROUTING_CONFIG_SOURCES[effective.sources[settings.ROUTING_KEY]],
+        harness_models={name: tuple(models) for name, models in effective[settings.HARNESS_MODELS_KEY].items()},
     )
 
 

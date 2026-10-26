@@ -54,6 +54,7 @@ from controller.errors import (  # noqa: E402
     LifecycleWorkerActiveError,
     LifecycleWorkerUnverifiableError,
     PendingJobReconciliationError,
+    RoutingConfigError,
     RuntimeContainmentError,
     SourceSnapshotError,
     UnmanagedRepositoryError,
@@ -3300,6 +3301,15 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         self.settings_path.unlink()
         options = cli._routing_options(self._args(write=False))
         self.assertEqual((options.config_source, options.config), (routing.CONFIG_SOURCE_NONE, None))
+
+    def test_harness_models_reach_the_routing_options_and_extend_the_accepted_models(self) -> None:
+        routed = {"routing": {"roles": {"milestone-plan": {"model": "claude-opus-5-6"}}}}
+        with self.assertRaises(RoutingConfigError) as ctx:
+            cli._routing_options(self._args(routed))
+        self.assertIn("harness.models", ctx.exception.message)
+        routed["harness"] = {"models": {"claude-code": ["claude-opus-5-6"]}}
+        options = cli._routing_options(self._args(routed))
+        self.assertEqual(dict(options.harness_models), {"claude-code": ("claude-opus-5-6",)})
 
     def test_the_real_job_records_controller_settings_and_the_routes_source(self) -> None:
         job.execute_step = self._orig_execute_step

@@ -10,5 +10,7 @@ setting (table generation 16) adds a model without a release. The plan is archiv
 
 ## Next action
 
-No milestone is active. Next is H7 in `docs/ROADMAP.md` (the harness-neutral roles epic, owner decision 2026-10-24);
-run `/milestone-plan` for it.
+No milestone is active. Next is NF2 in `docs/ROADMAP.md` ([#170](https://github.com/RodrigoFAbreu/workflow-controller/issues/170): a spent
+`checks_pending` wait is an info event; critical only when a check fails or the wait is much longer), then RB3
+([#168](https://github.com/RodrigoFAbreu/workflow-controller/issues/168)), then H7 of the harness-neutral roles epic
+(owner decision 2026-10-24); run `/milestone-plan` for NF2.

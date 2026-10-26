@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(workflow-manager verify *)",
+      "Bash(workflow-manager verify)",
+      "Bash(workflow-controller --version)",
+      "mcp__ccd_pr__get_status",
+      "mcp__claude-design__read_file",
+      "mcp__visualize__read_me",
+      "mcp__ccd_session_mgmt__list_sessions"
+    ]
+  }
+}

@@ -2,11 +2,15 @@
 
 ## Status
 
-**Complete.** `workflow-controller-checks-wait` (NF2, issue #170) was accepted on 2026-10-26 by gate policy
-(`policy:bae758b4f4ce`): a spent pending-checks wait, or a pending-checks stop in a repository without auto-merge, sends
-the info event `checks_wait` (INFO, LOW), and `lane_blocked` only once the checks have been pending over four hours. The
-plan is archived at `docs/milestones/completed/workflow-controller-checks-wait.md`.
+**In implementation.** `workflow-controller-codex-build-pin` (RB3, issue #168; plan `docs/ai-workflow/CONTROLLER_CODEX_BUILD_PIN_PLAN.md`)
+moves the pinned Codex boundary to `codex-cli 0.163.0`.
+
+| checkpoint | state |
+| --- | --- |
+| CP1 The 0.163.0 feature capture | complete: `features_list.0.163.0.txt` (operator's 2026-10-26 probe) replaces the 0.162.1 file, README digest and provenance updated |
+| CP2 Move the pin | pending |
+| CP3 The guides and the roadmap | pending |
 
 ## Next action
 
-No milestone is active. Next is RB3 (issue #168) in `docs/ROADMAP.md`; run `/milestone-plan` for it.
+Run `/milestone-implement workflow-controller-codex-build-pin` for the next checkpoint.

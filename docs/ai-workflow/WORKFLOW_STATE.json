@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-harness-models",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -31208,6 +31208,303 @@
         "evaluated_at": "2026-10-26T00:44:28Z",
         "workflow_release": "2.19.2"
       }
+    },
+    "workflow-controller-harness-models": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-harness-models",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_HARNESS_MODELS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-models-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-models-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "798ba8632d889569757c51f98c6d49ca56197589",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+        "approved_review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_HARNESS_MODELS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "faca669a95c1c8b062c08166b568cd13c9778d3e"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-models-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e278315c9ab4e23f1c35507a395a0b53b0526849"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-harness-models-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "09b01b28f17477e644c9ffc9d7e94f412596557b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T02:29:10Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+            "ledger": {
+              "local": {
+                "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "31239a43c5ac26cb91fd8bbbefec4984cb4b47fd2402ce82f146df5b15f0fa16",
+                "ledger_entry_sha256": "0f5a909f36208d36aa3ac778b3b79b4e3fb8251fbdc6a53958953ae0f0d4dec4",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "d95a8c4ae630689dcf62d1c239d73491d1aeeb7ae43fc75e8fc10ac3741deb38",
+                "ledger_entry_sha256": "875136fa242eb4db33cc69a152c7fd0ab5b7da12dc6c7dec9e31d846c1aa2308",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T02:29:10Z",
+          "workflow_release": "2.20.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T02:18:54Z",
+          "verdict_sha256": "31239a43c5ac26cb91fd8bbbefec4984cb4b47fd2402ce82f146df5b15f0fa16",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T02:26:33Z",
+          "verdict_sha256": "d95a8c4ae630689dcf62d1c239d73491d1aeeb7ae43fc75e8fc10ac3741deb38",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 10,
+      "last_transition": "2026-10-26T02:29:10Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-26T02:15:09Z",
+        "consumed": {
+          "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+          "bundle_id": "b0e92de63974bf4e6de344f6451ebd1798e831b4383572c74b6f7f22d40f016e",
+          "plan_revision": 2
+        }
+      },
+      "optional_findings": {
+        "F-0c2ba7582873": {
+          "digest": "0c2ba75828739c74c68a420c9972c84301749c1c2376acd7b739be1f857a91a8",
+          "text": "**O1. The Codex efforts are left to the implementer's reading.** D1 says `codex` declares \"the efforts observed in `tests/harness_contract/codex/`\". The captured runs show only `high` (exec_argv.json, compose.txt, rollout_excerpt.jsonl, stderr_shapes.txt). `xhigh` appears only in sandbox_probe.txt, as the catalog's `multi_agent_reasoning_effort`, which no run used. Naming the value in the plan (`(\"high\",)`, or `(\"high\", \"xhigh\")` with the reason) would remove the judgement call. Nothing routes a worker to Codex today, so either choice is safe.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-368897772de9": {
+          "digest": "368897772de90fac3f45307d1fbac2aff8e9de6cb160a155817bf37780491688",
+          "text": "**O2. There is no command that sets `harness.models`.** D5 asks the release notes and docs to give \"the command to set it\". The `settings` command has only `show`, `path` and `clean`, and D4 says the row has no CLI flag. The docs can only show the JSON entry to add to the settings file. The wording could say \"the entry to add\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-75cd10c37ccc": {
+          "digest": "75cd10c37cccf4621af5f5fa8f298ed1e5d6613ca54cef6a26d1744ae01d6cef",
+          "text": "**O3. The aliases still fail at launch for the functional tester.** D1 declares `opus`, `sonnet` and `haiku` for claude-code, so H8 accepts `functional-tester` routed to `sonnet`. `review.functional_argv` then refuses any model that is not a full `claude-` id at launch, which is the mid-run failure the Goal describes. This behaviour is older than H8, and H8 does not make it worse. A Risks or Out-of-scope note, or a follow-up issue, would record the gap.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-c7d582c1d2af": {
+          "digest": "c7d582c1d2af33456d18d12af0445eb6a9645cba3d28a9c50a4b4679e75e816f",
+          "text": "**O4. The registry's protected-path note names `job.py`, but no checkpoint edits it.** The `controller/` exclusion reason in workflow-controller-harness-models-artifacts.json says \"this milestone edits routing.py, settings.py, cli.py and job.py\". No checkpoint's `**Files:**` lists `controller/job.py`, and nothing in the decisions needs it. The note is harmless, but it does not match the plan.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:04:00Z"
+            }
+          ]
+        },
+        "F-93f618f294eb": {
+          "digest": "93f618f294eb0ab040f53ccc6842877f426b02979fb1230e110bec9f3405b4b1",
+          "text": "**O1 — Make the placeholder migration inventory explicit, including efforts.** D7 discusses model placeholders and CP1 defers discovery to running the suite. Existing cases also route undeclared efforts: `tests/test_job.py:1051` uses `e-cli`, `e-role`, and `e-config-default`. List the affected cases and their model/effort replacements so the migration scope is reviewable.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e",
+              "verdict": "REVISE",
+              "at": "2026-10-26T02:12:46Z"
+            }
+          ]
+        },
+        "F-272c0e1744a8": {
+          "digest": "272c0e1744a826528b2da372a56a084421a3987d32014b33d5c0a3dd8cfb5fe3",
+          "text": "**O1. D7's inventory is not complete, though its catch-all covers the rest.** D7 says the migration scope \"is fixed here\", and lists the models `m`, `other`, `gpt`, `x`. Some placeholder models that reach `RoutingOptions` are not in that list. In `tests/test_cli.py`: `claude-sonnet-5` at lines 953, 3270 and 3287 (a settings/config routing run that records `worker_route`), and `rm` at line 900. In `tests/test_job.py`: `m-cli`, `m-role` and `m-config-role` at lines 1054-1060, a test that tells four sources apart. These would be refused under D3. D7's rule that \"any case outside this inventory\" is listed in the commit message covers them. Naming them now would make the stated fixed scope true and settle the mapping for the four-source test (for example the four full ids).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:18:54Z"
+            }
+          ]
+        },
+        "F-f5fddc50b1c7": {
+          "digest": "f5fddc50b1c7fab788b39b5a856943498ce65970351c9a3c2f3467df3afdf6df",
+          "text": "**O2. The Codex efforts are still left to the implementer's reading (round 1's O1, unchanged in revision 2).** The captured Codex runs show only `high` (`exec_argv.json`, `compose.txt`, `rollout_excerpt.jsonl`, `stderr_shapes.txt`). `xhigh` appears only in `sandbox_probe.txt`, as a catalog value no run used. Naming the declared tuple in D1 would remove the judgement call. Nothing routes a worker to Codex yet, so either choice is safe.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:18:54Z"
+            }
+          ]
+        },
+        "F-c59f3b19410b": {
+          "digest": "c59f3b19410be9818e6eec31f06f09528bdea8e47721773ec8b087f2e964174b",
+          "text": "**O3. The artifacts file's justification for the `controller/` exclusion names the wrong files.** It says the milestone \"edits routing.py, settings.py, cli.py and job.py\". The plan edits `harness.py`, `routing.py`, `settings.py` and `cli.py`, and not `job.py`. It is prose only and affects no classification.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:18:54Z"
+            }
+          ]
+        },
+        "F-96fbe8414907": {
+          "digest": "96fbe84149077b1cea55917905252f0f868402926992bcb2169d649041a978e0",
+          "text": "**O1 — Complete D7’s placeholder inventory.** Plan line 30 omits `claude-sonnet-5`, routed by tests at `tests/test_cli.py:948` and `:3284`, and `m-role`, `m-cli` and `m-config-role` at `tests/test_job.py:1051`. Include their replacements. The named files and full-suite checkpoint already cover discovery, so this does not block execution.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T02:26:33Z"
+            }
+          ]
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e"
+      ]
     }
   }
 }

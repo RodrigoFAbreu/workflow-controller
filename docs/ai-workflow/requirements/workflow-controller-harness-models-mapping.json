@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-harness-models",
+  "requirements": {
+    "R1": {
+      "description": "An adapter declares its supported models and efforts, and a route whose model or effort the resolved harness does not support is refused at load with exit 20 before any job record is written (H8)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A settings row harness.models adds models per harness without a release, with strict shape checks, unknown harness names tolerated, and table generation 16 (H8)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The generated harness table shows models and efforts, and the guides, compatibility page and roadmap describe the check, the setting and the tightening (H8)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Tests that routed placeholder models use declared ids, and the lane's routing, as a committed fixture, passes the check, with the real file verified once (H8)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    }
+  }
+}

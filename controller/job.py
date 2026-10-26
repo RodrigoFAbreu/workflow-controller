@@ -5211,7 +5211,14 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
                 # Pending checks are a normal end of a step that did not wait, as for a branch gate
                 # (pull-request-defect-loop D8): nothing asks a person for anything.
                 pass
-            elif waits is True or _protocol_disposition(record) == "blocked" or _functional_blocker(record):
+            elif waits is True:
+                # A spent wait on pending checks: nothing is wrong until they have been pending long.
+                if _pending_checks_long(_record_pending_seconds(record)):
+                    out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
+                else:
+                    out.append(DerivedEvent("checks_wait", ident, _checks_wait_title(work_item), work_item, body,
+                                            supersedes="lane_blocked"))
+            elif _protocol_disposition(record) == "blocked" or _functional_blocker(record):
                 # The Workflow itself calls the stop a blocker, so no person's decision is asked for
                 # (gate-policy D7); the identity is the gate's, so a re-derived event cannot duplicate.
                 out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
@@ -5293,9 +5300,42 @@ def _superseded_handled(event: DerivedEvent, repository: str, runtime_root: "Pat
     return False
 
 
+#: How long a pull request's checks may stay pending before a spent wait is a blocker rather than
+#: the info event ``checks_wait``: ten times the usual CI run, four times the default ``merge.wait_seconds``.
+CHECKS_PENDING_LONG_SECONDS = 4 * 60 * 60
+
+
+def _pending_checks_long(pending_seconds: object) -> bool:
+    """Whether ``pending_seconds`` is over :data:`CHECKS_PENDING_LONG_SECONDS`; a missing or
+    unreadable age is short, so the stop is still announced."""
+    return (isinstance(pending_seconds, (int, float)) and not isinstance(pending_seconds, bool)
+            and pending_seconds > CHECKS_PENDING_LONG_SECONDS)
+
+
+def _pending_seconds(events: "list[dict]", now: str | None) -> int | None:
+    """The seconds from the newest binding event to ``now`` (the clock's ISO time), else ``None``
+    for an empty log or an unreadable time."""
+    try:
+        began = datetime.datetime.strptime(str(events[-1]["at"]), "%Y-%m-%dT%H:%M:%SZ")
+        ended = datetime.datetime.strptime(str(now), "%Y-%m-%dT%H:%M:%SZ")
+    except (IndexError, KeyError, ValueError):
+        return None
+    return max(0, int((ended - began).total_seconds()))
+
+
+def _record_pending_seconds(record: Mapping) -> object:
+    block = record.get("pr_report")
+    wait = block.get("wait") if isinstance(block, Mapping) else None
+    return wait.get("pending_seconds") if isinstance(wait, Mapping) else None
+
+
+def _checks_wait_title(work_item: object) -> str:
+    return "Waiting for the pull request's checks" + (f" ({work_item})" if work_item else "")
+
+
 def _pending_checks_wait(record: Mapping) -> bool | None:
     """For a reporter record that stopped on pending checks: whether its step waited (the
-    budget was spent, so the stop is a blocker); ``None`` for any other record."""
+    budget was spent, so the stop is announced); ``None`` for any other record."""
     block = record.get("pr_report")
     if record.get("kind") != PR_REPORT_KIND or not isinstance(block, Mapping) \
             or block.get("outcome") != pr_report.PENDING:
@@ -5362,18 +5402,24 @@ def _binding_events(runtime_root: Path, key: str, record: Mapping) -> "list[dict
 
 def derive_branch_gate_event(gate: Any, binding_record: Mapping | None, *, waited: bool, spent: bool,
                              events: "list[dict] | None" = None,
-                             state_revision: object = None) -> "DerivedEvent | None":
+                             state_revision: object = None,
+                             pending_seconds: int | None = None) -> "DerivedEvent | None":
     """The event of a branch gate the preflight returned (D2, D4): a user
     gate for ``merge_pull_request`` and ``merge_held``, a blocker for the
     blocker class, and for a wait code only when the run waited and the wait
     is spent (a non-waitable outcome of a wait code is a blocker). The
     identity is the work item, ``binding_generation``, the gate code and the
-    gate's own occurrence component (:data:`milestone_branch.GATE_OCCURRENCE`)."""
+    gate's own occurrence component (:data:`milestone_branch.GATE_OCCURRENCE`).
+    ``checks_pending`` is the exception to the blocker: a spent wait, or a step
+    that cannot wait (no auto-merge), is the info event ``checks_wait`` until
+    the checks have been pending over :data:`CHECKS_PENDING_LONG_SECONDS`."""
     kind = milestone_branch.classify(gate)
     if kind == milestone_branch.GATE_WAIT:
         if not (waited and spent):
             return None
         kind = milestone_branch.GATE_BLOCKER
+    checks_wait = (kind == milestone_branch.GATE_BLOCKER and gate.code == milestone_branch.GATE_CHECKS_PENDING
+                   and not _pending_checks_long(pending_seconds))
     if kind is None:
         return None
     record = binding_record or {}
@@ -5394,13 +5440,16 @@ def derive_branch_gate_event(gate: Any, binding_record: Mapping | None, *, waite
     event_type = "user_gate" if kind == milestone_branch.GATE_USER else "lane_blocked"
     link = (record.get("pr") or {}).get("url")
     exits = f" Next: {gate.exits[0]}" if gate.exits else ""
+    if checks_wait:
+        return DerivedEvent("checks_wait", ident, _checks_wait_title(work_item), work_item,
+                            f"{gate.message}{exits}", link, supersedes="lane_blocked")
     title = (f"Your decision is needed: {gate.code}" if event_type == "user_gate" else f"Blocked: {gate.code}")
     return DerivedEvent(event_type, ident, f"{title} ({work_item})" if work_item else title,
                         work_item, f"{gate.message}{exits}", link)
 
 
 def _notify_branch_gate(managed_repo: Any, runtime_root: Path, gate: Any, *, wait_seconds: int,
-                        run_id: str | None) -> None:
+                        run_id: str | None, now: str | None = None) -> None:
     """Send the event of the gate the step's preflight ended on. Never raises."""
     try:
         if notify.installed() is None:
@@ -5414,7 +5463,8 @@ def _notify_branch_gate(managed_repo: Any, runtime_root: Path, gate: Any, *, wai
             view = target_state.read(managed_repo).work_items.get(gate.work_item_id)
             state_revision = None if view is None else view.state_revision
         event = derive_branch_gate_event(gate, record, waited=wait_seconds > 0, spent=wait_seconds > 0,
-                                         events=log, state_revision=state_revision)
+                                         events=log, state_revision=state_revision,
+                                         pending_seconds=_pending_seconds(log, now))
         if event is not None:
             _send_derived([event], notify.repository_name(managed_repo.root), run_id=run_id)
     except Exception:  # noqa: BLE001
@@ -7338,7 +7388,8 @@ def _run_pr_report(managed_repo: Any, *, runtime_root: Path, identity: Any, run_
         poll_seconds=ctx.poll_seconds, clock=ctx.clock, on_wait=on_wait)
     block = {"outcome": final.outcome, "row": row, "queried_commit": commit, "repository": repository,
              "pull_request": pull_request.get("number"), "raw_sha256": final.raw_sha256, "detail": final.detail,
-             "wait": ({"checks_empty": final.wait.empty, "waited": ctx.wait_seconds > 0}
+             "wait": ({"checks_empty": final.wait.empty, "waited": ctx.wait_seconds > 0,
+                       "pending_seconds": _pending_seconds(_binding_events(runtime_root, key, binding), ctx.clock())}
                       if final.outcome == pr_report.PENDING else None),
              "result": None if final.stored is None else dict(final.stored),
              "refusal": None if final.refusal is None else dict(final.refusal)}
@@ -8043,7 +8094,8 @@ def _execute_step_locked(
     # manifest refuses (exit 20), naming what the preflight did.
     _refuse_changed_release(managed_repo, preflight, preflight_events)
     if isinstance(preflight, milestone_branch.Gate):
-        _notify_branch_gate(managed_repo, runtime, preflight, wait_seconds=wait_seconds, run_id=run_id)
+        _notify_branch_gate(managed_repo, runtime, preflight, wait_seconds=wait_seconds, run_id=run_id,
+                            now=branch_ctx.clock())
         return _branch_gate_record(runtime, managed_repo, identity, target_state.read(managed_repo), preflight,
                                    run_id=run_id)
     if preflight.stop:

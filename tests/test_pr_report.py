@@ -579,7 +579,7 @@ class ReportNotificationTest(unittest.TestCase):
     a person, and a stop the Workflow calls ``blocked`` is a ``lane_blocked``.
     """
 
-    def record(self, outcome: str, *, disposition: str = "external_gate", waited: bool = False) -> dict:
+    def record(self, outcome: str, *, disposition: str = "external_gate", waited: bool = False, **wait) -> dict:
         gate = {"repository": "/r", "work_item_id": WID, "phase": "AWAITING_FUNCTIONAL_REVIEW",
                 "what_is_required": f"{outcome}: needs a person", "artifact_path": None,
                 "safe_resume_command": "gh pr review --approve"}
@@ -592,7 +592,7 @@ class ReportNotificationTest(unittest.TestCase):
                 "human_gate_pending": None if reported else gate,
                 "protocol": {"decision": {"disposition": disposition}},
                 "pr_report": {"outcome": outcome,
-                              "wait": {"checks_empty": False, "waited": waited}
+                              "wait": {"checks_empty": False, "waited": waited, **wait}
                               if outcome == pr_report.PENDING else None}}
 
     def events(self, record: dict) -> list[str]:
@@ -610,11 +610,14 @@ class ReportNotificationTest(unittest.TestCase):
     def test_pending_checks_without_a_wait_send_nothing(self) -> None:
         self.assertEqual(self.events(self.record(pr_report.PENDING)), [])
 
-    def test_pending_checks_left_after_the_wait_budget_is_spent_are_a_blocker(self) -> None:
-        self.assertEqual(self.events(self.record(pr_report.PENDING, waited=True)), ["lane_blocked"])
+    def test_pending_checks_left_after_the_wait_budget_is_spent_are_an_info_event_until_they_are_long(self) -> None:
+        self.assertEqual(self.events(self.record(pr_report.PENDING, waited=True)), ["checks_wait"])
+        self.assertEqual(self.events(self.record(pr_report.PENDING, waited=True, pending_seconds=60)), ["checks_wait"])
+        self.assertEqual(self.events(self.record(pr_report.PENDING, waited=True,
+                                                 pending_seconds=job.CHECKS_PENDING_LONG_SECONDS + 1)), ["lane_blocked"])
 
     def test_notifications_follow_the_real_pending_check_records(self) -> None:
-        for wait_seconds, expected in ((0, []), (25, ["lane_blocked"])):
+        for wait_seconds, expected in ((0, []), (25, ["checks_wait"])):
             with self.subTest(wait_seconds=wait_seconds):
                 case = ReportTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
                 self.addCleanup(case.doCleanups)  # ``case`` is never run, so nothing else removes its repository
@@ -623,6 +626,26 @@ class ReportNotificationTest(unittest.TestCase):
                 record = case.report(life, [lambda commit: raw_of(commit, rollup=(RUNNING,))],
                                      wait_seconds=wait_seconds, sleeps=[])
                 self.assertEqual(record["pr_report"]["outcome"], pr_report.PENDING)
+                self.assertEqual(self.events(record), expected)
+
+    def test_the_real_record_carries_the_age_of_the_pending_checks_and_a_long_one_is_a_blocker(self) -> None:
+        for at, expected in (("2020-01-01T00:00:00Z", ["lane_blocked"]), (milestone_branch._utc_now(), ["checks_wait"])):
+            with self.subTest(last_event=at):
+                case = ReportTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
+                self.addCleanup(case.doCleanups)
+                life = case.at_38f()
+                case.bind(life)
+                key = milestone_branch.repo_key(gitrepo.common_dir(life.root))
+                path = life.runtime / milestone_branch.events_rel(key, WID)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                other = {"at": "2019-01-01T00:00:00Z", "event": "ready", "binding_generation": 2}
+                path.write_text("".join(json.dumps(e) + "\n" for e in (
+                    {"at": "2019-01-01T00:00:00Z", "event": "bound", "binding_generation": 1},
+                    {"at": at, "event": "pushed", "binding_generation": 1}, other)))
+                record = case.report(life, [lambda commit: raw_of(commit, rollup=(RUNNING,))],
+                                     wait_seconds=25, sleeps=[])
+                age = record["pr_report"]["wait"]["pending_seconds"]
+                self.assertEqual(age > job.CHECKS_PENDING_LONG_SECONDS, expected == ["lane_blocked"])
                 self.assertEqual(self.events(record), expected)
 
     def test_a_stop_the_workflow_calls_blocked_is_not_a_decision(self) -> None:

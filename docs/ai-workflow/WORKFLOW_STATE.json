@@ -33031,7 +33031,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-build-pin-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-build-pin-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -33175,12 +33175,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-10-26T14:31:37Z",
+      "state_revision": 24,
+      "last_transition": "2026-10-26T14:35:22Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -33301,6 +33301,20 @@
               "review_content_id": "253b7b51d5f74f5745fd27c221721203539b27a34a2031fb98b4ea11fd8b35bc",
               "verdict": "APPROVE",
               "at": "2026-10-26T13:07:13Z"
+            }
+          ]
+        },
+        "F-80d504197c73": {
+          "digest": "80d504197c733032787e92e2a97ed20a589b5227fd68002bec78ba7fd5b74472",
+          "text": "`tests/test_review.py` `test_a_feature_new_in_0_163_0_that_is_neither_allowlisted_nor_disabled_is_refused`:\n  `assertIn(raised.exception.evidence[\"entry\"], self.BUILD_0_163_0_FEATURES)` accepts any of the three names, so at\n  head it would not notice the refusal naming a different new feature than the one left enabled; and the assertion\n  sits outside the `subTest` block, so a failure is not labelled with the name. At head `assertEqual(..., name)`\n  inside the `with` would be exact (the base-commit run of (b) would then fail for two of three names, which the\n  plan's \"passes on both\" statement would need to drop), so this is a strength trade-off, not a defect.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4a4a5aadf13f3cc4268e344ac062ea905d3ef5051537c30ccefe4643faf81e4f",
+              "verdict": "REVISE",
+              "at": "2026-10-26T14:35:22Z"
             }
           ]
         }

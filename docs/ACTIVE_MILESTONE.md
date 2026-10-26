@@ -9,5 +9,5 @@ archived at `docs/milestones/completed/workflow-controller-codex-build-pin.md`.
 
 ## Next action
 
-No milestone is active. Next is H7 of the harness-neutral roles epic in `docs/ROADMAP.md` (owner decision 2026-10-24); run
-`/milestone-plan` for it.
+No milestone is active. Next is H7 of the harness-neutral roles epic in `docs/ROADMAP.md` (owner decision 2026-10-24,
+[#182](https://github.com/RodrigoFAbreu/workflow-controller/issues/182)); run `/milestone-plan` for it.

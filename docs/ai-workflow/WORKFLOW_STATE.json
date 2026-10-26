@@ -33031,7 +33031,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-build-pin-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-build-pin-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -33145,10 +33145,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "c0a018dedfc54a1192694a5ee563706a42c3ab555ab6cfa382c4e7643ef8ec62",
-        "approved_review_content_id": "2fdf9637bdf653586e2db5d921cb896a0e6d1c40080cf1c2c7f751bcc70c0f9b",
+        "reviewed_bundle_id": "1bd09a34d4d6e684435462f8afb8ef6d64d74be1c5024adade117178bde9e5f3",
+        "approved_review_content_id": "1cd795ae183264de78319d1795b264bcd50a8c857bd1e0e0508c615262715d9e",
         "review_content_manifest": [
           {
             "path": "controller/harness.py",
@@ -33178,19 +33178,19 @@
             "path": "docs/guide/harnesses.md",
             "exists": true,
             "mode": "100644",
-            "blob": "40bc8e78178fc62cac1ddf50e9a6cce15186d169"
+            "blob": "bef103446220bfbad2a380025c1d43e3c950b349"
           },
           {
             "path": "docs/guide/runtime.md",
             "exists": true,
             "mode": "100644",
-            "blob": "ac0d7a103f5e1cd9b62c54f3ee5f3ed01d429b4f"
+            "blob": "e7f67e9b3443b5df0b7121f9ec173a99683492aa"
           },
           {
             "path": "docs/guide/workers.md",
             "exists": true,
             "mode": "100644",
-            "blob": "33eb5879b78aa0b8878b901e73b008583d69cee7"
+            "blob": "96733d5f2639ba80f654a23bddb4b9aec0601726"
           },
           {
             "path": "tests/fake_codex.py",
@@ -33229,11 +33229,11 @@
             "blob": "c604e2949f2d091b263509411cf911d06357a9a3"
           }
         ],
-        "reviewed_content_commit": "d9c674855be0fc12585033475ff57f5bc9a8a9f7",
+        "reviewed_content_commit": "9cfbf7b4678e3b0154414e53c7c635ce613c0895",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-10-26T15:18:30Z",
+        "recorded_at": "2026-10-26T15:32:46Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -33263,24 +33263,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "2fdf9637bdf653586e2db5d921cb896a0e6d1c40080cf1c2c7f751bcc70c0f9b",
+            "review_content_id": "1cd795ae183264de78319d1795b264bcd50a8c857bd1e0e0508c615262715d9e",
             "ledger": {
               "local": {
-                "bundle_id": "c0a018dedfc54a1192694a5ee563706a42c3ab555ab6cfa382c4e7643ef8ec62",
+                "bundle_id": "1bd09a34d4d6e684435462f8afb8ef6d64d74be1c5024adade117178bde9e5f3",
                 "verdict": "APPROVE",
-                "round": 2,
-                "verdict_sha256": "1f8cb02a1820d70d9bd904ec4053883b3b43e0e64bf91438d72563e53ce0a0ed",
-                "ledger_entry_sha256": "39f95b21c88ec1121d859ea6a75b1138ed22132881ce4405ade5334c547cb652",
+                "round": 3,
+                "verdict_sha256": "29c20632e4362eda35557dae32eeb1811f257c43e6f57be8f655cb0669729535",
+                "ledger_entry_sha256": "47a01b5dfa79c7a03e9c930e256a56d724e9278d9a5f695cc11bd2cada88123b",
                 "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "c0a018dedfc54a1192694a5ee563706a42c3ab555ab6cfa382c4e7643ef8ec62",
+                "bundle_id": "1bd09a34d4d6e684435462f8afb8ef6d64d74be1c5024adade117178bde9e5f3",
                 "verdict": "APPROVE",
-                "round": 2,
-                "verdict_sha256": "d550e9ddbaaa7a2e37ee5e097a48a7f19ba68d2cbf7e1ea1b8b36affb7c1a641",
-                "ledger_entry_sha256": "b8f35d1f02ff4371b9593792736c4dae68e7ab92c8200438e0414be5dde1a474",
-                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
+                "round": 3,
+                "verdict_sha256": "6892a8d77de23a62315a966ef2969c710009e32e6b82e2ba8554cc09de006e4f",
+                "ledger_entry_sha256": "dca1b8aff366d8a2b127f32f32b9cace71a2740709c93d2929e5f31b29e15e3c",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -33290,7 +33290,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-10-26T15:18:30Z",
+          "evaluated_at": "2026-10-26T15:32:46Z",
           "workflow_release": "2.20.0"
         }
       },
@@ -33324,12 +33324,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 30,
-      "last_transition": "2026-10-26T15:23:29Z",
+      "state_revision": 33,
+      "last_transition": "2026-10-26T15:32:46Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -33474,26 +33474,54 @@
               "at": "2026-10-26T15:10:53Z"
             }
           ]
+        },
+        "F-3bf46bfeb44e": {
+          "digest": "3bf46bfeb44e24fffe3856d2125a5a0df95e8bfed2071e46485894209b2951fc",
+          "text": "`IMPLEMENTATION_SUMMARY.md` says `implementation_revision: 3` but has no section for the functional-round fix `0cb518a`; its last section is \"Round 1 fixes (`d9c6748`)\", and `TEST_RESULTS.md` is still headed revision 1. The fix is recorded in `docs/ACTIVE_MILESTONE.md`, so this affects only how easy the bundle is to read.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1cd795ae183264de78319d1795b264bcd50a8c857bd1e0e0508c615262715d9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T15:25:41Z"
+            }
+          ]
+        },
+        "F-fa3d148d88a8": {
+          "digest": "fa3d148d88a8276d498b02b87d2bd81813a26447361ea07b47b38d8b1837451b",
+          "text": "`docs/guide/harnesses.md:35`: the edited first sentence of the new paragraph is one long unwrapped line, unlike the wrapped prose around it. It is cosmetic and renders the same.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1cd795ae183264de78319d1795b264bcd50a8c857bd1e0e0508c615262715d9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T15:25:41Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "2fdf9637bdf653586e2db5d921cb896a0e6d1c40080cf1c2c7f751bcc70c0f9b",
+        "review_content_id": "1cd795ae183264de78319d1795b264bcd50a8c857bd1e0e0508c615262715d9e",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "c0a018dedfc54a1192694a5ee563706a42c3ab555ab6cfa382c4e7643ef8ec62",
+          "bundle_id": "1bd09a34d4d6e684435462f8afb8ef6d64d74be1c5024adade117178bde9e5f3",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-26T15:10:53Z",
-          "verdict_sha256": "1f8cb02a1820d70d9bd904ec4053883b3b43e0e64bf91438d72563e53ce0a0ed",
+          "round": 3,
+          "completed_at": "2026-10-26T15:25:41Z",
+          "verdict_sha256": "29c20632e4362eda35557dae32eeb1811f257c43e6f57be8f655cb0669729535",
           "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "c0a018dedfc54a1192694a5ee563706a42c3ab555ab6cfa382c4e7643ef8ec62",
+          "bundle_id": "1bd09a34d4d6e684435462f8afb8ef6d64d74be1c5024adade117178bde9e5f3",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-10-26T15:16:36Z",
-          "verdict_sha256": "d550e9ddbaaa7a2e37ee5e097a48a7f19ba68d2cbf7e1ea1b8b36affb7c1a641",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
+          "round": 3,
+          "completed_at": "2026-10-26T15:30:38Z",
+          "verdict_sha256": "6892a8d77de23a62315a966ef2969c710009e32e6b82e2ba8554cc09de006e4f",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-build-pin/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },

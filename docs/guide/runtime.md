@@ -662,7 +662,8 @@ CLI's and not the reviewer alias `claude`, which names a verdict family. Each
 routing role is launched as one adapter role (`functional-tester` as
 `functional-tester`, every other routing role as `worker`), and a harness is
 accepted for a role only when its adapter declares that adapter role. Today
-that makes exactly these pairs valid:
+that makes exactly these pairs valid (the [harness page](harnesses.md) shows them as a
+generated table):
 
 - `claude-code`: every routing role;
 - `codex`: no routing role yet, because its adapter declares `reviewer` only.

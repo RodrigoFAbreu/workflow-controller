@@ -443,7 +443,8 @@ declared. `claude-code` and `claude` resolve to the same adapter. The family
 table of the review modes and the harness name `telemetry` prints derive from
 the registry, and tests pin the objects that launch a harness
 (`review.CODEX`, `review.CLAUDE`) to its declarations, so a drifted
-declaration fails a test by name. To add a harness, see
+declaration fails a test by name. The [harness page](harnesses.md) shows the
+registry as tables. To add a harness, see
 [Adding a harness or a git host](development.md#adding-a-harness-or-a-git-host).
 
 ## The same-provider reviewer

@@ -32,6 +32,7 @@ explains why.
 | [Workers: lifecycle, recovery and observation](guide/workers.md) | how workers run and end, background work, the lifecycle lock, `resume`, job records and their recovery, `follow` |
 | [Runtime state and runtime identity](guide/runtime.md) | the settings file, where the Controller keeps its state, and how it knows and records what code it is running |
 | [Milestone branches and pull requests](guide/milestone-branches.md) | the branch and pull request per milestone, readiness gates, the release notes in the pull request body, merge and close-out, auto-merge and the release wait, stuck milestones |
+| [Harnesses and the roles they can take](guide/harnesses.md) | which harness (Claude Code, Codex) can take which role, what each can restrict, how it reports usage and its version policy, as tables generated from the adapter registry |
 | [Troubleshooting](guide/troubleshooting.md) | the long account of every stop and the situations behind it |
 
 For maintainers of this repository:

@@ -43,6 +43,11 @@ class HarnessAdapter:
     usage: str
     pinned_version: str
     fails_closed_on_unknown_version: bool
+    #: The model ids and effort levels the harness accepts (H8). A route is
+    #: checked against them by ``routing.check_route_values``; the operator
+    #: adds a model with the ``harness.models`` setting, never an effort.
+    models: tuple[str, ...]
+    efforts: tuple[str, ...]
 
     def require_role(self, role: str) -> None:
         if role not in self.roles:
@@ -57,12 +62,18 @@ CLAUDE_CODE = HarnessAdapter(
     roles=(WORKER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_REPORTED, pinned_version="2.1.296 (Claude Code)",
     fails_closed_on_unknown_version=True,
+    models=("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1", "opus", "sonnet", "haiku"),
+    efforts=("low", "medium", "high", "xhigh", "max"),
 )
 CODEX = HarnessAdapter(
     name="codex", reviewer_name="codex", family="openai",
     roles=(REVIEWER,), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_DERIVED, pinned_version="codex-cli 0.162.1",
     fails_closed_on_unknown_version=True,
+    # tests/harness_contract/codex/: exec_argv.json (model gpt-6.1-sol, effort
+    # high) and sandbox_probe.txt (the catalog's effort xhigh).
+    models=("gpt-6.1-sol",),
+    efforts=("high", "xhigh"),
 )
 
 #: The closed registry, keyed by ``name``.

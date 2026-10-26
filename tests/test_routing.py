@@ -75,10 +75,10 @@ class RoutingTableTest(unittest.TestCase):
         self.assertTrue(route.single_agent)
         self.assertEqual(route.disallowed_tools, routing.SUBAGENT_TOOLS)
         self.assertNotIn(TESTER_ROLE, routing.ROLE_BY_COMMAND_STEM.values())
-        by_option = routing.RoutingOptions(cli_role_models={TESTER_ROLE: "m-opt"},
-                                           cli_role_efforts={TESTER_ROLE: "e-opt"}).resolve(TESTER_ROLE)
+        by_option = routing.RoutingOptions(cli_role_models={TESTER_ROLE: "haiku"},
+                                           cli_role_efforts={TESTER_ROLE: "high"}).resolve(TESTER_ROLE)
         self.assertEqual((by_option.model, by_option.effort, by_option.model_source, by_option.effort_source),
-                         ("m-opt", "e-opt", "role-cli", "role-cli"))
+                         ("haiku", "high", "role-cli", "role-cli"))
         config = _config(roles={TESTER_ROLE: {"model": "m-file"}}, default={"effort": "e-default"})
         by_file = routing.resolve_route(TESTER_ROLE, config=config)
         self.assertEqual((by_file.model, by_file.model_source), ("m-file", "config-role"))
@@ -242,19 +242,19 @@ class PrecedenceTest(unittest.TestCase):
 
     def test_a_config_routes_an_inherit_role_explicitly(self) -> None:
         route = routing.resolve_route(
-            "milestone-plan", config=_config(roles={"milestone-plan": {"model": "claude-sonnet-5"}}),
+            "milestone-plan", config=_config(roles={"milestone-plan": {"model": "claude-sonnet-5-5"}}),
         )
-        self.assertEqual((route.model, route.model_source), ("claude-sonnet-5", "config-role"))
+        self.assertEqual((route.model, route.model_source), ("claude-sonnet-5-5", "config-role"))
         self.assertEqual((route.effort, route.effort_source), (None, "inherit"))
 
     def test_routing_options_resolve_like_resolve_route(self) -> None:
         options = routing.RoutingOptions(
-            cli_model="m", cli_role_efforts={"review-plan": "low"},
+            cli_model="sonnet", cli_role_efforts={"review-plan": "low"},
             config=_config(default={"effort": "medium"}),
         )
         self.assertEqual(
             options.resolve("review-plan"),
-            routing.resolve_route("review-plan", cli_model="m", cli_role_efforts={"review-plan": "low"},
+            routing.resolve_route("review-plan", cli_model="sonnet", cli_role_efforts={"review-plan": "low"},
                                   config=options.config),
         )
         self.assertEqual(routing.NO_OVERRIDES.resolve("review-plan"), routing.resolve_route("review-plan"))
@@ -501,6 +501,93 @@ class RoutingConfigTest(unittest.TestCase):
             binary.write_bytes(b"\xff\xfe\x00")
             with self.assertRaises(RoutingConfigError):
                 routing.load_routing_config(binary)
+
+
+class CheckRouteValuesTest(unittest.TestCase):
+    def test_every_declared_model_and_effort_is_accepted(self) -> None:
+        for adapter in harness.ADAPTERS.values():
+            for model in adapter.models:
+                routing.check_route_values("review-plan", adapter.name, model, None, {})
+            for effort in adapter.efforts:
+                routing.check_route_values("review-plan", adapter.name, None, effort, {})
+
+    def test_none_means_inherit_and_is_never_refused(self) -> None:
+        routing.check_route_values("review-plan", "claude-code", None, None, {})
+
+    def test_an_extra_model_is_accepted_for_its_own_harness_only(self) -> None:
+        extra = {"claude-code": ("claude-opus-5-6",)}
+        routing.check_route_values("review-plan", "claude-code", "claude-opus-5-6", None, extra)
+        with self.assertRaises(ValueError):
+            routing.check_route_values("review-plan", "codex", "claude-opus-5-6", None, extra)
+
+    def test_a_refusal_names_the_role_harness_field_and_value(self) -> None:
+        for model, effort, field, value in (("nonsense", None, "model", "nonsense"), (None, "ultra", "effort", "ultra")):
+            with self.subTest(field=field), self.assertRaises(ValueError) as caught:
+                routing.check_route_values("apply-plan-review", "claude-code", model, effort, {})
+            message = str(caught.exception)
+            for part in ("apply-plan-review", "claude-code", f"the {field} {value!r}"):
+                self.assertIn(part, message)
+
+    def test_it_reads_the_registry_at_call_time(self) -> None:
+        patched = {**harness.ADAPTERS, "claude-code": dataclasses.replace(harness.CLAUDE_CODE, models=("only",))}
+        with unittest.mock.patch.object(harness, "ADAPTERS", patched):
+            routing.check_route_values("review-plan", "claude-code", "only", None, {})
+            with self.assertRaises(ValueError):
+                routing.check_route_values("review-plan", "claude-code", "sonnet", None, {})
+
+
+class RoutingOptionsHarnessCheckTest(unittest.TestCase):
+    def test_a_bad_model_is_refused_from_every_source_and_names_it(self) -> None:
+        cases = (
+            ({"cli_model": "bad"}, "the cli value"),
+            ({"cli_role_models": {"review-plan": "bad"}}, "the role-cli value"),
+            ({"config": _config(roles={"review-plan": {"model": "bad"}})}, "the config-role value"),
+            ({"config": _config(default={"model": "bad"})}, "the config-default value"),
+        )
+        for kwargs, source in cases:
+            with self.subTest(source=source), self.assertRaises(RoutingConfigError) as caught:
+                routing.RoutingOptions(**kwargs)
+            self.assertIn(f"model from {source}", str(caught.exception))
+            self.assertIn("harness.models", str(caught.exception))
+
+    def test_a_bad_effort_is_refused_from_every_source_and_names_it(self) -> None:
+        cases = (
+            ({"cli_effort": "bad"}, "the cli value"),
+            ({"cli_role_efforts": {"review-plan": "bad"}}, "the role-cli value"),
+            ({"config": _config(roles={"review-plan": {"effort": "bad"}})}, "the config-role value"),
+            ({"config": _config(default={"effort": "bad"})}, "the config-default value"),
+        )
+        for kwargs, source in cases:
+            with self.subTest(source=source), self.assertRaises(RoutingConfigError) as caught:
+                routing.RoutingOptions(**kwargs)
+            self.assertIn(f"effort from {source}", str(caught.exception))
+
+    def test_inherit_is_never_refused(self) -> None:
+        routing.RoutingOptions()  # the three inherit roles have no model and no effort
+
+    def test_harness_models_extends_the_model_list(self) -> None:
+        options = routing.RoutingOptions(cli_model="claude-opus-5-6",
+                                         harness_models={"claude-code": ("claude-opus-5-6",)})
+        self.assertEqual(options.resolve("review-plan").model, "claude-opus-5-6")
+        with self.assertRaises(RoutingConfigError):
+            routing.RoutingOptions(cli_model="claude-opus-5-6")
+        self.assertEqual(dict(routing.NO_OVERRIDES.harness_models), {})
+
+    def test_a_route_to_a_harness_without_the_builtin_model_names_the_default(self) -> None:
+        worker_codex = dataclasses.replace(harness.CODEX, roles=(harness.WORKER, harness.REVIEWER))
+        patched = {**harness.ADAPTERS, "codex": worker_codex}
+        with unittest.mock.patch.object(harness, "ADAPTERS", patched):
+            config = _config(roles={"milestone-implement": {"harness": "codex"}})
+            with self.assertRaises(RoutingConfigError) as caught:
+                routing.RoutingOptions(config=config)
+            self.assertIn("model from the built-in default", str(caught.exception))
+            routing.RoutingOptions(config=_config(roles={"milestone-implement": {
+                "harness": "codex", "model": "gpt-6.1-sol", "effort": "high"}}))
+
+    def test_the_builtin_table_and_the_lane_fixture_pass_for_every_role(self) -> None:
+        routing.RoutingOptions()
+        lane = routing.load_routing_config(Path(__file__).resolve().parent / "fixtures" / "lane_routing.json")
+        routing.RoutingOptions(config=lane)
 
 
 if __name__ == "__main__":

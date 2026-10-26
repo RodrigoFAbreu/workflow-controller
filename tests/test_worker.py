@@ -411,8 +411,8 @@ class RouteArgvTest(unittest.TestCase):
     def test_every_resolved_route_reaches_the_argv_with_no_session_reuse_flag(self) -> None:
         option_sets = (
             routing.NO_OVERRIDES,
-            routing.RoutingOptions(cli_model="claude-sonnet-5", cli_effort="low"),
-            routing.RoutingOptions(cli_role_models={role: "m" for role in routing.ROLES},
+            routing.RoutingOptions(cli_model="claude-sonnet-5-5", cli_effort="low"),
+            routing.RoutingOptions(cli_role_models={role: "sonnet" for role in routing.ROLES},
                                    cli_role_efforts={role: "max" for role in routing.ROLES}),
         )
         for options in option_sets:

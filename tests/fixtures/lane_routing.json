@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "default": {
+    "model": "claude-sonnet-5-5",
+    "effort": "medium"
+  },
+  "roles": {
+    "review-plan": {
+      "model": "claude-opus-5-5",
+      "effort": "medium"
+    },
+    "review-implementation": {
+      "model": "claude-opus-5-5",
+      "effort": "medium"
+    },
+    "milestone-implement-self-review": {
+      "model": "claude-opus-5-5",
+      "effort": "high"
+    },
+    "milestone-implement": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "apply-plan-review": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "apply-implementation-review": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "apply-functional-review": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "apply-pr-review": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "satisfy-gate": {
+      "model": "claude-haiku-5-5",
+      "effort": "high"
+    },
+    "satisfy-gate-acceptance": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "functional-tester": {
+      "model": "claude-sonnet-5-5",
+      "effort": "medium"
+    },
+    "record-manual-plan-review": {
+      "model": "claude-haiku-5-5",
+      "effort": "high"
+    },
+    "record-manual-implementation-review": {
+      "model": "claude-haiku-5-5",
+      "effort": "high"
+    }
+  }
+}

@@ -815,12 +815,12 @@ class RoutingOptionsParserTest(unittest.TestCase):
 
     def test_the_routing_options_parse_before_the_subcommand(self) -> None:
         args = cli.build_parser().parse_args([
-            "--model", "claude-sonnet-5", "--effort", "high",
+            "--model", "claude-sonnet-5-5", "--effort", "high",
             "--role-model", "review-plan=claude-opus-5-5", "--role-model", "milestone-plan=m",
             "--role-effort", "review-implementation=max", "--routing-config", "/cfg.json",
             "run", "/target",
         ])
-        self.assertEqual((args.model, args.effort), ("claude-sonnet-5", "high"))
+        self.assertEqual((args.model, args.effort), ("claude-sonnet-5-5", "high"))
         self.assertEqual(args.role_model, {"review-plan": "claude-opus-5-5", "milestone-plan": "m"})
         self.assertEqual(args.role_effort, {"review-implementation": "max"})
         self.assertEqual(args.routing_config, "/cfg.json")
@@ -897,13 +897,13 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
     def test_step_and_run_pass_the_options_and_the_parsed_config(self) -> None:
         config_path = self.tmp_root / "routing.json"
         config_path.write_text(json.dumps({"schema_version": 1, "roles": {"review-plan": {"effort": "max"}}}))
-        args = self._args_with(model="m", effort=None, role_model={"review-plan": "rm"},
+        args = self._args_with(model="sonnet", effort=None, role_model={"review-plan": "haiku"},
                                role_effort={"milestone-plan": "low"}, routing_config=str(config_path))
         for command in (cli.cmd_step, cli.cmd_run):
             with self.subTest(command=command.__name__):
                 [options] = self._received(command, args)
-                self.assertEqual((options.cli_model, options.cli_effort), ("m", None))
-                self.assertEqual(dict(options.cli_role_models), {"review-plan": "rm"})
+                self.assertEqual((options.cli_model, options.cli_effort), ("sonnet", None))
+                self.assertEqual(dict(options.cli_role_models), {"review-plan": "haiku"})
                 self.assertEqual(dict(options.cli_role_efforts), {"milestone-plan": "low"})
                 self.assertEqual(dict(options.config.roles["review-plan"]), {"effort": "max"})
 
@@ -911,6 +911,26 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
         for command in (cli.cmd_step, cli.cmd_run):
             with self.subTest(command=command.__name__):
                 self.assertEqual(self._received(command, self._args_with()), [routing.NO_OVERRIDES])
+
+    def test_a_model_the_harness_does_not_declare_exits_20_before_any_record_or_worker(self) -> None:
+        job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
+        invocations = self.tmp_root / "invocations"
+        env = {"FAKE_CLAUDE_INVOCATIONS_FILE": str(invocations)}
+        for command in (cli.cmd_step, cli.cmd_run):
+            with self.subTest(command=command.__name__):
+                args = _Args(str(self.repo), workflow_manager=str(self.stub_manager),
+                             claude_binary=str(FAKE_CLAUDE))
+                args.model = "nonsense"
+                stderr = io.StringIO()
+                with unittest.mock.patch.dict("os.environ", env), \
+                        unittest.mock.patch.object(cli, "_dispatch",
+                                                   lambda a, argv: command(args, self.runtime_root, self.ident)), \
+                        contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli.main(["step", str(self.repo)]), cli.EXIT_FAIL_CLOSED)
+                self.assertIn("routes the model 'nonsense' to the harness 'claude-code'", stderr.getvalue())
+                self.assertIn("model from the cli value", stderr.getvalue())
+                self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
+                self.assertFalse(invocations.exists())
 
     def test_an_invalid_config_exits_20_before_any_record_or_worker(self) -> None:
         job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
@@ -950,7 +970,7 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
         config_path = self.tmp_root / "routing.json"
         config_path.write_text(json.dumps({
             "schema_version": 1, "default": {"effort": "low"},
-            "roles": {"milestone-plan": {"model": "claude-sonnet-5"}},
+            "roles": {"milestone-plan": {"model": "claude-sonnet-5-5"}},
         }))
         diag = self.tmp_root / "diag.json"
         args = _Args(str(self.repo), workflow_manager=str(self.stub_manager), claude_binary=str(FAKE_CLAUDE),
@@ -961,7 +981,7 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
             self.assertEqual(cli.cmd_step(args, self.runtime_root, self.ident), cli.EXIT_WORKER_FAILED)
         [record] = [json.loads(path.read_text()) for path in self.runtime_root.glob("jobs/*.json")]
         self.assertEqual(record["worker_route"], {
-            "role": "milestone-plan", "model": "claude-sonnet-5", "effort": "low", "harness": "claude-code",
+            "role": "milestone-plan", "model": "claude-sonnet-5-5", "effort": "low", "harness": "claude-code",
             "single_agent": False, "fresh_session": True,
             "sources": {"model": "config-role", "effort": "config-default", "harness": "default"},
             "config_source": "routing-config",
@@ -969,7 +989,7 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
         argv = json.loads(diag.read_text())["argv"]
         # Worker-lifecycle-ownership CP3: the system note and the unownable
         # tools now follow the route's flags.
-        self.assertEqual(argv[-8:-4], ["--model", "claude-sonnet-5", "--effort", "low"])
+        self.assertEqual(argv[-8:-4], ["--model", "claude-sonnet-5-5", "--effort", "low"])
 
 
 class PartialApplyPlanReviewCliTest(_StepFixture, unittest.TestCase):
@@ -3267,10 +3287,10 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         self.assertEqual(rendered, [7])
 
     def test_routing_from_the_settings_section_unless_routing_config_replaces_it(self) -> None:
-        section = {"routing": {"roles": {"milestone-plan": {"model": "claude-sonnet-5"}}}}
+        section = {"routing": {"roles": {"milestone-plan": {"model": "claude-sonnet-5-5"}}}}
         options = cli._routing_options(self._args(section))
         self.assertEqual((options.config_source, dict(options.config.roles["milestone-plan"])),
-                         (routing.CONFIG_SOURCE_SETTINGS, {"model": "claude-sonnet-5"}))
+                         (routing.CONFIG_SOURCE_SETTINGS, {"model": "claude-sonnet-5-5"}))
         config_path = self.tmp_root / "routing.json"
         config_path.write_text(json.dumps({"schema_version": 1, "roles": {"review-plan": {"effort": "max"}}}))
         options = cli._routing_options(self._args(routing_config=str(config_path)))
@@ -3284,7 +3304,7 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
     def test_the_real_job_records_controller_settings_and_the_routes_source(self) -> None:
         job.execute_step = self._orig_execute_step
         args = self._args({"routing": {"default": {"effort": "low"},
-                                       "roles": {"milestone-plan": {"model": "claude-sonnet-5"}}},
+                                       "roles": {"milestone-plan": {"model": "claude-sonnet-5-5"}}},
                            "worker": {"timeout_seconds": 600}},
                           claude_binary=str(FAKE_CLAUDE))
         diag = self.tmp_root / "diag.json"
@@ -3294,7 +3314,7 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
         self.assertEqual(record["worker_route"]["config_source"], "settings")
         self.assertEqual(record["worker_route"]["sources"], {"model": "config-role", "effort": "config-default", "harness": "default"})
         self.assertEqual(json.loads(diag.read_text())["argv"][-8:-4],
-                         ["--model", "claude-sonnet-5", "--effort", "low"])
+                         ["--model", "claude-sonnet-5-5", "--effort", "low"])
         block = record["controller_settings"]
         self.assertEqual(block["path"], str(self.settings_path))
         self.assertEqual(block["sha256"], hashlib.sha256(self.settings_path.read_bytes()).hexdigest())

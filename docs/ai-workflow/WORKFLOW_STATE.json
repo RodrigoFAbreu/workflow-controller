@@ -31218,7 +31218,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-models-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-models-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -31331,7 +31331,210 @@
           "workflow_release": "2.20.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+        "approved_review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0522c92a1ee77cb406dc2806bea1320c796251f"
+          },
+          {
+            "path": "controller/harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c13984f4c67fafcd228e18a646bda5200016f7c"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "352332f0d6712957b436e53655edd2f561877730"
+          },
+          {
+            "path": "controller/settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5e15929825d2b4ee9b2001e4f85e4680b8501731"
+          },
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "34e5c0469f8b0ef5ad6c78ada45bb5b9b18db62c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-models-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "41ca8943817083fd43704b497da890d8a5f26ca9"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b85dcafce3b8a5cbf09aa80f0e7b9f71b580a011"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88f067dcafc6aec3cb064e7519ff7b73e9c77460"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a61f6bb5b5656058611c5c9bc8bfa39589f8c538"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8de3a056d9d4ba8b15afb17197a64fe4d06f5b5"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "45b00ec1d5da3c16d51cb473bc452f8808a17757"
+          },
+          {
+            "path": "tests/fixtures/lane_routing.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a1b811e204080092515bd2cd3ba9065aacbdba58"
+          },
+          {
+            "path": "tests/golden/no_policy_lifecycle.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5835c272fbfb8d4cc650aefcca4503f8731b3ccb"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f0022485e662cb6b1a0c13f466bfa8744d857810"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "94968b096944eee97ed3108619db0830d42fdf0b"
+          },
+          {
+            "path": "tests/test_harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2555a84dca5cb1d3c0f1f39dc43c1136a14816de"
+          },
+          {
+            "path": "tests/test_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "71e84b048e87b0674fdce1dea76eb1a3eb2ff9d3"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "830410f6d845c9cd0c40aad78a6f703dfde9eeb7"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a70c42e02f25925cdc9cba5f2101983bf1342f43"
+          },
+          {
+            "path": "tests/test_trunk_preflight.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f31ee2751559fa6b843e02077adda60b7dd5cfe3"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "94d7bcbdbb77a225287a1e9b745b2566a1b2722b"
+          },
+          {
+            "path": "tools/harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "865f99d3a1d7e9fd8c5914b3b53ad51dce3b6b1b"
+          }
+        ],
+        "reviewed_content_commit": "d828a4371356ef90ab437cf3da89dbafc2ec243e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T04:47:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+            "ledger": {
+              "local": {
+                "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "68694a3725511999a4628629c64a96865142b26dfb8f102241c457d63bbdbc5a",
+                "ledger_entry_sha256": "3915b0a8980711f11f4a379ebaa560cbb78fe6fff1812eff79641709d728c8c6",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ca7b6cbea73b1b090c068b0e8dec6d27f56e735690910e4b53da76bad3c98933",
+                "ledger_entry_sha256": "62a86f15b5128a872d8c3ad6c0066fc792e49e29c1e5282ac8ac97382da42e1e",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T04:47:38Z",
+          "workflow_release": "2.20.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "d29b33fd0d20ef0bab42a5e85cf38139c6ea5b0e7fd1d5ddf09f3845bb1b51ca",
@@ -31362,12 +31565,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 17,
-      "last_transition": "2026-10-26T04:31:32Z",
+      "state_revision": 20,
+      "last_transition": "2026-10-26T04:47:38Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -31513,11 +31716,88 @@
               "at": "2026-10-26T02:26:33Z"
             }
           ]
+        },
+        "F-200559e0ae47": {
+          "digest": "200559e0ae47dc15af4dcff9b05f5f9b4626bf78dd467476c0e73c862bac6de7",
+          "text": "**O1: stale docstring on `routing.check_value`.** `controller/routing.py:256-259` still says a model or effort value's \"vocabulary is the `claude` CLI's to judge\". Since H8, `check_route_values` judges it against the harness. The module docstring was corrected but this function's docstring was not. Reword it to say the function checks only the shape, and that `check_route_values` checks the vocabulary.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:41:14Z"
+            }
+          ]
+        },
+        "F-f4d0ab3b16b9": {
+          "digest": "f4d0ab3b16b9a53085ac2f2f1f05711f68222eb677336a786e19536f69ca39a4",
+          "text": "**O2: the refusal hint is chosen by matching message text.** `RoutingOptions.__post_init__` adds the `harness.models` hint when `\"routes the model\"` appears in the `ValueError` text. Both strings are in one module and tests cover them, but a field marker would be sturdier: for example, `check_route_values` could raise with the field as an attribute or argument, or the caller could check the model and the effort separately.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:41:14Z"
+            }
+          ]
+        },
+        "F-8178c83f7ed8": {
+          "digest": "8178c83f7ed86a19fd19974bda90f0a72d16b71a05ef50c6490bf7d8ae3229cc",
+          "text": "`docs/common-problems.md:145` says “nothing was written or launched.” Dispatch can write runtime identity and fill settings before routing refuses. Narrow this to “no job record was written or worker launched.”",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:46:02Z"
+            }
+          ]
+        },
+        "F-1580a43b302a": {
+          "digest": "1580a43b302a109a15517ebe31bf4b68df0c5ec600d3ff39d756b469a94d83d3",
+          "text": "Bundle `TEST_RESULTS.md:42` overstates that every new test fails against the base. The inherit and valid-fixture positive controls pass there, as expected; describe the feature-specific failures instead.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T04:46:02Z"
+            }
+          ]
         }
       },
       "consumed_plan_review_content_ids": [
         "753ee14612d813454b8e8f7fc69aa9c40785e9c73dabbb81f8cef7b8d6cdaf9e"
-      ]
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "b0de09605cb2ed4ac0f71f48bb9c582c4a55ca82a3ad84409d1205f4e4f30fa4",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-26T04:41:14Z",
+          "verdict_sha256": "68694a3725511999a4628629c64a96865142b26dfb8f102241c457d63bbdbc5a",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d0bcc8002741080c6ab0672579d0440b1f753eda6d1f0307e5795ec744896433",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-26T04:46:02Z",
+          "verdict_sha256": "ca7b6cbea73b1b090c068b0e8dec6d27f56e735690910e4b53da76bad3c98933",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-models/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      }
     }
   }
 }

@@ -82,8 +82,8 @@ import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_FEATURES = HERE / "harness_contract" / "codex" / "features_list.0.162.1.txt"
-VERSION = "codex-cli 0.162.1"
+DEFAULT_FEATURES = HERE / "harness_contract" / "codex" / "features_list.0.163.0.txt"
+VERSION = "codex-cli 0.163.0"
 ORPHAN_SECONDS_DEFAULT = 300.0
 _ORPHAN_POLL_SECONDS = 0.5
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-harness-verification",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -33862,6 +33862,205 @@
         },
         "evaluated_at": "2026-10-26T15:59:47Z",
         "workflow_release": "2.20.0"
+      }
+    },
+    "workflow-controller-harness-verification": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-harness-verification",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_HARNESS_VERIFICATION_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-verification-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-verification-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 1,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "f4d34b17a7631d322ee13f2f01c39a508c552b36",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+        "approved_review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_HARNESS_VERIFICATION_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7e63ad1f2955c3b28624a1d4f30a2c22af1ce799"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-verification-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4b4d8a507d48acad689e4ab784bb40c3f34fb111"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-harness-verification-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b5ce13a866a6889b9c8ce1b5347d900e115f34de"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-26T19:37:19Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+            "ledger": {
+              "local": {
+                "bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "ad1479529733cd66801bd4cf9dec80c4bf93413f0e54e4360e6c397e5bffb2ca",
+                "ledger_entry_sha256": "860b90e8bc357399defbcb8ea75d2673fc9fe2d566c95d41e32192a0921209b2",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-verification/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "9c150492ab23ddd4fdbfdba966b6377caf016ff48db14270d5e973198c9f9f78",
+                "ledger_entry_sha256": "5b35aab6b519f7520017e19f5e84c54f3ca6b3844f024636c97cb1dd6787d6e0",
+                "run_ref": "codex:20261026T193251Z-1e5e80a6",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-26T19:37:19Z",
+          "workflow_release": "2.21.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T19:32:13Z",
+          "verdict_sha256": "ad1479529733cd66801bd4cf9dec80c4bf93413f0e54e4360e6c397e5bffb2ca",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-verification/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-26T19:34:38Z",
+          "verdict_sha256": "9c150492ab23ddd4fdbfdba966b6377caf016ff48db14270d5e973198c9f9f78",
+          "run_ref": "codex:20261026T193251Z-1e5e80a6",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-26T19:37:19Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-26T19:30:15Z",
+        "consumed": {
+          "review_content_id": "da62477b0c5fddd6bef9f5dd626721674bf5a24e0735b5054393e872ab280ded",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+          "plan_revision": 1
+        },
+        "bound": {
+          "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+          "bundle_id": "d60d94ee2cd3aa3731430dd84b0b35e2829abae435a4e22953c249d75027d2ea",
+          "plan_revision": 1
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "da62477b0c5fddd6bef9f5dd626721674bf5a24e0735b5054393e872ab280ded"
+      ],
+      "optional_findings": {
+        "F-158d6b46ab9b": {
+          "digest": "158d6b46ab9b0d138be873bfadf5be543bb42d26a39f1c5b659ad91387890a59",
+          "text": "**LPR-R2-001: the \"fail against the base commit\" bullet covers tests that pass at the base.** CP1's last bullet says \"these tests fail against the base commit\". The two source-scan tests (nothing under `controller/` reads `build_verification`; `claude_build.recorded_digests` is read outside `claude_build.py`/`cli.py` only in `review.py` `launch_functional`) pin behaviour that already holds at `f4d34b1`, so they pass there. In the CP1 self-check, name the tests that must fail at the base (the declared-field, `_DISPATCH`, refusal-text and table-column tests) and say the two scan tests pin the existing state.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T19:32:13Z"
+            }
+          ]
+        },
+        "F-78c86309310c": {
+          "digest": "78c86309310ccc1330daa331ee59a4d1bb0c95832aa62095f7010e8c36a0567a",
+          "text": "**LPR-R2-002: the scope pin watches one entry point.** The scope test looks only for `claude_build.recorded_digests`. A later change could gate the worker or reviewer launch through `functional_review.identity_check` or `static_probe` (which take `recorded=` or `is_native=` from the caller) without a new `recorded_digests` reader, and the test would not notice. Have the same scan also require that `identity_check`/`static_probe` are called under `controller/` only from `functional_review.py` and `review.py` `launch_functional`. Today the only caller is `review.py:2315`, and `job.py:7692` reaches it through `launch_functional`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "8d35576f69f61c0dc55b23da7a6faf8897663c258189faa2f143a84a6ef4c6b2",
+              "verdict": "APPROVE",
+              "at": "2026-10-26T19:32:13Z"
+            }
+          ]
+        }
       }
     }
   }

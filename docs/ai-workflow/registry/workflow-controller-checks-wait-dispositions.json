@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-checks-wait",
+  "dispositions": {
+    "F-017ece930f66": {"disposition": "dropped", "reason": "The full-suite clause already runs tests.test_pr_report; the focused command is only a quick check and the implementation ran the complete suite."},
+    "F-1ebedad5b23a": {"disposition": "fixed"},
+    "F-341f20ea9be2": {"disposition": "fixed"},
+    "F-45db7d2546b2": {"disposition": "fixed"},
+    "F-5574dbac7cdc": {"disposition": "fixed"},
+    "F-5e15c0c7dc3e": {"disposition": "fixed"},
+    "F-a0cb49a91904": {"disposition": "dropped", "reason": "Two navigation names in the plan text (the step caller and the test class); the intended change was clear and the implementation edited the real functions and tests, so the plan is not amended."},
+    "F-c0e5a576420d": {"disposition": "fixed"},
+    "F-eaea7f77279d": {"disposition": "fixed"}
+  }
+}

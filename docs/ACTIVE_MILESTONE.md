@@ -12,4 +12,5 @@ squash commit is `chore:` and nothing is released. The plan is archived at
 
 ## Next action
 
-No milestone is active. Next is H10 of the harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.
+No milestone is active. Next is H10 of the harness-neutral roles epic in `docs/ROADMAP.md`
+([#194](https://github.com/RodrigoFAbreu/workflow-controller/issues/194)); run `/milestone-plan` for it.

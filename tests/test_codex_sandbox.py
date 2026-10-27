@@ -360,5 +360,69 @@ class ReviewerUnchangedTest(unittest.TestCase):
         self.assertNotIn("default_permissions", " ".join(command))
 
 
+def targets(base: Path = Path("/w")) -> cs.ProbeTargets:
+    return cs.ProbeTargets(
+        clone=base / "clone", scratch=base / "scratch", sibling=base / "sibling", stand_in_home=base / "ophome",
+        canary_file=base / "ophome" / "canary", canary_env="OPERATOR_CANARY", credential=base / "codex-home" / "auth.json",
+        push_origin=base / "origin.git", tcp_port=4321, socket_path=base / "sock")
+
+
+def good_output() -> str:
+    lines = [f"PROBE {name} {want}" for name, want in cs.PROBE_EXPECTED.items()]
+    return "\n".join(lines + ["PROBE tmp WROTE", "PROBE vartmp WROTE", "PROBE sibling WROTE"]) + "\n"
+
+
+class ProbeCommandTest(unittest.TestCase):
+    def test_every_probe_name_appears_once_and_every_path_is_absolute(self) -> None:
+        command = cs.probe_command(targets(), marker="m1")
+        names = set(cs.PROBE_EXPECTED) | set(cs.PROBE_INFORMATIONAL) | {"rename", "delete"}
+        for name in names:
+            with self.subTest(name=name):
+                hits = command.count(f"PROBE {name} ") + command.count(f"w {name} ")
+                self.assertGreaterEqual(hits, 1)
+        for path in ("/w/clone/src.txt", "/w/clone/.git/config", "/w/scratch/probe", "/w/ophome/canary",
+                     "/w/codex-home/auth.json", "/w/origin.git", "/tmp/m1", "/var/tmp/m1", "/usr/bin/gh"):
+            self.assertIn(path, command)
+        self.assertIn("OPERATOR_CANARY", command)
+        self.assertIn("4321", command)
+
+    def test_the_prompt_carries_the_command_verbatim(self) -> None:
+        command = cs.probe_command(targets(), marker="m1")
+        self.assertIn(command, cs.probe_prompt(command))
+
+
+class JudgeTest(unittest.TestCase):
+    def test_the_expected_output_passes(self) -> None:
+        self.assertEqual(cs.judge(good_output()), [])
+
+    def test_each_failure_mode_fails_closed(self) -> None:
+        good = good_output()
+        cases = {
+            "a missing line": good.replace("PROBE git REFUSED\n", ""),
+            "a repeated line with a different result": good + "PROBE git WROTE\n",
+            "an unexpected result": good.replace("PROBE tracked REFUSED", "PROBE tracked WROTE"),
+            "an unknown probe": good + "PROBE mystery WROTE\n",
+            "a missing informational line": good.replace("PROBE tmp WROTE\n", ""),
+            "an informational line with an odd result": good.replace("PROBE tmp WROTE", "PROBE tmp ODD"),
+            "unreadable output": "\x00\xff garbage",
+            "empty output": "",
+        }
+        for name, output in cases.items():
+            with self.subTest(name=name):
+                self.assertTrue(cs.judge(output))
+
+    def test_a_repeated_line_with_the_same_result_is_not_a_failure(self) -> None:
+        self.assertEqual(cs.judge(good_output() + "PROBE git REFUSED\n"), [])
+
+
+class SandboxProbeArgvTest(Fixture):
+    def test_the_modelless_form_selects_the_profile_and_no_other_sandbox(self) -> None:
+        command = cs.sandbox_probe_argv(self.layout, binary=self.binary, command="echo hi")
+        self.assertEqual(command[:6], [str(self.binary), "sandbox", "-P", "tester", "-C", str(self.layout.clone)])
+        self.assertEqual(command[-4:], ["--", "sh", "-c", "echo hi"])
+        self.assertNotIn("-s", command)
+        self.assertIn('shell_environment_policy.inherit="none"', command)
+
+
 if __name__ == "__main__":
     unittest.main()

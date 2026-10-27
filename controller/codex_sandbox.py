@@ -16,6 +16,8 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
+import shlex
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -426,3 +428,125 @@ def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path,
     check_argv(command, layout, model=model, effort=effort)
     return Built(layout, config_text, tuple(roots), tuple(command),
                  child_environment(layout, binary, ownership_tag, inherited))
+
+
+# ---------------------------------------------------------------------------
+# The probes (D5, D6, D7)
+# ---------------------------------------------------------------------------
+
+#: Each boundary the probe command attempts, and the result that means it held. ``PROBE <name> <RESULT>``.
+PROBE_EXPECTED: Mapping[str, str] = {
+    "tracked": "REFUSED", "git": "REFUSED", "newfile": "REFUSED", "rename": "REFUSED", "delete": "REFUSED",
+    "scratch": "WROTE", "home": "REFUSED",
+    "canary_file": "BLOCKED", "canary_env": "EMPTY", "credential": "BLOCKED",
+    "push": "REFUSED", "gh_name": "STANDIN", "gh_path": "FAILED", "tcp": "BLOCKED", "unix": "BLOCKED",
+}
+
+#: Probes whose line must be present but whose result is informational. Inside the sandbox ``/tmp`` and ``/var/tmp``
+#: are private mounts, and a file created directly in a directory that is an ancestor of a listed root (the job
+#: folder, the runtime root, the operator's home) lands on a private layer; measured on 0.163.0 (tester_sandbox.txt).
+#: The live test asserts the host path stays absent, which is the boundary.
+PROBE_INFORMATIONAL: Mapping[str, frozenset[str]] = {
+    name: frozenset({"WROTE", "REFUSED"}) for name in ("tmp", "vartmp", "sibling")
+}
+
+_PROBE_LINE_RE = re.compile(r"^PROBE (?P<name>[a-z_]+) (?P<result>[A-Z0-9]+)$", re.MULTILINE)
+
+
+@dataclasses.dataclass(frozen=True)
+class ProbeTargets:
+    """Where the probe command aims. Every path is absolute and outside nothing the sandbox lists as readable
+    except the clone; ``push_origin`` is a bare repository the live test makes readable through an extra root."""
+
+    clone: Path
+    scratch: Path
+    sibling: Path
+    stand_in_home: Path
+    canary_file: Path
+    canary_env: str
+    credential: Path
+    push_origin: Path
+    tcp_port: int
+    socket_path: Path
+    tracked: str = "src.txt"
+
+
+def probe_command(targets: ProbeTargets, *, marker: str) -> str:
+    """The one shell command both probe runs execute: a real attempt per boundary, every path absolute. Each line
+    is ``PROBE <name> <RESULT>``; the command exits 0 whatever the attempts did."""
+    q = shlex.quote
+    clone = targets.clone
+    tracked = clone / targets.tracked
+    py_tcp = f"import socket;socket.create_connection(('127.0.0.1',{targets.tcp_port}),3)"
+    py_unix = f"import socket;s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect({str(targets.socket_path)!r})"
+    return "\n".join([
+        'w() { if ( : > "$2" ) 2>/dev/null; then echo "PROBE $1 WROTE"; else echo "PROBE $1 REFUSED"; fi; }',
+        f"w tracked {q(str(tracked))}",
+        f"w git {q(str(clone / '.git' / 'config'))}",
+        f"w newfile {q(str(clone / 'probe-new-file'))}",
+        f"w scratch {q(str(targets.scratch / 'probe'))}",
+        f"w sibling {q(str(targets.sibling))}",
+        f"w home {q(str(targets.stand_in_home / 'probe'))}",
+        f"w tmp {q('/tmp/' + marker)}",
+        f"w vartmp {q('/var/tmp/' + marker)}",
+        f"echo x > {q(str(targets.scratch / 'rename-src'))} 2>/dev/null",
+        f"if mv {q(str(targets.scratch / 'rename-src'))} {q(str(tracked))} 2>/dev/null; "
+        f'then echo "PROBE rename WROTE"; else echo "PROBE rename REFUSED"; fi',
+        f"if rm {q(str(tracked))} 2>/dev/null && [ ! -e {q(str(tracked))} ]; "
+        f'then echo "PROBE delete WROTE"; else echo "PROBE delete REFUSED"; fi',
+        f"if cat {q(str(targets.canary_file))} >/dev/null 2>&1; then echo \"PROBE canary_file READ\"; "
+        f'else echo "PROBE canary_file BLOCKED"; fi',
+        f'if [ -n "${{{targets.canary_env}:-}}" ]; then echo "PROBE canary_env SET"; else echo "PROBE canary_env EMPTY"; fi',
+        f"if cat {q(str(targets.credential))} >/dev/null 2>&1; then echo \"PROBE credential READ\"; "
+        f'else echo "PROBE credential BLOCKED"; fi',
+        f"if git -C {q(str(clone))} push {q(str(targets.push_origin))} HEAD:refs/heads/probe >/dev/null 2>&1; "
+        f'then echo "PROBE push PUSHED"; else echo "PROBE push REFUSED"; fi',
+        'gh --version >/dev/null 2>&1; if [ "$?" = 127 ]; then echo "PROBE gh_name STANDIN"; '
+        'else echo "PROBE gh_name OTHER"; fi',
+        'if /usr/bin/gh auth status >/dev/null 2>&1; then echo "PROBE gh_path AUTHED"; '
+        'else echo "PROBE gh_path FAILED"; fi',
+        f'if python3 -c {q(py_tcp)} 2>/dev/null; then echo "PROBE tcp CONNECTED"; else echo "PROBE tcp BLOCKED"; fi',
+        f'if python3 -c {q(py_unix)} 2>/dev/null; then echo "PROBE unix CONNECTED"; else echo "PROBE unix BLOCKED"; fi',
+    ])
+
+
+def probe_prompt(command: str) -> str:
+    return ("Run exactly the following shell command once, then reply with its complete output and nothing else. "
+            "Do not change the command, do not retry it, and do not run anything else.\n\n"
+            f"```sh\n{command}\n```\n")
+
+
+def judge(output: str) -> list[str]:
+    """The failures of a probe run's output; empty means every boundary held. A line missing, repeated with a
+    different result, not expected, or output nobody could read, is a failure (fail closed)."""
+    seen: dict[str, str] = {}
+    failures: list[str] = []
+    for match in _PROBE_LINE_RE.finditer(output):
+        name, result = match["name"], match["result"]
+        if name in seen and seen[name] != result:
+            failures.append(f"{name}: reported both {seen[name]} and {result}")
+        seen[name] = result
+    for name, want in PROBE_EXPECTED.items():
+        got = seen.get(name)
+        if got is None:
+            failures.append(f"{name}: no result line")
+        elif got != want:
+            failures.append(f"{name}: {got}, expected {want}")
+    for name, allowed in PROBE_INFORMATIONAL.items():
+        got = seen.get(name)
+        if got is None:
+            failures.append(f"{name}: no result line")
+        elif got not in allowed:
+            failures.append(f"{name}: {got}, expected one of {sorted(allowed)}")
+    for name in seen.keys() - PROBE_EXPECTED.keys() - PROBE_INFORMATIONAL.keys():
+        failures.append(f"{name}: not a known probe")
+    return failures
+
+
+def sandbox_probe_argv(layout: TesterLayout, *, binary: Path, command: str) -> list[str]:
+    """The modelless form of D6a: ``codex sandbox -P tester -C <clone> -c <shell policy> -- sh -c <command>``,
+    run with the tester's ``CODEX_HOME`` and environment. No ``-s`` and no other profile selector."""
+    out = [str(binary), "sandbox", "-P", PROFILE, "-C", str(layout.clone)]
+    for item in shell_policy_overrides(layout):
+        out += ["-c", item]
+    return out + ["--", "sh", "-c", command]

@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-reviewer-family",
+ "dispositions": {
+  "F-03dfb1685869": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-4a62efb8099e": {
+   "disposition": "dropped",
+   "reason": "Plan wording about how the patched-registry tests are built; the implementation built them and the Codex implementation review ran them."
+  },
+  "F-5ec5b95439ec": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-cb98aa0a7a5c": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-d5f0d281cb80": {
+   "disposition": "dropped",
+   "reason": "Plan wording about explain; the implementation adds the call as CP1 says and the review_mode_report case passes."
+  },
+  "F-eb1a839be4a5": {
+   "disposition": "dropped",
+   "reason": "One inexact sentence in the plan about imports; the no-cycle conclusion holds and no code depends on it."
+  }
+ }
+}

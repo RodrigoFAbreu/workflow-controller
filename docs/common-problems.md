@@ -90,9 +90,10 @@ See [pausing for usage limits](run.md#pausing-for-usage-limits), [`resume`](guid
 
 ## A run stopped at review_mode_unavailable
 
-`step` or `run` exits `10` with the reason `review_mode_unavailable` at an external review gate. Nothing was launched. Two causes:
+`step` or `run` exits `10` with the reason `review_mode_unavailable` at an external review gate. Nothing was launched. Three causes:
 
 - **`cross-model` without a distinct provider**: `reviewer.harness` is unset or names the workers' own provider. Set `reviewer.harness` to a distinct one, or run with `--review-mode manual`.
+- **Worker roles on more than one provider family** (`auto`, `cross-model` or `single-provider`): there is no single provider for a reviewer to be distinct from, so the step stops. The message names the stage's local review role (`review-plan` or `review-implementation`), its harness and family, and `reviewer.harness` and its family, and says whether the two are of one family or distinct; when they are distinct, the other roles cause the stop. Route every worker role to harnesses of one family (and, for a collision, route the local review role or `reviewer.harness` to another family), or run with `--review-mode manual`, which this stop never applies to.
 - **`single-provider` without the lowered-policy signal**, or a same-provider review the Workflow refused (`DistinctReviewerModelsRequiredError`, job `INCOMPLETE`). The stop holds while the state and the policy signal are unchanged and the mode again selects a same-family reviewer. The message names the ways out that apply to the mode and phase:
   1. lower the stage's `require` by adopting a policy (`docs/ai-workflow/GATE_POLICY.md`); an open review bundle is not changed by it, so withdraw the bundle and generate it again first;
   2. under `auto` only: turn the stage's gate human with an uncommitted edit of `docs/ai-workflow/GATE_POLICY.json`, which makes the next step stop at the ordinary gate;

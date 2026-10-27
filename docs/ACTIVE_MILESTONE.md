@@ -15,9 +15,9 @@ squash commit is `chore:` and nothing is released. The plan is archived at
 `workflow-controller-reviewer-independence` (H10,
 [#194](https://github.com/RodrigoFAbreu/workflow-controller/issues/194)), plan revision 3 approved. CP1 is complete: the
 mixed-lane stop now names the stage's local review role, `reviewer.harness` and their families
-(`review_mode.mixed_lane_reason`, used in `job._choose_review`), verified by `tests.test_review_independence`. CP2 (guide,
-troubleshooting page, roadmap) is next.
+(`review_mode.mixed_lane_reason`, used in `job._choose_review`), verified by `tests.test_review_independence`. CP2 is
+complete: the guide, the troubleshooting page and the roadmap describe it, and the roadmap marks H10 complete and points at H9.
 
 ## Next action
 
-Run `/milestone-implement` for CP2 of `workflow-controller-reviewer-independence`.
+Run `/milestone-implement` again for the self-review of `workflow-controller-reviewer-independence`, then the implementation bundle.

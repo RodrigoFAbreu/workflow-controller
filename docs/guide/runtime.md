@@ -392,7 +392,11 @@ review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
   routed to harnesses of more than one family there is no single provider to
   be distinct from, and `auto`, `cross-model` and `single-provider` stop with
   `review_mode_unavailable`; route every worker role to harnesses of one
-  family, or choose `--review-mode manual`. The same-provider review is
+  family, or choose `--review-mode manual`. The stop's text names the stage's
+  local review role (`review-plan` or `review-implementation`), its harness and
+  family, and `reviewer.harness` and its family, and says whether the two are of
+  one family (the Workflow's `distinct_reviewer_models` rule would refuse the
+  approval for that stage) or distinct; `manual` is unaffected. The same-provider review is
   unchanged and still runs Claude. A name that is not
   registered stops the review step with exit `20`; it is never ignored.
   The `codex` harness was pinned against `codex-cli 0.163.0` (ADR 0013,
@@ -442,7 +446,7 @@ the four is a usage error (exit `2`). `settings show` gives its source.
 | Mode | At an external review gate |
 |---|---|
 | `auto` (default) | the cross-model reviewer when `reviewer.harness` is set; else the same-provider reviewer, only where `verify` reports the stage's `require` lowered (a lowering adoption of the gate policy) and nothing else; else the ordinary gate |
-| `cross-model` | the reviewer of `reviewer.harness`, whose provider family must differ from the workers' (derived from the routing; mixed worker families stop it); without one the step stops at `review_mode_unavailable` |
+| `cross-model` | the reviewer of `reviewer.harness`, whose provider family must differ from the workers' (derived from the routing; mixed worker families stop it, and the stop's text names the stage's local review role and `reviewer.harness` with their families); without one the step stops at `review_mode_unavailable` |
 | `single-provider` | the same-provider reviewer (below), only while the lowered-policy signal stands; else refused before launch with `review_mode_unavailable` |
 | `manual` | the ordinary gate: a person reviews and pastes the verdict |
 

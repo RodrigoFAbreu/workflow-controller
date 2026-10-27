@@ -410,8 +410,22 @@ the entry's position, counted from 1 after the first route. The command-line
 options (`--role-model`, `--role-effort`, `--role-harness`, `--model` and
 `--effort`) change the first route only and leave every later entry as the
 configuration wrote it. The chain is validated and counted in the worker
-families that the review modes compare, but it is **not yet used to select a
-route**: a worker still launches on the first route.
+families that the review modes compare, and `step` and `run` **use it to choose
+the route of a worker**.
+
+The entries are tried in order, before the worker is spawned and never after.
+An entry is skipped when its harness cannot launch the role (the launcher
+cannot be resolved), or when the usage gate holds its provider; a hold skips
+every later entry on the same provider as well, since the readings are
+per account and a model-specific limit is not detected. The first entry that
+is neither is launched, and the job record names it (see
+[the job record](workers.md#telemetry)). Nothing is retried once a
+worker has started: a worker that fails, or stops on a usage limit, ends as it
+did before, and the next `step` or `run` selects from the first entry again.
+When no entry can be launched the outcome is the single-route outcome: if any
+entry was held, the hold whose reset is earliest is returned and the wait is the
+existing one; if every launcher is unavailable, the first entry's error is
+raised. A role with no `fallback` is unchanged.
 
 The settings file's `routing` section has the same shape, without
 `schema_version`; `--routing-config` replaces it whole. Only `step` and

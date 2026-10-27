@@ -20,10 +20,10 @@ plan revision 2, implementing.
   (a role without a chain takes the unchanged lines), the record's `worker_route` gains the `selection` block for a
   chain role, and `telemetry.dimensions` reports `chain_position`, `chain_skipped` and the worker record's own harness;
   `tests/test_route_select_job.py`.
-- CP3 (guides and roadmap) is next.
+- CP3 complete: the guides (`commands.md`, `runtime.md`, `workers.md`) say the chain is used, what skips an entry and the
+  `selection` block; the roadmap marks H9b complete.
 
 ## Next action
 
-No milestone is active. Next is H9b of the harness-neutral roles epic in `docs/ROADMAP.md` (the selection of a fallback chain's
-entry; its open question is the narrow definition of "unavailable or held by a limit",
-[#202](https://github.com/RodrigoFAbreu/workflow-controller/issues/202)); run `/milestone-plan` for it.
+H9b is implemented and awaits implementation review. After it, the next item of the harness-neutral roles epic in
+`docs/ROADMAP.md` is H11 (the harness in telemetry), then the Codex tester (C10g-1 to C10g-3).

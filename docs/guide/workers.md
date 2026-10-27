@@ -755,6 +755,17 @@ telemetry existed has no block; the `telemetry` command derives the same
 figures from its `worker.stdout` each time it runs, marked
 `"derived": true`, and writes nothing back.
 
+**The selection block.** For a role with a fallback chain, `worker_route` also
+holds `selection`: `{"position": <index of the chosen entry>, "length": <entries
+in the chain>, "skipped": [{"position": <index>, "harness": <name>, "cause":
+"launcher_unavailable" | "usage_held"}, ...]}`. `worker_route` itself is the
+chosen entry's route, so `role`, `model`, `effort`, `harness` and `sources` read
+as before. A role without a chain has no block. The selection is made once,
+before the record exists; `resume` and the drain path read the recorded route.
+`telemetry` adds the dimensions `chain_position` and `chain_skipped` (the causes
+in order) for a record with the block, and a worker record reports its own
+`harness` from `worker_route`.
+
 **Also on the job record.** Each launched job records the settings it
 ran with, in a `controller_settings` block: the settings file's `path`,
 the `sha256` of the bytes read (`null` with no file), and each effective

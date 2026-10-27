@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-scenario-base",
+  "requirements": {
+    "R1": {
+      "description": "The scenario fixture measures its Workflow identity from the checkout tip, so files added since an old pinned base cannot reach the classification (SC1)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A guard CI runs without the sandbox proves the fixture paths classify under the pinned declaration (SC1)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The development guide and the roadmap describe the fixture and the guard, shipped as a test change with no release (SC1)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

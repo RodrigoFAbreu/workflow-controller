@@ -23,6 +23,9 @@ worker roles are routed to, and mixed worker families stop the review with
 column lists the adapter roles it declares; the legend below the second table
 says what each one is.
 
+A worker role is launched through the launcher of the harness it is routed to
+(`controller/worker_launch.py`); Claude Code's is the only launcher today.
+
 The second table has one row per routing role, the role a model, effort and
 harness are chosen for in the `routing` section of the settings file. Each
 routing role is launched as one adapter role (`Runs as`), and a harness is

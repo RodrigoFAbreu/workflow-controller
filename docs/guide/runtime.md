@@ -724,8 +724,9 @@ The resolved harness is recorded in each job's `worker_route` as `harness`, with
 `sources.harness`, using the adapter name for every job kind. A same-provider
 external review's record now reads `claude-code` there, where it read `claude`
 before; the `review` block's own `harness` key keeps the reviewer vocabulary. The
-launch does not read the resolved harness yet (H3 does that), so today every
-worker runs on Claude Code.
+launch reads the resolved harness and starts the worker through that harness's
+launcher (`controller/worker_launch.py`); Claude Code's is the only one today, so
+every worker runs on Claude Code.
 
 The release that adds the `harness` field is table generation 15: it adds no
 key and moves no value, but a file it fills records `"_table_generation": 15`.

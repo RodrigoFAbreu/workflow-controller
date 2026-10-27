@@ -12,9 +12,10 @@ paragraph changed; the squash commit is `test:`, so nothing is released. The pla
 ## In progress: `workflow-controller-worker-launch` (H3)
 
 Plan: `docs/ai-workflow/CONTROLLER_WORKER_LAUNCH_PLAN.md`. CP1 (the launcher interface, the Claude Code launcher and the
-call site in `controller/job.py`) is implemented and verified with the narrow run list; CP2 (guides and roadmap) is next.
+call site in `controller/job.py`) and CP2 (the development and harness guides, the runtime guide sentence and the roadmap row)
+are implemented and verified; the full verification and the implementation review bundle are next.
 
 ## Next action
 
-No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`
-([#191](https://github.com/RodrigoFAbreu/workflow-controller/issues/191)); run `/milestone-plan` for it.
+`workflow-controller-worker-launch` is waiting for its implementation review. After it, H10 is next in the
+harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.

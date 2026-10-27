@@ -75,7 +75,7 @@ class PinnedDeclarationsTest(unittest.TestCase):
 
     def test_worker_declarations(self) -> None:
         worker = harness.worker_adapter()
-        self.assertEqual(review_mode.WORKER_FAMILY, worker.family)
+        self.assertEqual(review_mode.worker_families(), frozenset({worker.family}))
         self.assertEqual(review_mode.SAME_PROVIDER_HARNESS, worker.reviewer_name)
 
 

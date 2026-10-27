@@ -16,7 +16,10 @@ so they show what a settings file, a `--routing-config` file and
 ## Reading the tables
 
 The first table has one row per harness. `reviewer.harness` is the value that
-chooses it as the external reviewer (a dash means it cannot review). The roles
+chooses it as the external reviewer (a dash means it cannot review); a reviewer
+is cross-model when its family differs from the family of the harnesses the
+worker roles are routed to, and mixed worker families stop the review with
+`review_mode_unavailable`. The roles
 column lists the adapter roles it declares; the legend below the second table
 says what each one is.
 

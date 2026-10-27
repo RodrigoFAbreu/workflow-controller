@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-reviewer-family",
+  "requirements": {
+    "R1": {
+      "description": "The review mode derives the workers' provider family from the routed harness of the worker roles, so a configured reviewer of another family is cross-model (H2)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Mixed worker families stop in a named way and every outcome stays as today with the current registry, pinned by tests (H2)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The guides and the roadmap describe the derivation, shipped as a chore with no release (H2)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

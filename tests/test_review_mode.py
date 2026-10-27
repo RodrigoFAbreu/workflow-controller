@@ -19,7 +19,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, job, review, review_mode, worker  # noqa: E402
+from controller import cli, harness, job, review, review_mode, routing, worker  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import test_review_job as rj  # noqa: E402
 from controller.review_mode import (  # noqa: E402
@@ -198,7 +198,7 @@ class FamilyTest(unittest.TestCase):
         for name in review.HARNESSES:
             self.assertIn(name, review_mode.HARNESS_FAMILY)
         self.assertEqual(review_mode.HARNESS_FAMILY["codex"], "openai")
-        self.assertNotEqual(review_mode.HARNESS_FAMILY["codex"], review_mode.WORKER_FAMILY)
+        self.assertNotIn(review_mode.HARNESS_FAMILY["codex"], review_mode.worker_families())
 
 
 class FlagTest(unittest.TestCase):
@@ -416,6 +416,92 @@ class JobChoiceTest(rj._ReviewCase):
         from controller.errors import ControllerError
         with mock.patch.object(job.protocol, "verify", side_effect=ControllerError("down")):
             self.assertIsNone(job._review_mode_signal(self.life.inspect()))
+
+
+WORKER_ROLES = sorted(role for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER)
+SIGNALS = (None, "lowering_only", "no_policy", "lowering_plus_invalid_file")
+
+
+def codex_workers(roles: list[str]) -> tuple[mock._patch, routing.RoutingOptions]:
+    """A registry whose ``codex`` also takes the worker role (with Claude's models and efforts so every route
+    validates), and the routing sending ``roles`` to it."""
+    patched = dataclasses.replace(
+        harness.CODEX, roles=(harness.WORKER, harness.REVIEWER), models=harness.CLAUDE_CODE.models,
+        efforts=harness.CLAUDE_CODE.efforts)
+    registry = {harness.CLAUDE_CODE.name: harness.CLAUDE_CODE, patched.name: patched}
+    patch = mock.patch.object(harness, "ADAPTERS", registry)
+    patch.start()
+    try:
+        options = routing.RoutingOptions(cli_role_harnesses={role: "codex" for role in roles})
+    except BaseException:
+        patch.stop()
+        raise
+    return patch, options
+
+
+class WorkerFamiliesTest(unittest.TestCase):
+    """Reviewer-family D1-D5: the workers' family is read from the routing."""
+
+    def test_the_built_in_routing_is_anthropic(self) -> None:
+        self.assertEqual(review_mode.worker_families(), frozenset({"anthropic"}))
+        self.assertEqual(review_mode.worker_families(routing.NO_OVERRIDES), frozenset({"anthropic"}))
+        self.assertEqual(review_mode.worker_families(), frozenset({harness.worker_adapter().family}))
+
+    def test_a_derived_set_changes_no_outcome_with_the_registry_as_it_is(self) -> None:
+        derived = review_mode.worker_families(routing.RoutingOptions(
+            cli_role_harnesses={role: "claude-code" for role in WORKER_ROLES}))
+        self.assertEqual(derived, review_mode.worker_families())
+        for mode in MODES:
+            for reviewer_options in (None, reviewer("claude"), reviewer("codex")):
+                self.assertEqual(review_mode.needs_signal(mode, reviewer_options),
+                                 review_mode.needs_signal(mode, reviewer_options, derived))
+                self.assertEqual(review_mode.distinct_harness(reviewer_options),
+                                 review_mode.distinct_harness(reviewer_options, derived))
+                for stage in STAGES:
+                    for name in SIGNALS:
+                        sig = None if name is None else signal(name)
+                        self.assertEqual(choose(mode, reviewer_options, stage, sig),
+                                         choose(mode, reviewer_options, stage, sig, derived))
+
+    def test_openai_workers_make_a_claude_reviewer_cross_model(self) -> None:
+        patch, options = codex_workers(WORKER_ROLES)
+        self.addCleanup(patch.stop)
+        workers = review_mode.worker_families(options)
+        self.assertEqual(workers, frozenset({"openai"}))
+        self.assertEqual(review_mode.distinct_harness(reviewer("claude"), workers), "claude")
+        self.assertIsNone(review_mode.distinct_harness(reviewer("codex"), workers))
+        chosen = choose(MODE_CROSS_MODEL, reviewer("claude"), "plan", None, workers)
+        self.assertEqual((chosen.kind, chosen.harness), ("review", "claude"))
+        refused = choose(MODE_CROSS_MODEL, reviewer("codex"), "plan", None, workers)
+        self.assertEqual(refused.kind, "refused")
+        self.assertIn("the workers' own provider", refused.reason)
+
+    def test_mixed_families_stop_in_a_named_way(self) -> None:
+        patch, options = codex_workers(WORKER_ROLES[:1])
+        self.addCleanup(patch.stop)
+        workers = review_mode.worker_families(options)
+        self.assertEqual(workers, frozenset({"anthropic", "openai"}))
+        for mode in (MODE_AUTO, MODE_CROSS_MODEL, MODE_SINGLE_PROVIDER):
+            with self.subTest(mode):
+                chosen = choose(mode, reviewer("codex"), "plan", signal("lowering_only"), workers)
+                self.assertEqual(chosen.kind, "refused")
+                self.assertIn("more than one family (anthropic, openai)", chosen.reason)
+                self.assertFalse(review_mode.needs_signal(mode, None, workers))
+        self.assertEqual(choose(MODE_MANUAL, reviewer("codex"), "plan", None, workers).kind, "gate")
+
+    def test_the_job_follows_the_routing(self) -> None:
+        patch, options = codex_workers(WORKER_ROLES)
+        self.addCleanup(patch.stop)
+        with mock.patch.object(job, "_external_review_stage", return_value=("plan", "x")):
+            default = job._choose_review(None, None, reviewer("claude"), {"mode": "cross-model"})
+            routed = job._choose_review(None, None, reviewer("claude"), {"mode": "cross-model"},
+                                        route_options=options)
+        self.assertEqual(default[1].kind, "refused")
+        self.assertEqual((routed[1].kind, routed[1].harness), ("review", "claude"))
+
+    def test_no_module_reads_the_removed_constant(self) -> None:
+        for path in (Path(__file__).resolve().parent.parent / "controller").rglob("*.py"):
+            self.assertNotIn("WORKER_FAMILY", path.read_text(), path.name)
 
 
 if __name__ == "__main__":

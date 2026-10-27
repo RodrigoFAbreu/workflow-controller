@@ -380,10 +380,20 @@ The five `reviewer` rows (1.10.0) let the Controller run the cross-model
 review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
 
 - `reviewer.harness` is unset by default, and then every review gate stops
-  for a person exactly as before. Setting it to a registered name (only
-  `codex` exists) makes `step` and `run` start that reviewer at the two
+  for a person exactly as before. Setting it to `codex`, a registered name,
+  makes `step` and `run` start that reviewer at the two
   external review gates of a work item, in a disposable copy of the
-  worktree, and hand its verdict to the Workflow. A name that is not
+  worktree, and hand its verdict to the Workflow. `claude` is also a
+  registered name. A reviewer is cross-model when its provider family is not
+  the workers' family, and the workers' family comes from the routing: the
+  families of the harnesses the worker roles are routed to. With the current
+  registry every worker role runs on Claude Code, so `claude` is never
+  cross-model and reads as unset, and `codex` is. If the worker roles are
+  routed to harnesses of more than one family there is no single provider to
+  be distinct from, and `auto`, `cross-model` and `single-provider` stop with
+  `review_mode_unavailable`; route every worker role to harnesses of one
+  family, or choose `--review-mode manual`. The same-provider review is
+  unchanged and still runs Claude. A name that is not
   registered stops the review step with exit `20`; it is never ignored.
   The `codex` harness was pinned against `codex-cli 0.163.0` (ADR 0013,
   "What the pre-step fixed", recorded on 0.162.1); a Codex update that enables
@@ -432,7 +442,7 @@ the four is a usage error (exit `2`). `settings show` gives its source.
 | Mode | At an external review gate |
 |---|---|
 | `auto` (default) | the cross-model reviewer when `reviewer.harness` is set; else the same-provider reviewer, only where `verify` reports the stage's `require` lowered (a lowering adoption of the gate policy) and nothing else; else the ordinary gate |
-| `cross-model` | the reviewer of `reviewer.harness`, which must be a provider distinct from the workers'; without one the step stops at `review_mode_unavailable` |
+| `cross-model` | the reviewer of `reviewer.harness`, whose provider family must differ from the workers' (derived from the routing; mixed worker families stop it); without one the step stops at `review_mode_unavailable` |
 | `single-provider` | the same-provider reviewer (below), only while the lowered-policy signal stands; else refused before launch with `review_mode_unavailable` |
 | `manual` | the ordinary gate: a person reviews and pastes the verdict |
 

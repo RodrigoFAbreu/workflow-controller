@@ -14,7 +14,7 @@ import dataclasses
 import re
 from typing import Any, Mapping
 
-from controller import harness
+from controller import harness, routing
 from controller.settings import REVIEW_MODES
 
 MODE_AUTO, MODE_CROSS_MODEL, MODE_SINGLE_PROVIDER, MODE_MANUAL = REVIEW_MODES
@@ -22,8 +22,9 @@ MODE_AUTO, MODE_CROSS_MODEL, MODE_SINGLE_PROVIDER, MODE_MANUAL = REVIEW_MODES
 #: The stop's gate code (D4, D6).
 REVIEW_MODE_UNAVAILABLE = "review_mode_unavailable"
 
-#: The family of the Controller's workers (Claude is the only worker harness).
-WORKER_FAMILY = "anthropic"
+#: The family whose usage is the Claude provider's (``job`` picks the usage
+#: provider of a review by it); it says nothing about what the workers are.
+CLAUDE_FAMILY = "anthropic"
 
 #: The verdict family of each review harness (``review.HARNESSES``; a test
 #: pins this table to the registry). A harness not listed is a distinct,
@@ -108,14 +109,24 @@ def harness_family(name: str) -> str | None:
     return HARNESS_FAMILY.get(name)
 
 
-def distinct_harness(reviewer: Mapping | None) -> str | None:
+def worker_families(options: routing.RoutingOptions = routing.NO_OVERRIDES) -> frozenset[str]:
+    """The families of the harnesses ``options`` routes every worker role to
+    (reviewer-family D1): the roles whose adapter role is ``worker``."""
+    return frozenset(
+        harness.get(options.resolve(role).harness).family
+        for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER)
+
+
+def distinct_harness(reviewer: Mapping | None, workers: frozenset[str] | None = None) -> str | None:
     """The configured ``reviewer.harness`` when it is a distinct provider
-    (D2, D4): set, and not of the workers' family. A same-family harness
-    (``claude``) reads as unset here."""
+    (D2, D4): set, and of a family that is not the workers' (``workers``,
+    default the built-in routing's). A same-family harness reads as unset
+    here."""
     if reviewer is None:
         return None
     name = reviewer["harness"]
-    return None if harness_family(name) == WORKER_FAMILY else name
+    families = worker_families() if workers is None else workers
+    return None if harness_family(name) in families else name
 
 
 @dataclasses.dataclass(frozen=True)
@@ -140,24 +151,34 @@ def _refuse(reason: str, signal: Signal | None) -> Choice:
     return Choice("refused", reason=reason, signal=signal)
 
 
-def needs_signal(mode: str, reviewer: Mapping | None) -> bool:
+def needs_signal(mode: str, reviewer: Mapping | None, workers: frozenset[str] | None = None) -> bool:
     """Whether :func:`choose` reads the lowered-policy signal: only where a
     same-provider review could run (``auto`` with no distinct harness, and
     an explicit ``single-provider``). ``manual``, ``cross-model`` and ``auto``
-    with a distinct harness never ask ``verify`` for it."""
+    with a distinct harness never ask ``verify`` for it. Mixed worker
+    families end in a refusal that reads no signal."""
+    if workers is not None and len(workers) > 1:
+        return False
     if mode == MODE_SINGLE_PROVIDER:
         return True
-    return mode == MODE_AUTO and distinct_harness(reviewer) is None
+    return mode == MODE_AUTO and distinct_harness(reviewer, workers) is None
 
 
-def choose(mode: str, reviewer: Mapping | None, stage: str, signal: Signal | None) -> Choice:
+def choose(mode: str, reviewer: Mapping | None, stage: str, signal: Signal | None,
+           workers: frozenset[str] | None = None) -> Choice:
     """The choice at an ``external_gate`` of ``stage`` (D1-D4). ``reviewer``
     is the ``reviewer.*`` options (``None`` while ``reviewer.harness`` is
     unset); ``signal`` is the ``gate_policy`` check's, ``None`` when it is
-    absent or could not be read (no signal)."""
+    absent or could not be read (no signal). ``workers`` is the workers'
+    families (:func:`worker_families`); more than one is refused (D3)."""
     if mode == MODE_MANUAL:
         return GATE
-    distinct = distinct_harness(reviewer)
+    if workers is not None and len(workers) > 1:
+        return _refuse(
+            "the worker roles are routed to harnesses of more than one family "
+            f"({', '.join(sorted(workers))}), so there is no single provider to be distinct from; route every "
+            "worker role to harnesses of one family, or choose --review-mode manual", None)
+    distinct = distinct_harness(reviewer, workers)
     if mode == MODE_CROSS_MODEL:
         if distinct is not None:
             return Choice("review", harness=distinct)

@@ -6746,17 +6746,20 @@ def _review_mode_signal(managed_repo: Any) -> review_mode.Signal | None:
 
 
 def _choose_review(managed_repo: Any, decision: Decision, reviewer: Mapping | None,
-                   mode_options: Mapping | None) -> tuple[tuple[str, str], review_mode.Choice] | None:
+                   mode_options: Mapping | None, *,
+                   route_options: routing.RoutingOptions = routing.NO_OVERRIDES) -> tuple[tuple[str, str], review_mode.Choice] | None:
     """The review the step runs at this decision (review-modes D1-D4), or
     ``None`` when the decision is not an external review gate. The signal is
     read from ``verify`` only where :func:`review_mode.needs_signal` says a
-    same-provider review could run."""
+    same-provider review could run. The workers' family comes from
+    ``route_options`` (reviewer-family D1, D4)."""
     target = _external_review_stage(decision)
     if target is None:
         return None
     mode = review_mode.MODE_AUTO if mode_options is None else mode_options["mode"]
-    signal = _review_mode_signal(managed_repo) if review_mode.needs_signal(mode, reviewer) else None
-    return target, review_mode.choose(mode, reviewer, target[0], signal)
+    workers = review_mode.worker_families(route_options)
+    signal = _review_mode_signal(managed_repo) if review_mode.needs_signal(mode, reviewer, workers) else None
+    return target, review_mode.choose(mode, reviewer, target[0], signal, workers)
 
 
 def _sticky_stop_message(mode: str, stage: str) -> str:
@@ -6767,7 +6770,8 @@ def _sticky_stop_message(mode: str, stage: str) -> str:
 
 
 def review_mode_report(runtime_root: Path, managed_repo: Any, work_item_id: str | None, decision: Decision,
-                       reviewer: Mapping | None, mode_options: Mapping | None) -> dict | None:
+                       reviewer: Mapping | None, mode_options: Mapping | None, *,
+                       route_options: routing.RoutingOptions = routing.NO_OVERRIDES) -> dict | None:
     """What the next ``step`` would do at the external review gate ``decision``
     (review-modes D1-D7), for ``explain``: ``None`` when the decision is not an
     external review gate, else ``mode``, ``source``, ``stage``, ``choice``
@@ -6775,7 +6779,7 @@ def review_mode_report(runtime_root: Path, managed_repo: Any, work_item_id: str 
     ``lowered`` and, for a stop, its ``reason`` (the step's own text, with the
     ways out that apply). Read-only: it asks ``verify`` and reads the job files
     exactly as the step does and writes nothing."""
-    chosen = _choose_review(managed_repo, decision, reviewer, mode_options)
+    chosen = _choose_review(managed_repo, decision, reviewer, mode_options, route_options=route_options)
     if chosen is None:
         return None
     (stage, _kind), choice = chosen
@@ -6947,7 +6951,7 @@ def _run_review_job(
                                   single_agent=True, model_source=prefix + "model", effort_source=prefix + "effort",
                                   harness=adapters.get(harness.name).name,
                                   harness_source="review.mode" if prefix != "reviewer." else "reviewer.harness")
-    provider = usage.PROVIDER_CLAUDE if harness.verdict_family == review_mode.WORKER_FAMILY else usage.PROVIDER_CODEX
+    provider = usage.PROVIDER_CLAUDE if harness.verdict_family == review_mode.CLAUDE_FAMILY else usage.PROVIDER_CODEX
     token: str | None = None
     if usage_gate is not None:
         # D8: the budget of the provider that runs the review
@@ -8161,7 +8165,7 @@ def _execute_step_locked(
                 preflight_events=preflight_events, controller_settings=controller_settings,
                 lifecycle_lock=lifecycle_lock, config_source=routing.config_source, route_options=routing,
                 functional=functional)
-        chosen = _choose_review(managed_repo, decision, reviewer, review_mode_options)
+        chosen = _choose_review(managed_repo, decision, reviewer, review_mode_options, route_options=routing)
         review_target = None
         if chosen is not None:
             review_target, choice = chosen

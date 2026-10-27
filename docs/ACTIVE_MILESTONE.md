@@ -9,6 +9,11 @@ sandbox-free guard checks that every file the fixture commits is classified. Onl
 paragraph changed; the squash commit is `test:`, so nothing is released. The plan is archived at
 `docs/milestones/completed/workflow-controller-scenario-base.md`.
 
+## In progress: `workflow-controller-worker-launch` (H3)
+
+Plan: `docs/ai-workflow/CONTROLLER_WORKER_LAUNCH_PLAN.md`. CP1 (the launcher interface, the Claude Code launcher and the
+call site in `controller/job.py`) is implemented and verified with the narrow run list; CP2 (guides and roadmap) is next.
+
 ## Next action
 
 No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`

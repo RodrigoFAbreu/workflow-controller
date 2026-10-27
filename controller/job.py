@@ -108,7 +108,7 @@ from typing import Any, Callable
 from controller import harness as adapters
 from controller import (
     evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
-    routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_stream, workflow_contract,
+    routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
     BRANCH_GATE_PHASE,
@@ -8255,6 +8255,9 @@ def _execute_step_locked(
     # CP6: the worker's route, resolved before anything is recorded, so an
     # unroutable action leaves no record behind.
     route = _worker_route(decision, work_item, routing)
+    # H3: the routed harness's launcher, resolved with the route and before
+    # anything is recorded, so an unlaunchable harness leaves no record.
+    launcher = worker_launch.for_harness(route.harness)
 
     # Usage budget (CP3, D7): admitted against the budget now, with the
     # route known and before any record exists, so a hold leaves nothing for
@@ -8338,7 +8341,7 @@ def _execute_step_locked(
                 resolved_work_item_id=resolved_work_item_id, governing_workflow_version=governing_workflow_version,
                 permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
                 lifecycle_lock=lifecycle_lock, supervisor_lock_path=supervisor_lock_path,
-                drain_detach_seconds=drain_detach_seconds, usage_end=usage_end,
+                drain_detach_seconds=drain_detach_seconds, usage_end=usage_end, launcher=launcher,
             )
     except BaseException:
         # A worker that never started left a terminal record: released
@@ -8459,6 +8462,7 @@ def _launch_job(
     claude_bin: str | None,
     lifecycle_lock: lock.LifecycleLock,
     supervisor_lock_path: Path,
+    launcher: worker_launch.WorkerLauncher,
     drain_detach_seconds: float | None = None,
     usage_end: dict | None = None,
 ) -> JobRecord:
@@ -8605,7 +8609,7 @@ def _launch_job(
             }, protocol_decision.DECISION_STALE_AT_LAUNCH)
 
     try:
-        result = worker.launch(
+        result = launcher.launch(
             worker_task(decision.action),
             cwd=managed_repo.root,
             permission_mode=permission_mode,

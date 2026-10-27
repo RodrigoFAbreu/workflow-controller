@@ -14,7 +14,7 @@ the shipped harnesses only `claude-code` takes the worker role, so a chain canno
 ## Next action
 
 No work item is active. The next item of the harness-neutral roles epic in `docs/ROADMAP.md` is H11 (the harness in
-telemetry), then the Codex tester (C10g-1 to C10g-3). Run `/milestone-plan` for H11.
+telemetry, [#207](https://github.com/RodrigoFAbreu/workflow-controller/issues/207)), then the Codex tester (C10g-1 to C10g-3). Run `/milestone-plan` for H11.
 
 ## Functional review checklist
 

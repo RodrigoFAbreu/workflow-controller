@@ -38056,7 +38056,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-fallback-select-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fallback-select-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -38169,7 +38169,144 @@
           "workflow_release": "2.22.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "4a6f5cb9592b9fb92606e6f23e63d92697dd59e79093933a63f5ff6ce53b60d4",
+        "approved_review_content_id": "d7ef1506bef7257826c977dc0ff7fa33b8b2b7a18a27bfc07cc81e972b78045a",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4a8fd7bef23385fb0c1c61d5e4ade2188bca2513"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e7b2ccd0eeb68c8bcaaf276b0da4e93d549f313b"
+          },
+          {
+            "path": "controller/route_select.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e7b6fb5e3689ee864a39b85b4206fc85aee0b428"
+          },
+          {
+            "path": "controller/telemetry.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "20e276326289a42b8afb6be78df567e5571cb57f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-fallback-select-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d6465cc4896fea843e20cdfa30ef607e56535adc"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dc769c1e5b3b9d66f430ddf152875e939995c64c"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "54e8296129b0dc7b16e4aecd7e2375ffab2c8b20"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c50152ffcac252227258a687cb51c77bee76dfe4"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b269fb01cce6e4e17e283758ab529ab849b4de5"
+          },
+          {
+            "path": "tests/test_route_select.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "242fdef68e985b0a1a1f17fc0f44b60aa2747a47"
+          },
+          {
+            "path": "tests/test_route_select_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "88729c3c21fdec4b4a1e98bba06466cf15fb1fac"
+          }
+        ],
+        "reviewed_content_commit": "3f8b0ca5bb73cbae63c922b4d23f9af29b5fa4db",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T17:00:40Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "d7ef1506bef7257826c977dc0ff7fa33b8b2b7a18a27bfc07cc81e972b78045a",
+            "ledger": {
+              "local": {
+                "bundle_id": "4a6f5cb9592b9fb92606e6f23e63d92697dd59e79093933a63f5ff6ce53b60d4",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "2f0572751bd2397a1076ba62f7bc7d6bbe21c27dae89874fd68e2c09890c8382",
+                "ledger_entry_sha256": "d0af007e28025b221926b25a13f3fc561b3314b08457e1452700b93849eb7e45",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-fallback-select/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "4a6f5cb9592b9fb92606e6f23e63d92697dd59e79093933a63f5ff6ce53b60d4",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "c9534b8a5f47a31b810a07596b6730fb99b491ee39c835e4f6876654e0eedf88",
+                "ledger_entry_sha256": "eddcff8439c9f1995173aeaf719cd228a86ec383c01943f084270125dc0f7ae9",
+                "run_ref": "codex:20261027T165716Z-9975afe6",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T17:00:40Z",
+          "workflow_release": "2.22.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
@@ -38200,12 +38337,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-10-27T16:49:46Z",
+      "state_revision": 19,
+      "last_transition": "2026-10-27T17:00:40Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -38298,6 +38435,41 @@
               "at": "2026-10-27T15:55:42Z"
             }
           ]
+        },
+        "F-ab20b1105dab": {
+          "digest": "ab20b1105dab9e5fe1a2f39bcef571df5f5065a67d30d96106933c0793d40693",
+          "text": "`controller/route_select.py` `select`: an admission counts as a go only when it is `None` or a `str`; anything else is read as a hold and later needs `.waitable`/`.resume_at`. The single-entry path in `controller/job.py` `_execute_step_locked` does the opposite test (a go is anything that is not a `UsageHold`/`usage.Hold`). With the real gate the two agree, because `usage.Admission.token` is `str | None`. But a gate whose token is not a string, such as a test fake, would make a chain role fail with an `AttributeError` while a single-entry role would accept the same token. Using the same `isinstance(admitted, (UsageHold, usage.Hold))` test, or documenting the narrower contract on `usage_gate`, would keep the two paths aligned.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "d7ef1506bef7257826c977dc0ff7fa33b8b2b7a18a27bfc07cc81e972b78045a",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T16:56:37Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "d7ef1506bef7257826c977dc0ff7fa33b8b2b7a18a27bfc07cc81e972b78045a",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4a6f5cb9592b9fb92606e6f23e63d92697dd59e79093933a63f5ff6ce53b60d4",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T16:56:37Z",
+          "verdict_sha256": "2f0572751bd2397a1076ba62f7bc7d6bbe21c27dae89874fd68e2c09890c8382",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-fallback-select/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4a6f5cb9592b9fb92606e6f23e63d92697dd59e79093933a63f5ff6ce53b60d4",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T16:59:28Z",
+          "verdict_sha256": "c9534b8a5f47a31b810a07596b6730fb99b491ee39c835e4f6876654e0eedf88",
+          "run_ref": "codex:20261027T165716Z-9975afe6",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

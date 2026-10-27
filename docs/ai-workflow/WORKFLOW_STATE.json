@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-fallback-select",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -38045,6 +38045,247 @@
         },
         "evaluated_at": "2026-10-27T14:20:17Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-fallback-select": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-fallback-select",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_FALLBACK_SELECT_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-fallback-select-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fallback-select-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "c80100bee65611a4772a6a63be0c8cec7dbb0f2b",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+        "approved_review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_FALLBACK_SELECT_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "77991500f59450bcb22b49d9a21af1c675c5b704"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-fallback-select-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ad9886962440cf4efcc2406df0bc5f7668da4543"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-fallback-select-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0258fe0caf3e20ad6fd34d8548026164b5acb35b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T15:59:23Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+            "ledger": {
+              "local": {
+                "bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "fc389253b7c3fe7a8b6d20556a58e50eda26e074e61bd6c09cbcb1ca5dc7c31e",
+                "ledger_entry_sha256": "d17c7cae3a49fea5d5e4710f838a89a0431a289f7df3b3e38353c610ff291478",
+                "run_ref": "session:local .ai-review/workflow-controller-fallback-select/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "d697191eb587d4a2f06637d5b92ff395fbfbeda952937e1479fcc31331f76639",
+                "ledger_entry_sha256": "47294e92203758fa587e66343cc95e2e18a36c37f1ba7752ac77f48a541819d7",
+                "run_ref": "codex:20261027T155559Z-3b03a061",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T15:59:23Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T15:55:42Z",
+          "verdict_sha256": "fc389253b7c3fe7a8b6d20556a58e50eda26e074e61bd6c09cbcb1ca5dc7c31e",
+          "run_ref": "session:local .ai-review/workflow-controller-fallback-select/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T15:58:04Z",
+          "verdict_sha256": "d697191eb587d4a2f06637d5b92ff395fbfbeda952937e1479fcc31331f76639",
+          "run_ref": "codex:20261027T155559Z-3b03a061",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-27T15:59:23Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T15:53:29Z",
+        "consumed": {
+          "review_content_id": "7626ad78d72a0c15930943cf4dd76bd7feec89eee28d053e74146296db9b5be9",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+          "bundle_id": "81ca2397926729a3e723109ce6a30ecfa19242edfce582c3a0153c26f8efbcbe",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "7626ad78d72a0c15930943cf4dd76bd7feec89eee28d053e74146296db9b5be9"
+      ],
+      "optional_findings": {
+        "F-7ea6167c3e5e": {
+          "digest": "7ea6167c3e5ee7837d1823eecdd066c44d28a364f2eb2c2865c65352bec2740a",
+          "text": "**LOCAL-R1-002 (D1): \"`len(chain) == 1`, which is every role that loads today\" is inaccurate.** Since H9a (shipped in 1.22.x) a routing configuration with `roles.<worker-role>.fallback` of `claude-code` entries loads (`routing._Validator.fallback_chain`, `_check_pair` admits `claude-code` for every worker role), so an operator may already have a chain; D9 itself describes that case. Reword to \"every role whose configuration names no `fallback`\", and note in the release text that such a role's records gain the `selection` block.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7626ad78d72a0c15930943cf4dd76bd7feec89eee28d053e74146296db9b5be9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T15:52:00Z"
+            }
+          ]
+        },
+        "F-2985f5c50a7d": {
+          "digest": "2985f5c50a7d344973c76b5411fae36bee87517d3d7cdf2eff9dd431e1ba08a2",
+          "text": "**LOCAL-R1-003 (D3, CP1): `usage_provider` is a second closed map beside one that exists.** The review job already derives the provider from the adapter's family (`job.py:6959`: `PROVIDER_CLAUDE if harness.verdict_family == CLAUDE_FAMILY else PROVIDER_CODEX`). Deriving it from the adapter's `family` (anthropic/openai) would avoid a map a test must keep equal to the registry, and avoid the CP2 patched-registry harness tripping `usage_provider`'s refusal (a new adapter name in the patch would make `select` raise rather than skip). Also, an unknown harness name raises `UnknownHarnessError` in `harness.get`; say which error `usage_provider` raises and why.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7626ad78d72a0c15930943cf4dd76bd7feec89eee28d053e74146296db9b5be9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T15:52:00Z"
+            }
+          ]
+        },
+        "F-b4c372b50354": {
+          "digest": "b4c372b503546b4a95478b8d5f5f989fd770babff64c600db4f6bcfcffc33424",
+          "text": "**LOCAL-R1-004 (D4): tie and `resume_at=None` handling unspecified.** State the tie-break between two waitable holds with equal `resume_at` (the earlier chain position) and whether a waitable hold with `resume_at None` can occur; add the tie to the CP1 table.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7626ad78d72a0c15930943cf4dd76bd7feec89eee28d053e74146296db9b5be9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T15:52:00Z"
+            }
+          ]
+        },
+        "F-320d79d97811": {
+          "digest": "320d79d97811d590ecf52f54be2711d730e3f123541ffb0f993e8723862f3274",
+          "text": "**LOCAL-R2-001 (CP1): the import list and `usage_provider`'s values pull in two directions.** CP1 says `controller/route_select.py` imports only `controller.harness`, `controller.routing` and `controller.errors`, but `usage_provider` returns `usage.PROVIDER_CLAUDE`/`PROVIDER_CODEX` and compares the family to `review_mode.CLAUDE_FAMILY`, the constants `job.py:6959` uses. Under the stated import list those become repeated literals (`\"claude\"`, `\"codex\"`, `\"anthropic\"`). The CP1 test that checks against the review job's derivation would catch drift, so this is not a defect. Still, the plan should either allow importing `controller.usage` and `controller.review_mode` (neither imports `job` or `route_select`) or say that the literals are deliberate.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T15:55:42Z"
+            }
+          ]
+        },
+        "F-6d575677040d": {
+          "digest": "6d575677040d6970caeba5c64463e536b7d376a34fd88896ee78d1af47adf319",
+          "text": "**LOCAL-R2-002 (CP2): `telemetry.rows` does not report a harness.** `rows` copies only `role`/`model` from `dimensions` (`controller/telemetry.py:411-422`). The harness reaches only the completion block (`job.py:4498`) and the derived block (`telemetry.py:222`). So the courier and second-harness cases should assert on `dimensions(record)` (and on the derived block), not on a `rows` column that does not exist.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "501a4bcd0b16066de40448bc263fe6c3dd46943b6b9b7813c8e0e0255aacb776",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T15:55:42Z"
+            }
+          ]
+        }
       }
     }
   }

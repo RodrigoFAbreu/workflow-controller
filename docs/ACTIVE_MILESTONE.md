@@ -10,7 +10,14 @@ and `controller/job.py` resolves the launcher from the routed harness before the
 squash commit is `chore:` and nothing is released. The plan is archived at
 `docs/milestones/completed/workflow-controller-worker-launch.md`.
 
+## In progress
+
+`workflow-controller-reviewer-independence` (H10,
+[#194](https://github.com/RodrigoFAbreu/workflow-controller/issues/194)), plan revision 3 approved. CP1 is complete: the
+mixed-lane stop now names the stage's local review role, `reviewer.harness` and their families
+(`review_mode.mixed_lane_reason`, used in `job._choose_review`), verified by `tests.test_review_independence`. CP2 (guide,
+troubleshooting page, roadmap) is next.
+
 ## Next action
 
-No milestone is active. Next is H10 of the harness-neutral roles epic in `docs/ROADMAP.md`
-([#194](https://github.com/RodrigoFAbreu/workflow-controller/issues/194)); run `/milestone-plan` for it.
+Run `/milestone-implement` for CP2 of `workflow-controller-reviewer-independence`.

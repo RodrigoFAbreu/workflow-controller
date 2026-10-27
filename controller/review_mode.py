@@ -201,6 +201,37 @@ def choose(mode: str, reviewer: Mapping | None, stage: str, signal: Signal | Non
         f"policy lowered distinct_reviewer_models). {remedies(mode, stage)}", signal)
 
 
+#: The local review role of each external review stage: the stage the
+#: Workflow's ``distinct_reviewer_models`` rule compares with the external one.
+LOCAL_REVIEW_ROLE = {"plan": routing.REVIEW_PLAN, "implementation": routing.REVIEW_IMPLEMENTATION}
+
+
+def mixed_lane_reason(options: routing.RoutingOptions, reviewer: Mapping | None, stage: str) -> str:
+    """The text of the mixed-lane stop (reviewer-independence D3, D4): begins
+    with :func:`choose`'s own sentence, then names the pair the Workflow's
+    ``distinct_reviewer_models`` rule compares at ``stage`` (the local review
+    role and ``reviewer.harness``) and whether it is of one family. Pure; it
+    decides nothing."""
+    workers = worker_families(options)
+    role = LOCAL_REVIEW_ROLE[stage]
+    local = options.resolve(role).harness
+    local_family = harness.get(local).family
+    pair = f"the {stage} stage's local review role {role} runs on {local} ({local_family})"
+    if reviewer is None:
+        pair += "; reviewer.harness is unset"
+    else:
+        name = reviewer["harness"]
+        family = harness_family(name)
+        pair += f" and reviewer.harness is {name} ({family}), "
+        pair += ("so the two are of one family and the Workflow's distinct_reviewer_models rule would refuse the "
+                 "approval" if family == local_family else
+                 "so that pair is distinct and the stop comes from the other worker roles")
+    return ("the worker roles are routed to harnesses of more than one family "
+            f"({', '.join(sorted(workers))}), so there is no single provider to be distinct from: {pair}. "
+            "Route every worker role to harnesses of one family (for a collision, route the local review role "
+            "or reviewer.harness to another family), or choose --review-mode manual")
+
+
 #: The ``GATE_POLICY.json`` gate each stage's approval is held by.
 STAGE_GATE = {"plan": "plan_approval", "implementation": "technical_approval"}
 

@@ -6759,7 +6759,12 @@ def _choose_review(managed_repo: Any, decision: Decision, reviewer: Mapping | No
     mode = review_mode.MODE_AUTO if mode_options is None else mode_options["mode"]
     workers = review_mode.worker_families(route_options)
     signal = _review_mode_signal(managed_repo) if review_mode.needs_signal(mode, reviewer, workers) else None
-    return target, review_mode.choose(mode, reviewer, target[0], signal, workers)
+    choice = review_mode.choose(mode, reviewer, target[0], signal, workers)
+    if choice.kind == "refused" and len(workers) > 1:
+        # Reviewer-independence D2: the same stop, now naming the colliding pair.
+        choice = review_mode.Choice(choice.kind, choice.harness, choice.lowered,
+                                    review_mode.mixed_lane_reason(route_options, reviewer, target[0]), choice.signal)
+    return target, choice
 
 
 def _sticky_stop_message(mode: str, stage: str) -> str:

@@ -36602,6 +36602,665 @@
         "evaluated_at": "2026-10-27T06:34:55Z",
         "workflow_release": "2.22.0"
       }
+    },
+    "workflow-controller-reviewer-independence": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-reviewer-independence",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_REVIEWER_INDEPENDENCE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-independence-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-independence-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 3,
+      "implementation_revision": 1,
+      "functional_review_round": null,
+      "base_commit": "d6f17eb18ba666b5a33a189b49931c1220fd1e47",
+      "reviewed_implementation_head": "a1163a460e6aa99ebe1ea303b720ff15a19f4fb3",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP2",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "d073afbb42a8c67b843f5e0544d0ecfefd7a4c14"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "d8619b5497f6c82ad35fe7f4b7fb6d4885708976"
+        }
+      },
+      "current_bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+        "approved_review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_REVIEWER_INDEPENDENCE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4f95d992b372ade41e85a22b16d6eeabc70a1211"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-reviewer-independence-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "93d03b8627c75f71ccf7880bdaa34e0f1d1c497c"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-reviewer-independence-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "de14226c2cef3e5ea980c3f57806b2771b714111"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T08:02:16Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+            "ledger": {
+              "local": {
+                "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "153e92857bb9712f9e9b1ecca3823c82727719e10d3bb9b6bf1d0c6793af7479",
+                "ledger_entry_sha256": "bd8e4b95f65ba0898b3c910a3f155f5ae3cbcbc5150b47f6e8622002807f82fb",
+                "run_ref": "session:local .ai-review/workflow-controller-reviewer-independence/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "12d92240134e7d47fd974c9ba3eef480482182a016c747644c92f24c4128499d",
+                "ledger_entry_sha256": "cb4fad4188e5cb937d3724bea61c2074e0a0705fba779b309586f5009861baf5",
+                "run_ref": "codex:20261027T075818Z-f210ca6e",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T08:02:16Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "0d19fce1bbfc0bbcd20ce1c4554c8ec8dc267f35098849535f79495aa1d4ffc2",
+        "approved_review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+        "review_content_manifest": [
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "27740239af846cdcb7bf3031561bcd7e1d780716"
+          },
+          {
+            "path": "controller/review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6a851c38f264f9b5e607b0046830bb5f0f158e03"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-reviewer-independence-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "edd6a010672e855a6db49d9166e247de6f216ab1"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f5845561b13f5b28a485b15ea6f87c2591687a58"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "010c7c082d12d3378f3945c149dcfdf258a0160c"
+          },
+          {
+            "path": "tests/test_review_independence.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "46a6f03bbbaf26fe4e78968f15ebb6fb0b64d8e1"
+          }
+        ],
+        "reviewed_content_commit": "a1163a460e6aa99ebe1ea303b720ff15a19f4fb3",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T08:42:19Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "ledger": {
+              "local": {
+                "bundle_id": "0d19fce1bbfc0bbcd20ce1c4554c8ec8dc267f35098849535f79495aa1d4ffc2",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "aad9d0757bc0114ec4ed8756ed8ae0ccc427ef189499f585be1ac7ddae549b07",
+                "ledger_entry_sha256": "a44df9aa71251a76c32c447ce6f5808a92a61c4e2ad12c344b363002867ff7a2",
+                "run_ref": "session:local .ai-review/workflow-controller-reviewer-independence/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "0d19fce1bbfc0bbcd20ce1c4554c8ec8dc267f35098849535f79495aa1d4ffc2",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "91b3eaff37eedd7fc6b69d3a84c57e73aa1ac84eaa001df59a5ba1ae65c249aa",
+                "ledger_entry_sha256": "504ebad1eca9625e5bd21440520988360768ef7b8d534b0d2b3537f5e56789f1",
+                "run_ref": "codex:20261027T083849Z-4275b0c7",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T08:42:19Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-27T07:58:03Z",
+          "verdict_sha256": "153e92857bb9712f9e9b1ecca3823c82727719e10d3bb9b6bf1d0c6793af7479",
+          "run_ref": "session:local .ai-review/workflow-controller-reviewer-independence/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-27T08:00:17Z",
+          "verdict_sha256": "12d92240134e7d47fd974c9ba3eef480482182a016c747644c92f24c4128499d",
+          "run_ref": "codex:20261027T075818Z-f210ca6e",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 1,
+          "external": 1
+        }
+      },
+      "state_revision": 21,
+      "last_transition": "2026-10-27T09:19:38Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T07:55:55Z",
+        "consumed": {
+          "review_content_id": "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+          "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "97a79563258ad9b317dc7027342982d71099ce193e94606c0ec5beb82fa49d42",
+        "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9"
+      ],
+      "optional_findings": {
+        "F-aaf55ec9094d": {
+          "digest": "aaf55ec9094d70e9b897120d55136e3c170e74abaee58e95e13790f8b1bd5802",
+          "text": "D4 says \"the signal is read from `verify` only after a collision is found, so no other run asks for it\". With B1 and I1 resolved, also state whether the rule's signal read and `choose`'s own `needs_signal` read can both happen in one step, so that `verify` is not asked twice.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "97a79563258ad9b317dc7027342982d71099ce193e94606c0ec5beb82fa49d42",
+              "verdict": "REVISE",
+              "at": "2026-10-27T07:48:38Z"
+            }
+          ]
+        },
+        "F-b9140a54b6c7": {
+          "digest": "b9140a54b6c7c4590eb7bbf74a9a60d6bb7428eb03f36ccb2a59a3783ca5e8ff",
+          "text": "`docs/common-problems.md`, section \"A run stopped at review_mode_unavailable\", lists two causes (`cross-model` without a distinct provider, `single-provider` without the signal). It does not list the mixed-lane cause that `choose` has refused since H2, which is the stop whose text this milestone rewrites. The gap already exists today. CP2 could add a third cause, worker roles on more than one family, and say that the message now names the stage's local review role and `reviewer.harness` with their families. That would keep the troubleshooting page in step with `docs/guide/runtime.md`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T07:53:30Z"
+            }
+          ]
+        },
+        "F-6ef43f13532a": {
+          "digest": "6ef43f13532a4a4f105292dd80faab085c66e256a026c1023d291ae5ad2c33a2",
+          "text": "`docs/ROADMAP.md` line 83, the epic's prose summary, still calls H10 \"the independence rule in routing\". CP2 rewords row H10 and \"Next, in order\" item 2, but not this sentence. Reword it in the same edit so the roadmap does not describe H10 two ways.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T07:53:30Z"
+            }
+          ]
+        },
+        "F-aa8c09dc23ca": {
+          "digest": "aa8c09dc23ca829ab42d6189af8b631cda98158e2c9414dda85716b3f592d36a",
+          "text": "`choose`'s mixed-family sentence already ends with a remedy (\"route every worker role to harnesses of one family, or choose --review-mode manual\"). CP1 says `mixed_lane_reason` begins with that sentence, and D4 then adds its own remedies. If both are kept, the stop gives the same advice twice. When writing CP1, keep `choose`'s first clause (the families) but give the remedies only once, as D4 states them.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T07:58:03Z"
+            }
+          ]
+        },
+        "F-b20661731b28": {
+          "digest": "b20661731b2878e2269cccc1ce8a7899bbc10fa6b2ea2f20cec0f223cc6704d2",
+          "text": "D4 could clarify that moving the local review role must still leave **all worker roles on one family**. Moving that role alone can preserve the mixed-family refusal; changing `reviewer.harness` avoids that ambiguity.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T08:00:17Z"
+            }
+          ]
+        },
+        "F-b3cdb9fba8de": {
+          "digest": "b3cdb9fba8de63799247185944ed5b35a9335a984feb2de8c51432fd091bd7af",
+          "text": "`controller/review_mode.py` `mixed_lane_reason` copies `choose`'s first mixed-lane sentence (\"the worker roles are routed to harnesses of more than one family (...), so there is no single provider to be distinct from\") as a second literal instead of sharing it. If one is edited and the other is not, the two stops drift apart, and `test_only_the_reason_differs_from_choose` only checks the shared prefix of the new text. Moving the sentence into one small helper that both functions call would keep the stop recognisable by construction.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T08:38:03Z"
+            }
+          ]
+        },
+        "F-de695021e967": {
+          "digest": "de695021e96721b5da395d57a4295821e9be6eae020153633f72995eb87826b0",
+          "text": "The remedy \"(for a collision, route the local review role or reviewer.harness to another family)\" is correct only together with the main remedy. If only `reviewer.harness` is re-routed while the workers stay on two families, the lane is still mixed and `choose` still refuses it. The manual external plan review raised the same point (F-b20661731b28). Saying \"after routing every worker role to one family\" in the text, in `docs/common-problems.md` and in `docs/guide/runtime.md` would remove the ambiguity.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T08:38:03Z"
+            }
+          ]
+        },
+        "F-e550b4f7e314": {
+          "digest": "e550b4f7e3148a2f375718526824f1c9f243335258dace862e1da8249246a37d",
+          "text": "`docs/ACTIVE_MILESTONE.md` \"Next action\" still says to run `/milestone-implement` for the self-review, but the self-review (`a1163a4`) and the bundle (`ddbd6f8`) are already done. It should name the implementation review gate as the next step.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T08:38:03Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0d19fce1bbfc0bbcd20ce1c4554c8ec8dc267f35098849535f79495aa1d4ffc2",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T08:38:03Z",
+          "verdict_sha256": "aad9d0757bc0114ec4ed8756ed8ae0ccc427ef189499f585be1ac7ddae549b07",
+          "run_ref": "session:local .ai-review/workflow-controller-reviewer-independence/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0d19fce1bbfc0bbcd20ce1c4554c8ec8dc267f35098849535f79495aa1d4ffc2",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T08:40:27Z",
+          "verdict_sha256": "91b3eaff37eedd7fc6b69d3a84c57e73aa1ac84eaa001df59a5ba1ae65c249aa",
+          "run_ref": "codex:20261027T083849Z-4275b0c7",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+            "ran_at": "2026-10-27T08:59:03Z",
+            "summary": {
+              "checklist_blob": "c66d796c9bc327e197f4bb6677e0ae7c0022f7ca",
+              "text": "10 tests ran, all OK."
+            },
+            "log_digest": "23fc03f6a6c305067bdd78e42815c8ae853b026394d2ef817fb894e7ce253e08",
+            "run_ref": "controller:20261027T085313Z-8705705f",
+            "reporter": "workflow-controller 1.22.2",
+            "identity": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "recorded_at": "2026-10-27T08:59:04Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+            "ran_at": "2026-10-27T08:59:04Z",
+            "summary": {
+              "checklist_blob": "c66d796c9bc327e197f4bb6677e0ae7c0022f7ca",
+              "text": "All four texts match: (a) collision names review-plan on codex (openai), reviewer.harness codex (openai), one family, distinct_reviewer_models refuses; (b) implementation: claude-code (anthropic), pair distinct, stop from other roles; (c) reviewer.harness is unset, no pair verdict; (d) 'nosuch (not a registered reviewer)', no None. All end with the remedy. Note: (d) also says 'that pair is distinct', which the flow does not forbid."
+            },
+            "log_digest": "6cd5ecf7d1477a7700ab585b7967d9a49d89815c9a0ced73236f286fee70bc6c",
+            "run_ref": "controller:20261027T085313Z-8705705f",
+            "reporter": "workflow-controller 1.22.2",
+            "identity": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "recorded_at": "2026-10-27T08:59:04Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+            "ran_at": "2026-10-27T08:59:04Z",
+            "summary": {
+              "checklist_blob": "c66d796c9bc327e197f4bb6677e0ae7c0022f7ca",
+              "text": "The 3 MixedLaneJobTest tests passed (stop launches nothing, manual reaches ordinary gate, explain reports the text)."
+            },
+            "log_digest": "caa58355cbf1e1d412d5530bacbcdb567ffe4317a102b39b1b9917839a205247",
+            "run_ref": "controller:20261027T085313Z-8705705f",
+            "reporter": "workflow-controller 1.22.2",
+            "identity": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "recorded_at": "2026-10-27T08:59:04Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+            "ran_at": "2026-10-27T08:59:04Z",
+            "summary": {
+              "checklist_blob": "c66d796c9bc327e197f4bb6677e0ae7c0022f7ca",
+              "text": "tests.test_review_mode and tests.test_review_job: 122 tests OK."
+            },
+            "log_digest": "192ceab2b197b7d67dc2447ee8f955a3795d43cdf7dbedef91e9c644ac6faa63",
+            "run_ref": "controller:20261027T085313Z-8705705f",
+            "reporter": "workflow-controller 1.22.2",
+            "identity": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "recorded_at": "2026-10-27T08:59:04Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+            "ran_at": "2026-10-27T08:59:04Z",
+            "summary": {
+              "checklist_blob": "c66d796c9bc327e197f4bb6677e0ae7c0022f7ca",
+              "text": "Docs describe the named pair and the three causes; manual stated as unaffected; check_docs.py exit 0; ROADMAP marks H10 complete and H9 next."
+            },
+            "log_digest": "bbe9a928b79fa418041b52b49840fb2f58efb40b72b8ec0ee96644ffdd37ed59",
+            "run_ref": "controller:20261027T085313Z-8705705f",
+            "reporter": "workflow-controller 1.22.2",
+            "identity": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "recorded_at": "2026-10-27T08:59:04Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 196,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/196"
+          },
+          "state": "open",
+          "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+          "observed_at": "2026-10-27T09:19:38Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "a1163a460e6aa99ebe1ea303b720ff15a19f4fb3",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-27T09:19:38Z",
+            "raw_sha256": "43d9cc43c8dcf808dfc69b4385560acd842e431076eb435e377f777587e8fcf8",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "e9370b0186007329d872731c7f3841fc93744839a612c3ebd467c6f347a59159"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 196,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/196"
+          },
+          "state": "open",
+          "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+          "observed_at": "2026-10-27T09:18:33Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "a1163a460e6aa99ebe1ea303b720ff15a19f4fb3",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.22.2"
+            },
+            "fetched_at": "2026-10-27T09:18:32Z",
+            "raw_sha256": "43d9cc43c8dcf808dfc69b4385560acd842e431076eb435e377f777587e8fcf8",
+            "run_ref": "controller:20261027T091832Z-bae61fca"
+          },
+          "fact_id": "63b18426d76d6ed01b9863c7e3df7fe48cab7f269f6ed673ed6ae65d15c092d0"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #196 at db215b55a216ec189d2aaad6c729193dc2367895 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "a1163a460e6aa99ebe1ea303b720ff15a19f4fb3",
+          "anchor_identity": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "287a8a02468efe39add37d2d1c306e925b07efe2e5636b3efb30e88c026c65a9",
+            "recorded_at": "2026-10-27T08:42:19Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "c610646239a354e0c4e1f78ec5369ca2ae51cb2e51f474ec2ecee36bb1e824f7",
+              "log_digest": "23fc03f6a6c305067bdd78e42815c8ae853b026394d2ef817fb894e7ce253e08",
+              "run_ref": "controller:20261027T085313Z-8705705f"
+            },
+            "flow-2": {
+              "evidence_id": "6ac7223983c36336931957ab6779d3a19ae4b330b080e130e10a63d07cb39230",
+              "log_digest": "6cd5ecf7d1477a7700ab585b7967d9a49d89815c9a0ced73236f286fee70bc6c",
+              "run_ref": "controller:20261027T085313Z-8705705f"
+            },
+            "flow-3": {
+              "evidence_id": "9dc2a7d8f3e14b2622951073ac85ba5b3df290a3ad7e1eb414a9b2225db8dcce",
+              "log_digest": "caa58355cbf1e1d412d5530bacbcdb567ffe4317a102b39b1b9917839a205247",
+              "run_ref": "controller:20261027T085313Z-8705705f"
+            },
+            "flow-4": {
+              "evidence_id": "36aa27de1e95d1105a558084889669371e1565ff0073c6e7ed10fa66fa200812",
+              "log_digest": "192ceab2b197b7d67dc2447ee8f955a3795d43cdf7dbedef91e9c644ac6faa63",
+              "run_ref": "controller:20261027T085313Z-8705705f"
+            },
+            "flow-5": {
+              "evidence_id": "7cc47ffdff128d4526d4d7f8308cccd9ea5f0052f4f0b71a88b1d662cce58b31",
+              "log_digest": "bbe9a928b79fa418041b52b49840fb2f58efb40b72b8ec0ee96644ffdd37ed59",
+              "run_ref": "controller:20261027T085313Z-8705705f"
+            }
+          },
+          "pr": {
+            "fact_id": "e9370b0186007329d872731c7f3841fc93744839a612c3ebd467c6f347a59159",
+            "head": "db215b55a216ec189d2aaad6c729193dc2367895",
+            "provenance": "workflow_gh",
+            "raw_sha256": "43d9cc43c8dcf808dfc69b4385560acd842e431076eb435e377f777587e8fcf8"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-27T09:19:38Z",
+        "workflow_release": "2.22.0"
+      }
     }
   }
 }

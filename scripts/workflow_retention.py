@@ -37,6 +37,17 @@ verifies it, links it into place without overwriting, appends one line to
 `--apply`. It never writes, renames, moves or removes anything in the folder or
 the repository; the folder stays. Needs the `zstd` program on the PATH.
 
+The removal (workflow-2.22.0, `retention-removal`):
+
+    python3 -I scripts/workflow_retention.py remove <work-item-id> [--apply] [--json]
+                                                    [--archive-root DIR] [--repo-root DIR]
+
+removes the untracked `.ai-review/<id>/` folder of a finished, archived item: one
+atomic rename into `<archive-root>/<repo>/.removing/<id>`, a comparison of every
+file's SHA-256 with the archive, and then the delete entry by entry, or the
+rename back. A dry run without `--apply`. Nothing is deleted that is not proven
+present in the archive with matching contents. Needs the `zstd` program.
+
 Stdlib-only plus `workflow_forge`.
 """
 from __future__ import annotations
@@ -348,6 +359,31 @@ def build_report(repo_root, *, archive_root, ttl_days: int = DEFAULT_TTL_DAYS, n
             os.close(own_fd)
 
 
+def _removing_ids(archive_dir: Path, errors: dict[str, str]) -> list[str]:
+    """The directories of `<archive-dir>/.removing/` (workflow-2.22.0): the
+    leftovers of interrupted removals. A `.removing` that is a symlink, is not a
+    directory or cannot be read is one `read_errors` entry."""
+    path = archive_dir / ".removing"
+    try:
+        info = os.lstat(path)
+    except OSError as exc:
+        if not _absent(exc):
+            _unreadable(errors, path, exc)
+        return []
+    if stat.S_ISLNK(info.st_mode):
+        errors.setdefault(str(path), "symlink: not followed")
+        return []
+    if not stat.S_ISDIR(info.st_mode):
+        errors.setdefault(str(path), "not a directory")
+        return []
+    try:
+        with os.scandir(path) as entries:
+            return sorted(e.name for e in entries if e.is_dir(follow_symlinks=False))
+    except OSError as exc:
+        _unreadable(errors, path, exc)
+        return []
+
+
 def _assemble(repo_root, repository, archive_dir, ai_fd, tracked, errors, merged, not_finished, ttl_days, now):
     archive_dir_linked = False
     try:
@@ -392,12 +428,13 @@ def _assemble(repo_root, repository, archive_dir, ai_fd, tracked, errors, merged
             archives.append({"name": name, "work_item_id": stem, **fact, "item": classes.get(stem, "other")})
     archives.sort(key=lambda a: a["name"])
     not_finished.sort(key=lambda r: r["work_item_id"])
+    removing = [] if archive_dir_linked else _removing_ids(archive_dir, errors)
 
     return {
         "schema_version": SCHEMA_VERSION, "kind": "retention-report", "generated_at": _iso(now),
         "repository": repository, "archive_dir": str(archive_dir), "ttl_days": ttl_days,
         "keep_recent": KEEP_RECENT, "finished": finished, "kept_recent": kept_recent,
-        "not_finished": not_finished, "archives": archives, "complete": not errors,
+        "not_finished": not_finished, "archives": archives, "removing": removing, "complete": not errors,
         "read_errors": [{"path": path, "error": errors[path]} for path in sorted(errors)],
         "totals": {"finished": len(finished),
                    "finished_folder_bytes": sum(r["review_folder"]["bytes"] for r in finished),
@@ -875,12 +912,12 @@ def _underneath(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
-def _fsync(fd: int, what: str, code: str = "place_failed") -> None:
+def _fsync(fd: int, what: str, code: str = "place_failed", where: str = "nothing was kept") -> None:
     try:
         os.fsync(fd)
     except OSError as exc:
         raise _refuse(code, f"{what} could not be made durable: {exc.strerror or exc}",
-                      "check the file system and free space; nothing was kept") from None
+                      f"check the file system and free space; {where}") from None
 
 
 def _remove_quietly(action, problems: list[str], what: str) -> None:
@@ -892,60 +929,78 @@ def _remove_quietly(action, problems: list[str], what: str) -> None:
         problems.append(f"{what}: {exc.strerror or exc}")
 
 
-def archive_item(repo_root, item_id: str, *, apply: bool = False, archive_root=DEFAULT_ARCHIVE_ROOT,
-                 now: datetime.datetime, run=None, resolve=None, zstd: str | None = None) -> dict:
-    """Packs the untracked review folder of a finished item into a verified
-    tarball outside the repository. Dry run unless `apply`. Never writes to the
-    folder or the repository."""
+_DONE = {"archive": "archived", "remove": "removed"}
+_ABLE = {"archive": "archivable", "remove": "removable"}
+
+
+def _select_finished(repo_root, item_id: str, archive_root, now, run, resolve, fds: list[int], verb: str,
+                     needs: tuple = ()):
+    """D-Selection 1 to 5, shared by `archive` and `remove`: the id, the platform,
+    the anchor, the report, the finished record and the destination up to the
+    archive directory. The caller owns every descriptor: each one opened here,
+    `.ai-review` included, is appended to `fds` before anything can refuse, and
+    the caller's `finally` closes them. Returns `(root, ai_fd, report, record,
+    resolved, adir_fd)`; `ai_fd` and `adir_fd` are None when absent."""
     if not isinstance(item_id, str) or not _ID_RE.match(item_id) or item_id in RESERVED_IDS:
-        raise _refuse("invalid_id", f"{item_id!r} is not a work item id the archive accepts",
+        raise _refuse("invalid_id", f"{item_id!r} is not a work item id the {verb} accepts",
                       "pass the id exactly as the report lists it")
-    if not _platform_ok():
+    supported = {fn.__name__ for fn in os.supports_dir_fd}
+    if not _platform_ok() or not set(needs) <= supported:
         raise _refuse("path_unsafe", "this platform has no descriptor-relative file access",
                       "run it on Linux or macOS")
     root = Path(os.path.realpath(repo_root))
     errors: dict[str, str] = {}
     ai_fd = _open_review_root(root, errors)
+    if ai_fd is not None:
+        fds.append(ai_fd)
     if ai_fd is None and errors:
         unsafe = any(why in ("symlink: not followed", "not a directory") for why in errors.values())
         if not unsafe:
             raise _refuse("unreadable", f"{root / '.ai-review'} cannot be read", "grant read access to it")
         raise _refuse("path_unsafe", f"{root / '.ai-review'} is not a real directory",
                       "replace it by a real directory; the engine reads nothing through a link")
-    adir_fd = None
+    archive_base = os.path.abspath(os.path.expanduser(str(archive_root)))
+    report = build_report(root, archive_root=archive_base, now=now, run=run, resolve=resolve,
+                          review_root_fd=ai_fd)
+    record = next((r for r in report["finished"] if r["work_item_id"] == item_id), None)
+    if record is None:
+        reasons = {r["work_item_id"]: r["reason"] for r in report["not_finished"]}
+        if item_id in reasons:
+            raise _refuse(f"not_finished:{reasons[item_id]}", f"{item_id} is not finished ({reasons[item_id]})",
+                          f"only an item the report lists as finished can be {_DONE[verb]}")
+        if any(r["work_item_id"] == item_id for r in report["kept_recent"]):
+            raise _refuse("kept_recent", f"{item_id} is one of the {KEEP_RECENT} most recent merged items",
+                          f"it becomes {_ABLE[verb]} when newer items are merged")
+        raise _refuse("unknown_item", f"{item_id} is not a work item of this repository",
+                      "pass an id the report lists")
+    repo_name = report["repository"].split("/", 1)[1]
+    unresolved = os.path.join(archive_base, repo_name)
+    resolved = os.path.realpath(unresolved)
+    if _underneath(resolved, str(root)):
+        raise _refuse("archive_inside_repository", f"the archive directory {resolved} is inside the repository",
+                      "choose an --archive-root outside the checkout")
+    info = _lstat_at_path(unresolved)
+    if info is not None and not stat.S_ISDIR(info.st_mode):
+        raise _refuse("archive_dir_unsafe", f"{unresolved} is a symlink or not a directory",
+                      f"replace {unresolved} by a real directory, or choose another --archive-root")
+    for entry in report["read_errors"]:
+        if _underneath(entry["path"], unresolved):
+            raise _refuse("unreadable", f"{entry['path']} cannot be read ({entry['error']})",
+                          f"repair it; the engine does not {verb} from a partial view")
+    complete = _walk_chain(_chain_parts(resolved), fds, None)
+    return root, ai_fd, report, record, resolved, (fds[-1] if complete else None)
+
+
+def archive_item(repo_root, item_id: str, *, apply: bool = False, archive_root=DEFAULT_ARCHIVE_ROOT,
+                 now: datetime.datetime, run=None, resolve=None, zstd: str | None = None) -> dict:
+    """Packs the untracked review folder of a finished item into a verified
+    tarball outside the repository. Dry run unless `apply`. Never writes to the
+    folder or the repository."""
     fds: list[int] = []
     created: list[tuple[int, str]] = []
     try:
-        archive_base = os.path.abspath(os.path.expanduser(str(archive_root)))
-        report = build_report(root, archive_root=archive_base, now=now, run=run, resolve=resolve,
-                              review_root_fd=ai_fd)
-        record = next((r for r in report["finished"] if r["work_item_id"] == item_id), None)
-        if record is None:
-            reasons = {r["work_item_id"]: r["reason"] for r in report["not_finished"]}
-            if item_id in reasons:
-                raise _refuse(f"not_finished:{reasons[item_id]}", f"{item_id} is not finished ({reasons[item_id]})",
-                              "only an item the report lists as finished can be archived")
-            if any(r["work_item_id"] == item_id for r in report["kept_recent"]):
-                raise _refuse("kept_recent", f"{item_id} is one of the {KEEP_RECENT} most recent merged items",
-                              "it becomes archivable when newer items are merged")
-            raise _refuse("unknown_item", f"{item_id} is not a work item of this repository",
-                          "pass an id the report lists")
-        repo_name = report["repository"].split("/", 1)[1]
-        unresolved = os.path.join(archive_base, repo_name)
-        resolved = os.path.realpath(unresolved)
-        if _underneath(resolved, str(root)):
-            raise _refuse("archive_inside_repository", f"the archive directory {resolved} is inside the repository",
-                          "choose an --archive-root outside the checkout")
-        info = _lstat_at_path(unresolved)
-        if info is not None and not stat.S_ISDIR(info.st_mode):
-            raise _refuse("archive_dir_unsafe", f"{unresolved} is a symlink or not a directory",
-                          f"replace {unresolved} by a real directory, or choose another --archive-root")
-        for entry in report["read_errors"]:
-            if _underneath(entry["path"], unresolved):
-                raise _refuse("unreadable", f"{entry['path']} cannot be read ({entry['error']})",
-                              "repair it; the engine does not archive from a partial view")
-        complete = _walk_chain(_chain_parts(resolved), fds, None)
-        adir_fd = fds[-1] if complete else None
+        root, ai_fd, report, record, resolved, adir_fd = _select_finished(
+            repo_root, item_id, archive_root, now, run, resolve, fds, "archive")
         _judge_archive_side(adir_fd, item_id, check_partial=True)
         folder = root / ".ai-review" / item_id
         if ai_fd is None or not _is_real_dir(ai_fd, item_id):
@@ -990,8 +1045,6 @@ def archive_item(repo_root, item_id: str, *, apply: bool = False, archive_root=D
                 os.close(fd)
             except OSError:
                 pass
-        if ai_fd is not None:
-            os.close(ai_fd)
 
 
 def _lstat_at_path(path: str) -> os.stat_result | None:
@@ -1142,6 +1195,532 @@ def _undo(adir_fd, item_id, final, tmp_name, state, created) -> None:
         sys.stderr.write("warning: the undo could not remove: " + "; ".join(problems) + "\n")
 
 
+# --------------------------------------------------------------------------
+# workflow-2.22.0: the removal (`retention-removal`)
+# --------------------------------------------------------------------------
+
+_REMOVING = ".removing"
+_rename = os.rename
+
+
+def _same_device(fd_a: int, fd_b: int) -> bool:
+    return os.fstat(fd_a).st_dev == os.fstat(fd_b).st_dev
+
+
+def _bad_archive(name: str, why: str, item_id: str) -> RetentionError:
+    return _refuse("unreadable", f"the archive {name} cannot be read: {why}",
+                   f"repair the archive or its access, then run `remove {item_id} --apply` again")
+
+
+def _archive_table(zstd: str, adir_fd: int, name: str, item_id: str) -> dict:
+    """D-Compare: the archive read into `{path: (type, size, target, sha256)}`,
+    the item's own entry as the path ''. The bytes of each file are hashed as
+    they stream; the memory is the table."""
+    try:
+        rfd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=adir_fd)
+    except OSError as exc:
+        raise _bad_archive(name, str(exc.strerror or exc), item_id) from None
+    try:
+        proc = subprocess.Popen([zstd, "-dc"], stdin=rfd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                close_fds=True)
+    except OSError as exc:
+        raise _bad_archive(name, f"zstd could not start: {exc}", item_id) from None
+    finally:
+        os.close(rfd)
+    table: dict[str, tuple] = {}
+    try:
+        try:
+            with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
+                for member in tar:
+                    if member.name == item_id:
+                        rel = ""
+                    elif member.name.startswith(item_id + "/"):
+                        rel = member.name[len(item_id) + 1:]
+                    else:
+                        raise _bad_archive(name, f"{member.name} is outside {item_id}", item_id)
+                    if rel in table:
+                        raise _bad_archive(name, f"{member.name} is listed twice", item_id)
+                    if member.isdir():
+                        table[rel] = ("dir", 0, None, None)
+                    elif member.issym():
+                        table[rel] = ("symlink", len(member.linkname.encode("utf-8", "surrogateescape")),
+                                      member.linkname, None)
+                    elif member.isreg():
+                        digest, count = hashlib.sha256(), 0
+                        source = tar.extractfile(member)
+                        while True:
+                            data = source.read(_CHUNK)
+                            if not data:
+                                break
+                            digest.update(data)
+                            count += len(data)
+                        table[rel] = ("file", count, None, digest.hexdigest())
+                    else:
+                        raise _bad_archive(name, f"{member.name} is not a file, directory or symlink", item_id)
+            while proc.stdout.read(_CHUNK):
+                pass
+        except RetentionError:
+            raise
+        except (OSError, EOFError, tarfile.TarError, ValueError) as exc:
+            raise _bad_archive(name, str(exc), item_id) from None
+        if proc.wait() != 0:
+            raise _bad_archive(name, f"zstd exited {proc.returncode}: {_stderr_of(proc)}", item_id)
+    finally:
+        _reap(proc)
+    return table
+
+
+def _hash_folder(dir_fd: int, item_id: str) -> list[dict]:
+    """D-Compare: the `_record`s of the folder `item_id` in `dir_fd`, with a
+    SHA-256 for every file (one read each; the same size and link checks as the
+    pack)."""
+    records = []
+    for rel, dirfd, dir_info, others in _walk_folder(dir_fd, item_id):
+        records.append(_record(rel, "dir", dir_info))
+        for name, info, kind in others:
+            shown = f"{rel}/{name}" if rel else name
+            if kind == "symlink":
+                records.append(_record(shown, kind, info, os.readlink(name, dir_fd=dirfd)))
+                continue
+            fd = _open_file(name, dirfd, shown)
+            try:
+                opened = os.fstat(fd)
+                if not stat.S_ISREG(opened.st_mode) or opened.st_nlink > 1 or \
+                        (opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != \
+                        (info.st_size, info.st_mtime_ns, info.st_ctime_ns):
+                    raise _refuse("folder_changed", f"{shown} changed after the folder was listed",
+                                  "run it again when nothing writes to the review folder")
+                digest, count = hashlib.sha256(), 0
+                try:
+                    while count < opened.st_size:
+                        data = os.read(fd, min(_CHUNK, opened.st_size - count))
+                        if not data:
+                            break
+                        digest.update(data)
+                        count += len(data)
+                    extra = os.read(fd, 1)
+                except OSError as exc:
+                    raise _refuse("unreadable", f"{shown} cannot be read ({exc.strerror or exc})",
+                                  "repair it; the engine does not remove from a partial view") from None
+                if count != opened.st_size or extra:
+                    raise _refuse("folder_changed", f"{shown} changed size while it was read",
+                                  "run it again when nothing writes to the review folder")
+                records.append(_record(shown, kind, opened, None, digest.hexdigest()))
+            finally:
+                os.close(fd)
+    return records
+
+
+def _differences(table: dict, records: list[dict], allow_missing: bool) -> tuple[list[tuple[str, str]], int]:
+    """D-Compare: `([(path, why)], missing)`. An entry of the folder that is not in
+    the archive, or differs in type, size, target or hash, is a difference; an
+    archived entry the folder lacks is one too unless `allow_missing`, in which
+    case it is counted in `missing`."""
+    diffs: list[tuple[str, str]] = []
+    seen = set()
+    for record in records:
+        seen.add(record["path"])
+        entry = table.get(record["path"])
+        if entry is None:
+            diffs.append((record["path"], "not in archive"))
+            continue
+        kind, size, target, digest = entry
+        if record["type"] != kind or record["target"] != target or \
+                (kind == "file" and (record["size"] != size or record["sha256"] != digest)):
+            diffs.append((record["path"], "differs"))
+    missing = 0
+    for path in table:
+        if path not in seen:
+            if allow_missing:
+                missing += 1
+            else:
+                diffs.append((path, "missing from folder"))
+    diffs.sort()
+    return diffs, missing
+
+
+def _incomplete_note(missing: int, archive: str) -> str:
+    return (f"{missing} archived entries are missing because an earlier run already deleted them; they are in "
+            f"{archive}; extract them with `zstd -dc {archive} | tar -x -C <scratch>` and merge by hand")
+
+
+def _mismatch(diffs: list[tuple[str, str]], missing: int, archive: str) -> RetentionError:
+    shown = "; ".join(f"{path or '.'} ({why})" for path, why in diffs[:10])
+    more = f" (the first 10 of {len(diffs)})" if len(diffs) > 10 else ""
+    step = ("the differing entries exist only in this folder, keep them (copy them out first); a later `remove` "
+            "stays refused while they differ")
+    if missing:
+        step += "; " + _incomplete_note(missing, archive)
+    return _refuse("archive_mismatch",
+                   f"the review folder differs from its archive in {len(diffs)} entr"
+                   f"{'y' if len(diffs) == 1 else 'ies'}{more}: {shown}", step)
+
+
+def _stopped(code: str, why: str, deleted: int, place: str, item_id: str) -> RetentionError:
+    extra = "; check the permissions of `.removing/%s`" % item_id if code == "remove_failed" else ""
+    return _refuse(code, f"{why}; stopped after deleting {deleted} entries, each proven archived; the rest is in "
+                         f"{place}", f"run `remove {item_id} --apply` again{extra}")
+
+
+def _remove_tree(removing_fd: int, item_id: str, records: list[dict], *, place: str) -> int:
+    """D-Delete: the renamed folder deleted entry by entry, each checked against
+    the record verified a moment before; a new or changed entry stops the walk
+    and is kept. Returns the number of entries deleted."""
+    known = {r["path"]: r for r in records}
+    deleted = 0
+    for dirpath, dirnames, filenames, dirfd in os.fwalk(item_id, topdown=False, dir_fd=removing_fd,
+                                                         follow_symlinks=False):
+        rel = dirpath[len(item_id) + 1:]
+        for name in sorted(set(dirnames) | set(filenames)):
+            shown = f"{rel}/{name}" if rel else name
+            try:
+                info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+            except OSError as exc:
+                raise _stopped("folder_changed", f"{shown} vanished ({exc.strerror or exc})", deleted, place,
+                               item_id) from None
+            if stat.S_ISDIR(info.st_mode):
+                if shown not in known or known[shown]["type"] != "dir":
+                    raise _stopped("folder_changed", f"{shown} is a directory that was not verified", deleted,
+                                   place, item_id)
+                try:
+                    os.rmdir(name, dir_fd=dirfd)
+                except OSError as exc:
+                    code = "folder_changed" if exc.errno == errno.ENOTEMPTY else "remove_failed"
+                    raise _stopped(code, f"{shown} cannot be removed ({exc.strerror or exc})", deleted, place,
+                                   item_id) from None
+                deleted += 1
+                continue
+            kind = _kind_of(info.st_mode)
+            expected = known.get(shown)
+            if kind is None or expected is None or _comparable(_record(shown, kind, info, expected["target"])) \
+                    != _comparable(expected) or (kind == "symlink" and os.readlink(name, dir_fd=dirfd)
+                                                 != expected["target"]):
+                raise _stopped("folder_changed", f"{shown} is not the entry that was verified", deleted, place,
+                               item_id)
+            try:
+                os.unlink(name, dir_fd=dirfd)
+            except OSError as exc:
+                raise _stopped("remove_failed", f"{shown} cannot be deleted ({exc.strerror or exc})", deleted,
+                               place, item_id) from None
+            deleted += 1
+    try:
+        os.rmdir(item_id, dir_fd=removing_fd)
+    except OSError as exc:
+        code = "folder_changed" if exc.errno == errno.ENOTEMPTY else "remove_failed"
+        raise _stopped(code, f"{item_id} cannot be removed ({exc.strerror or exc})", deleted, place,
+                       item_id) from None
+    return deleted + 1
+
+
+def _drop_container(adir_fd: int) -> None:
+    """Removes the empty `.removing` this run created, after a refusal that left
+    the folder in its place or after a clean rename back. Best effort: a
+    container that is not empty is somebody's leftover and stays."""
+    try:
+        os.rmdir(_REMOVING, dir_fd=adir_fd)
+        os.fsync(adir_fd)
+    except OSError:
+        pass
+
+
+def _restore(removing_fd: int, ai_fd: int | None, item_id: str, *, removing_place: str, ai_place: str) -> None:
+    """D-Restore: renames the folder back, never replacing anything. Returns on
+    a completed, durable rename; otherwise raises `restore_failed` naming the
+    place the folder is in."""
+    if ai_fd is None:
+        raise _refuse("restore_failed", f"{ai_place.rsplit(os.sep, 1)[0]} is absent, so the folder was not moved "
+                      f"back: it stays in {removing_place}",
+                      f"create `.ai-review`, then `mv` the folder from {removing_place} to {ai_place}")
+    if _lstat_at(item_id, ai_fd) is not None:
+        raise _refuse("restore_failed", f"{ai_place} exists, so nothing was moved back: the folder stays in "
+                      f"{removing_place}", f"compare the two by hand, move one aside, then `mv` {removing_place} "
+                      f"to {ai_place}")
+    try:
+        _rename(item_id, item_id, src_dir_fd=removing_fd, dst_dir_fd=ai_fd)
+    except OSError as exc:
+        if exc.errno in (errno.ENOTEMPTY, errno.EEXIST, errno.ENOTDIR):
+            raise _refuse("restore_failed", f"{ai_place} is in the way, so nothing was moved back: the folder "
+                          f"stays in {removing_place}", f"compare the two by hand, move one aside, then `mv` "
+                          f"{removing_place} to {ai_place}") from None
+        raise _refuse("restore_failed", f"the folder could not be renamed back ({exc.strerror or exc}): it is in "
+                      f"{removing_place}", f"`mv` {removing_place} to {ai_place} by hand") from None
+    where = f"the folder is back in {ai_place}, not confirmed durable"
+    _fsync(ai_fd, ".ai-review", "restore_failed", where)
+    _fsync(removing_fd, _REMOVING, "restore_failed", where)
+
+
+def _open_removing(adir_fd: int, fds: list[int], *, create: bool = False) -> int | None:
+    """`.removing` opened without following a link; None when absent (and not
+    created). The caller owns the descriptor through `fds`."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(_REMOVING, flags, dir_fd=adir_fd)
+    except FileNotFoundError:
+        if not create:
+            return None
+        try:
+            os.mkdir(_REMOVING, 0o700, dir_fd=adir_fd)
+            fd = os.open(_REMOVING, flags, dir_fd=adir_fd)
+        except OSError as exc:
+            raise _refuse("place_failed", f"{_REMOVING} cannot be created: {exc.strerror or exc}",
+                          "check the permissions and free space of the archive directory") from None
+    except OSError as exc:
+        raise _refuse("unreadable", f"{_REMOVING} cannot be opened: {exc.strerror or exc}",
+                      "repair it; the engine does not remove from a partial view") from None
+    fds.append(fd)
+    return fd
+
+
+def _judge_removal_archive(adir_fd: int | None, item_id: str) -> int:
+    """D-Selection 6: the index's integrity first, then the archive file and the
+    index line. Returns the archive's size."""
+    ids: set[str] = set()
+    if adir_fd is not None:
+        fd, _ = _open_index(adir_fd, write=False)
+        if fd is not None:
+            try:
+                ids = _index_ids(fd, os.fstat(fd).st_size)
+            finally:
+                os.close(fd)
+    final = f"{item_id}{ARCHIVE_SUFFIX}"
+    info = _lstat_at(final, adir_fd) if adir_fd is not None else None
+    has_file = info is not None and stat.S_ISREG(info.st_mode)
+    if not has_file or item_id not in ids:
+        missing = ("the archive file" if not has_file else "") + (" and " if not has_file and item_id not in ids
+                                                                  else "") + \
+                  (f"its line in {_INDEX_NAME}" if item_id not in ids else "")
+        raise _refuse("not_archived", f"{item_id} has no verified archive: {missing} is missing",
+                      f"run `archive {item_id} --apply` first; the engine never removes a folder without an archive")
+    return info.st_size
+
+
+def _leftover_note(resolved: str, item_id: str) -> str:
+    return (f"an earlier run's leftover is untouched in {os.path.join(resolved, _REMOVING, item_id)}; once this is "
+            f"resolved, run `remove {item_id} --apply` again")
+
+
+def _has_leftover(adir_fd: int | None, item_id: str) -> bool:
+    if adir_fd is None:
+        return False
+    try:
+        rm = os.open(_REMOVING, _FLAGS_DIR, dir_fd=adir_fd)
+    except OSError:
+        return False
+    try:
+        info = _lstat_at(item_id, rm)
+    except OSError:
+        return False
+    finally:
+        os.close(rm)
+    return info is not None and stat.S_ISDIR(info.st_mode)
+
+
+def _select_removal(repo_root, item_id, archive_root, now, run, resolve, zstd, fds) -> dict:
+    """D-Selection 1 to 11 for `remove`; nothing is written. Returns the facts the
+    dry run and the flow share."""
+    root, ai_fd, report, record, resolved, adir_fd = _select_finished(
+        repo_root, item_id, archive_root, now, run, resolve, fds, "remove", needs=("rename",))
+    try:
+        archive_bytes = _judge_removal_archive(adir_fd, item_id)                       # 6
+        if _git_tracked(root, item_id):                                                # 7
+            raise _refuse("tracked_files", f"Git tracks an entry at or under .ai-review/{item_id}",
+                          "this command removes the untracked folder only")
+        removing_fd = _open_removing(adir_fd, fds)                                     # 8
+        leftover = removing_fd is not None and _lstat_at(item_id, removing_fd) is not None
+        in_place = ai_fd is not None and _lstat_at(item_id, ai_fd) is not None
+        if leftover:
+            real = stat.S_ISDIR(_lstat_at(item_id, removing_fd).st_mode)
+            if not real or in_place:
+                why = "it is not a real directory" if not real else f"{root / '.ai-review' / item_id} exists too"
+                raise _refuse("leftover_conflict", f"{os.path.join(resolved, _REMOVING, item_id)} cannot be "
+                              f"resumed: {why}", "compare the two by hand and move one aside; nothing was moved or "
+                              "deleted")
+        state = "L1" if leftover else "L0"
+        folder_fd = removing_fd if leftover else ai_fd
+        folder_path = os.path.join(resolved, _REMOVING, item_id) if leftover else str(root / ".ai-review" / item_id)
+        if not leftover:                                                               # 9
+            if ai_fd is None or not _is_real_dir(ai_fd, item_id):
+                raise _refuse("review_folder_absent", f"{folder_path} is not a real directory",
+                              "there is nothing to remove")
+            for entry in report["read_errors"]:
+                if _underneath(entry["path"], folder_path):
+                    raise _refuse("unreadable", f"{entry['path']} cannot be read ({entry['error']})",
+                                  "repair it; the engine does not remove from a partial view")
+        entries = _scan(folder_fd, item_id)
+        if state == "L0" and not _same_device(ai_fd, adir_fd):                         # 10
+            raise _refuse("cross_device", ".ai-review and the archive directory are on different file systems",
+                          "keep the archive store on the repository's file system (--archive-root), or leave the "
+                          "folder; nothing was moved")
+        program = zstd or shutil.which("zstd")                                         # 11
+        if not program:
+            raise _refuse("zstd_missing", "the zstd program was not found on PATH",
+                          "install zstd so that it is on the PATH")
+    except RetentionError as exc:
+        if _has_leftover(adir_fd, item_id) and exc.code != "leftover_conflict":
+            exc.next_step += "; " + _leftover_note(resolved, item_id)
+        raise
+    return {"root": root, "ai_fd": ai_fd, "adir_fd": adir_fd, "removing_fd": removing_fd, "report": report,
+            "record": record, "resolved": resolved, "state": state, "folder_fd": folder_fd,
+            "folder_path": folder_path, "entries": entries, "program": program, "archive_bytes": archive_bytes}
+
+
+def remove_item(repo_root, item_id: str, *, apply: bool = False, archive_root=DEFAULT_ARCHIVE_ROOT,
+                now: datetime.datetime, run=None, resolve=None, zstd: str | None = None) -> dict:
+    """Removes the untracked review folder of a finished, archived item: one
+    atomic rename out of the repository, a contents comparison with the archive,
+    then the delete entry by entry, or the rename back. Dry run unless `apply`."""
+    fds: list[int] = []
+    try:
+        sel = _select_removal(repo_root, item_id, archive_root, now, run, resolve, zstd, fds)
+        resolved = sel["resolved"]
+        archive = os.path.join(resolved, f"{item_id}{ARCHIVE_SUFFIX}")
+        name = f"{item_id}{ARCHIVE_SUFFIX}"
+        removing_place = os.path.join(resolved, _REMOVING, item_id)
+        ai_place = str(sel["root"] / ".ai-review" / item_id)
+        leftover = sel["state"] == "L1"
+
+        def note(exc: RetentionError) -> RetentionError:
+            if _has_leftover(sel["adir_fd"], item_id) and exc.code != "leftover_conflict":
+                exc.next_step += "; " + _leftover_note(resolved, item_id)
+            return exc
+
+        if not apply:
+            try:                                                                       # 12
+                records = _hash_folder(sel["folder_fd"], item_id)
+                table = _archive_table(sel["program"], sel["adir_fd"], name, item_id)
+                diffs, missing = _differences(table, records, leftover)
+                if diffs:
+                    raise _mismatch(diffs, missing, archive)
+            except RetentionError as exc:
+                raise note(exc) from None
+            removed, folder = {"removed": False}, sel["entries"]
+        else:
+            removed, folder = _flow(sel, item_id, name, archive, removing_place, ai_place, note, fds, repo_root,
+                                    archive_root, now, run, resolve, zstd)
+        record = sel["record"]
+        files = [e for e in folder if e["type"] == "file"]
+        return {
+            "schema_version": SCHEMA_VERSION, "kind": "retention-remove",
+            "mode": "apply" if apply else "dry-run", "generated_at": _iso(now),
+            "repository": sel["report"]["repository"], "work_item_id": item_id,
+            "pull_request": record["pull_request"],
+            "review_folder": {"path": sel["folder_path"], "state": "leftover" if leftover else "in_place",
+                              "files": len(files), "bytes": sum(e["size"] for e in files),
+                              "entries": [{"path": e["path"], "type": e["type"], "bytes": e["size"]}
+                                          for e in sorted(folder, key=lambda e: e["path"]) if e["path"]]},
+            "archive": {"path": archive, "bytes": sel["archive_bytes"], "indexed": True},
+            "target": {"removing": removing_place}, "verify": {"matches": True}, "zstd": sel["program"],
+            "result": removed,
+        }
+    finally:
+        for fd in reversed(fds):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def _flow(sel, item_id, name, archive, removing_place, ai_place, note, fds, repo_root, archive_root, now, run,
+          resolve, zstd) -> tuple[dict, list[dict]]:
+    """D-Flow 1 to 7. Returns the result and the verified records."""
+    adir_fd, leftover = sel["adir_fd"], sel["state"] == "L1"
+    created = False
+    try:                                                                               # 1
+        try:
+            fcntl.flock(adir_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise _refuse("archive_busy", "another `archive` or `remove` run holds this repository's archive "
+                          "directory", "wait for it to finish, then run it again") from None
+        again = _select_removal(repo_root, item_id, archive_root, now, run, resolve, zstd, fds)
+        held = os.fstat(adir_fd)
+        now_adir = os.fstat(again["adir_fd"])
+        if (held.st_dev, held.st_ino) != (now_adir.st_dev, now_adir.st_ino) or again["state"] != sel["state"]:
+            raise _refuse("place_failed", "the archive directory or the leftover changed while the lock was taken",
+                          "run it again")
+        sel = again
+        removing_fd = sel["removing_fd"]                                               # 2
+        if removing_fd is None:
+            removing_fd = _open_removing(adir_fd, fds, create=True)
+            created = True
+            _fsync(removing_fd, _REMOVING)
+            _fsync(adir_fd, "the archive directory")
+    except RetentionError as exc:
+        if created:
+            _drop_container(adir_fd)
+        raise note(exc) from None
+    ai_fd = sel["ai_fd"]
+
+    def leave_in_place(exc: RetentionError) -> RetentionError:
+        if created:
+            _drop_container(adir_fd)
+        return exc
+
+    before = None
+    if not leftover:                                                                   # 3
+        if _lstat_at(item_id, removing_fd) is not None:
+            raise leave_in_place(_refuse("leftover_conflict", f"{removing_place} appeared after the check",
+                                         "compare it by hand and move one aside; nothing was moved or deleted"))
+        try:
+            before = os.stat(item_id, dir_fd=ai_fd, follow_symlinks=False)
+        except OSError:
+            raise leave_in_place(_refuse("folder_changed", f"{ai_place} vanished before it was moved",
+                                         "nothing was moved; run it again")) from None
+        try:
+            _rename(item_id, item_id, src_dir_fd=ai_fd, dst_dir_fd=removing_fd)
+        except OSError as exc:
+            if exc.errno == errno.EXDEV:
+                raise leave_in_place(_refuse("cross_device", ".ai-review and the archive directory are on different "
+                                             "file systems", "keep the archive store on the repository's file system "
+                                             "(--archive-root); nothing was moved")) from None
+            raise leave_in_place(_refuse("place_failed", f"the folder could not be moved: {exc.strerror or exc}",
+                                         "nothing was moved")) from None
+        where = (f"the rename is done: the folder is whole in {removing_place}, not confirmed durable, nothing was "
+                 f"renamed back or deleted; run `remove {item_id} --apply` again")
+        _fsync(ai_fd, ".ai-review", "place_failed", where)
+        _fsync(removing_fd, _REMOVING, "place_failed", where)
+    info = _lstat_at(item_id, removing_fd)                                             # 4
+    if info is None or not stat.S_ISDIR(info.st_mode) or \
+            (before is not None and (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)):
+        raise _refuse("folder_changed", f"{removing_place} is not the folder that was moved",
+                      f"nothing was renamed back or deleted; inspect {removing_place} by hand")
+    compared, missing = False, 0                                                       # 5
+    try:
+        records = _hash_folder(removing_fd, item_id)
+        table = _archive_table(sel["program"], adir_fd, name, item_id)
+        diffs, missing = _differences(table, records, leftover)
+        compared = True
+        if diffs:
+            raise _mismatch(diffs, missing, archive)
+        if [_comparable(r) for r in _scan(removing_fd, item_id)] != [_comparable(r) for r in records]:
+            raise _refuse("folder_changed", "the folder changed while it was verified",
+                          "nothing was deleted; run it again when nothing writes to the folder")
+    except RetentionError as exc:                                                      # 6, a refusal
+        if exc.code not in ("archive_mismatch", "folder_changed", "unreadable", "unsupported_entry"):
+            raise
+        if leftover and not compared:
+            exc.message += f"; the folder is in {removing_place}, it may be incomplete and the missing entries " \
+                           f"exist only in the archive"
+            exc.next_step += f"; repair the cause and run `remove {item_id} --apply` again"
+            raise
+        try:
+            _restore(removing_fd, ai_fd, item_id, removing_place=removing_place, ai_place=ai_place)
+        except RetentionError as failed:
+            raise _refuse("restore_failed", f"{failed.message}; the refusal was {exc.code}: {exc.message}",
+                          f"{failed.next_step}; {exc.next_step}") from None
+        if created:
+            _drop_container(adir_fd)
+        exc.message += f"; the folder is back in {ai_place}"
+        if exc.code != "archive_mismatch" and missing:
+            exc.next_step += "; " + _incomplete_note(missing, archive)
+        raise
+    _remove_tree(removing_fd, item_id, records, place=removing_place)                  # 6, equal
+    _fsync(removing_fd, _REMOVING, "remove_failed", "the folder is deleted, every entry proven archived, durability "
+           "unconfirmed; there is nothing to restore")
+    fcntl.flock(adir_fd, fcntl.LOCK_UN)                                                # 7
+    files = [r for r in records if r["type"] == "file"]
+    return {"removed": True, "files": len(files), "bytes": sum(r["size"] for r in files)}, records
+
+
 def _size(count: int) -> str:
     value = float(count)
     for unit in ("B", "KiB", "MiB", "GiB"):
@@ -1169,6 +1748,9 @@ def render_text(report: dict) -> str:
             lines.append(f"    {folder['tracked_files']} tracked file(s) under .ai-review/{record['work_item_id']}/")
     if not report["finished"]:
         lines.append("  none")
+    if report.get("removing"):
+        lines += ["", f"Interrupted removals ({len(report['removing'])}): {', '.join(report['removing'])}, "
+                      "finish them with `remove <id> --apply`"]
     kept = ", ".join(r["work_item_id"] for r in report["kept_recent"]) or "none"
     lines += ["", f"Kept as recent ({len(report['kept_recent'])}): {kept}", "",
               f"Not finished ({len(report['not_finished'])}):"]
@@ -1205,6 +1787,25 @@ def render_archive_text(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_remove_text(result: dict) -> str:
+    folder, pr = result["review_folder"], result["pull_request"]
+    lines = [f"Retention remove for {result['repository']}: {result['work_item_id']} "
+             f"({result['mode']}, {result['generated_at']})",
+             f"Merged pull request: #{pr.get('number')} {pr.get('url')}",
+             f"Review folder ({folder['state'].replace('_', ' ')}): {folder['path']}",
+             f"  {folder['files']} file(s), {_size(folder['bytes'])}; entries:"]
+    lines += [f"    {e['type']:<8} {e['bytes']:>12}  {e['path']}" for e in folder["entries"]] or ["    none"]
+    lines += [f"Archive:   {result['archive']['path']} ({_size(result['archive']['bytes'])}, indexed)",
+              f"Moved to:  {result['target']['removing']} (the folder is renamed there, verified, then deleted)",
+              f"zstd:      {result['zstd']}", "contents match the archive"]
+    if result["result"]["removed"]:
+        lines.append(f"removed {result['result']['files']} file(s), {_size(result['result']['bytes'])}; "
+                     "the archive holds them")
+    else:
+        lines.append("dry run: nothing was written; pass --apply to remove")
+    return "\n".join(lines) + "\n"
+
+
 def _parse(argv) -> argparse.Namespace:
     parser = _Parser(prog="workflow_retention.py", description=__doc__.split("\n\n", 1)[0])
     commands = parser.add_subparsers(dest="command", parser_class=_Parser)
@@ -1220,9 +1821,17 @@ def _parse(argv) -> argparse.Namespace:
     archive.add_argument("--json", action="store_true", help="print one JSON object")
     archive.add_argument("--archive-root", default=DEFAULT_ARCHIVE_ROOT)
     archive.add_argument("--repo-root", default=repo_default)
+    remove = commands.add_parser("remove", help="remove an archived finished item's review folder (a dry run "
+                                                "without --apply)")
+    remove.add_argument("work_item_id")
+    remove.add_argument("--apply", action="store_true", help="verify against the archive, then remove the folder")
+    remove.add_argument("--json", action="store_true", help="print one JSON object")
+    remove.add_argument("--archive-root", default=DEFAULT_ARCHIVE_ROOT)
+    remove.add_argument("--repo-root", default=repo_default)
     args = parser.parse_args(argv)
     if args.command is None:
-        raise RetentionError("usage", "a command is required", "run `workflow_retention.py report` or `archive`")
+        raise RetentionError("usage", "a command is required",
+                             "run `workflow_retention.py report`, `archive` or `remove`")
     if args.command == "report":
         if not re.fullmatch(r"[0-9]{1,5}", args.ttl_days) or not 1 <= int(args.ttl_days) <= MAX_TTL_DAYS:
             raise RetentionError("usage",
@@ -1244,6 +1853,14 @@ def main(argv=None, *, run=None, resolve=None, now: datetime.datetime | None = N
                 sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
             else:
                 sys.stdout.write(render_archive_text(result))
+            return 0
+        if args.command == "remove":
+            result = remove_item(args.repo_root, args.work_item_id, apply=args.apply,
+                                 archive_root=args.archive_root, now=moment, run=run, resolve=resolve, zstd=zstd)
+            if args.json:
+                sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
+            else:
+                sys.stdout.write(render_remove_text(result))
             return 0
         report = build_report(args.repo_root, archive_root=args.archive_root, ttl_days=args.ttl_days,
                               now=moment, run=run, resolve=resolve)

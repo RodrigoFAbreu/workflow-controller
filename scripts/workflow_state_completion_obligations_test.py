@@ -4044,7 +4044,7 @@ class RetentionReport(unittest.TestCase):
             report = json.loads(out)
             self.assertEqual(sorted(report), ["archive_dir", "archives", "complete", "finished", "generated_at",
                                               "keep_recent", "kept_recent", "kind", "not_finished", "read_errors",
-                                              "repository", "schema_version", "totals", "ttl_days"])
+                                              "removing", "repository", "schema_version", "totals", "ttl_days"])
             self.assertEqual((report["complete"], report["read_errors"]), (True, []))
             self.assertEqual(report["repository"], "acme/widgets")
             self.assertEqual(report["kind"], "retention-report")
@@ -5362,6 +5362,1019 @@ class RetentionArchive(unittest.TestCase):
         self.assertEqual(len(rr.violations), 8)
         rr.violations.clear()
         self.assertEqual((folder / "a.txt").read_text(), "hello w00\n")
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.22.0: the removal (`retention-removal`)
+# ---------------------------------------------------------------------------
+
+class _RM(_RA):
+    """`_RA` plus the removal: `rm` runs `remove_item` under the write guard
+    (which allows exactly the rename out of `.ai-review/<id>` and back, through
+    the engine's `_rename` seam, and the unlinks beneath `.removing`)."""
+
+    def __enter__(self):
+        super().__enter__()
+        self.renames = []
+        self.removing = self.adir / ".removing"
+        return self
+
+    def prepared(self, item="w00", links=True):
+        """A populated folder and a real archive of it made by the engine."""
+        folder = self.folder(item, links=links)
+        result = self.call(item, apply=True)
+        assert result.code == 0, result.error
+        return folder
+
+    def rm(self, item="w00", apply=False, guard=True, **kwargs):
+        kwargs.setdefault("archive_root", self.archive_root)
+        kwargs.setdefault("now", _RR_NOW)
+        real = wr._rename
+        root = os.path.realpath(self.root)
+
+        def seam(src, dst, **kw):
+            self.renames.append((src, dst))
+            return real(src, dst, **kw)
+
+        try:
+            with unittest.mock.patch.object(wr, "_rename", seam):
+                if guard:
+                    with _ra_write_guard(self.root, self.violations):
+                        result = wr.remove_item(self.root, item, apply=apply, run=self.run, resolve=self.resolve,
+                                                **kwargs)
+                else:
+                    result = wr.remove_item(self.root, item, apply=apply, run=self.run, resolve=self.resolve,
+                                            **kwargs)
+        except wr.RetentionError as exc:
+            self.last_error = exc
+            return _Result(2, error=exc)
+        finally:
+            assert not self.violations, self.violations
+        return _Result(0, result)
+
+    def main_rm(self, item, *args, zstd=None):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = wr.main(["remove", item, "--repo-root", str(self.root), "--archive-root", str(self.archive_root),
+                            *args], run=self.run, resolve=self.resolve, now=_RR_NOW, zstd=zstd)
+        return code, out.getvalue(), err.getvalue()
+
+    def leftover(self, item="w00"):
+        return self.removing / item
+
+    def park(self, item="w00"):
+        """Builds the leftover by hand: the folder moved into `.removing`."""
+        self.removing.mkdir(mode=0o700, exist_ok=True)
+        _REAL["rename"](self.root / ".ai-review" / item, self.removing / item)
+        return self.removing / item
+
+    def files(self, folder):
+        """Every entry below `folder`: kind, link target or hash and, for a file, its mtime."""
+        seen = {}
+        for directory, dirs, names in os.walk(folder, followlinks=False):
+            for name in sorted(names + dirs):
+                full = os.path.join(directory, name)
+                info = os.lstat(full)
+                rel = os.path.relpath(full, folder)
+                if stat.S_ISLNK(info.st_mode):
+                    seen[rel] = ("link", os.readlink(full))
+                elif stat.S_ISREG(info.st_mode):
+                    seen[rel] = ("file", hashlib.sha256(Path(full).read_bytes()).hexdigest(), info.st_mtime_ns)
+                else:
+                    seen[rel] = ("dir",)
+        return seen
+
+    def outside_snap(self):
+        return _ra_snap(self.outside)
+
+
+def _fd_count():
+    for path in ("/proc/self/fd", "/dev/fd"):
+        if os.path.isdir(path):
+            return len(os.listdir(path))
+    return -1
+
+
+@unittest.skipUnless(_HAVE_ZSTD, "the removal tests need the zstd program on PATH")
+class RetentionRemove(unittest.TestCase):
+    def setUp(self):
+        self._dirs = []
+
+    def tearDown(self):
+        for directory in self._dirs:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def env(self, items=None, **kwargs):
+        rr = _RM(items, **kwargs)
+        self.addCleanup(rr.__exit__, None, None, None)
+        rr.__enter__()
+        return rr
+
+    def patch(self, target, name, replacement):
+        patcher = unittest.mock.patch.object(target, name, replacement)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def refused(self, rr, result, code):
+        self.assertEqual(result.code, 2, result.result)
+        self.assertEqual(result.err_code, code, getattr(result.error, "message", None))
+
+    def same_bytes_changed(self, path):
+        """Changes a file's bytes without changing its size or modification time."""
+        info = os.stat(path)
+        data = Path(path).read_bytes()
+        Path(path).write_bytes(bytes([data[0] ^ 1]) + data[1:])
+        os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns))
+
+    def whole(self, rr, item="w00"):
+        """The snapshot a refusal must leave: the repository and the archive store."""
+        return rr.snap(times=False), rr.files(rr.root / ".ai-review" / item) if \
+            (rr.root / ".ai-review" / item).exists() else None
+
+    # -- T1 -------------------------------------------------------------
+
+    def test_t1_the_dry_run_lists_everything_and_writes_nothing(self):
+        rr = self.env()
+        folder = rr.prepared()
+        before, folder_before, times = rr.snap(), rr.files(folder), _ra_snap(folder)
+        result = rr.rm()
+        self.assertEqual(result.code, 0, result.error)
+        data = result.result
+        self.assertEqual((data["kind"], data["mode"], data["verify"], data["result"]),
+                         ("retention-remove", "dry-run", {"matches": True}, {"removed": False}))
+        self.assertEqual(data["review_folder"]["state"], "in_place")
+        self.assertEqual((data["review_folder"]["files"], data["review_folder"]["bytes"]), (3, len("hello w00\n") + 4 + 3000))
+        self.assertEqual(data["archive"], {"path": str(rr.adir / "w00.tar.zst"),
+                                           "bytes": (rr.adir / "w00.tar.zst").stat().st_size, "indexed": True})
+        self.assertEqual(data["target"], {"removing": str(rr.removing / "w00")})
+        self.assertEqual(rr.snap(), before)
+        self.assertEqual(_ra_snap(folder), times)
+        self.assertEqual(rr.renames, [])
+        self.assertFalse(rr.removing.exists())
+        self.assertEqual(sorted(os.listdir(rr.adir)), ["index.jsonl", "w00.tar.zst"])
+        code, out, err = rr.main_rm("w00")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("dry run: nothing was written; pass --apply to remove", out)
+        code, out, _ = rr.main_rm("w00", "--json")
+        self.assertEqual(json.loads(out)["mode"], "dry-run")
+        self.assertEqual(rr.snap(), before)
+        # a changed folder is the archive_mismatch refusal, with nothing on stdout, in both forms
+        self.same_bytes_changed(folder / "a.txt")
+        for extra in ((), ("--json",)):
+            code, out, err = rr.main_rm("w00", *extra)
+            self.assertEqual((code, out), (2, ""))
+            self.assertTrue(err.startswith("error: archive_mismatch: "), err)
+            self.assertIn("a.txt (differs)", err)
+        self.assertFalse(rr.removing.exists())
+
+    def test_t1_a_real_interpreter_dry_run_leaves_no_bytecode(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "PYTHONPATH")}
+        copy = Path(tempfile.mkdtemp(prefix="wfo-scripts-"))
+        self._dirs.append(copy)
+        for name in ("workflow_retention.py", "workflow_forge.py"):
+            shutil.copy(Path(wr.__file__).resolve().parent / name, copy / name)
+        rr = self.env({**_rr_many(7), "busy": _rr_item(phase="IMPLEMENTING")})
+        rr.folder("busy")
+        before = rr.snap()
+        proc = subprocess.run(["python3", "-I", str(copy / "workflow_retention.py"), "remove", "busy",
+                               "--repo-root", str(rr.root), "--archive-root", str(rr.archive_root)],
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("error: not_finished:open_phase", proc.stderr)
+        self.assertEqual(_rr_find_pycache(copy, rr.root, rr.archive_root), [])
+        self.assertEqual(rr.snap(), before)
+
+    # -- T2, T11 --------------------------------------------------------
+
+    def test_t2_apply_removes_only_that_folder_after_the_verify(self):
+        rr = self.env()
+        rr.prepared()
+        rr.prepared("w01")
+        _run(["git", "add", "-f", ".ai-review/w01/a.txt"], cwd=rr.root)
+        archive = rr.adir / "w00.tar.zst"
+        archive_bytes, archive_mtime = archive.read_bytes(), archive.stat().st_mtime_ns
+        index = (rr.adir / "index.jsonl").read_bytes()
+        others, state, outside = _ra_snap(rr.root / ".ai-review" / "w01"), \
+            (rr.root / "docs/ai-workflow/WORKFLOW_STATE.json").read_bytes(), rr.outside_snap()
+        tracked = subprocess.run(["git", "ls-files"], cwd=rr.root, capture_output=True, text=True).stdout
+        order = []
+        real_unlink = os.unlink
+        self.patch(os, "unlink", lambda *a, **k: (order.append("unlink"), real_unlink(*a, **k))[1])
+        result = rr.rm(apply=True)
+        self.assertEqual(result.code, 0, result.error)
+        self.assertEqual(result.result["result"], {"removed": True, "files": 3, "bytes": len("hello w00\n") + 4 + 3000})
+        self.assertFalse((rr.root / ".ai-review" / "w00").exists())
+        self.assertEqual(_ra_snap(rr.root / ".ai-review" / "w01"), others)
+        self.assertEqual((rr.root / "docs/ai-workflow/WORKFLOW_STATE.json").read_bytes(), state)
+        self.assertEqual(subprocess.run(["git", "ls-files"], cwd=rr.root, capture_output=True, text=True).stdout,
+                         tracked)
+        self.assertEqual((archive.read_bytes(), archive.stat().st_mtime_ns), (archive_bytes, archive_mtime))
+        self.assertEqual((rr.adir / "index.jsonl").read_bytes(), index)
+        self.assertEqual(os.listdir(rr.removing), [])
+        self.assertEqual(rr.outside_snap(), outside)           # T11: the link to a directory was unlinked, not followed
+        self.assertEqual(len(rr.renames), 1)
+        self.assertEqual(rr.renames[0][0], "w00")
+        self.assertEqual(order.count("unlink"), 5)             # three files and the two symlinks
+        report = wr.build_report(rr.root, archive_root=rr.archive_root, now=_RR_NOW, run=rr.run, resolve=rr.resolve)
+        finished = {r["work_item_id"]: r for r in report["finished"]}
+        self.assertFalse(finished["w00"]["review_folder"]["present"])
+        self.assertTrue(finished["w00"]["archive"]["present"])
+        self.assertEqual(report["removing"], [])
+        self.assertEqual(report["read_errors"], [])
+        code, out, _ = rr.main_rm("w00", "--json")
+        self.assertEqual(code, 2)        # a second run: the folder is gone
+
+    # -- T3 -------------------------------------------------------------
+
+    def test_t3_a_difference_refuses_and_nothing_is_lost(self):
+        cases = {
+            "same-size changed bytes, mtime restored": (lambda rr, f: self.same_bytes_changed(f / "a.txt"), "a.txt"),
+            "an added file": (lambda rr, f: (f / "added.txt").write_text("new"), "added.txt"),
+            "a removed file": (lambda rr, f: os.unlink(f / "sub/b.txt"), "sub/b.txt"),
+            "a retargeted symlink": (lambda rr, f: (os.unlink(f / "ln"), os.symlink("sub/b.txt", f / "ln")), "ln"),
+            "a changed nested file": (lambda rr, f: self.same_bytes_changed(f / "sub/deeper/c.bin"),
+                                      "sub/deeper/c.bin"),
+        }
+        for label, (change, path) in cases.items():
+            for apply in (False, True):
+                with self.subTest(label, apply=apply):
+                    rr = self.env()
+                    folder = rr.prepared()
+                    change(rr, folder)
+                    before, files = rr.snap(times=False), rr.files(folder)
+                    calls = []
+                    real_unlink, real_rmdir = os.unlink, os.rmdir
+                    with unittest.mock.patch.object(os, "unlink", lambda *a, **k: (calls.append(("unlink", a)),
+                                                                                    real_unlink(*a, **k))[1]), \
+                            unittest.mock.patch.object(os, "rmdir", lambda *a, **k: (calls.append(("rmdir", a)),
+                                                                                      real_rmdir(*a, **k))[1]):
+                        result = rr.rm(apply=apply)
+                    self.refused(rr, result, "archive_mismatch")
+                    self.assertIn(path, result.error.message)
+                    self.assertEqual(rr.files(folder), files)
+                    self.assertEqual(rr.snap(times=False), before)
+                    self.assertFalse(rr.removing.exists())
+                    self.assertEqual([c for c in calls if c[0] == "unlink"], [])
+                    self.assertEqual([c[1][0] for c in calls if c[0] == "rmdir"], [".removing"] if apply else [])
+                    self.assertIn("keep them", result.error.next_step)
+                    self.assertNotIn("delete", (result.error.message + result.error.next_step).replace(
+                        "already deleted", ""))
+
+    # -- T4 -------------------------------------------------------------
+
+    def test_t4_every_selection_refusal_has_its_code_and_writes_nothing(self):
+        from workflow_forge import ForgeUnavailableError
+        items = {**_rr_many(7), "busy": _rr_item(phase="IMPLEMENTING"),
+                 "runtime": _rr_item(), "archive": _rr_item()}
+
+        def prep(rr, *names):
+            for name in names:
+                rr.prepared(name)
+
+        def unarchived(rr):
+            rr.folder("w01")
+
+        def no_line(rr):
+            prep(rr, "w01")
+            (rr.adir / "index.jsonl").write_text("")
+
+        def no_file(rr):
+            prep(rr, "w01")
+            (rr.adir / "w01.tar.zst").unlink()
+
+        def half_line(rr):
+            prep(rr, "w01")
+            with open(rr.adir / "index.jsonl", "ab") as handle:
+                handle.write(b'{"work_item_id": "w0')
+
+        def linked_index(rr):
+            prep(rr, "w01")
+            real = rr.adir / "index.jsonl"
+            keep = rr.outside / "index.jsonl"
+            shutil.move(real, keep)
+            os.symlink(keep, real)
+
+        def linked_root(rr):
+            prep(rr, "w01")
+            shutil.move(rr.root / ".ai-review", rr.outside / "moved")
+            os.symlink(rr.outside / "moved", rr.root / ".ai-review")
+
+        def linked_adir(rr):
+            prep(rr, "w01")
+            shutil.move(rr.adir, rr.outside / "store")
+            os.symlink(rr.outside / "store", rr.adir)
+
+        def linked_removing(rr):
+            prep(rr, "w01")
+            os.symlink(rr.outside / "tree", rr.adir / ".removing")
+
+        def tracked_file(rr):
+            prep(rr, "w01")
+            _run(["git", "add", "-f", ".ai-review/w01/a.txt"], cwd=rr.root)
+
+        def tracked_gitlink(rr):
+            prep(rr, "w01")
+            _run(["git", "update-index", "--add", "--cacheinfo", f"160000,{'a' * 40},.ai-review/w01"], cwd=rr.root)
+
+        def fifo(rr):
+            prep(rr, "w01")
+            os.mkfifo(rr.root / ".ai-review" / "w01" / "pipe")
+
+        def absent(rr):
+            prep(rr, "w01")
+            shutil.rmtree(rr.root / ".ai-review" / "w01")
+
+        def no_state(rr):
+            prep(rr, "w01")
+            (rr.root / "docs/ai-workflow/WORKFLOW_STATE.json").unlink()
+
+        def bad_state(rr):
+            prep(rr, "w01")
+            (rr.root / "docs/ai-workflow/WORKFLOW_STATE.json").write_text("{")
+
+        def no_origin(rr):
+            prep(rr, "w01")
+            _run(["git", "remote", "remove", "origin"], cwd=rr.root)
+
+        def unreadable_dir(rr):
+            prep(rr, "w01")
+            os.chmod(rr.root / ".ai-review" / "w01" / "sub", 0)
+
+        table = [("busy", "not_finished:open_phase", None), ("w06", "kept_recent", None),
+                 ("w99", "unknown_item", None), ("runtime", "invalid_id", None), ("archive", "invalid_id", None),
+                 ("Bad Id", "invalid_id", None), ("w01", "not_archived", unarchived), ("w01", "not_archived", no_line),
+                 ("w01", "not_archived", no_file), ("w01", "index_invalid", half_line),
+                 ("w01", "index_unsafe", linked_index), ("w01", "path_unsafe", linked_root),
+                 ("w01", "archive_dir_unsafe", linked_adir), ("w01", "unreadable", linked_removing),
+                 ("w01", "tracked_files", tracked_file), ("w01", "tracked_files", tracked_gitlink),
+                 ("w01", "unsupported_entry", fifo), ("w01", "review_folder_absent", absent),
+                 ("w01", "state_missing", no_state), ("w01", "state_invalid", bad_state),
+                 ("w01", "repository_unknown", no_origin)]
+        if not _AS_ROOT:
+            table.append(("w01", "unreadable", unreadable_dir))
+        for item, code, setup in table:
+            for apply in (False, True):
+                with self.subTest(item=item, code=code, setup=getattr(setup, "__name__", None), apply=apply):
+                    rr = self.env(items, outcomes={})
+                    rr.folder("busy", links=False)
+                    if setup is not None:
+                        setup(rr)
+                    before = rr.snap(times=False)
+                    fds = _fd_count()
+                    result = rr.rm(item, apply=apply)
+                    self.refused(rr, result, code)
+                    self.assertEqual(_fd_count(), fds, "a descriptor leaked")
+                    self.assertEqual(rr.snap(times=False), before, f"{code} wrote something")
+        # an archive store inside the checkout
+        rr = self.env(items)
+        rr.prepared("w01")
+        inside = rr.root / "store"
+        shutil.copytree(rr.archive_root, inside, symlinks=True)
+        for apply in (False, True):
+            result = rr.rm("w01", apply=apply, archive_root=inside)
+            self.refused(rr, result, "archive_inside_repository")
+        # zstd missing
+        rr = self.env(items)
+        rr.prepared("w01")
+        with unittest.mock.patch.object(shutil, "which", lambda *a, **k: None):
+            for apply in (False, True):
+                self.refused(rr, rr.rm("w01", apply=apply), "zstd_missing")
+        # a held lock: only an apply refuses
+        rr = self.env(items)
+        rr.prepared("w01")
+        import fcntl
+        held = os.open(rr.adir, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, held)
+        fcntl.flock(held, fcntl.LOCK_EX)
+        before = rr.snap(times=False)
+        self.assertEqual(rr.rm("w01").code, 0)
+        self.refused(rr, rr.rm("w01", apply=True), "archive_busy")
+        self.assertEqual(rr.snap(times=False), before)
+        self.assertEqual(rr.rm("w01").result["result"], {"removed": False})
+        # a forge that cannot be reached
+        rr = self.env({**items, "failing": _rr_item(last="2026-08-02T00:00:00Z")},
+                      outcomes={_rr_commit("failing"): ForgeUnavailableError("gh gone")})
+        rr.folder("failing")
+        self.refused(rr, rr.rm("failing"), "not_finished:query_failed:forge_unavailable")
+
+    # -- T5 -------------------------------------------------------------
+
+    def test_t5_cross_device_refuses_before_and_during_the_rename(self):
+        rr = self.env()
+        folder = rr.prepared()
+        before, files = rr.snap(times=False), rr.files(folder)
+        self.patch(wr, "_same_device", lambda a, b: False)
+        for apply in (False, True):
+            self.refused(rr, rr.rm(apply=apply), "cross_device")
+        self.assertEqual(rr.snap(times=False), before)
+        self.assertEqual(rr.renames, [])
+        unittest.mock.patch.stopall()
+        self.patch(wr, "_rename", lambda *a, **k: (_ for _ in ()).throw(OSError(errno.EXDEV, "cross-device")))
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "cross_device")
+        self.assertEqual(rr.files(folder), files)
+        self.assertEqual(rr.snap(times=False), before)
+        self.assertFalse(rr.removing.exists())          # created by this run, removed again
+
+    # -- T6, T8 ---------------------------------------------------------
+
+    def test_t6_the_rename_back_never_replaces_anything(self):
+        rr = self.env()
+        folder = rr.prepared()
+        self.same_bytes_changed(folder / "a.txt")
+        parked = rr.files(folder)
+        real = wr._rename
+
+        def seam(src, dst, **kw):
+            real(src, dst, **kw)
+            if kw.get("dst_dir_fd") is not None and src == "w00" and not (rr.root / ".ai-review" / "w00").exists() \
+                    and (rr.removing / "w00").exists():
+                _REAL["mkdir"](rr.root / ".ai-review" / "w00")
+                (rr.root / ".ai-review" / "w00" / "someone.txt").write_text("populated")
+
+        self.patch(wr, "_rename", seam)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "restore_failed")
+        self.assertIn(str(rr.removing / "w00"), result.error.message)
+        self.assertIn("a.txt (differs)", result.error.message)
+        self.assertEqual(rr.files(rr.removing / "w00"), parked)
+        self.assertEqual(os.listdir(rr.root / ".ai-review" / "w00"), ["someone.txt"])
+        # an empty directory in the way would be replaced silently by the rename: the lstat guard refuses it
+        unittest.mock.patch.stopall()
+        rr = self.env()
+        folder = rr.prepared()
+        self.same_bytes_changed(folder / "a.txt")
+        parked = rr.files(folder)
+        real = wr._rename
+
+        def seam_empty(src, dst, **kw):
+            real(src, dst, **kw)
+            if src == "w00" and kw.get("src_dir_fd") is not None and (rr.removing / "w00").exists() \
+                    and not (rr.root / ".ai-review" / "w00").exists():
+                _REAL["mkdir"](rr.root / ".ai-review" / "w00")
+
+        self.patch(wr, "_rename", seam_empty)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "restore_failed")
+        self.assertEqual(rr.files(rr.removing / "w00"), parked)
+        self.assertEqual(os.listdir(rr.root / ".ai-review" / "w00"), [])
+
+    def test_t8_a_directory_swapped_in_after_the_rename_is_neither_deleted_nor_renamed_back(self):
+        rr = self.env()
+        rr.prepared()
+        real = wr._rename
+
+        def seam(src, dst, **kw):
+            real(src, dst, **kw)
+            if dst == "w00" and kw.get("src_dir_fd") is not None and src == "w00":
+                _REAL["rename"](rr.removing / "w00", rr.outside / "moved-folder")
+                _REAL["mkdir"](rr.removing / "w00")
+                (rr.removing / "w00" / "stranger.txt").write_text("not the folder")
+
+        self.patch(wr, "_rename", seam)
+        calls = []
+        real_unlink = os.unlink
+        self.patch(os, "unlink", lambda *a, **k: (calls.append(a), real_unlink(*a, **k))[1])
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "folder_changed")
+        self.assertEqual(calls, [])
+        self.assertEqual(os.listdir(rr.removing / "w00"), ["stranger.txt"])
+        self.assertFalse((rr.root / ".ai-review" / "w00").exists())
+        self.assertTrue((rr.outside / "moved-folder" / "a.txt").exists())
+
+    # -- T7 -------------------------------------------------------------
+
+    def test_t7_a_late_writer_stops_the_delete_and_the_rerun_renames_the_remainder_back(self):
+        rr = self.env()
+        rr.prepared()
+        real = os.fwalk
+        done = []
+
+        def fwalk(top, *args, **kwargs):
+            if kwargs.get("topdown") is False and not done:
+                done.append(1)
+                with open(rr.removing / "w00" / "a.txt", "ab") as handle:
+                    handle.write(b"LATE")
+                (rr.removing / "w00" / "extra.txt").write_text("late arrival")
+            return real(top, *args, **kwargs)
+
+        self.patch(os, "fwalk", fwalk)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "folder_changed")
+        message = result.error.message
+        self.assertRegex(message, r"stopped after deleting [1-9][0-9]* entries, each proven archived")
+        self.assertIn(str(rr.removing / "w00"), message)
+        self.assertIn("remove w00 --apply", result.error.next_step)
+        left = rr.files(rr.removing / "w00")
+        self.assertIn("a.txt", left)
+        self.assertIn("extra.txt", left)
+        unittest.mock.patch.stopall()
+        second = rr.rm(apply=True)
+        self.refused(rr, second, "archive_mismatch")
+        self.assertIn("extra.txt", second.error.message)
+        self.assertIn("a.txt", second.error.message)
+        self.assertRegex(second.error.next_step, r"[1-9][0-9]* archived entries are missing")
+        self.assertIn(str(rr.adir / "w00.tar.zst"), second.error.next_step)
+        self.assertEqual((rr.root / ".ai-review" / "w00" / "extra.txt").read_text(), "late arrival")
+        self.assertTrue((rr.root / ".ai-review" / "w00" / "a.txt").read_bytes().endswith(b"LATE"))
+        self.assertTrue(rr.removing.is_dir())
+        self.assertEqual(os.listdir(rr.removing), [])
+
+    # -- T9 -------------------------------------------------------------
+
+    def test_t9_a_killed_run_leaves_a_leftover_the_next_run_completes(self):
+        import signal
+        rr = self.env()
+        folder = rr.prepared()
+        original = rr.files(folder)
+        copy = Path(tempfile.mkdtemp(prefix="wfo-scripts-"))
+        self._dirs.append(copy)
+        for name in ("workflow_retention.py", "workflow_forge.py"):
+            shutil.copy(Path(wr.__file__).resolve().parent / name, copy / name)
+        driver = copy / "driver.py"
+        # a real process, killed with SIGKILL by itself at the first read of the archive, which is after the rename
+        # (a stand-in `zstd` that sleeps would leave two re-parented processes for the orphan wrapper to list)
+        driver.write_text(textwrap.dedent(f"""
+            import sys, os, json, signal, datetime
+            sys.dont_write_bytecode = True
+            sys.path.insert(0, {str(copy)!r})
+            import workflow_retention as wr
+            def run(argv, timeout):
+                return json.dumps([{{"number": 7, "url": "https://github.com/acme/widgets/pull/7",
+                                    "state": "MERGED", "headRefOid": "a" * 40}}])
+            def resolve(root):
+                return {{"path": "/usr/bin/gh", "sha256": "0" * 64}}
+            def die(*args, **kwargs):
+                os.kill(os.getpid(), signal.SIGKILL)
+            wr._archive_table = die
+            sys.exit(wr.main(sys.argv[1:], run=run, resolve=resolve,
+                             now=datetime.datetime(2026, 11, 1, 12, tzinfo=datetime.timezone.utc)))
+        """))
+        proc = subprocess.run(["python3", "-I", str(driver), "remove", "w00", "--apply", "--repo-root",
+                               str(rr.root), "--archive-root", str(rr.archive_root)], capture_output=True)
+        self.assertEqual(proc.returncode, -signal.SIGKILL, proc.stderr)
+        self.assertFalse((rr.root / ".ai-review" / "w00").exists())
+        self.assertEqual(rr.files(rr.removing / "w00"), original)
+        self.assertEqual(rr.build()["removing"], ["w00"])
+        done = rr.rm(apply=True)
+        self.assertEqual(done.code, 0, done.error)
+        self.assertEqual(done.result["review_folder"]["state"], "leftover")
+        self.assertFalse((rr.removing / "w00").exists())
+        self.assertFalse((rr.root / ".ai-review" / "w00").exists())
+        self.assertEqual(rr.build()["removing"], [])
+
+    # -- T10 ------------------------------------------------------------
+
+    def test_t10_leftover_states_built_by_hand(self):
+        # (a) whole, resumed and deleted; (b) partly deleted, finished
+        rr = self.env()
+        rr.prepared()
+        rr.park()
+        result = rr.rm(apply=True)
+        self.assertEqual(result.code, 0, result.error)
+        self.assertEqual(result.result["review_folder"]["state"], "leftover")
+        self.assertFalse((rr.removing / "w00").exists())
+        rr = self.env()
+        rr.prepared()
+        leftover = rr.park()
+        os.unlink(leftover / "sub/b.txt")
+        os.unlink(leftover / "ln")
+        self.assertEqual(rr.rm().code, 0)          # the dry run forgives what is missing
+        self.assertEqual(rr.rm(apply=True).code, 0)
+        self.assertFalse((rr.removing / "w00").exists())
+        # (c) same-size changed bytes, mtime restored: renamed back, the difference named, no offer to delete
+        rr = self.env()
+        rr.prepared()
+        leftover = rr.park()
+        self.same_bytes_changed(leftover / "a.txt")
+        files = rr.files(leftover)
+        result = rr.rm(apply=True)
+        self.refused(rr, result, "archive_mismatch")
+        self.assertIn("a.txt (differs)", result.error.message)
+        self.assertEqual(rr.files(rr.root / ".ai-review" / "w00"), files)
+        self.assertEqual(os.listdir(rr.removing), [])
+        text = result.error.message + " " + result.error.next_step
+        for offer in ("rm ", "rm -", "delete the folder", "--force"):
+            self.assertNotIn(offer, text)
+        # (d) an extra file in a partly deleted leftover: renamed back, the extra file, the count missing, the archive
+        rr = self.env()
+        rr.prepared()
+        leftover = rr.park()
+        os.unlink(leftover / "sub/b.txt")
+        (leftover / "extra.txt").write_text("extra")
+        result = rr.rm(apply=True)
+        self.refused(rr, result, "archive_mismatch")
+        self.assertIn("extra.txt (not in archive)", result.error.message)
+        self.assertIn("1 archived entries are missing", result.error.next_step)
+        self.assertIn(str(rr.adir / "w00.tar.zst"), result.error.next_step)
+        self.assertIn("zstd -dc", result.error.next_step)
+        self.assertEqual((rr.root / ".ai-review" / "w00" / "extra.txt").read_text(), "extra")
+        self.assertFalse((rr.root / ".ai-review" / "w00" / "sub/b.txt").exists())
+        # a whole leftover with an extra file: the difference only
+        rr = self.env()
+        rr.prepared()
+        leftover = rr.park()
+        (leftover / "extra.txt").write_text("extra")
+        result = rr.rm(apply=True)
+        self.refused(rr, result, "archive_mismatch")
+        self.assertNotIn("missing", result.error.next_step)
+        # (e) both folders present
+        rr = self.env()
+        rr.prepared()
+        leftover = rr.park()
+        rr.folder("w00", links=False)
+        before = rr.snap(times=False)
+        for apply in (False, True):
+            self.refused(rr, rr.rm(apply=apply), "leftover_conflict")
+        self.assertEqual(rr.snap(times=False), before)
+        # (f) the archive gone, (g) a half index line: untouched, with the leftover note
+        for label in ("archive", "index"):
+            rr = self.env()
+            rr.prepared()
+            leftover = rr.park()
+            if label == "archive":
+                (rr.adir / "w00.tar.zst").unlink()
+                code = "not_archived"
+            else:
+                with open(rr.adir / "index.jsonl", "ab") as handle:
+                    handle.write(b'{"work_i')
+                code = "index_invalid"
+            before = rr.snap(times=False)
+            for apply in (False, True):
+                result = rr.rm(apply=apply)
+                self.refused(rr, result, code)
+                self.assertIn("remove w00 --apply", result.error.next_step)
+            self.assertEqual(rr.snap(times=False), before)
+        # (h) a file or a symlink where the leftover should be
+        for kind in ("file", "link"):
+            rr = self.env()
+            rr.prepared()
+            shutil.move(rr.root / ".ai-review" / "w00", rr.outside / "w00-folder")
+            rr.removing.mkdir(mode=0o700)
+            if kind == "file":
+                (rr.removing / "w00").write_text("not a directory")
+            else:
+                os.symlink(rr.outside / "w00-folder", rr.removing / "w00")
+            self.refused(rr, rr.rm(apply=True), "leftover_conflict")
+            self.assertTrue((rr.outside / "w00-folder" / "a.txt").exists())
+        # (i) `.ai-review` absent with a different leftover, from an unrelated working directory
+        rr = self.env()
+        rr.prepared()
+        leftover = rr.park()
+        self.same_bytes_changed(leftover / "a.txt")
+        shutil.rmtree(rr.root / ".ai-review")
+        elsewhere = Path(tempfile.mkdtemp(prefix="wfo-cwd-"))
+        self._dirs.append(elsewhere)
+        files = rr.files(leftover)
+        here = os.getcwd()
+        os.chdir(elsewhere)
+        try:
+            result = rr.rm(apply=True)
+        finally:
+            os.chdir(here)
+        self.refused(rr, result, "restore_failed")
+        self.assertIn(str(leftover), result.error.message)
+        self.assertIn(".ai-review", result.error.message)
+        self.assertIn("a.txt (differs)", result.error.message)
+        self.assertEqual(rr.files(leftover), files)
+        self.assertEqual(os.listdir(elsewhere), [])
+        self.assertFalse((rr.root / ".ai-review").exists())
+        # (j) the archive truncated
+        for state in ("fresh", "partial"):
+            rr = self.env()
+            rr.prepared()
+            leftover = rr.park() if state == "partial" else None
+            if leftover is not None:
+                os.unlink(leftover / "sub/b.txt")
+            archive = rr.adir / "w00.tar.zst"
+            archive.write_bytes(archive.read_bytes()[:len(archive.read_bytes()) // 2])
+            result = rr.rm(apply=True)
+            self.refused(rr, result, "unreadable")
+            if state == "fresh":
+                self.assertTrue((rr.root / ".ai-review" / "w00" / "a.txt").exists())
+                self.assertFalse((rr.removing / "w00").exists())
+            else:
+                self.assertTrue((leftover / "a.txt").exists())
+                self.assertFalse((rr.root / ".ai-review" / "w00").exists())
+                self.assertIn("incomplete", result.error.message)
+                self.assertIn("only in the archive", result.error.message)
+        # (l) the leftover note on every refusal after the leftover is known
+        def tracked(rr, leftover):
+            _run(["git", "add", "-f", ".ai-review/w00/a.txt"], cwd=rr.root)
+
+        def pipe(rr, leftover):
+            os.mkfifo(leftover / "pipe")
+
+        for label, mutate, code in (("tracked", tracked, "tracked_files"), ("pipe", pipe, "unsupported_entry")):
+            rr = self.env()
+            rr.prepared()
+            if label == "tracked":
+                tracked(rr, None)
+                leftover = rr.park()
+            else:
+                leftover = rr.park()
+                mutate(rr, leftover)
+            result = rr.rm(apply=True)
+            self.refused(rr, result, code)
+            self.assertIn(str(rr.removing / "w00"), result.error.next_step)
+            self.assertIn("run `remove w00 --apply` again", result.error.next_step)
+        rr = self.env()
+        rr.prepared()
+        rr.park()
+        with unittest.mock.patch.object(shutil, "which", lambda *a, **k: None):
+            result = rr.rm(apply=True)
+        self.refused(rr, result, "zstd_missing")
+        self.assertIn(str(rr.removing / "w00"), result.error.next_step)
+        import fcntl
+        held = os.open(rr.adir, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, held)
+        fcntl.flock(held, fcntl.LOCK_EX)
+        result = rr.rm(apply=True)
+        self.refused(rr, result, "archive_busy")
+        self.assertIn(str(rr.removing / "w00"), result.error.next_step)
+
+    # -- T12 ------------------------------------------------------------
+
+    def test_t12_failures_during_the_delete_and_the_place(self):
+        rr = self.env()
+        rr.prepared()
+        real = os.unlink
+        count = []
+
+        def unlink(path, *args, **kwargs):
+            count.append(path)
+            if len(count) == 3:
+                raise OSError(errno.EIO, "Input/output error")
+            return real(path, *args, **kwargs)
+
+        with unittest.mock.patch.object(os, "unlink", unlink):
+            result = rr.rm(apply=True)
+        self.refused(rr, result, "remove_failed")
+        self.assertRegex(result.error.message, r"stopped after deleting 3 entries, each proven archived; the rest is "
+                                               r"in .*/\.removing/w00")
+        self.assertIn("run `remove w00 --apply` again", result.error.next_step)
+        self.assertIn("check the permissions of `.removing/w00`", result.error.next_step)
+        self.assertEqual(rr.rm(apply=True).code, 0)
+        self.assertFalse((rr.removing / "w00").exists())
+        rr = self.env()
+        rr.prepared()
+        real_rmdir = os.rmdir
+
+        def rmdir(path, *args, **kwargs):
+            if path == "deeper":
+                raise OSError(errno.ENOTEMPTY, "Directory not empty")
+            return real_rmdir(path, *args, **kwargs)
+
+        with unittest.mock.patch.object(os, "rmdir", rmdir):
+            self.refused(rr, rr.rm(apply=True), "folder_changed")
+        self.assertTrue((rr.removing / "w00").is_dir())
+        # `.removing` cannot be created
+        rr = self.env()
+        folder = rr.prepared()
+        files = rr.files(folder)
+        real_mkdir = os.mkdir
+        with unittest.mock.patch.object(os, "mkdir", lambda path, *a, **k: (_ for _ in ()).throw(
+                PermissionError(errno.EACCES, "denied")) if path == ".removing" else real_mkdir(path, *a, **k)):
+            self.refused(rr, rr.rm(apply=True), "place_failed")
+        self.assertEqual(rr.files(folder), files)
+        # `.removing/w00` appearing after the selection
+        rr = self.env()
+        folder = rr.prepared()
+        files = rr.files(folder)
+        real_fsync, fired = os.fsync, []
+
+        def fsync(fd):
+            if not fired:
+                fired.append(1)
+                _REAL["mkdir"](rr.removing / "w00")
+            return real_fsync(fd)
+
+        with unittest.mock.patch.object(os, "fsync", fsync):
+            result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "leftover_conflict")
+        self.assertEqual(rr.files(folder), files)
+
+    # -- T13 ------------------------------------------------------------
+
+    def test_t13_the_report_and_the_cli(self):
+        rr = self.env()
+        rr.prepared()
+        self.assertEqual(rr.build()["removing"], [])
+        rr.park()
+        report = rr.build()
+        self.assertEqual((report["removing"], report["complete"]), (["w00"], True))
+        text = wr.render_text(report)
+        self.assertIn("Interrupted removals (1): w00, finish them with `remove <id> --apply`", text)
+        self.assertNotIn("Interrupted removals", wr.render_text({**report, "removing": []}))
+        shutil.move(rr.removing, rr.outside / "moved-removing")
+        os.symlink(rr.outside / "moved-removing", rr.removing)
+        report = rr.build()
+        self.assertEqual(report["removing"], [])
+        self.assertFalse(report["complete"])
+        self.assertEqual([e["path"] for e in report["read_errors"]], [str(rr.removing)])
+        for command in ("archive", "remove"):
+            kwargs = {"archive_root": rr.archive_root, "now": _RR_NOW, "run": rr.run, "resolve": rr.resolve}
+            with self.assertRaises(wr.RetentionError) as caught:
+                (wr.archive_item if command == "archive" else wr.remove_item)(rr.root, "w00", apply=True, **kwargs)
+            self.assertEqual(caught.exception.code, "unreadable")
+            self.assertIn(f"does not {command} from a partial view", caught.exception.next_step)
+        os.unlink(rr.removing)
+        rr.removing.write_text("a file")
+        self.assertFalse(rr.build()["complete"])
+        # the CLI
+        rr = self.env()
+        rr.prepared()
+        code, out, err = rr.main_rm("w00", "--apply")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("removed 3 file(s)", out)
+        rr = self.env()
+        rr.prepared()
+        code, out, err = rr.main_rm("w00", "--apply", "--json")
+        self.assertEqual((code, err), (0, ""))
+        data = json.loads(out)
+        self.assertEqual(sorted(data), ["archive", "generated_at", "kind", "mode", "pull_request", "repository",
+                                        "result", "review_folder", "schema_version", "target", "verify",
+                                        "work_item_id", "zstd"])
+        self.assertEqual(data["result"], {"removed": True, "files": 3, "bytes": 3014})
+        self.assertEqual(rr.main_rm("w00")[0], 2)
+        for argv in ([], ["remove"], ["remove", "w00", "--bogus"]):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = wr.main(argv)
+            self.assertEqual((code, out.getvalue()), (2, ""))
+            self.assertTrue(err.getvalue().startswith("error: usage: "), err.getvalue())
+
+    # -- T14 ------------------------------------------------------------
+
+    def test_t14_an_interruption_at_every_transition_loses_nothing(self):
+        def run_case(label, arm, expect_folder, expect_leftover):
+            rr = self.env()
+            folder = rr.prepared()
+            original = rr.files(folder)
+            if label == "rename back":
+                self.same_bytes_changed(folder / "a.txt")
+                original = rr.files(folder)
+            killer = arm(rr)
+            with self.assertRaises(_Killed):
+                rr.rm(apply=True, guard=False)
+            unittest.mock.patch.stopall()
+            here, there = rr.root / ".ai-review" / "w00", rr.removing / "w00"
+            self.assertEqual((here.exists(), there.exists()), (expect_folder, expect_leftover), label)
+            for place in (here, there):
+                if place.exists():
+                    for rel, entry in rr.files(place).items():
+                        self.assertEqual(entry, original[rel], f"{label}: {rel}")     # the T7 subset rule
+            if label != "rename back":
+                again = rr.rm(apply=True)
+                self.assertEqual(again.code, 0 if expect_leftover or expect_folder else 2, label)
+                self.assertFalse(here.exists() or there.exists(), label)
+            return rr
+
+        real_rename = wr._rename
+
+        def before_rename(rr):
+            self.patch(wr, "_rename", lambda *a, **k: (_ for _ in ()).throw(_Killed()))
+
+        def after_rename(rr):
+            def seam(src, dst, **kw):
+                real_rename(src, dst, **kw)
+                raise _Killed()
+            self.patch(wr, "_rename", seam)
+
+        def after_compare(rr):
+            real = wr._differences
+
+            def differences(*args, **kwargs):
+                real(*args, **kwargs)
+                raise _Killed()
+            self.patch(wr, "_differences", differences)
+
+        def after_second_unlink(rr):
+            real, seen = os.unlink, []
+
+            def unlink(*args, **kwargs):
+                real(*args, **kwargs)
+                seen.append(1)
+                if len(seen) == 2:
+                    raise _Killed()
+            self.patch(os, "unlink", unlink)
+
+        def after_last_rmdir(rr):
+            real = os.rmdir
+
+            def rmdir(path, *args, **kwargs):
+                real(path, *args, **kwargs)
+                if path == "w00":
+                    raise _Killed()
+            self.patch(os, "rmdir", rmdir)
+
+        def after_rename_back(rr):
+            calls = []
+
+            def seam(src, dst, **kw):
+                calls.append(1)
+                real_rename(src, dst, **kw)
+                if len(calls) == 2:
+                    raise _Killed()
+            self.patch(wr, "_rename", seam)
+
+        run_case("before the rename", before_rename, True, False)
+        run_case("after the rename", after_rename, False, True)
+        run_case("after the compare", after_compare, False, True)
+        rr = run_case("after the second unlink", after_second_unlink, False, True)
+        run_case("after the last rmdir", after_last_rmdir, False, False)
+        rr = run_case("rename back", after_rename_back, True, False)
+        self.assertEqual(rr.rm(apply=True).err_code, "archive_mismatch")           # a rerun reaches restored again
+
+    # -- T15 ------------------------------------------------------------
+
+    def test_t15_a_failure_after_a_completed_step_names_the_place_it_reached(self):
+        real_rename = wr._rename
+        # the rename back fails with EIO
+        rr = self.env()
+        folder = rr.prepared()
+        self.same_bytes_changed(folder / "a.txt")
+        calls = []
+
+        def eio_back(src, dst, **kw):
+            calls.append(1)
+            if len(calls) == 2:
+                raise OSError(errno.EIO, "Input/output error")
+            return real_rename(src, dst, **kw)
+        self.patch(wr, "_rename", eio_back)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "restore_failed")
+        self.assertIn(str(rr.removing / "w00"), result.error.message)
+        self.assertIn("a.txt (differs)", result.error.message)
+        unittest.mock.patch.stopall()
+        # fsync fails after the outward rename
+        rr = self.env()
+        rr.prepared()
+        flag, real_fsync = [], os.fsync
+
+        def marking(src, dst, **kw):
+            real_rename(src, dst, **kw)
+            flag.append(1)
+        self.patch(wr, "_rename", marking)
+
+        def fsync(fd):
+            if flag:
+                raise OSError(errno.EIO, "Input/output error")
+            return real_fsync(fd)
+        self.patch(os, "fsync", fsync)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "place_failed")
+        text = result.error.message + " " + result.error.next_step
+        self.assertIn(str(rr.removing / "w00"), text)
+        self.assertIn("rename is done", text)
+        self.assertNotIn("nothing was kept", text)
+        unittest.mock.patch.stopall()
+        self.assertEqual(rr.rm(apply=True).code, 0)
+        # fsync fails after the rename back
+        rr = self.env()
+        folder = rr.prepared()
+        self.same_bytes_changed(folder / "a.txt")
+        back = []
+
+        def marking_back(src, dst, **kw):
+            real_rename(src, dst, **kw)
+            if kw.get("dst_dir_fd") is not None and (rr.root / ".ai-review" / "w00").exists():
+                back.append(1)
+        self.patch(wr, "_rename", marking_back)
+
+        def fsync_back(fd):
+            if back:
+                raise OSError(errno.EIO, "Input/output error")
+            return real_fsync(fd)
+        self.patch(os, "fsync", fsync_back)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "restore_failed")
+        self.assertIn(str(rr.root / ".ai-review" / "w00"), result.error.message + result.error.next_step)
+        self.assertNotIn("nothing was kept", result.error.message + result.error.next_step)
+        self.assertTrue((rr.root / ".ai-review" / "w00" / "a.txt").exists())
+        unittest.mock.patch.stopall()
+        # fsync fails after the last rmdir
+        rr = self.env()
+        rr.prepared()
+        real_rmdir, gone = os.rmdir, []
+
+        def rmdir(path, *args, **kwargs):
+            real_rmdir(path, *args, **kwargs)
+            if path == "w00":
+                gone.append(1)
+        self.patch(os, "rmdir", rmdir)
+
+        def fsync_gone(fd):
+            if gone:
+                raise OSError(errno.EIO, "Input/output error")
+            return real_fsync(fd)
+        self.patch(os, "fsync", fsync_gone)
+        result = rr.rm(apply=True, guard=False)
+        self.refused(rr, result, "remove_failed")
+        self.assertIn("is deleted", result.error.next_step)
+        self.assertNotIn("nothing was kept", result.error.message + result.error.next_step)
+        self.assertFalse((rr.removing / "w00").exists())
 
 
 if __name__ == "__main__":

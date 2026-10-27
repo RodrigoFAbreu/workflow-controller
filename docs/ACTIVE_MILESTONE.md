@@ -11,4 +11,6 @@ and with today's registry no outcome changes. The squash commit is `chore:`, so 
 
 ## Next action
 
-No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.
+No milestone is active. Next is SC1 in `docs/ROADMAP.md`
+([#188](https://github.com/RodrigoFAbreu/workflow-controller/issues/188), the scenario-test fix), then H3 of the harness-neutral roles epic;
+run `/milestone-plan` for it.

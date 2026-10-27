@@ -1,6 +1,6 @@
 # Compatibility
 
-> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.19.1; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.18.2, 2.18.5, 2.18.6, 2.18.7, 2.19.1, 2.19.2, 2.20.0 and 2.21.0.
+> For: anyone choosing a Controller or a Workflow release. Last checked with: Controller 1.19.1; Workflow 2.6.0, 2.7.0, 2.8.0, 2.9.0, 2.9.1, 2.9.2, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.18.2, 2.18.5, 2.18.6, 2.18.7, 2.19.1, 2.19.2, 2.20.0, 2.21.0 and 2.22.0.
 
 This page is the one place that says which Controller release admits which
 Workflow release. Other pages and other repositories link here instead of
@@ -31,9 +31,9 @@ protocol (1.4) and is admitted the same way; Controllers 1.13.1, 1.14.0 and 1.15
 `review_round`, null for an item created before 2.15.0), and is admitted the same way; Controllers 1.16.0, 1.16.1 and 1.17.0
 were checked against it (protocol mode, protocol 1.5). Workflow 2.16.0 keeps protocol 1.5 (it changes only the managed
 `workflow-conformance` job, which now runs the acceptance suite in four shards with a coverage check) and is admitted
-the same way; Controller 1.17.0 was checked against it. Workflow 2.18.2, 2.18.5, 2.18.6, 2.18.7, 2.19.1, 2.19.2, 2.20.0 and 2.21.0 also keep protocol 1.5 (2.17.0 adds the
+the same way; Controller 1.17.0 was checked against it. Workflow 2.18.2, 2.18.5, 2.18.6, 2.18.7, 2.19.1, 2.19.2, 2.20.0, 2.21.0 and 2.22.0 also keep protocol 1.5 (2.17.0 adds the
 optional backlog file, 2.18.0 the harness-neutral command files, 2.18.1 to 2.18.7 are fixes and speed-ups: 2.18.4 shortens
-the conformance job, 2.18.5 and 2.18.6 stop a live same-worktree owner reclaiming a takeover's guard, 2.18.7 adds a checkpoint-start release function with no command yet and ends the 2.18.6 fork-test orphan; 2.19.0 adds the user-only `/release-checkpoint-start` command, which no automatic step uses, 2.19.1 only adds test pins and 2.19.2 only fixes the accuracy of documents and two refusal messages, 2.20.0 adds the read-only retention report `scripts/workflow_retention.py report`, 2.21.0 adds its `archive <id>` command, a dry run by default whose `--apply` writes a verified archive outside the repository) and are admitted the
+the conformance job, 2.18.5 and 2.18.6 stop a live same-worktree owner reclaiming a takeover's guard, 2.18.7 adds a checkpoint-start release function with no command yet and ends the 2.18.6 fork-test orphan; 2.19.0 adds the user-only `/release-checkpoint-start` command, which no automatic step uses, 2.19.1 only adds test pins and 2.19.2 only fixes the accuracy of documents and two refusal messages, 2.20.0 adds the read-only retention report `scripts/workflow_retention.py report`, 2.21.0 adds its `archive <id>` command, a dry run by default whose `--apply` writes a verified archive outside the repository, 2.22.0 adds `remove <id>`, a dry run by default whose `--apply` deletes an archived item's review folder only after verifying it against the archive) and are admitted the
 same way; Controller 1.18.0 was checked against 2.18.2 and Controller 1.19.0 against 2.18.5 and Controller 1.19.1 against 2.18.6 and 2.18.7 (protocol mode, protocol 1.5). The functional tester's sandbox layout does not depend on a Claude build's write-precedence rule, so a build, 2.1.304 and later included, is admitted once `workflow-controller verify-claude` has recorded it. That layout keeps the tester's writable folders outside the clone, behind links the Controller makes, so no write allowance lies below a denied path (resolved through links too). Controller 1.12.0
 reads that review round for its review round cap; on an older Workflow it counts the round from its own
 job records instead. Controller 1.17.0, which adds the local and external round caps, reads the four per-role counts
@@ -54,8 +54,8 @@ line as outside the supported lines, a newer release with no protocol script as
 `no_protocol`, and one whose protocol is not major 1 as
 `unsupported_protocol_major`.
 
-This repository itself runs Workflow 2.21.0, with automatic gates, since a `chore:` update pull
-request (2026-10-26). It ran 2.20.0 earlier that day, 2.19.2 from 2026-10-25, 2.19.1 earlier that day, 2.18.7 from 2026-10-24, 2.18.6 earlier that day, 2.18.5 from 2026-10-23, 2.18.2 from 2026-10-22, 2.16.0 from 2026-10-19, 2.15.0 earlier that day, 2.14.0 from 2026-10-18, 2.13.0 earlier that day, 2.12.0 from 2026-10-16, 2.11.0 from 2026-10-15, 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
+This repository itself runs Workflow 2.22.0, with automatic gates, since a `chore:` update pull
+request (2026-10-27). It ran 2.21.0 from 2026-10-26, 2.20.0 earlier that day, 2.19.2 from 2026-10-25, 2.19.1 earlier that day, 2.18.7 from 2026-10-24, 2.18.6 earlier that day, 2.18.5 from 2026-10-23, 2.18.2 from 2026-10-22, 2.16.0 from 2026-10-19, 2.15.0 earlier that day, 2.14.0 from 2026-10-18, 2.13.0 earlier that day, 2.12.0 from 2026-10-16, 2.11.0 from 2026-10-15, 2.10.0 from 2026-10-13, 2.9.2 from 2026-10-11 and 2.9.0 from 2026-10-09, after the milestone
 that vendored that release's test tree, and skipped 2.9.1.
 
 ## What admitted means

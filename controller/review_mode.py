@@ -222,7 +222,7 @@ def mixed_lane_reason(options: routing.RoutingOptions, reviewer: Mapping | None,
     else:
         name = reviewer["harness"]
         family = harness_family(name)
-        pair += f" and reviewer.harness is {name} ({family}), "
+        pair += f" and reviewer.harness is {name} ({family or 'not a registered reviewer'}), "
         pair += ("so the two are of one family and the Workflow's distinct_reviewer_models rule would refuse the "
                  "approval" if family == local_family else
                  "so that pair is distinct and the stop comes from the other worker roles")

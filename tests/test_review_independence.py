@@ -92,6 +92,11 @@ class MixedLaneTextTest(unittest.TestCase):
         self.assertNotIn("that pair is distinct", text)
         self.assertNotIn("of one family and", text)
 
+    def test_an_unregistered_reviewer_is_named_as_such(self) -> None:
+        text = review_mode.mixed_lane_reason(self.options, reviewer("nosuch"), "plan")
+        self.assertIn("reviewer.harness is nosuch (not a registered reviewer)", text)
+        self.assertNotIn("None", text)
+
 
 class MixedLaneJobTest(rj._ReviewCase):
     """Through ``job``: the report and a real ``execute_step``."""

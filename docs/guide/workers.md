@@ -736,7 +736,8 @@ The block also holds:
   (`null` when the spawn time is not known, for example a re-attached
   job whose `worker_spawned` event is missing);
 - the dimensions kept apart for comparison: `role`, `model` and `effort`
-  (from `worker_route`), `harness` (`claude-code`), `workflow_version`
+  (from `worker_route`), `harness` (the harness the job ran on: a worker's route, a
+  review's reviewer; a record without a route reads `claude-code`), `workflow_version`
   (the target's Workflow release) and `controller_version`.
 
 **Telemetry never changes a job's outcome.** If reading the stream or

@@ -157,16 +157,20 @@ What each figure means is in [Telemetry](workers.md#telemetry).
   `--run` one run's, and `--since` the jobs created at or after a UTC
   date (`2026-10-01`) or time (`2026-10-01T12:00:00Z`). Filters combine.
   A bad `--since` is a usage error (exit `2`).
-- `--by` groups the jobs: `role`, `model`, `role,model`, `action` (the
+- `--by` groups the jobs: `role`, `model`, `role,model`, `harness`,
+  `role,harness`, `role,harness,model`, `action` (the
   protocol action id), `stage` (`plan`, `implementation`, `functional` or
   `none`), `stage,round` (a round counted from job records is
   marked `~` and kept apart from the Workflow's own), `work_item,action` or
   `review_mode` (the review's mode and whether it was lowered; a review record
   without them reads `cross-model`, a job that is not a review `none`);
-  without it there is one group. Each job row also carries `action`,
+  without it there is one group. The harness groupings compare the harnesses
+  a job ran on: a worker's is its route's harness, a review's the reviewer
+  that ran it. Each job row also carries `harness`, `action`,
   `stage`, `round` and `round_source`, derived from the job records and
   never written back. A Claude review job also carries the `telemetry` block of its
-  cost and tokens; a Codex review has none. Each group shows its job count and how many
+  cost and tokens; a Codex review has none, so a `codex` group shows its job
+  count with every job `telemetry unavailable` and no figures. Each group shows its job count and how many
   have no figures (`telemetry unavailable`). Totals and means count only the jobs that
   carry each figure.
 - With the global `--json` it prints `by`, `rows` (one per job, with its

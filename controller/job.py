@@ -108,7 +108,7 @@ from typing import Any, Callable
 from controller import harness as adapters
 from controller import (
     evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
-    routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
+    route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
     BRANCH_GATE_PHASE,
@@ -6311,6 +6311,26 @@ def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOp
     return options.resolve(role)
 
 
+def _launcher_error(entry: routing.ResolvedRoute) -> BaseException | None:
+    """The chain probe for "unavailable": the error ``for_harness`` raises
+    for an entry whose launcher cannot be resolved, else ``None``."""
+    try:
+        worker_launch.for_harness(entry.harness)
+    except ControllerError as exc:
+        return exc
+    return None
+
+
+def _chain_admit(usage_gate: Callable[..., Any] | None) -> Callable[[routing.ResolvedRoute, str], Any]:
+    """The chain probe for "held": the usage gate for the entry's provider;
+    no gate admits every entry with no token."""
+    def admit(entry: routing.ResolvedRoute, provider: str) -> Any:
+        if usage_gate is None:
+            return None
+        return usage_gate(entry, provider=provider)
+    return admit
+
+
 # ---------------------------------------------------------------------------
 # The usage budget (`workflow-controller-usage-budget` CP3, plan D6/D7): the
 # gate before the job record exists, the job record's `usage` block, the
@@ -8260,20 +8280,39 @@ def _execute_step_locked(
     # CP6: the worker's route, resolved before anything is recorded, so an
     # unroutable action leaves no record behind.
     route = _worker_route(decision, work_item, routing)
-    # H3: the routed harness's launcher, resolved with the route and before
-    # anything is recorded, so an unlaunchable harness leaves no record.
-    launcher = worker_launch.for_harness(route.harness)
-
-    # Usage budget (CP3, D7): admitted against the budget now, with the
-    # route known and before any record exists, so a hold leaves nothing for
-    # `resume`. A hold never waits here: the decision and pre-state are this
-    # boundary's, and the caller re-enters the whole boundary after a wait.
+    chain = routing.chain(route.role)
+    selection_block: dict | None = None
     token: str | None = None
-    if usage_gate is not None:
-        admitted = usage_gate(route)
-        if isinstance(admitted, (UsageHold, usage.Hold)):
-            return _as_usage_hold(admitted, preflight_events)
-        token = admitted
+    if len(chain) == 1:
+        # H3: the routed harness's launcher, resolved with the route and
+        # before anything is recorded, so an unlaunchable harness leaves no
+        # record.
+        launcher = worker_launch.for_harness(route.harness)
+
+        # Usage budget (CP3, D7): admitted against the budget now, with the
+        # route known and before any record exists, so a hold leaves nothing
+        # for `resume`. A hold never waits here: the decision and pre-state
+        # are this boundary's, and the caller re-enters the whole boundary
+        # after a wait.
+        if usage_gate is not None:
+            admitted = usage_gate(route)
+            if isinstance(admitted, (UsageHold, usage.Hold)):
+                return _as_usage_hold(admitted, preflight_events)
+            token = admitted
+    else:
+        # H9b: a role with a fallback chain chooses its entry here, once,
+        # before any record exists; nothing after this re-selects.
+        selected = route_select.select(chain, _launcher_error, _chain_admit(usage_gate))
+        if selected.outcome == route_select.HELD:
+            return _as_usage_hold(selected.hold, preflight_events)
+        if selected.outcome == route_select.UNAVAILABLE:
+            raise selected.error
+        route, token = selected.route, selected.token
+        launcher = worker_launch.for_harness(selected.route.harness)
+        selection_block = {
+            "position": selected.position, "length": len(chain),
+            "skipped": [{"position": p, "harness": h, "cause": c} for p, h, c in selected.skipped],
+        }
 
     # Step 4: write the job record in two flushes, PLANNED then LAUNCHED,
     # both before the worker is spawned.
@@ -8299,6 +8338,9 @@ def _execute_step_locked(
         "created_at": now,
         "updated_at": now,
     }
+    if selection_block is not None:
+        # H9b: optional, additive (SCHEMA_VERSION stays 1); only a chain role.
+        record["worker_route"]["selection"] = selection_block
     if run_id is not None:
         record["run_id"] = run_id
     if decision.protocol is not None:

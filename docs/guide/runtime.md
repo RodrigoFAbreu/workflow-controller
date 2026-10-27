@@ -749,8 +749,17 @@ A role's entry also accepts `fallback`, an ordered list of further
 unknown field of the parent entry is only ignored with a warning: an entry is a
 route, and running the wrong one is worse than a refusal. `routing.default.fallback`
 is refused. The chain is validated at load and counted in the worker families
-of the review modes, but it is **not yet used to select a route**; that is the
-next change.
+of the review modes, and a worker launch **selects** from it (see
+[Worker routing](commands.md#worker-routing) for the order and what skips an
+entry).
+
+With the harnesses shipped today, only `claude-code` can take the worker role
+and all its entries share one provider, so a chain cannot change the route: the
+first entry is chosen, and when the Claude account is held the launch waits
+exactly as it did. A model-specific limit is not detected, so a later entry on
+the same account is never a fallback for a hold. A later entry is chosen only
+once a second worker harness exists. A role whose configuration already names a
+`fallback` gains the `selection` block in its job records.
 
 The release that adds `fallback` is table generation 17: it adds no key and
 moves no value, but a file it fills records `"_table_generation": 17`. An older

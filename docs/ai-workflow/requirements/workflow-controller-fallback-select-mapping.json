@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fallback-select",
+  "requirements": {
+    "R1": {
+      "description": "A pure selection walks a role's chain in order and chooses the first entry whose launcher resolves and whose provider the usage gate admits; a hold skips every later entry of the held provider without a second admission; an unavailable launcher is skipped (H9b)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "When no entry can be launched the outcome is today's: the earliest waitable hold (else the first hold) is returned to the existing wait path, or the first entry's HarnessRoleError is raised when none was held (H9b)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The worker launch selects only when the role has a chain, before the record exists and never after; a role without a chain takes the existing lines and writes a byte-identical record; the chosen entry satisfies the family rules by construction (H9b)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The job record gains the optional worker_route.selection block (position, length, skipped causes) and telemetry the chain_position and chain_skipped dimensions, additive only; telemetry reads the harness from the record (H9b)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The guides and the roadmap describe the selection, its narrow definition and the limit of the present detection, shipped as a feat change (H9b)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

@@ -82,14 +82,28 @@ def dimensions(record: Mapping) -> dict:
     Controller version."""
     route = record.get("worker_route") if isinstance(record.get("worker_route"), Mapping) else {}
     runtime = record.get("controller_runtime") if isinstance(record.get("controller_runtime"), Mapping) else {}
-    return {
+    harness_name = HARNESS
+    if not is_courier_job(record) and isinstance(route.get("harness"), str):
+        # A worker record names the harness it ran on (a fallback chain can
+        # choose a second one); a courier record's names its reviewer.
+        harness_name = route["harness"]
+    out = {
         "role": route.get("role"),
         "model": route.get("model"),
         "effort": route.get("effort"),
-        "harness": HARNESS,
+        "harness": harness_name,
         "workflow_version": record.get("target_workflow_version"),
         "controller_version": runtime.get("version"),
     }
+    selection = route.get("selection")
+    if isinstance(selection, Mapping):
+        # H9b: only a chain role's record has the block, so every other
+        # record reports the dimensions it always did.
+        skipped = selection.get("skipped")
+        out["chain_position"] = selection.get("position")
+        out["chain_skipped"] = [s.get("cause") for s in skipped if isinstance(s, Mapping)] \
+            if isinstance(skipped, list) else []
+    return out
 
 
 def failed_block(exc: BaseException) -> dict:

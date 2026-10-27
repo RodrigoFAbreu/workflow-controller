@@ -1,0 +1,34 @@
+{
+  "dispositions": {
+    "F-6d0890c5cc9d": {
+      "disposition": "fixed",
+      "note": "Plan D2 (final revision) states that an entry identical to the role entry's own first route is allowed and why; tests/test_routing_chain.py asserts it loads."
+    },
+    "F-6dc4a615b00a": {
+      "disposition": "dropped",
+      "reason": "A harmless unused tempfile.TemporaryDirectory() in one test helper. Removing it now would change reviewed content and stale the technical approval for no behavioural gain; the helper still asserts the refusal correctly."
+    },
+    "F-837635d5c866": {
+      "disposition": "fixed",
+      "note": "Plan CP1 and controller/routing.py build the role entry without fallback as a new dict (a comprehension), never popping from the caller's data; tests/test_routing_chain.py pins that settings clean leaves the chain unchanged."
+    },
+    "F-b6e84e8833ab": {
+      "disposition": "fixed",
+      "note": "controller/review_mode.py mixed_lane_reason computes local_families over every entry of the local role's chain and appends the fallback harnesses and families."
+    },
+    "F-b81b994633e7": {
+      "disposition": "fixed",
+      "note": "controller/settings.py _routing_unknown treats fallback as a known role-level key, and tests/test_routing_chain.py:212-218 pins an unknown role named review-plan.fallback beside a real chain: only the unknown role is reported and removed."
+    },
+    "F-bbbc7dfa92cc": {
+      "disposition": "fixed",
+      "note": "controller/routing.py removes fallback from a copy of the role entry for validation, so the parsed settings data and later writes keep the chain; the settings preservation tests cover it."
+    },
+    "F-dfb2952776c8": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/blob/main/docs/ROADMAP.md#adapters-and-backlog"
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fallback-chain"
+}

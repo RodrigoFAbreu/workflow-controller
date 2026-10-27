@@ -1619,6 +1619,8 @@ class SquashReleaseNotesTest(_Squash):
         }
         for name, (notes, excerpt) in cases.items():
             with self.subTest(name):
+                if name == "bare url" and not gitrepo.parse_trailers(excerpt).strip():
+                    continue  # Git 2.56 no longer parses a bare URL as a trailer: the rule follows Git's verdict
                 self.fresh()
                 number, _ = self.accept_with(narrative(notes))
                 gate = self.assertNotesGate(number, excerpt, "parses as a Git trailer block",

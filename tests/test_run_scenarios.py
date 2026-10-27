@@ -274,6 +274,20 @@ def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True).stdout
 
 
+def fixture_files() -> "list[str]":
+    """The files ``CloneCase`` copies into its clone: every file under ``kit.CODE_PATHS``, tracked or not ignored."""
+    listing = _git(REPO_ROOT, "ls-files", "-co", "--exclude-standard", "-z", "--", *kit.CODE_PATHS).split("\0")
+    return [name for name in listing if name and (REPO_ROOT / name).is_file()]
+
+
+def pin_base_to_checkout(state: dict, clone: Path) -> None:
+    """Set the pinned work item's ``base_commit`` to the clone's own ``HEAD`` (the checkout's tip), whatever it held.
+
+    The Workflow computes the implementation-stage identity over ``base_commit..head``; measuring from the tip keeps
+    every file added to the repository since the item's recorded base out of that diff."""
+    state["work_items"][WORK_ITEM]["base_commit"] = _git(clone, "rev-parse", "HEAD").strip()
+
+
 def load_runner(root: Path):
     spec = importlib.util.spec_from_file_location("_run_scenarios_under_test", root / "tools" / "run_scenarios.py")
     module = importlib.util.module_from_spec(spec)
@@ -292,26 +306,18 @@ class CloneCase(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.base, ignore_errors=True)
         cls.clone = cls.base / "clone"
         _git(cls.base, "clone", "-q", "--no-hardlinks", str(REPO_ROOT), str(cls.clone))
-        listing = _git(REPO_ROOT, "ls-files", "-co", "--exclude-standard", "-z", "--",
-                       *kit.CODE_PATHS).split("\0")
-        for name in filter(None, listing):
+        for name in fixture_files():
             source, target = REPO_ROOT / name, cls.clone / name
-            if source.is_file():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
         # the working tree's Workflow bookkeeping, so the clone resolves the same work item
         for name in ("docs/ai-workflow/WORKFLOW_STATE.json",):
             shutil.copy2(REPO_ROOT / name, cls.clone / name)
-        # CI's checkout is shallow, so the work item's base commit, which the Workflow's identity
-        # is computed from, may be missing; the clone then measures from the checkout's own HEAD.
+        # the clone measures its identity from the checkout's own tip, whatever history the checkout has
         state_path = cls.clone / "docs/ai-workflow/WORKFLOW_STATE.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        item = state["work_items"][WORK_ITEM]
-        probe = subprocess.run(["git", "cat-file", "-e", f"{item['base_commit']}^{{commit}}"], cwd=cls.clone,
-                               env=kit.sanitised_git_env(), capture_output=True)
-        if probe.returncode != 0:
-            item["base_commit"] = _git(cls.clone, "rev-parse", "HEAD").strip()
-            state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        pin_base_to_checkout(state, cls.clone)
+        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         _git(cls.clone, "add", "-A")
         _git(cls.clone, "commit", "-q", "--allow-empty", "-m", "test: working tree code")
         cls.head = _git(cls.clone, "rev-parse", "HEAD").strip()
@@ -680,6 +686,48 @@ class SubsetDeterminismTest(CloneCase):
         first = {k: v["summary"] for k, v in records.items()}
         second = {k: v["summary"] for k, v in self.subset_run().items()}
         self.assertEqual(first, second)
+
+
+class FixtureClassificationTest(unittest.TestCase):
+    """Needs no sandbox and no pinned base: runs in every environment, shallow CI checkouts included."""
+
+    def classify(self, names: "list[str]") -> "list[str]":
+        scripts = str(REPO_ROOT / "scripts")
+        sys.path.insert(0, scripts)
+        self.addCleanup(sys.path.remove, scripts)
+        import workflow_fingerprint as fingerprint
+        declaration = json.loads((REPO_ROOT / fingerprint.artifacts_path_for_work_item(WORK_ITEM)).read_text())["implementation_stage"]
+        unclassified = []
+        for name in names:
+            try:
+                fingerprint.classify_path_implementation_stage(
+                    name, declaration["protected_paths"], declaration.get("protected_prefixes", {}),
+                    declaration["excluded_paths"], declaration["excluded_prefixes"])
+            except fingerprint.UnclassifiedPathError:
+                unclassified.append(name)
+        return unclassified
+
+    def test_every_file_the_fixture_commits_is_classified(self) -> None:
+        names = [*fixture_files(), "docs/ai-workflow/WORKFLOW_STATE.json"]
+        self.assertEqual(self.classify(names), [])
+
+    def test_the_guard_names_a_file_the_declaration_does_not_cover(self) -> None:
+        made_up = "unlisted-top-level-entry/file.txt"
+        self.assertEqual(self.classify([*fixture_files(), made_up]), [made_up])
+
+
+class PinBaseToCheckoutTest(unittest.TestCase):
+    def test_the_base_is_the_clones_head_whatever_it_held(self) -> None:
+        repo = Path(tempfile.mkdtemp(prefix="pin-base-test-"))
+        self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
+        _git(repo, "init", "-q")
+        _git(repo, "commit", "-q", "--allow-empty", "-m", "one")
+        head = _git(repo, "rev-parse", "HEAD").strip()
+        for held in ("0" * 40, "1" * 40, head):
+            with self.subTest(held=held):
+                state = {"work_items": {WORK_ITEM: {"base_commit": held}}}
+                pin_base_to_checkout(state, repo)
+                self.assertEqual(state["work_items"][WORK_ITEM]["base_commit"], head)
 
 
 class _GitCase(unittest.TestCase):

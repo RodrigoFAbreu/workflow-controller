@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-harness-telemetry",
+  "requirements": {
+    "R1": {
+      "description": "telemetry --by accepts the groupings harness, role,harness and role,harness,model, and every telemetry row carries a harness key read like its role and model (H11)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A courier (Controller-run external review) record reports the harness that ran it from its worker_route, so a Codex review reads codex; a record with no route harness reads the worker adapter's name as today (H11)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "Groups count telemetry unavailable per harness, text and --json output carry the harness, and the output of the existing groupings is unchanged (two existing test assertions move with the row key and the courier correction) (H11)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The command guide, the telemetry section of the workers guide and the roadmap describe the harness groupings and the value per kind of job (H11)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

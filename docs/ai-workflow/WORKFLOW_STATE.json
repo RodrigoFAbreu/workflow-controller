@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-harness-telemetry",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -38709,6 +38709,261 @@
         },
         "evaluated_at": "2026-10-27T17:27:02Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-harness-telemetry": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-harness-telemetry",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_HARNESS_TELEMETRY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-telemetry-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-telemetry-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "d4916eb3f7410f233f497f1548a97a6e80f42e44",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+        "approved_review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_HARNESS_TELEMETRY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f5c5bcc92f192b234eeddd9fca1cb15acfe94206"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-telemetry-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e42c6b4aeeed1bdea2603fbe74d1b112dc411cfe"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-harness-telemetry-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cbea8e9d0a1fce59888d702223f02ba6f591215d"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T21:35:35Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+            "ledger": {
+              "local": {
+                "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "641792dcaf419ccdebe7177b9e2ff1fd72f5cd8cf1a5d29495747862851786b7",
+                "ledger_entry_sha256": "071044ee70efba25d95890f66cc7410838dd9440579e1c63e9de5bca53c6e598",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-telemetry/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "bac21908b9ddee2049ae4df13b38617d9b0b9ff9bd9e2ec4838dcfb72141dee2",
+                "ledger_entry_sha256": "6d237dca1dad0b17f8bd1b4a7c8f192128156b3b62f2252c8b37e9bda2508891",
+                "run_ref": "codex:20261027T213236Z-57893f7e",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T21:35:35Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T21:32:01Z",
+          "verdict_sha256": "641792dcaf419ccdebe7177b9e2ff1fd72f5cd8cf1a5d29495747862851786b7",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-telemetry/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T21:34:10Z",
+          "verdict_sha256": "bac21908b9ddee2049ae4df13b38617d9b0b9ff9bd9e2ec4838dcfb72141dee2",
+          "run_ref": "codex:20261027T213236Z-57893f7e",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-27T21:35:35Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T21:28:32Z",
+        "consumed": {
+          "review_content_id": "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+          "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06"
+      ],
+      "optional_findings": {
+        "F-26024fe6d311": {
+          "digest": "26024fe6d311237d1e08ef078f6dd5868c081ae9c9708931c7dee45e19a4654f",
+          "text": "**O1. The per-kind list omits the functional-review (tester) job.** A `kind` `functional` job keeps a top-level `telemetry` block copied from the tester's session (`controller/job.py:7664-7665`), so it is a telemetry row; its block carries no `harness`, so D2 reads `worker_route.harness` (`claude-code`, the only adapter declaring the tester role). Behaviour is right; one bullet in \"What the harness value is today\" and one test case would make the table complete.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06",
+              "verdict": "REVISE",
+              "at": "2026-10-27T21:27:26Z"
+            }
+          ]
+        },
+        "F-efd0cc169a5a": {
+          "digest": "efd0cc169a5a4616d10b5996f68fec39a96b893b96c9e163de8c0c9863431090",
+          "text": "**O2. CP2 names `docs/guide/runtime.md` conditionally (\"if it lists the groupings\").** It does not list them: it shows `telemetry --by stage,round` (line 362) and `--by review_mode` (line 474) as examples only. State whether the file changes, so the checkpoint's file list is decided at planning time.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06",
+              "verdict": "REVISE",
+              "at": "2026-10-27T21:27:26Z"
+            }
+          ]
+        },
+        "F-9cf93e78ff08": {
+          "digest": "9cf93e78ff08ce64ea20a49cd2ec251285cb9c6490e0619c094c8f182adf851d",
+          "text": "**O1. CP1's `--by` help-text edit must keep the phrase an existing test pins.** `tests/test_telemetry.py:209` asserts `\"role, model, or role,model\"` appears in the whitespace-normalised `telemetry --help` output. CP1 says `tests/test_telemetry.py` changes in only one assertion. So the reworded help string has to keep that phrase verbatim (for example by appending the harness groupings after the existing text), or the run list goes red on a test the plan keeps unedited.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:32:01Z"
+            }
+          ]
+        },
+        "F-50e1f542dfe2": {
+          "digest": "50e1f542dfe2437b49e449ea5e3bb27415a0e28e1c5ff5fe885f8e073ef9685e",
+          "text": "**O2. D5's \"a row always has a harness\" holds only for blocks this code writes.** `rows` reads `block.get(\"harness\", route[\"harness\"])`. A recorded block that holds an explicit `\"harness\": null` would give a `None` group key, and `render_text` would raise `KeyError` on `_GROUP_LABEL_MISSING[\"harness\"]`. No writer produces such a block today (every block built with `**dimensions` carries a string, and `failed_block` has no key). A `\"harness\": \"none\"` entry, or reading `block.get(\"harness\") or route[\"harness\"]`, would close it at no cost.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:32:01Z"
+            }
+          ]
+        },
+        "F-d3648fa5c6a9": {
+          "digest": "d3648fa5c6a92488f9426dc63ada6f5b5d12232a4d346529490ed9c86527f8cb",
+          "text": "**O1. Use the actual tester record kind.** The plan’s per-kind list and CP1 fixture description say `functional`; `controller/functional_review.py:65` defines `JOB_KIND = \"functional_test\"`. Use that constant in the fixture. The planned telemetry behavior works with the actual kind.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:34:10Z"
+            }
+          ]
+        },
+        "F-e69594482922": {
+          "digest": "e69594482922c58d4ef7d2cca9710bdb0d0d6cc297e48e712db448016d2fb529",
+          "text": "**O2. Preserve the existing help-text assertion.** `tests/test_telemetry.py:209` expects `role, model, or role,model` in normalized help output. Append the new groupings while preserving that phrase to keep CP1’s promise that only the D6 assertion changes in this module.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:34:10Z"
+            }
+          ]
+        }
       }
     }
   }

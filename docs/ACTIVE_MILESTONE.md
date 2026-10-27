@@ -12,7 +12,7 @@ group shows its jobs with no figures). The change is `feat:`. The plan is archiv
 ## Next action
 
 No work item is active. The next item of the harness-neutral roles epic in `docs/ROADMAP.md` is the Codex tester
-(C10g-1 to C10g-3). Run `/milestone-plan` for C10g-1.
+(C10g-1 to C10g-3). Run `/milestone-plan` for C10g-1 ([#210](https://github.com/RodrigoFAbreu/workflow-controller/issues/210)).
 
 ## Functional review checklist
 

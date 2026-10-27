@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-sandbox",
+  "requirements": {
+    "R1": {
+      "description": "A restricted-read permissions profile, layout, environment and codex exec argv for a tester-shaped Codex run, built in a new module with the reviewer's launch untouched (C10g-1)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "An argv check refuses a tester launch that omits a pinned item or carries -s, an unpinned override or a banned flag; offline tests cover the builder and the unchanged reviewer (C10g-1)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A probe set, one real attempt per boundary (clone write, write outside scratch, real-home read, environment, push, gh, network), with a fail-closed judge and recorded known limits (C10g-1)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Opt-in live tests prove the boundaries through codex sandbox and through codex exec on the pinned build, and the measured results are recorded in a capture file (C10g-1)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The development and harness guides and the roadmap describe the sandbox, its proof, the opt-in command and the limits (C10g-1)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

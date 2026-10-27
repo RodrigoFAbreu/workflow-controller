@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-tester-sandbox",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -39399,6 +39399,348 @@
         },
         "evaluated_at": "2026-10-27T22:27:22Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-codex-tester-sandbox": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-tester-sandbox",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_SANDBOX_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-sandbox-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-sandbox-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "bc202dc99df2ec7ecc3ed799a2738c9c04aa82e4",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+        "approved_review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_SANDBOX_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a0e8099210bec6cbbed0fafb5af3158ed47960eb"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-sandbox-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "48aeadb5c883cf5688003b5c44c57d8cb61e4ec3"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-sandbox-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e2593f8b34e4388664fbe74021076d2fded9c2ee"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T23:47:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+            "ledger": {
+              "local": {
+                "bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "d72e49b2e567cb303a3a71ead3a3d587e7cd3a03cfe863cd72077ca5df133724",
+                "ledger_entry_sha256": "7e14017f2fce95caefd5473cacdd2f6c36e1514801b80a5fc0491e10407d0901",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-sandbox/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "3ea4b81ce8e24838378dd51b0a4e23f37d97f6ada2c24cd23e0376af904c90cb",
+                "ledger_entry_sha256": "2243c52e6baeffbd0dc3c5b443d3daa11d9d717abdc70ac6cd589e210f647451",
+                "run_ref": "codex:20261027T234326Z-5229a548",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T23:47:38Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-27T23:42:55Z",
+          "verdict_sha256": "d72e49b2e567cb303a3a71ead3a3d587e7cd3a03cfe863cd72077ca5df133724",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-sandbox/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-10-27T23:44:42Z",
+          "verdict_sha256": "3ea4b81ce8e24838378dd51b0a4e23f37d97f6ada2c24cd23e0376af904c90cb",
+          "run_ref": "codex:20261027T234326Z-5229a548",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 5,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 19,
+      "last_transition": "2026-10-27T23:47:38Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T23:41:12Z",
+        "consumed": {
+          "review_content_id": "a539ef09779e1a63a214c4fb9a334f0f7f5a9a74bddd0860e6fcca86a8c33d49",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+          "bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "3e0065769b3af1dd5bf7620fe318a3ba167390358cf687a1fcd9c541a8482364",
+        "5fec336e111b550e7c7850e14b00d2ede8aa11a8931a90129f9f8a6418e5770b",
+        "a539ef09779e1a63a214c4fb9a334f0f7f5a9a74bddd0860e6fcca86a8c33d49",
+        "faa0045dd3a60980c2c7f986eb9c05a53ad51fb56b9831ad305579e46abf8d80"
+      ],
+      "optional_findings": {
+        "F-afbc08cebd4c": {
+          "digest": "afbc08cebd4cdf80db5b79238dac53126d333e1a2262d0093c4b99af337e5107",
+          "text": "CP1's text tells it to record the `exec` strict-config observations \"in the capture file CP2 owns\" (`tests/harness_contract/codex/tester_sandbox.txt`), but that file is not in CP1's `**Files:**` paragraph. Either add it to CP1's Files or say that CP1 keeps the observations and CP2 writes them into the file.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faa0045dd3a60980c2c7f986eb9c05a53ad51fb56b9831ad305579e46abf8d80",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:26:01Z"
+            }
+          ]
+        },
+        "F-955ffcdabb52": {
+          "digest": "955ffcdabb525be80b478dd9edad568ce172ee9c5b3e35c0bdcac28cd17af220",
+          "text": "D6's \"skip when ... no model is reachable\" needs a narrow, stated test, for example no credential file in the operator's Codex home, decided before the run. Otherwise a failed `exec` turn could be read as \"unreachable\" and skipped, which goes against D7's rule that nothing is skipped silently.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faa0045dd3a60980c2c7f986eb9c05a53ad51fb56b9831ad305579e46abf8d80",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:26:01Z"
+            }
+          ]
+        },
+        "F-b0282cab158d": {
+          "digest": "b0282cab158d0688cd71fa6fdc8a3fa070644c9db58454af3caad5e2ec7e5626",
+          "text": "\"The Codex install tree\" in D2/`readable_roots` is not defined. On an nvm install, `resolve_binary` returns `~/.nvm/versions/node/<v>/bin/codex` (symlink kept on purpose), and `interpreter_dir` returns `None` for `#!/usr/bin/env node`, while the code that runs is in `~/.nvm/versions/node/<v>/lib/node_modules/@openai/codex`. Name the rule, for example the binary's directory plus the resolved target's package root, so the result does not depend on how the binary was installed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faa0045dd3a60980c2c7f986eb9c05a53ad51fb56b9831ad305579e46abf8d80",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:26:01Z"
+            }
+          ]
+        },
+        "F-170397509d01": {
+          "digest": "170397509d01a4a9a8ee7156dec25b4844861229dafa0523cd2312745fbc33ec",
+          "text": "D4 names the kept overrides but leaves `sandbox_mode`, the `projects` trust table, `notify=[]`, `model_provider` and `project_root_markers` implicit. List the full tester override set (and say `sandbox_mode` is dropped) so `check_argv`'s \"unpinned `-c`\" rule has an exact reference.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faa0045dd3a60980c2c7f986eb9c05a53ad51fb56b9831ad305579e46abf8d80",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:26:01Z"
+            }
+          ]
+        },
+        "F-57d8a60e3686": {
+          "digest": "57d8a60e368679d1cc18b5c041074e20a6a7a5b7ca71bed89c9c4ec1ff7159f3",
+          "text": "CP1's path quoting and escaping should not use `str.replace`: `tests.test_write_containment` flags any `.replace(` call in `controller/`. `json.dumps` gives a valid TOML basic string for the paths that are allowed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "faa0045dd3a60980c2c7f986eb9c05a53ad51fb56b9831ad305579e46abf8d80",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:26:01Z"
+            }
+          ]
+        },
+        "F-d352028b516c": {
+          "digest": "d352028b516c7ace0ef4a5f44d09f0b00cc42bbd455cebaa80842ee168770609",
+          "text": "CP2 still says the live test \"is skipped, not failed, when `codex` or `bwrap` is missing or no model is reachable\". D6 now narrows the skip to `codex` or `bwrap` being absent or the operator's Codex home having no `auth.json`, and says a failed `exec` turn is a failure. Align CP2's sentence with D6, so the implementer does not take the looser reading.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5fec336e111b550e7c7850e14b00d2ede8aa11a8931a90129f9f8a6418e5770b",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:30:11Z"
+            }
+          ]
+        },
+        "F-b17eeabacac7": {
+          "digest": "b17eeabacac72fee0a63b5d992f86eb9c117eeeefeb9b9ecdf343d6315b18f36",
+          "text": "D5's `git push` probe targets \"a scratch bare origin the sandbox can read but not write\", but no D2 readable root covers that origin, and the overlap refusal would refuse it if it sat under `<base>`. Either say how the live test makes the origin readable (an extra test-only read root that the overlap rule accepts) or expect the push to fail as \"not found\". Then record in the capture file which of the two results the probe shows.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5fec336e111b550e7c7850e14b00d2ede8aa11a8931a90129f9f8a6418e5770b",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:30:11Z"
+            }
+          ]
+        },
+        "F-2d5f667756ce": {
+          "digest": "2d5f667756cec4362ffb90962c7ace38085e1878a0de5fb8e221e744e8223d7d",
+          "text": "The package-root rule of D2 (\"nearest ancestor holding a `package.json`\") walks up without a bound. A stray `~/package.json` above a non-npm `codex` binary would make the whole real home readable. The overlap refusal catches this only when the runtime root is under the home. Stop the search at a `node_modules` boundary, or also refuse a readable root that is `/`, the operator's real home or one of its ancestors.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5fec336e111b550e7c7850e14b00d2ede8aa11a8931a90129f9f8a6418e5770b",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:30:11Z"
+            }
+          ]
+        },
+        "F-349c2ff22a71": {
+          "digest": "349c2ff22a712980e4f354b8db07a49b4138b3fb0aee851364666345c1631c73",
+          "text": "CP1 should include `controller/__init__.py` and `tests/test_package_structure.py` in its integration work. Their exact module inventory and dependency-order checks require entries for the new `codex_sandbox` module, but the plan currently omits these edits and checks.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "3e0065769b3af1dd5bf7620fe318a3ba167390358cf687a1fcd9c541a8482364",
+              "verdict": "REVISE",
+              "at": "2026-10-27T23:36:02Z"
+            }
+          ]
+        },
+        "F-390f7cda3806": {
+          "digest": "390f7cda38065ca3b9c8a23139e3f93f72d0d696fcfeb350ffa59d7e5e2a1a94",
+          "text": "D1b's control order runs `check_home` once before both listings and once after them. That differs from `review._preflight` (`controller/review.py:1855-1871`), which re-runs `check_home` before **each** listing, because `mcp list` itself writes Codex state into the home, and which also passes each listing argv through `review.check_argv(kind, ...)` before running it. The plan says \"as the reviewer does\". Either match the reviewer (home, mcp, home, features, home, with `check_argv` on each listing argv) or drop that phrase. The CP1 order test should follow whichever order is chosen.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T23:42:55Z"
+            }
+          ]
+        },
+        "F-23ea1ff7695f": {
+          "digest": "23ea1ff7695fbe31bede31b877d1096457b87dc392713eab5a2b905ff2db4d27",
+          "text": "D1b first says \"the reviewer runs five controls\", listing `check_effective` as the fifth, and then calls `check_effective` \"the sixth reviewer control\". It is the fifth. Fix the count so the KNOWN_LIMITS entry and the guide paragraph of CP3 do not inherit it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T23:42:55Z"
+            }
+          ]
+        },
+        "F-a3161e69a15c": {
+          "digest": "a3161e69a15c3ebe321e2e7a2025f85d51ffe44a4d7f6bbc1c5cb7f424ffe52e",
+          "text": "CP1's test bullet \"`KNOWN_LIMITS` holds the composed-configuration entry and the profile text and guide sentence name it\" is unclear. The TOML profile text cannot name a limit, and the guide paragraph is written in CP3. The bullet presumably means the entry's own reason and guide-sentence fields (D7). Say that, so the test asserts something CP1 can check.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T23:42:55Z"
+            }
+          ]
+        }
       }
     }
   }

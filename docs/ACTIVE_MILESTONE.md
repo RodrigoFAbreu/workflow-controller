@@ -2,15 +2,13 @@
 
 ## Status
 
-**Complete.** `workflow-controller-reviewer-family` (H2, issue
-[#185](https://github.com/RodrigoFAbreu/workflow-controller/issues/185)) was accepted on 2026-10-27 by gate policy
-(`policy:bae758b4f4ce`): the review mode now derives the workers' provider family from the routing
-(`review_mode.worker_families`) instead of the constant `WORKER_FAMILY`; mixed families stop with `review_mode_unavailable`,
-and with today's registry no outcome changes. The squash commit is `chore:`, so nothing is released. The plan is archived at
-`docs/milestones/completed/workflow-controller-reviewer-family.md`.
+**Complete.** `workflow-controller-scenario-base` (SC1, issue
+[#188](https://github.com/RodrigoFAbreu/workflow-controller/issues/188)) was accepted on 2026-10-27 by gate policy
+(`policy:bae758b4f4ce`): the scenario tests now measure from the checkout instead of an old pinned base commit, and a
+sandbox-free guard checks that every file the fixture commits is classified. Only tests and one development-guide
+paragraph changed; the squash commit is `test:`, so nothing is released. The plan is archived at
+`docs/milestones/completed/workflow-controller-scenario-base.md`.
 
 ## Next action
 
-No milestone is active. Next is SC1 in `docs/ROADMAP.md`
-([#188](https://github.com/RodrigoFAbreu/workflow-controller/issues/188), the scenario-test fix), then H3 of the harness-neutral roles epic;
-run `/milestone-plan` for it.
+No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.

@@ -365,6 +365,16 @@ in-process Controller and child Controllers started through the kit's
 bootstrap, not what an allowed shell or git hook launches, a `python -E`
 child, or a re-exec.
 
+**The fixture's base and the classification guard.** The scenario fixture
+measures its work item from the checkout's own tip (`pin_base_to_checkout` in
+`tests/test_run_scenarios.py`), not from a commit recorded in a state file, so
+a file added to the repository can never reach the Workflow's
+implementation-stage classification through an old base. A guard test,
+`FixtureClassificationTest`, checks that classification without the sandbox:
+it fails naming any file the fixture commits that the work item's declaration
+neither lists nor excludes, so CI catches it even where the scenarios are
+skipped.
+
 **What a `passed` record proves.** That a scripted path ran on that commit
 and produced those observations. It does not prove a real worker behaves:
 the fakes follow the contract suite in `tests/test_fake_claude_contract.py`,

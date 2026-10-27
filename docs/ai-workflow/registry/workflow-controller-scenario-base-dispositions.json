@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-scenario-base",
+ "dispositions": {
+  "F-002b6f63f0f2": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-01dcffc78775": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-5f3d0883c6e0": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-710262a8169e": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-8224460e92ad": {
+   "disposition": "dropped",
+   "reason": "Plan wording: D5 should name the bookkeeping files (ROADMAP and ACTIVE_MILESTONE) that CP2 also edits; they are excluded by this item's declaration, so the release reasoning holds and nothing shipped depends on the sentence."
+  },
+  "F-eca2e1ccf060": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  }
+ }
+}

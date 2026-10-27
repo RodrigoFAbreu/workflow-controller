@@ -33,6 +33,8 @@ HARNESS = harness.worker_adapter().name
 #: The ``--by`` groupings the ``telemetry`` command accepts.
 GROUPINGS = {
     "role": ("role",), "model": ("model",), "role,model": ("role", "model"),
+    "harness": ("harness",), "role,harness": ("role", "harness"),
+    "role,harness,model": ("role", "harness", "model"),
     "action": ("action",), "stage": ("stage",), "stage,round": ("stage", "round"),
     "work_item,action": ("work_item_id", "action"),
     "review_mode": ("review_mode", "lowered"),
@@ -83,9 +85,9 @@ def dimensions(record: Mapping) -> dict:
     route = record.get("worker_route") if isinstance(record.get("worker_route"), Mapping) else {}
     runtime = record.get("controller_runtime") if isinstance(record.get("controller_runtime"), Mapping) else {}
     harness_name = HARNESS
-    if not is_courier_job(record) and isinstance(route.get("harness"), str):
+    if isinstance(route.get("harness"), str):
         # A worker record names the harness it ran on (a fallback chain can
-        # choose a second one); a courier record's names its reviewer.
+        # choose a second one); a courier record's route names its reviewer.
         harness_name = route["harness"]
     out = {
         "role": route.get("role"),
@@ -434,6 +436,7 @@ def rows(records: Iterable[Mapping], *, work_item: str | None = None, run: str |
             "run_id": record.get("run_id"),
             "role": block.get("role", route["role"]),
             "model": block.get("model", route["model"]),
+            "harness": block.get("harness", route["harness"]),
             "action": action,
             "stage": stage,
             "round": round_number,

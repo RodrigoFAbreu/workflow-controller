@@ -484,7 +484,8 @@ def build_parser() -> argparse.ArgumentParser:
                              help="only jobs created at or after this UTC date or time "
                                   "(YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)")
     telemetry_p.add_argument("--by", choices=sorted(telemetry.GROUPINGS), default=None, metavar="GROUPING",
-                             help="group the jobs: role, model, or role,model for both; action, stage, "
+                             help="group the jobs: role, model, or role,model for both; harness, "
+                                  "role,harness or role,harness,model; action, stage, "
                                   "stage,round (a round counted from job records is marked ~) or "
                                   "work_item,action; review_mode groups review jobs by the mode they ran "
                                   "under and whether it was a lowered-policy review (default: one group)")

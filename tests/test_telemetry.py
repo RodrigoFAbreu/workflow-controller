@@ -318,7 +318,7 @@ class RoundsTest(_RuntimeCase):
                     "derived", "unavailable", "telemetry"}
         payload = json.loads(self.cli("--json", "telemetry")[1])
         for row in payload["rows"]:
-            self.assertEqual(set(row) - old_keys, {"action", "stage", "round", "round_source", "review_mode", "lowered"})
+            self.assertEqual(set(row) - old_keys, {"harness", "action", "stage", "round", "round_source", "review_mode", "lowered"})
             self.assertEqual((row["action"], row["stage"], row["round"], row["round_source"]),
                              (None, "none", None, None))
 

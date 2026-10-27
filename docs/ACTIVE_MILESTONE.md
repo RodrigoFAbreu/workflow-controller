@@ -2,6 +2,11 @@
 
 ## Status
 
+**In progress.** `workflow-controller-harness-telemetry` (H11, issue
+[#207](https://github.com/RodrigoFAbreu/workflow-controller/issues/207)): CP1 complete (the `harness`, `role,harness` and
+`role,harness,model` groupings, the `harness` row key, a courier record reading its route's harness); CP2 (guides and
+roadmap) next. The text below is the previous milestone's record until CP2 replaces it.
+
 **Complete.** `workflow-controller-fallback-select` (H9b, issue
 [#202](https://github.com/RodrigoFAbreu/workflow-controller/issues/202)) was accepted on 2026-10-27 by gate policy
 (`policy:bae758b4f4ce`): a fallback chain's later entry is now used when the first cannot launch or its provider is held

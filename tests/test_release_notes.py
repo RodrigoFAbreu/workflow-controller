@@ -139,9 +139,14 @@ class TrailerRuleTest(unittest.TestCase):
         self.assertIn("reword the paragraph or join it", problem.remedy)
 
     def test_a_bare_url_and_a_one_line_note_are_refused(self) -> None:
+        # The rule is Git's own verdict on each paragraph. A one-line note is a trailer to every Git; a bare URL
+        # was one before Git 2.56 and is not any more, so it is refused exactly when this Git parses it as one.
         for paragraph in ("https://example.com/x", "Note: this release changes the default."):
             with self.subTest(paragraph):
-                self.assertIsNotNone(self.problem(f"Intro.\n\n{paragraph}\n\nOutro."))
+                git_parses_it = bool(gitrepo.parse_trailers(paragraph).strip())
+                if paragraph.startswith("Note:"):
+                    self.assertTrue(git_parses_it)
+                self.assertEqual(self.problem(f"Intro.\n\n{paragraph}\n\nOutro.") is not None, git_parses_it)
 
     def test_ordinary_shapes_pass(self) -> None:
         for notes in ("A colon: inside prose is fine, as Git decides.",

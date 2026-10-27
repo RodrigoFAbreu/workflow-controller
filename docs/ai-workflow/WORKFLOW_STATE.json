@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-fallback-chain",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -37260,6 +37260,247 @@
         },
         "evaluated_at": "2026-10-27T09:19:38Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-fallback-chain": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-fallback-chain",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_FALLBACK_CHAIN_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-fallback-chain-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fallback-chain-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "d1b6982dbc3ea85f836f0c20748d68df7f44b3b3",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+        "approved_review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_FALLBACK_CHAIN_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "906420ae8fc91e3692cd9beedc1fde1c59e1290b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-fallback-chain-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5328106664e0ada264a624357689fbc5b88b2d6e"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-fallback-chain-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "47510fbbbffdcbce0e0b2623ad325671d831bf84"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T10:29:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+            "ledger": {
+              "local": {
+                "bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "e02d3784e71428cfea9ec7f56fa38d5c48c51655722ee20eb38c7ddc6d8a3496",
+                "ledger_entry_sha256": "9383b1b11cf76b4c79060ff5caf4a8b42867b122e4c3dac0f42a7b50a761627d",
+                "run_ref": "session:local .ai-review/workflow-controller-fallback-chain/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "ee3f474ed47ea2926225cb9fa022ed3ec2a85db10d62719eeb1cf5b25b9d51e8",
+                "ledger_entry_sha256": "467e2a8f0203faad06b1af670274f82e1659b51bd317b47a867032e0951a7ee8",
+                "run_ref": "codex:20261027T102447Z-d45ba8d8",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T10:29:00Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T10:24:30Z",
+          "verdict_sha256": "e02d3784e71428cfea9ec7f56fa38d5c48c51655722ee20eb38c7ddc6d8a3496",
+          "run_ref": "session:local .ai-review/workflow-controller-fallback-chain/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T10:26:38Z",
+          "verdict_sha256": "ee3f474ed47ea2926225cb9fa022ed3ec2a85db10d62719eeb1cf5b25b9d51e8",
+          "run_ref": "codex:20261027T102447Z-d45ba8d8",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-27T10:29:00Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T10:22:28Z",
+        "consumed": {
+          "review_content_id": "a9b2dcbd832d44388c419f7ddd7aed87865329bafb79eb436cc4233c5e452802",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+          "bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "a9b2dcbd832d44388c419f7ddd7aed87865329bafb79eb436cc4233c5e452802"
+      ],
+      "optional_findings": {
+        "F-b81b994633e7": {
+          "digest": "b81b994633e793d511560340d78f4f08cd9fee75bd4bfa59b0244b4bd8c570d1",
+          "text": "**LOCAL-R1-002 (CP1, `_routing_unknown`):** the dotted-role ambiguity reading in `controller/settings.py:325-331` lists `(\"roles\", role, field)` whenever `field not in routing.FIELDS`. With `fallback` now a known role-level key that is not in `FIELDS`, an unknown role literally named `review-plan.fallback` beside a real `roles.review-plan.fallback` would have the real chain reported as unknown and removed by `settings clean`. The plan's catch-all sentence (\"keeps each correct for the new key\") covers this, but no listed test pins it. Name the case and test it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a9b2dcbd832d44388c419f7ddd7aed87865329bafb79eb436cc4233c5e452802",
+              "verdict": "REVISE",
+              "at": "2026-10-27T10:21:00Z"
+            }
+          ]
+        },
+        "F-b6e84e8833ab": {
+          "digest": "b6e84e8833ab4d61806d64f3234512f2d581264377af984b37df43f91827b6b6",
+          "text": "**LOCAL-R1-003 (D6, `mixed_lane_reason`):** the pair's verdict (\"so the two are of one family ...\" / \"so that pair is distinct and the stop comes from the other worker roles\") is computed from entry 0 alone. When the local review role's own fallback entry is of `reviewer.harness`'s family, the \"distinct\" branch would be false even with the fallback harnesses appended. Have the verdict consider every entry of the local role's chain, or word the appended text so the sentence stays true.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a9b2dcbd832d44388c419f7ddd7aed87865329bafb79eb436cc4233c5e452802",
+              "verdict": "REVISE",
+              "at": "2026-10-27T10:21:00Z"
+            }
+          ]
+        },
+        "F-6d0890c5cc9d": {
+          "digest": "6d0890c5cc9d99d2e00d1a3236a8b4a7de28943640cb63a9895ba7a6ec80f6e1",
+          "text": "**LOCAL-R1-004 (D2/CP1):** the plan refuses an identical repeated fallback entry but says nothing about a fallback entry identical to the role entry's own first route as the configuration writes it. Either refuse that too or state that it is allowed. Command-line options can change entry 0, so only the configured form can be checked.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a9b2dcbd832d44388c419f7ddd7aed87865329bafb79eb436cc4233c5e452802",
+              "verdict": "REVISE",
+              "at": "2026-10-27T10:21:00Z"
+            }
+          ]
+        },
+        "F-837635d5c866": {
+          "digest": "837635d5c86622f355618ddbe2bb005b13b1f55b1e0b365807227b380e6f2240",
+          "text": "**LOCAL-R2-001 (CP1, `_Validator`):** CP1 says `_Validator` \"reads and removes `fallback` from a role entry before the existing key check\". In the settings section, `_check_routing` gets the raw `routing` value from the parsed file data, and `_filled(data)`/`clean` later deep-copy and rewrite that same data (`controller/settings.py:536-539`, `663-686`, `742-753`). If the removal is a `pop` on the caller's dict, every fill would silently drop the chain from the file. The listed test that `settings clean` leaves the chain unchanged would catch it. Still, say in CP1 that the validator works on a copy of the role entry, so the implementer does not have to work it out from the test failure.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T10:24:30Z"
+            }
+          ]
+        },
+        "F-bbbc7dfa92cc": {
+          "digest": "bbbc7dfa92cc7917ad8f38916396d252657c48e2b289d3654039e262805ac9dc",
+          "text": "CP1 should explicitly say that removing `fallback` for validation operates on a copy of the role entry. Settings validation receives the original parsed dictionary; mutating it could discard the chain during subsequent writes. The planned settings preservation tests already cover this risk.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3e05274378168898cc7b4cd71af4a6e8ea88ba1fe951c5a0a4c103925e3694e7",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T10:26:38Z"
+            }
+          ]
+        }
       }
     }
   }

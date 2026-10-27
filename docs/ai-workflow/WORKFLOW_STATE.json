@@ -35270,7 +35270,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-scenario-base-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-scenario-base-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 1,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -35379,7 +35379,96 @@
           "workflow_release": "2.22.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "df9697bd530fbf24d66767c9c213babf8d0e94dca9843450aff85799deb861e7",
+        "approved_review_content_id": "e3c20711ee14adae9ffb845c30bef11df24164cae60495696dfa44f4a06fdc62",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-scenario-base-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c6317d7ade9bcce425b023b639746627af44b1b7"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "117fc7525b2650419c0f67c586b78d20cbf4a08c"
+          },
+          {
+            "path": "tests/test_run_scenarios.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4ffd75b8bebd2dd6d39afb15e421b4b3d39b07fe"
+          }
+        ],
+        "reviewed_content_commit": "3002421cbdebfbb8cf2a378b33a13f78014092b7",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T03:52:10Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e3c20711ee14adae9ffb845c30bef11df24164cae60495696dfa44f4a06fdc62",
+            "ledger": {
+              "local": {
+                "bundle_id": "df9697bd530fbf24d66767c9c213babf8d0e94dca9843450aff85799deb861e7",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "b410b346ab2aa54ffcecbe8ae38ca456710c68e5a8da774ced402c31c553d8d8",
+                "ledger_entry_sha256": "762fbc425af369c9139dcb5f4c2a709c6365c718ccb0559a67f691595340d581",
+                "run_ref": "session:local .ai-review/workflow-controller-scenario-base/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "df9697bd530fbf24d66767c9c213babf8d0e94dca9843450aff85799deb861e7",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "28c53c5e6937837046f33550b363228c96c900c443925ef6f0da736ab39c4d35",
+                "ledger_entry_sha256": "69cbeef68fe56b5ec902b4dc56f56f9e671dea19b28220711c02e5312cce8c3d",
+                "run_ref": "codex:20261027T034908Z-7ea702c6",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T03:52:10Z",
+          "workflow_release": "2.22.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "2c82dfc246bdc8ec786d27523f610428b5985e381929dd0b1873a386b17ed572",
@@ -35410,12 +35499,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-10-27T03:33:58Z",
+      "state_revision": 21,
+      "last_transition": "2026-10-27T03:52:10Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -35491,12 +35580,61 @@
               "at": "2026-10-27T03:00:19Z"
             }
           ]
+        },
+        "F-01dcffc78775": {
+          "digest": "01dcffc787758b86c13e83d5e1485a2e5f758161f3ec66c5eeac868dbb7a980e",
+          "text": "`tests/test_run_scenarios.py` `FixtureClassificationTest.classify` reads the artifacts JSON by hand (`declaration[\"excluded_paths\"]`, `declaration.get(\"protected_prefixes\", {})`) instead of calling the Workflow's own `workflow_fingerprint.load_implementation_stage_classification(REPO_ROOT, artifacts_path_for_work_item(WORK_ITEM))`, which the real identity computation uses. The two agree today, but the hand copy skips the loader's defaults for absent keys and its `_validate_exclusion_prefixes` check, so a future change in how the Workflow loads a declaration could make the guard disagree with what the scenario tests actually classify. Calling the loader would make the guard measure the real classification by construction.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "e3c20711ee14adae9ffb845c30bef11df24164cae60495696dfa44f4a06fdc62",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T03:48:52Z"
+            }
+          ]
+        },
+        "F-002b6f63f0f2": {
+          "digest": "002b6f63f0f2bef952174051f2655646048d6616ec22c1e1427cb741a14178a3",
+          "text": "Update the completed SC1 row in `docs/ROADMAP.md:187` to describe the implemented base pinning and guard, and its `test:` commit type. It still describes classifying the missing path and a `fix:`/`chore:` change.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "e3c20711ee14adae9ffb845c30bef11df24164cae60495696dfa44f4a06fdc62",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T03:50:41Z"
+            }
+          ]
         }
       },
       "consumed_plan_review_content_ids": [
         "4524153c678493cc5bddb37ab921307587b8801cdfaef4075774793b25f45617",
         "b2c2a020e714ecd7e4c6207db3f98c4792a0dad5ae63f2fce53c690a65114f21"
-      ]
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "e3c20711ee14adae9ffb845c30bef11df24164cae60495696dfa44f4a06fdc62",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "df9697bd530fbf24d66767c9c213babf8d0e94dca9843450aff85799deb861e7",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T03:48:52Z",
+          "verdict_sha256": "b410b346ab2aa54ffcecbe8ae38ca456710c68e5a8da774ced402c31c553d8d8",
+          "run_ref": "session:local .ai-review/workflow-controller-scenario-base/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "df9697bd530fbf24d66767c9c213babf8d0e94dca9843450aff85799deb861e7",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T03:50:41Z",
+          "verdict_sha256": "28c53c5e6937837046f33550b363228c96c900c443925ef6f0da736ab39c4d35",
+          "run_ref": "codex:20261027T034908Z-7ea702c6",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      }
     }
   }
 }

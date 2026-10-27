@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-reviewer-independence",
+  "requirements": {
+    "R1": {
+      "description": "At an external review gate the mixed-lane review_mode_unavailable stop names the stage's local review role, the external reviewer, their families and whether they collide; manual stays the ordinary gate (H10)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Every configuration that loads today yields the same choice as before: only the reason of the existing mixed-family stop changes, and verify is not asked again (H10)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The guide, the troubleshooting page and the roadmap describe the mixed-lane text and the pair it reports, shipped as a chore change with no release (H10)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

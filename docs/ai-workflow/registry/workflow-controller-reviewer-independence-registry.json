@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-reviewer-independence",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The mixed-lane text, its use at the review gate and its tests",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The guide, the troubleshooting page and the roadmap",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

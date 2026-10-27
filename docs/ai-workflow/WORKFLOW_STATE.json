@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-reviewer-independence",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -36601,6 +36601,248 @@
         },
         "evaluated_at": "2026-10-27T06:34:55Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-reviewer-independence": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-reviewer-independence",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_REVIEWER_INDEPENDENCE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-independence-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-independence-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "d6f17eb18ba666b5a33a189b49931c1220fd1e47",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+        "approved_review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_REVIEWER_INDEPENDENCE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4f95d992b372ade41e85a22b16d6eeabc70a1211"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-reviewer-independence-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "93d03b8627c75f71ccf7880bdaa34e0f1d1c497c"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-reviewer-independence-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "de14226c2cef3e5ea980c3f57806b2771b714111"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T08:02:16Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+            "ledger": {
+              "local": {
+                "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "153e92857bb9712f9e9b1ecca3823c82727719e10d3bb9b6bf1d0c6793af7479",
+                "ledger_entry_sha256": "bd8e4b95f65ba0898b3c910a3f155f5ae3cbcbc5150b47f6e8622002807f82fb",
+                "run_ref": "session:local .ai-review/workflow-controller-reviewer-independence/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "12d92240134e7d47fd974c9ba3eef480482182a016c747644c92f24c4128499d",
+                "ledger_entry_sha256": "cb4fad4188e5cb937d3724bea61c2074e0a0705fba779b309586f5009861baf5",
+                "run_ref": "codex:20261027T075818Z-f210ca6e",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T08:02:16Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-27T07:58:03Z",
+          "verdict_sha256": "153e92857bb9712f9e9b1ecca3823c82727719e10d3bb9b6bf1d0c6793af7479",
+          "run_ref": "session:local .ai-review/workflow-controller-reviewer-independence/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-27T08:00:17Z",
+          "verdict_sha256": "12d92240134e7d47fd974c9ba3eef480482182a016c747644c92f24c4128499d",
+          "run_ref": "codex:20261027T075818Z-f210ca6e",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-10-27T08:02:16Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T07:55:55Z",
+        "consumed": {
+          "review_content_id": "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+          "bundle_id": "c482545a51cb6e3bd38d3fc92d21d0c21de8e677f55f0744f528dc5a42f3bf28",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "97a79563258ad9b317dc7027342982d71099ce193e94606c0ec5beb82fa49d42",
+        "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9"
+      ],
+      "optional_findings": {
+        "F-aaf55ec9094d": {
+          "digest": "aaf55ec9094d70e9b897120d55136e3c170e74abaee58e95e13790f8b1bd5802",
+          "text": "D4 says \"the signal is read from `verify` only after a collision is found, so no other run asks for it\". With B1 and I1 resolved, also state whether the rule's signal read and `choose`'s own `needs_signal` read can both happen in one step, so that `verify` is not asked twice.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "97a79563258ad9b317dc7027342982d71099ce193e94606c0ec5beb82fa49d42",
+              "verdict": "REVISE",
+              "at": "2026-10-27T07:48:38Z"
+            }
+          ]
+        },
+        "F-b9140a54b6c7": {
+          "digest": "b9140a54b6c7c4590eb7bbf74a9a60d6bb7428eb03f36ccb2a59a3783ca5e8ff",
+          "text": "`docs/common-problems.md`, section \"A run stopped at review_mode_unavailable\", lists two causes (`cross-model` without a distinct provider, `single-provider` without the signal). It does not list the mixed-lane cause that `choose` has refused since H2, which is the stop whose text this milestone rewrites. The gap already exists today. CP2 could add a third cause, worker roles on more than one family, and say that the message now names the stage's local review role and `reviewer.harness` with their families. That would keep the troubleshooting page in step with `docs/guide/runtime.md`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T07:53:30Z"
+            }
+          ]
+        },
+        "F-6ef43f13532a": {
+          "digest": "6ef43f13532a4a4f105292dd80faab085c66e256a026c1023d291ae5ad2c33a2",
+          "text": "`docs/ROADMAP.md` line 83, the epic's prose summary, still calls H10 \"the independence rule in routing\". CP2 rewords row H10 and \"Next, in order\" item 2, but not this sentence. Reword it in the same edit so the roadmap does not describe H10 two ways.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "b1a7b15d96b4950fcdc7667aab6233dbcd5838975e0e1d0e9ef90c36286adce9",
+              "verdict": "REVISE",
+              "at": "2026-10-27T07:53:30Z"
+            }
+          ]
+        },
+        "F-aa8c09dc23ca": {
+          "digest": "aa8c09dc23ca829ab42d6189af8b631cda98158e2c9414dda85716b3f592d36a",
+          "text": "`choose`'s mixed-family sentence already ends with a remedy (\"route every worker role to harnesses of one family, or choose --review-mode manual\"). CP1 says `mixed_lane_reason` begins with that sentence, and D4 then adds its own remedies. If both are kept, the stop gives the same advice twice. When writing CP1, keep `choose`'s first clause (the families) but give the remedies only once, as D4 states them.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T07:58:03Z"
+            }
+          ]
+        },
+        "F-b20661731b28": {
+          "digest": "b20661731b2878e2269cccc1ce8a7899bbc10fa6b2ea2f20cec0f223cc6704d2",
+          "text": "D4 could clarify that moving the local review role must still leave **all worker roles on one family**. Moving that role alone can preserve the mixed-family refusal; changing `reviewer.harness` avoids that ambiguity.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "b0073b1a7af777fed30eb70d4853383e807026078a782bb675b5819c8101c5d4",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T08:00:17Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -13,4 +13,5 @@ released. The plan is archived at `docs/milestones/completed/workflow-controller
 ## Next action
 
 No milestone is active. Next is H9b of the harness-neutral roles epic in `docs/ROADMAP.md` (the selection of a fallback chain's
-entry; its open question is the narrow definition of "unavailable or held by a limit"); run `/milestone-plan` for it.
+entry; its open question is the narrow definition of "unavailable or held by a limit",
+[#202](https://github.com/RodrigoFAbreu/workflow-controller/issues/202)); run `/milestone-plan` for it.

@@ -9,8 +9,8 @@ sandbox-free guard checks the fixture's classification. Plan revision 1 approved
 - CP1 (pin the base to the checkout, guard the classification): complete. `tests/test_run_scenarios.py` gains
   `pin_base_to_checkout`, `fixture_files`, `FixtureClassificationTest` and `PinBaseToCheckoutTest`; `tests.test_run_scenarios`
   (53 tests) and `tests.test_catalogue_determinism` (11 tests) pass on a machine whose probe passes.
-- CP2 (guide and roadmap): pending.
+- CP2 (guide and roadmap): complete. The development guide describes the pinned base and the guard; ROADMAP row SC1 is marked complete and H3 is next.
 
 ## Next action
 
-Run `/milestone-implement workflow-controller-scenario-base` for CP2 (the guide and the roadmap).
+Every checkpoint is complete. Run `/milestone-implement workflow-controller-scenario-base` again to self-review, verify and prepare the implementation review bundle. After acceptance, H3 is next.

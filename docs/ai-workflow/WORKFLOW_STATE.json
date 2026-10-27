@@ -34567,7 +34567,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-reviewer-family-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-reviewer-family-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -34676,7 +34676,138 @@
           "workflow_release": "2.21.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "bcf7c0ad942f4b21b45ea055d72288f2993a4f17b9dc7f11b153df5919fa339f",
+        "approved_review_content_id": "1cb5281d9c09d9dd676951c36569343d71a24ae4350ee940766eb9e804017661",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "401b9ab5a8dea01a6c93753a29b9423c1210d023"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4fdd9bab876635937318ba4a2a7085666b0ad073"
+          },
+          {
+            "path": "controller/review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "93d0fb4a0001cfb3908116f4f9b963ee5023c6db"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-reviewer-family-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f1ca421cffba244b66443af2a52a6b3cf8e46d71"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9fb49a91cb57e8ec5841472fe6526ca7a1fb6b0a"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "28740c4e4b37974b7dd3d7641c177dea405beff6"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f18c72e2c5890d9635be2838406b334613f6a252"
+          },
+          {
+            "path": "tests/test_review_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "af81f52ce25f070e9a11e3304162590fdaffec1d"
+          },
+          {
+            "path": "tests/test_review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "98aecadc3357d09e46fca1b06bf4b9befe423128"
+          },
+          {
+            "path": "tests/test_review_same_provider.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5e1a524861a5e42795100d7d1c5c9520a92948a3"
+          }
+        ],
+        "reviewed_content_commit": "71844b98b1f7f893fc65254fea6f757da9769cd6",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T00:41:59Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "1cb5281d9c09d9dd676951c36569343d71a24ae4350ee940766eb9e804017661",
+            "ledger": {
+              "local": {
+                "bundle_id": "bcf7c0ad942f4b21b45ea055d72288f2993a4f17b9dc7f11b153df5919fa339f",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ecacc11ba339cc8a4142f25fe2c0c0af5745c91976a605f25fb02b524890d2d8",
+                "ledger_entry_sha256": "515e663f84c79a1f594ededab3320e56d9356c12c5c793914eeb52c7f5a7f013",
+                "run_ref": "session:local .ai-review/workflow-controller-reviewer-family/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "bcf7c0ad942f4b21b45ea055d72288f2993a4f17b9dc7f11b153df5919fa339f",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "0f95028dc83d1b2c01c8c95107135d14896e8fac5b6af790fa4d2f3fdf22c7ae",
+                "ledger_entry_sha256": "261fa24d8a717b0d605d7933e4d07c18ee54b93267c307fcfd69bb74fe28a689",
+                "run_ref": "codex:20261027T003809Z-6c956b8e",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T00:41:59Z",
+          "workflow_release": "2.21.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "f4529e8297f18fb8b2294448174c71aa2c3dd6e39cae2a2f69ca30ac42d23034",
@@ -34707,12 +34838,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-10-27T00:20:04Z",
+      "state_revision": 17,
+      "last_transition": "2026-10-27T00:41:59Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -34777,6 +34908,69 @@
               "at": "2026-10-26T22:28:33Z"
             }
           ]
+        },
+        "F-03dfb1685869": {
+          "digest": "03dfb1685869cbb4f6530dad2e0a43cee60c61b2ff1fb3c5e7cac1341a627419",
+          "text": "D3 says the mixed-family reason \"names the families and the roles' harnesses\". The text in `review_mode.choose` (`controller/review_mode.py`) names only the families (\"(anthropic, openai)\"). It does not say which worker roles are on which harness. The remedy (\"route every worker role to harnesses of one family\") is still actionable, and the case cannot happen with today's registry. Either name the roles per harness, which needs the routing and not only the family set, or record that the families are enough.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "1cb5281d9c09d9dd676951c36569343d71a24ae4350ee940766eb9e804017661",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T00:37:33Z"
+            }
+          ]
+        },
+        "F-5ec5b95439ec": {
+          "digest": "5ec5b95439ecd22573e544fc4d10d9deb998de6f7c471baf1ca9fdd2788f4cf3",
+          "text": "D7 says the guide states that making the same-provider harness follow the routing belongs to H4. `docs/guide/runtime.md` says only \"The same-provider review is unchanged and still runs Claude.\" It does not say that H4 is where this changes. This is a small docs gap and the behaviour is described correctly.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "1cb5281d9c09d9dd676951c36569343d71a24ae4350ee940766eb9e804017661",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T00:37:33Z"
+            }
+          ]
+        },
+        "F-cb98aa0a7a5c": {
+          "digest": "cb98aa0a7a5cdc543c94e5aff9674ae40e693e6a25bd7fcd94a13ce34afe1d77",
+          "text": "`tests/test_review_mode.py:422`: The D5 equivalence matrix covers every mode, stage and specified reviewer, but only three signal captures plus `None`. Include `lowering_plus_file_tightened`, `lowering_plus_floor_and_reverted_file` and `lowering_plus_unreferenced_runs`, which existing tests already exercise. This is a coverage improvement; no incorrect behavior was found.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "1cb5281d9c09d9dd676951c36569343d71a24ae4350ee940766eb9e804017661",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T00:40:13Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "1cb5281d9c09d9dd676951c36569343d71a24ae4350ee940766eb9e804017661",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "bcf7c0ad942f4b21b45ea055d72288f2993a4f17b9dc7f11b153df5919fa339f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T00:37:33Z",
+          "verdict_sha256": "ecacc11ba339cc8a4142f25fe2c0c0af5745c91976a605f25fb02b524890d2d8",
+          "run_ref": "session:local .ai-review/workflow-controller-reviewer-family/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "bcf7c0ad942f4b21b45ea055d72288f2993a4f17b9dc7f11b153df5919fa339f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T00:40:13Z",
+          "verdict_sha256": "0f95028dc83d1b2c01c8c95107135d14896e8fac5b6af790fa4d2f3fdf22c7ae",
+          "run_ref": "codex:20261027T003809Z-6c956b8e",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "workflow_version": "2.21.0",
+  "workflow_version": "2.22.0",
   "profile": "full",
   "upstream": {
     "repository": "repflow-android",
@@ -14,13 +14,13 @@
   "source": {
     "kind": "package",
     "repository": "RodrigoFAbreu/workflow",
-    "archive": "workflow-2.21.0.tar.gz",
-    "sha256": "34241cee4298fa5f7959321cb76145ada0e2d2d2d9c79b2a17962f39dd7c8700",
+    "archive": "workflow-2.22.0.tar.gz",
+    "sha256": "57dc099d296370f44dd89cc4d3a6bc94455e37755e70b5453f32c4774dcc0354",
     "trust": "discovered",
     "from": "github:RodrigoFAbreu/workflow"
   },
   "installed_at": "2026-09-05T14:33:32Z",
-  "updated_at": "2026-10-26T17:41:45Z",
+  "updated_at": "2026-10-27T02:18:04Z",
   "managed": {
     ".claude/commands/accept-milestone.md": {
       "sha256": "8eb653d3352bb4dba6efc4fb637a12b8d16ad71b857a33a366f13b7851e8f8f7",
@@ -139,7 +139,7 @@
       "executable": false
     },
     "docs/ai-workflow/ORCHESTRATION_PROTOCOL.md": {
-      "sha256": "fd17687788ac76e68fe25aa60084882f3af5f41fb46f80fceb2328ccbe90419b",
+      "sha256": "9b406083a74e0ad731aeb3a96a85e286d4b80c4053ba4d32d05ce8565ed52ffc",
       "executable": false
     },
     "docs/ai-workflow/PLAN_REVIEW_WORKFLOW.md": {
@@ -307,15 +307,15 @@
       "executable": false
     },
     "scripts/workflow_protocol.py": {
-      "sha256": "992693fd5c96455c115d2e954e400257cb8e9e8a2f4f0cb40f46a9a6490da788",
+      "sha256": "d2824930d89c1cd83b506d9e6febf5b1224f66a5d7157360e24ee0e648eb25cd",
       "executable": false
     },
     "scripts/workflow_protocol_test.py": {
-      "sha256": "9092b76c6cc8d81b5335719d9a3dcf91fc8a85f95f74ee3fe155342fb9b27a6a",
+      "sha256": "b9f7a1ab4a2b5a0a398cd547f13d133c9c6e94855c87dc4902d0b3ca773774cd",
       "executable": false
     },
     "scripts/workflow_retention.py": {
-      "sha256": "c3e2e284c669d59f6083b28327a50946ca7ac02ec6927e77636c061782fd4b5c",
+      "sha256": "ba6db03dc4a220b8cfa093b2a9fd4bd1b6034fca6e2ed6f7ce0637d464e0822a",
       "executable": false
     },
     "scripts/workflow_state.py": {
@@ -323,7 +323,7 @@
       "executable": false
     },
     "scripts/workflow_state_completion_obligations_test.py": {
-      "sha256": "44b86ecc32f24d3724827efe3477232f5fada88c43d950cfa1c318bf23706e7a",
+      "sha256": "bff9f2a593a7567f369fe8120b51f2c43183396baf24205dee2ba0e164e6de79",
       "executable": false
     },
     "scripts/workflow_state_demo_test.py": {

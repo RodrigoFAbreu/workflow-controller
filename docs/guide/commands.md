@@ -392,6 +392,27 @@ entry sets `model`, `effort`, `harness` or any of them):
 }
 ```
 
+A role entry may also list further routes under `fallback`, the role's
+**fallback chain**: a non-empty list of objects, each naming `harness` and
+`model` and optionally `effort` (omitted means the harness's own default).
+The role entry's own `harness`, `model` and `effort` stay the first route.
+
+```json
+{"roles": {"review-plan": {"model": "claude-opus-5-5",
+  "fallback": [{"harness": "claude-code", "model": "claude-sonnet-5-5"}]}}}
+```
+
+Nothing is filled into a fallback entry from `default` or the built-in table,
+an unknown key inside one is refused (in the settings file too), `default`
+takes no `fallback`, and the harness, model and effort of every entry are
+checked at load exactly as the first route's are; a refusal names the role and
+the entry's position, counted from 1 after the first route. The command-line
+options (`--role-model`, `--role-effort`, `--role-harness`, `--model` and
+`--effort`) change the first route only and leave every later entry as the
+configuration wrote it. The chain is validated and counted in the worker
+families that the review modes compare, but it is **not yet used to select a
+route**: a worker still launches on the first route.
+
 The settings file's `routing` section has the same shape, without
 `schema_version`; `--routing-config` replaces it whole. Only `step` and
 `run` use these options to launch workers. A model or effort value must be non-empty, must not begin with `-`, and must be

@@ -252,6 +252,13 @@ def role_for(phase: Any, command: str, registry_complete: bool | None) -> str:
 #: The three routable fields.
 FIELDS: tuple[str, ...] = ("model", "effort", "harness")
 
+#: The key of a role entry that lists the role's further routes, in order
+#: (workflow-controller-fallback-chain D1). Not a routable field: it is
+#: read and removed before the entry's own fields are checked.
+FALLBACK_KEY = "fallback"
+#: The keys a fallback entry may hold; ``effort`` is the only optional one.
+FALLBACK_ENTRY_KEYS: tuple[str, ...] = ("harness", "model", "effort")
+
 
 def check_value(value: object) -> str:
     """A model or effort value: a non-empty string that does not begin with
@@ -333,6 +340,10 @@ class RoutingConfig:
     path: str
     default: Mapping[str, str]
     roles: Mapping[str, Mapping[str, str]]
+    #: Role -> its fallback entries, in order (each a mapping of
+    #: :data:`FALLBACK_ENTRY_KEYS`); a role without a chain is absent.
+    chains: Mapping[str, tuple[Mapping[str, str], ...]] = dataclasses.field(
+        default_factory=lambda: MappingProxyType({}))
 
 
 def _refuse(path: str, problem: str, **evidence: Any) -> RoutingConfigError:
@@ -389,6 +400,46 @@ class _Validator:
                 raise self.refuse(f"{where}.{field}: {exc}", f"{where}.{field}", where=f"{where}.{field}") from None
         return MappingProxyType(checked)
 
+    def fallback_chain(self, role: str, where: str, raw: object) -> tuple[Mapping[str, str], ...]:
+        """One role's ``fallback`` list (``where`` is its location, e.g.
+        ``roles.review-plan.fallback``): a non-empty list of objects, each
+        naming a ``harness`` the role may take and a ``model``, with an
+        optional ``effort`` and no other key -- refused under either unknown
+        rule, since an unknown key could change which route the entry means
+        (D2). Entries are counted from 1 after the role's own route."""
+        if not isinstance(raw, list) or not raw:
+            raise self.refuse(f"{where} must be a non-empty list, got {raw!r}", where, where=where, role=role)
+        entries: list[Mapping[str, str]] = []
+        for position, entry in enumerate(raw, start=1):
+            here = f"{where}[{position}]"
+            evidence: dict[str, Any] = {"where": here, "role": role, "entry": position}
+            if not isinstance(entry, dict):
+                raise self.refuse(f"{here} must be an object, got {entry!r}", here, **evidence)
+            unknown = sorted(set(entry) - set(FALLBACK_ENTRY_KEYS))
+            if unknown:
+                key = f"{here}.{unknown[0]}"
+                raise self.refuse(
+                    f"{key} is not a key of a fallback entry (only {list(FALLBACK_ENTRY_KEYS)} are), so the "
+                    f"route it would change cannot be known", key, **{**evidence, "unknown_keys": unknown})
+            for needed in ("harness", "model"):
+                if needed not in entry:
+                    raise self.refuse(f"{here} must name a {needed}", f"{here}.{needed}", **evidence)
+            checked: dict[str, str] = {}
+            for field in FALLBACK_ENTRY_KEYS:
+                if field not in entry:
+                    continue
+                key = f"{here}.{field}"
+                try:
+                    checked[field] = check_harness(entry[field]) if field == "harness" else check_value(entry[field])
+                except ValueError as exc:
+                    raise self.refuse(f"{key}: {exc}", key, **{**evidence, "where": key}) from None
+            self._check_pair(f"{here}.harness", role, checked["harness"], entry=position)
+            frozen = MappingProxyType(checked)
+            if any(dict(frozen) == dict(earlier) for earlier in entries):
+                raise self.refuse(f"{here} repeats an earlier fallback entry of {where}", here, **evidence)
+            entries.append(frozen)
+        return tuple(entries)
+
     def check_harness_pairs(self, default_where: str, default: Mapping[str, str], roles_where: str,
                             roles: Mapping[str, Mapping[str, str]]) -> None:
         """Refuse a ``harness`` the registry does not let its role take: each
@@ -411,12 +462,12 @@ class _Validator:
                 self._check_pair(f"{default_where}.harness", role, name,
                                  also=f" (and {others} further role(s) the default would apply to)" if others else "")
 
-    def _check_pair(self, key: str, role: str, name: str, also: str = "") -> None:
+    def _check_pair(self, key: str, role: str, name: str, also: str = "", **extra: Any) -> None:
         try:
             check_role_harness(role, name)
         except ValueError as exc:
             raise self.refuse(f"{key}: {exc}{also}", key, where=key,
-                              **_pair_refusal_evidence(role, name)) from None
+                              **_pair_refusal_evidence(role, name), **extra) from None
 
 
 def _pair_refusal_evidence(role: str, name: str) -> dict[str, Any]:
@@ -465,7 +516,13 @@ def validate_routing_mapping(
             f"(it looks like a --routing-config file pasted in whole; drop the key)",
             f"{where}schema_version",
         )
-    default = v.field_entry(f"{where}default", data.get("default", {}))
+    default_entry = data.get("default", {})
+    if isinstance(default_entry, dict) and FALLBACK_KEY in default_entry:
+        raise v.refuse(
+            f"{where}default.{FALLBACK_KEY} is not allowed: a chain in default would have to be valid for every "
+            f"role, and the roles do not run as the same adapter role; give the role its own {FALLBACK_KEY}",
+            f"{where}default.{FALLBACK_KEY}", where=f"{where}default.{FALLBACK_KEY}")
+    default = v.field_entry(f"{where}default", default_entry)
     roles_entry = data.get("roles", {})
     if not isinstance(roles_entry, dict):
         if where:
@@ -476,12 +533,18 @@ def validate_routing_mapping(
         raise _refuse(path, f"unknown role(s) {unknown_roles}; known roles: {', '.join(sorted(ROLES))}",
                       unknown_roles=unknown_roles)
     v.ignored.extend(f"{where}roles.{role}" for role in unknown_roles)
-    roles = {
-        role: v.field_entry(f"{where}roles.{role}", entry)
-        for role, entry in roles_entry.items() if role in ROLES
-    }
+    roles: dict[str, Mapping[str, str]] = {}
+    chains: dict[str, tuple[Mapping[str, str], ...]] = {}
+    for role, entry in roles_entry.items():
+        if role not in ROLES:
+            continue
+        if isinstance(entry, dict) and FALLBACK_KEY in entry:
+            chains[role] = v.fallback_chain(role, f"{where}roles.{role}.{FALLBACK_KEY}", entry[FALLBACK_KEY])
+            entry = {key: value for key, value in entry.items() if key != FALLBACK_KEY}
+        roles[role] = v.field_entry(f"{where}roles.{role}", entry)
     v.check_harness_pairs(f"{where}default", default, f"{where}roles", roles)
-    config = RoutingConfig(path=path, default=default, roles=MappingProxyType(roles))
+    config = RoutingConfig(path=path, default=default, roles=MappingProxyType(roles),
+                           chains=MappingProxyType(chains))
     return config, v.ignored
 
 
@@ -529,12 +592,15 @@ SOURCE_ROLE_CLI = "role-cli"
 SOURCE_CLI = "cli"
 SOURCE_CONFIG_ROLE = "config-role"
 SOURCE_CONFIG_DEFAULT = "config-default"
+#: A later entry of a role's fallback chain (:meth:`RoutingOptions.chain`).
+SOURCE_CONFIG_CHAIN = "config-chain"
 SOURCE_DEFAULT = "default"
 SOURCE_INHERIT = "inherit"
 #: The harness a role runs on when no routing entry names one.
 DEFAULT_HARNESS = harness.CLAUDE_CODE.name
 SOURCES: tuple[str, ...] = (
-    SOURCE_ROLE_CLI, SOURCE_CLI, SOURCE_CONFIG_ROLE, SOURCE_CONFIG_DEFAULT, SOURCE_DEFAULT, SOURCE_INHERIT,
+    SOURCE_ROLE_CLI, SOURCE_CLI, SOURCE_CONFIG_ROLE, SOURCE_CONFIG_DEFAULT, SOURCE_CONFIG_CHAIN, SOURCE_DEFAULT,
+    SOURCE_INHERIT,
 )
 
 
@@ -723,6 +789,23 @@ class RoutingOptions:
                         },
                     },
                 ) from exc
+            for position, later in enumerate(self.chain(role)[1:], start=1):
+                try:
+                    check_route_values(role, later.harness, later.model, later.effort, self.harness_models)
+                except ValueError as exc:
+                    raise RoutingConfigError(
+                        f"{exc} (fallback entry {position} of the role's chain)"
+                        + ("; add a model the harness accepts with the harness.models setting"
+                           if "routes the model" in str(exc) else ""),
+                        evidence={
+                            "role": role, "entry": position, "harness": later.harness, "model": later.model,
+                            "effort": later.effort,
+                            "sources": {
+                                "model": later.model_source, "effort": later.effort_source,
+                                "harness": later.harness_source,
+                            },
+                        },
+                    ) from exc
 
     def resolve(self, role: str) -> ResolvedRoute:
         return resolve_route(
@@ -730,6 +813,27 @@ class RoutingOptions:
             cli_role_models=self.cli_role_models, cli_role_efforts=self.cli_role_efforts,
             cli_role_harnesses=self.cli_role_harnesses, config=self.config,
         )
+
+    def chain(self, role: str) -> tuple[ResolvedRoute, ...]:
+        """``role``'s whole route chain (workflow-controller-fallback-chain
+        D5): entry 0 is exactly :meth:`resolve`, each later entry is one of
+        the configuration's fallback entries, sourced ``config-chain`` for
+        the fields it names (an omitted effort is ``inherit``). The
+        command-line overrides change entry 0 only. Nothing selects a later
+        entry yet."""
+        first = self.resolve(role)
+        if self.config is None:
+            return (first,)
+        single = ROLE_ROUTES[check_role(role)].single_agent
+        later = tuple(
+            ResolvedRoute(
+                role=role, model=entry["model"], effort=entry.get("effort"), single_agent=single,
+                model_source=SOURCE_CONFIG_CHAIN,
+                effort_source=SOURCE_CONFIG_CHAIN if "effort" in entry else SOURCE_INHERIT,
+                harness=entry["harness"], harness_source=SOURCE_CONFIG_CHAIN,
+            ) for entry in self.config.chains.get(role, ())
+        )
+        return (first, *later)
 
 
 NO_OVERRIDES = RoutingOptions()

@@ -111,10 +111,13 @@ def harness_family(name: str) -> str | None:
 
 def worker_families(options: routing.RoutingOptions = routing.NO_OVERRIDES) -> frozenset[str]:
     """The families of the harnesses ``options`` routes every worker role to
-    (reviewer-family D1): the roles whose adapter role is ``worker``."""
+    (reviewer-family D1): the roles whose adapter role is ``worker``, over
+    every entry of each role's fallback chain (fallback-chain D6): a
+    fallback entry is a route the role can take."""
     return frozenset(
-        harness.get(options.resolve(role).harness).family
-        for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER)
+        harness.get(route.harness).family
+        for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER
+        for route in options.chain(role))
 
 
 def distinct_harness(reviewer: Mapping | None, workers: frozenset[str] | None = None) -> str | None:
@@ -214,9 +217,14 @@ def mixed_lane_reason(options: routing.RoutingOptions, reviewer: Mapping | None,
     decides nothing."""
     workers = worker_families(options)
     role = LOCAL_REVIEW_ROLE[stage]
-    local = options.resolve(role).harness
+    chain = options.chain(role)
+    local = chain[0].harness
+    local_families = {harness.get(route.harness).family for route in chain}
     local_family = harness.get(local).family
     pair = f"the {stage} stage's local review role {role} runs on {local} ({local_family})"
+    if len(chain) > 1:
+        pair += " and falls back to " + ", ".join(
+            f"{route.harness} ({harness.get(route.harness).family})" for route in chain[1:])
     if reviewer is None:
         pair += "; reviewer.harness is unset"
     else:
@@ -224,7 +232,7 @@ def mixed_lane_reason(options: routing.RoutingOptions, reviewer: Mapping | None,
         family = harness_family(name)
         pair += f" and reviewer.harness is {name} ({family or 'not a registered reviewer'}), "
         pair += ("so the two are of one family and the Workflow's distinct_reviewer_models rule would refuse the "
-                 "approval" if family == local_family else
+                 "approval" if family in local_families else
                  "so that pair is distinct and the stop comes from the other worker roles")
     return ("the worker roles are routed to harnesses of more than one family "
             f"({', '.join(sorted(workers))}), so there is no single provider to be distinct from: {pair}. "

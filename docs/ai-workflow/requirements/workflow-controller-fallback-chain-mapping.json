@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fallback-chain",
+  "requirements": {
+    "R1": {
+      "description": "A role entry may carry a fallback list; every entry is validated at load with the first route's checks (harness registry and adapter role, model and effort against the harness), a bad later entry refused naming the role and its position, and default.fallback refused (H9a)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "RoutingOptions.chain(role) returns the chain with entry 0 equal to resolve(role); the command line changes entry 0 only; every configuration valid today resolves, writes back and counts families exactly as before (H9a)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The worker family set counts every chain entry and the mixed-lane text names a local role's fallback entries; the settings table generation is 17 and routing_mapping writes the chain back (H9a)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The guides and the roadmap describe the chain, its precedence and that it is not yet used to select a route, and split row H9 into H9a and H9b, shipped as a chore change with no release (H9a)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

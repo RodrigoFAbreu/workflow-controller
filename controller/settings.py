@@ -230,8 +230,9 @@ TABLE: tuple[Setting, ...] = (
 #: (workflow-controller-automated-functional-review D8). 14: the row
 #: ``reviewer.brief`` (workflow-controller-reviewer-brief D1). 15: the routing
 #: field ``harness`` (workflow-controller-routing-harness D6). 16: the row
-#: ``harness.models`` (workflow-controller-harness-models D4).
-TABLE_GENERATION = 16
+#: ``harness.models`` (workflow-controller-harness-models D4). 17: the routing
+#: role key ``fallback`` (workflow-controller-fallback-chain D8).
+TABLE_GENERATION = 17
 
 
 def _table() -> dict[str, Setting]:
@@ -327,7 +328,7 @@ def _routing_unknown(section: Mapping, ignored: Sequence[str]) -> list[tuple[str
                 readings.append(("roles", tail))
             for role in sorted(routing.ROLES):
                 field = tail.removeprefix(role + ".")
-                if tail.startswith(role + ".") and field not in routing.FIELDS:
+                if tail.startswith(role + ".") and field not in routing.FIELDS and field != routing.FALLBACK_KEY:
                     readings.append(("roles", role, field))
         found.extend((dotted, (ROUTING_KEY, *segments)) for segments in readings
                      if _lookup(section, segments)[0])
@@ -571,10 +572,10 @@ def _validate(data: dict, path: Path) -> _Checked:
 def routing_mapping(config: routing.RoutingConfig) -> dict:
     """A routing config as the plain ``{"default": ..., "roles": ...}``
     mapping it was parsed from, minus what was ignored."""
-    return {
-        "default": dict(config.default),
-        "roles": {role: dict(entry) for role, entry in sorted(config.roles.items())},
-    }
+    roles = {role: dict(entry) for role, entry in sorted(config.roles.items())}
+    for role, chain in config.chains.items():
+        roles.setdefault(role, {})[routing.FALLBACK_KEY] = [dict(entry) for entry in chain]
+    return {"default": dict(config.default), "roles": dict(sorted(roles.items()))}
 
 
 # ---------------------------------------------------------------------------

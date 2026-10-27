@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-worker-launch",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -35932,6 +35932,248 @@
         },
         "evaluated_at": "2026-10-27T04:19:07Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-worker-launch": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-worker-launch",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_WORKER_LAUNCH_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-worker-launch-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-worker-launch-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 1,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "cdd300d851062cdd16bd51ce396b9aad4a5d8c3c",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+        "approved_review_content_id": "81b70a7a61b3d1c0bca3b6b330274c61f2979a5a9aee20b8c1f6a18df51f8c37",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_WORKER_LAUNCH_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3eec1248807310ac56dfacda5e96bb85f3dfa757"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-worker-launch-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2065e5e10da9057d3b6d80394650cd4ce55404eb"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-worker-launch-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "52b1313671c13180fbd3a9806d2d282b74af6936"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T05:24:24Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "81b70a7a61b3d1c0bca3b6b330274c61f2979a5a9aee20b8c1f6a18df51f8c37",
+            "ledger": {
+              "local": {
+                "bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "32928f32bcbb9264ac6ea252633da70176acb645602927b5019002949cd9b248",
+                "ledger_entry_sha256": "765117c0b2e07cc77d5b807e99ed70c0e12b5c849686ff264f99c71228761c09",
+                "run_ref": "session:local .ai-review/workflow-controller-worker-launch/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "22352342cd6f8f41928f49bb37400d62e6ec5d248ac0105ac4d2b28ab66db1f4",
+                "ledger_entry_sha256": "e2628b0b094f04c5d66e18dd546d4da2876f04f8530d15ab0aaa5c38bef51896",
+                "run_ref": "codex:20261027T052211Z-625b2087",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T05:24:24Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "81b70a7a61b3d1c0bca3b6b330274c61f2979a5a9aee20b8c1f6a18df51f8c37",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-27T05:21:52Z",
+          "verdict_sha256": "32928f32bcbb9264ac6ea252633da70176acb645602927b5019002949cd9b248",
+          "run_ref": "session:local .ai-review/workflow-controller-worker-launch/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-27T05:23:13Z",
+          "verdict_sha256": "22352342cd6f8f41928f49bb37400d62e6ec5d248ac0105ac4d2b28ab66db1f4",
+          "run_ref": "codex:20261027T052211Z-625b2087",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 13,
+      "last_transition": "2026-10-27T05:24:24Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T05:19:33Z",
+        "consumed": {
+          "review_content_id": "5abe19a6fa654e9ab6b91f2d1223ae356893023b122e3d0006b94104ef0b9b9e",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "81b70a7a61b3d1c0bca3b6b330274c61f2979a5a9aee20b8c1f6a18df51f8c37",
+          "plan_revision": 1
+        },
+        "bound": {
+          "review_content_id": "81b70a7a61b3d1c0bca3b6b330274c61f2979a5a9aee20b8c1f6a18df51f8c37",
+          "bundle_id": "14e21b9902cf3eca5f78a5a6cb4ead54fb7cc6aee98a68607964ab8a2d90a0f4",
+          "plan_revision": 1
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "360c97cdb9aea38e79191e1e17871995a1c6f464d84cb0984ec58dfe1234efb2",
+        "5abe19a6fa654e9ab6b91f2d1223ae356893023b122e3d0006b94104ef0b9b9e"
+      ],
+      "optional_findings": {
+        "F-77497cbb331f": {
+          "digest": "77497cbb331fae7a910db4201ceb9aee669ff13412499e95087a8e641c605ae3",
+          "text": "CP1's equivalence test says \"all fifteen keywords `job.py` passes\", but the `worker.launch(` call at `controller/job.py:8608` passes sixteen: `cwd`, `permission_mode`, `timeout`, `stdout_path`, `stderr_path`, `claude_bin`, `pass_fds`, `on_spawn`, `on_group_drain`, `model`, `effort`, `disallowed_tools`, `ownership_tag`, `supervisor_lock_path`, `on_state_change`, `drain_detach_seconds`. State the right count or drop the number.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "360c97cdb9aea38e79191e1e17871995a1c6f464d84cb0984ec58dfe1234efb2",
+              "verdict": "REVISE",
+              "at": "2026-10-27T05:13:30Z"
+            }
+          ]
+        },
+        "F-497069419f74": {
+          "digest": "497069419f74a76eaa9d5bb3212110597dbe0bd357476fe5187940bebbb941db",
+          "text": "CP2 marks the H3 row of `docs/ROADMAP.md` complete, but the prose at `docs/ROADMAP.md:43` also says \"H3 ... is next\". Name that sentence too, so CP2 updates both.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "360c97cdb9aea38e79191e1e17871995a1c6f464d84cb0984ec58dfe1234efb2",
+              "verdict": "REVISE",
+              "at": "2026-10-27T05:13:30Z"
+            }
+          ]
+        },
+        "F-db79297ed4d7": {
+          "digest": "db79297ed4d7eea1732141129ec70bbcbd3dd9cc28f3140bef818184cda8841e",
+          "text": "CP1 says one existing job test is \"named in the run list below\", but the run list names only modules. Name the test (for example a `tests.test_job` method that patches `job.worker.launch`), as the functional review notes also rely on \"one routed job test of `tests.test_job`\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "360c97cdb9aea38e79191e1e17871995a1c6f464d84cb0984ec58dfe1234efb2",
+              "verdict": "REVISE",
+              "at": "2026-10-27T05:13:30Z"
+            }
+          ]
+        },
+        "F-701a8de66f43": {
+          "digest": "701a8de66f43f1c3a9d935bf2a8066e6e9ed8c65af98697f43a1353396f5b71f",
+          "text": "CP1's run list names \"the job test modules that patch `worker.launch`\" as `tests.test_job`, `tests.test_protocol_job` and `tests.test_lifecycle_orchestration`, but more modules patch it: `tests.test_resume` (direct `job.worker.launch =`), `tests.test_cli` (`setattr(worker_module, \"launch\")`), `tests.test_functional_lifecycle`, `tests.test_review_job`, `tests.test_usage_record_job`, `tests.test_protocol_lifecycle`, `tests.test_protocol_outcome`, `tests.test_protocol_equivalence`, `tests.test_review_round_lifecycle`, `tests.test_review_same_provider`, `tests.test_review_mode` and `tests.test_claude_build`. The full suite covers them, so nothing breaks, but either drop the word \"the\" or add at least `tests.test_resume` and `tests.test_cli`, which use the two non-`mock.patch.object` patching styles D2 relies on.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5abe19a6fa654e9ab6b91f2d1223ae356893023b122e3d0006b94104ef0b9b9e",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T05:16:34Z"
+            }
+          ]
+        },
+        "F-bc7a910af7a7": {
+          "digest": "bc7a910af7a7e6da0a431131fa05fe6a30a9dce55d58bb654412fc97bdd80421",
+          "text": "CP1's run list still names \"the job test modules that patch `worker.launch`\" as only `tests.test_job`, `tests.test_protocol_job` and `tests.test_lifecycle_orchestration`; more modules patch it, including `tests.test_resume` (direct `job.worker.launch =` assignment) and `tests.test_cli` (`setattr` on the worker module), the two non-`mock.patch.object` styles D2 relies on. The full suite covers them, so nothing breaks; drop \"the\" or add those two (carried from round 2).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "81b70a7a61b3d1c0bca3b6b330274c61f2979a5a9aee20b8c1f6a18df51f8c37",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T05:21:52Z"
+            }
+          ]
+        }
       }
     }
   }

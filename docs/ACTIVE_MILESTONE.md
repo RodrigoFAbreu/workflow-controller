@@ -11,4 +11,5 @@ The plan is archived at `docs/milestones/completed/workflow-controller-reviewer-
 
 ## Next action
 
-Next incomplete milestone in `docs/ROADMAP.md`: H9 (a fallback chain per role). Run `/milestone-plan` to start planning.
+Next incomplete milestone in `docs/ROADMAP.md`: H9 (a fallback chain per role,
+[#197](https://github.com/RodrigoFAbreu/workflow-controller/issues/197)). Run `/milestone-plan` to start planning.

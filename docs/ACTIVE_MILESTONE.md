@@ -10,6 +10,14 @@
 settings table generation is 17. Nothing selects a later entry yet (that is H9b). The change is `chore:`, so nothing is
 released. The plan is archived at `docs/milestones/completed/workflow-controller-fallback-chain.md`.
 
+## In progress
+
+`workflow-controller-fallback-select` (H9b, issue [#202](https://github.com/RodrigoFAbreu/workflow-controller/issues/202)),
+plan revision 2, implementing.
+
+- CP1 complete: `controller/route_select.py`, the pure selection over injected probes, and `tests/test_route_select.py`.
+- CP2 (the launch call site, the record block, telemetry) and CP3 (guides and roadmap) are next.
+
 ## Next action
 
 No milestone is active. Next is H9b of the harness-neutral roles epic in `docs/ROADMAP.md` (the selection of a fallback chain's

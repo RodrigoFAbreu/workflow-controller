@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-worker-launch",
+  "requirements": {
+    "R1": {
+      "description": "The lifecycle worker is launched through the launcher of the routed worker harness, behind one launch interface (H3)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Claude Code's launcher is worker.launch looked up at call time with unchanged arguments, so behaviour and existing tests are unchanged (H3)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The guides and the roadmap describe the launcher registry, shipped as a chore change with no release (H3)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

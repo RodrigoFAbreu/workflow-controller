@@ -571,6 +571,10 @@ The record of the 2.6.0 admission is
    adapter gains or loses a role or its `pinned_version` changes, which every
    pin bump does (a pin bump changes the informational version only, not
    which builds launch).
+   A harness that declares the `worker` role also registers a launcher in
+   `LAUNCHERS` in `controller/worker_launch.py` (the object that starts its
+   worker; `ClaudeCodeLauncher` is the only one today); a test fails when the
+   adapters declaring the role and the registered launchers disagree.
 2. Add a converter to `controller/usage_record.py` that builds a `UsageRecord`
    from the harness's own output, following the record's meanings (input
    excludes cached tokens, output includes reasoning) and returning `null` with

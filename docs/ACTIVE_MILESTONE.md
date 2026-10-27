@@ -2,14 +2,14 @@
 
 ## Status
 
-**Complete.** `workflow-controller-scenario-base` (SC1, issue
-[#188](https://github.com/RodrigoFAbreu/workflow-controller/issues/188)) was accepted on 2026-10-27 by gate policy
-(`policy:bae758b4f4ce`): the scenario tests now measure from the checkout instead of an old pinned base commit, and a
-sandbox-free guard checks that every file the fixture commits is classified. Only tests and one development-guide
-paragraph changed; the squash commit is `test:`, so nothing is released. The plan is archived at
-`docs/milestones/completed/workflow-controller-scenario-base.md`.
+**Complete.** `workflow-controller-worker-launch` (H3, issue
+[#191](https://github.com/RodrigoFAbreu/workflow-controller/issues/191)) was accepted on 2026-10-27 by gate policy
+(`policy:bae758b4f4ce`): the worker launch now sits behind the harness adapter. `controller/worker_launch.py` holds the
+`WorkerLauncher` interface, the Claude Code launcher (which calls `worker.launch` unchanged) and the registry of launchers,
+and `controller/job.py` resolves the launcher from the routed harness before the usage gate. Behaviour is unchanged, so the
+squash commit is `chore:` and nothing is released. The plan is archived at
+`docs/milestones/completed/workflow-controller-worker-launch.md`.
 
 ## Next action
 
-No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`
-([#191](https://github.com/RodrigoFAbreu/workflow-controller/issues/191)); run `/milestone-plan` for it.
+No milestone is active. Next is H10 of the harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.

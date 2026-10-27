@@ -25,24 +25,23 @@ roles epic in `docs/ROADMAP.md` is the Codex tester (C10g-1 to C10g-3).
 
 ## Functional review checklist
 
-Work item `workflow-controller-fallback-select` (H9b), implementation revision 1. Every flow is offline and unit level:
+Work item `workflow-controller-harness-telemetry` (H11), implementation revision 1. Every flow is offline and unit level:
 no `claude`, `codex`, `ssh`, network or real `gh` is needed, and nothing is written inside the clone.
 
 **Setup.** Run from the clone root with the system `python3`. Do not set `PYTHONPATH`. Point `TMPDIR` at a scratch folder.
 
-**Test data.** None to seed. The tests build their own chains, fake launchers, fake gates and a patched harness registry
-with a second worker harness.
+**Test data.** None to seed. The tests build their own job records (worker, courier review, functional review, recorded
+telemetry block) in a scratch runtime folder.
 
 | # | Flow | Command | Expected |
 | --- | --- | --- | --- |
-| 1 | The pure selection (D2 to D4, D7) | `python3 -m unittest tests.test_route_select -v` | All pass: first admitted entry chosen; a held provider skips every later entry of that provider with no second admission; an unavailable launcher is skipped; the earliest waitable hold is reported; every launcher unavailable returns the first entry's error; a disabled budget returns token `None`; `usage_provider` covers every registered adapter. |
-| 2 | The launch call site and the record (D1, D4, D5) | `python3 -m unittest tests.test_route_select_job -v` | All pass: a role without a chain has no `selection` key; a free Claude chain picks position 0 with nothing skipped; a held Claude account with a free second-harness entry launches the second entry, records `usage_held` for position 0 and holds one reservation; a held account with only same-provider entries returns the unchanged `UsageHold` with no record and no reservation; a worker that fails is not retried; `resume` never reselects. |
-| 3 | Telemetry (D6) | same module as flow 2, the telemetry cases | A record with a `selection` block reports `chain_position` and `chain_skipped`; one without reports today's dimensions only; a courier review record whose route harness is `codex` still reports `claude-code`. |
-| 4 | Nothing existing moved | `python3 -m unittest tests.test_routing_chain tests.test_telemetry tests.test_usage_gate tests.test_usage_limit_mid_job tests.test_worker_launch tests.test_job tests.test_harness` | All pass, none of those files edited by this milestone. |
-| 5 | Docs | `python3 tools/check_docs.py`, then read the "Worker routing" section of `docs/guide/commands.md`, the routing section of `docs/guide/runtime.md` and "The selection block" in `docs/guide/workers.md` | The check passes; the three pages agree with each other and with the behaviour above (order, what skips an entry, a hold skips the whole provider, nothing retried after a worker started, a role with no `fallback` unchanged). |
+| 1 | The groupings and the row key | `python3 -m unittest tests.test_telemetry_harness -v` | All pass: a worker row reads its route's harness, or the worker adapter's when the record has no route; a functional review row reads `claude-code`; a courier review row reads its route's harness (`codex`); a recorded block that names a harness wins; `--by harness` counts Codex reviews as `telemetry unavailable`; `role,harness` and `role,harness,model` group correctly; text and `--json` output carry the harness; `--help` lists the groupings and an unknown one is a usage error (exit 2). |
+| 2 | The courier correction | `python3 -m unittest tests.test_route_select_job -v` | All pass, including `test_a_courier_review_record_reads_its_routes_harness` (the former hard-coded `claude-code` case now expects `codex`). |
+| 3 | Row keys and existing telemetry | `python3 -m unittest tests.test_telemetry` | All pass; the job row's new keys now include `harness`. |
+| 4 | Nothing else moved | `python3 -m unittest tests.test_routing_chain tests.test_usage_gate tests.test_worker_launch tests.test_job tests.test_harness` | All pass. |
+| 5 | The command help | `python3 -m controller telemetry --help` (runtime folder under the scratch `TMPDIR` if prompted) | The `--by` help lists `harness`, `role,harness` and `role,harness,model` beside the older groupings. |
+| 6 | Docs | `python3 tools/check_docs.py`, then read the `--by` bullet of "telemetry" in `docs/guide/commands.md`, the dimensions paragraph of "Telemetry" in `docs/guide/workers.md` and the H11 row of `docs/ROADMAP.md` | The check passes; the pages agree with each other and with the behaviour above (a worker's harness is its route's, a review's the reviewer that ran it, a record without a route reads `claude-code`, a Codex group has no figures). |
 
-**Known limitations, out of scope.** With the harness registry as shipped only `claude-code` takes the worker role, so a
-real chain of Claude entries always records position 0 and waits exactly as today; a later entry is chosen only with a
-second worker harness (H4). A model-specific limit is not detected, so a same-account entry is never a fallback for a hold.
-The Codex tester's own fallback and build check (C10g-3), a retry after a worker started, and H11 (the harness in telemetry
-for review records) are separate items.
+**Known limitations, out of scope.** With the harness registry as shipped only `claude-code` takes the worker role, so
+real worker groups show one harness; a `codex` group appears only for external reviews, which carry no figures. The Codex
+tester (C10g-1 to C10g-3) and the Codex worker (H4a to H4g) are separate items.

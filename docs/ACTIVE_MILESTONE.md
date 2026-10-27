@@ -11,4 +11,5 @@ paragraph changed; the squash commit is `test:`, so nothing is released. The pla
 
 ## Next action
 
-No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`; run `/milestone-plan` for it.
+No milestone is active. Next is H3 of the harness-neutral roles epic in `docs/ROADMAP.md`
+([#191](https://github.com/RodrigoFAbreu/workflow-controller/issues/191)); run `/milestone-plan` for it.

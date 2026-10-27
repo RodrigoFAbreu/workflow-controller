@@ -418,10 +418,6 @@ class JobChoiceTest(rj._ReviewCase):
             self.assertIsNone(job._review_mode_signal(self.life.inspect()))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 WORKER_ROLES = sorted(role for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER)
 SIGNALS = (None, "lowering_only", "no_policy", "lowering_plus_invalid_file")
 
@@ -506,3 +502,7 @@ class WorkerFamiliesTest(unittest.TestCase):
     def test_no_module_reads_the_removed_constant(self) -> None:
         for path in (Path(__file__).resolve().parent.parent / "controller").rglob("*.py"):
             self.assertNotIn("WORKER_FAMILY", path.read_text(), path.name)
+
+
+if __name__ == "__main__":
+    unittest.main()

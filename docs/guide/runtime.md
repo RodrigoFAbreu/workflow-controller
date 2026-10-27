@@ -380,8 +380,8 @@ The five `reviewer` rows (1.10.0) let the Controller run the cross-model
 review itself (see [ADR 0013](../adr/0013-review-only-harness-seam.md)):
 
 - `reviewer.harness` is unset by default, and then every review gate stops
-  for a person exactly as before. Setting it to a registered name (only
-  `codex` exists) makes `step` and `run` start that reviewer at the two
+  for a person exactly as before. Setting it to `codex`, a registered name,
+  makes `step` and `run` start that reviewer at the two
   external review gates of a work item, in a disposable copy of the
   worktree, and hand its verdict to the Workflow. `claude` is also a
   registered name. A reviewer is cross-model when its provider family is not

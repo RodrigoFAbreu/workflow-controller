@@ -1,0 +1,14 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-reviewer-independence",
+ "dispositions": {
+  "F-6ef43f13532a": {"disposition": "fixed"},
+  "F-aa8c09dc23ca": {"disposition": "fixed"},
+  "F-aaf55ec9094d": {"disposition": "dropped", "reason": "Plan wording: asks the plan to state whether verify is read twice in one step; the implementation review approved the shipped behaviour and nothing depends on the sentence."},
+  "F-b20661731b28": {"disposition": "fixed"},
+  "F-b3cdb9fba8de": {"disposition": "dropped", "reason": "Cosmetic duplication of one sentence between choose and mixed_lane_reason; test_only_the_reason_differs_from_choose guards the shared prefix, and no behaviour is affected."},
+  "F-b9140a54b6c7": {"disposition": "fixed"},
+  "F-de695021e967": {"disposition": "dropped", "reason": "Wording: the shipped text and docs already put the collision remedy in the same sentence as the main remedy (route every worker role to one family), so the ambiguity is minor."},
+  "F-e550b4f7e314": {"disposition": "fixed"}
+ }
+}

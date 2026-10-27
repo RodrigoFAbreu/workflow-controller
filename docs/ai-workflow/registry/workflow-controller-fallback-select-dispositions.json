@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-fallback-select",
+ "dispositions": {
+  "F-2985f5c50a7d": {
+   "disposition": "dropped",
+   "reason": "Plan wording (D3, CP1) about deriving the provider from the adapter family; the plan is a historical record and the Codex implementation review confirmed the implemented derivation."
+  },
+  "F-320d79d97811": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the import list of route_select.py; settled in the implementation and checked by the Codex implementation review."
+  },
+  "F-6d575677040d": {
+   "disposition": "dropped",
+   "reason": "Plan wording: the tests assert on the telemetry dimensions and the derived block; reporting the harness as a telemetry column is H11's item (telemetry --by role,harness,model)."
+  },
+  "F-7ea6167c3e5e": {
+   "disposition": "dropped",
+   "reason": "Plan wording (D1): the exact scope of 'every role that loads today'; the release notes for H9b state that a role with a chain gains the selection block."
+  },
+  "F-ab20b1105dab": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#174"
+  },
+  "F-b4c372b50354": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the tie-break and resume_at None; the implementation fixes the tie-break by chain position and the Codex implementation review approved it."
+  }
+ }
+}

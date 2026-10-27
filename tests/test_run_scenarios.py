@@ -721,9 +721,11 @@ class PinBaseToCheckoutTest(unittest.TestCase):
         repo = Path(tempfile.mkdtemp(prefix="pin-base-test-"))
         self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
         _git(repo, "init", "-q")
-        _git(repo, "commit", "-q", "--allow-empty", "-m", "one")
+        _git(repo, "commit", "-q", "--allow-empty", "-m", "old")
+        old = _git(repo, "rev-parse", "HEAD").strip()
+        _git(repo, "commit", "-q", "--allow-empty", "-m", "tip")
         head = _git(repo, "rev-parse", "HEAD").strip()
-        for held in ("0" * 40, "1" * 40, head):
+        for held in ("0" * 40, old, head):  # a missing commit, an old commit, the tip itself
             with self.subTest(held=held):
                 state = {"work_items": {WORK_ITEM: {"base_commit": held}}}
                 pin_base_to_checkout(state, repo)

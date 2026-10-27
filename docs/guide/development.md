@@ -371,8 +371,9 @@ measures its work item from the checkout's own tip (`pin_base_to_checkout` in
 a file added to the repository can never reach the Workflow's
 implementation-stage classification through an old base. A guard test,
 `FixtureClassificationTest`, checks that classification without the sandbox:
-it fails naming any file the fixture commits that the work item's declaration neither lists nor excludes, so
-CI catches it even where the scenarios are skipped.
+it fails naming any file the fixture commits that the work item's declaration
+neither lists nor excludes, so CI catches it even where the scenarios are
+skipped.
 
 **What a `passed` record proves.** That a scripted path ran on that commit
 and produced those observations. It does not prove a real worker behaves:

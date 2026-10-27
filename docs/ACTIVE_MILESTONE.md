@@ -52,7 +52,7 @@ clone root (read-only is fine: nothing writes inside it). Scratch files go in `$
    review role with a chain should read "... falls back to <harness> (<family>)".
 9. Docs. Read `docs/guide/commands.md` ("Worker routing") and `docs/guide/runtime.md` (settings, table generation 17); expected: they
    match flows 1-5 and say the chain is not yet used to select a route. Run `python3 tools/check_docs.py`; expected: clean.
-10. Regression. `python3 tests/run_tests.py tests.test_routing_chain tests.test_settings` (not backgrounded); expected: pass.
+10. Regression. `python3 -m unittest tests.test_routing_chain tests.test_settings` (not backgrounded); expected: pass.
 
 **Known limitations / out of scope.** Nothing selects a fallback entry: a worker always launches on the first route (H9b, which
 also defines "unavailable or held by a limit"). No live `claude`/`codex` run, no pull request and no release are involved. A shared

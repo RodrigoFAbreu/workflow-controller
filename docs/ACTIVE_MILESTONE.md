@@ -2,26 +2,17 @@
 
 ## Status
 
-**Implemented, awaiting review.** `workflow-controller-harness-telemetry` (H11, issue
-[#207](https://github.com/RodrigoFAbreu/workflow-controller/issues/207)): `telemetry --by harness`, `role,harness` and
-`role,harness,model` group the jobs by the harness they ran on, every row carries a `harness` key, and a courier review
-record reads its route's harness (so a Codex review group shows its jobs with no figures). CP1 (the groupings, the row
-key, the courier correction) and CP2 (the command and worker guides, the roadmap row) are complete. The change is `feat:`.
-The text below is the previous milestone's record until acceptance replaces it.
-
-**Complete.** `workflow-controller-fallback-select` (H9b, issue
-[#202](https://github.com/RodrigoFAbreu/workflow-controller/issues/202)) was accepted on 2026-10-27 by gate policy
-(`policy:bae758b4f4ce`): a fallback chain's later entry is now used when the first cannot launch or its provider is held
-by a limit. `controller/route_select.py` walks the chain before a worker is spawned (never mid-job); a hold skips every
-later entry of that provider; when none can launch the earliest waitable hold or the first entry's error is returned as
-today. `worker_route.selection` and the telemetry dimensions `chain_position` and `chain_skipped` record the choice. With
-the shipped harnesses only `claude-code` takes the worker role, so a chain cannot yet change the route (H4). The change is
-`feat:`. The plan is archived at `docs/milestones/completed/workflow-controller-fallback-select.md`.
+**Complete.** `workflow-controller-harness-telemetry` (H11, issue
+[#207](https://github.com/RodrigoFAbreu/workflow-controller/issues/207)) was accepted on 2026-10-27 by gate policy
+(`policy:bae758b4f4ce`): `telemetry --by harness`, `role,harness` and `role,harness,model` group the jobs by the harness
+they ran on, every row carries a `harness` key, and a courier review record reads its route's harness (so a Codex review
+group shows its jobs with no figures). The change is `feat:`. The plan is archived at
+`docs/milestones/completed/workflow-controller-harness-telemetry.md`.
 
 ## Next action
 
-`workflow-controller-harness-telemetry` (H11) is in implementation review. After it, the next item of the harness-neutral
-roles epic in `docs/ROADMAP.md` is the Codex tester (C10g-1 to C10g-3).
+No work item is active. The next item of the harness-neutral roles epic in `docs/ROADMAP.md` is the Codex tester
+(C10g-1 to C10g-3). Run `/milestone-plan` for C10g-1.
 
 ## Functional review checklist
 

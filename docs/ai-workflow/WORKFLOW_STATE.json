@@ -38710,6 +38710,696 @@
         "evaluated_at": "2026-10-27T17:27:02Z",
         "workflow_release": "2.22.0"
       }
+    },
+    "workflow-controller-harness-telemetry": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-harness-telemetry",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_HARNESS_TELEMETRY_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-harness-telemetry-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-harness-telemetry-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 2,
+      "implementation_revision": 1,
+      "functional_review_round": null,
+      "base_commit": "d4916eb3f7410f233f497f1548a97a6e80f42e44",
+      "reviewed_implementation_head": "b96dddef5d1a7450146ec0715b87a1c89d5147a1",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP2",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "6f8458739f87d6296af07531ec806892d2877949"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "8f53c86d3cd5eb47f213f35dc666ddab6e8d3252"
+        }
+      },
+      "current_bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+        "approved_review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_HARNESS_TELEMETRY_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f5c5bcc92f192b234eeddd9fca1cb15acfe94206"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-telemetry-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e42c6b4aeeed1bdea2603fbe74d1b112dc411cfe"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-harness-telemetry-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cbea8e9d0a1fce59888d702223f02ba6f591215d"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T21:35:35Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+            "ledger": {
+              "local": {
+                "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "641792dcaf419ccdebe7177b9e2ff1fd72f5cd8cf1a5d29495747862851786b7",
+                "ledger_entry_sha256": "071044ee70efba25d95890f66cc7410838dd9440579e1c63e9de5bca53c6e598",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-telemetry/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "bac21908b9ddee2049ae4df13b38617d9b0b9ff9bd9e2ec4838dcfb72141dee2",
+                "ledger_entry_sha256": "6d237dca1dad0b17f8bd1b4a7c8f192128156b3b62f2252c8b37e9bda2508891",
+                "run_ref": "codex:20261027T213236Z-57893f7e",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T21:35:35Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e1c2b2760ad734da6da976ab129dda2c9fe6fd3adbbc84e373500e46617cab3b",
+        "approved_review_content_id": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+        "review_content_manifest": [
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e175fff83c5f4491337c1442bb50c3b32bbc0635"
+          },
+          {
+            "path": "controller/telemetry.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "85114bc2dcadc4ab7bdbc7959b5b3a327647ef0b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-harness-telemetry-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "be9f19e708dd7d13a19738701d732f176631b6ca"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6e7ebe2b154329089e66e0ff3781148a8d2f6066"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "baa258190021c8535b483be07b1a8cf710a0b881"
+          },
+          {
+            "path": "tests/test_route_select_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3d498198777746758f85db5697134d0bd1609ed6"
+          },
+          {
+            "path": "tests/test_telemetry.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bc063c15acb85ba5c7d8dbd93106c393a02a5318"
+          },
+          {
+            "path": "tests/test_telemetry_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2721da1edb7db2f4b46f9a5812405de9e742138a"
+          }
+        ],
+        "reviewed_content_commit": "b96dddef5d1a7450146ec0715b87a1c89d5147a1",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-27T22:01:53Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "ledger": {
+              "local": {
+                "bundle_id": "e1c2b2760ad734da6da976ab129dda2c9fe6fd3adbbc84e373500e46617cab3b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "e87e7cc59affe9c2afb21921c5f5fe54595f8b9e4c293a09460943ee58ae0ea3",
+                "ledger_entry_sha256": "c8003c9e75135bd89a82d39478eb96e035249edf826ada29297f43e76494e328",
+                "run_ref": "session:local .ai-review/workflow-controller-harness-telemetry/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e1c2b2760ad734da6da976ab129dda2c9fe6fd3adbbc84e373500e46617cab3b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d868d42b2b223cd0c62d3d196e31ecb1db19c79ac80f85c2e7b71d3338fa4166",
+                "ledger_entry_sha256": "0553d7e500f97dd4fe576db8e39d111afc963455c3eb49e742be14540a92315e",
+                "run_ref": "codex:20261027T215820Z-e1e8b90a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-27T22:01:53Z",
+          "workflow_release": "2.22.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T21:32:01Z",
+          "verdict_sha256": "641792dcaf419ccdebe7177b9e2ff1fd72f5cd8cf1a5d29495747862851786b7",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-telemetry/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-27T21:34:10Z",
+          "verdict_sha256": "bac21908b9ddee2049ae4df13b38617d9b0b9ff9bd9e2ec4838dcfb72141dee2",
+          "run_ref": "codex:20261027T213236Z-57893f7e",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 1,
+          "external": 1
+        }
+      },
+      "state_revision": 18,
+      "last_transition": "2026-10-27T22:27:22Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-27T21:28:32Z",
+        "consumed": {
+          "review_content_id": "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+          "bundle_id": "51b743101f97afcf9d86cec538c3e23ad7d65d0f0d414d409fc0f0eac47add2d",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06"
+      ],
+      "optional_findings": {
+        "F-26024fe6d311": {
+          "digest": "26024fe6d311237d1e08ef078f6dd5868c081ae9c9708931c7dee45e19a4654f",
+          "text": "**O1. The per-kind list omits the functional-review (tester) job.** A `kind` `functional` job keeps a top-level `telemetry` block copied from the tester's session (`controller/job.py:7664-7665`), so it is a telemetry row; its block carries no `harness`, so D2 reads `worker_route.harness` (`claude-code`, the only adapter declaring the tester role). Behaviour is right; one bullet in \"What the harness value is today\" and one test case would make the table complete.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06",
+              "verdict": "REVISE",
+              "at": "2026-10-27T21:27:26Z"
+            }
+          ]
+        },
+        "F-efd0cc169a5a": {
+          "digest": "efd0cc169a5a4616d10b5996f68fec39a96b893b96c9e163de8c0c9863431090",
+          "text": "**O2. CP2 names `docs/guide/runtime.md` conditionally (\"if it lists the groupings\").** It does not list them: it shows `telemetry --by stage,round` (line 362) and `--by review_mode` (line 474) as examples only. State whether the file changes, so the checkpoint's file list is decided at planning time.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "2f34ab78e4b0dae9a5267398d902a42abb2d6ab7c0c7696da9531f5643450b06",
+              "verdict": "REVISE",
+              "at": "2026-10-27T21:27:26Z"
+            }
+          ]
+        },
+        "F-9cf93e78ff08": {
+          "digest": "9cf93e78ff08ce64ea20a49cd2ec251285cb9c6490e0619c094c8f182adf851d",
+          "text": "**O1. CP1's `--by` help-text edit must keep the phrase an existing test pins.** `tests/test_telemetry.py:209` asserts `\"role, model, or role,model\"` appears in the whitespace-normalised `telemetry --help` output. CP1 says `tests/test_telemetry.py` changes in only one assertion. So the reworded help string has to keep that phrase verbatim (for example by appending the harness groupings after the existing text), or the run list goes red on a test the plan keeps unedited.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:32:01Z"
+            }
+          ]
+        },
+        "F-50e1f542dfe2": {
+          "digest": "50e1f542dfe2437b49e449ea5e3bb27415a0e28e1c5ff5fe885f8e073ef9685e",
+          "text": "**O2. D5's \"a row always has a harness\" holds only for blocks this code writes.** `rows` reads `block.get(\"harness\", route[\"harness\"])`. A recorded block that holds an explicit `\"harness\": null` would give a `None` group key, and `render_text` would raise `KeyError` on `_GROUP_LABEL_MISSING[\"harness\"]`. No writer produces such a block today (every block built with `**dimensions` carries a string, and `failed_block` has no key). A `\"harness\": \"none\"` entry, or reading `block.get(\"harness\") or route[\"harness\"]`, would close it at no cost.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:32:01Z"
+            }
+          ]
+        },
+        "F-d3648fa5c6a9": {
+          "digest": "d3648fa5c6a92488f9426dc63ada6f5b5d12232a4d346529490ed9c86527f8cb",
+          "text": "**O1. Use the actual tester record kind.** The plan’s per-kind list and CP1 fixture description say `functional`; `controller/functional_review.py:65` defines `JOB_KIND = \"functional_test\"`. Use that constant in the fixture. The planned telemetry behavior works with the actual kind.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:34:10Z"
+            }
+          ]
+        },
+        "F-e69594482922": {
+          "digest": "e69594482922c58d4ef7d2cca9710bdb0d0d6cc297e48e712db448016d2fb529",
+          "text": "**O2. Preserve the existing help-text assertion.** `tests/test_telemetry.py:209` expects `role, model, or role,model` in normalized help output. Append the new groupings while preserving that phrase to keep CP1’s promise that only the D6 assertion changes in this module.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "f1aba068d4e1a917754da7be5ca86036740127575dd251bd25bd5bd2a78dd25d",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:34:10Z"
+            }
+          ]
+        },
+        "F-9a6855eca55c": {
+          "digest": "9a6855eca55cde0fa450337010992f2c4d2462459d039a05159cd18ab94bceae",
+          "text": "`controller/telemetry.py:520` (`_GROUP_LABEL_MISSING`): `render_text` indexes `_GROUP_LABEL_MISSING[k]` when a group value is `None`, and it has no `harness` entry. D5 is right that every row the Controller writes has a string harness (`dimensions` always answers one, and a worker block's `harness` comes from `dimensions`), but a hand-edited or corrupt record whose `telemetry` block holds `\"harness\": null` would make `telemetry --by harness` raise `KeyError` instead of printing `harness=none`. A `\"harness\": \"none\"` entry, or `.get(k, \"none\")`, would close it cheaply. Not needed for the plan.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T21:58:00Z"
+            }
+          ]
+        },
+        "F-62035d0d9901": {
+          "digest": "62035d0d99013191ed244ce8cd04acb5f20db8364e8727a50873278c9779009f",
+          "text": "`tests/test_telemetry_harness.py:42`: Use `functional_review.JOB_KIND` (`functional_test`) instead of `functional` so the tester fixture matches production records. Current behavior also passes with the actual kind; this is a test-fidelity improvement.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+              "verdict": "APPROVE",
+              "at": "2026-10-27T22:00:32Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e1c2b2760ad734da6da976ab129dda2c9fe6fd3adbbc84e373500e46617cab3b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T21:58:00Z",
+          "verdict_sha256": "e87e7cc59affe9c2afb21921c5f5fe54595f8b9e4c293a09460943ee58ae0ea3",
+          "run_ref": "session:local .ai-review/workflow-controller-harness-telemetry/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e1c2b2760ad734da6da976ab129dda2c9fe6fd3adbbc84e373500e46617cab3b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-27T22:00:32Z",
+          "verdict_sha256": "d868d42b2b223cd0c62d3d196e31ecb1db19c79ac80f85c2e7b71d3338fa4166",
+          "run_ref": "codex:20261027T215820Z-e1e8b90a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "ran_at": "2026-10-27T22:05:03Z",
+            "summary": {
+              "checklist_blob": "c6ef3b57f7ddce7e6491e0b3cdbf559f6a30eb20",
+              "text": "tests.test_telemetry_harness: 8 tests OK."
+            },
+            "log_digest": "d66fcead69d63f116d9b3bce8c5a6a32b89eea53e01e8db04729a8fec074c656",
+            "run_ref": "controller:20261027T220402Z-6ea0a75b",
+            "reporter": "workflow-controller 1.23.0",
+            "identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:05:03Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "ran_at": "2026-10-27T22:05:03Z",
+            "summary": {
+              "checklist_blob": "c6ef3b57f7ddce7e6491e0b3cdbf559f6a30eb20",
+              "text": "tests.test_route_select_job: 12 tests OK, including test_a_courier_review_record_reads_its_routes_harness."
+            },
+            "log_digest": "2e832ae2369dbe705f6926d04f1591a6a3380e644857f25b1f25cdbc764e6ab7",
+            "run_ref": "controller:20261027T220402Z-6ea0a75b",
+            "reporter": "workflow-controller 1.23.0",
+            "identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:05:03Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "ran_at": "2026-10-27T22:05:03Z",
+            "summary": {
+              "checklist_blob": "c6ef3b57f7ddce7e6491e0b3cdbf559f6a30eb20",
+              "text": "tests.test_telemetry: 30 tests OK."
+            },
+            "log_digest": "45156fec0b2eabd9a9e8035375a35b56bb725442956b0306c677b127aaf07db5",
+            "run_ref": "controller:20261027T220402Z-6ea0a75b",
+            "reporter": "workflow-controller 1.23.0",
+            "identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:05:03Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "ran_at": "2026-10-27T22:05:03Z",
+            "summary": {
+              "checklist_blob": "c6ef3b57f7ddce7e6491e0b3cdbf559f6a30eb20",
+              "text": "233 tests OK across routing_chain, usage_gate, worker_launch, job, harness."
+            },
+            "log_digest": "c717832dc75c67e82c85b023db06a3ad86613c358858498f9f40e3a249e8bd57",
+            "run_ref": "controller:20261027T220402Z-6ea0a75b",
+            "reporter": "workflow-controller 1.23.0",
+            "identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:05:04Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "ran_at": "2026-10-27T22:05:04Z",
+            "summary": {
+              "checklist_blob": "c6ef3b57f7ddce7e6491e0b3cdbf559f6a30eb20",
+              "text": "telemetry --help --by lists harness, role,harness and role,harness,model beside role/model/action/stage etc."
+            },
+            "log_digest": "a18b8a79eaca537f44c9bc72e16580a8cdb06794c447ea15c7582b08ca34fc22",
+            "run_ref": "controller:20261027T220402Z-6ea0a75b",
+            "reporter": "workflow-controller 1.23.0",
+            "identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:05:04Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "ran_at": "2026-10-27T22:05:04Z",
+            "summary": {
+              "checklist_blob": "c6ef3b57f7ddce7e6491e0b3cdbf559f6a30eb20",
+              "text": "check_docs.py exit 0. commands.md --by bullet, workers.md dimensions paragraph and ROADMAP H11 row agree (worker harness from route, review's reviewer, no route reads claude-code, Codex group has no figures)."
+            },
+            "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "run_ref": "controller:20261027T220402Z-6ea0a75b",
+            "reporter": "workflow-controller 1.23.0",
+            "identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:05:04Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 209,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/209"
+          },
+          "state": "open",
+          "head": "f2663db703de5bd466479c867623415595a31a5c",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+          "observed_at": "2026-10-27T22:27:22Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "b96dddef5d1a7450146ec0715b87a1c89d5147a1",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-27T22:27:22Z",
+            "raw_sha256": "b88d318c3860917a894a3e8b56875213c17669d0e1f0472fb7402a1c7c173e21",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "d92cae90ef3273303937a4f426310437da5bb8dedf08def0c536a9980209045f"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 209,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/209"
+          },
+          "state": "open",
+          "head": "f2663db703de5bd466479c867623415595a31a5c",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+          "observed_at": "2026-10-27T22:26:01Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "b96dddef5d1a7450146ec0715b87a1c89d5147a1",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.23.0"
+            },
+            "fetched_at": "2026-10-27T22:26:01Z",
+            "raw_sha256": "b88d318c3860917a894a3e8b56875213c17669d0e1f0472fb7402a1c7c173e21",
+            "run_ref": "controller:20261027T222601Z-ee83e161"
+          },
+          "fact_id": "541f153646dcc1f95af007e3b1e4f4044fe0027728bc93c3ddfe63ca7c6bbccf"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #209 at f2663db703de5bd466479c867623415595a31a5c is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "b96dddef5d1a7450146ec0715b87a1c89d5147a1",
+          "anchor_identity": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "9cd6bc3be6bdd78913e0965c29a3a5bccf3629009a379cbb96eb08e6daa51428",
+            "recorded_at": "2026-10-27T22:01:53Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "e940b60f31161192ccb5508575f511ae8562f0e9e7fa0e311e43e4e7b6ffcb75",
+              "log_digest": "d66fcead69d63f116d9b3bce8c5a6a32b89eea53e01e8db04729a8fec074c656",
+              "run_ref": "controller:20261027T220402Z-6ea0a75b"
+            },
+            "flow-2": {
+              "evidence_id": "6b206285b7f723192bbab36362e087ac355e569da4948c2b4d0c8f6f22f291a7",
+              "log_digest": "2e832ae2369dbe705f6926d04f1591a6a3380e644857f25b1f25cdbc764e6ab7",
+              "run_ref": "controller:20261027T220402Z-6ea0a75b"
+            },
+            "flow-3": {
+              "evidence_id": "4167da1bdef8e230509b71b5bf0aed46cb2858a15682e666f130ff21000b42c2",
+              "log_digest": "45156fec0b2eabd9a9e8035375a35b56bb725442956b0306c677b127aaf07db5",
+              "run_ref": "controller:20261027T220402Z-6ea0a75b"
+            },
+            "flow-4": {
+              "evidence_id": "dd79fc8ec3f667bbd78d47f7ee3f99c33731d12b7709b93ac2ccc8e0c5025e6e",
+              "log_digest": "c717832dc75c67e82c85b023db06a3ad86613c358858498f9f40e3a249e8bd57",
+              "run_ref": "controller:20261027T220402Z-6ea0a75b"
+            },
+            "flow-5": {
+              "evidence_id": "c49ee2fae65cc654cc01b2c6cac7ebd42023a0af2903895c179fb3aba8fb707d",
+              "log_digest": "a18b8a79eaca537f44c9bc72e16580a8cdb06794c447ea15c7582b08ca34fc22",
+              "run_ref": "controller:20261027T220402Z-6ea0a75b"
+            },
+            "flow-6": {
+              "evidence_id": "40d12ec08682d8e8fe90d289eacb7736d30482e05c5b73d7265dcfcc3367b9d1",
+              "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "run_ref": "controller:20261027T220402Z-6ea0a75b"
+            }
+          },
+          "pr": {
+            "fact_id": "d92cae90ef3273303937a4f426310437da5bb8dedf08def0c536a9980209045f",
+            "head": "f2663db703de5bd466479c867623415595a31a5c",
+            "provenance": "workflow_gh",
+            "raw_sha256": "b88d318c3860917a894a3e8b56875213c17669d0e1f0472fb7402a1c7c173e21"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-27T22:27:22Z",
+        "workflow_release": "2.22.0"
+      }
     }
   }
 }

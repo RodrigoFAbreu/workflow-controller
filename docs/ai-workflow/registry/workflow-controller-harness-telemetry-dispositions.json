@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-harness-telemetry",
+  "dispositions": {
+    "F-26024fe6d311": {"disposition": "fixed"},
+    "F-50e1f542dfe2": {"disposition": "dropped", "reason": "No writer produces a telemetry block with an explicit null harness (every block carries a string, failed_block has no key); only a hand-edited record could, so the hardening is not worth a change after approval."},
+    "F-62035d0d9901": {"disposition": "dropped", "reason": "The row code does not branch on the job kind, so the fixture passes identically with functional or functional_test; a test-fidelity nicety that would stale the approved bundle."},
+    "F-9a6855eca55c": {"disposition": "dropped", "reason": "Same case as the plan-stage null-harness note: only a hand-edited or corrupt record holds a null harness, and no Controller writer produces one."},
+    "F-9cf93e78ff08": {"disposition": "fixed"},
+    "F-d3648fa5c6a9": {"disposition": "dropped", "reason": "The row code does not branch on the job kind, so the fixture passes identically with functional or functional_test; a test-fidelity nicety that would stale the approved bundle."},
+    "F-e69594482922": {"disposition": "fixed"},
+    "F-efd0cc169a5a": {"disposition": "fixed"}
+  }
+}

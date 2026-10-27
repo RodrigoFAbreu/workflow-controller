@@ -165,10 +165,10 @@ class TelemetryDimensionsTest(unittest.TestCase):
         self.assertEqual(set(dims), {"role", "model", "effort", "harness", "workflow_version", "controller_version"})
         self.assertEqual(dims["harness"], telemetry.HARNESS)
 
-    def test_a_courier_review_record_keeps_the_hard_coded_harness(self) -> None:
+    def test_a_courier_review_record_reads_its_routes_harness(self) -> None:
         record = {**self.record(harness="codex"), "kind": "review", "review": {"action_id": "a"}}
         self.assertTrue(telemetry.is_courier_job(record))
-        self.assertEqual(telemetry.dimensions(record)["harness"], telemetry.HARNESS)
+        self.assertEqual(telemetry.dimensions(record)["harness"], "codex")
 
 
 if __name__ == "__main__":

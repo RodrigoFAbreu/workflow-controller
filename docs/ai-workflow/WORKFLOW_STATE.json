@@ -37271,18 +37271,22 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-fallback-chain-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fallback-chain-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 2,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "d1b6982dbc3ea85f836f0c20748d68df7f44b3b3",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP1",
+      "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
           "start_commit": "6763c7eac2bae89a05f7077f05d945f5cc76b4f7"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "e12842ccfff6c6a49bd641673d02d89ff803ac4b"
         }
       },
       "current_bundle_id": "8159892bbe50b4c4ca30af7daed674cc0f2cdd4e05ae28b365dcd903adb9203f",
@@ -37411,8 +37415,8 @@
           "external": 0
         }
       },
-      "state_revision": 11,
-      "last_transition": "2026-10-27T10:36:53Z",
+      "state_revision": 13,
+      "last_transition": "2026-10-27T10:38:59Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

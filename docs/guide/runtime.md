@@ -741,6 +741,27 @@ A later release that lets Codex take a role makes a file holding that pair
 valid for it and refused by this one at load, naming the role, the harness and what it declares;
 update the Controller or remove the entry.
 
+A role's entry also accepts `fallback`, an ordered list of further
+`{harness, model, effort}` routes after the entry's own (see
+[Worker routing](commands.md#worker-routing)). Each fallback entry must name
+`harness` and `model`, and an unknown key inside one is refused with a
+`SettingsError` naming `routing.roles.<role>.fallback[<n>].<key>`, although an
+unknown field of the parent entry is only ignored with a warning: an entry is a
+route, and running the wrong one is worse than a refusal. `routing.default.fallback`
+is refused. The chain is validated at load and counted in the worker families
+of the review modes, but it is **not yet used to select a route**; that is the
+next change.
+
+The release that adds `fallback` is table generation 17: it adds no key and
+moves no value, but a file it fills records `"_table_generation": 17`. An older
+Controller sharing the file ignores `routing.roles.<role>.fallback` with the
+unknown-key warning, its `settings clean` refuses, and it refuses the key in a
+`--routing-config` file, since that file is strict. The downgrade hazard runs
+the other way: a later release that adds a field to a fallback entry writes a
+shared settings file that this release refuses, naming the key; update the
+Controller or remove the field. A first-route field, and a file with no
+`fallback`, are unaffected.
+
 The fill only ever adds an empty `{"default": {}, "roles": {}}`. The
 contents are yours, and no release migrates them. A `--routing-config`
 file keeps its own strict rules, byte for byte: there an unknown role or

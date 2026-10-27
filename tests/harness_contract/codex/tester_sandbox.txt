@@ -1,0 +1,25 @@
+# Codex tester sandbox, codex-cli 0.163.0 (C10g-1)
+
+Section 1 (CP1): `codex exec --strict-config` and `default_permissions`. Measured 2026-10-27 with no model call
+and no spend (exec stops at the stdin prompt, or at the configuration error, before any request). Setup: a scratch
+CODEX_HOME holding config.toml, HOME = an empty scratch folder, `-C` a scratch git repo.
+
+| Case | Result |
+| --- | --- |
+| config.toml: `default_permissions = "tester"` + `[permissions.tester.filesystem]` + `[permissions.tester.network]` | accepted (exec proceeds to read the prompt) |
+| `default_permissions = "nosuch"` with only a `tester` table | rejected: `Error: default_permissions refers to undefined profile `nosuch`` |
+| `default_permissions = "tester"` with no `[permissions]` table | rejected: `Error: default_permissions requires a `[permissions]` table` |
+| the profile name passed by `-c 'default_permissions="tester"'` with the table in config.toml | accepted |
+| the same `-c` with an undefined name | rejected (same message as above) |
+| `codex mcp list` and `codex features list` with the tester config.toml | run normally ("No MCP servers configured yet."; the feature table) |
+
+Observation: with CODEX_HOME under /tmp, Codex prints `WARNING: proceeding, even though we could not create PATH
+aliases: Refusing to create helper binaries under temporary dir "/tmp"`. The Controller's runtime root is never
+under /tmp in production; the live tests (CP2) place it elsewhere.
+
+Consequence for the builder: the profile name is written both in config.toml and as a `-c` override
+(`required_overrides`), so the argv contract pins it and a later config edit cannot change it. No fallback form is
+needed. Whether `codex exec` *applies* the profile (as opposed to accepting it) is settled by the CP2 live run
+and recorded in section 2.
+
+Section 2 (CP2): the per-probe expected and measured results, and the limits. (Written by CP2.)

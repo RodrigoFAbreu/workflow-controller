@@ -350,10 +350,10 @@ class VerifyBuildTests(Fixture):
 
         real = cv._git
 
-        def guarded(args, cwd):
+        def guarded(args, cwd, stdin=None):
             if started:
                 self.fail(f"git ran after the {started[0]} run started: {args}")
-            return real(args, cwd)
+            return real(args, cwd, stdin)
 
         with mock.patch.object(cv, "_git", guarded):
             self.scenario({"sandbox": {"lines": {"git": "WROTE"}}})

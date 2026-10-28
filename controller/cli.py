@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from controller import (
-    claude_build, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, notify,
+    claude_build, codex_build, codex_verify, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, notify,
     observe, protocol_decision, review, review_mode, review_rounds, routing, runtime, settings, target_state,
     telemetry, usage, worker,
 )
@@ -46,10 +46,10 @@ READ_ONLY_COMMANDS = frozenset({"inspect", "explain", "status", "follow", "telem
 #: (claude-build-verify D5): dispatch only *loads* the file for them, so it is
 #: never created, filled or updated. The named exception to the generic
 #: ``write = not read_only`` rule.
-SETTINGS_READ_ONLY_COMMANDS = frozenset({"verify-claude"})
+SETTINGS_READ_ONLY_COMMANDS = frozenset({"verify-claude", "verify-codex"})
 ALL_COMMANDS = frozenset({
     "inspect", "explain", "status", "step", "run", "resume", "follow", "milestone-binding", "settings",
-    "telemetry", "usage", "notifications", "verify-claude",
+    "telemetry", "usage", "notifications", "verify-claude", "verify-codex",
 })
 
 #: The full exit-code contract (``docs/ai-workflow/CONTROLLER_GEN1_PLAN.md``,
@@ -505,6 +505,23 @@ def build_parser() -> argparse.ArgumentParser:
                     "Exit 0: the build is verified (newly recorded, already recorded or built in); 20: it is not.")
     verify_p.add_argument("--force", action="store_true", default=False,
                           help="probe again even when the build is already admitted")
+
+    # workflow-controller-verify-codex-command D1: verify a `codex` build for the Codex tester (C10g-3).
+    verify_codex_p = subparsers.add_parser(
+        "verify-codex",
+        help="run the Codex sandbox boundary probes against the codex build a launch would run and record its digest "
+             "when every probe holds",
+        description="Verify the codex build a launch would run (codex on PATH; --codex-binary names a different "
+                    "build to verify). Runs the sandbox probes (the modelless `codex sandbox` form, then one short "
+                    "`codex exec` turn) and, only when every probe holds and the build is unchanged by the run, "
+                    "records its SHA-256 in the Controller's runtime root (never in the settings file). COST: one "
+                    "short model turn using your existing Codex credentials; the usage budget gate is not "
+                    "consulted. Nothing launches on the record yet. Exit 0: the build is verified (newly recorded or "
+                    "already recorded); 20: it is not.")
+    verify_codex_p.add_argument("--force", action="store_true", default=False,
+                                help="probe again even when the build is already recorded")
+    verify_codex_p.add_argument("--codex-binary", default=None, metavar="PATH",
+                                help="verify this codex build instead of the one on PATH")
 
     # workflow-controller-signalhub-notifications CP4 (D10): the effective
     # notification configuration, and the transport check. Takes no
@@ -1605,6 +1622,56 @@ def cmd_verify_claude(args: argparse.Namespace, runtime_root: Path, ident: ident
     return EXIT_OK
 
 
+def cmd_verify_codex(args: argparse.Namespace, runtime_root: Path, ident: identity.ControllerIdentity) -> int:
+    """``verify-codex`` (verify-codex-command D1-D9): probe the codex build a launch would run and record its
+    digest only when every probe holds."""
+    named = getattr(args, "codex_binary", None)
+    binary = review.resolve_binary(named or review.CODEX.default_binary)
+    try:
+        on_path = review.resolve_binary(review.CODEX.default_binary)
+    except ControllerError:  # --codex-binary needs no codex on PATH; the note below says what that means
+        on_path = None
+    print(f"codex: {binary}")
+    status = codex_build.is_verified(runtime_root, binary)
+    if status.digest is None:
+        raise ControllerError(f"identity: {binary} cannot be bound to a digest ({status.reason})",
+                              evidence={"raised_by": "cli.cmd_verify_codex"})
+    print(f"digest: {status.digest}")
+    if on_path is None:
+        print("note: a launch finds no codex on PATH (for example link the verified build there)")
+    elif on_path != binary:
+        print(f"note: a launch runs {on_path} (codex on PATH), which stays unverified until it is verified or PATH "
+              f"is changed")
+    if status.ok and not args.force:
+        print(f"already verified: {status.digest}; not probed (--force probes again)")
+        return EXIT_OK
+    if status.reason and not status.ok and "ignored" in status.reason:
+        print(f"note: {status.reason}")
+    print("probing: the modelless sandbox probe, then one short model turn using your Codex credentials "
+          "(the usage budget is not consulted)")
+    try:
+        result = codex_verify.verify_build(binary, runtime_root=runtime_root, operator_home=_codex_home(),
+                                           report=lambda message: print(f"note: {message}"))
+    except OSError as exc:  # a setup failure while the jobs are built is exit 20, never a traceback
+        raise ControllerError(f"host: the verification could not run: {exc}",
+                              evidence={"raised_by": "cli.cmd_verify_codex"}) from exc
+    print(f"version: {result.version}")
+    for probe in result.probes:
+        print(probe.line())
+    try:
+        codex_build.record_verified(runtime_root, result.digest, {
+            "version": result.version,
+            "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            "controller_version": ident.version,
+            "probes": result.probe_results(),
+        })
+    except OSError as exc:
+        raise ControllerError(f"the build held every probe but was not recorded: {exc}",
+                              evidence={"raised_by": "cli.cmd_verify_codex"}) from exc
+    print(f"recorded: {result.digest} in {runtime_root / codex_build.RECORD_NAME}")
+    return EXIT_OK
+
+
 def _local_time(epoch: float) -> str:
     """``epoch`` in local time, with the epoch itself (D7, D10); a stored
     figure beyond the calendar shows as the bare epoch."""
@@ -2498,6 +2565,7 @@ _DISPATCH = {
     "resume": cmd_resume,
     "milestone-binding": cmd_milestone_binding,
     "verify-claude": cmd_verify_claude,
+    "verify-codex": cmd_verify_codex,
     # "status" is dispatched specially: it needs the pre-existing-state
     # snapshot captured before this run's own identity.json write.
 }

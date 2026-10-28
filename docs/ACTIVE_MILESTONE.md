@@ -2,16 +2,17 @@
 
 ## Status
 
-**Complete.** `workflow-controller-verify-codex` (C10g-2a, issue
-[#214](https://github.com/RodrigoFAbreu/workflow-controller/issues/214)) is implemented (CP1, CP2 and the review-fix
-round). `controller/codex_build.py` computes a SHA-256 build digest of a Codex install, keeps the verified-build record
-`verified-codex-builds.json` and answers `is_verified` from the record and a fresh digest. Nothing calls it outside
-tests; no command, setting, option or output changes. The change is `chore:` with no release. The plan is
-`docs/ai-workflow/CONTROLLER_VERIFY_CODEX_PLAN.md`.
+**Implemented, awaiting review.** `workflow-controller-verify-codex-command` (C10g-2b, issue
+[#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)) is implemented (CP1, CP2).
+`controller/codex_verify.py` runs the C10g-1 probes (modelless `sandbox`, then one `exec` turn) in fresh jobs against
+host fixtures; `workflow-controller verify-codex [--force] [--codex-binary PATH]` records the build's digest in
+`verified-codex-builds.json` only when every probe held and the build was unchanged, and otherwise exits 20 with a named
+refusal. Nothing launches on the record: `build_verification` for `codex` stays `none` until C10g-3. The change is a
+`feat:` with a minor release. The plan is `docs/ai-workflow/CONTROLLER_VERIFY_CODEX_COMMAND_PLAN.md`.
 
 ## Next action
 
-`/milestone-plan` for C10g-2b (`verify-codex`, [#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)).
+Implementation review of `workflow-controller-verify-codex-command`; then `/milestone-plan` for C10g-3.
 
 ## Functional review checklist
 

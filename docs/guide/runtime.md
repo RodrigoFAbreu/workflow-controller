@@ -43,6 +43,9 @@ cannot be read, is ignored and the stop text says so. Deleting it only
 un-admits those builds until `verify-claude` is run again. It is per runtime
 root, so a source checkout and the shared install keep separate records.
 
+`verified-codex-builds.json` is kept beside it for `codex` builds that `workflow-controller verify-codex` verified
+(see [`verify-codex`](commands.md#verify-codex)), with the same trust rules. Nothing at launch reads it yet.
+
 Who the record is defended against: the sandboxed functional tester and
 redirection. The read is checked on one descriptor (no symlink, owned by you,
 not writable by others), the write refuses to go through a symlink, and a

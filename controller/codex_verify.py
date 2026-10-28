@@ -137,21 +137,28 @@ class _Listeners:
         self.tcp.close()
 
 
-def _git(args: Sequence[str], cwd: Path) -> None:
+def _git(args: Sequence[str], cwd: Path, stdin: bytes | None = None) -> None:
     """The only place git runs: before the sandboxed run, with no user or system configuration and no templates."""
     env = {"PATH": os.environ.get("PATH", review.SYSTEM_PATH), "HOME": str(cwd), "GIT_CONFIG_GLOBAL": "/dev/null",
            "GIT_CONFIG_SYSTEM": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_AUTHOR_NAME": "verify",
            "GIT_AUTHOR_EMAIL": "verify@example.invalid", "GIT_COMMITTER_NAME": "verify",
            "GIT_COMMITTER_EMAIL": "verify@example.invalid"}
-    subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, timeout=60)
+    subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, timeout=60,
+                   input=stdin)
 
 
-def _make_clone(clone: Path) -> None:
+#: One commit holding ``src.txt``, in ``git fast-import``'s stream form: the clone gets its history without a commit.
+_FAST_IMPORT = (b"commit refs/heads/main\ncommitter verify <verify@example.invalid> 0 +0000\ndata 4\ninit\n"
+                b"M 100644 inline src.txt\ndata 9\noriginal\n\n")
+
+
+def _make_clone(runtime_root: Path, clone: Path) -> None:
     clone.mkdir(parents=True, mode=0o700)
     _git(["init", "-q", "--template=", "-b", "main", str(clone)], clone)
-    (clone / "src.txt").write_text("original\n")
-    _git(["add", "src.txt"], clone)
-    _git(["commit", "-q", "-m", "init"], clone)
+    _git(["fast-import", "--quiet"], clone, stdin=_FAST_IMPORT)
+    _git(["read-tree", "HEAD"], clone)
+    runtime.write_bytes(runtime_root, clone.relative_to(runtime_root) / "src.txt", b"original\n")
+    _git(["update-index", "--refresh"], clone)
 
 
 def _make_origin(origin: Path) -> None:
@@ -247,10 +254,10 @@ def _prepare(name: str, *, binary: Path, runtime_root: Path, operator_home: Path
     origin = folder / f"{name}.git"
     standin = layout.base / "standin"
     try:
-        _make_clone(layout.clone)
+        _make_clone(runtime_root, layout.clone)
         _make_origin(origin)
         standin.mkdir(mode=0o700)
-        (standin / "canary").write_text("canary\n")
+        runtime.write_bytes(runtime_root, standin.relative_to(runtime_root) / "canary", b"canary\n")
         targets = cs.ProbeTargets(
             clone=layout.clone, scratch=layout.scratch, sibling=layout.base / "sibling", stand_in_home=standin,
             canary_file=standin / "canary", canary_env=CANARY_ENV, credential=layout.codex_home / "auth.json",

@@ -87,6 +87,11 @@ def _shebang(path: str) -> list[str] | None:
     return first[2:].decode("utf-8", "replace").split()
 
 
+def _executable(path: Path) -> bool:
+    """A file the launch can execute: ``env`` skips a candidate that is not, so lookup must too."""
+    return path.is_file() and os.access(path, os.X_OK)
+
+
 def _interpreter(launcher: Path, parts: list[str], system_path: str) -> str:
     """The resolved interpreter of a ``#!`` line, found the way the launch finds it."""
     if not parts:
@@ -97,9 +102,9 @@ def _interpreter(launcher: Path, parts: list[str], system_path: str) -> str:
             raise _Unbound("an env option")
         name = parts[1]
         dirs = [str(launcher.parent), *[d for d in system_path.split(":") if d]]
-        found = next((Path(d) / name for d in dirs if (Path(d) / name).is_file()), None)
+        found = next((Path(d) / name for d in dirs if _executable(Path(d) / name)), None)
     else:
-        found = Path(first) if Path(first).is_file() else None
+        found = Path(first) if _executable(Path(first)) else None
     if found is None:
         raise _Unbound("the interpreter is found nowhere")
     return os.path.realpath(found)

@@ -147,6 +147,31 @@ class BuildDigestTests(Tree):
         write(self.tmp / "n2/lib/node_modules/node_modules" / PLATFORM / "v", "hidden2")
         self.assertEqual(self.digest(launcher2, self.tmp / "n2"), a)
 
+    def test_non_executable_interpreter_candidate_is_skipped(self) -> None:
+        launcher, _ = self.npm(self.tmp, nested=False, interp=False)
+        # a non-executable `node` first on PATH, an executable one later; the platform package is global to the latter
+        write(self.tmp / "first/node", "not executable", 0o644)
+        real = self.tmp / "prefix/bin/node"
+        write(real, "node", 0o755)
+        (self.tmp / "second").mkdir()
+        (self.tmp / "second/node").symlink_to(real)
+        global_pkg = self.tmp / "prefix/lib/node" / PLATFORM
+        write(global_pkg / "package.json", "{}")
+        native = write(global_pkg / "vendor/codex", "g", 0o755)
+        path = f"{self.tmp / 'first'}:{self.tmp / 'second'}"
+        before = cb.build_digest(launcher, system_path=path)
+        self.assertIsNotNone(before)
+        runtime_root = self.tmp / "runtime"
+        runtime_root.mkdir(mode=0o700)
+        cb.record_verified(runtime_root, before, {"note": "test"})
+        self.assertTrue(cb.is_verified(runtime_root, launcher, system_path=path).ok)
+        native.write_text("g2")
+        self.assertNotEqual(cb.build_digest(launcher, system_path=path), before)
+        self.assertFalse(cb.is_verified(runtime_root, launcher, system_path=path).ok)
+        # with no executable candidate at all, the layout cannot be bound
+        real.chmod(0o644)
+        self.assertIsNone(cb.build_digest(launcher, system_path=path))
+
     def test_interpreter_inside_or_outside_the_roots(self) -> None:
         launcher, pkg = self.npm(self.tmp)
         base = self.digest(launcher, self.tmp)

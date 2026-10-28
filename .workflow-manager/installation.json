@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "workflow_version": "2.24.0",
+  "workflow_version": "2.25.0",
   "profile": "full",
   "upstream": {
     "repository": "repflow-android",
@@ -14,13 +14,13 @@
   "source": {
     "kind": "package",
     "repository": "RodrigoFAbreu/workflow",
-    "archive": "workflow-2.24.0.tar.gz",
-    "sha256": "034c2bfed9501e6e4acad19122e1c8b07a02af3b4992f26bc3fca9f9c0520ac4",
+    "archive": "workflow-2.25.0.tar.gz",
+    "sha256": "1cddc3c3f8193d86d1a2ae7fee04ad73482886ed9758bb3e2a7013f0305035e0",
     "trust": "discovered",
     "from": "github:RodrigoFAbreu/workflow"
   },
   "installed_at": "2026-09-05T14:33:32Z",
-  "updated_at": "2026-10-28T13:45:28Z",
+  "updated_at": "2026-10-28T13:59:08Z",
   "managed": {
     ".claude/commands/accept-milestone.md": {
       "sha256": "8eb653d3352bb4dba6efc4fb637a12b8d16ad71b857a33a366f13b7851e8f8f7",
@@ -72,6 +72,10 @@
     },
     ".claude/commands/prepare-review.md": {
       "sha256": "de05a427f90087dd56703162e56fb388d86e74f090c95d6953590884d18bda1a",
+      "executable": false
+    },
+    ".claude/commands/prune-archives.md": {
+      "sha256": "fca6163d182fb0be749c7e0899ea173bb3060bf740e83d38836a422a2845046f",
       "executable": false
     },
     ".claude/commands/record-manual-implementation-review.md": {
@@ -127,7 +131,7 @@
       "executable": false
     },
     "docs/ai-workflow/COMMAND_FILES.md": {
-      "sha256": "2ebd457d647fe1e7e7da5d26ff220d9afdb6a5ccddfe79f2c757b41bf8c54d3d",
+      "sha256": "1b30e6d255adfeeeb1859fdf3f6badf037ab2fcb2d824eaf1fa869984ffcdb8a",
       "executable": false
     },
     "docs/ai-workflow/GATE_POLICY.md": {
@@ -143,7 +147,7 @@
       "executable": false
     },
     "docs/ai-workflow/ORCHESTRATION_PROTOCOL.md": {
-      "sha256": "252aade83e72fbe810542b7da4ac16446c9914ac37ec651152ab2d533db258ae",
+      "sha256": "f11bd81ab720958d89e567dbef8a958c571a861037cdd878822a675d4c3d68cd",
       "executable": false
     },
     "docs/ai-workflow/PLAN_REVIEW_WORKFLOW.md": {
@@ -155,7 +159,7 @@
       "executable": false
     },
     "docs/ai-workflow/WORKFLOW_V2_1_OPERATOR_REFERENCE.md": {
-      "sha256": "4a54e6ac99b07696bd787dab540f09644ccfbed31da2d6ea25de78bf54f69642",
+      "sha256": "6157d8ab63d26432b361b863658e6247e4d3b6e950c5b98d35d9da17286f18fe",
       "executable": false
     },
     "docs/ai-workflow/WORKFLOW_V2_3_FOLLOWUPS.md": {
@@ -307,15 +311,15 @@
       "executable": false
     },
     "scripts/workflow_integration_test.py": {
-      "sha256": "ee2b55696852c9b2909df810bbcd82d1df4a31cf54f2838e2d256272f9fe900e",
+      "sha256": "1febab8bb1a14bdb05affc810c401d289008da7ecc893871ad9a8d5e036c457b",
       "executable": false
     },
     "scripts/workflow_protocol.py": {
-      "sha256": "178cdbb85d44ca3d173549777f15a27bbf906a024b43978c6f6414d5c01e7b54",
+      "sha256": "71b1f45b7fcf588ee1d75cec0b8838954059aece4187f0c4678f1c1604abb2c7",
       "executable": false
     },
     "scripts/workflow_protocol_test.py": {
-      "sha256": "9a56e7581bc1077ce8f39712d3445bbda1095dcedb74c8fa15780828e85002e7",
+      "sha256": "dbc029e3d49c03a01c4c9432981529fde3c4e847cc777c098c7863f06ecc4d67",
       "executable": false
     },
     "scripts/workflow_retention.py": {

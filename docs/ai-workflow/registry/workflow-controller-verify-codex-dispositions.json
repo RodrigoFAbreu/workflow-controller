@@ -1,0 +1,62 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-verify-codex",
+ "dispositions": {
+  "F-195f0432bfbb": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-1d6a21208d56": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-1e995411e46f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-1f4f3b10ca82": {
+   "disposition": "fixed",
+   "note": "Applied in the re-scoped plan (revision 7) and implemented in controller/codex_build.py: the digest design carries the change."
+  },
+  "F-2547ac1729ad": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-6bb8ef5ba48f": {
+   "disposition": "fixed",
+   "note": "Applied in the re-scoped plan (revision 7) and implemented in controller/codex_build.py: the digest design carries the change."
+  },
+  "F-6f50e49f629e": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-86337662bea8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6470043940"
+  },
+  "F-8ccf5c9cb869": {
+   "disposition": "fixed",
+   "note": "Applied in the re-scoped plan (revision 7) and implemented in controller/codex_build.py: the digest design carries the change."
+  },
+  "F-d5446492dc5b": {
+   "disposition": "fixed",
+   "note": "Applied in the re-scoped plan (revision 7) and implemented in controller/codex_build.py: the digest design carries the change."
+  },
+  "F-e71aa5d237de": {
+   "disposition": "dropped",
+   "reason": "Wording of the old combined plan's CP2 interpreter test; the re-scoped plan tests the interpreter with fake install trees in CP1 and the old CP2 no longer exists."
+  },
+  "F-ebcdf9bfe258": {
+   "disposition": "fixed",
+   "note": "Applied in the re-scoped plan (revision 7) and implemented in controller/codex_build.py: the digest design carries the change."
+  },
+  "F-f1641fb5f107": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-f96d0fa8c3b3": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  }
+ }
+}

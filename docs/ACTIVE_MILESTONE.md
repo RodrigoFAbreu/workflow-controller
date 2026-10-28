@@ -2,7 +2,7 @@
 
 ## Status
 
-**Awaiting functional review.** `workflow-controller-verify-codex` (C10g-2a, issue
+**Complete.** `workflow-controller-verify-codex` (C10g-2a, issue
 [#214](https://github.com/RodrigoFAbreu/workflow-controller/issues/214)) is implemented (CP1, CP2 and the review-fix
 round). `controller/codex_build.py` computes a SHA-256 build digest of a Codex install, keeps the verified-build record
 `verified-codex-builds.json` and answers `is_verified` from the record and a fresh digest. Nothing calls it outside
@@ -11,7 +11,7 @@ tests; no command, setting, option or output changes. The change is `chore:` wit
 
 ## Next action
 
-Run the functional review below, then `/accept-milestone`. After the merge, `/milestone-plan` for C10g-2b (`verify-codex`, [#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)).
+`/milestone-plan` for C10g-2b (`verify-codex`, [#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)).
 
 ## Functional review checklist
 

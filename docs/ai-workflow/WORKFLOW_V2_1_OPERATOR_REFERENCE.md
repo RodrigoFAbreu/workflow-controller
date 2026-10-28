@@ -32,13 +32,13 @@ Where they disagree, see [Known discrepancies](#known-discrepancies).
   `/record-manual-implementation-review`, and `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`/
   `AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW` sections below.
 - **User-only commands** (`/approve-review`, `/accept-milestone`,
-  `/adopt-gate-policy`, `/release-checkpoint-start`, `/request-plan-amendment`,
-  `/resume-implementation`, `/retire-legacy-work-item`) carry
+  `/adopt-gate-policy`, `/archive-finished-item`, `/release-checkpoint-start`,
+  `/request-plan-amendment`, `/resume-implementation`, `/retire-legacy-work-item`) carry
   `disable-model-invocation: true`.
   The control each of them carries itself, under every harness, is the
   literal-confirmation check: they refuse to write anything unless *your
   current-turn message* contains literal confirmation text naming what the
-  command acts on (for six of them the exact work item, with a stage,
+  command acts on (for seven of them the exact work item, with a stage,
   checkpoint or keyword where the command needs one; for `/adopt-gate-policy`
   the policy digest; each command file states its own). The flag is an
   additional layer where the harness enforces it; it does not replace the
@@ -253,7 +253,7 @@ mode.
 
 ## Command reference
 
-`.claude/commands/` holds 23 files today, and all 23 are sectioned below
+`.claude/commands/` holds 24 files today, and all 24 are sectioned below
 — including `/review-implementation` and `/review-functional`
 (`workflow-v2-3`) and `/request-plan-amendment` (`workflow-2.4.0`),
 previously undocumented here. `[work-item-id]` defaults
@@ -268,8 +268,8 @@ What is actually guaranteed about that inventory, precisely:
 set of `### /<name>` sections in this document and the set of
 `.claude/commands/*.md` stems on disk and asserts the two are **equal** —
 that part is derived, so a command added or removed without a section here
-fails. The number 23 itself is *not* derived: it is a hardcoded tripwire
-in that same test (`assertEqual(len(on_disk), 23)`) whose job is to make a
+fails. The number 24 itself is *not* derived: it is a hardcoded tripwire
+in that same test (`assertEqual(len(on_disk), 24)`) whose job is to make a
 change in the roster size a deliberate, reviewed edit. So the set equality
 is mechanical; the count in this paragraph and in the test is a
 hand-maintained pair that must be updated together. If they disagree, the
@@ -951,6 +951,24 @@ committed"); if a round was refused with "must always transition phase", see
 - **Refuses**: a missing or wrong confirmation; an unknown id; any phase other
   than `LEGACY_READY`; the active item; unfinished children.
 
+### `/archive-finished-item <work-item-id>` — user-only
+- **When**: a finished work item's untracked `.ai-review/<id>/` folder is to be packed into
+  the archive store and removed (`docs/RETENTION.md`, roadmap row 27e; Workflow 2.23.0).
+- **Expects**: exactly one id in `$ARGUMENTS` (the id comes from `$ARGUMENTS` only,
+  never from the active item), and, after the
+  preview, your current-turn message carrying the sentence `Archive and remove the review
+  folder of <id>.` with the id as an exact token (`m-1` never authorizes `m-10`).
+- **Does**: previews `workflow_retention.py archive <id>` and `remove <id>` (dry runs that
+  write nothing), prints the sentence and stops. Only on the sentence it runs `archive <id>
+  --apply`, then `remove <id> --apply`; with an archive already present it runs `remove`
+  only. It packs, verifies and deletes nothing itself.
+- **Writes**: nothing in the repository and no state. The engines write the archive, its
+  index line and the removal in the archive store.
+- **Next**: nothing. The retention report lists the item as archived with no folder.
+- **Refuses**: a missing or wrong sentence; several or no ids; any engine refusal, whose
+  code and next step it reports, without retrying and without running `remove` after an
+  `archive` that did not succeed. One item per run.
+
 ### `/resume-implementation <work-item-id>` — user-only
 - **When**: a `2.1`/`2.2` item sits at `AWAITING_FUNCTIONAL_REVIEW` with a registry
   checkpoint still outstanding (`next-action` row 38c, `registry_incomplete`;
@@ -1021,9 +1039,11 @@ committed"); if a round was refused with "must always transition phase", see
 ### `/prepare-review <base-sha> <stage> [work-item-id]`
 - **When**: a one-off review of work that is not part of a tracked milestone
   checkpoint.
-- **Expects**: nothing — no phase requirement. One of the two commands
-  unconditionally declaring `state_writer: false`; the other is the
-  report-only review command `/review-functional` (writes nothing at all).
+- **Expects**: nothing — no phase requirement. One of the three commands
+  unconditionally declaring `state_writer: false`; the others are the
+  report-only review command `/review-functional` (writes nothing at all) and
+  `/archive-finished-item` (writes no state; its only effects are the two
+  retention engine calls).
   `/review-implementation` (`workflow-2.5.0`) is no longer among them: its
   frontmatter now declares `state_writer: true`, because for a `"2.2"` item
   at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` it is the authoritative
@@ -1051,7 +1071,7 @@ committed"); if a round was refused with "must always transition phase", see
   file says it is "retired — deleted — only at this work item's own
   `MILESTONE_COMPLETE`". That condition is now met — `workflow-v2-1-core`
   is `MILESTONE_COMPLETE` — but the file has not been deleted, so the
-  command is still on disk and still in this reference's roster of 23.
+  command is still on disk and still in this reference's roster of 24.
   Retiring it is a scoped act of its own (the way
   `/accept-scoped-remediation`'s retirement was); until then, treat it as
   live-but-unreachable: its target is terminal, so every invocation refuses

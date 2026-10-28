@@ -193,9 +193,10 @@ class ReadableRootsTest(Fixture):
             with self.subTest(build=str(bad)), self.assertRaises(ReviewLaunchRefusedError):
                 self.build(extra_readable=[bad])
 
-    def test_a_root_inside_the_scratch_area_refuses(self) -> None:
-        with self.assertRaises(ReviewLaunchRefusedError):
-            self.roots(extra=[self.layout.scratch_tmp])
+    def test_a_root_inside_the_scratch_area_or_the_codex_home_refuses(self) -> None:
+        for bad in (self.layout.scratch_tmp, self.layout.codex_home / "sessions"):
+            with self.subTest(root=str(bad)), self.assertRaises(ReviewLaunchRefusedError):
+                self.roots(extra=[bad])
 
     def test_a_runtime_root_under_the_controller_package_parent_refuses_the_parent_but_not_the_package(self) -> None:
         layout = cs.TesterLayout(REPO_ROOT / ".controller", "job1")

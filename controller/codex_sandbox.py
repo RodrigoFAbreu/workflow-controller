@@ -197,7 +197,8 @@ def controller_package_dir() -> Path:
 
 def check_roots(layout: TesterLayout, roots: Sequence[Path], operator_home: Path | None = None) -> None:
     """The overlap refusal: no readable root may equal or contain the job's base, the runtime root or the Codex
-    home, lie inside the scratch area, or be ``/``, the operator's real home or one of its ancestors."""
+    home, lie inside the scratch area or the Codex home (the credential copy), or be ``/``, the operator's real home
+    or one of its ancestors."""
     home = operator_home if operator_home is not None else Path.home()
     protected = {"the job folder": layout.base, "the runtime root": layout.runtime_root,
                  "the Codex home": layout.codex_home, "the operator's home": home}
@@ -210,6 +211,8 @@ def check_roots(layout: TesterLayout, roots: Sequence[Path], operator_home: Path
                     raise _refuse(f"the readable root {root} contains {what} ({path})", check="roots", entry=str(root))
             if any(_contains(s, form) for s in _forms(layout.scratch)):
                 raise _refuse(f"the readable root {root} lies inside the scratch area", check="roots", entry=str(root))
+            if any(_contains(h, form) for h in _forms(layout.codex_home)):
+                raise _refuse(f"the readable root {root} lies inside the Codex home", check="roots", entry=str(root))
 
 
 def readable_roots(layout: TesterLayout, binary: Path, *, extra: Sequence[Path] = (), python: Path | None = None,
@@ -286,7 +289,8 @@ def check_launch(layout: TesterLayout, config_text: str, binary: Path, env: Mapp
                  system_dir: Path = review.SYSTEM_LAYER_DIR, run: Callable[..., review.RunResult] | None = None,
                  timeout: float = LISTING_TIMEOUT) -> None:
     """The pre-launch controls (D1b), in order, before every ``codex exec`` and ``codex sandbox`` run: the layers
-    outside the home, the home, ``mcp list``, ``features list`` and the home again. The first refusal stops the
+    outside the home, then the home before each of ``mcp list`` and ``features list`` and once more after both, as
+    the reviewer's ``_preflight`` does (a listing writes Codex state into the home). The first refusal stops the
     rest. Not covered: the composed-configuration values (:data:`KNOWN_LIMITS`)."""
     run = run or review.run_bounded
     review.check_outside_layers(system_dir)
@@ -442,10 +446,10 @@ PROBE_EXPECTED: Mapping[str, str] = {
     "push": "REFUSED", "gh_name": "STANDIN", "gh_path": "FAILED", "tcp": "BLOCKED", "unix": "BLOCKED",
 }
 
-#: Probes whose line must be present but whose result is informational. Inside the sandbox ``/tmp`` and ``/var/tmp``
-#: are private mounts, and a file created directly in a directory that is an ancestor of a listed root (the job
-#: folder, the runtime root, the operator's home) lands on a private layer; measured on 0.163.0 (tester_sandbox.txt).
-#: The live test asserts the host path stays absent, which is the boundary.
+#: Probes whose line must be present but whose result is informational. A file created directly in a directory that
+#: is an ancestor of a listed root (the job folder, the runtime root, the operator's home) reports success but lands
+#: on a private layer, and ``/tmp`` and ``/var/tmp`` writes were refused, although a private mount would accept them;
+#: measured on 0.163.0 (tester_sandbox.txt). The live test asserts the host path stays absent, which is the boundary.
 PROBE_INFORMATIONAL: Mapping[str, frozenset[str]] = {
     name: frozenset({"WROTE", "REFUSED"}) for name in ("tmp", "vartmp", "sibling")
 }

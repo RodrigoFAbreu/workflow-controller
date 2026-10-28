@@ -103,9 +103,9 @@ operator's environment variables, read its own credential copy, push, reach a ho
 real `gh` work. The measured results are in `tests/harness_contract/codex/tester_sandbox.txt`; the live proof is opt-in
 (`CONTROLLER_LIVE_CODEX_TESTS=1`, see [Development](development.md#working-from-a-checkout)) and CI does not run it.
 
-Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable;
-the stand-in `gh` refuses only by name (`/usr/bin/gh` fails for lack of credentials and network, not because of the
-profile). One check is open (the one entry of `KNOWN_LIMITS`): the composed configuration values, and managed layers that are not files, are verified
+Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
+name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). One check is open (the
+one entry of `KNOWN_LIMITS`): the composed configuration values, and managed layers that are not files, are verified
 only for their MCP servers and features, so a managed layer could still change another setting. C10g-3 builds that
 check before the sandbox is wired.
 

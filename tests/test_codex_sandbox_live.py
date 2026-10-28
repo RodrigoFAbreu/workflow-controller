@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import codex_sandbox as cs, review  # noqa: E402
+from tests import fixtures  # noqa: E402
 
 ENABLED = os.environ.get("CONTROLLER_LIVE_CODEX_TESTS") == "1"
 CANARY_ENV = "CONTROLLER_LIVE_CANARY"
@@ -77,7 +78,7 @@ class LiveSandboxTest(unittest.TestCase):
         self.ophome.mkdir()
         (self.ophome / "canary").write_text("canary\n")
         self.origin = self.root / "origin.git"
-        subprocess.run(["git", "init", "--bare", "-q", str(self.origin)], check=True)
+        fixtures.git_init(self.origin, "--bare")
         self.tcp = socket.socket()
         self.tcp.bind(("127.0.0.1", 0))
         self.tcp.listen(8)
@@ -94,7 +95,7 @@ class LiveSandboxTest(unittest.TestCase):
                           binary=self.binary, package_parent=REPO_ROOT, extra_readable=[self.origin],
                           inherited={**os.environ, CANARY_ENV: CANARY_VALUE})
         layout.clone.mkdir(parents=True)
-        git("init", "-q", cwd=layout.clone)
+        fixtures.git_init(layout.clone)
         (layout.clone / "src.txt").write_text("original\n")
         git("add", "src.txt", cwd=layout.clone)
         git("commit", "-q", "-m", "init", cwd=layout.clone)

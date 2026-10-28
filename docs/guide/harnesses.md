@@ -92,6 +92,23 @@ that declares it.
 - `functional-tester`: runs the functional-review checklist in a sandbox with a shell only
 <!-- harness-table:end -->
 
+## The Codex tester sandbox
+
+`controller/codex_sandbox.py` builds the sandbox a Codex functional tester would run in, and it is proven but not
+wired: no role is declared for it (`functional-tester` stays `no` for `codex` above), and nothing calls it except its
+tests. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
+`codex-cli 0.163.0`, with real attempts through `codex sandbox` (no model) and `codex exec` (one short turn), the
+tester cannot write the clone, write outside its scratch area, read a file under the operator's home, read the
+operator's environment variables, read its own credential copy, push, reach a host TCP or Unix socket, or make the
+real `gh` work. The measured results are in `tests/harness_contract/codex/tester_sandbox.txt`; the live proof is opt-in
+(`CONTROLLER_LIVE_CODEX_TESTS=1`, see [Development](development.md#working-from-a-checkout)) and CI does not run it.
+
+Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable;
+the stand-in `gh` refuses only by name (`/usr/bin/gh` fails for lack of credentials and network, not because of the
+profile). One check is open (the one entry of `KNOWN_LIMITS`): the composed configuration values, and managed layers that are not files, are verified
+only for their MCP servers and features, so a managed layer could still change another setting. C10g-3 builds that
+check before the sandbox is wired.
+
 ## Keeping the page current
 
 Run `python3 tools/harness_table.py` to print the tables without touching the

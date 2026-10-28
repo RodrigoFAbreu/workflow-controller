@@ -39410,14 +39410,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-sandbox-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-sandbox-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 5,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "bc202dc99df2ec7ecc3ed799a2738c9c04aa82e4",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP2",
+      "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -39426,6 +39426,10 @@
         "CP2": {
           "status": "COMPLETE",
           "start_commit": "2363863335ef7ce101db3121757d9913a5f65444"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "fd9402dbe1e02b73803c1008f20fea5175a33c6f"
         }
       },
       "current_bundle_id": "e11c3ec81ad4d97917e4fe9a3fac9d230773fda7bb40d673a423cea559b79eb2",
@@ -39554,8 +39558,8 @@
           "external": 0
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-10-27T23:59:01.328302+00:00",
+      "state_revision": 25,
+      "last_transition": "2026-10-28T00:00:44.766965+00:00",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

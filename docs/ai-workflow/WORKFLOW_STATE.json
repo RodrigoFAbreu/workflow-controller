@@ -39410,7 +39410,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-sandbox-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-sandbox-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -39554,12 +39554,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-10-28T00:27:35Z",
+      "state_revision": 28,
+      "last_transition": "2026-10-28T00:36:34Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -39753,7 +39753,90 @@
               "at": "2026-10-27T23:42:55Z"
             }
           ]
+        },
+        "F-72f6632f22d7": {
+          "digest": "72f6632f22d721006abfece3c2017feca52e98c3f0ef4f4332655a77fb219896",
+          "text": "The push probe's failure mode is not recorded. D5 (and plan finding F-b17eeabacac7) asks the capture file to record whether `git push` fails on the read-only file system or as \"not found\". Section 2 of `tests/harness_contract/codex/tester_sandbox.txt` only says \"REFUSED; the origin holds no ref\", and `probe_command` discards stderr, so the two cases cannot be told apart. Measured in this review with the builder's own profile (an ad hoc `codex sandbox` run): the origin is readable (`ls` lists `HEAD`, `config`) and the push fails with `! [remote rejected] HEAD -> probe (unpacker error)`, which is the read-only case. Add that line to the capture file.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T00:33:00Z"
+            }
+          ]
+        },
+        "F-30143a613b37": {
+          "digest": "30143a613b37ccdbc699095c0ee64b2c127b427e21adc758522df729a5c7d512",
+          "text": "The `tcp`, `unix`, `push` and `canary_file`/`credential` probes report the boundary result for any failure of the tool they use (for example `python3` failing to start inside the sandbox would print `tcp BLOCKED`). The Claude probes have the same shape, so this is not a regression. Measured here: `python3` runs in the sandbox and the TCP connect gets `PermissionError: [Errno 1] Operation not permitted`, so today's results are genuine. A positive-control line (for example `python3 -c pass` → `PROBE python OK`, expected in `PROBE_EXPECTED`) would make the proof fail closed if a later build stops `python3` from running.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T00:33:00Z"
+            }
+          ]
+        },
+        "F-3b329b988489": {
+          "digest": "3b329b988489414cc2b0066351df2588d0047ea592ffd7c8d6690f556d9bb63c",
+          "text": "`check_roots` protects the job's own Codex home but not the operator's Codex home that `build` copies the credential from (`build(operator_home=...)`), and not other jobs' folders under the runtime root (their own credential copies). No install layout today produces such a root: a root equal to `~/.codex` needs the binary directly in it, and the real home and its ancestors are already refused. The fix is cheap: add `operator_home` (the Codex home) to the protected set as \"equal or contain\", and refuse a root inside the runtime root other than `<base>/bin` and the clone. C10g-3 or H4b could take it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T00:33:00Z"
+            }
+          ]
+        },
+        "F-acdc1ff04271": {
+          "digest": "acdc1ff04271aa03d3f62931605cba808fce9aff999e69a1b6e0c83050f21966",
+          "text": "`docs/guide/harnesses.md` says the tester \"cannot ... write outside its scratch area\". As measured (`sibling WROTE`), a file created directly in an ancestor of a listed root reports success on a private layer and never reaches the host. The sentence is true for the host but could say that, so a reader of the capture file does not see a contradiction.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T00:33:00Z"
+            }
+          ]
+        },
+        "F-cf230d50ce33": {
+          "digest": "cf230d50ce339e5023a857ee26c72b06a93b34fe50763779b9572d4bb024fa66",
+          "text": "`check_argv` accepts appended `--config 'sandbox_mode=\"danger-full-access\"'` and `--sandbox=danger-full-access` because it examines only canonical flag spellings. The constructor currently emits canonical arguments, so rejecting equivalent spellings would strengthen the guard for later integration.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+              "verdict": "REVISE",
+              "at": "2026-10-28T00:36:34Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "f0ab2c2a5fab6d695189f2084ba0da969888f507922d9cecee591f12191dc1b6",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-28T00:33:00Z",
+          "verdict_sha256": "314d32be871a546f119c4d38e94279265422825ff6c0a6eead6f6074e9fac8d1",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-sandbox/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

@@ -129,12 +129,13 @@ class TesterLayout:
 
 
 def _string(value: Path | str) -> str:
-    """``value`` as a TOML basic string. A value that carries a quote, a backslash or a control character refuses
-    (those are the only inputs ``json.dumps`` would escape differently from TOML)."""
+    """``value`` as a TOML basic string. A value that carries a quote, a backslash, a control character or a lone
+    surrogate refuses (those are the only inputs ``json.dumps`` would escape differently from TOML); every other
+    character, supplementary ones included, is written as itself, since TOML has no surrogate-pair escapes."""
     text = str(value)
-    if any(ch in '"\\' or ord(ch) < 32 or ord(ch) == 127 for ch in text):
+    if any(ch in '"\\' or ord(ch) < 32 or ord(ch) == 127 or 0xD800 <= ord(ch) <= 0xDFFF for ch in text):
         raise _refuse(f"the value {text!r} cannot be written into the sandbox profile", check="path", entry=text)
-    return json.dumps(text)
+    return json.dumps(text, ensure_ascii=False)
 
 
 def _quote(path: Path | str) -> str:
@@ -376,6 +377,9 @@ def check_argv(command: Sequence[str], layout: TesterLayout, *, model: str = rev
     for arg in command[1:]:
         if arg in BANNED_FLAGS:
             raise _refuse(f"the command line carries {arg!r}", check="argv", entry=arg)
+    for arg in command[1:-1]:
+        if arg == "--config" or arg.startswith(("--config=", "--sandbox", "--add-dir=", "-c=")):
+            raise _refuse(f"the command line carries the equivalent spelling {arg!r}", check="argv", entry=arg)
 
     def value_of(flag: str) -> str | None:
         return command[command.index(flag) + 1] if command.count(flag) == 1 and command.index(flag) + 1 < len(command) \

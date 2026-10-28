@@ -10,6 +10,7 @@ import os
 import stat
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -279,6 +280,21 @@ class ProfileTest(Fixture):
         with self.assertRaises(ReviewLaunchRefusedError):
             cs.profile_toml(cs.TesterLayout(self.tmp / 'a"b', "job1"), [])
 
+    def test_supplementary_unicode_paths_parse_and_are_preserved(self) -> None:
+        runtime = self.tmp / "runtime-\U0001F600-\u00e9"
+        layout = cs.TesterLayout(runtime, "job1")
+        root = self.tmp / "root-\U0001F680"
+        parsed = tomllib.loads(cs.config_toml(layout, [root]))
+        access = parsed["permissions"]["tester"]["filesystem"]
+        self.assertEqual(access[str(root)], "read")
+        self.assertEqual(access[str(layout.clone)], "read")
+        for override in cs.required_overrides(layout):
+            tomllib.loads(f"x = {override.split('=', 1)[1]}" if "." not in override.split("=", 1)[0] else override)
+        projects = tomllib.loads(next(o for o in cs.required_overrides(layout) if o.startswith("projects=")))
+        self.assertIn(str(layout.clone), projects["projects"])
+        with self.assertRaises(ReviewLaunchRefusedError):
+            cs.profile_toml(layout, [Path("/tmp/a\ud800b")])
+
 
 class EnvironmentTest(Fixture):
     def test_the_environment_is_exactly_the_allowlist_with_the_scratch_tmpdir(self) -> None:
@@ -329,6 +345,8 @@ class ArgvTest(Fixture):
             "missing -c": good[:good.index('default_permissions="tester"') - 1]
             + good[good.index('default_permissions="tester"') + 1:],
             "code mode": good + ["--disable", "code_mode_host"],
+            "--config": good[:-1] + ["--config", 'sandbox_mode="danger-full-access"', good[-1]],
+            "--sandbox=": good[:-1] + ["--sandbox=danger-full-access", good[-1]],
         }
         for name, command in cases.items():
             with self.subTest(name=name), self.assertRaises(ReviewLaunchRefusedError):

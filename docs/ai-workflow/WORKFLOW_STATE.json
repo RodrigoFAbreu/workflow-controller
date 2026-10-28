@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-verify-codex",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -40285,6 +40285,364 @@
         },
         "evaluated_at": "2026-10-28T03:18:04Z",
         "workflow_release": "2.22.0"
+      }
+    },
+    "workflow-controller-verify-codex": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-verify-codex",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_VERIFY_CODEX_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-verify-codex-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-verify-codex-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 7,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "6ded1d8e6646473578b03c2ae8310dbe72b45458",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+        "approved_review_content_id": "a5c2e39be461225744d0966b124dccc52ab5600b1789a1a63ed8ef620a073e18",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_VERIFY_CODEX_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4c066534fbd70149797d9fd337f67259b8b7d9b8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-verify-codex-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c7195010bc5fdb89331b699f27b86a6c1a151287"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-verify-codex-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "68da4dd47e6c36b4e4d0c319c13a95790586dcc0"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-28T10:44:44Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a5c2e39be461225744d0966b124dccc52ab5600b1789a1a63ed8ef620a073e18",
+            "ledger": {
+              "local": {
+                "bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+                "verdict": "APPROVE",
+                "round": 7,
+                "verdict_sha256": "1ec2dbe05e7511a058bc44fadc574c3fd273839b276d65a2aa6343564825193b",
+                "ledger_entry_sha256": "6bb238054a9bd3201bc73e2b2dac7b052c491e1fadd5121726ac59d2223be721",
+                "run_ref": "session:local .ai-review/workflow-controller-verify-codex/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+                "verdict": "APPROVE",
+                "round": 7,
+                "verdict_sha256": "88d60540e9cf6fd4a6e09b46c991da93b5a80c80c7f10ae811a36b668a87b6d8",
+                "ledger_entry_sha256": "77a1ec133fea796b7566a6857429f1af0fb411dd94b9574f448094c899596bc5",
+                "run_ref": "codex:20261028T104104Z-e7bbb85f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-28T10:44:44Z",
+          "workflow_release": "2.23.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a5c2e39be461225744d0966b124dccc52ab5600b1789a1a63ed8ef620a073e18",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-10-28T10:40:11+00:00",
+          "verdict_sha256": "1ec2dbe05e7511a058bc44fadc574c3fd273839b276d65a2aa6343564825193b",
+          "run_ref": "session:local .ai-review/workflow-controller-verify-codex/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-10-28T10:43:11Z",
+          "verdict_sha256": "88d60540e9cf6fd4a6e09b46c991da93b5a80c80c7f10ae811a36b668a87b6d8",
+          "run_ref": "codex:20261028T104104Z-e7bbb85f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 7,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 26,
+      "last_transition": "2026-10-28T10:44:44Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-28T10:37:40+00:00",
+        "consumed": {
+          "review_content_id": "90e9b528e95544ecf66f7150d60ed31d8be2130a983acaa5683f75b689527cf9",
+          "plan_revision": 6,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a5c2e39be461225744d0966b124dccc52ab5600b1789a1a63ed8ef620a073e18",
+          "plan_revision": 7
+        },
+        "bound": {
+          "review_content_id": "a5c2e39be461225744d0966b124dccc52ab5600b1789a1a63ed8ef620a073e18",
+          "bundle_id": "60cd3e6943e68b251ae42a369c8889637c0f0f47e9a84f442a965e56e57ed064",
+          "plan_revision": 7
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "137a4beffd42881c35a2be9aa9d6e492c2d89cba04d8c32b28a31cfe91863091",
+        "1ef4a48e0940bf7cb6e8620be14f82f7713c0a1683cb0c9a968873be3d4ea04e",
+        "8e7b7ac3d8ec7fc3b62b4cc7b6da6444b3ebfb38516a2b6e5bccf1b10f096f27",
+        "90e9b528e95544ecf66f7150d60ed31d8be2130a983acaa5683f75b689527cf9",
+        "a54256c20c34ea99259d0ef926420b92a96bdf8cbc9691ad37118328bc89e6ab",
+        "faa728f22892f507a137943aa655f6da3a4c54be2360f54e668daaceb15daca7"
+      ],
+      "optional_findings": {
+        "F-195f0432bfbb": {
+          "digest": "195f0432bfbbe60a17b78a880b0c4a19034c2000822fc2faf8b175d0984d8907",
+          "text": "**O1. The Unix listener's socket path length.** D5 puts the scratch area under the runtime root, as the tester's is, and not under `/tmp`. The host Unix listener's `bind` is limited to 107 bytes. A deep `--runtime-dir` (for example a test runner's nested TMPDIR, the same failure class that already affects `test_claude_build` under `run_tests.py`) would make every `verify-codex` run fail at `host` setup. Consider stating where the socket lives (Codex's `/tmp` refusal concerns its helper binaries, not a host-side listener) or naming the limit and the refusal it produces.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e7b7ac3d8ec7fc3b62b4cc7b6da6444b3ebfb38516a2b6e5bccf1b10f096f27",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:12:30+00:00"
+            }
+          ]
+        },
+        "F-1e995411e46f": {
+          "digest": "1e995411e46fe93d9a4cb04f41b7ece2960a99b7297d98435d2f42ba608e8ca5",
+          "text": "**O2. The host-side git checks and the `run` seam.** The host-side checks run `git status --porcelain` and `git for-each-ref` on the clone and the bare origin, and the fixture creates a real repository (the live test used `tests.fixtures.git_init`, which a `controller/` module cannot import). The plan says that \"the launch and the controls take a `run` callable\". Consider saying that the host-side git calls and fixture creation do not go through the injected seam, so a fake `run` cannot also answer the checks that judge it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e7b7ac3d8ec7fc3b62b4cc7b6da6444b3ebfb38516a2b6e5bccf1b10f096f27",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:12:30+00:00"
+            }
+          ]
+        },
+        "F-d5446492dc5b": {
+          "digest": "d5446492dc5bdac5604f4142b95fb00002ad060afeb4dfc8bbf625db37cf4680",
+          "text": "**O3. Execute the resolved entry point, as `claude_build` does.** D4 takes the digest before the first run and after the last, which catches a symlink that is re-pointed and stays re-pointed. Resolving the entry point once and executing that resolved path for every run, the approach #114 took for `verify-claude`, would also make the probed bytes and the recorded digest the same object by construction, not only by a before/after comparison. This is outside the stated trust boundary (an operator-authority actor), so it is optional.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e7b7ac3d8ec7fc3b62b4cc7b6da6444b3ebfb38516a2b6e5bccf1b10f096f27",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:12:30+00:00"
+            }
+          ]
+        },
+        "F-2547ac1729ad": {
+          "digest": "2547ac1729ad781cbcb72ebadb739afdb38a3fb054d608931252ecec07fbd2c9",
+          "text": "**O4. Text that says C10g-2 changes `build_verification`.** The `controller/harness.py` comment says `verify-codex` \"then changes this one value\", and the completed H7 roadmap row says `codex` keeps its checks \"until C10g-2 ships `verify-codex`\". Both contradict D7, which keeps `None`. D7 already covers rewording the comment and the guides; consider naming the roadmap H7 row too, or leaving it as the historical record and saying so.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e7b7ac3d8ec7fc3b62b4cc7b6da6444b3ebfb38516a2b6e5bccf1b10f096f27",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:12:30+00:00"
+            }
+          ]
+        },
+        "F-f96d0fa8c3b3": {
+          "digest": "f96d0fa8c3b3647e44cadeb18da6f6ac7d68cf5eea9c3d6003f50df4358a2a09",
+          "text": "**O5. Other roadmap text that names C10g-2.** D7 leaves the completed H7 row as the historical record. The completed RB3 row (`docs/ROADMAP.md` line 187) also says \"the durable fix is `verify-codex` in C10g-2\" for the Controller-run Codex review, but this slice leaves the reviewer unchanged and never asks it for a verification. The epic summary (line 43) lists C10g-2 as remaining. D8's \"marks C10g-2 complete\" presumably covers line 43. Consider saying that RB3 is historical too, or that the reviewer's move onto `verify-codex` is later work (C10g-3 or a follow-up), so the roadmap does not imply this slice delivered it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a54256c20c34ea99259d0ef926420b92a96bdf8cbc9691ad37118328bc89e6ab",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:15:58+00:00"
+            }
+          ]
+        },
+        "F-6f50e49f629e": {
+          "digest": "6f50e49f629e510cc9159959d317f9ea9b6e0af3b075dde502e66564e815f3fd",
+          "text": "**O6. A socket folder under a readable root.** D4 and D5 require the socket to be outside every readable and writable root of the profile, and CP2 tests that location. They do not say what happens when the condition does not hold. `readable_roots` includes the system directories, the Codex install roots, the interpreter roots and the Controller package directory, and `check_roots` refuses only an overlap with the job. A `--runtime-dir` under one of those roots would therefore put the command's folder inside a readable root. Consider stating that `verify_build` checks the socket path against the computed roots and refuses with a named error, as it does for the 107-byte limit, and adding that case to CP2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "137a4beffd42881c35a2be9aa9d6e492c2d89cba04d8c32b28a31cfe91863091",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:19:41+00:00"
+            }
+          ]
+        },
+        "F-1d6a21208d56": {
+          "digest": "1d6a21208d56a3cba4063f2abd2a2e2ed21a8e6989bf8db3ffd57ce589d62de4",
+          "text": "**O7. Where the operator's Codex home comes from.** D5 says the command uses \"the operator's existing Codex credentials\", and `verify_build` takes `operator_home`. The plan does not name where that value comes from. `controller/cli.py:1734` already resolves `CODEX_HOME`, else `~/.codex`, and the live test reads `CONTROLLER_LIVE_CODEX_HOME`, else `~/.codex`. Consider naming the CLI's existing helper, so that the command, a launch and the help text agree on which credential file is copied.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "faa728f22892f507a137943aa655f6da3a4c54be2360f54e668daaceb15daca7",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:24:30+00:00"
+            }
+          ]
+        },
+        "F-f1641fb5f107": {
+          "digest": "f1641fb5f10750f3160be875ebc0a58f1188c66f0e4b9ff7f52d45002e575971",
+          "text": "**O8. How the run folder holds the layouts.** `TesterLayout(runtime_root, job_id)` places a job at `<runtime_root>/functional/<job id>/`. D5's run folder can hold both layouts only if the run folder is passed as the layouts' `runtime_root`, as the live test passes `<root>/runtime`. `check_roots` then also protects the run folder, which supports D5's new refusal. Consider saying so, so that an implementation does not pass the real runtime root and leave the layouts outside the folder it removes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "faa728f22892f507a137943aa655f6da3a4c54be2360f54e668daaceb15daca7",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:24:30+00:00"
+            }
+          ]
+        },
+        "F-ebcdf9bfe258": {
+          "digest": "ebcdf9bfe25897f0eb5bbb50398bf148d8cc601a608673bade328721549ab496",
+          "text": "**O9. The launcher's interpreter is outside the digest.** D1 hashes the package root of the resolved entry point. On an npm install that root is `lib/node_modules/@openai/codex`, and it does contain the native `codex` (measured: `node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex`, nested inside the package, no symlinks). The `node` beside the launcher symlink (`~/.nvm/versions/node/<v>/bin/node`) is not hashed, and neither is a system `node` that `env node` might find. The native binary enforces the sandbox, so leaving `node` out is a reasonable choice. Consider saying so in D1 (\"the interpreter that runs the launcher is not part of the identity; it only starts the native binary\") so that a later reader does not treat it as an oversight.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "1ef4a48e0940bf7cb6e8620be14f82f7713c0a1683cb0c9a968873be3d4ea04e",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T04:27:14+00:00"
+            }
+          ]
+        },
+        "F-e71aa5d237de": {
+          "digest": "e71aa5d237dec15fa1be1127238d1773a8601148bb11012e651ef9876f44cb6a",
+          "text": "**O10. How CP2's interpreter test runs.** CP2's done-when says \"both runs find that interpreter on `PATH` ... and the same install with the interpreter absent from that directory fails\". A fake `run` that only returns canned output executes nothing, so it cannot show that a process found an interpreter or failed to. Consider saying that this case runs the fake install for real, through `review.run_bounded` with a fake interpreter script that prints the expected lines, or that it asserts on the `PATH` and readable roots that `verify_build` hands to `run`, so the test's mechanism is not left to the implementer.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "1ef4a48e0940bf7cb6e8620be14f82f7713c0a1683cb0c9a968873be3d4ea04e",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T04:27:14+00:00"
+            }
+          ]
+        },
+        "F-8ccf5c9cb869": {
+          "digest": "8ccf5c9cb869eead6226e11f03aa54085d233b74634f5b41998d02ab960a1407",
+          "text": "**O7. A dependency root that is itself a symlink.** In a pnpm layout `<root>/node_modules/@openai/codex-linux-x64` is a symlink into `.pnpm/…`, and Node resolves through it to the real path. D1 does not say whether the found dependency root is followed (then hashed under `dep:<name>/` from its real path) or listed as a symlink leaving the root (then `None`). Either is fail-closed, but saying which avoids a pnpm install being refused by accident, or being hashed under a path that differs from the one Node loads.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "90e9b528e95544ecf66f7150d60ed31d8be2130a983acaa5683f75b689527cf9",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:34:04+00:00"
+            }
+          ]
+        },
+        "F-1f4f3b10ca82": {
+          "digest": "1f4f3b10ca824e44edc81054442ba223d12772ad840798f4302eec17446e21e9",
+          "text": "**O8. The ancestor search and directories named `node_modules`.** Node's lookup never appends `node_modules` to a directory that is itself named `node_modules` (so from `…/node_modules/@openai/codex` it checks `…/node_modules/@openai/node_modules` and then `<prefix>/lib/node_modules`, not `…/node_modules/node_modules`). D1's \"`node_modules/<name>` in each ancestor directory\" would consult one extra path Node never does; harmless in practice, but matching Node exactly keeps the \"Node's own search\" claim true.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "90e9b528e95544ecf66f7150d60ed31d8be2130a983acaa5683f75b689527cf9",
+              "verdict": "REVISE",
+              "at": "2026-10-28T04:34:04+00:00"
+            }
+          ]
+        },
+        "F-6bb8ef5ba48f": {
+          "digest": "6bb8ef5ba48f0be5b3c3a921a4d33ca029d6209b8c96a3ef24de597a64b2fc3b",
+          "text": "**O9. `env`'s lookup takes the first executable `<name>`, not the first file.** D1 says the interpreter for `#!/usr/bin/env <name>` is \"the first `<name>` in the launcher's directory and then in `system_path`\". `env` (`execvp`) skips a `<name>` that is not an executable regular file and goes on to the next `PATH` directory. A non-executable `node` beside the launcher would make the digest's global folder come from a different prefix than the launch's. Saying \"the first executable regular file named `<name>`\" (and testing a non-executable decoy) keeps the rule exactly the launch's.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "a5c2e39be461225744d0966b124dccc52ab5600b1789a1a63ed8ef620a073e18",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T10:40:11+00:00"
+            }
+          ]
+        }
       }
     }
   }

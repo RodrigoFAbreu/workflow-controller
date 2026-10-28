@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-verify-codex",
+  "requirements": {
+    "R1": {
+      "description": "A Codex build's digest covers every file the launch can run as Codex: the launcher's package and each dependency package found where Node's resolution in the launch environment finds it; a layout it cannot bind gives no digest; it is recomputed from disk on every use (#214)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The record of verified Codex builds is verified-codex-builds.json in the runtime root with claude_build's schema and trust rules and its own lock, never in the settings file, and verify-claude, its record and its tests are unchanged (#214)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "is_verified answers from the record and a fresh digest alone, writes nothing, starts no process, says why when it answers no, and has no caller outside tests (#214)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The roadmap and the harnesses guide describe the split and what is built; check_docs and the suite are green but for the known tests (#214)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

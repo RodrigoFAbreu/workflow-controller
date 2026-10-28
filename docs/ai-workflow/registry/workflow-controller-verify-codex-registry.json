@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-verify-codex",
+  "plan_revision": 7,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The Codex build digest",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The verified-build record, is_verified, the guide and the roadmap",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

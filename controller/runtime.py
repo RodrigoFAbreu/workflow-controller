@@ -520,14 +520,15 @@ BUILDS_LOCK_NAME = "verified-claude-builds.lock"
 
 
 @contextlib.contextmanager
-def builds_lock(runtime_root: Path) -> Iterator[Path]:
-    """Hold the exclusive ``flock`` on the verified-builds lock for the whole
-    read-merge-write of that record (as :func:`usage_lock` does for the usage
-    record), so two concurrent verifications cannot lose an entry."""
-    fd = open_lock_file(runtime_root, BUILDS_LOCK_NAME)
+def builds_lock(runtime_root: Path, name: str = BUILDS_LOCK_NAME) -> Iterator[Path]:
+    """Hold the exclusive ``flock`` on the verified-builds lock ``name`` (default:
+    the Claude record's) for the whole read-merge-write of that record (as
+    :func:`usage_lock` does for the usage record), so two concurrent
+    verifications cannot lose an entry."""
+    fd = open_lock_file(runtime_root, name)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield Path(runtime_root) / BUILDS_LOCK_NAME
+        yield Path(runtime_root) / name
     finally:
         os.close(fd)
 

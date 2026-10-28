@@ -109,6 +109,17 @@ one entry of `KNOWN_LIMITS`): the composed configuration values, and managed lay
 only for their MCP servers and features, so a managed layer could still change another setting. C10g-3 builds that
 check before the sandbox is wired.
 
+`controller/codex_build.py` names a Codex build and records which builds were verified, offline, and nothing calls it
+except its tests. `build_digest` is a SHA-256 over every file a launch can run as Codex: the launcher's package and
+each `optionalDependencies` package found where Node's resolution finds it in the launch environment. A layout it
+cannot bind (a shell shim, a package that declares `dependencies`, a symlink leaving the package, an unreadable or
+oversized tree) gives no digest, and the digest is recomputed from disk on every call. The interpreter that runs the
+launcher (`node`) is not part of the identity; it only starts the native binary. The record is
+`verified-codex-builds.json` in the runtime root, with `verify-claude`'s trust rules (a regular file you own with no
+group or world write bit, created `0600`, never written through a symlink) and its own lock; `is_verified` answers
+from a fresh digest and the record and writes nothing. Nothing writes the record until `verify-codex` (C10g-2b), and no
+launch reads it until C10g-3.
+
 ## Keeping the page current
 
 Run `python3 tools/harness_table.py` to print the tables without touching the

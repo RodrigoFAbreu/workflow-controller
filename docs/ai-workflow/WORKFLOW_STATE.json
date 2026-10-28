@@ -40296,7 +40296,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-verify-codex-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-verify-codex-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 7,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -40436,12 +40436,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 31,
-      "last_transition": "2026-10-28T11:28:40Z",
+      "state_revision": 33,
+      "last_transition": "2026-10-28T11:52:59Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -40651,7 +40651,34 @@
               "at": "2026-10-28T10:40:11+00:00"
             }
           ]
+        },
+        "F-86337662bea8": {
+          "digest": "86337662bea8d245fe6c1e68766ceb0c0f5862e7431dfa97bc64d481300f916f",
+          "text": "**O1. The listing does not keep the package root and a dependency apart.** `_list_root` names the package root's entries with no label and a dependency's entries with `dep:<name>/`, and a line is `name\\0flag\\0value\\n`, where a name may contain `\\n` and a symlink target may contain `\\n` too. So two different layouts can produce one listing. Measured on this branch: a package root that holds a directory literally named `dep:x/` (and no `x` found anywhere) and the same package with `x` hoisted to `lib/node_modules/x` give the identical digest `3608bd3d…`, although in the first the launcher falls back to its own `vendor/` and in the second it runs `x`. A symlink whose target text ends in `\\n<name>` and a file named `<name>` can also swap. Only an actor that can write the install tree, which is outside the stated trust boundary, can arrange this, so it is optional. Giving the root its own label (for example `pkg/`) and length-prefixing or escaping each field would make the listing injective; `DIGEST_VERSION` would then change, which is safe because nothing has recorded a digest yet.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b3de0c8e71cfb17a5bab2bad953fb6758a66f3055d16d361f2d8f7ac67970bde",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T11:49:00Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "b3de0c8e71cfb17a5bab2bad953fb6758a66f3055d16d361f2d8f7ac67970bde",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3260f043f155ece9ab09674489c741e3faedbc26f67ddaeab5812ba0e47cb00f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-28T11:49:00Z",
+          "verdict_sha256": "f93594b0afca70cf57aea1a8806a1e2078bdec854c1d8cce0ea17b618912cb2c",
+          "run_ref": "session:local .ai-review/workflow-controller-verify-codex/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

@@ -39410,7 +39410,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-sandbox-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-sandbox-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -39523,7 +39523,138 @@
           "workflow_release": "2.22.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "5058cc622206a1ee066d13e985dce82fe9d578b9fd637ff7c08595e19e482155",
+        "approved_review_content_id": "ae7b7f1bd839b842cb39027bed8538236caedbbd192a88e6f38680500048e360",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e91bdaab6bb78f15f13c69df1a558b6bab3c5197"
+          },
+          {
+            "path": "controller/codex_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "02ac41734e543195e0959ca50f4d4859b3cacf47"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-sandbox-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "939d88cae0eb245565d9fe0a73a812d9b80666d8"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6a824dc0914c5404abb65bc2cfa6ef938bd4b4e5"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f8a69cc9ef73d76571ee2a10f258bf07ec96083d"
+          },
+          {
+            "path": "tests/harness_contract/codex/tester_sandbox.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d4b5b0f349f11812b8751208cea4a0ab8e7b9aa4"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ac1a7287a5ef3a21b26256c8de97f157373e1b2c"
+          },
+          {
+            "path": "tests/test_codex_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "db3ab1e4913e7f8b6a9eb9950cbcb46e07bef0a4"
+          },
+          {
+            "path": "tests/test_codex_sandbox_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cc5ba55f13c375bf7f33195bff16c469829f6080"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8f209ed3513adf8390b3cd2953c4eb1ffb803fdc"
+          }
+        ],
+        "reviewed_content_commit": "bf59f57b8d75de174b1189ed2d4d9cca9bd2a2c5",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-28T01:27:13Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "ae7b7f1bd839b842cb39027bed8538236caedbbd192a88e6f38680500048e360",
+            "ledger": {
+              "local": {
+                "bundle_id": "5058cc622206a1ee066d13e985dce82fe9d578b9fd637ff7c08595e19e482155",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "b527a961b49886668aad84e89c9466d0656ee3bbc9216f5ec9f882e60c5eaafb",
+                "ledger_entry_sha256": "831a4d844362e5da9b821490da6586ffed97957f88b1f29238cbf00daf9ea00d",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-sandbox/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "5058cc622206a1ee066d13e985dce82fe9d578b9fd637ff7c08595e19e482155",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "69151b1ad7c745d8bdbdbbc7d7edf20f29dd3cf3691aefe325e16b1a1ac9188a",
+                "ledger_entry_sha256": "7937cd1e3abb36f7a072af0b7b78d4c58b4513dd305e08359953bffe45c1f986",
+                "run_ref": "codex:20261028T012342Z-7b2b9289",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-28T01:27:13Z",
+          "workflow_release": "2.22.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "8660b867a07549cc8f0bf45d9b71352355cbc00c48e7ab161325d89560b9f837",
@@ -39554,12 +39685,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-10-28T01:08:56Z",
+      "state_revision": 32,
+      "last_transition": "2026-10-28T01:27:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -39823,20 +39954,70 @@
               "at": "2026-10-28T00:36:34Z"
             }
           ]
+        },
+        "F-54f3b5884e9e": {
+          "digest": "54f3b5884e9e4390e459428b875f0fbe78669a8f0b5512fe43f1c930a7485578",
+          "text": "`check_argv`'s new equivalent-spelling refusal (`controller/codex_sandbox.py:380-382`) still accepts four forms that `codex` parses, measured on 0.163.0: `codex exec -sbogus` reports `invalid value 'bogus' for '--sandbox <SANDBOX_MODE>'`, and `-cmodel_provider=1` is read as an override. The four forms are: (1) an attached short value, such as `-sdanger-full-access` or `-csandbox_mode=\"danger-full-access\"`; (2) `--profile=x` and `--enable=x`; (3) `--sandbox=danger-full-access` appended after the prompt, because the loop skips the last element and clap takes options after the positional; (4) `-C`/`-o`/`-p` with attached values, which take the same path. In this review all of these pass `check_argv`, while the \"before the prompt\" cases in the new test are refused. Nothing is wired and `argv` emits only canonical spellings, so this is defence in depth, as in round 1. A complete rule fits in a few lines: refuse any element after `exec` that starts with `-`, is not exactly one of the constructor's flags, and is not the value of the flag before it. A test should append each form at the very end as well as before the prompt. C10g-3, which wires the launch, could take it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "ae7b7f1bd839b842cb39027bed8538236caedbbd192a88e6f38680500048e360",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T01:23:01Z"
+            }
+          ]
+        },
+        "F-88aa23ddc3e1": {
+          "digest": "88aa23ddc3e1edcc1d30cc372393fb22b57189bd65e52a05a0c097e46beca2eb",
+          "text": "`TEST_RESULTS.md` still describes implementation revision 1 (`609329e`). It records no run of the round-1 fix `bf59f57`. In this review, the CP1/CP2 run list (`tests.test_codex_sandbox`, `tests.test_codex_sandbox_live`, `tests.test_review`, `tests.test_fake_codex_contract`, `tests.test_write_containment`, `tests.test_package_structure`, `tests.test_ci_workflows`) gave `Ran 302 tests`, `OK (skipped=2)`. The full `python3 tools/run_tests.py` at `0f91d3b`, under a reaping subreaper with SIGINT at its default, gave PASS: 4959 tests in 8 shards, coverage exact, exit 0. `python3 tools/check_docs.py` exited 0. A later fix round should add its own section to the test record.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "ae7b7f1bd839b842cb39027bed8538236caedbbd192a88e6f38680500048e360",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T01:23:01Z"
+            }
+          ]
+        },
+        "F-5a63d0b0e9fd": {
+          "digest": "5a63d0b0e9fdbc7afb7b31b22a4321f44bb70690c4666d217d76a215810223d7",
+          "text": "The previous equivalent-flag finding remains partially unresolved. In `controller/codex_sandbox.py:380`, scanning `command[1:-1]` skips the final argument. Reproduced: `check_argv(good + [\"--sandbox=danger-full-access\"], layout)` passes. The current constructor emits canonical arguments, so this remains optional hardening.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "ae7b7f1bd839b842cb39027bed8538236caedbbd192a88e6f38680500048e360",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T01:25:27Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "a4833734dd9c0c79050af33b435a75e49c501e96517954bfd673f2ce9a5444ea",
+        "review_content_id": "ae7b7f1bd839b842cb39027bed8538236caedbbd192a88e6f38680500048e360",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "f0ab2c2a5fab6d695189f2084ba0da969888f507922d9cecee591f12191dc1b6",
+          "bundle_id": "5058cc622206a1ee066d13e985dce82fe9d578b9fd637ff7c08595e19e482155",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-10-28T00:33:00Z",
-          "verdict_sha256": "314d32be871a546f119c4d38e94279265422825ff6c0a6eead6f6074e9fac8d1",
+          "round": 2,
+          "completed_at": "2026-10-28T01:23:01Z",
+          "verdict_sha256": "b527a961b49886668aad84e89c9466d0656ee3bbc9216f5ec9f882e60c5eaafb",
           "run_ref": "session:local .ai-review/workflow-controller-codex-tester-sandbox/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5058cc622206a1ee066d13e985dce82fe9d578b9fd637ff7c08595e19e482155",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-28T01:25:27Z",
+          "verdict_sha256": "69151b1ad7c745d8bdbdbbc7d7edf20f29dd3cf3691aefe325e16b1a1ac9188a",
+          "run_ref": "codex:20261028T012342Z-7b2b9289",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

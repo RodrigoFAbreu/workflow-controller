@@ -27,6 +27,7 @@ Stdlib-only. Run: python3 scripts/workflow_state_completion_obligations_test.py
 from __future__ import annotations
 
 import ast
+import errno
 import hashlib
 import json
 import multiprocessing
@@ -35,6 +36,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import textwrap
 import time
@@ -6375,6 +6377,524 @@ class RetentionRemove(unittest.TestCase):
         self.assertIn("is deleted", result.error.next_step)
         self.assertNotIn("nothing was kept", result.error.message + result.error.next_step)
         self.assertFalse((rr.removing / "w00").exists())
+
+
+# ---------------------------------------------------------------------------
+# workflow-2.24.0: the archive prune (`retention-prune`)
+# ---------------------------------------------------------------------------
+
+_RP_MUTATING = tuple(name for name in _RA_MUTATING if name != "write")
+
+
+class _RP(_RA):
+    """`_RA` plus the prune: archives made by the real engine and aged with
+    `os.utime` in the scratch store, and a write guard that allows exactly the
+    `unlink` of a named `<id>.tar.zst` beneath the scratch archive directory and
+    records every `open`, the index's included."""
+
+    AGES = {"w00": 40, "w01": 50, "w02": 60, "w03": 5}
+
+    def __enter__(self):
+        super().__enter__()
+        self.real = {name: getattr(os, name) for name in _RP_MUTATING if hasattr(os, name)}
+        self.opened, self.events, self.unlinks = [], [], []
+        return self
+
+    def made(self, ages=None):
+        """The archives of w00..w03, made by the engine and aged."""
+        for item, days in (ages or self.AGES).items():
+            self.folder(item, links=False)
+            assert self.call(item, apply=True).code == 0
+            self.age(item, days)
+
+    def age(self, item, days):
+        stamp = _RR_NOW.timestamp() - days * 86400 - 3600
+        self.real["utime"](self.adir / f"{item}{wr.ARCHIVE_SUFFIX}", (stamp, stamp))
+
+    @contextlib.contextmanager
+    def guard(self, allow_unlink):
+        adir = os.path.realpath(self.adir)
+        real_open, real_fsync = os.open, os.fsync
+        builtin_open = open
+
+        def wrap(name):
+            def call(*args, **kwargs):
+                target = _ra_target(self.root, args, kwargs)
+                if name == "unlink" and allow_unlink and target is not None and os.path.dirname(target) == adir \
+                        and target.endswith(wr.ARCHIVE_SUFFIX) and kwargs.get("dir_fd") is not None \
+                        and os.fsdecode(args[0]) == os.path.basename(target):
+                    self.unlinks.append(os.path.basename(target))
+                    self.events.append(("unlink", os.path.basename(target)))
+                    return self.real[name](*args, **kwargs)
+                self.violations.append((name, args))
+                raise AssertionError(f"a write the prune must not make: os.{name}{args}")
+            return call
+
+        def open_(path, flags, *args, **kwargs):
+            self.opened.append(_ra_target(self.root, (path,), kwargs))
+            if flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
+                self.violations.append(("open", (path, flags)))
+                raise AssertionError(f"a write the prune must not make: os.open({path!r}, {flags})")
+            return real_open(path, flags, *args, **kwargs)
+
+        def fsync(fd):
+            self.events.append(("fsync", os.path.realpath(f"/proc/self/fd/{fd}")))
+            return real_fsync(fd)
+
+        def builtin(path, *args, **kwargs):
+            self.opened.append(os.fspath(path) if isinstance(path, (str, bytes, os.PathLike)) else None)
+            return builtin_open(path, *args, **kwargs)
+
+        patches = [unittest.mock.patch.object(os, name, wrap(name)) for name in self.real]
+        patches += [unittest.mock.patch.object(os, "open", open_), unittest.mock.patch.object(os, "fsync", fsync),
+                    unittest.mock.patch("builtins.open", builtin), unittest.mock.patch("io.open", builtin)]
+        with contextlib.ExitStack() as stack:
+            for patch in patches:
+                stack.enter_context(patch)
+            yield
+
+    def pr(self, ids, apply=False, guard=True, **kwargs):
+        kwargs.setdefault("archive_root", self.archive_root)
+        kwargs.setdefault("now", _RR_NOW)
+        kwargs.setdefault("repo_root", self.root)
+        repo_root = kwargs.pop("repo_root")
+        try:
+            if guard:
+                with self.guard(allow_unlink=apply):
+                    result = wr.prune_archives(repo_root, ids, apply=apply, run=self.run, resolve=self.resolve,
+                                               **kwargs)
+            else:
+                result = wr.prune_archives(repo_root, ids, apply=apply, run=self.run, resolve=self.resolve, **kwargs)
+        except wr.RetentionError as exc:
+            self.last_error = exc
+            return _Result(2, error=exc)
+        finally:
+            assert not self.violations, self.violations
+        return _Result(0, result)
+
+    def main_pr(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = wr.main(["prune", *args, "--repo-root", str(self.root), "--archive-root", str(self.archive_root)],
+                           run=self.run, resolve=self.resolve, now=_RR_NOW)
+        return code, out.getvalue(), err.getvalue()
+
+    def twin(self, path):
+        """Swaps `path` for a symlink to an outside file of the same size and
+        modification time: only an `lstat` tells it from the archive."""
+        info = os.stat(path)
+        twin = self.outside / "twin"
+        twin.write_bytes(b"y" * info.st_size)
+        self.real["utime"](twin, ns=(info.st_atime_ns, info.st_mtime_ns))
+        self.real["unlink"](path)
+        self.real["symlink"](twin, path)
+
+    def archive_name(self, item):
+        return self.adir / f"{item}{wr.ARCHIVE_SUFFIX}"
+
+    def index_opened(self):
+        return [p for p in self.opened if p and os.path.basename(os.fsdecode(p)) == "index.jsonl"]
+
+
+@unittest.skipUnless(_HAVE_ZSTD, "the prune tests need the zstd program on PATH (the archives are made by it)")
+class RetentionPrune(unittest.TestCase):
+    def env(self, items=None, ages=None, outcomes=None, **kwargs):
+        rr = _RP(items, **kwargs)
+        self.addCleanup(rr.__exit__, None, None, None)
+        rr.__enter__()
+        rr.made(ages)
+        rr.outcomes = outcomes or {}
+        return rr
+
+    def hook(self, target, name, before=None, after=None):
+        real = getattr(target, name)
+
+        def call(*args, **kwargs):
+            if before is not None:
+                before(*args, **kwargs)
+            result = real(*args, **kwargs)
+            if after is not None:
+                after(result, *args, **kwargs)
+            return result
+        patch = unittest.mock.patch.object(target, name, call)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return real
+
+    @staticmethod
+    def outside_of(rr):
+        """What lies outside the store, the test's own `twin` left out."""
+        return {k: v for k, v in _ra_snap(rr.outside).items() if not k.endswith("/twin")}
+
+    def refused(self, rr, ids, code, apply=True, snapshot=True, **kwargs):
+        """A refusal: exit 2, the stable code, the repository and the store
+        identical (unless the test's own hook changed them), and no descriptor
+        left open."""
+        before, fds = rr.snap(), _fd_count()
+        result = rr.pr(ids, apply=apply, **kwargs)
+        self.assertEqual(result.code, 2, result.result)
+        self.assertEqual(result.err_code, code, getattr(result.error, "message", None))
+        if snapshot:
+            self.assertEqual(rr.snap(), before)
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual(rr.unlinks, [])
+        return result
+
+    # -- P1 -------------------------------------------------------------
+
+    def test_p1_the_dry_run_lists_and_writes_nothing(self):
+        rr = self.env()
+        before, fds = rr.snap(), _fd_count()
+        result = rr.pr(["w01", "w00"])
+        self.assertEqual(result.code, 0, getattr(result.error, "message", None))
+        data = result.result
+        self.assertEqual((data["mode"], data["kind"], data["result"]), ("dry-run", "retention-prune",
+                                                                          {"removed": [], "bytes": 0}))
+        self.assertEqual([(a["work_item_id"], a["item"]) for a in data["archives"]],
+                         [("w00", "finished"), ("w01", "finished")])
+        self.assertEqual(data["index"], os.path.join(data["archive_dir"], "index.jsonl"))
+        self.assertEqual(rr.snap(), before)
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual((rr.unlinks, rr.index_opened()), ([], []))
+        self.assertFalse(any(e[0] == "fsync" for e in rr.events))
+        # a fresh interpreter leaves no bytecode and no cache directory
+        scripts = Path(wr.__file__).resolve().parent
+        caches = _rr_find_pycache(scripts, rr.root)
+        pyc = sorted(str(p) for p in scripts.rglob("*.pyc"))
+        bin_dir = Path(tempfile.mkdtemp(prefix="wfo-bin-"))
+        self.addCleanup(shutil.rmtree, bin_dir, ignore_errors=True)
+        os.symlink(shutil.which("git"), bin_dir / "git")
+        env = {"PATH": str(bin_dir), "HOME": str(bin_dir)}
+        run = subprocess.run([sys.executable, "-I", str(scripts / "workflow_retention.py"), "prune", "w00",
+                              "--repo-root", str(rr.root), "--archive-root", str(rr.archive_root)],
+                             capture_output=True, text=True, env=env)
+        self.assertEqual(run.returncode, 2, run.stderr)
+        self.assertEqual(run.stdout, "")
+        self.assertEqual((_rr_find_pycache(scripts, rr.root), sorted(str(p) for p in scripts.rglob("*.pyc"))),
+                         (caches, pyc))
+        self.assertEqual(rr.snap(), before)
+
+    # -- P2 -------------------------------------------------------------
+
+    def test_p2_apply_removes_only_the_named_prunable_archives(self):
+        rr = self.env()
+        index = rr.adir / "index.jsonl"
+        index_before = (index.read_bytes(), os.stat(index).st_mtime_ns)
+        names = {n: rr.archive_name(n).read_bytes() for n in ("w02", "w03")}
+        review = _ra_snap(rr.root / ".ai-review")
+        tracked = _ra_snap(rr.root / "README.md") if (rr.root / "README.md").is_dir() else None
+        fds = _fd_count()
+        result = rr.pr(["w00", "w01"], apply=True)
+        self.assertEqual(result.code, 0, getattr(result.error, "message", None))
+        self.assertEqual(result.result["result"]["removed"], ["w00", "w01"])
+        self.assertEqual(result.result["result"]["bytes"], sum(a["bytes"] for a in result.result["archives"]))
+        self.assertFalse(rr.archive_name("w00").exists() or rr.archive_name("w01").exists())
+        for name, data in names.items():
+            self.assertEqual(rr.archive_name(name).read_bytes(), data)
+        self.assertEqual((index.read_bytes(), os.stat(index).st_mtime_ns), index_before)
+        self.assertEqual(_ra_snap(rr.root / ".ai-review"), review)
+        self.assertEqual(_fd_count(), fds)
+        adir = os.path.realpath(rr.adir)
+        self.assertEqual(rr.events, [("unlink", "w00.tar.zst"), ("fsync", adir), ("unlink", "w01.tar.zst"),
+                                     ("fsync", adir)])
+        self.assertEqual(rr.index_opened(), [])
+        self.assertEqual([a["name"] for a in rr.build()["archives"]], ["w02.tar.zst", "w03.tar.zst"])
+        self.assertEqual((rr.root / "README.md").read_text(), "base\n")
+        self.assertEqual(rr.call("w00", apply=True).err_code, "already_indexed")
+        self.assertEqual(rr.pr(["w00"], apply=True).err_code, "not_in_report")
+
+    # -- P3 -------------------------------------------------------------
+
+    def test_p3_the_refusals_in_the_order_of_d_selection(self):
+        rr = self.env()
+        for bad in ("../w00", "W00", "", "runtime", "archive", "w00/x", "-w00"):
+            with self.subTest(bad=bad):
+                self.refused(rr, ["w00", bad], "invalid_id")
+        # the platform
+        with unittest.mock.patch.object(os, "supports_dir_fd", set()):
+            self.refused(rr, ["w00"], "path_unsafe")
+        # the report's own refusals, passed through
+        rr.write_state({})
+        os.unlink(rr.root / "docs/ai-workflow/WORKFLOW_STATE.json")
+        self.refused(rr, ["w00"], "state_missing")
+        _write(rr.repo, "docs/ai-workflow/WORKFLOW_STATE.json", "{not json")
+        self.refused(rr, ["w00"], "state_invalid")
+        rr.write_state(rr.items)
+        _run(["git", "remote", "set-url", "origin", "https://github.com/acme/..git"], cwd=rr.root)
+        self.refused(rr, ["w00"], "repository_unknown")
+        _run(["git", "remote", "set-url", "origin", "https://github.com/acme/widgets.git"], cwd=rr.root)
+        # a path inside the checkout
+        inside = rr.root / "store"
+        (inside / "widgets").mkdir(parents=True)
+        self.refused(rr, ["w00"], "archive_inside_repository", archive_root=inside)
+        # a symlinked per-repository directory
+        outside_root = Path(tempfile.mkdtemp(prefix="wfo-root-"))
+        self.addCleanup(shutil.rmtree, outside_root, ignore_errors=True)
+        os.symlink(rr.adir, outside_root / "widgets")
+        self.refused(rr, ["w00"], "archive_dir_unsafe", archive_root=outside_root)
+        # a broken (symlinked) .removing
+        os.symlink(rr.outside / "tree", rr.adir / ".removing")
+        self.refused(rr, ["w00"], "unreadable")
+        os.unlink(rr.adir / ".removing")
+        # not in the report
+        self.refused(rr, ["w00", "nope"], "not_in_report")
+        os.symlink(rr.outside / "sentinel", rr.adir / "ln.tar.zst")
+        self.refused(rr, ["ln"], "not_in_report")
+        (rr.adir / "dir.tar.zst").mkdir()
+        self.refused(rr, ["dir"], "not_in_report")
+        shutil.rmtree(rr.adir / "dir.tar.zst")
+        os.unlink(rr.adir / "ln.tar.zst")
+        # an interrupted removal
+        (rr.adir / ".removing" / "w00").mkdir(parents=True)
+        self.refused(rr, ["w00"], "removal_interrupted")
+        self.refused(rr, ["w01", "w00"], "removal_interrupted", apply=False)
+        shutil.rmtree(rr.adir / ".removing")
+        # the time to live: exactly at it against one past it
+        rr.age("w03", 30)
+        result = self.refused(rr, ["w03"], "not_prunable")
+        self.assertIn("30", result.error.message)
+        self.assertIn("days", result.error.message)
+        rr.age("w03", 31)
+        self.assertEqual(rr.pr(["w03"], apply=False).code, 0)
+        rr.age("w03", 5)
+        # the class of the item
+        with_open = _rr_many(7)
+        rr2 = self.env(with_open, ages=dict(_RP.AGES), outcomes={_rr_commit("w00"): RuntimeError("down")})
+        self.refused(rr2, ["w00"], "item_not_finished")
+        self.refused(rr2, ["w00"], "item_not_finished", apply=False)
+        rr3 = self.env()
+        for item in ("w05",):
+            rr3.folder(item, links=False)
+        rr3.archive("w05.tar.zst", 40 * 86400 + 3600)
+        self.refused(rr3, ["w05"], "item_not_finished")
+        rr3.archive("zz.tar.zst", 40 * 86400 + 3600)
+        self.assertEqual(rr3.pr(["zz"], apply=True).result["result"]["removed"], ["zz"])
+        self.assertEqual(rr3.pr(["w00"], apply=True).result["result"]["removed"], ["w00"])
+        # a mixed run removes nothing
+        rr4 = self.env()
+        self.refused(rr4, ["w00", "w03"], "not_prunable")
+        self.refused(rr4, ["w00", "w01", "nope"], "not_in_report")
+
+    def test_p3b_the_lock_and_the_re_read_under_it(self):
+        import fcntl
+        rr = self.env()
+        # held by another run: apply is busy, the dry run never looks at the lock
+        fd = os.open(rr.adir, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(lambda: os.close(fd) if fd >= 0 else None)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        self.refused(rr, ["w00"], "archive_busy")
+        self.assertEqual(rr.pr(["w00"], apply=False).code, 0)
+        os.close(fd)
+        fd = -1
+        real_flock = fcntl.flock
+
+        def after_lock(do):
+            def flock(handle, how):
+                real_flock(handle, how)
+                if how & fcntl.LOCK_EX:
+                    do()
+            patch = unittest.mock.patch.object(fcntl, "flock", flock)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+        # .removing becomes a symlink after step 9: unreadable, not "no interrupted removal"
+        after_lock(lambda: rr.real["symlink"](rr.outside / "tree", rr.adir / ".removing"))
+        self.refused(rr, ["w00"], "unreadable", snapshot=False)
+        self.assertTrue(all(rr.archive_name(n).exists() for n in ("w00", "w01", "w02", "w03")))
+        os.unlink(rr.adir / ".removing")
+        unittest.mock.patch.stopall()
+        # a remove began after step 6
+        after_lock(lambda: (rr.real["mkdir"](rr.adir / ".removing"), rr.real["mkdir"](rr.adir / ".removing" / "w00")))
+        self.refused(rr, ["w00"], "removal_interrupted", snapshot=False)
+        self.assertTrue(all(rr.archive_name(n).exists() for n in ("w00", "w01", "w02", "w03")))
+
+    # -- P4 -------------------------------------------------------------
+
+    def test_p4_a_change_after_the_preview_removes_nothing(self):
+        import fcntl
+        real_flock = fcntl.flock
+        changes = {
+            "size": lambda p, rr: p.write_bytes(p.read_bytes() + b"x"),
+            "mtime": lambda p, rr: rr.real["utime"](p, (1, 1)),
+            "symlink": lambda p, rr: rr.twin(p),
+            "directory": lambda p, rr: (rr.real["unlink"](p), rr.real["mkdir"](p)),
+        }
+        for kind, change in changes.items():
+            with self.subTest(change=kind):
+                rr = self.env()
+                target = rr.archive_name("w01")
+                sentinel = rr.outside / "sentinel"
+                outside = self.outside_of(rr)
+
+                def flock(handle, how, change=change, rr=rr, target=target):
+                    real_flock(handle, how)
+                    if how & fcntl.LOCK_EX:
+                        change(target, rr)
+                with unittest.mock.patch.object(fcntl, "flock", flock):
+                    before = {n: rr.archive_name(n).read_bytes() for n in ("w00", "w02")}
+                    result = rr.pr(["w00", "w01"], apply=True)
+                self.assertEqual((result.code, result.err_code), (2, "archive_changed"))
+                self.assertTrue(rr.archive_name("w00").exists())
+                self.assertEqual(rr.unlinks, [])
+                self.assertEqual(rr.archive_name("w02").read_bytes(), before["w02"])
+                self.assertEqual(self.outside_of(rr), outside)
+                self.assertTrue(sentinel.exists())
+        # after the first unlink the second changes: the first stays removed
+        rr = self.env()
+        second = rr.archive_name("w01")
+        def swap(result, name, *a, **k):
+            if name == "w00.tar.zst":
+                rr.twin(second)
+        self.hook(os, "unlink", after=swap)
+        outside = self.outside_of(rr)
+        result = rr.pr(["w00", "w01", "w02"], apply=True, guard=False)
+        self.assertEqual((result.code, result.err_code), (2, "archive_changed"))
+        self.assertIn("removed: w00", result.error.message)
+        self.assertIn("not removed: w01, w02", result.error.message)
+        self.assertFalse(rr.archive_name("w00").exists())
+        self.assertTrue(rr.archive_name("w02").exists())
+        self.assertEqual(self.outside_of(rr), outside)
+
+    # -- P5 -------------------------------------------------------------
+
+    def test_p5_a_failure_stops_the_run_and_names_both_lists(self):
+        rr = self.env()
+        real_unlink = os.unlink
+
+        def failing(name, *a, **k):
+            if name == "w01.tar.zst":
+                raise OSError(errno.EIO, "Input/output error")
+            return real_unlink(name, *a, **k)
+        with unittest.mock.patch.object(os, "unlink", failing):
+            result = rr.pr(["w00", "w01", "w02"], apply=True, guard=False)
+        self.assertEqual((result.code, result.err_code), (2, "prune_failed"))
+        for text in ("removed: w00", "not removed: w01, w02", "EIO"):
+            self.assertIn(text, result.error.message)
+        self.assertIn("permissions", result.error.next_step)
+        self.assertFalse(rr.archive_name("w00").exists())
+        self.assertTrue(rr.archive_name("w01").exists() and rr.archive_name("w02").exists())
+        # a failed fsync after an unlink: that archive is removed
+        rr = self.env()
+        real_fsync = os.fsync
+
+        def fsync_fails(fd):
+            raise OSError(errno.EIO, "Input/output error")
+        with unittest.mock.patch.object(os, "fsync", fsync_fails):
+            result = rr.pr(["w00", "w01"], apply=True, guard=False)
+        self.assertEqual((result.code, result.err_code), (2, "prune_failed"))
+        self.assertIn("w00.tar.zst is removed", result.error.message)
+        self.assertIn("not removed: w01", result.error.message)
+        self.assertFalse(rr.archive_name("w00").exists())
+        self.assertTrue(rr.archive_name("w01").exists())
+        self.assertEqual(rr.pr(["w01"], apply=True).code, 0)
+        # a stat error other than ENOENT on the second archive's final check, after the first unlink
+        rr = self.env()
+        real_stat, unlinks = os.stat, []
+        real_unlink = os.unlink
+
+        def counting(name, *a, **k):
+            unlinks.append(name)
+            return real_unlink(name, *a, **k)
+
+        def stat_fails(path, *a, **k):
+            if path == "w01.tar.zst" and k.get("dir_fd") is not None and unlinks:
+                raise OSError(errno.EIO, "Input/output error")
+            return real_stat(path, *a, **k)
+        fds = _fd_count()
+        with unittest.mock.patch.object(os, "unlink", counting), unittest.mock.patch.object(os, "stat", stat_fails):
+            result = rr.pr(["w00", "w01", "w02"], apply=True, guard=False)
+        self.assertEqual((result.code, result.err_code, result.result), (2, "prune_failed", None))
+        for text in ("removed: w00", "not removed: w01, w02", "EIO"):
+            self.assertIn(text, result.error.message)
+        self.assertEqual(unlinks, ["w00.tar.zst"])
+        self.assertFalse(rr.archive_name("w00").exists())
+        self.assertTrue(rr.archive_name("w01").exists() and rr.archive_name("w02").exists())
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual(rr.pr(["w01", "w02"], apply=True).code, 0)  # the lock was released
+        # an interruption before the first unlink and one between two
+        for stop_at, left in ((0, ["w00", "w01"]), (1, ["w01"])):
+            with self.subTest(stop_at=stop_at):
+                rr = self.env()
+                count = []
+
+                def killer(name, *a, **k):
+                    if len(count) == stop_at:
+                        raise _Killed()
+                    count.append(name)
+                    return real_unlink(name, *a, **k)
+                fds = _fd_count()
+                with unittest.mock.patch.object(os, "unlink", killer):
+                    with self.assertRaises(_Killed):
+                        rr.pr(["w00", "w01"], apply=True, guard=False)
+                self.assertEqual(_fd_count(), fds)
+                self.assertEqual([n for n in ("w00", "w01") if rr.archive_name(n).exists()], left)
+                self.assertEqual(rr.pr(left, apply=True).code, 0)
+                self.assertFalse(rr.archive_name("w00").exists() or rr.archive_name("w01").exists())
+
+    # -- P6 -------------------------------------------------------------
+
+    def test_p6_the_index_is_never_opened(self):
+        rr = self.env()
+        self.refused(rr, ["w03"], "not_prunable")
+        self.assertEqual(rr.pr(["w00"], apply=False).code, 0)
+        self.assertEqual(rr.pr(["w00", "w01"], apply=True).code, 0)
+        self.assertEqual(rr.pr(["w02"], apply=True).code, 0)
+        self.assertEqual(rr.index_opened(), [])
+        lines = (rr.adir / "index.jsonl").read_text().splitlines()
+        self.assertEqual(sorted(json.loads(l)["work_item_id"] for l in lines), ["w00", "w01", "w02", "w03"])
+
+    # -- P7 -------------------------------------------------------------
+
+    def test_p7_ttl_days_agrees_with_the_report(self):
+        rr = self.env(ages={"w00": 2, "w01": 50, "w02": 60, "w03": 5})
+        self.refused(rr, ["w00"], "not_prunable")
+        self.assertEqual(rr.pr(["w00"], ttl_days=1).code, 0)
+        code, out, _ = rr.cli("--ttl-days", "1", "--json")
+        self.assertEqual(code, 0)
+        self.assertTrue(next(a for a in json.loads(out)["archives"] if a["work_item_id"] == "w00")["prunable"])
+        self.assertEqual(rr.main_pr("w00", "--ttl-days", "1")[0], 0)
+        for bad in ("0", "abc", "3651", "-1", "1.5"):
+            with self.subTest(ttl=bad):
+                code, out, err = rr.main_pr("w01", "--ttl-days", bad)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("usage", err)
+
+    # -- P8 -------------------------------------------------------------
+
+    def test_p8_the_command_line(self):
+        rr = self.env()
+        code, out, err = rr.main_pr("w00", "w01")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("dry run", out)
+        self.assertIn("w00.tar.zst", out)
+        code, out, err = rr.main_pr("w00", "--json")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual((data["mode"], list(data) == sorted(data)), ("dry-run", True))
+        self.assertTrue(rr.archive_name("w00").exists())
+        code, out, err = rr.main_pr("w00", "w01", "--apply")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("removed 2 archive(s)", out)
+        self.assertFalse(rr.archive_name("w00").exists())
+        # no names is a usage error
+        code, out, err = rr.main_pr()
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("error: usage", err)
+        # a refusal prints nothing on stdout, --json included
+        for extra in ((), ("--json",), ("--apply",), ("--apply", "--json")):
+            code, out, err = rr.main_pr("w03", *extra)
+            self.assertEqual((code, out), (2, ""))
+            self.assertIn("error: not_prunable", err)
+            self.assertIn("next step:", err)
+
+    def test_p9_the_other_commands_keep_their_checks(self):
+        rr = self.env()
+        self.assertEqual(wr._ttl_of("30"), 30)
+        with self.assertRaises(wr.RetentionError):
+            wr._ttl_of("0")
+        with self.assertRaises(wr.RetentionError) as caught:
+            wr._check_id("runtime", "archive")
+        self.assertEqual(caught.exception.code, "invalid_id")
 
 
 if __name__ == "__main__":

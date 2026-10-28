@@ -212,5 +212,125 @@ class BuildDigestTests(Tree):
         self.assertIsNone(self.digest(self.tmp / "missing", self.tmp))
 
 
+DIGEST_A = "a" * 64
+DIGEST_B = "b" * 64
+
+
+class RecordTests(Tree):
+    def setUp(self) -> None:
+        super().setUp()
+        self.root = self.tmp / "runtime"
+        self.root.mkdir(mode=0o700)
+        self.record = self.root / cb.RECORD_NAME
+
+    def test_names_are_not_the_claude_ones(self) -> None:
+        self.assertEqual(cb.RECORD_NAME, "verified-codex-builds.json")
+        self.assertEqual(cb.LOCK_NAME, "verified-codex-builds.lock")
+
+    def test_missing_record_is_empty_without_reason(self) -> None:
+        self.assertEqual(cb.read_verified(self.root), ({}, None))
+
+    def test_record_merges_two_entries_and_is_private(self) -> None:
+        cb.record_verified(self.root, DIGEST_A, {"version": "1"})
+        cb.record_verified(self.root, DIGEST_B, {"version": "2"})
+        builds, note = cb.read_verified(self.root)
+        self.assertEqual(sorted(builds), [DIGEST_A, DIGEST_B])
+        self.assertIsNone(note)
+        self.assertEqual(self.record.stat().st_mode & 0o777, 0o600)
+        self.assertTrue((self.root / cb.LOCK_NAME).exists())
+        self.assertFalse((self.root / "verified-claude-builds.json").exists())
+        self.assertFalse((self.root / "verified-claude-builds.lock").exists())
+
+    def test_non_digest_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            cb.record_verified(self.root, "nope", {})
+        self.assertFalse(self.record.exists())
+
+    def test_symlink_record_refused_and_target_untouched(self) -> None:
+        target = write(self.tmp / "target.json", "keep", 0o600)
+        self.record.symlink_to(target)
+        with self.assertRaises(OSError):
+            cb.record_verified(self.root, DIGEST_A, {})
+        self.assertEqual(target.read_text(), "keep")
+        builds, note = cb.read_verified(self.root)
+        self.assertEqual(builds, {})
+        self.assertIn("was ignored", note or "")
+
+    def test_untrustworthy_records_admit_nothing(self) -> None:
+        good = '{"schema_version": 1, "builds": {"%s": {}}}' % DIGEST_A
+        cases = {
+            "group-writable": (good, 0o660),
+            "malformed": ("{not json", 0o600),
+            "wrong schema": ('{"schema_version": 2, "builds": {}}', 0o600),
+            "bad digest": ('{"schema_version": 1, "builds": {"zz": {}}}', 0o600),
+        }
+        for name, (text, mode) in cases.items():
+            with self.subTest(name):
+                write(self.record, text, mode)
+                builds, note = cb.read_verified(self.root)
+                self.assertEqual(builds, {})
+                self.assertIn("was ignored", note or "")
+
+    def test_foreign_owner_is_ignored(self) -> None:
+        write(self.record, '{"schema_version": 1, "builds": {}}', 0o600)
+        real = os.geteuid
+        try:
+            os.geteuid = lambda: real() + 1  # type: ignore[assignment]
+            builds, note = cb.read_verified(self.root)
+        finally:
+            os.geteuid = real  # type: ignore[assignment]
+        self.assertEqual(builds, {})
+        self.assertIn("was ignored", note or "")
+
+
+class IsVerifiedTests(Tree):
+    def setUp(self) -> None:
+        super().setUp()
+        self.root = self.tmp / "runtime"
+        self.root.mkdir(mode=0o700)
+        self.launcher, self.pkg = self.npm(self.tmp / "install")
+        self.sys = str(self.tmp / "install/sys")
+
+    def check(self) -> cb.Verified:
+        return cb.is_verified(self.root, self.launcher, system_path=self.sys)
+
+    def test_recorded_build_is_verified_and_an_edit_is_not(self) -> None:
+        digest = cb.build_digest(self.launcher, system_path=self.sys)
+        cb.record_verified(self.root, digest, {"version": "1"})
+        self.assertEqual(self.check(), cb.Verified(True, digest, None))
+        (self.pkg / "extra.txt").write_text("edited")
+        result = self.check()
+        self.assertFalse(result.ok)
+        self.assertIn("not recorded", result.reason or "")
+
+    def test_unbindable_build_is_not_verified(self) -> None:
+        launcher, _ = self.npm(self.tmp / "bad", manifest='{"dependencies": {"a": "1"}}')
+        result = cb.is_verified(self.root, launcher, system_path=str(self.tmp / "bad/sys"))
+        self.assertFalse(result.ok)
+        self.assertIsNone(result.digest)
+        self.assertIn("cannot be bound", result.reason or "")
+
+    def test_missing_record_says_so(self) -> None:
+        result = self.check()
+        self.assertFalse(result.ok)
+        self.assertIn("no verified-codex-builds.json", result.reason or "")
+
+    def test_ignored_record_says_it_was_ignored(self) -> None:
+        write(self.root / cb.RECORD_NAME, "{bad", 0o600)
+        result = self.check()
+        self.assertFalse(result.ok)
+        self.assertIn("was ignored", result.reason or "")
+
+    def test_writes_nothing(self) -> None:
+        digest = cb.build_digest(self.launcher, system_path=self.sys)
+        before = sorted(p.name for p in self.root.iterdir())
+        self.check()
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), before)
+        cb.record_verified(self.root, digest, {})
+        before = {p.name: p.stat().st_mtime_ns for p in self.root.iterdir()}
+        self.check()
+        self.assertEqual({p.name: p.stat().st_mtime_ns for p in self.root.iterdir()}, before)
+
+
 if __name__ == "__main__":
     unittest.main()

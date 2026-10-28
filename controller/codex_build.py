@@ -10,19 +10,24 @@ guess. The digest is computed from disk on every call.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
-from . import codex_sandbox, review
+from . import codex_sandbox, review, runtime
 
 #: Bumped whenever the listing's shape changes, so an old digest never matches a new listing.
 DIGEST_VERSION = "codex-build-digest-v1"
 #: More entries than this in all gives no digest; nothing is truncated.
 MAX_ENTRIES = 20000
 _CHUNK = 1 << 20
+#: The record of verified Codex builds, and its lock, inside the runtime root (D2).
+RECORD_NAME = "verified-codex-builds.json"
+LOCK_NAME = "verified-codex-builds.lock"
+SCHEMA_VERSION = 1
 
 
 class _Unbound(Exception):
@@ -166,3 +171,68 @@ def build_digest(binary: Path, *, system_path: str = review.SYSTEM_PATH) -> str 
         return _digest(Path(binary), system_path)
     except (_Unbound, OSError, ValueError):
         return None
+
+
+def _is_digest(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(ch in "0123456789abcdef" for ch in value)
+
+
+def read_verified(runtime_root: Path) -> tuple[dict[str, dict], str | None]:
+    """The recorded Codex builds (digest to entry) and, when a record exists but cannot be trusted, why it was
+    ignored. A missing record is empty with no reason; an unreadable, symlinked, foreign-owned, other-writable,
+    malformed or wrong-schema record is empty **with** a reason, so a damaged record never admits a build."""
+    path = Path(runtime_root).resolve() / RECORD_NAME
+    try:
+        data = runtime.read_owned_file(path)
+    except FileNotFoundError:
+        return {}, None
+    except OSError as exc:
+        return {}, f"{RECORD_NAME} was ignored: {exc}"
+    try:
+        obj = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        return {}, f"{RECORD_NAME} was ignored: it is not valid JSON ({exc})"
+    builds = obj.get("builds") if isinstance(obj, dict) else None
+    if not isinstance(obj, dict) or obj.get("schema_version") != SCHEMA_VERSION or not isinstance(builds, dict):
+        return {}, f"{RECORD_NAME} was ignored: it is not a schema_version {SCHEMA_VERSION} record"
+    admitted = {digest: entry for digest, entry in builds.items() if _is_digest(digest) and isinstance(entry, dict)}
+    if len(admitted) != len(builds):
+        return {}, f"{RECORD_NAME} was ignored: an entry is not a SHA-256 digest with an object"
+    return admitted, None
+
+
+def record_verified(runtime_root: Path, digest: str, entry: Mapping) -> Path:
+    """Record ``digest`` with ``entry``, merging under the exclusive lock so concurrent runs cannot lose an entry.
+    Refuses (``OSError``, nothing written) when the record is a symlink; an untrustworthy existing record is
+    replaced by one holding only the new entry."""
+    if not _is_digest(digest):
+        raise ValueError(f"not a SHA-256 digest: {digest!r}")
+    with runtime.builds_lock(runtime_root, LOCK_NAME):
+        builds, _note = read_verified(runtime_root)
+        builds[digest] = dict(entry)
+        return runtime.write_private_json_nofollow(
+            Path(runtime_root), RECORD_NAME, {"schema_version": SCHEMA_VERSION, "builds": builds})
+
+
+@dataclasses.dataclass(frozen=True)
+class Verified:
+    """The answer of :func:`is_verified`: ``reason`` says why when ``ok`` is false."""
+    ok: bool
+    digest: str | None
+    reason: str | None = None
+
+
+def is_verified(runtime_root: Path, binary: Path, *, system_path: str = review.SYSTEM_PATH) -> Verified:
+    """Whether the build ``binary`` names was verified: its fresh digest is in a trustworthy record. Reads only --
+    writes nothing, starts no process."""
+    digest = build_digest(binary, system_path=system_path)
+    if digest is None:
+        return Verified(False, None, "the Codex build cannot be bound to a digest")
+    builds, note = read_verified(runtime_root)
+    if note is not None:
+        return Verified(False, digest, note)
+    if not (Path(runtime_root).resolve() / RECORD_NAME).exists():
+        return Verified(False, digest, f"no {RECORD_NAME} record exists")
+    if digest not in builds:
+        return Verified(False, digest, "this build's digest is not recorded")
+    return Verified(True, digest)

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-verify-codex-command",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -41067,6 +41067,275 @@
         },
         "evaluated_at": "2026-10-28T13:19:14Z",
         "workflow_release": "2.23.0"
+      }
+    },
+    "workflow-controller-verify-codex-command": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-verify-codex-command",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_VERIFY_CODEX_COMMAND_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-verify-codex-command-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-verify-codex-command-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "70bb217e71f97bfc1a3d388d55cc8e2d01ec5c40",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+        "approved_review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_VERIFY_CODEX_COMMAND_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5ef3972aece9544a32109b7dd5d06c40c699937d"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-verify-codex-command-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57fa702aaf7aac1e2e79799e646b8252495b574f"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-verify-codex-command-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ccfb5f4f1e4a5114aa9250e8acb74b3008da7cd"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-28T14:44:32+00:00",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+            "ledger": {
+              "local": {
+                "bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "9606dd1770037d83005a6b45892ffe2f869514ecc3a5582fc56c9d43ea4611a1",
+                "ledger_entry_sha256": "2a0cad7e64ab2f1553d0d7ee70b08c2b43ec34b875318aa7c58146ae8affe07f",
+                "run_ref": "session:local .ai-review/workflow-controller-verify-codex-command/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "23f15bcb17666838fea96fcaa4af64c498d1e5b0f93f1fdfda53ecbc1b5231e0",
+                "ledger_entry_sha256": "e4b79b50cba68e4dc6d29c3693feb642fa665e520a5a8ff5a17414379c60abf3",
+                "run_ref": "codex:20261028T143821Z-7b9c914a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-28T14:44:32+00:00",
+          "workflow_release": "2.25.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-28T14:38:04+00:00",
+          "verdict_sha256": "9606dd1770037d83005a6b45892ffe2f869514ecc3a5582fc56c9d43ea4611a1",
+          "run_ref": "session:local .ai-review/workflow-controller-verify-codex-command/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-28T14:41:20Z",
+          "verdict_sha256": "23f15bcb17666838fea96fcaa4af64c498d1e5b0f93f1fdfda53ecbc1b5231e0",
+          "run_ref": "codex:20261028T143821Z-7b9c914a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-28T14:44:32+00:00",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-28T14:36:34+00:00",
+        "consumed": {
+          "review_content_id": "77260fdb8e23a16d054b63f65af5a9828d6f423dadbb5064fa61e9e6fd0a626a",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+          "bundle_id": "fbc06d5e30b10f40db62ef9436d76a429af14964c60929125488f56367d3c150",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "77260fdb8e23a16d054b63f65af5a9828d6f423dadbb5064fa61e9e6fd0a626a"
+      ],
+      "optional_findings": {
+        "F-c7b502429959": {
+          "digest": "c7b502429959752182475ec676300b0dcee731a7ae6612b796d366b0fae2401f",
+          "text": "**O1. The D6 snapshot reads a tree the run could have written; state that it does not follow symlinks or open non-regular files.** A FIFO or a symlink to a device planted after a boundary failure would hang or mislead a snapshot that opens every entry. Recording each entry's type (and a symlink's target text) without following it, and listing directories too, keeps the check terminating and catches a created empty directory.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "77260fdb8e23a16d054b63f65af5a9828d6f423dadbb5064fa61e9e6fd0a626a",
+              "verdict": "REVISE",
+              "at": "2026-10-28T14:35:00+00:00"
+            }
+          ]
+        },
+        "F-79d6293cb43f": {
+          "digest": "79d6293cb43f87e96df6f51357e93c399ee9c0118dd41b8cee967d6516431ea7",
+          "text": "**O2. D7 does not name the class of an `exec` turn that exits non-zero for a cause outside login, credit, limit or timeout.** It is safe (nothing is recorded) but the message differs: say it is an `exec` failure, not `model_unreachable`, and name where the cause is read from (exit code and stderr text, as the reviewer's own classifier does, if one is reused).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "77260fdb8e23a16d054b63f65af5a9828d6f423dadbb5064fa61e9e6fd0a626a",
+              "verdict": "REVISE",
+              "at": "2026-10-28T14:35:00+00:00"
+            }
+          ]
+        },
+        "F-68f0237ee9de": {
+          "digest": "68f0237ee9de0db810b184d0c12579ec10d0b67f2c16299eb6bbad709a9e0573",
+          "text": "**O3. D1's \"differs\" comparison is not defined for a kept launcher symlink.** `verify-claude` compares realpaths; for `codex` the launcher path is kept on purpose, so say whether the note compares the lexical launcher paths, their realpaths or their digests.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "77260fdb8e23a16d054b63f65af5a9828d6f423dadbb5064fa61e9e6fd0a626a",
+              "verdict": "REVISE",
+              "at": "2026-10-28T14:35:00+00:00"
+            }
+          ]
+        },
+        "F-76c2f438bd45": {
+          "digest": "76c2f438bd4578ff41334b3e8f39d2080b0b20c9eff33356c7f0ef212e8146cc",
+          "text": "**O1. D7 reads a limit cause from stderr text with `review.LIMIT_ERRORS`, but those are `codex_error_info` values from the job's rollouts, not stderr wording.** The reviewer detects a limit with `review.scan_rollouts(codex_home).limit` (`controller/review.py:1351`, `_is_limit_error`), not from stderr, so matching `LIMIT_ERRORS` against stderr text may never fire and a real usage limit would come out as `exec_failed` instead of `model_unreachable`. It is safe (nothing is recorded either way), but the message would tell the operator the build is at fault. Consider classifying a limit with `review.scan_rollouts(layout.codex_home)` before D8 removes the job folder, and keep stderr and the exit code for login, credit and the `exec_failed` tail.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T14:38:04+00:00"
+            }
+          ]
+        },
+        "F-5a5c65790d44": {
+          "digest": "5a5c65790d4461e56ed732aafd90a0b7200a7fff500134f440b7051ce7a8bed5",
+          "text": "**O2. The job ids of the two probe jobs are not stated.** Two concurrent `verify-codex` runs, or a run alongside a real tester job under `<runtime>/functional/`, need distinct job folders. Saying the ids carry a unique suffix (as the reviewer's job ids do) makes D8's removal of \"the job folder\" unambiguous; the record write itself already merges under `runtime.builds_lock`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T14:38:04+00:00"
+            }
+          ]
+        },
+        "F-2b4fdb502692": {
+          "digest": "2b4fdb502692dc1196647b3d24ac301e02a78e0e509a4563ebc84678b1ce8a4e",
+          "text": "**O1. Classify limit failures from structured evidence.** D7 proposes matching `review.LIMIT_ERRORS` against stderr, but those constants describe structured `codex_error_info` values (`controller/review.py:1316`). Human stderr can use different wording, producing `exec_failed` instead of `model_unreachable`. Consider using `review.scan_rollouts(...).limit_error` before cleanup. Both outcomes already refuse verification.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T14:41:20Z"
+            }
+          ]
+        },
+        "F-b2c90355b381": {
+          "digest": "b2c90355b3818cd4ff22aba9df776f2b673c906e3ee30bf84fc860b71e7a2d7b",
+          "text": "**O2. Specify credential selection for the live test.** `tests/__init__.py:33` replaces `CODEX_HOME` with an empty directory. CP2’s live test should explicitly select the operator home for both its prerequisite check and command environment, following `tests/test_codex_sandbox_live.py:41`; otherwise a straightforward implementation could skip despite available credentials.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a4a2e5cc482b0b78beb26644a92152e03db67f6b629e3f3812ae34943447e026",
+              "verdict": "APPROVE",
+              "at": "2026-10-28T14:41:20Z"
+            }
+          ]
+        }
       }
     }
   }

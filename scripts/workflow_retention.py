@@ -48,6 +48,16 @@ file's SHA-256 with the archive, and then the delete entry by entry, or the
 rename back. A dry run without `--apply`. Nothing is deleted that is not proven
 present in the archive with matching contents. Needs the `zstd` program.
 
+The prune (workflow-2.24.0, `retention-prune`):
+
+    python3 -I scripts/workflow_retention.py prune <work-item-id>... [--apply] [--json] [--ttl-days N]
+                                                   [--archive-root DIR] [--repo-root DIR]
+
+removes the named archives `<archive-root>/<repo>/<id>.tar.zst` that the report
+lists as past the time to live: one `unlink` each through the archive
+directory's descriptor, checked just before and made durable. A dry run without
+`--apply`. The index is never opened and no other file is touched.
+
 Stdlib-only plus `workflow_forge`.
 """
 from __future__ import annotations
@@ -933,6 +943,34 @@ _DONE = {"archive": "archived", "remove": "removed"}
 _ABLE = {"archive": "archivable", "remove": "removable"}
 
 
+def _check_id(item_id, verb: str, next_step: str = "pass the id exactly as the report lists it") -> None:
+    if not isinstance(item_id, str) or not _ID_RE.match(item_id) or item_id in RESERVED_IDS:
+        raise _refuse("invalid_id", f"{item_id!r} is not a work item id the {verb} accepts", next_step)
+
+
+def _select_destination(root, report: dict, archive_base: str, fds: list[int], verb: str):
+    """The destination checks every subcommand needs: the directory is outside
+    the checkout, is not a symlink or a non-directory, has no `read_errors`
+    entry beneath it, and its chain of components opens without following a
+    link. Returns `(resolved, adir_fd)`; `adir_fd` is None when absent."""
+    repo_name = report["repository"].split("/", 1)[1]
+    unresolved = os.path.join(archive_base, repo_name)
+    resolved = os.path.realpath(unresolved)
+    if _underneath(resolved, str(root)):
+        raise _refuse("archive_inside_repository", f"the archive directory {resolved} is inside the repository",
+                      "choose an --archive-root outside the checkout")
+    info = _lstat_at_path(unresolved)
+    if info is not None and not stat.S_ISDIR(info.st_mode):
+        raise _refuse("archive_dir_unsafe", f"{unresolved} is a symlink or not a directory",
+                      f"replace {unresolved} by a real directory, or choose another --archive-root")
+    for entry in report["read_errors"]:
+        if _underneath(entry["path"], unresolved):
+            raise _refuse("unreadable", f"{entry['path']} cannot be read ({entry['error']})",
+                          f"repair it; the engine does not {verb} from a partial view")
+    complete = _walk_chain(_chain_parts(resolved), fds, None)
+    return resolved, (fds[-1] if complete else None)
+
+
 def _select_finished(repo_root, item_id: str, archive_root, now, run, resolve, fds: list[int], verb: str,
                      needs: tuple = ()):
     """D-Selection 1 to 5, shared by `archive` and `remove`: the id, the platform,
@@ -941,9 +979,7 @@ def _select_finished(repo_root, item_id: str, archive_root, now, run, resolve, f
     `.ai-review` included, is appended to `fds` before anything can refuse, and
     the caller's `finally` closes them. Returns `(root, ai_fd, report, record,
     resolved, adir_fd)`; `ai_fd` and `adir_fd` are None when absent."""
-    if not isinstance(item_id, str) or not _ID_RE.match(item_id) or item_id in RESERVED_IDS:
-        raise _refuse("invalid_id", f"{item_id!r} is not a work item id the {verb} accepts",
-                      "pass the id exactly as the report lists it")
+    _check_id(item_id, verb)
     supported = {fn.__name__ for fn in os.supports_dir_fd}
     if not _platform_ok() or not set(needs) <= supported:
         raise _refuse("path_unsafe", "this platform has no descriptor-relative file access",
@@ -973,22 +1009,8 @@ def _select_finished(repo_root, item_id: str, archive_root, now, run, resolve, f
                           f"it becomes {_ABLE[verb]} when newer items are merged")
         raise _refuse("unknown_item", f"{item_id} is not a work item of this repository",
                       "pass an id the report lists")
-    repo_name = report["repository"].split("/", 1)[1]
-    unresolved = os.path.join(archive_base, repo_name)
-    resolved = os.path.realpath(unresolved)
-    if _underneath(resolved, str(root)):
-        raise _refuse("archive_inside_repository", f"the archive directory {resolved} is inside the repository",
-                      "choose an --archive-root outside the checkout")
-    info = _lstat_at_path(unresolved)
-    if info is not None and not stat.S_ISDIR(info.st_mode):
-        raise _refuse("archive_dir_unsafe", f"{unresolved} is a symlink or not a directory",
-                      f"replace {unresolved} by a real directory, or choose another --archive-root")
-    for entry in report["read_errors"]:
-        if _underneath(entry["path"], unresolved):
-            raise _refuse("unreadable", f"{entry['path']} cannot be read ({entry['error']})",
-                          f"repair it; the engine does not {verb} from a partial view")
-    complete = _walk_chain(_chain_parts(resolved), fds, None)
-    return root, ai_fd, report, record, resolved, (fds[-1] if complete else None)
+    resolved, adir_fd = _select_destination(root, report, archive_base, fds, verb)
+    return root, ai_fd, report, record, resolved, adir_fd
 
 
 def archive_item(repo_root, item_id: str, *, apply: bool = False, archive_root=DEFAULT_ARCHIVE_ROOT,
@@ -1721,6 +1743,178 @@ def _flow(sel, item_id, name, archive, removing_place, ai_place, note, fds, repo
     return {"removed": True, "files": len(files), "bytes": sum(r["size"] for r in files)}, records
 
 
+# --------------------------------------------------------------------------
+# workflow-2.24.0: the archive prune (`retention-prune`)
+# --------------------------------------------------------------------------
+
+_PRUNE_IDS_NEXT = "pass the ids exactly as the report's `archives` lists them"
+_PRUNE_AGAIN = "run `prune` again for a fresh preview"
+
+
+def _seen_by_report(entry: dict, info: os.stat_result | None) -> bool:
+    """D-Check: a regular file of the size and modification time the report saw,
+    the time formatted by the report's own expression."""
+    if info is None or not stat.S_ISREG(info.st_mode) or info.st_size != entry["bytes"]:
+        return False
+    modified = datetime.datetime.fromtimestamp(info.st_mtime, datetime.timezone.utc)
+    return _iso(modified) == entry["modified"]
+
+
+def _prune_select(repo_root, ids: list[str], archive_root, ttl_days: int, now, run, resolve, fds: list[int]):
+    """D-Selection 1 to 9 for `prune`; nothing is written. Returns
+    `(report, resolved, adir_fd, entries, seen)`."""
+    for item_id in ids:                                                                # 1
+        _check_id(item_id, "prune", _PRUNE_IDS_NEXT)
+    supported = {fn.__name__ for fn in os.supports_dir_fd}
+    if not _platform_ok() or not {"unlink", "stat"} <= supported:                      # 2
+        raise _refuse("path_unsafe", "this platform has no descriptor-relative file access",
+                      "run it on Linux or macOS")
+    root = Path(os.path.realpath(repo_root))
+    archive_base = os.path.abspath(os.path.expanduser(str(archive_root)))
+    report = build_report(root, archive_root=archive_base, ttl_days=ttl_days, now=now, run=run,  # 3
+                          resolve=resolve)
+    resolved, adir_fd = _select_destination(root, report, archive_base, fds, "prune")  # 4
+    listed = {a["work_item_id"]: a for a in report["archives"]}
+    for item_id in ids:                                                                # 5
+        if item_id not in listed:
+            raise _refuse("not_in_report", f"{item_id}{ARCHIVE_SUFFIX} is not an archive the report lists",
+                          "prune only archives the report lists")
+    for item_id in ids:                                                                # 6
+        if item_id in report["removing"]:
+            raise _refuse("removal_interrupted", f"{item_id} has an interrupted removal under "
+                          f"{os.path.join(resolved, _REMOVING, item_id)}",
+                          f"finish it first with `remove {item_id} --apply`; the archive may be the only copy of "
+                          "the leftover's missing entries")
+    for item_id in ids:                                                                # 7
+        entry = listed[item_id]
+        if not entry["prunable"]:
+            raise _refuse("not_prunable", f"{entry['name']} is {entry['age_days']} days old, not above the time to "
+                          f"live of {ttl_days} days", "it becomes prunable when it is older than the time to live")
+    for item_id in ids:                                                                # 8
+        if listed[item_id]["item"] in ("open", "recent"):
+            raise _refuse("item_not_finished", f"{item_id} is {listed[item_id]['item']}: its archive may be the "
+                          "only copy of its review folder",
+                          "wait until the report classes the item `finished`")
+    seen = {}
+    for item_id in ids:                                                                # 9
+        entry = listed[item_id]
+        info = _lstat_at(entry["name"], adir_fd) if adir_fd is not None else None
+        if not _seen_by_report(entry, info):
+            raise _refuse("archive_changed", f"{entry['name']} is not the file the report saw",
+                          f"{_PRUNE_AGAIN}; nothing was removed")
+        seen[item_id] = (info.st_size, info.st_mtime_ns)
+    return report, resolved, adir_fd, [listed[i] for i in ids], seen
+
+
+def _unchanged(entry: dict, adir_fd: int, seen: tuple) -> bool:
+    info = _lstat_at(entry["name"], adir_fd)
+    return info is not None and stat.S_ISREG(info.st_mode) and (info.st_size, info.st_mtime_ns) == seen
+
+
+def _check_unchanged(entry: dict, adir_fd: int, seen: tuple, removed: list[str], pending: list[str],
+                     resolved: str) -> None:
+    """The check just before an unlink: `archive_changed` when the file differs, `prune_failed` (with the
+    progress so far) when it cannot be examined."""
+    try:
+        same = _unchanged(entry, adir_fd, seen)
+    except OSError as exc:
+        raise _refuse("prune_failed", _stop_after(removed, pending, f"{entry['name']} could not be examined: "
+                                                   f"{errno.errorcode.get(exc.errno, exc.errno)} "
+                                                   f"{exc.strerror or exc}"),
+                      f"check the permissions of {resolved}; {_PRUNE_AGAIN}") from None
+    if not same:
+        raise _refuse("archive_changed", _stop_after(removed, pending, f"{entry['name']} changed after the "
+                                                      "preview"), _PRUNE_AGAIN)
+
+
+def _stop_after(removed: list[str], pending: list[str], why: str) -> str:
+    return f"{why}; removed: {', '.join(removed) or 'none'}; not removed: {', '.join(pending) or 'none'}"
+
+
+def _prune_delete(entries: list[dict], seen: dict, adir_fd: int, resolved: str, ids: list[str]) -> list[str]:
+    """D-Delete: each archive, in order, checked immediately before its unlink
+    and made durable after it. Returns the removed ids."""
+    removed: list[str] = []
+    for position, entry in enumerate(entries):
+        item_id = entry["work_item_id"]
+        pending = ids[position:]
+        _check_unchanged(entry, adir_fd, seen[item_id], removed, pending, resolved)    # 13 (a)
+        try:                                                                           # (b)
+            os.unlink(entry["name"], dir_fd=adir_fd)
+        except OSError as exc:
+            raise _refuse("prune_failed", _stop_after(removed, pending, f"{entry['name']} could not be removed: "
+                                                       f"{errno.errorcode.get(exc.errno, exc.errno)} "
+                                                       f"{exc.strerror or exc}"),
+                          f"check the permissions of {resolved}; {_PRUNE_AGAIN}") from None
+        removed.append(item_id)
+        try:                                                                           # (c)
+            os.fsync(adir_fd)
+        except OSError as exc:
+            raise _refuse("prune_failed", _stop_after(removed, pending[1:], f"{entry['name']} is removed, but its "
+                                                       "durability is unconfirmed: "
+                                                       f"{errno.errorcode.get(exc.errno, exc.errno)} "
+                                                       f"{exc.strerror or exc}"),
+                          f"check the permissions of {resolved}; {_PRUNE_AGAIN}") from None
+    return removed
+
+
+def prune_archives(repo_root, ids, *, apply: bool = False, archive_root=DEFAULT_ARCHIVE_ROOT,
+                   ttl_days: int = DEFAULT_TTL_DAYS, now: datetime.datetime, run=None, resolve=None) -> dict:
+    """Removes the named archives `<id>.tar.zst` that the report lists as past
+    the time to live: one `unlink` each through the archive directory's
+    descriptor, checked just before and made durable. Dry run unless `apply`.
+    Never opens the index, an archive's contents, a review folder or the
+    repository for writing."""
+    ids = sorted(set(ids))
+    if not ids:
+        raise RetentionError("usage", "at least one work item id is required", "pass one or more ids")
+    fds: list[int] = []
+    try:
+        report, resolved, adir_fd, entries, seen = _prune_select(repo_root, ids, archive_root, ttl_days, now, run,
+                                                                 resolve, fds)
+        removed: list[str] = []
+        if apply:
+            try:                                                                       # 10
+                fcntl.flock(adir_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise _refuse("archive_busy", "another `archive`, `remove` or `prune` run holds this repository's "
+                              "archive directory", "wait for it to finish, then run it again") from None
+            try:
+                errors: dict[str, str] = {}                                            # 11
+                leftovers = _removing_ids(Path(resolved), errors)
+                for item_id in ids:
+                    if item_id in leftovers:
+                        raise _refuse("removal_interrupted", f"{item_id} has an interrupted removal under "
+                                      f"{os.path.join(resolved, _REMOVING, item_id)}",
+                                      f"finish it first with `remove {item_id} --apply`")
+                if errors:
+                    path, why = sorted(errors.items())[0]
+                    raise _refuse("unreadable", f"{path} cannot be read ({why})",
+                                  "repair it; the engine does not prune from a partial view")
+                for entry in entries:                                                  # 12
+                    _check_unchanged(entry, adir_fd, seen[entry["work_item_id"]], [], ids, resolved)
+                removed = _prune_delete(entries, seen, adir_fd, resolved, ids)         # 13
+            finally:
+                _remove_quietly(lambda: fcntl.flock(adir_fd, fcntl.LOCK_UN), [], "the lock")
+        return {
+            "schema_version": SCHEMA_VERSION, "kind": "retention-prune",
+            "mode": "apply" if apply else "dry-run", "generated_at": _iso(now),
+            "repository": report["repository"], "archive_dir": resolved, "ttl_days": ttl_days,
+            "archives": [{"work_item_id": e["work_item_id"], "name": e["name"],
+                          "path": os.path.join(resolved, e["name"]), "bytes": e["bytes"],
+                          "modified": e["modified"], "age_days": e["age_days"], "item": e["item"]}
+                         for e in entries],
+            "index": os.path.join(resolved, _INDEX_NAME),
+            "result": {"removed": removed, "bytes": sum(e["bytes"] for e in entries if e["work_item_id"] in removed)},
+        }
+    finally:
+        for fd in reversed(fds):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
 def _size(count: int) -> str:
     value = float(count)
     for unit in ("B", "KiB", "MiB", "GiB"):
@@ -1806,6 +2000,26 @@ def render_remove_text(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_prune_text(result: dict) -> str:
+    lines = [f"Retention prune for {result['repository']} ({result['mode']}, {result['generated_at']})",
+             f"Archive directory: {result['archive_dir']}",
+             f"Time to live: {result['ttl_days']} days", "Archives:"]
+    lines += [f"  {a['name']}: {_size(a['bytes'])}, {a['age_days']} days old, {a['item']}" for a in result["archives"]]
+    lines.append(f"Index:     {result['index']} (not touched; it keeps every line)")
+    if result["mode"] == "apply":
+        lines.append(f"removed {len(result['result']['removed'])} archive(s), {_size(result['result']['bytes'])}")
+    else:
+        lines.append("dry run: nothing was written; pass --apply to remove")
+    return "\n".join(lines) + "\n"
+
+
+def _ttl_of(text: str) -> int:
+    if not re.fullmatch(r"[0-9]{1,5}", text) or not 1 <= int(text) <= MAX_TTL_DAYS:
+        raise RetentionError("usage", f"--ttl-days must be an integer from 1 to {MAX_TTL_DAYS}, got {text!r}",
+                             "pass --ttl-days 30")
+    return int(text)
+
+
 def _parse(argv) -> argparse.Namespace:
     parser = _Parser(prog="workflow_retention.py", description=__doc__.split("\n\n", 1)[0])
     commands = parser.add_subparsers(dest="command", parser_class=_Parser)
@@ -1828,16 +2042,19 @@ def _parse(argv) -> argparse.Namespace:
     remove.add_argument("--json", action="store_true", help="print one JSON object")
     remove.add_argument("--archive-root", default=DEFAULT_ARCHIVE_ROOT)
     remove.add_argument("--repo-root", default=repo_default)
+    prune = commands.add_parser("prune", help="remove archives past the time to live (a dry run without --apply)")
+    prune.add_argument("work_item_ids", nargs="+", metavar="work_item_id")
+    prune.add_argument("--apply", action="store_true", help="remove the named archives")
+    prune.add_argument("--json", action="store_true", help="print one JSON object")
+    prune.add_argument("--archive-root", default=DEFAULT_ARCHIVE_ROOT)
+    prune.add_argument("--ttl-days", default=str(DEFAULT_TTL_DAYS))
+    prune.add_argument("--repo-root", default=repo_default)
     args = parser.parse_args(argv)
     if args.command is None:
         raise RetentionError("usage", "a command is required",
-                             "run `workflow_retention.py report`, `archive` or `remove`")
-    if args.command == "report":
-        if not re.fullmatch(r"[0-9]{1,5}", args.ttl_days) or not 1 <= int(args.ttl_days) <= MAX_TTL_DAYS:
-            raise RetentionError("usage",
-                                 f"--ttl-days must be an integer from 1 to {MAX_TTL_DAYS}, got {args.ttl_days!r}",
-                                 "pass --ttl-days 30")
-        args.ttl_days = int(args.ttl_days)
+                             "run `workflow_retention.py report`, `archive`, `remove` or `prune`")
+    if args.command in ("report", "prune"):
+        args.ttl_days = _ttl_of(args.ttl_days)
     return args
 
 
@@ -1861,6 +2078,15 @@ def main(argv=None, *, run=None, resolve=None, now: datetime.datetime | None = N
                 sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
             else:
                 sys.stdout.write(render_remove_text(result))
+            return 0
+        if args.command == "prune":
+            result = prune_archives(args.repo_root, args.work_item_ids, apply=args.apply,
+                                    archive_root=args.archive_root, ttl_days=args.ttl_days, now=moment, run=run,
+                                    resolve=resolve)
+            if args.json:
+                sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
+            else:
+                sys.stdout.write(render_prune_text(result))
             return 0
         report = build_report(args.repo_root, archive_root=args.archive_root, ttl_days=args.ttl_days,
                               now=moment, run=run, resolve=resolve)

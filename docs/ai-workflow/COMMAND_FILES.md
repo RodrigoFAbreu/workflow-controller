@@ -34,7 +34,7 @@ quoted). The body is everything after the closing line. The body is the prompt.
 
 | Key | Class | What an adapter does |
 |---|---|---|
-| `disable-model-invocation` | **Honour** | `true` (eight commands): never launch the command for a model on the model's own initiative or as a step of another command; launch it only on the user's own request. An adapter that cannot tell refuses the command. The command's own confirmation check stays on regardless. |
+| `disable-model-invocation` | **Honour** | `true` (nine commands): never launch the command for a model on the model's own initiative or as a step of another command; launch it only on the user's own request. An adapter that cannot tell refuses the command. The command's own confirmation check stays on regardless. |
 | `state_writer` | **Honour** | A command file declares `true` or `false` only (`"publisher"` is a script-side value and never appears in a command file). `true`: the command changes `WORKFLOW_STATE.json`, always through `workflow_state.state_transaction`. Launch it in the checkout whose state it changes, with permission to run the Workflow scripts and Git there; never give the worker another way to write the state file. `false`: it never writes that file. The Workflow's conformance check requires the key on every command. |
 | `review-subject` | **Carry** | `bundle`, `verdict` or `none`: what the command reviews or consumes. Read by the Workflow's own conformance check (which commands call `assert_bundle_not_rejected`). An adapter passes the file through unchanged and needs no action. |
 | `description` | **Hint** | One line, shown when listing commands. No semantics. |
@@ -78,12 +78,13 @@ the appended copy is redundant.
 
 ## The user-only commands
 
-Eight commands carry `disable-model-invocation: true`:
+Nine commands carry `disable-model-invocation: true`:
 
 - `/accept-milestone`
 - `/adopt-gate-policy`
 - `/approve-review`
 - `/archive-finished-item`
+- `/prune-archives`
 - `/release-checkpoint-start`
 - `/request-plan-amendment`
 - `/resume-implementation`

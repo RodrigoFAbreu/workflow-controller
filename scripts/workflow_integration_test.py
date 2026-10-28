@@ -2768,14 +2768,14 @@ class TestGoldenCommandFileHashes(unittest.TestCase):
 
 
 class TestUserOnlyCommandLineWidth(unittest.TestCase):
-    """workflow-2.18.2 (review-followups-2, 64c): the guard lines of the eight user-only command
+    """workflow-2.18.2 (review-followups-2, 64c): the guard lines of the nine user-only command
     bodies stay at the files' usual width. Exempt: the front matter, code-fence lines, table rows,
     headings, and a line whose only content past its indentation is one span with no space inside
     it (it cannot be broken at a space)."""
 
     FILES = ("accept-milestone.md", "approve-review.md", "adopt-gate-policy.md",
              "release-checkpoint-start.md", "request-plan-amendment.md", "resume-implementation.md", "retire-legacy-work-item.md",
-             "archive-finished-item.md")
+             "archive-finished-item.md", "prune-archives.md")
     LIMIT = 90
 
     def test_no_prose_line_exceeds_the_limit(self):
@@ -7408,7 +7408,7 @@ class TestRetiredScopedRemediationLeavesNoLiveSurface(unittest.TestCase):
         text = (_repo_root() / "docs/ai-workflow/WORKFLOW_V2_1_OPERATOR_REFERENCE.md").read_text()
         sections = re.findall(r"(?m)^### `/([a-z0-9-]+)", text)
         on_disk = sorted(p.stem for p in (_repo_root() / ".claude" / "commands").glob("*.md"))
-        self.assertEqual(len(on_disk), 24)
+        self.assertEqual(len(on_disk), 25)
         self.assertNotIn("accept-scoped-remediation", sections)
         self.assertNotIn("accept-scoped-remediation", on_disk)
         # Every live command has exactly one section, and vice versa.
@@ -7757,13 +7757,16 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         `false` to `true` (it is the authoritative
         `LOCAL_MODEL_IMPLEMENTATION_REVIEW` stage writer for a `"2.2"` item
         at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW`), so two remained;
-        `/archive-finished-item` (workflow-2.23.0) makes the third."""
+        `/archive-finished-item` (workflow-2.23.0) makes the third and
+        `/prune-archives` (workflow-2.25.0) the fourth."""
         stems = _declared_state_writer_false()
-        self.assertEqual(stems, {"prepare-review", "review-functional", "archive-finished-item"})
+        self.assertEqual(stems, {"prepare-review", "review-functional", "archive-finished-item",
+                                 "prune-archives"})
         text = _operator_reference_text()
         self.assertNotIn("The only command with\n  `state_writer: false`", text)
+        self.assertNotIn("One of the three commands", text)
         self.assertIn(
-            "One of the three commands\n  unconditionally declaring `state_writer: false`",
+            "One of the four commands\n  unconditionally declaring `state_writer: false`",
             text,
         )
         for stem in sorted(stems - {"prepare-review"}):
@@ -7827,12 +7830,13 @@ class TestOperatorReferenceMatchesReality(unittest.TestCase):
         equality is derived; the count is a hardcoded tripwire."""
         text = _operator_reference_text()
         self.assertNotIn("not\nhand-maintained", text)
-        self.assertIn("assertEqual(len(on_disk), 24)", text)
+        self.assertIn("assertEqual(len(on_disk), 25)", text)
         for stale in ("holds 16", "all 16", "number 16", "roster of 16", "len(on_disk), 16",
-                      "holds 23", "all 23", "number 23", "roster of 23", "len(on_disk), 23"):
+                      "holds 23", "all 23", "number 23", "roster of 23", "len(on_disk), 23",
+                      "holds 24", "all 24", "number 24", "roster of 24", "len(on_disk), 24"):
             self.assertNotIn(stale, text, stale)
-        for current in ("holds 24 files today, and all 24", "number 24 itself",
-                        "len(on_disk), 24", "roster of 24"):
+        for current in ("holds 25 files today, and all 25", "number 25 itself",
+                        "len(on_disk), 25", "roster of 25"):
             self.assertIn(current, text, current)
         self.assertIn("hardcoded tripwire", text)
         # And the claim it makes about the derivation is itself true.
@@ -8862,7 +8866,7 @@ class TestCommandFilesContractDocument(unittest.TestCase):
             for filename in _command_filenames()
             if self._frontmatter(filename).get("disable-model-invocation") == "true"
         }
-        self.assertEqual(len(listed), 8)
+        self.assertEqual(len(listed), 9)
         self.assertEqual(listed, flagged)
 
     def test_the_neutral_documents_pass_the_neutrality_pattern(self):
@@ -8928,6 +8932,9 @@ class TestHarnessNeutralCommandBodies(unittest.TestCase):
         "archive-finished-item.md": (
             "Archive and remove the review folder of", "refuse to write anything unless",
             "Never fabricate, infer or carry over this text", "print the sentence and stop"),
+        "prune-archives.md": (
+            "Prune the archives", "refuse to write anything unless",
+            "Never fabricate, infer or carry over this text", "print the sentence again and stop"),
     }
 
     @staticmethod
@@ -9075,12 +9082,12 @@ class TestArchiveFinishedItemCommand(unittest.TestCase):
 
     def test_the_documents_list_it(self):
         users = ["accept-milestone", "adopt-gate-policy", "approve-review", "archive-finished-item",
-                 "release-checkpoint-start", "request-plan-amendment", "resume-implementation",
-                 "retire-legacy-work-item"]
+                 "prune-archives", "release-checkpoint-start", "request-plan-amendment",
+                 "resume-implementation", "retire-legacy-work-item"]
         doc = " ".join((_repo_root() / "docs" / "ai-workflow" / "COMMAND_FILES.md").read_text().split())
-        self.assertIn("`true` (eight commands)", doc)
-        self.assertNotIn("seven commands", doc)
-        self.assertIn("Eight commands carry `disable-model-invocation: true`", doc)
+        self.assertIn("`true` (nine commands)", doc)
+        self.assertNotIn("eight commands", doc)
+        self.assertIn("Nine commands carry `disable-model-invocation: true`", doc)
         reference = " ".join(_operator_reference_text().split())
         for stem in users:
             self.assertIn(f"- `/{stem}`", doc)
@@ -9088,6 +9095,116 @@ class TestArchiveFinishedItemCommand(unittest.TestCase):
         self.assertIn("### `/archive-finished-item <work-item-id>` \u2014 user-only", reference)
         self.assertIn("for seven of them the exact work item", reference)
         self.assertNotIn("for six of them", reference)
+
+
+class TestPruneArchivesCommand(unittest.TestCase):
+    """retention-prune-command (workflow-2.25.0, CP1): `/prune-archives` only calls the prune
+    engine, only after the literal sentence naming exactly the archives it was given."""
+
+    FILENAME = "prune-archives.md"
+    SPAN = re.compile(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", re.S)
+    DRY = "python3 -I scripts/workflow_retention.py prune <names>"
+    APPLY = "python3 -I scripts/workflow_retention.py prune <names> --apply"
+
+    def _body(self) -> str:
+        return _command_text(self.FILENAME).split("---\n", 2)[2]
+
+    def _spans(self) -> list[str]:
+        return [(a or b).strip() for a, b in self.SPAN.findall(self._body())]
+
+    def _fenced(self, startswith: str) -> str:
+        found = [span for span in self._spans() if span.startswith(startswith)]
+        self.assertEqual(len(found), 1, startswith)
+        return found[0]
+
+    def _authorizes(self, message: str, names: list[str]) -> bool:
+        pattern = re.compile(self._fenced("(?i)prune the archives").replace("T", "[a-z0-9][a-z0-9_-]{0,63}"))
+        matches = pattern.findall(" ".join(message.split()))
+        wanted = set(names)
+        return bool(matches) and all(
+            {n.lower() for n in found.split(", ")} == wanted for found in matches)
+
+    def _accepts_arguments(self, arguments: str) -> bool:
+        token = self._fenced("^[a-z0-9]").strip("^$")
+        if re.fullmatch(rf"{token}(?: {token})*", arguments) is None:
+            return False
+        names = arguments.split()
+        return len(names) == len(set(names))
+
+    def test_frontmatter(self):
+        frontmatter = _command_text(self.FILENAME).split("---\n", 2)[1]
+        for line in ("argument-hint: \"<work-item-id>...\"", "disable-model-invocation: true",
+                     "state_writer: false", "review-subject: none"):
+            self.assertIn(line, frontmatter.splitlines())
+        self.assertIn("$ARGUMENTS", self._body())
+
+    def test_the_body_calls_exactly_the_two_engine_forms(self):
+        import workflow_retention as wr
+        commands = [s for s in self._spans() if re.match(r"(python\d*|tar|zstd|rm|mv|unlink)\b", s)]
+        self.assertEqual(set(commands), {self.DRY, self.APPLY})
+        for command in (self.DRY, self.APPLY):
+            argv = command.replace("<names>", "m-1 m-2").split()[3:]
+            parsed = wr._parse(argv)
+            self.assertEqual(parsed.work_item_ids, ["m-1", "m-2"])
+            self.assertEqual(parsed.apply, command.endswith("--apply"))
+            self.assertFalse(parsed.json)
+        body = self._body()
+        for token in ("--archive-root", "--repo-root", "--ttl-days", "--json", "--force",
+                      "WORKFLOW_STATE.json", "state_transaction", "state_lock"):
+            self.assertNotIn(token, body)
+        spans = self._spans()
+        self.assertLess(spans.index(self.DRY), spans.index(self.APPLY))
+
+    def test_the_sentence_check_compares_the_named_set(self):
+        both = ["m-1", "m-2"]
+        self.assertTrue(self._authorizes("Prune the archives m-1, m-2.", both))
+        self.assertTrue(self._authorizes("Prune the archives m-2, m-1.", both))
+        self.assertTrue(self._authorizes("ok.  PRUNE the\narchives M-1, m-2. thanks", both))
+        self.assertTrue(self._authorizes("Prune the archives m-1.", ["m-1"]))
+        for message in ("", "m-1, m-2", "Prune the archives m-1.", "Prune the archives m-1, m-2, m-3.",
+                        "Prune the archives m-1, m-3.", "Prune the archives m-1, m-2",
+                        "Prune the archives m-1 and m-2.", "Prune the archives m-10, m-2.",
+                        "Prune the archives m-1, m-2. Prune the archives m-1.",
+                        "Prune the archives m-1. Prune the archives m-1, m-2."):
+            self.assertFalse(self._authorizes(message, both), message)
+        # The comparison is written in `_authorizes`; the body must state the same rule.
+        body = " ".join(self._body().split())
+        self.assertIn("The confirmation holds when there is at least one match and, in every match, "
+                      "the lower-cased names, as a set, equal the set of names of step 1.", body)
+        for loosened in ("in some match", "each name of step 1 is present", "among the lower-cased names"):
+            self.assertNotIn(loosened, body)
+        self.assertFalse(self._authorizes("Prune the archives m-10.", ["m-1"]))
+        self.assertFalse(self._authorizes("Prune the archives m-1.", ["m-10"]))
+        self.assertTrue(self._authorizes("Prune the archives m-10.", ["m-10"]))
+
+    def test_the_arguments_are_distinct_id_tokens(self):
+        for good in ("m-1", "m-1 m-2", "retention-command a"):
+            self.assertTrue(self._accepts_arguments(good), good)
+        for bad in ("", "m-1 m-1", "Prune the archives m-1.", "-m", "M-1", "m-1.tar.zst", "m-1,m-2"):
+            self.assertFalse(self._accepts_arguments(bad), bad)
+
+    def test_the_stop_and_no_retry_rules_are_pinned(self):
+        body = " ".join(self._body().split())
+        for needle in ("Never retry", "Never an archive the user did not name",
+                       "**Preview.**", "**Ask and stop.**", "**Apply**",
+                       "Nothing is applied and no sentence is asked for",
+                       "apply nothing, print the sentence again and stop",
+                       "its name without `.tar.zst`"):
+            self.assertIn(needle, body)
+        self.assertLess(body.index("**Preview.**"), body.index("**Ask and stop.**"))
+        self.assertLess(body.index("**Ask and stop.**"), body.index("**Apply**"))
+
+    def test_the_documents_list_it(self):
+        doc = " ".join((_repo_root() / "docs" / "ai-workflow" / "COMMAND_FILES.md").read_text().split())
+        self.assertIn("- `/prune-archives`", doc)
+        reference = " ".join(_operator_reference_text().split())
+        self.assertIn("### `/prune-archives <work-item-id>...` \u2014 user-only", reference)
+        self.assertIn("for seven of them the exact work item", reference)
+        self.assertIn("for `/prune-archives` the exact archives; for `/adopt-gate-policy` the policy digest",
+                      reference)
+        protocol = " ".join((_repo_root() / "docs" / "ai-workflow" / "ORCHESTRATION_PROTOCOL.md")
+                            .read_text().split())
+        self.assertIn("`/archive-finished-item` and `/prune-archives`", protocol)
 
 
 class TestReviewProtocolBaselineClauses(unittest.TestCase):

@@ -46,7 +46,7 @@ import workflow_state  # noqa: E402
 #: The Workflow release these bytes are. A build refuses when it differs
 #: from the manifest's `workflow_version` (CP7); it never reads the
 #: installation record.
-WORKFLOW_RELEASE = "2.22.0"
+WORKFLOW_RELEASE = "2.23.0"
 
 PROTOCOL_NAME = "workflow-orchestration"
 PROTOCOL_MAJOR = 1

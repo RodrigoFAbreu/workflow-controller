@@ -13,7 +13,7 @@ one open limit and C10g-3 builds it before wiring. The change is `chore:` with n
 
 ## Next action
 
-`/milestone-plan` for C10g-2 (`verify-codex`), the next item of the harness-neutral roles epic.
+`/milestone-plan` for C10g-2 (`verify-codex`, [#214](https://github.com/RodrigoFAbreu/workflow-controller/issues/214)), the next item of the harness-neutral roles epic.
 
 ## Functional review checklist
 

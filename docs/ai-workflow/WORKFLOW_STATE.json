@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-codex-tester-run",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -43207,7 +43207,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-run-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-run-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -43504,8 +43504,8 @@
           "external": 1
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-10-30T21:36:57Z",
+      "state_revision": 20,
+      "last_transition": "2026-10-30T22:32:19Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -43648,6 +43648,324 @@
           "run_ref": "codex:20261030T212949Z-883f12eb",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:26Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "19 tests in tests.test_codex_tester pass, covering outcome precedence, empty-message failure and refusals propagating with no exec."
+            },
+            "log_digest": "3919efc40458ab1fccfb983f3da48a613f84f1badebddc444fa57223849425ac",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:26Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:26Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "81 tests pass (bridge and sandbox)."
+            },
+            "log_digest": "6b2c6c5882c1abea54fb6dcd2ff848cc566cce7266f61895446af38c6358aed0",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:26Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:26Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "20 fake Codex contract tests pass."
+            },
+            "log_digest": "5ce3f51d3a47a378bf4560041bd017ebf2a98b051dd87d48a00dc74b33f118f3",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:26Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:26Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "SettleTest copy-back and removal tests pass (ran, refusal, deadline, failed copy-back, rotated credential)."
+            },
+            "log_digest": "3919efc40458ab1fccfb983f3da48a613f84f1badebddc444fa57223849425ac",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:27Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:27Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "run_tester's result dict has all nine keys with first_readings [] and telemetry None; test_the_result_holds_every_key_of_the_claude_launch passes."
+            },
+            "log_digest": "3919efc40458ab1fccfb983f3da48a613f84f1badebddc444fa57223849425ac",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:27Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:27Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "grep finds only the definition at controller/codex_tester.py:101."
+            },
+            "log_digest": "ca8db11c044d9333b3c2eb6d698e5f270c1b285df926683c9935b4621334e568",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:27Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:27Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "git diff --stat is empty for review.py, harness.py and cli.py."
+            },
+            "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:27Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:27Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "check_docs passes; guide, roadmap and ACTIVE_MILESTONE record the 3b2a/3b2b split and say nothing calls run_tester."
+            },
+            "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:27Z"
+          },
+          "flow-9": {
+            "flow_id": "flow-9",
+            "status": "passed",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "ran_at": "2026-10-30T21:53:27Z",
+            "summary": {
+              "checklist_blob": "4c90307a72e148b5b00c26551e6a73638dac96ea",
+              "text": "63 sandbox tests pass; the last SANDBOX_LIMITS entry is reworded as CP3 says; test_every_read_entry_of_the_roots_is_a_known_kind_of_location asserts the read roots."
+            },
+            "log_digest": "6f254ad3d7f59a5ce635f322cb97b3719296d66e81d807ae1f616b19f0dbdd58",
+            "run_ref": "controller:20261030T215250Z-16f27dec",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:53:27Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 232,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/232"
+          },
+          "state": "open",
+          "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+          "observed_at": "2026-10-30T22:32:19Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "87a86afc74473b285ba9133f8c5bc3b796d15cbd",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-30T22:32:19Z",
+            "raw_sha256": "11282ce5e07df4f12498d74846ef7b367b34eecf19c4770ab38ad59337995800",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "3b49dd7f63b03a5571b27dddaaf1c29494eb6fe40c5c7bc1e493ded982a40c74"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 232,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/232"
+          },
+          "state": "open",
+          "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+          "observed_at": "2026-10-30T22:17:23Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "87a86afc74473b285ba9133f8c5bc3b796d15cbd",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.25.0"
+            },
+            "fetched_at": "2026-10-30T22:17:23Z",
+            "raw_sha256": "11282ce5e07df4f12498d74846ef7b367b34eecf19c4770ab38ad59337995800",
+            "run_ref": "controller:20261030T221723Z-e1c4cabc"
+          },
+          "fact_id": "6e70d7029e2ce3de852751226d12126d709f3c6f0510c7936fb1ffe54ae955d6"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8', 'flow-9'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #232 at 4461fd49607f37f9ba3308b215468232b13fcc48 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "87a86afc74473b285ba9133f8c5bc3b796d15cbd",
+          "anchor_identity": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "recorded_at": "2026-10-30T21:36:57Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "09d64ffeddaa23b8fbf58311f11265e95c614683124dacac19a908c5e5885446",
+              "log_digest": "3919efc40458ab1fccfb983f3da48a613f84f1badebddc444fa57223849425ac",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-2": {
+              "evidence_id": "e112bb4221ce2e1100dfad5604d93f35d3e9457c83873f9357fb75fec8012aaa",
+              "log_digest": "6b2c6c5882c1abea54fb6dcd2ff848cc566cce7266f61895446af38c6358aed0",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-3": {
+              "evidence_id": "5c9d4aed3fac8eac0fae5d2c6e4c5662378be54cb35673f18fe07454a4ab4dbc",
+              "log_digest": "5ce3f51d3a47a378bf4560041bd017ebf2a98b051dd87d48a00dc74b33f118f3",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-4": {
+              "evidence_id": "a142dc6bc824cf93fe97e5e05f2e56499513cbe8e76e88ce20677bd0127788ac",
+              "log_digest": "3919efc40458ab1fccfb983f3da48a613f84f1badebddc444fa57223849425ac",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-5": {
+              "evidence_id": "726765b46d818a3e27e316b79053f6819780941cc3f0c7ceed50fb3a4415b12c",
+              "log_digest": "3919efc40458ab1fccfb983f3da48a613f84f1badebddc444fa57223849425ac",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-6": {
+              "evidence_id": "588ffd3ee9d3f1120e747b0c3867697a2db0a6243247170d64cd0d7be3bd86fa",
+              "log_digest": "ca8db11c044d9333b3c2eb6d698e5f270c1b285df926683c9935b4621334e568",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-7": {
+              "evidence_id": "78fcc30b9e63f4b3a299ad1b2d7d33114a8f8f79b7bfb0c96f745647fbeb647c",
+              "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-8": {
+              "evidence_id": "60d388e26a94d090e2a460a9b4b01973cfbafd52878d934d0dfc501a68b6492c",
+              "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            },
+            "flow-9": {
+              "evidence_id": "6ddd6b40166ed67ed2c34feec46bbd740fa91e2882941a0c0d998f4b374832f7",
+              "log_digest": "6f254ad3d7f59a5ce635f322cb97b3719296d66e81d807ae1f616b19f0dbdd58",
+              "run_ref": "controller:20261030T215250Z-16f27dec"
+            }
+          },
+          "pr": {
+            "fact_id": "3b49dd7f63b03a5571b27dddaaf1c29494eb6fe40c5c7bc1e493ded982a40c74",
+            "head": "4461fd49607f37f9ba3308b215468232b13fcc48",
+            "provenance": "workflow_gh",
+            "raw_sha256": "11282ce5e07df4f12498d74846ef7b367b34eecf19c4770ab38ad59337995800"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-30T22:32:19Z",
+        "workflow_release": "2.25.0"
       }
     }
   }

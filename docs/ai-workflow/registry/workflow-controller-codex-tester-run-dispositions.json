@@ -1,0 +1,34 @@
+{
+ "dispositions": {
+  "F-1431bf53b732": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/231"
+  },
+  "F-2296ccf9acaf": {
+   "disposition": "fixed",
+   "note": "Applied in the plan revisions and the implementation (the code, tests and docs carry it)."
+  },
+  "F-3c27113d21c4": {
+   "disposition": "fixed",
+   "note": "Applied in the plan revisions and the implementation (the code, tests and docs carry it)."
+  },
+  "F-8cce040d9e72": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/231"
+  },
+  "F-b0ad422b8b03": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/231"
+  },
+  "F-e191ef3a1cad": {
+   "disposition": "fixed",
+   "note": "Applied in the plan revisions and the implementation (the code, tests and docs carry it)."
+  },
+  "F-f6396954d847": {
+   "disposition": "fixed",
+   "note": "Applied in the plan revisions and the implementation (the code, tests and docs carry it)."
+  }
+ },
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-tester-run"
+}

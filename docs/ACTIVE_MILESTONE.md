@@ -12,7 +12,7 @@ project and managed layers is compared with the pinned tester profile, which nar
 
 ## Next action
 
-`/milestone-plan` for C10g-3b (the Codex functional-tester launch, [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)).
+`/milestone-plan` for C10g-3b (the Codex tester's sandbox bridge, [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)).
 
 ## Functional review checklist
 

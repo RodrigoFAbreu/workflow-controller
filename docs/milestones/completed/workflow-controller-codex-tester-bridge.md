@@ -1,0 +1,82 @@
+# C10g-3b: the Codex tester's sandbox bridge (Revision 1)
+
+Work item: `workflow-controller-codex-tester-bridge`
+Work item type: `product`
+Governing workflow version: `2.2` (this repository's `docs/ai-workflow/WORKFLOW_CONFIG.json` default at creation)
+Base commit: `92155e83d49545e6250ca0867ec31c668b34c12e` ("docs: split C10g-3b into the sandbox bridge and the launch (#222, #228) (#229)"), the tip of `main`.
+Lifecycle authority: this repository's installed Workflow, automatic gates.
+Roadmap slot: `docs/ROADMAP.md` row C10g-3b, fifth slice of the Codex tester ([#131](https://github.com/RodrigoFAbreu/workflow-controller/issues/131)). Issue [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222).
+Released baseline: `workflow-controller 1.25.0`. Nothing user-visible is added (a module nothing calls yet, two behaviour-preserving extractions, a guide paragraph and a roadmap row), so the squash commit is a `chore:` and there is no release, as for C10g-1, C10g-2a and C10g-3a.
+Pull request title: `chore: the Codex tester's sandbox bridge (C10g-3b, #222)`
+
+## Goal
+
+Today the Claude tester gets its sandbox from `functional_review.capture_candidate` (the tested bytes pinned to a head) and `functional_review.build_sandbox`, and `functional_review.check_bound` proves after the run that the clone still equals the candidate. The Codex tester has its own layout (`codex_sandbox.TesterLayout`, `codex_sandbox.build`: the home with the profile and the credential copy, the scratch area, the stand-in launchers, the controls that start no process) but nothing puts a candidate into it. This item connects them, offline only: from a `Candidate` it builds the Codex tester's read-only clone and the rest of its folder, provides the binding check for after a run, and builds the tester's prompt for Codex from the one text both testers get. Nothing launches Codex here (no `codex exec`, no `app-server`), no role is declared, `harness.py`'s `build_verification` is unchanged, and there is no new setting, option, exit code or gate. The launch, the result collection and the refusal mapping are C10g-3b2; routing and fallback are C10g-3c.
+
+## What exists
+
+- `controller/functional_review.py`: `Candidate`, `capture_candidate`, `build_sandbox` (the clone sequence, the writable locations, the settings, the launchers, the manifest verification), `check_bound` over a `Sandbox`, `walk_differences`, `derive_writable_locations`, `make_writable_links`, `exclude_writable_links`, `write_launchers`, `remove_sandbox`, `kept_sandboxes`, `tester_prompt`, `SANDBOX_LIMITS`, `unavailable` and its four causes.
+- `controller/codex_sandbox.py`: `TesterLayout` (clone `<base>/tree`, scratch `<base>/scratch`, `scratch/tmp`, `scratch/fake-logs`, `bin`, home, Codex home), `build` (writes the home and `config.toml`, the scratch folders and the launchers, runs `check_outside_layers` and `check_home`, returns `Built` with the argv, whose prompt is `-` (standard input) unless one is given), `profile_toml` (read: the listed roots and the clone; write: the scratch area only), `check_launch`, `check_composed`.
+
+## Decisions
+
+Each decision states one principle.
+
+- **D1. One clone sequence and one binding comparison, shared by both testers.** `build_sandbox` is split without changing what it does: `clone_candidate(candidate, *, clone, origin)` runs the sequence (a bare scratch origin, `git clone --no-hardlinks --no-checkout` with `core.autocrlf=false` of the real repository, the checkout of the head on the branch, the `origin` remote moved to the scratch origin, the push), and `bound_differences(clone, candidate, check_dir, links, refs, git_state)` is the body of `check_bound`. `build_sandbox` and `check_bound(sandbox)` call them, so the Claude tester's behaviour, records and tests are unchanged, and the Codex tester cannot drift from the same checkout rules (no autocrlf, no filter driver, the same manifest comparison). The Claude-specific parts stay where they are and are not reused: the `settings.json` with its sandbox settings and flags, the short socket-safe `TMPDIR`, `Sandbox.environment` and the seccomp probe. The Codex tester's equivalents are the profile, `command_environment` and the scratch `TMPDIR` of `codex_sandbox`.
+- **D2. Where the pieces go, so the profile stays true.** The clone is `layout.clone` (the profile's read-only entry). Everything the tester may write is inside `layout.scratch`: the scratch bare origin `scratch/origin.git` (so a push from a copy reaches nothing real), the output folder `scratch/out` (where `RESULTS.json` and the logs go) and the writable-location links' targets `scratch/writable/<name>`. The Controller-only `check.git` (the empty Git directory `walk_differences` uses to evaluate ignore rules) and the `ITEM` record are `<base>/check.git` and `<base>/ITEM`, outside the scratch area and listed in no readable root, so the tester can neither read nor change them. `check_roots` and the overlap refusals are untouched and still hold; a test builds a bridge and asserts that no profile entry other than the clone and the scratch area covers any of these paths and that the only `write` entry is the scratch area.
+- **D3. The writable locations come from the same derivation; whether Codex honours a write through the link is not measured here.** `derive_writable_locations` over the candidate's root `.gitignore` admits the same directories, `make_writable_links` links them from the clone to `scratch/writable/<name>`, `exclude_writable_links` hides the links from Git, and `walk_differences` accepts exactly those links, as for Claude. Whether the permissions profile lets a write through such a link succeed is a behaviour of the real sandbox that this offline item cannot show: the prompt says that a write through a link that is refused makes the flow `environment`, and C10g-3b2's live probe measures it. No other claim is made.
+- **D4. The bridge builds on `codex_sandbox.build` and owns the clone.** `codex_bridge.build_bridge(candidate, *, runtime_root, job_id, work_item_id, operator_home, binary, ...)` refuses a folder that already exists, calls `codex_sandbox.build` (so the home, scratch, launchers and the two controls that start no process run exactly as in C10g-1), then `clone_candidate`, the writable links, the recorded `.git` state and refs, the `ITEM` record (so `kept_sandboxes`, `sweep_kept` and `remove_sandbox` find a Codex job's folder, which lives under the same `functional/<job id>/` area), and finally verifies the fresh clone with `walk_differences`: a mismatch is `functional_review.unavailable(UNAVAILABLE_CLONE_MISMATCH, ...)` before anything runs, as for Claude. Any failure removes the folder. It returns a `Bridge` holding the `Built`, the candidate, the writable and refused locations, the recorded state and the output folder. The prompt is not placed in the argv: `Built.argv` keeps `-`, and the prompt text is the caller's to deliver on standard input (C10g-3b2).
+- **D5. The binding check is the shared one.** `codex_bridge.check_bound(bridge)` returns `bound_differences(...)` over the bridge's clone, so an edit, a new file, a changed ref or a `.git` change other than the allowed ones is reported in the same words, capped at the same count. The scratch origin and the output folder are outside the clone and are not part of it.
+- **D6. One prompt text, with the sandbox's own limits.** `functional_review.tester_prompt` gains one keyword, `limits`, defaulting to `SANDBOX_LIMITS`, so the Claude prompt is byte for byte what it is today (a test compares it with the unchanged call). `codex_bridge.SANDBOX_LIMITS` states the Codex sandbox's own limits: no network and no host socket; `gh`, `claude`, `codex` and `ssh` refuse; the `PATH` is the sandbox `bin/` and the system directories; reads are limited to the clone, the system and install directories and the sandbox's own files (nothing of the operator's home, environment or credentials); the clone is read-only; writes go to the scratch area only, which holds the output folder and `TMPDIR` (the scratch `HOME` is read-only, so a flow that needs a writable home sets `HOME` inside `TMPDIR`); a write through a writable-location link that is refused is `environment` (D3). The text is checked against the profile by a test (D2's write assertion), so a change to the profile cannot leave the prompt wrong. `codex_bridge.prompt(bridge, flows, *, timeout_seconds)` fills the clone, the output folder, the head, the checklist blob and the locations from the bridge.
+- **D7. Sizing and the review nits.** One mechanism, two checkpoints. None of the review nits on #174 (the C10g-1 hardening items, the digest-listing nit) is needed by the bridge, so none is taken. A flow that cannot run in the Codex sandbox stays a tester decision (`environment`), as for Claude.
+- **D8. Release type.** The title rules need a `feat:` only for an operator-visible change. This item adds a module nothing calls, two behaviour-preserving extractions and a guide and roadmap update, so it is a `chore:` with no release.
+
+## Checkpoints
+
+The table below is generated from the registry; never edit it by hand.
+
+| id | name | depends_on | complexity | session_target |
+| --- | --- | --- | --- | --- |
+| CP1 | The shared extractions and the bridge's layout from a candidate | - | 2 | 1 |
+| CP2 | The binding check, the Codex prompt and the documents | CP1 | 2 | 1 |
+
+<!-- CP1 -->
+### CP1 -- The shared extractions and the bridge's layout from a candidate (#222)
+
+**Files:** `controller/functional_review.py`, `controller/codex_bridge.py`, `tests/test_codex_bridge.py`
+
+D1, D2, D3 and D4. In `controller/functional_review.py`: `clone_candidate` and `bound_differences` are extracted from `build_sandbox` and `check_bound`, which call them (no other behaviour change). In the new `controller/codex_bridge.py`: `Bridge` and `build_bridge`.
+
+Done when `tests/test_codex_bridge.py` shows, offline, over fake candidate trees captured from a scratch Git repository: a clone whose files, executable bits and symlinks equal the manifest; the scratch origin holding the branch at the head and the clone's `origin` remote pointing at it; the output folder, the scratch origin and the writable-location targets inside the scratch area and `check.git` and `ITEM` outside it; writable locations derived from a `.gitignore` as linked and hidden from Git, and a refused pattern listed with its reason; the stand-in `gh`, `claude`, `codex` and `ssh` present in `bin/`; `build` having run its controls (a pre-existing startup-loaded entry in the Codex home refuses); a pre-existing job folder refused; a checkout conversion (`core.autocrlf=true` forced on the checkout, as `test_core_autocrlf_ends_at_unavailable_before_launch` does for Claude) ending at `functional_tester_unavailable` with cause `clone_mismatch` and the folder removed; a failure after the folder exists removing it; `kept_sandboxes` finding the item's Codex job and `remove_sandbox` removing it; and the D2 profile assertion (no entry but the clone and the scratch area covers the bridge's files, and the scratch area is the only `write` entry). `tests.test_functional_sandbox`, `tests.test_functional_review` and `tests.test_codex_sandbox` run unchanged and green, and the Claude launch path, `controller/review.py`, `controller/codex_sandbox.py`, `controller/harness.py` and `controller/cli.py` are not edited.
+<!-- /CP1 -->
+
+<!-- CP2 -->
+### CP2 -- The binding check, the Codex prompt and the documents (#222)
+
+**Files:** `controller/functional_review.py`, `controller/codex_bridge.py`, `tests/test_codex_bridge.py`, `tests/test_functional_review.py`, `docs/guide/harnesses.md`, `docs/ROADMAP.md`, `docs/ACTIVE_MILESTONE.md`
+
+D5, D6 and the documents. In `controller/functional_review.py`: the `limits` keyword of `tester_prompt`. In `controller/codex_bridge.py`: `check_bound`, `SANDBOX_LIMITS` and `prompt`. Documents, in place: `docs/guide/harnesses.md` says the bridge exists, what it builds, that the prompt for Codex states the Codex sandbox's limits, that no launch path calls it yet and that C10g-3b2 launches; `docs/ROADMAP.md` marks the C10g-3b row complete and C10g-3b2 next; `docs/ACTIVE_MILESTONE.md` points to `/milestone-plan` for C10g-3b2.
+
+Done when `tests/test_codex_bridge.py` shows, offline: a clone untouched after a run is bound, and each of an edited tracked file, a changed executable bit, a deleted file, a new untracked file, a new file the ignore rules ignore (accepted), a retargeted or replaced writable-location link, a moved ref, a changed `.git` entry beyond the allowed ones and a special file is reported in the shared words; the prompt carries the clone, output folder, head, checklist blob, the writable and refused locations, the flows with their ids and the result format, and every limit of `codex_bridge.SANDBOX_LIMITS`, and none of the Claude-only wording (the claim that the scratch `HOME` and `XDG_*` directories are writable); a test ties each path-bearing limit to the profile (D2); and `tests/test_functional_review.py` shows `tester_prompt` called without `limits` returns exactly the text it returned before this item. `python3 tools/check_docs.py` passes, and the suite is green but for the known Git 2.56 trailer tests.
+<!-- /CP2 -->
+
+## Requirements
+
+| id | requirement | checkpoints |
+|---|---|---|
+| R1 | From a captured candidate the bridge builds the Codex tester's folder: a read-only clone equal to the candidate's manifest, a scratch bare origin, the output folder and writable-location targets inside the scratch area, the Controller-only check directory and item record outside it, the stand-ins on the `PATH`, and the controls of `codex_sandbox.build`; a mismatch or any failure refuses before anything runs and removes the folder (#222) | CP1 |
+| R2 | The clone sequence and the binding comparison are one implementation shared with the Claude tester through behaviour-preserving extractions, so the Claude tester's behaviour and tests are unchanged and no second set of checkout rules exists (#222) | CP1, CP2 |
+| R3 | After a run the binding check reports any difference between the clone and the candidate in the shared words, and the scratch origin and output folder are not part of it (#222) | CP2 |
+| R4 | The tester's prompt for Codex is the one shared text with the Codex sandbox's own limits, checked against the profile; the Claude prompt is byte-identical when no limits are given (#222) | CP2 |
+| R5 | Nothing launches Codex, no role is declared, and the launch paths, the reviewer, `build_verification`, settings, options, exit codes and gates are unchanged; the guide and roadmap say so (#222) | CP1, CP2 |
+
+## Functional review
+
+Every flow is offline and unit-level, run one module at a time (`tests.test_codex_bridge`, `tests.test_functional_sandbox`, `tests.test_functional_review`, `tests.test_codex_sandbox`), plus `python3 -B tools/check_docs.py`, `git diff <base>..HEAD --stat -- controller/review.py controller/codex_sandbox.py controller/harness.py controller/cli.py` (expected empty) and a search showing nothing outside the bridge and its tests calls `build_bridge`. The tester's `/tmp` is read-only and these tests create temporary folders, so the tester runs them with `TMPDIR` set to its scratch area; a flow that cannot is `environment` and operator-run. The tests build real Git repositories and run `git`, which the tester's `PATH` provides. There is no live flow: the bridge starts no Codex. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206).
+
+## Risks
+
+- **Writes through a writable-location link are unmeasured under the Codex profile.** Stated in D3 and the prompt; C10g-3b2's live probe measures it, and a refused write is `environment`, never a `defect`.
+- **The extractions touch the Claude tester's build and binding code.** They move code without changing it, and the Claude tests run unchanged; the prompt keyword defaults to the old text and a test compares the bytes.
+- **The read-only scratch `HOME`.** Follows from the profile (write: scratch only) and is stated in the limits; a flow that needs a writable home sets `HOME` inside `TMPDIR`.
+- **Out of scope:** the `codex exec` launch, the result collection and refusal mapping, the role declaration and the `is_verified` gate (C10g-3b2), routing and fallback (C10g-3c), the Codex worker (H4a to H4g), the review nits on #174, and any change to the reviewer, `verify-codex`, settings, options, exit codes or gates.

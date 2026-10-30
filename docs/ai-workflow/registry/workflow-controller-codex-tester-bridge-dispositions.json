@@ -1,0 +1,42 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-tester-bridge",
+ "dispositions": {
+  "F-06c7fae467f6": {
+   "disposition": "dropped",
+   "reason": "Two independent `git init --bare` commands run in the other order; every Claude-tester test passes and behaviour is unchanged."
+  },
+  "F-177195bdb82a": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/228"
+  },
+  "F-1ca226f0655f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/223"
+  },
+  "F-421ee7f8907e": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/228"
+  },
+  "F-4ef84fb10525": {
+   "disposition": "dropped",
+   "reason": "The same reorder of two independent git-init commands, with no correctness impact."
+  },
+  "F-74480bb786fa": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/228"
+  },
+  "F-c3a9df84a5ac": {
+   "disposition": "dropped",
+   "reason": "Plan wording: `build_bridge` creates the empty `check.git` as implemented; the plan is a historical record."
+  },
+  "F-cef7722c3baa": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/228"
+  },
+  "F-ff4d8da7e743": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/228"
+  }
+ }
+}

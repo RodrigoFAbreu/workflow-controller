@@ -41872,7 +41872,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-composed-config-check-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-composed-config-check-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 1,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -42012,12 +42012,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 11,
-      "last_transition": "2026-10-30T13:05:13Z",
+      "state_revision": 13,
+      "last_transition": "2026-10-30T13:35:20Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -42103,7 +42103,34 @@
               "at": "2026-10-30T12:08:25Z"
             }
           ]
+        },
+        "F-2e164a8b1d46": {
+          "digest": "2e164a8b1d46c58f13f02433a0e4a83764217068d59a5a3c26b28eda5b0f4c4a",
+          "text": "**Parent-table origins disappear from refusal evidence.** At `controller/codex_sandbox.py:500`, `review._origin` cannot resolve an ancestor origin. Using the recorded `shell_environment_policy` origin and changing `inherit` to `all` correctly refuses, but reports `source=None`. The fixture manufactures child origins and misses this diagnostic gap.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b4d9f843675a0c6b26b104ef49c2919806bf60d66b763d4bd257f3b7a0f80966",
+              "verdict": "REVISE",
+              "at": "2026-10-30T13:35:20Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "b4d9f843675a0c6b26b104ef49c2919806bf60d66b763d4bd257f3b7a0f80966",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "ae8249ba0bf2a151974cd7cfe0e668efe640817d954dfcdc90adafaae79ad4f4",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T13:28:12Z",
+          "verdict_sha256": "58a3371d3dd673cd21510b054d704eafa3e16f2e91dac562971cea084e95bdcc",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-composed-config-check/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

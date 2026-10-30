@@ -790,9 +790,11 @@ def sandbox_limits_note() -> str:
 def tester_prompt(
     flows: Sequence[Flow], *, clone_dir: Path, output_dir: Path, head: str, checklist_blob: str,
     writable: Sequence[str], refused: Sequence[RefusedPattern], timeout_seconds: int,
+    limits: Sequence[str] = SANDBOX_LIMITS,
 ) -> str:
     """The independent tester's prompt (D4): the flows with their ids, the
-    exact result format, the sandbox's limits, the writable and refused
+    exact result format, the sandbox's limits (``limits``: the Claude
+    sandbox's own unless a harness gives its own), the writable and refused
     locations, and the rules about copies."""
     lines = [
         "You are an independent functional tester. Run each flow of the checklist below against the repository "
@@ -806,7 +808,7 @@ def tester_prompt(
         "",
         "## Sandbox limits",
         "",
-        *[f"- {limit}" for limit in SANDBOX_LIMITS],
+        *[f"- {limit}" for limit in limits],
         "",
         "Writable locations in the clone root, each a link to a folder outside the clone: "
         + (", ".join(f"{name}/" for name in writable) or "none"),
@@ -1758,6 +1760,22 @@ def _plain(cwd: Path, *args: str) -> None:
     _git(cwd, list(args))
 
 
+def clone_candidate(candidate: Candidate, *, clone: Path, origin: Path) -> None:
+    """The clone sequence both testers share (D1): a bare scratch repository at
+    ``origin``, a ``git clone --no-hardlinks --no-checkout`` of the real
+    repository with ``core.autocrlf=false`` into ``clone``, the checkout of the
+    head on the branch, the ``origin`` remote moved to the scratch repository
+    and the branch pushed to it. The parents of ``clone`` and ``origin`` exist;
+    neither does."""
+    _plain(origin.parent, "init", "-q", "--bare", origin.name)
+    _plain(clone.parent, "clone", "-q", "--no-hardlinks", "--no-checkout", "-c", "core.autocrlf=false",
+           str(candidate.repo_root), clone.name)
+    _plain(clone, "checkout", "-q", "-B", candidate.branch, candidate.head)
+    _plain(clone, "remote", "remove", "origin")
+    _plain(clone, "remote", "add", "origin", str(origin))
+    _plain(clone, "push", "-q", "-u", "origin", candidate.branch)
+
+
 def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work_item_id: str,
                   python: str | None = None, package_parent: Path | None = None) -> Sandbox:
     """Build the sandbox of D3 and verify the fresh clone against the
@@ -1779,15 +1797,9 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
         for name in ("out", "home", "fake-logs", "bin", "home/.config", "home/.local/share", "home/.local/state",
                      "home/.cache"):
             (base / name).mkdir(parents=True, exist_ok=True)
-        _plain(base, "init", "-q", "--bare", "origin.git")
         _plain(base, "init", "-q", "--bare", "check.git")
-        _plain(base, "clone", "-q", "--no-hardlinks", "--no-checkout", "-c", "core.autocrlf=false",
-               str(candidate.repo_root), "clone")
         clone = base / "clone"
-        _plain(clone, "checkout", "-q", "-B", candidate.branch, candidate.head)
-        _plain(clone, "remote", "remove", "origin")
-        _plain(clone, "remote", "add", "origin", str(base / "origin.git"))
-        _plain(clone, "push", "-q", "-u", "origin", candidate.branch)
+        clone_candidate(candidate, clone=clone, origin=base / "origin.git")
         writable, refused = derive_writable_locations(candidate.root_gitignore, candidate.manifest)
         make_writable_links(clone, base / "writable", writable)
         exclude_writable_links(runtime_root, f"{SANDBOX_AREA}/{job_id}/clone/.git", writable)
@@ -1808,22 +1820,30 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
         raise
 
 
-def check_bound(sandbox: Sandbox) -> list[str]:
+def bound_differences(clone: Path, candidate: Candidate, check_dir: Path, links: Mapping[str, Path],
+                      refs: Mapping[str, str], git_state: Mapping[str, tuple]) -> list[str]:
     """After the run: whether the clone still is the candidate (D5). Empty
     means bound. The worktree is walked in Python against the manifest, the
-    clone's ``HEAD`` and refs are compared as plain files with those captured,
-    and ``.git`` may differ only by the index, ``logs/``, ``FETCH_HEAD`` and
-    new loose objects. No Git command runs in the clone."""
-    clone = sandbox.clone
+    clone's ``HEAD`` and refs are compared as plain files with those captured
+    (``refs``), and ``.git`` may differ from ``git_state`` only by the index,
+    ``logs/``, ``FETCH_HEAD`` and new loose objects. No Git command runs in the
+    clone. Shared by both testers (D1)."""
     refs_now = refs_of(clone / ".git")
-    problems = [f"clone ref {name} changed" for name in sorted(set(sandbox.refs) | set(refs_now))
-                if sandbox.refs.get(name) != refs_now.get(name)]
+    problems = [f"clone ref {name} changed" for name in sorted(set(refs) | set(refs_now))
+                if refs.get(name) != refs_now.get(name)]
     moved = {p.split(" ")[2] for p in problems}
     now = _git_dir_state(clone / ".git")
-    problems += [d for d in git_dir_differences(sandbox.git_state, now)
+    problems += [d for d in git_dir_differences(git_state, now)
                  if not any(d.startswith(f".git/{name}:") for name in moved)]
-    problems += walk_differences(clone, sandbox.candidate, sandbox.check_dir, sandbox.writable_links)
+    problems += walk_differences(clone, candidate, check_dir, links)
     return problems[:MAX_DIFFERENCES]
+
+
+def check_bound(sandbox: Sandbox) -> list[str]:
+    """After the run: whether the clone still is the candidate (D5); see
+    :func:`bound_differences`."""
+    return bound_differences(sandbox.clone, sandbox.candidate, sandbox.check_dir, sandbox.writable_links,
+                             sandbox.refs, sandbox.git_state)
 
 
 # ---------------------------------------------------------------------------

@@ -114,6 +114,18 @@ limit remains (the one entry of `KNOWN_LIMITS`, `composition_window`): the confi
 just before the launch, so a layer that changes in that window, or a setting only `exec` composes differently, is not
 seen. The reviewer's control makes the same assumption.
 
+`controller/codex_bridge.py` is the Codex tester's sandbox bridge. From the functional review's captured candidate,
+`build_bridge` builds the tester's folder: the read-only clone (the Claude tester's own `clone_candidate`, so the two
+share one set of checkout rules), the scratch bare origin, the output folder and the writable-location targets inside
+the profile's one write area, the Controller-only check directory and item record outside it, the stand-ins on the
+`PATH`, and everything `codex_sandbox.build` writes and checks. A fresh clone that differs from the manifest, or any
+other failure, removes the folder before anything runs. `check_bound` reports, after a run, any difference between the
+clone and the candidate in the shared words (`bound_differences`); the scratch origin and output folder are not part of
+it. `prompt` is the tester's one shared prompt with the Codex sandbox's own limits (`codex_bridge.SANDBOX_LIMITS`: the
+scratch `HOME` is read-only, so a flow that needs a writable home sets `HOME` inside `TMPDIR`), and a test ties those
+limits to the profile. No launch path calls the bridge, no role is declared and nothing starts `codex`: C10g-3b2
+launches it.
+
 `controller/codex_build.py` names a Codex build and records which builds were verified, offline, and nothing calls it
 except its tests. `build_digest` is a SHA-256 over every file a launch can run as Codex: the launcher's package and
 each `optionalDependencies` package found where Node's resolution finds it in the launch environment. A layout it

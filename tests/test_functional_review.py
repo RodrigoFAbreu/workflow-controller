@@ -626,6 +626,20 @@ class PromptTest(unittest.TestCase):
                         timeout_seconds=3600)
         return fr.tester_prompt(FLOWS, **{**defaults, **kwargs})
 
+    def test_without_limits_the_text_is_what_it_was_before_the_keyword(self) -> None:
+        import hashlib
+        text = fr.tester_prompt(
+            [fr.Flow("flow-1", "A", "Run it.")], clone_dir=Path("/c"), output_dir=Path("/o"), head="h",
+            checklist_blob="b", writable=("build",), refused=(fr.RefusedPattern("*.pyc", "a glob"),),
+            timeout_seconds=60)
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),
+                         "126f26958ef022bd85f1eef1ef172eae8ca4a9106210ba508c2991527c933068")
+
+    def test_given_limits_replace_the_sandbox_limits(self) -> None:
+        text = self.prompt(limits=("only this limit",))
+        self.assertIn("- only this limit", text)
+        self.assertNotIn(fr.SANDBOX_LIMITS[0], text)
+
     def test_it_carries_the_flows_the_format_and_the_locations(self) -> None:
         text = self.prompt()
         for flow in FLOWS:

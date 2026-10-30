@@ -42531,6 +42531,672 @@
         "evaluated_at": "2026-10-30T15:46:28Z",
         "workflow_release": "2.25.0"
       }
+    },
+    "workflow-controller-codex-tester-bridge": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-tester-bridge",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-bridge-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-bridge-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 1,
+      "implementation_revision": 1,
+      "functional_review_round": null,
+      "base_commit": "92155e83d49545e6250ca0867ec31c668b34c12e",
+      "reviewed_implementation_head": "2e4a22a61f2babafa9abaaed08227a6309452824",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP2",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "f2b148e5ed932c9cf699788ff868ce528031a68d"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "e714dcaf095a7d35fff24109073e8a247cbdcff9"
+        }
+      },
+      "current_bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+        "approved_review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7f37e480f0ff9c1dfd5270ee343826367f81f287"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-bridge-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dad014e2d1c72535152798bcb5984f1a7d601ec1"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-bridge-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2d633551ffe1f2d08fdd6379475d0e2038a12a83"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T17:09:20Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+            "ledger": {
+              "local": {
+                "bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ef659d3e625ac442566b12aba96a32ef9570ccf9e9ee0a48ea9b31608bba0629",
+                "ledger_entry_sha256": "c37f1a4adf118f8a447cd119ca67aed1ed160638b3222156a1f9800567055ecd",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-bridge/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "6b35cc5d2feddcb0ddd64bdf20ad1391a732f9550f69feb959085a719d80667f",
+                "ledger_entry_sha256": "2fa4149839f586f1e69b574a9f57c1e00ceccd889e3f335aea6118f07bf2fc25",
+                "run_ref": "codex:20261030T170314Z-a1c63dc6",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T17:09:20Z",
+          "workflow_release": "2.25.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+        "approved_review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8d195f559ceec328620616b06e5a622adf285f39"
+          },
+          {
+            "path": "controller/codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6bba49c962efb221e1939cfa05f68c34dae82cd8"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "69d96029cd090b07041eead96e3cf125a50456d8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-bridge-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8bf17d5142e389b8574617a86b1c4b1623e5944e"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "03863afafd87934b5843b7072fb2ee85a6922233"
+          },
+          {
+            "path": "tests/test_codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1f24b7e31ec15f4afba8e329f01f4e9f9d9a8959"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2612216e93030bb9b0c8f88a447744ca92d74908"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e3c2af81fe258aff5ecaf3eb5e256c3f91fa972"
+          }
+        ],
+        "reviewed_content_commit": "2e4a22a61f2babafa9abaaed08227a6309452824",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T18:28:23Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "ledger": {
+              "local": {
+                "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "9a5b1bd999745472fe5b4c6468e7507268b0fce58f22148e6494116183ce9720",
+                "ledger_entry_sha256": "69d759728c826b659bb11ce381bbc9da395bf8f3e3927613e2df22d2391c009d",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-bridge/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "fa99e6a31bc23f882210cf8c6faee9f22fd9259573f4686ef96750a828d3028d",
+                "ledger_entry_sha256": "43bdfce3633eb7ef642dc63edc3a5cff34db224f95e891c558cf7ac358438db3",
+                "run_ref": "codex:20261030T182050Z-f9e74993",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T18:28:23Z",
+          "workflow_release": "2.25.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T17:00:29Z",
+          "verdict_sha256": "ef659d3e625ac442566b12aba96a32ef9570ccf9e9ee0a48ea9b31608bba0629",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-bridge/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T17:04:45Z",
+          "verdict_sha256": "6b35cc5d2feddcb0ddd64bdf20ad1391a732f9550f69feb959085a719d80667f",
+          "run_ref": "codex:20261030T170314Z-a1c63dc6",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 1,
+          "external": 1
+        },
+        "implementation": {
+          "local": 1,
+          "external": 1
+        }
+      },
+      "state_revision": 15,
+      "last_transition": "2026-10-30T19:08:55Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-30T16:56:45Z",
+        "consumed": null,
+        "published": {
+          "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+          "plan_revision": 1
+        },
+        "bound": {
+          "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+          "bundle_id": "c57a3a4d2ccaeb67c02385801fea4a1c5a36a71530347066a6fc881aea640236",
+          "plan_revision": 1
+        }
+      },
+      "optional_findings": {
+        "F-177195bdb82a": {
+          "digest": "177195bdb82a25d01c98c59a79ccc26d17b879792ec5fa7fb7f92edcd3be1ada",
+          "text": "D6 calls the tester's `HOME` \"the scratch `HOME`\" and \"read-only\". `command_environment` sets `HOME` to `layout.home` (`<base>/home`, `controller/codex_sandbox.py:325`). That folder is outside the scratch area and in no readable root, so under the profile it is neither readable nor writable (the C10g-1 probe expects `home` `REFUSED`). Word the limit as \"`HOME` is not writable (and is not a readable location); a flow that needs a writable home sets `HOME` inside `TMPDIR`\", so that CP2's test tying each path-bearing limit to the profile checks a true statement.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T17:00:29Z"
+            }
+          ]
+        },
+        "F-ff4d8da7e743": {
+          "digest": "ff4d8da7e7438221b764ec3d4a9b017391c0595ba5b76cba8584c06cca5bc796",
+          "text": "CP2's roadmap edit names only the C10g-3b row. `docs/ROADMAP.md:43` also lists \"C10g-3b, C10g-3b2 and C10g-3c ... remain\" in the order sentence, so update it in place too. `docs/guide/harnesses.md:46` and `:126` still say \"C10g-3\", the item split since; retarget them to C10g-3b2 while CP2 edits that guide.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T17:00:29Z"
+            }
+          ]
+        },
+        "F-c3a9df84a5ac": {
+          "digest": "c3a9df84a5ace4d413c03119bfa5ebcb5e273f46c8cf793b683645d1d174ded7",
+          "text": "D4's sequence does not mention creating the empty bare `check.git` that D2 places at `<base>/check.git` and that `walk_differences` needs. In `build_sandbox`, `git init --bare check.git` is outside the part D1 extracts. Say that `build_bridge` creates it, or move it into a shared helper, so nobody assumes `clone_candidate` makes it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T17:00:29Z"
+            }
+          ]
+        },
+        "F-1ca226f0655f": {
+          "digest": "1ca226f0655f9b25c2de1d1a4c4f1be1255175f4eab8f5bb169c845d71241cf6",
+          "text": "`sandbox_limits_note()` (the row-37 checklist-writer note) keeps stating the Claude limits. That is right while only Claude tests, but C10g-3c (routing) should decide what the note says once either tester may run. A line under Risks or Out of scope would record it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T17:00:29Z"
+            }
+          ]
+        },
+        "F-421ee7f8907e": {
+          "digest": "421ee7f8907e7893711d723ad1c2af6e56da5c82ca637dd9135346d3daeb6042",
+          "text": "`codex_bridge.SANDBOX_LIMITS`' last limit says \"the scratch `HOME` is read-only\" (`controller/codex_bridge.py:122`). Both halves are inaccurate. `command_environment` sets `HOME` to `layout.home` (`<base>/home`). That folder is outside the scratch area, and `PromptTest.test_the_limits_agree_with_the_profile_and_the_environment` itself asserts `HOME` is not under scratch. It is also in no readable root, so the profile makes it neither readable nor writable. The instruction that follows (\"a flow that needs a writable home sets `HOME` inside `TMPDIR`\") is right, so the practical risk is low. Word it as \"`HOME` is neither writable nor a readable location\" and update the fragment the test pins. This repeats plan-stage Optional finding F-177195bdb82a, which the plan's D6 wording carried into the code.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-cef7722c3baa": {
+          "digest": "cef7722c3baa7fe96f12ad0b1cbd1c6d6a9222602c4e5365aca4e5680ae8ddb7",
+          "text": "`docs/guide/harnesses.md:46` (\"until the tester role is declared (C10g-3)\") and `:138` (\"no launch reads it until C10g-3\") still name C10g-3, which has since been split. The role declaration and the `is_verified` launch gate are now C10g-3b2. The ROADMAP order sentence was updated, but these two guide lines were not. This is the remaining part of plan-stage Optional finding F-ff4d8da7e743.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-74480bb786fa": {
+          "digest": "74480bb786fa43e205470d9d053df8d87f0f69cc01a7acad5458b698d64be4af",
+          "text": "CP2 says \"a test ties each path-bearing limit to the profile\". `PromptTest` ties the write area, the network, `PATH`, `TMPDIR` and `HOME`'s location to the profile and environment. The read limit (\"reads are limited to the clone, the system and install directories and the sandbox's own files\") is checked only as a text fragment and is never compared with `bridge.built.roots`. A check could assert that every `read` entry is the clone, a `SYSTEM_READ_DIRS` entry, an install or interpreter root, the package directory or `layout.bin`, and that none is under the operator's home.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-06c7fae467f6": {
+          "digest": "06c7fae467f6c6eca8576fd5240f722fcdfa50da91e6eaebbc5089ea8864b3d9",
+          "text": "`build_sandbox` now runs `git init --bare check.git` before `git init --bare origin.git` (it was the other way round, because `clone_candidate` creates the origin). The two commands are independent and every Claude-tester test still passes, so behaviour is unchanged. The summary's \"unchanged\" applies to what happens, not to the exact order of commands.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-4ef84fb10525": {
+          "digest": "4ef84fb10525ffb24dd33729f75056d3fb409234c0c4c954cd51f73e5c7fb6ef",
+          "text": "`controller/functional_review.py:1800`: The extraction reverses the initialization order of `origin.git` and `check.git`. These independent operations show no correctness impact, but the review request’s claim of identical command ordering should acknowledge this small difference.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:24:07Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T18:17:30Z",
+          "verdict_sha256": "9a5b1bd999745472fe5b4c6468e7507268b0fce58f22148e6494116183ce9720",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-bridge/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T18:24:07Z",
+          "verdict_sha256": "fa99e6a31bc23f882210cf8c6faee9f22fd9259573f4686ef96750a828d3028d",
+          "run_ref": "codex:20261030T182050Z-f9e74993",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "ran_at": "2026-10-30T18:45:10Z",
+            "summary": {
+              "checklist_blob": "736da31b614acdfda8636c45a15eae708d7c3d58",
+              "text": "17 tests, OK."
+            },
+            "log_digest": "3aed18c053ae432b45b9b76672a0644712c4a9849411d5f9983524a1f8082966",
+            "run_ref": "controller:20261030T184429Z-ff6b93f1",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:45:10Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "ran_at": "2026-10-30T18:46:25Z",
+            "summary": {
+              "result": "passed",
+              "detail": "python3 -B -m unittest tests.test_functional_review tests.test_functional_sandbox tests.test_codex_sandbox tests.test_package_structure in an operator clone with a writable /tmp: Ran 211 tests (57+79+62+13), OK. The tester's sandbox has a read-only /tmp, which test_functional_sandbox needs."
+            },
+            "log_digest": "584c0ed049cfab60a681d2e4da810d8aa8dbc382687f113abef39512c813ef63",
+            "run_ref": "operator-clone ~/.cache/c1-func/c10g3b/operator",
+            "reporter": "operator",
+            "identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:46:25Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "ran_at": "2026-10-30T18:45:10Z",
+            "summary": {
+              "checklist_blob": "736da31b614acdfda8636c45a15eae708d7c3d58",
+              "text": "git diff --stat is empty."
+            },
+            "log_digest": "93ff7811a209e2a8479230bbb9b6bc19f7f311d3af383ec350c1db2a7e7d5494",
+            "run_ref": "controller:20261030T184429Z-ff6b93f1",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:45:10Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "ran_at": "2026-10-30T18:45:10Z",
+            "summary": {
+              "checklist_blob": "736da31b614acdfda8636c45a15eae708d7c3d58",
+              "text": "Hits only in controller/__init__.py (import list and __all__)."
+            },
+            "log_digest": "7cf90b52f9e1c884d0f0292fc2d082f4e107b33e064d355607ba03046dd2287d",
+            "run_ref": "controller:20261030T184429Z-ff6b93f1",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:45:10Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "ran_at": "2026-10-30T18:45:11Z",
+            "summary": {
+              "checklist_blob": "736da31b614acdfda8636c45a15eae708d7c3d58",
+              "text": "check_bound returned []. After editing build_notes.txt it returned ['differs: build_notes.txt']. The prompt shows the clone, output folder, head, checklist blob and flows, with limits for limited reads, read-only clone, scratch-only writes and refused link write as environment."
+            },
+            "log_digest": "7787f5d61c1436a974ba54afee41f64fb8452ff4604b25c3b0e3fba22087c320",
+            "run_ref": "controller:20261030T184429Z-ff6b93f1",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:45:11Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "ran_at": "2026-10-30T18:45:11Z",
+            "summary": {
+              "checklist_blob": "736da31b614acdfda8636c45a15eae708d7c3d58",
+              "text": "check_docs exit 0. harnesses.md says no launch path calls the bridge and names C10g-3b2 as the launch. ROADMAP marks C10g-3b complete and C10g-3b2 as the next item."
+            },
+            "log_digest": "6fee25d9adaf3a0aa496038ac2d137e11f2d3ebc129ed8e62cadedb8b72e8cef",
+            "run_ref": "controller:20261030T184429Z-ff6b93f1",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:45:11Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 230,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/230"
+          },
+          "state": "open",
+          "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+          "observed_at": "2026-10-30T19:08:55Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "2e4a22a61f2babafa9abaaed08227a6309452824",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-30T19:08:55Z",
+            "raw_sha256": "a9a1fe81545c3f1f73fda0d5d03ba876ace44fa934a4db1f03cb25b9af5ab38e",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "2bad3530985cfe8d07e245a69d5d4a760018c30f2823f9820468694031347821"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 2
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #230 at 8fcdca98c1a71ec286c53a43054dc70cd968d34a is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "2e4a22a61f2babafa9abaaed08227a6309452824",
+          "anchor_identity": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "recorded_at": "2026-10-30T18:28:23Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "7767f379c0e02bdc0761a7fecd7fe078d862e7eecda3c4ad8b330616cc9b0371",
+              "log_digest": "3aed18c053ae432b45b9b76672a0644712c4a9849411d5f9983524a1f8082966",
+              "run_ref": "controller:20261030T184429Z-ff6b93f1"
+            },
+            "flow-2": {
+              "evidence_id": "5e7bc965da362073e6b4eff404567b2fec595ca692792c278216c1b3de30dee7",
+              "log_digest": "584c0ed049cfab60a681d2e4da810d8aa8dbc382687f113abef39512c813ef63",
+              "run_ref": "operator-clone ~/.cache/c1-func/c10g3b/operator"
+            },
+            "flow-3": {
+              "evidence_id": "fc75dcf6eb0e39c276fa66640dcdc6a11f0a3dbdb2c7ddff4df36eb878fe588b",
+              "log_digest": "93ff7811a209e2a8479230bbb9b6bc19f7f311d3af383ec350c1db2a7e7d5494",
+              "run_ref": "controller:20261030T184429Z-ff6b93f1"
+            },
+            "flow-4": {
+              "evidence_id": "b012deb14ffd4ae7e10332e312111de54adc97eb14f911ceb92e0442a934c85b",
+              "log_digest": "7cf90b52f9e1c884d0f0292fc2d082f4e107b33e064d355607ba03046dd2287d",
+              "run_ref": "controller:20261030T184429Z-ff6b93f1"
+            },
+            "flow-5": {
+              "evidence_id": "f5fd41b62db7cf3387bf93257c579a6e23db262cf247b3638e9973a304926b93",
+              "log_digest": "7787f5d61c1436a974ba54afee41f64fb8452ff4604b25c3b0e3fba22087c320",
+              "run_ref": "controller:20261030T184429Z-ff6b93f1"
+            },
+            "flow-6": {
+              "evidence_id": "8a4153d53f1768ca2a36183454120cf19c988a5d5de3d0278270690a9d676431",
+              "log_digest": "6fee25d9adaf3a0aa496038ac2d137e11f2d3ebc129ed8e62cadedb8b72e8cef",
+              "run_ref": "controller:20261030T184429Z-ff6b93f1"
+            }
+          },
+          "pr": {
+            "fact_id": "2bad3530985cfe8d07e245a69d5d4a760018c30f2823f9820468694031347821",
+            "head": "8fcdca98c1a71ec286c53a43054dc70cd968d34a",
+            "provenance": "workflow_gh",
+            "raw_sha256": "a9a1fe81545c3f1f73fda0d5d03ba876ace44fa934a4db1f03cb25b9af5ab38e"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-30T19:08:55Z",
+        "workflow_release": "2.25.0"
+      }
     }
   }
 }

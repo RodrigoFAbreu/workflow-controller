@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-bridge",
+  "plan_revision": 1,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The shared extractions and the bridge's layout from a candidate",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The binding check, the Codex prompt and the documents",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

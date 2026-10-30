@@ -42541,7 +42541,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-bridge-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-bridge-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 1,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -42650,7 +42650,126 @@
           "workflow_release": "2.25.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+        "approved_review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8d195f559ceec328620616b06e5a622adf285f39"
+          },
+          {
+            "path": "controller/codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6bba49c962efb221e1939cfa05f68c34dae82cd8"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "69d96029cd090b07041eead96e3cf125a50456d8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-bridge-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8bf17d5142e389b8574617a86b1c4b1623e5944e"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "03863afafd87934b5843b7072fb2ee85a6922233"
+          },
+          {
+            "path": "tests/test_codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1f24b7e31ec15f4afba8e329f01f4e9f9d9a8959"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2612216e93030bb9b0c8f88a447744ca92d74908"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e3c2af81fe258aff5ecaf3eb5e256c3f91fa972"
+          }
+        ],
+        "reviewed_content_commit": "2e4a22a61f2babafa9abaaed08227a6309452824",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T18:28:23Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+            "ledger": {
+              "local": {
+                "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "9a5b1bd999745472fe5b4c6468e7507268b0fce58f22148e6494116183ce9720",
+                "ledger_entry_sha256": "69d759728c826b659bb11ce381bbc9da395bf8f3e3927613e2df22d2391c009d",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-bridge/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "fa99e6a31bc23f882210cf8c6faee9f22fd9259573f4686ef96750a828d3028d",
+                "ledger_entry_sha256": "43bdfce3633eb7ef642dc63edc3a5cff34db224f95e891c558cf7ac358438db3",
+                "run_ref": "codex:20261030T182050Z-f9e74993",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T18:28:23Z",
+          "workflow_release": "2.25.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "22fff614366e236ec4aad13b99f5da41725ba994c0478b76dbee21ac5144063a",
@@ -42681,12 +42800,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 11,
-      "last_transition": "2026-10-30T18:06:12.489885+00:00",
+      "state_revision": 14,
+      "last_transition": "2026-10-30T18:28:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -42758,6 +42877,97 @@
               "at": "2026-10-30T17:00:29Z"
             }
           ]
+        },
+        "F-421ee7f8907e": {
+          "digest": "421ee7f8907e7893711d723ad1c2af6e56da5c82ca637dd9135346d3daeb6042",
+          "text": "`codex_bridge.SANDBOX_LIMITS`' last limit says \"the scratch `HOME` is read-only\" (`controller/codex_bridge.py:122`). Both halves are inaccurate. `command_environment` sets `HOME` to `layout.home` (`<base>/home`). That folder is outside the scratch area, and `PromptTest.test_the_limits_agree_with_the_profile_and_the_environment` itself asserts `HOME` is not under scratch. It is also in no readable root, so the profile makes it neither readable nor writable. The instruction that follows (\"a flow that needs a writable home sets `HOME` inside `TMPDIR`\") is right, so the practical risk is low. Word it as \"`HOME` is neither writable nor a readable location\" and update the fragment the test pins. This repeats plan-stage Optional finding F-177195bdb82a, which the plan's D6 wording carried into the code.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-cef7722c3baa": {
+          "digest": "cef7722c3baa7fe96f12ad0b1cbd1c6d6a9222602c4e5365aca4e5680ae8ddb7",
+          "text": "`docs/guide/harnesses.md:46` (\"until the tester role is declared (C10g-3)\") and `:138` (\"no launch reads it until C10g-3\") still name C10g-3, which has since been split. The role declaration and the `is_verified` launch gate are now C10g-3b2. The ROADMAP order sentence was updated, but these two guide lines were not. This is the remaining part of plan-stage Optional finding F-ff4d8da7e743.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-74480bb786fa": {
+          "digest": "74480bb786fa43e205470d9d053df8d87f0f69cc01a7acad5458b698d64be4af",
+          "text": "CP2 says \"a test ties each path-bearing limit to the profile\". `PromptTest` ties the write area, the network, `PATH`, `TMPDIR` and `HOME`'s location to the profile and environment. The read limit (\"reads are limited to the clone, the system and install directories and the sandbox's own files\") is checked only as a text fragment and is never compared with `bridge.built.roots`. A check could assert that every `read` entry is the clone, a `SYSTEM_READ_DIRS` entry, an install or interpreter root, the package directory or `layout.bin`, and that none is under the operator's home.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-06c7fae467f6": {
+          "digest": "06c7fae467f6c6eca8576fd5240f722fcdfa50da91e6eaebbc5089ea8864b3d9",
+          "text": "`build_sandbox` now runs `git init --bare check.git` before `git init --bare origin.git` (it was the other way round, because `clone_candidate` creates the origin). The two commands are independent and every Claude-tester test still passes, so behaviour is unchanged. The summary's \"unchanged\" applies to what happens, not to the exact order of commands.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:17:30Z"
+            }
+          ]
+        },
+        "F-4ef84fb10525": {
+          "digest": "4ef84fb10525ffb24dd33729f75056d3fb409234c0c4c954cd51f73e5c7fb6ef",
+          "text": "`controller/functional_review.py:1800`: The extraction reverses the initialization order of `origin.git` and `check.git`. These independent operations show no correctness impact, but the review request’s claim of identical command ordering should acknowledge this small difference.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T18:24:07Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "4933c585c39625278dfddbf14cc670f30ad2c5147d6e9f3fd07bb5d5e045b2f4",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T18:17:30Z",
+          "verdict_sha256": "9a5b1bd999745472fe5b4c6468e7507268b0fce58f22148e6494116183ce9720",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-bridge/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5ade7f62ff4ef5ef5fe0d24f7b42e06f2fa75560cb21787fa2ff31bb3b9246e5",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T18:24:07Z",
+          "verdict_sha256": "fa99e6a31bc23f882210cf8c6faee9f22fd9259573f4686ef96750a828d3028d",
+          "run_ref": "codex:20261030T182050Z-f9e74993",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

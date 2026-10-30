@@ -11,9 +11,14 @@ host fixtures; `workflow-controller verify-codex [--force] [--codex-binary PATH]
 refusal. Nothing launches on the record: `build_verification` for `codex` stays `none` until C10g-3. The change is a
 `feat:` with a minor release. The plan is `docs/ai-workflow/CONTROLLER_VERIFY_CODEX_COMMAND_PLAN.md`.
 
+**In implementation.** `workflow-controller-composed-config-check` (C10g-3a, issue
+[#221](https://github.com/RodrigoFAbreu/workflow-controller/issues/221)): CP1 (`check_effective`) and CP2 (`check_composed`,
+`KNOWN_LIMITS` narrowed to `composition_window`, guide and roadmap) are implemented. Nothing calls the check until C10g-3b.
+The plan is `docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md`.
+
 ## Next action
 
-`/milestone-plan` for C10g-3a (the Codex tester's composed-configuration check, [#221](https://github.com/RodrigoFAbreu/workflow-controller/issues/221)).
+`/milestone-plan` for C10g-3b (the Codex functional-tester launch, [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)).
 
 ## Functional review checklist
 

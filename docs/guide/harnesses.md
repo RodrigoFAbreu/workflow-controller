@@ -105,10 +105,14 @@ real `gh` work. The measured results are in `tests/harness_contract/codex/tester
 (`CONTROLLER_LIVE_CODEX_TESTS=1`, see [Development](development.md#working-from-a-checkout)) and CI does not run it.
 
 Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
-name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). One check is open (the
-one entry of `KNOWN_LIMITS`): the composed configuration values, and managed layers that are not files, are verified
-only for their MCP servers and features, so a managed layer could still change another setting. C10g-3a builds that
-check before the sandbox is wired.
+name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). The composed
+configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the
+tester's home, flags and any managed layer (`codex app-server`, `config/read`, no model request), compares every
+security-relevant value with the pinned tester profile leaf by leaf, and refuses a difference naming the value and its
+layer. It is a separate control from `check_launch`, and no launch path calls either yet (C10g-3b wires them). One
+limit remains (the one entry of `KNOWN_LIMITS`, `composition_window`): the configuration is read by the `app-server`
+just before the launch, so a layer that changes in that window, or a setting only `exec` composes differently, is not
+seen. The reviewer's control makes the same assumption.
 
 `controller/codex_build.py` names a Codex build and records which builds were verified, offline, and nothing calls it
 except its tests. `build_digest` is a SHA-256 over every file a launch can run as Codex: the launcher's package and

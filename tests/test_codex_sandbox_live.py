@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import codex_sandbox as cs, review  # noqa: E402
+from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests import fixtures  # noqa: E402
 
 ENABLED = os.environ.get("CONTROLLER_LIVE_CODEX_TESTS") == "1"
@@ -145,6 +146,23 @@ class LiveSandboxTest(unittest.TestCase):
         output = verdict.read_text()
         print("\n--- codex exec final message ---\n" + output)
         self.assert_host_effects(built, output)
+
+
+    def test_a_real_tester_job_passes_the_composed_check_and_a_changed_flag_is_refused(self) -> None:
+        """No model request: the composing command is ``codex app-server`` answering ``config/read``."""
+        built, _targets, _command = self.prepare("compose1")
+        cs.check_launch(built.layout, built.config_text, self.binary, built.environment)
+        cs.check_composed(built.layout, built.config_text, built.roots, self.binary, built.environment)
+
+        def changed(command, **kw):
+            command = ["approval_policy=\"on-request\"" if item.startswith("approval_policy=") else item
+                       for item in command]
+            return review.run_bounded(command, **kw)
+
+        with self.assertRaises(ReviewLaunchRefusedError) as caught:
+            cs.check_composed(built.layout, built.config_text, built.roots, self.binary, built.environment, run=changed)
+        self.assertEqual(caught.exception.evidence["key"], "approval_policy")
+        self.assertIn("sessionFlags", json.dumps(caught.exception.evidence["source"]))
 
 
 if __name__ == "__main__":

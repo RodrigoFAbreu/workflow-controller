@@ -52,15 +52,16 @@ class Limit:
     guide: str
 
 
-#: What the sandbox does not guarantee. The first entry is the unbuilt composed-configuration check (D1b).
+#: What the sandbox does not guarantee. The one entry is the window in which :func:`check_composed` can be out of date (D6).
 KNOWN_LIMITS: tuple[Limit, ...] = (
-    Limit("composed_configuration",
-          "the composed configuration values and the managed layers that are not files are not verified, other than "
-          "their MCP servers and features; a managed layer could still change a setting other than an MCP server or "
-          "a feature",
-          "C10g-3 builds the tester's composed-configuration check before the sandbox is wired",
-          "composed configuration values and non-file managed layers other than their MCP servers and features are "
-          "not verified; a managed layer could still change a setting other than an MCP server or a feature"),
+    Limit("composition_window",
+          "check_composed reads the configuration from a separate app-server process started just before the launch, "
+          "with the same home, environment and -c items, so a layer that changes between that read and the launch, or "
+          "a setting only the exec command composes differently, is not seen; the reviewer's control (b) makes the "
+          "same assumption",
+          "none: a different composing path would need a Codex command that reports the exec's own composition",
+          "the composed configuration is read by the app-server just before the launch, so a layer that changes "
+          "in that window, or a setting only exec composes differently, is not seen"),
 )
 
 
@@ -293,7 +294,8 @@ def check_launch(layout: TesterLayout, config_text: str, binary: Path, env: Mapp
     """The pre-launch controls (D1b), in order, before every ``codex exec`` and ``codex sandbox`` run: the layers
     outside the home, then the home before each of ``mcp list`` and ``features list`` and once more after both, as
     the reviewer's ``_preflight`` does (a listing writes Codex state into the home). The first refusal stops the
-    rest. Not covered: the composed-configuration values (:data:`KNOWN_LIMITS`)."""
+    rest. The composed configuration is a separate control, :func:`check_composed`, which this does not call
+    (:data:`KNOWN_LIMITS` names the window it leaves)."""
     run = run or review.run_bounded
     review.check_outside_layers(system_dir)
     for kind in ("mcp", "features"):
@@ -518,6 +520,51 @@ def check_effective(composed: Mapping, layout: TesterLayout, roots: Sequence[Pat
             raise _refuse(f"the composed configuration sets features.{feature} to {features[feature]!r}", check="effective",
                           key=f"features.{feature}", value=features[feature],
                           source=review._origin(origins, f"features.{feature}"))
+
+
+def compose_config(layout: TesterLayout, binary: Path, env: Mapping[str, str], *, model: str, effort: str,
+                   timeout: float, run: Callable[..., review.RunResult] | None = None) -> dict:
+    """Run the tester's composing command and return the ``config/read`` result with its layers. The exchange is
+    :func:`review.compose_config`'s (``initialize``, ``initialized``, ``config/read`` with ``includeLayers`` and the
+    clone as ``cwd``, stdin held open by :func:`review._answered` until the answer); the requests are repeated here
+    because that function builds them inline for the reviewer's argv. It needs no credential and starts no model
+    request."""
+    command = compose_argv(layout, binary=binary, model=model, effort=effort)
+    check_compose_argv(command, layout, model=model, effort=effort)
+    requests = [
+        {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "workflow-controller", "version": "1"}}},
+        {"method": "initialized"},
+        {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(layout.clone)}},
+    ]
+    run = run or review.run_bounded
+    result = run(command, cwd=layout.clone, env=env, timeout=timeout,
+                 stdin_text="".join(json.dumps(item) + "\n" for item in requests), hold_open_until=review._answered)
+    stderr = result.stderr.decode("utf-8", "replace")
+    if result.timed_out or result.exit_code != 0:
+        raise _refuse("the composing command did not run", check="effective", value=stderr.strip()[-400:])
+    for line in result.stdout.decode("utf-8", "replace").splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get("id") == 2:
+            if isinstance(message.get("result"), dict):
+                return message["result"]
+            raise _refuse("the composing command answered config/read with an error", check="effective",
+                          value=json.dumps(message.get("error"))[:400])
+    raise _refuse("the composing command printed no config/read answer", check="effective", value=stderr.strip()[-400:])
+
+
+def check_composed(layout: TesterLayout, config_text: str, roots: Sequence[Path], binary: Path,
+                   env: Mapping[str, str], *, model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT,
+                   run: Callable[..., review.RunResult] | None = None, timeout: float = LISTING_TIMEOUT) -> None:
+    """The composed-configuration launch control (D4, D5): compose through the ``run`` seam, check the home again
+    (the composing command writes Codex state into it), then compare with :func:`check_effective`. A separate
+    control from :func:`check_launch`; a caller runs both before each launch. ``roots``, ``model`` and ``effort``
+    are the ones :func:`build` was given (``Built.roots``); the first refusal stops the rest."""
+    composed = compose_config(layout, binary, env, model=model, effort=effort, timeout=timeout, run=run)
+    check_home(layout, config_text)
+    check_effective(composed, layout, roots, model=model, effort=effort)
 
 
 # ---------------------------------------------------------------------------

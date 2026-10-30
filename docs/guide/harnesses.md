@@ -109,7 +109,7 @@ name (`/usr/bin/gh` fails for lack of credentials and network, not because of th
 configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the
 tester's home, flags and any managed layer (`codex app-server`, `config/read`, no model request), compares every
 security-relevant value with the pinned tester profile leaf by leaf, and refuses a difference naming the value and its
-layer. It is a separate control from `check_launch`, and no launch path calls either yet (C10g-3b2 wires them). One
+layer. It is a separate control from `check_launch`, and no launch path calls either yet (C10g-3b2b wires them). One
 limit remains (the one entry of `KNOWN_LIMITS`, `composition_window`): the configuration is read by the `app-server`
 just before the launch, so a layer that changes in that window, or a setting only `exec` composes differently, is not
 seen. The reviewer's control makes the same assumption.
@@ -121,10 +121,22 @@ the profile's one write area, the Controller-only check directory and item recor
 `PATH`, and everything `codex_sandbox.build` writes and checks. A fresh clone that differs from the manifest, or any
 other failure, removes the folder before anything runs. `check_bound` reports, after a run, any difference between the
 clone and the candidate in the shared words (`bound_differences`); the scratch origin and output folder are not part of
-it. `prompt` is the tester's one shared prompt with the Codex sandbox's own limits (`codex_bridge.SANDBOX_LIMITS`: the
-scratch `HOME` is read-only, so a flow that needs a writable home sets `HOME` inside `TMPDIR`), and a test ties those
-limits to the profile. No launch path calls the bridge, no role is declared and nothing starts `codex`: C10g-3b2
-launches it.
+it. `prompt` is the tester's one shared prompt with the Codex sandbox's own limits (`codex_bridge.SANDBOX_LIMITS`: `HOME`
+is not writable and not a readable location, so a flow that needs a writable home sets `HOME` inside `TMPDIR`), and a
+test ties those limits to the profile.
+
+`controller/codex_tester.py` is the Codex tester's run. `run_tester` takes a bridge and the flows, rebuilds the pinned
+command from the model and effort the bridge recorded and compares it with the one `build` made, runs `check_argv`,
+`check_launch` and `check_composed` in that order (a refusal propagates and starts nothing), then starts `codex exec`
+under a deadline with the bridge's prompt on standard input. The outcome is `timeout` when the deadline passed, else
+`limit` when a rollout records a usage limit, else `failed` when the exit code is not zero or the run wrote no final
+message (an absent, empty or blank `-o` file), else `ran`; the final message is the `-o` file, never the transcript. The
+result has the Claude tester launch's shape (outcome, detail, message, readings, sub-agents, credential copy-back) and
+the credential copy in the job's Codex home is removed on every path. Whether the output folder holds valid results is
+not decided here. Nothing calls `run_tester`, no role is declared and the reviewer, `verify-claude` and `verify-codex`
+are unchanged: C10g-3b2b adds the `is_verified` gate, the before-and-after comparison of the real repository, the
+mapping of refusals to `functional_tester_unavailable`, the sandbox removal and the role declaration. One opt-in test
+(`tests/test_codex_tester_live.py`, `CONTROLLER_LIVE_CODEX_TESTS=1`, one model turn) runs a real tester turn.
 
 `controller/codex_build.py` names a Codex build and records which builds were verified, offline, and nothing calls it
 except its tests. `build_digest` is a SHA-256 over every file a launch can run as Codex: the launcher's package and

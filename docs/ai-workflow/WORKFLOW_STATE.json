@@ -41872,7 +41872,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-composed-config-check-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-composed-config-check-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 1,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -41981,7 +41981,126 @@
           "workflow_release": "2.25.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "496e016f91ffc0fac98b8e4c227c6f1b123605aad36873dfa08faaec12c7ed05",
+        "approved_review_content_id": "8e679654f16563f1a62b069d23e07b9645289cd1713c1da270c734c79dc5b8af",
+        "review_content_manifest": [
+          {
+            "path": "controller/codex_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3009513e2e0b79ee5a5012a3b5c2e4ad52d8ced3"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-composed-config-check-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ad2c832e0fc28c7621b5c844a49cc1d1757bba1b"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef3e52015fe17303a4237206a4d7e2e57def8f78"
+          },
+          {
+            "path": "tests/harness_contract/codex/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "24605506e9d213870227a8c1370aa49a7405f386"
+          },
+          {
+            "path": "tests/harness_contract/codex/tester_compose.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d2b32d9e40d021f59f163c0488c2f27ebe0b3ffd"
+          },
+          {
+            "path": "tests/test_codex_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e4f3a4f70c33df5b93f01c720f1e7952e2c901f"
+          },
+          {
+            "path": "tests/test_codex_sandbox_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "40f51a2470698ad2a24bdca5b987d170b5c0cc67"
+          },
+          {
+            "path": "tests/test_fake_codex_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4b90c130f5dfcdecc6f72faef646b9acf93adfd4"
+          }
+        ],
+        "reviewed_content_commit": "864bc8069906fce64d2de378833861b4a6a7f18b",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T14:59:01Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8e679654f16563f1a62b069d23e07b9645289cd1713c1da270c734c79dc5b8af",
+            "ledger": {
+              "local": {
+                "bundle_id": "496e016f91ffc0fac98b8e4c227c6f1b123605aad36873dfa08faaec12c7ed05",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "2f94b37599086ea6df53f1e4a69976fefe3c83151cee2cef2694f3a490a911cf",
+                "ledger_entry_sha256": "b05e70446904e43643f5c03a16f9e7e466741c579dd840ff5c2bbd7739579af4",
+                "run_ref": "session:local .ai-review/workflow-controller-composed-config-check/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "496e016f91ffc0fac98b8e4c227c6f1b123605aad36873dfa08faaec12c7ed05",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "feff6dab445d4e4ecc1d96c33e7739e6e7a264884c283bd4868538ce5e56ef11",
+                "ledger_entry_sha256": "3c45f72ec3d47866a20ad02790757d4aedde98a9606128b53131a073f617300b",
+                "run_ref": "codex:20261030T145152Z-84d539ee",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T14:59:01Z",
+          "workflow_release": "2.25.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
@@ -42012,12 +42131,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-10-30T14:25:20Z",
+      "state_revision": 17,
+      "last_transition": "2026-10-30T14:59:01Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -42117,20 +42236,42 @@
               "at": "2026-10-30T13:35:20Z"
             }
           ]
+        },
+        "F-f83e675352e7": {
+          "digest": "f83e675352e729c9d2fdcc628d3938028f6c505b28f22c1fa10002c24bcb54ef",
+          "text": "`TEST_RESULTS.md` was not regenerated for revision 2. Its header says \"implementation revision 1\" and every\n  result is at `d380553`, so the bundle carries no test evidence for the fix commit `864bc80`. I reran the evidence\n  at HEAD (`326e270`):\n  - the narrow modules: 154 tests OK, 3 skipped;\n  - the opt-in live composed check on codex-cli 0.163.0 with `bwrap`: OK;\n  - `tools/check_docs.py`: exit 0.\n\n  I did not rerun the full sharded suite. The fix touches only `controller/codex_sandbox.py` and its tests, which\n  the narrow modules cover. When a fix round changes code, regenerate `TEST_RESULTS.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "8e679654f16563f1a62b069d23e07b9645289cd1713c1da270c734c79dc5b8af",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T14:48:02Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "b4d9f843675a0c6b26b104ef49c2919806bf60d66b763d4bd257f3b7a0f80966",
+        "review_content_id": "8e679654f16563f1a62b069d23e07b9645289cd1713c1da270c734c79dc5b8af",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "ae8249ba0bf2a151974cd7cfe0e668efe640817d954dfcdc90adafaae79ad4f4",
+          "bundle_id": "496e016f91ffc0fac98b8e4c227c6f1b123605aad36873dfa08faaec12c7ed05",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-10-30T13:28:12Z",
-          "verdict_sha256": "58a3371d3dd673cd21510b054d704eafa3e16f2e91dac562971cea084e95bdcc",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-composed-config-check/feedback/REVIEW_FEEDBACK.md",
+          "round": 2,
+          "completed_at": "2026-10-30T14:48:02Z",
+          "verdict_sha256": "2f94b37599086ea6df53f1e4a69976fefe3c83151cee2cef2694f3a490a911cf",
+          "run_ref": "session:local .ai-review/workflow-controller-composed-config-check/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "496e016f91ffc0fac98b8e4c227c6f1b123605aad36873dfa08faaec12c7ed05",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-30T14:54:29Z",
+          "verdict_sha256": "feff6dab445d4e4ecc1d96c33e7739e6e7a264884c283bd4868538ce5e56ef11",
+          "run_ref": "codex:20261030T145152Z-84d539ee",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

@@ -161,5 +161,99 @@ class KeptTest(BridgeFixture):
         self.assertEqual(fr.kept_sandboxes(self.runtime, "item-1"), [])
 
 
+class BoundTest(BridgeFixture):
+    def test_an_untouched_clone_is_bound(self) -> None:
+        self.assertEqual(cb.check_bound(self.bridge()), [])
+
+    def test_each_kind_of_change_is_reported_and_ignored_files_are_accepted(self) -> None:
+        repo = self.tmp / "repo2"
+        head = make_repo(repo, {".gitignore": "build/\nnotes.log\n"})
+        cases = {}
+
+        def edited(b):
+            (b.clone / "src" / "app.py").write_text("print('changed')\n")
+
+        def mode(b):
+            os.chmod(b.clone / "tool.sh", 0o644)
+
+        def deleted(b):
+            os.chmod(b.clone / "src", 0o755)
+            (b.clone / "src" / "app.py").unlink()
+
+        def untracked(b):
+            (b.clone / "new.txt").write_text("x")
+
+        def special(b):
+            os.mkfifo(b.clone / "pipe")
+
+        def retargeted(b):
+            (b.clone / "build").unlink()
+            os.symlink("/elsewhere", b.clone / "build")
+
+        def replaced(b):
+            (b.clone / "build").unlink()
+            (b.clone / "build").mkdir()
+
+        def ref(b):
+            (b.clone / ".git" / "refs" / "heads" / "other").write_text(head + "\n")
+
+        def gitdir(b):
+            (b.clone / ".git" / "hooks" / "pre-commit").write_text("#!/bin/sh\n")
+
+        cases = dict(edited=edited, mode=mode, deleted=deleted, untracked=untracked, special=special,
+                     retargeted=retargeted, replaced=replaced, ref=ref, gitdir=gitdir)
+        for n, (name, change) in enumerate(cases.items()):
+            with self.subTest(name):
+                bridge = self.bridge(fr.capture_candidate(repo, head), job_id=f"job-{n}")
+                change(bridge)
+                self.assertTrue(cb.check_bound(bridge), name)
+        accepted = self.bridge(fr.capture_candidate(repo, head), job_id="job-ok")
+        (accepted.writable_dir / "build" / "out.o").write_text("x")
+        (accepted.clone / "notes.log").write_text("x")
+        (accepted.origin / "extra").write_text("x")
+        (accepted.out / "RESULTS.json").write_text("[]")
+        self.assertEqual(cb.check_bound(accepted), [])
+
+    def test_the_words_are_the_shared_ones(self) -> None:
+        bridge = self.bridge()
+        (bridge.clone / "src" / "app.py").write_text("print('changed')\n")
+        self.assertEqual(cb.check_bound(bridge), fr.bound_differences(
+            bridge.clone, bridge.candidate, bridge.check_dir, bridge.writable_links, bridge.refs, bridge.git_state))
+
+
+class PromptTest(BridgeFixture):
+    FLOWS = [fr.Flow("flow-1", "A", "Run the version command."), fr.Flow("flow-2", "B", "Run the build.")]
+
+    def test_it_carries_the_bridge_facts_the_flows_the_format_and_every_limit(self) -> None:
+        repo = self.tmp / "repo2"
+        head = make_repo(repo, {".gitignore": "build/\n*.pyc\n"})
+        bridge = self.bridge(fr.capture_candidate(repo, head))
+        text = cb.prompt(bridge, self.FLOWS, timeout_seconds=900)
+        for fact in (str(bridge.clone), str(bridge.out), head, bridge.candidate.checklist_blob, "build/", "*.pyc",
+                     "### flow-1 (checklist label A)", "### flow-2 (checklist label B)", "RESULTS.json",
+                     "900 seconds", *cb.SANDBOX_LIMITS):
+            self.assertIn(fact, text)
+        for claim in fr.SANDBOX_LIMITS[-1:]:
+            self.assertNotIn(claim, text)
+        self.assertNotIn("scratch `HOME`, `XDG_*`", text)
+
+    def test_the_limits_agree_with_the_profile_and_the_environment(self) -> None:
+        bridge = self.bridge()
+        profile = tomllib.loads(bridge.built.config_text)["permissions"][cs.PROFILE]
+        writes = [path for path, access in profile["filesystem"].items() if access == "write"]
+        self.assertEqual(writes, [str(bridge.layout.scratch)])
+        self.assertIs(profile["network"]["enabled"], False)
+        env = cs.command_environment(bridge.layout)
+        self.assertEqual(env["PATH"].split(":")[0], str(bridge.layout.bin))
+        self.assertTrue(Path(env["TMPDIR"]).is_relative_to(bridge.layout.scratch))
+        self.assertFalse(Path(env["HOME"]).is_relative_to(bridge.layout.scratch))
+        self.assertFalse(bridge.clone.is_relative_to(bridge.layout.scratch))
+        joined = " ".join(cb.SANDBOX_LIMITS)
+        for fragment in ("no network", "`gh`", "`claude`, `codex` or `ssh`", "`PATH`", "read-only", "scratch area",
+                         "`TMPDIR`", "scratch `HOME` is read-only", "`HOME` inside `TMPDIR`"):
+            self.assertIn(fragment, joined)
+        self.assertEqual(set(fr.FAKE_PROGRAMS) >= {"gh", "claude", "codex", "ssh"}, True)
+
+
 if __name__ == "__main__":
     unittest.main()

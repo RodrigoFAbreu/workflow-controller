@@ -12,7 +12,7 @@ checkout rules. Nothing calls this module yet: no ``codex`` is started and no ro
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -103,3 +103,39 @@ def build_bridge(candidate: Candidate, *, runtime_root: Path, job_id: str, work_
     except BaseException:
         functional_review.remove_sandbox(runtime_root, job_id)
         raise
+
+
+
+#: The Codex sandbox's own limits (D6), stated to the tester in place of the Claude sandbox's. Tied to the profile by
+#: ``tests.test_codex_bridge``, so a change to the profile cannot leave this text wrong.
+SANDBOX_LIMITS: tuple[str, ...] = (
+    "no network access and no connection to a host socket",
+    "no real GitHub: `gh` is a stand-in that refuses and logs, so a flow that needs a pull request or any forge "
+    "call cannot run",
+    "no real `claude`, `codex` or `ssh`: each is a stand-in that refuses and logs",
+    "a `PATH` of the sandbox's `bin/` and the system directories, with no other tool",
+    "reads are limited to the clone, the system and install directories and the sandbox's own files: nothing of "
+    "the operator's home, environment or credentials is readable",
+    "the product clone is read-only: no flow may write inside it, except the writable locations listed",
+    "a writable location in the clone is a link to a folder in the scratch area: a tool that deletes and recreates "
+    "the linked folder (`shutil.rmtree('build')`, `rm -rf build`) or a write through the link that is refused is a "
+    "sandbox limit (`environment`), not a product `defect`",
+    "writes go to the scratch area only, which holds the output folder and `TMPDIR`; the scratch `HOME` is "
+    "read-only, so a flow that needs a writable home sets `HOME` inside `TMPDIR`",
+)
+
+
+def check_bound(bridge: Bridge) -> list[str]:
+    """After the run: whether the clone still is the candidate (D5), in the shared words. Empty means bound. The
+    scratch origin and the output folder are outside the clone and are not compared."""
+    return functional_review.bound_differences(bridge.clone, bridge.candidate, bridge.check_dir,
+                                               bridge.writable_links, bridge.refs, bridge.git_state)
+
+
+def prompt(bridge: Bridge, flows: Sequence[functional_review.Flow], *, timeout_seconds: int) -> str:
+    """The tester's prompt for Codex: the shared text with this sandbox's limits (D6)."""
+    candidate = bridge.candidate
+    return functional_review.tester_prompt(
+        flows, clone_dir=bridge.clone, output_dir=bridge.out, head=candidate.head,
+        checklist_blob=candidate.checklist_blob, writable=bridge.writable, refused=bridge.refused,
+        timeout_seconds=timeout_seconds, limits=SANDBOX_LIMITS)

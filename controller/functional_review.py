@@ -790,9 +790,11 @@ def sandbox_limits_note() -> str:
 def tester_prompt(
     flows: Sequence[Flow], *, clone_dir: Path, output_dir: Path, head: str, checklist_blob: str,
     writable: Sequence[str], refused: Sequence[RefusedPattern], timeout_seconds: int,
+    limits: Sequence[str] = SANDBOX_LIMITS,
 ) -> str:
     """The independent tester's prompt (D4): the flows with their ids, the
-    exact result format, the sandbox's limits, the writable and refused
+    exact result format, the sandbox's limits (``limits``: the Claude
+    sandbox's own unless a harness gives its own), the writable and refused
     locations, and the rules about copies."""
     lines = [
         "You are an independent functional tester. Run each flow of the checklist below against the repository "
@@ -806,7 +808,7 @@ def tester_prompt(
         "",
         "## Sandbox limits",
         "",
-        *[f"- {limit}" for limit in SANDBOX_LIMITS],
+        *[f"- {limit}" for limit in limits],
         "",
         "Writable locations in the clone root, each a link to a folder outside the clone: "
         + (", ".join(f"{name}/" for name in writable) or "none"),

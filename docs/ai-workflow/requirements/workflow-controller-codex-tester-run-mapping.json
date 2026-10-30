@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-run",
+  "requirements": {
+    "R1": {
+      "description": "run_tester runs the launch controls in order, then codex exec under a deadline; a refused control starts nothing",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "outcome ran/timeout/limit/failed by precedence; final message is the -o file; missing message is failed",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "readings, sub-agents and credential copy-back collected; copy removed on every path; Claude-shaped result",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "nothing calls the run; no role declared; reviewer, Claude tester, verify commands, settings, options, exit codes, gates unchanged; split recorded",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "one opt-in live test; two carried wording fixes",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

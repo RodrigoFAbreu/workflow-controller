@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-tester-run",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -43196,6 +43196,247 @@
         },
         "evaluated_at": "2026-10-30T19:08:55Z",
         "workflow_release": "2.25.0"
+      }
+    },
+    "workflow-controller-codex-tester-run": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-tester-run",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_RUN_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-run-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-run-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "6faebb053b268f892c8831976afb0d399f2b2748",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+        "approved_review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_RUN_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "770b0dbb416427ec4fff30f23d427dabeb99fa38"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-run-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "50d4c8171aa01e6918a426c49ac2c9a4b45e9c82"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-run-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "307988e8b2298e2ee1df07dbc0393057d5915951"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T20:16:01Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+            "ledger": {
+              "local": {
+                "bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "5ec11cc9d57a3380c97b7c4a299d57e1736082821b1eca9abd3cbd1665a57339",
+                "ledger_entry_sha256": "062afbd258cd98840881531ab23d319f6520a38fb1b27e16fe43c99ad41b6e3e",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-run/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "370619183af29d974d41e8ad4b2bbc3f5e31d1588f71d7c5d84cefe816e6b54c",
+                "ledger_entry_sha256": "009e27e94ba354f84425a9f686de45a5fee7c133678693c97e91299e0c8608da",
+                "run_ref": "codex:20261030T200917Z-ffba3e32",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T20:16:01Z",
+          "workflow_release": "2.25.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-30T20:03:53Z",
+          "verdict_sha256": "5ec11cc9d57a3380c97b7c4a299d57e1736082821b1eca9abd3cbd1665a57339",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-run/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-30T20:11:34Z",
+          "verdict_sha256": "370619183af29d974d41e8ad4b2bbc3f5e31d1588f71d7c5d84cefe816e6b54c",
+          "run_ref": "codex:20261030T200917Z-ffba3e32",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-10-30T20:16:01Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-30T19:59:54Z",
+        "consumed": {
+          "review_content_id": "a15a28f08063897b069412e9566874955f4ace9d64a89c5b16f1b8b17f56a485",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+          "bundle_id": "dbee037164d85bee12280b2af6d349c1a3122ac838b0e85dd68ff177fe679ba0",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "a15a28f08063897b069412e9566874955f4ace9d64a89c5b16f1b8b17f56a485"
+      ],
+      "optional_findings": {
+        "F-3c27113d21c4": {
+          "digest": "3c27113d21c4a7bfc4665f7ca694ca2a46c53570f3c81b0f97ff2d6fc024f63e",
+          "text": "D3 treats \"exited zero but wrote no final message\" as `failed`. Say whether an `-o` file that exists but is empty or whitespace-only counts as no message (recommended: yes, with the same `failed` detail), and add it to the CP1 case so a blank file is never a `ran`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a15a28f08063897b069412e9566874955f4ace9d64a89c5b16f1b8b17f56a485",
+              "verdict": "REVISE",
+              "at": "2026-10-30T19:56:25Z"
+            }
+          ]
+        },
+        "F-e191ef3a1cad": {
+          "digest": "e191ef3a1cada4e532744bf8569753116f9185e329dcf0b3e9fcf56eb343bdd2",
+          "text": "CP3's document list leaves known-stale text: `docs/ROADMAP.md` line 84 (\"C10g-1 to C10g-3c with C10g-3b2\") and `docs/guide/harnesses.md` lines 112 (\"no launch path calls either yet (C10g-3b2 wires them)\") and 126 (\"C10g-3b2 ...\") name the row this item splits; retarget them to C10g-3b2a/C10g-3b2b in place in CP3.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a15a28f08063897b069412e9566874955f4ace9d64a89c5b16f1b8b17f56a485",
+              "verdict": "REVISE",
+              "at": "2026-10-30T19:56:25Z"
+            }
+          ]
+        },
+        "F-2296ccf9acaf": {
+          "digest": "2296ccf9acaf509ecde42ff9eaa4324be142d550de285123796ed774b57acad5",
+          "text": "`docs/ROADMAP.md` line 165 (the C10g-3b row) still says \"nothing calls it until C10g-3b2\". CP3 names lines 43 and 84, the C10g-3b2 row and C10g-3c's dependency, but not this one. Retarget it to C10g-3b2b in place with the others.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T20:03:53Z"
+            }
+          ]
+        },
+        "F-b0ad422b8b03": {
+          "digest": "b0ad422b8b03fde90c4b90dc1f9ba5854b7a04bb9df2f31df2a3b4ac217969b9",
+          "text": "D4 rebuilds the command with `run_tester`'s `binary` argument, but `Built` does not record the binary it was built with. A caller passing a different path gets a refusal. That is fail-closed, but D4 or the guide should say the binary must be the one the bridge was built with, or `Built` could record it, as it now records the model and effort. The same holds for `build`'s `prompt` option: a bridge built with a positional prompt never rebuilds to `-`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T20:03:53Z"
+            }
+          ]
+        },
+        "F-f6396954d847": {
+          "digest": "f6396954d8476fa149fd8226cc29e701d1f0333aaa01be93f3c271af1207af7c",
+          "text": "CP1 could explicitly test D3’s precedence and telemetry distinction: a timeout with a limit rollout must remain `timeout`; telemetry at 100 percent without `limit_error`, with exit zero and a message, must remain `ran`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T20:11:34Z"
+            }
+          ]
+        }
       }
     }
   }

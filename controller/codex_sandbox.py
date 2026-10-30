@@ -19,6 +19,7 @@ import os
 import re
 import shlex
 import sys
+import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -51,15 +52,16 @@ class Limit:
     guide: str
 
 
-#: What the sandbox does not guarantee. The first entry is the unbuilt composed-configuration check (D1b).
+#: What the sandbox does not guarantee. The one entry is the window in which :func:`check_composed` can be out of date (D6).
 KNOWN_LIMITS: tuple[Limit, ...] = (
-    Limit("composed_configuration",
-          "the composed configuration values and the managed layers that are not files are not verified, other than "
-          "their MCP servers and features; a managed layer could still change a setting other than an MCP server or "
-          "a feature",
-          "C10g-3 builds the tester's composed-configuration check before the sandbox is wired",
-          "composed configuration values and non-file managed layers other than their MCP servers and features are "
-          "not verified; a managed layer could still change a setting other than an MCP server or a feature"),
+    Limit("composition_window",
+          "check_composed reads the configuration from a separate app-server process started just before the launch, "
+          "with the same home, environment and -c items, so a layer that changes between that read and the launch, or "
+          "a setting only the exec command composes differently, is not seen; the reviewer's control (b) makes the "
+          "same assumption",
+          "none: a different composing path would need a Codex command that reports the exec's own composition",
+          "the composed configuration is read by the app-server just before the launch, so a layer that changes "
+          "in that window, or a setting only exec composes differently, is not seen"),
 )
 
 
@@ -292,7 +294,8 @@ def check_launch(layout: TesterLayout, config_text: str, binary: Path, env: Mapp
     """The pre-launch controls (D1b), in order, before every ``codex exec`` and ``codex sandbox`` run: the layers
     outside the home, then the home before each of ``mcp list`` and ``features list`` and once more after both, as
     the reviewer's ``_preflight`` does (a listing writes Codex state into the home). The first refusal stops the
-    rest. Not covered: the composed-configuration values (:data:`KNOWN_LIMITS`)."""
+    rest. The composed configuration is a separate control, :func:`check_composed`, which this does not call
+    (:data:`KNOWN_LIMITS` names the window it leaves)."""
     run = run or review.run_bounded
     review.check_outside_layers(system_dir)
     for kind in ("mcp", "features"):
@@ -391,6 +394,207 @@ def check_argv(command: Sequence[str], layout: TesterLayout, *, model: str = rev
     for flag, expected in (("-C", str(layout.clone)), ("-o", str(layout.verdict)), ("--color", "never")):
         if value_of(flag) != expected:
             raise _refuse(f"the command line does not pin {flag} {expected}", check="argv", entry=flag)
+
+
+# ---------------------------------------------------------------------------
+# The composed configuration (C10g-3a)
+# ---------------------------------------------------------------------------
+
+
+def compose_argv(layout: TesterLayout, *, binary: Path, model: str = review.DEFAULT_MODEL,
+                 effort: str = review.DEFAULT_EFFORT) -> list[str]:
+    """The only constructor of the tester's composing command: ``app-server`` with the exec's own ``--disable`` and
+    ``-c`` items, so the composed values are the ones the tester runs under (``tester_compose.txt``)."""
+    out = [str(binary), "app-server", "--strict-config"]
+    for feature in review.DISABLED_FEATURES:
+        out += ["--disable", feature]
+    for item in required_overrides(layout, model=model, effort=effort):
+        out += ["-c", item]
+    return out + ["--listen", "stdio://"]
+
+
+def check_compose_argv(command: Sequence[str], layout: TesterLayout, *, model: str = review.DEFAULT_MODEL,
+                       effort: str = review.DEFAULT_EFFORT) -> None:
+    """Refuse a composing command line that omits a pinned item, adds a ``-c`` outside :func:`required_overrides`,
+    selects a sandbox or carries a banned flag, then require it to equal :func:`compose_argv` for its own binary."""
+    if len(command) < 3 or command[1] != "app-server":
+        raise _refuse("the command line is not an app-server run", check="argv", entry=command[1] if len(command) > 1
+                      else "")
+    present_disables = {command[i + 1] for i, a in enumerate(command[:-1]) if a == "--disable"}
+    for feature in review.DISABLED_FEATURES:
+        if feature not in present_disables:
+            raise _refuse(f"the command line does not disable the {feature!r} feature", check="argv", entry=feature)
+    if "code_mode_host" in present_disables:
+        raise _refuse("the command line disables the 'code_mode_host' tool", check="argv", entry="code_mode_host")
+    present = [command[i + 1] for i, a in enumerate(command[:-1]) if a == "-c"]
+    required = required_overrides(layout, model=model, effort=effort)
+    for item in required:
+        if item not in present:
+            raise _refuse(f"the command line omits the pinned override {item!r}", check="argv", entry=item)
+    for item in present:
+        if item not in required:
+            raise _refuse(f"the command line carries the unpinned override {item!r}", check="argv", entry=item)
+    for arg in command[1:]:
+        if arg in BANNED_FLAGS:
+            raise _refuse(f"the command line carries {arg!r}", check="argv", entry=arg)
+    for arg in command[1:]:
+        if arg == "--config" or arg.startswith(("--config=", "--sandbox", "--add-dir=", "-c=")):
+            raise _refuse(f"the command line carries the equivalent spelling {arg!r}", check="argv", entry=arg)
+    if "--strict-config" not in command:
+        raise _refuse("the command line omits --strict-config", check="argv", entry="--strict-config")
+    if command.count("--listen") != 1 or command.index("--listen") + 1 >= len(command) \
+            or command[command.index("--listen") + 1] != "stdio://":
+        raise _refuse("the command line does not listen on stdio", check="argv", entry="--listen")
+    if list(command) != compose_argv(layout, binary=Path(command[0]), model=model, effort=effort):
+        raise _refuse("the command line differs from the composing command the Controller builds", check="argv",
+                      entry="argv")
+
+
+def _override_values(layout: TesterLayout, *, model: str, effort: str) -> dict[str, object]:
+    """The value each ``-c`` item of :func:`required_overrides` sets, keyed by the dotted name as written: the item
+    parsed back as TOML, so the argv and the expected policy have one source. A dotted name the reviewer's table keeps
+    flat (``skills.bundled.enabled``) stays flat; any other is a leaf of its table, which is compared whole."""
+    out: dict[str, object] = {}
+    for item in required_overrides(layout, model=model, effort=effort):
+        key = item.partition("=")[0]
+        node: object = tomllib.loads(item)
+        for part in key.split("."):
+            node = node[part]
+        if "." in key and key not in review.EFFECTIVE_POLICY:
+            table, _, leaf = key.partition(".")
+            out.setdefault(table, {})[leaf] = node
+        else:
+            out[key] = node
+    return out
+
+
+def effective_policy(layout: TesterLayout, roots: Sequence[Path], *, model: str = review.DEFAULT_MODEL,
+                     effort: str = review.DEFAULT_EFFORT) -> dict[str, object]:
+    """Every value the tester's composed ``config`` must equal (D1). The argv-pinned values (approval policy, model,
+    effort, tier, trust, shell policy, ``default_permissions``) are parsed back from :func:`required_overrides`, so a
+    constructor value cannot diverge from the expectation; the profile is parsed back from :func:`profile_toml`, the
+    sandbox keys are unset, and the reviewer's remaining defaults (its scalar table without ``sandbox_mode``) fill
+    the keys the argv does not pin."""
+    profile = tomllib.loads(profile_toml(layout, roots))
+    scalars = {key: value for key, value in review.EFFECTIVE_POLICY.items() if key != "sandbox_mode"}
+    return {
+        **scalars, **_override_values(layout, model=model, effort=effort),
+        "permissions": profile["permissions"], "sandbox_mode": None, "sandbox_workspace_write": None,
+    }
+
+
+def _origin_of(origins: Mapping, leaf: str) -> object:
+    """The origin of ``leaf``: its own or one below it (:func:`review._origin`), else the nearest ancestor table's,
+    as ``config/read`` reports a table whose leaves were set together under the table's name."""
+    found = review._origin(origins, leaf)
+    parts = leaf.split(".")
+    while found is None and len(parts) > 1:
+        parts.pop()
+        found = origins.get(".".join(parts))
+    return found
+
+
+def _set_leaves(value: object, prefix: str) -> dict[str, object]:
+    """The leaves of ``value`` that carry a value (D2): a ``null`` is unset, and so is an empty table or list that is
+    the whole key; an empty table or list below the key (``mcp_servers.<name> = {}``) is a set leaf, as the
+    reviewer's check treats it."""
+    return {leaf: item for leaf, item in review.flatten(value, prefix).items()
+            if item is not None and not (leaf == prefix and item in ({}, []))}
+
+
+def check_effective(composed: Mapping, layout: TesterLayout, roots: Sequence[Path], *,
+                    model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT) -> None:
+    """The tester's control (b): ``composed`` is the ``config/read`` result with layers. The layers follow the
+    reviewer's rules, every key of :func:`effective_policy` is compared leaf by leaf (``null`` is unset, an unexpected
+    leaf refuses), every origin must be an allowed layer, no layer other than the packaged defaults may set a
+    forbidden key (the tester's own ``permissions`` and ``default_permissions`` are compared in full instead) and no
+    disabled feature may be reported enabled. The error names the leaf, its value and its origin layer."""
+    config = composed.get("config") if isinstance(composed, Mapping) else None
+    origins = composed.get("origins") if isinstance(composed, Mapping) else None
+    layers = composed.get("layers") if isinstance(composed, Mapping) else None
+    if not isinstance(config, Mapping) or not isinstance(origins, Mapping) or not isinstance(layers, list):
+        raise _refuse("the composed configuration is not a config/read result with layers", check="effective")
+    review._check_layers(layers, layout.codex_home)
+    for key, want in effective_policy(layout, roots, model=model, effort=effort).items():
+        got = review._lookup(config, key)
+        wanted_leaves, got_leaves = _set_leaves(want, key), _set_leaves(got, key)
+        if wanted_leaves == got_leaves:
+            continue
+        differing = [leaf for leaf in sorted({*wanted_leaves, *got_leaves})
+                     if wanted_leaves.get(leaf, "<unset>") != got_leaves.get(leaf, "<unset>")]
+        leaf = next((name for name in differing if name in got_leaves), differing[0])
+        raise _refuse(f"the composed configuration sets {leaf} to {got_leaves.get(leaf, '<unset>')!r}, expected "
+                      f"{wanted_leaves.get(leaf, '<unset>')!r}", check="effective", key=leaf,
+                      value=got_leaves.get(leaf), source=_origin_of(origins, leaf))
+    for key in review.INSTRUCTION_KEYS:
+        if config.get(key) and review._origin(origins, key) is None:
+            raise _refuse(f"the composed configuration sets {key} from no layer the Controller can judge",
+                          check="effective", key=key, value=config.get(key))
+    forbidden = tuple(key for key in review.FORBIDDEN_EFFECTIVE_KEYS if key not in ("permissions", "default_permissions"))
+    leaves = review.flatten(config)
+    for name in sorted(origins):
+        origin = origins[name]
+        source = origin.get("name", origin) if isinstance(origin, Mapping) else origin
+        if isinstance(source, Mapping) and source.get("type") == "packagedDefaults":
+            continue
+        kind = source.get("type") if isinstance(source, Mapping) else None
+        if kind not in review.ORIGIN_ALLOWED and review.MANAGED_APPROVED_LEAVES.get(name, object()) != leaves.get(name):
+            raise _refuse(f"the composed configuration sets {name} from a {kind} layer", check="effective",
+                          key=name, value=leaves.get(name), source=origin)
+        if name.split(".", 1)[0] in forbidden or (name.startswith("skills.") and name != "skills.bundled.enabled"):
+            raise _refuse(f"the composed configuration sets {name}", check="effective", key=name,
+                          value=leaves.get(name), source=origin)
+    features = config.get("features")
+    for feature in review.DISABLED_FEATURES:
+        if isinstance(features, Mapping) and feature in features and features[feature] is not False:
+            raise _refuse(f"the composed configuration sets features.{feature} to {features[feature]!r}", check="effective",
+                          key=f"features.{feature}", value=features[feature],
+                          source=review._origin(origins, f"features.{feature}"))
+
+
+def _compose_config(layout: TesterLayout, binary: Path, env: Mapping[str, str], *, model: str, effort: str,
+                   timeout: float, run: Callable[..., review.RunResult] | None = None) -> dict:
+    """Run the tester's composing command and return the ``config/read`` result with its layers. The exchange is
+    :func:`review.compose_config`'s (``initialize``, ``initialized``, ``config/read`` with ``includeLayers`` and the
+    clone as ``cwd``, stdin held open by :func:`review._answered` until the answer); the requests are repeated here
+    because that function builds them inline for the reviewer's argv. It needs no credential and starts no model
+    request."""
+    command = compose_argv(layout, binary=binary, model=model, effort=effort)
+    check_compose_argv(command, layout, model=model, effort=effort)
+    requests = [
+        {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "workflow-controller", "version": "1"}}},
+        {"method": "initialized"},
+        {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(layout.clone)}},
+    ]
+    run = run or review.run_bounded
+    result = run(command, cwd=layout.clone, env=env, timeout=timeout,
+                 stdin_text="".join(json.dumps(item) + "\n" for item in requests), hold_open_until=review._answered)
+    stderr = result.stderr.decode("utf-8", "replace")
+    if result.timed_out or result.exit_code != 0:
+        raise _refuse("the composing command did not run", check="effective", value=stderr.strip()[-400:])
+    for line in result.stdout.decode("utf-8", "replace").splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get("id") == 2:
+            if isinstance(message.get("result"), dict):
+                return message["result"]
+            raise _refuse("the composing command answered config/read with an error", check="effective",
+                          value=json.dumps(message.get("error"))[:400])
+    raise _refuse("the composing command printed no config/read answer", check="effective", value=stderr.strip()[-400:])
+
+
+def check_composed(layout: TesterLayout, config_text: str, roots: Sequence[Path], binary: Path,
+                   env: Mapping[str, str], *, model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT,
+                   run: Callable[..., review.RunResult] | None = None, timeout: float = LISTING_TIMEOUT) -> None:
+    """The composed-configuration launch control (D4, D5): compose through the ``run`` seam, check the home again
+    (the composing command writes Codex state into it), then compare with :func:`check_effective`. A separate
+    control from :func:`check_launch`; a caller runs both before each launch. ``roots``, ``model`` and ``effort``
+    are the ones :func:`build` was given (``Built.roots``); the first refusal stops the rest."""
+    composed = _compose_config(layout, binary, env, model=model, effort=effort, timeout=timeout, run=run)
+    check_home(layout, config_text)
+    check_effective(composed, layout, roots, model=model, effort=effort)
 
 
 # ---------------------------------------------------------------------------

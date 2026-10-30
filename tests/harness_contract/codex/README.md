@@ -30,6 +30,7 @@ on further drift.
 | `env.txt` | the exact environment the installed Codex needs (the symlink's directory holds `node`) | `1bb441add406d50c57237393823a162c3c65373d28ace2801956b086ff6ae296` |
 | `flags.txt` | which invocation kind accepts which flag; unknown `--disable` and `-c` names fail closed | `0da03da748d8781b244ab2ad2e9b40c2c60b896a531d95f20968eef4d9b2e017` |
 | `sandbox_probe.txt` | the sandbox probe (P1-P4, C1-C2, T6-T7): what a reviewer can and cannot reach, the code-mode host, project trust, sub-agents | `cd0ba3546d15212856a9fd84eabbee5e56410d20d43ae20cb51c4a15da0135cc` |
+| `tester_compose.txt` | the Codex tester's composed configuration (C10g-3a): the composing command, the layers, the origins and values of the tester's keys and the state the run wrote, measured on `codex-cli 0.163.0` on 2026-10-30 with no model call: the source of `codex_sandbox.check_effective` | `3a09120933d6c3acff9f244a4f9305731b7b0c2943d071a983a34c1c5aa83505` |
 
 Features that became enabled between 0.162.1 and 0.163.0 (all `stable` and `true` on 0.163.0, `false`
 on 0.162.1). Each is disabled (`DISABLED_FEATURES`, never allowlisted): a review needs none of them

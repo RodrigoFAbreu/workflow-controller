@@ -1,0 +1,86 @@
+# Codex tester composed configuration, codex-cli 0.163.0 (C10g-3a)
+
+Measured 2026-10-30 with no model call and no spend. Setup: a real tester job built by `codex_sandbox.build`
+(runtime root under ~/.cache, a one-commit git clone, the operator's `auth.json` copied into the tester home), then
+the reviewer's composing command pointed at it, with the exec's own `--disable` and `-c` items:
+
+    codex app-server --strict-config <--disable ...> <-c ...> --listen stdio://
+
+stdin: `initialize`, `initialized`, `config/read` with `includeLayers` and the clone as `cwd`, held open until the
+answer. Exit 0, no stderr. Paths below are replaced: `<job>` is `<runtime>/functional/<job id>`, `<operator-home>` the
+operator's home.
+
+## Layers (highest precedence first)
+
+[
+ {
+  "disabledReason": null,
+  "has_config": true,
+  "name": {
+   "type": "sessionFlags"
+  }
+ },
+ {
+  "disabledReason": null,
+  "has_config": true,
+  "name": {
+   "file": "<job>/codex-home/config.toml",
+   "profile": null,
+   "type": "user"
+  }
+ },
+ {
+  "disabledReason": null,
+  "has_config": false,
+  "name": {
+   "file": "/etc/codex/config.toml",
+   "type": "system"
+  }
+ }
+]
+
+(`sessionFlags` carries the `-c` items, `user` the tester home's `config.toml`, `system` is `/etc/codex/config.toml`,
+empty on this host. No other layer was listed.)
+
+## Origins of the tester's keys (the layer types seen per key group)
+
+- `approval_policy`: sessionFlags
+- `default_permissions`: sessionFlags
+- `features.*`: sessionFlags
+- `model`: sessionFlags
+- `model_provider`: sessionFlags
+- `model_reasoning_effort`: sessionFlags
+- `permissions.tester.filesystem.*`: user
+- `permissions.tester.network.enabled`: user
+- `project_root_markers.0`: sessionFlags
+- `projects.<clone>.trust_level`: sessionFlags
+- `service_tier`: sessionFlags
+- `shell_environment_policy`: sessionFlags
+- `shell_environment_policy.set.*`: sessionFlags
+- `skills`: sessionFlags
+- `web_search`: sessionFlags
+
+## Values
+
+- `default_permissions = 'tester'`, `approval_policy = 'never'`, `sandbox_mode = None`,
+  `sandbox_workspace_write = None`, `notify = []`, `model_provider = 'openai'`,
+  `web_search = 'disabled'`, `project_root_markers = ['.git']`, `hooks = None`, `mcp_servers = {}`.
+- `permissions.tester` is a table: `description`, `extends`, `workspace_roots`, `filesystem.glob_scan_max_depth` and
+  the network proxy fields (`allow_local_binding`, `allow_upstream_proxy`, ... `unix_sockets`) are reported as `null`;
+  the filesystem entries carry origin `user` (the home's `config.toml`) and `network.enabled = false`.
+- `shell_environment_policy`: `inherit = "none"`, `set` the five pinned variables, every other leaf `null`.
+- `projects`: one entry, the clone, `trust_level = "untrusted"` (origin `sessionFlags`).
+- `skills = {"bundled": {"enabled": false}}`.
+- `features`: every disabled feature is reported `false`; features the profile does not disable are reported with
+  their own value (some `true`), which the check does not refuse.
+
+## State the run wrote into the tester home
+
+`auth.json, config.toml, goals_1.sqlite, goals_1.sqlite-shm, goals_1.sqlite-wal, installation_id, logs_2.sqlite, logs_2.sqlite-shm, logs_2.sqlite-wal, memories_1.sqlite, memories_1.sqlite-shm, memories_1.sqlite-wal, queue_1.sqlite, queue_1.sqlite-shm, queue_1.sqlite-wal, sessions, state_5.sqlite, state_5.sqlite-shm, state_5.sqlite-wal, tmp`
+
+All are accepted by `check_home` afterwards; `sessions/` and `tmp/` are directories.
+
+## Not measured
+
+A managed layer (`/etc/codex/config.toml` is root-owned; no MDM profile on this host). The layer shapes are those
+`compose.txt` records from the schema.

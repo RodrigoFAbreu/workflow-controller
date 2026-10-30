@@ -1,0 +1,34 @@
+{
+  "dispositions": {
+    "F-029380b76127": {
+      "disposition": "dropped",
+      "reason": "The plan is a historical record and is not edited after approval; the implementation already follows the code as the finding describes it. check_composed imports review._answered and repeats the request list (controller/codex_sandbox.py)."
+    },
+    "F-1c5fc8ba5e2c": {
+      "disposition": "dropped",
+      "reason": "The plan is a historical record and is not edited after approval; the implementation already follows the code as the finding describes it. check_composed imports review._answered and repeats the request list (controller/codex_sandbox.py)."
+    },
+    "F-2e164a8b1d46": {
+      "disposition": "fixed",
+      "reason": "Fixed in 864bc80: ancestor-table origins are named in the refusal evidence, with a test."
+    },
+    "F-47c96bb870fa": {
+      "disposition": "fixed",
+      "reason": "The ROADMAP C10g-3a row now says the limit is narrowed to composition_window, not closed."
+    },
+    "F-c5acd03f9ac1": {
+      "disposition": "dropped",
+      "reason": "The plan is a historical record and is not edited after approval; the implementation already follows the code as the finding describes it. check_composed takes roots explicitly, as the finding asks."
+    },
+    "F-e71e1215275f": {
+      "disposition": "dropped",
+      "reason": "tester_sandbox.txt is a dated, digest-pinned measurement record and stays as measured; the contract README points to tester_compose.txt for the composed check."
+    },
+    "F-f83e675352e7": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a generated bundle artefact, not a tracked file. The reviewer reran the evidence at HEAD itself (narrow modules, live composed check, check_docs) and approved."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-composed-config-check"
+}

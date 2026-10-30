@@ -12,7 +12,7 @@ project and managed layers is compared with the pinned tester profile, which nar
 
 ## In progress
 
-`workflow-controller-codex-tester-bridge` (C10g-3b, issue [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)): CP1 and CP2 complete (`clone_candidate` and `bound_differences` extracted in `controller/functional_review.py`, `tester_prompt` gains `limits`; `controller/codex_bridge.py` with `Bridge`, `build_bridge`, `check_bound`, `SANDBOX_LIMITS` and `prompt`; `tests/test_codex_bridge.py`; `docs/guide/harnesses.md` and `docs/ROADMAP.md` updated). Next is the self-review and the implementation bundle. The plan is `docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md`.
+`workflow-controller-codex-tester-bridge` (C10g-3b, issue [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)): CP1 and CP2 complete (`clone_candidate` and `bound_differences` extracted in `controller/functional_review.py`, `tester_prompt` gains `limits`; `controller/codex_bridge.py` with `Bridge`, `build_bridge`, `check_bound`, `SANDBOX_LIMITS` and `prompt`; `tests/test_codex_bridge.py`; `docs/guide/harnesses.md` and `docs/ROADMAP.md` updated) and the self-review (one style fix) are done; the implementation is in review. The plan is `docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md`.
 
 ## Next action
 

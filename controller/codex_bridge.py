@@ -105,7 +105,6 @@ def build_bridge(candidate: Candidate, *, runtime_root: Path, job_id: str, work_
         raise
 
 
-
 #: The Codex sandbox's own limits (D6), stated to the tester in place of the Claude sandbox's. Tied to the profile by
 #: ``tests.test_codex_bridge``, so a change to the profile cannot leave this text wrong.
 SANDBOX_LIMITS: tuple[str, ...] = (

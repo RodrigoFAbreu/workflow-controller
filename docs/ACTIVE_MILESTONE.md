@@ -2,21 +2,13 @@
 
 ## Status
 
-**Complete.** `workflow-controller-verify-codex-command` (C10g-2b, issue
-[#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)) is implemented (CP1, CP2, the
-self-review fixes and the functional review).
-`controller/codex_verify.py` runs the C10g-1 probes (modelless `sandbox`, then one `exec` turn) in fresh jobs against
-host fixtures; `workflow-controller verify-codex [--force] [--codex-binary PATH]` records the build's digest in
-`verified-codex-builds.json` only when every probe held and the build was unchanged, and otherwise exits 20 with a named
-refusal. Nothing launches on the record: `build_verification` for `codex` stays `none` until C10g-3. The change is a
-`feat:` with a minor release. The plan is `docs/ai-workflow/CONTROLLER_VERIFY_CODEX_COMMAND_PLAN.md`.
-
-**In implementation.** `workflow-controller-composed-config-check` (C10g-3a, issue
-[#221](https://github.com/RodrigoFAbreu/workflow-controller/issues/221)): CP1 (`check_effective`) and CP2 (`check_composed`,
-`KNOWN_LIMITS` narrowed to `composition_window`, guide and roadmap) and the self-review fixes (an empty table or
-list below a compared key is a set leaf, as in the reviewer's check) are implemented. Nothing calls the check until
-C10g-3b.
-The plan is `docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md`.
+**Complete.** `workflow-controller-composed-config-check` (C10g-3a, issue
+[#221](https://github.com/RodrigoFAbreu/workflow-controller/issues/221)) is implemented (CP1, CP2, the self-review
+fixes and the functional review) and accepted by policy.
+`controller/codex_sandbox.py` gains `check_effective` and `check_composed`: the configuration Codex composes from the user,
+project and managed layers is compared with the pinned tester profile, which narrows `KNOWN_LIMITS` to
+`composition_window`. Nothing calls the check until C10g-3b. The change is a `chore:` with no release. The plan is
+`docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md`.
 
 ## Next action
 

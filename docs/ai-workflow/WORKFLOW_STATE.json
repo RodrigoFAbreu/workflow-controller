@@ -41872,12 +41872,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-composed-config-check-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-composed-config-check-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 1,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "2faaf53445612976e547f78ac8d0cd9f826cc866",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "d380553c16a7ba69ed8a8e8c4fc9670de6a060b2",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -42016,8 +42016,8 @@
           "external": 0
         }
       },
-      "state_revision": 10,
-      "last_transition": "2026-10-30T12:31:36Z",
+      "state_revision": 11,
+      "last_transition": "2026-10-30T13:05:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -467,9 +467,11 @@ def effective_policy(layout: TesterLayout, roots: Sequence[Path], *, model: str 
 
 
 def _set_leaves(value: object, prefix: str) -> dict[str, object]:
-    """The leaves of ``value`` that carry a value: a ``null``, an empty table and an empty list are unset (D2)."""
-    return {leaf: item for leaf, item in review.flatten(value, prefix).items() if item is not None and item != {}
-            and item != []}
+    """The leaves of ``value`` that carry a value (D2): a ``null`` is unset, and so is an empty table or list that is
+    the whole key; an empty table or list below the key (``mcp_servers.<name> = {}``) is a set leaf, as the
+    reviewer's check treats it."""
+    return {leaf: item for leaf, item in review.flatten(value, prefix).items()
+            if item is not None and not (leaf == prefix and item in ({}, []))}
 
 
 def check_effective(composed: Mapping, layout: TesterLayout, roots: Sequence[Path], *,
@@ -522,7 +524,7 @@ def check_effective(composed: Mapping, layout: TesterLayout, roots: Sequence[Pat
                           source=review._origin(origins, f"features.{feature}"))
 
 
-def compose_config(layout: TesterLayout, binary: Path, env: Mapping[str, str], *, model: str, effort: str,
+def _compose_config(layout: TesterLayout, binary: Path, env: Mapping[str, str], *, model: str, effort: str,
                    timeout: float, run: Callable[..., review.RunResult] | None = None) -> dict:
     """Run the tester's composing command and return the ``config/read`` result with its layers. The exchange is
     :func:`review.compose_config`'s (``initialize``, ``initialized``, ``config/read`` with ``includeLayers`` and the
@@ -562,7 +564,7 @@ def check_composed(layout: TesterLayout, config_text: str, roots: Sequence[Path]
     (the composing command writes Codex state into it), then compare with :func:`check_effective`. A separate
     control from :func:`check_launch`; a caller runs both before each launch. ``roots``, ``model`` and ``effort``
     are the ones :func:`build` was given (``Built.roots``); the first refusal stops the rest."""
-    composed = compose_config(layout, binary, env, model=model, effort=effort, timeout=timeout, run=run)
+    composed = _compose_config(layout, binary, env, model=model, effort=effort, timeout=timeout, run=run)
     check_home(layout, config_text)
     check_effective(composed, layout, roots, model=model, effort=effort)
 

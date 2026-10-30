@@ -13,7 +13,9 @@ refusal. Nothing launches on the record: `build_verification` for `codex` stays 
 
 **In implementation.** `workflow-controller-composed-config-check` (C10g-3a, issue
 [#221](https://github.com/RodrigoFAbreu/workflow-controller/issues/221)): CP1 (`check_effective`) and CP2 (`check_composed`,
-`KNOWN_LIMITS` narrowed to `composition_window`, guide and roadmap) are implemented. Nothing calls the check until C10g-3b.
+`KNOWN_LIMITS` narrowed to `composition_window`, guide and roadmap) and the self-review fixes (an empty table or
+list below a compared key is a set leaf, as in the reviewer's check) are implemented. Nothing calls the check until
+C10g-3b.
 The plan is `docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md`.
 
 ## Next action

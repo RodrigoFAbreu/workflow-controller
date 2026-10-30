@@ -147,7 +147,6 @@ class LiveSandboxTest(unittest.TestCase):
         print("\n--- codex exec final message ---\n" + output)
         self.assert_host_effects(built, output)
 
-
     def test_a_real_tester_job_passes_the_composed_check_and_a_changed_flag_is_refused(self) -> None:
         """No model request: the composing command is ``codex app-server`` answering ``config/read``."""
         built, _targets, _command = self.prepare("compose1")

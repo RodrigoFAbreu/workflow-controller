@@ -541,6 +541,17 @@ class CheckEffectiveTests(Fixture):
         composed["config"]["mcp_servers"] = None
         composed["config"]["notify"] = None
         self.check(composed)
+        composed["config"]["mcp_servers"] = {}
+        composed["config"]["hooks"] = {}
+        self.check(composed)
+
+    def test_an_empty_table_or_list_below_the_key_is_a_set_leaf(self) -> None:
+        for path, value, leaf in ((("mcp_servers", "x"), {}, "mcp_servers.x"),
+                                  (("hooks", "PreToolUse"), [], "hooks.PreToolUse"),
+                                  (("shell_environment_policy", "exclude"), [], "shell_environment_policy.exclude")):
+            with self.subTest(leaf=leaf):
+                error = self.refused(self.mutated(*path, value=value))
+                self.assertEqual(error.evidence.get("key"), leaf, error)
 
     def test_a_feature_the_composition_does_not_report_is_not_refused(self) -> None:
         composed = self.mutated("features", value={})

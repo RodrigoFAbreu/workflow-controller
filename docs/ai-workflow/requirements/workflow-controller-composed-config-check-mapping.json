@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-composed-config-check",
+  "requirements": {
+    "R1": {
+      "description": "The tester's composed configuration, read with the reviewer's composing command under the tester's home and flags, is compared with values built from the same functions that write the profile and the argv, leaf by leaf with `null` as unset, and any security-relevant difference, from any layer, is a refusal naming the leaf, its value and its origin (#221)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The layers and origins of the composed result follow the reviewer's rules (unknown, file-backed or managed layers carrying configuration, an enabled project layer, a foreign user layer or a disallowed origin refuse), with the tester's own `permissions` and `default_permissions` compared in full (#221)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "`check_composed` runs the composing command through the `run` seam with a command line equal to the constructor's, checks the home again afterwards, and refuses a run that fails, times out or answers nothing; it is a separate control, not part of `check_launch`, and nothing calls it yet (#221)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "`KNOWN_LIMITS` states the narrower remaining limit, the profile header, the docstrings and the guide say it, the measurement is recorded, one opt-in live test runs the check against the real Codex, and the reviewer, `verify-codex` and the launch paths are unchanged (#221)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

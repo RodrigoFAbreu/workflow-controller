@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-composed-config-check",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -41861,6 +41861,240 @@
         },
         "evaluated_at": "2026-10-30T09:43:47Z",
         "workflow_release": "2.25.0"
+      }
+    },
+    "workflow-controller-composed-config-check": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-composed-config-check",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-composed-config-check-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-composed-config-check-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 1,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "2faaf53445612976e547f78ac8d0cd9f826cc866",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+        "approved_review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2b699e43231c8b27ea0dbf210d5f0566f6ee66df"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-composed-config-check-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2df7e4f93bfaf72c5e8f3dcdb0c7cd45b1be4a85"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-composed-config-check-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6a48c6d2288c3b63e889f58158c5ccba394f8151"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T12:11:36Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+            "ledger": {
+              "local": {
+                "bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "b4038138b0d83c90cea88674e9b67ab11064872ff66bfc110217f6b47231a4b6",
+                "ledger_entry_sha256": "135cd7fe62759aa55d7245deb83dad965d8e50357e6710e0e38f10eab205885b",
+                "run_ref": "session:local .ai-review/workflow-controller-composed-config-check/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d404dc240bffb1b77a0353fa48a9f3a60bf4cb02c7bf9fd3e51123a3a5a213ea",
+                "ledger_entry_sha256": "3908de16d75b987b36d41edbd6387aa22cc464313152ae23e9417c3b8735110d",
+                "run_ref": "codex:20261030T120642Z-c92b2b22",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T12:11:36Z",
+          "workflow_release": "2.25.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T12:04:10Z",
+          "verdict_sha256": "b4038138b0d83c90cea88674e9b67ab11064872ff66bfc110217f6b47231a4b6",
+          "run_ref": "session:local .ai-review/workflow-controller-composed-config-check/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T12:08:25Z",
+          "verdict_sha256": "d404dc240bffb1b77a0353fa48a9f3a60bf4cb02c7bf9fd3e51123a3a5a213ea",
+          "run_ref": "codex:20261030T120642Z-c92b2b22",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 1,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 6,
+      "last_transition": "2026-10-30T12:11:36Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-30T12:00:20Z",
+        "consumed": null,
+        "published": {
+          "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+          "plan_revision": 1
+        },
+        "bound": {
+          "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+          "bundle_id": "c984f8bade9ef78bd5528b76e66492a15c4645c0168e547eee4626344a26a466",
+          "plan_revision": 1
+        }
+      },
+      "optional_findings": {
+        "F-1c5fc8ba5e2c": {
+          "digest": "1c5fc8ba5e2c60f8138c39a63e2ba17c5a2078ff4d4b71f52a80fe3b1e9c1438",
+          "text": "CP2 says the private JSON-RPC helper \"imports its stdin helper\" from `review.compose_config`, but `controller/review.py` has no separate stdin helper: the three requests are built inline in `compose_config`, and the reusable pieces are `_answered` (the hold-open predicate) and `run_bounded`. Name `review._answered` as the import and state that the request list is duplicated, so the implementer does not look for a function that does not exist or refactor `review.py`, which the plan forbids.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T12:04:10Z"
+            }
+          ]
+        },
+        "F-c5acd03f9ac1": {
+          "digest": "c5acd03f9ac12c34d2b644ff67afd15b20902501daabfef8b9fcd9de1f992d30",
+          "text": "D4's `check_composed(layout, config_text, binary, env, *, run, timeout, ...)` hides the inputs that D1's `effective_policy(layout, roots, *, model, effort)` needs. Name `roots`, `model` and `effort` in the signature, or say they are taken from a `Built`, so CP2's tests and C10g-3b's caller agree on one call shape.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T12:04:10Z"
+            }
+          ]
+        },
+        "F-e71e1215275f": {
+          "digest": "e71e1215275f95200e77330e30639e99f4f6702c891ba43f24ba2008d900ef33",
+          "text": "`tests/harness_contract/codex/tester_sandbox.txt` line 73 says the composed-configuration check \"is unbuilt\" and is the only `KNOWN_LIMITS` entry. The plan does not say whether this dated measurement record stays as it is (it is digest-pinned in the contract README) or gets a pointer to `tester_compose.txt`. Say which, so the stale sentence is a deliberate choice.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T12:04:10Z"
+            }
+          ]
+        },
+        "F-47c96bb870fa": {
+          "digest": "47c96bb870fa226fa639f8f678132c965975873d10d7106ed37cb567839ab351",
+          "text": "The `docs/ROADMAP.md` C10g-3a row says the item \"closes the one entry of `codex_sandbox.KNOWN_LIMITS`\", but D6 narrows the limit to `composition_window` and does not remove it. CP2's roadmap edit should correct that wording, not only mark the row complete.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T12:04:10Z"
+            }
+          ]
+        },
+        "F-029380b76127": {
+          "digest": "029380b761270d9226742db082cfa5bd62ead1fc7b0540d371a13c45681f87d6",
+          "text": "CP2 refers to importing the reviewer’s “stdin helper.” `review.compose_config` builds its requests inline; the reusable helper is `review._answered`, alongside `review.run_bounded`. Naming these explicitly would clarify the implementation.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e776a5b7d07499afe7d108c5bb63230de7a5b15e19a75a1e03f6659c6f65a65",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T12:08:25Z"
+            }
+          ]
+        }
       }
     }
   }

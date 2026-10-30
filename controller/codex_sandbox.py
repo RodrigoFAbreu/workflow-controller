@@ -611,6 +611,11 @@ class Built:
     roots: tuple[Path, ...]
     argv: tuple[str, ...]
     environment: Mapping[str, str]
+    #: The digest of the credential copy :func:`build` wrote (what the copy-back compares against); ``""`` when unknown.
+    credential_digest: str = ""
+    #: The model and effort ``argv`` was built with, so a launch rebuilds and checks the same command.
+    model: str = review.DEFAULT_MODEL
+    effort: str = review.DEFAULT_EFFORT
 
 
 def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path, ownership_tag: str = "tester",
@@ -629,7 +634,7 @@ def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path,
     roots = readable_roots(layout, binary, extra=extra_readable, python=python, package_dir=package_dir,
                            operator_home=real_home)
     config_text = config_toml(layout, roots)
-    review.build_home(layout.job, operator_home)
+    digest = review.build_home(layout.job, operator_home)
     runtime.write_private_bytes(runtime_root, layout.rel("codex-home", "config.toml"), config_text.encode())
     for directory in (layout.scratch_tmp, layout.fake_logs):
         directory.mkdir(parents=True, exist_ok=True)
@@ -639,7 +644,7 @@ def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path,
     command = argv(layout, binary=binary, model=model, effort=effort, prompt=prompt)
     check_argv(command, layout, model=model, effort=effort)
     return Built(layout, config_text, tuple(roots), tuple(command),
-                 child_environment(layout, binary, ownership_tag, inherited))
+                 child_environment(layout, binary, ownership_tag, inherited), digest, model, effort)
 
 
 # ---------------------------------------------------------------------------

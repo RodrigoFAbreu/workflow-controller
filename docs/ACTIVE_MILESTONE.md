@@ -1,5 +1,14 @@
 # Active Milestone
 
+## In progress
+
+`workflow-controller-codex-tester-run` (C10g-3b2a, issue
+[#228](https://github.com/RodrigoFAbreu/workflow-controller/issues/228)), plan
+`docs/ai-workflow/CONTROLLER_CODEX_TESTER_RUN_PLAN.md`. CP1 done: `controller/codex_tester.py` runs the launch
+controls and `codex exec` and classifies the outcome; `Built` records the credential digest, model and effort. CP2
+(readings, credential copy-back, result dict) and CP3 (live test, documents) remain. The text below is the previous
+milestone's record and is replaced by CP3.
+
 ## Status
 
 **Complete.** `workflow-controller-codex-tester-bridge` (C10g-3b, issue

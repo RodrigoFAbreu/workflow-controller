@@ -12,11 +12,11 @@ this literal always names exactly the modules that exist under
 
 from . import (
     buildinfo, version, errors, harness, conventional_commit, repo_policy, gitrepo, release_notes, forge, runtime, release_txn, milestone_branch, lock, identity, workflow_contract, protocol_schema, protocol, pr_report, functional_review, claude_build,
-    decision, managed_repo, target_state, evidence, protocol_decision, routing, route_select, notify, settings, anchor, usage, worker_stream, usage_record, worker, review_rounds, telemetry, review, codex_sandbox, codex_bridge, codex_build, codex_verify, review_mode, handoff, worker_launch, job, observe, cli,
+    decision, managed_repo, target_state, evidence, protocol_decision, routing, route_select, notify, settings, anchor, usage, worker_stream, usage_record, worker, review_rounds, telemetry, review, codex_sandbox, codex_bridge, codex_tester, codex_build, codex_verify, review_mode, handoff, worker_launch, job, observe, cli,
 )
 
 __all__ = [
     "buildinfo", "version", "errors", "harness", "conventional_commit", "repo_policy", "gitrepo", "release_notes", "forge", "runtime", "release_txn", "milestone_branch", "lock", "identity",
-    "workflow_contract", "protocol_schema", "protocol", "pr_report", "functional_review", "claude_build", "decision", "managed_repo", "target_state", "evidence", "protocol_decision", "routing", "route_select", "notify", "settings", "anchor", "usage", "worker_stream", "usage_record", "worker", "review_rounds", "telemetry", "review", "codex_sandbox", "codex_bridge", "codex_build", "codex_verify", "review_mode", "handoff", "worker_launch", "job", "observe",
+    "workflow_contract", "protocol_schema", "protocol", "pr_report", "functional_review", "claude_build", "decision", "managed_repo", "target_state", "evidence", "protocol_decision", "routing", "route_select", "notify", "settings", "anchor", "usage", "worker_stream", "usage_record", "worker", "review_rounds", "telemetry", "review", "codex_sandbox", "codex_bridge", "codex_tester", "codex_build", "codex_verify", "review_mode", "handoff", "worker_launch", "job", "observe",
     "cli",
 ]

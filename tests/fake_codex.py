@@ -58,7 +58,8 @@ written here once the watchdog is armed: a test that orphans a fake waits for it
 kinds ``revise_then_approve``, ``revise_then_revise`` and ``no_status_then_exact`` each give a wrong id first and an exact
 header on the retry, with the ``Status:`` the name says), ``exit``,
 ``limit_shape`` (``string``, ``http429`` or ``percent``: how the rollout reports the
-limit), ``stderr`` (text printed on stderr, a transcript line), ``subagent``
+limit), ``message`` (text written to the ``-o`` file instead of a review verdict, so a tester's final message can be scripted; ``""``
+writes an empty file), ``stderr`` (text printed on stderr, a transcript line), ``subagent``
 (write a sub-agent rollout with that many total tokens),
 ``write_outside`` (list of paths to write), ``escape_to`` (a real-worktree path
 the fake writes as if the sandbox failed), ``git`` (argvs run in the working
@@ -563,8 +564,8 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
         code = code or 1
     elif verdict_kind != "none":
         out = argv[argv.index("-o") + 1] if "-o" in argv else None
-        text = _verdict(verdict_kind, prompt)
-        if out and text:
+        text = spec["message"] if "message" in spec else _verdict(verdict_kind, prompt)
+        if out and text is not None and ("message" in spec or text):
             Path(out).write_text(text)
     if notify:
         record["ran"].append({"layer": "notify", **_run_command(notify, cwd)})

@@ -4269,6 +4269,31 @@ class _Killed(BaseException):
     pass
 
 
+@contextlib.contextmanager
+def _stat_fails(site, name, err, skip=0):
+    """Fails the `lstat` of `name` (a call with a `dir_fd`) that the function
+    `site` makes through `_lstat_at` or `_lstat_raw`, after `skip` earlier ones
+    passed. A direct `os.stat` of the site itself is not counted. Yields the
+    list of the calls counted for the site."""
+    real = os.stat
+    counted = []
+
+    def fails(path, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None and path == name:
+            frame = sys._getframe(1)
+            if frame.f_code.co_name == "_lstat_raw":
+                frame = frame.f_back
+                if frame.f_code.co_name == "_lstat_at":
+                    frame = frame.f_back
+                if frame.f_code.co_name == site:
+                    counted.append(path)
+                    if len(counted) > skip:
+                        raise OSError(err, os.strerror(err))
+        return real(path, *args, **kwargs)
+    with unittest.mock.patch.object(os, "stat", fails):
+        yield counted
+
+
 class _Result:
     def __init__(self, code, result=None, error=None):
         self.code, self.result, self.error = code, result, error
@@ -4403,6 +4428,83 @@ class RetentionArchive(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
         return real
+
+    # -- T1, T9 of the stat-error refusal (W33) -----------------------------
+
+    def stat_refused(self, rr, result, code, shown, errname):
+        self.assertEqual((result.code, result.err_code), (2, code), getattr(result.error, "message", None))
+        self.assertTrue(result.error.message.startswith(f"{shown} cannot be examined: {errname} "),
+                        result.error.message)
+        self.assertIn(shown, result.error.next_step)
+        self.assertIn("check the permissions of", result.error.next_step)
+
+    def test_w33_t1_a_stat_error_of_the_archive_or_the_temporary_is_unreadable(self):
+        rr = self.ra()
+        rr.folder("w00")
+        rr.folder("w01")
+        self.assertEqual(rr.call("w01", apply=True).code, 0)  # the archive directory is present
+        before, fds = rr.snap(times=False), _fd_count()
+        for name, err, errname in (("w00.tar.zst", errno.EACCES, "EACCES"), ("w00.tar.zst", errno.ELOOP, "ELOOP"),
+                                   ("w00.tar.zst", errno.EIO, "EIO"), (".w00.partial", errno.EACCES, "EACCES")):
+            for apply in (False, True):
+                with self.subTest(name=name, errname=errname, apply=apply):
+                    with _stat_fails("_judge_archive_side", name, err):
+                        result = rr.call("w00", apply=apply)
+                    self.stat_refused(rr, result, "unreadable", str(rr.adir / name), errname)
+                    self.assertEqual(rr.snap(times=False), before)
+                    self.assertEqual(_fd_count(), fds)
+        # S1b: the second call, under the lock, after the temporary was written and verified
+        with _stat_fails("_judge_archive_side", "w00.tar.zst", errno.EIO, skip=1) as counted:
+            result = rr.call("w00", apply=True)
+        self.assertEqual(len(counted), 2)
+        self.stat_refused(rr, result, "unreadable", str(rr.adir / "w00.tar.zst"), "EIO")
+        self.assertIn("nothing was archived", result.error.next_step)
+        self.assertEqual(rr.snap(times=False), before)
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual(rr.call("w00", apply=True).code, 0)  # the lock was released
+        # S1b with no archive directory: the walk created the hierarchy, `_undo` removes it
+        rr = self.ra()
+        rr.folder("w00")
+        if rr.adir.exists():
+            self.assertEqual(os.listdir(rr.adir), [])
+            rr.adir.rmdir()
+        before, fds = rr.snap(times=False), _fd_count()
+        with _stat_fails("_judge_archive_side", "w00.tar.zst", errno.EACCES) as counted:
+            result = rr.call("w00", apply=True)
+        self.assertEqual(len(counted), 1)
+        self.stat_refused(rr, result, "unreadable", str(rr.adir / "w00.tar.zst"), "EACCES")
+        self.assertFalse(rr.adir.exists())
+        self.assertEqual(rr.snap(times=False), before)
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual(rr.call("w00", apply=True).code, 0)
+
+    def test_w33_t9_the_helper_returns_none_for_absent_and_refuses_every_other_error(self):
+        directory = Path(tempfile.mkdtemp(prefix="wfo-lstat-"))
+        self._dirs.append(directory)
+        (directory / "here").write_text("x")
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, fd)
+        self.assertIsNone(wr._lstat_at("gone", fd, shown="/p/gone"))
+        self.assertIsNone(wr._lstat_raw("gone", fd))
+        self.assertEqual(wr._lstat_at("here", fd, shown="/p/here").st_size, 1)
+        self.assertEqual(wr._lstat_raw("here", fd).st_size, 1)
+        for err in (errno.EACCES, errno.ELOOP, errno.ENAMETOOLONG, errno.EIO, errno.ENOTDIR):
+            with self.subTest(errno=errno.errorcode[err]):
+                with unittest.mock.patch.object(os, "stat", side_effect=OSError(err, os.strerror(err))):
+                    with self.assertRaises(wr.RetentionError) as caught:
+                        wr._lstat_at("here", fd, shown="/p/here")
+                    self.assertEqual(caught.exception.code, "unreadable")
+                    self.assertTrue(caught.exception.message.startswith(
+                        f"/p/here cannot be examined: {errno.errorcode[err]} "), caught.exception.message)
+                    self.assertIn("check the permissions of /p/here", caught.exception.next_step)
+                    self.assertIn("nothing was written or removed", caught.exception.next_step)
+                    with self.assertRaises(wr.RetentionError) as other:
+                        wr._lstat_at("here", fd, shown="/p/here", code="restore_failed", after="it stays")
+                    self.assertEqual(other.exception.code, "restore_failed")
+                    self.assertTrue(other.exception.next_step.endswith("it stays"))
+                    with self.assertRaises(OSError) as raw:
+                        wr._lstat_raw("here", fd)
+                    self.assertEqual(raw.exception.errno, err)
 
     # -- A1 -------------------------------------------------------------
 
@@ -5492,6 +5594,128 @@ class RetentionRemove(unittest.TestCase):
         """The snapshot a refusal must leave: the repository and the archive store."""
         return rr.snap(times=False), rr.files(rr.root / ".ai-review" / item) if \
             (rr.root / ".ai-review" / item).exists() else None
+
+    # -- T2 to T6 of the stat-error refusal (W33) ----------------------------
+
+    def stat_refused(self, result, code, shown, errname):
+        self.assertEqual((result.code, result.err_code), (2, code), getattr(result.error, "message", None))
+        self.assertIn(f"{shown} cannot be examined: {errname} ", result.error.message)
+        self.assertIn(shown, result.error.next_step)
+
+    def untouched(self, rr, before, folder_before, fds, item="w00"):
+        self.assertEqual(rr.snap(times=False), before)
+        self.assertEqual(rr.files(rr.root / ".ai-review" / item), folder_before)
+        self.assertEqual(_fd_count(), fds)
+
+    def test_w33_t2_a_stat_error_of_the_archive_file_is_unreadable(self):
+        rr = self.env()
+        rr.prepared()
+        before, folder_before, fds = rr.snap(times=False), rr.files(rr.root / ".ai-review" / "w00"), _fd_count()
+        for apply in (False, True):
+            with self.subTest(apply=apply):
+                with _stat_fails("_judge_removal_archive", "w00.tar.zst", errno.EACCES):
+                    result = rr.rm(apply=apply)
+                self.stat_refused(result, "unreadable", str(rr.adir / "w00.tar.zst"), "EACCES")
+                self.untouched(rr, before, folder_before, fds)
+        self.assertEqual(rr.renames, [])
+        self.assertEqual(rr.rm(apply=True).code, 0)
+
+    def test_w33_t3_a_stat_error_of_a_leftover_probe_is_unreadable_in_the_selection_and_under_the_lock(self):
+        # probe 1 and 2 with an empty `.removing`; probe 3 with the folder parked there
+        for parked, probe in ((False, 0), (False, 1), (True, 0), (True, 1), (True, 2)):
+            with self.subTest(parked=parked, probe=probe):
+                rr = self.env()
+                rr.prepared()
+                if parked:
+                    rr.park()
+                else:
+                    rr.removing.mkdir(mode=0o700)
+                shown = str(rr.removing / "w00") if probe != 1 else str(rr.root / ".ai-review" / "w00")
+                before, folder_before = rr.snap(times=False), None if parked else rr.files(rr.root / ".ai-review" / "w00")
+                leftover_before = rr.files(rr.removing / "w00") if parked else None
+                fds = _fd_count()
+                probes = 3 if parked else 2  # the calls the selection makes before the re-run under the lock
+                runs = [(False, probe), (True, probe), (True, probes + probe)]
+                for apply, skip in runs:
+                    with _stat_fails("_select_removal", "w00", errno.ELOOP, skip=skip) as counted:
+                        result = rr.rm(apply=apply)
+                    self.stat_refused(result, "unreadable", shown, "ELOOP")
+                    self.assertEqual(len(counted), skip + 1)
+                    self.assertEqual(rr.snap(times=False), before)
+                    if parked:
+                        self.assertEqual(rr.files(rr.removing / "w00"), leftover_before)
+                    else:
+                        self.assertEqual(rr.files(rr.root / ".ai-review" / "w00"), folder_before)
+                    self.assertEqual(_fd_count(), fds)
+                    self.assertEqual(rr.renames, [])
+                self.assertEqual(rr.rm(apply=True).code, 0)
+
+    def test_w33_t4_a_stat_error_under_the_lock_before_the_rename_leaves_everything_in_place(self):
+        rr = self.env()
+        rr.prepared()
+        before, folder_before, fds = rr.snap(times=False), rr.files(rr.root / ".ai-review" / "w00"), _fd_count()
+        with _stat_fails("_flow", "w00", errno.EACCES) as counted:
+            result = rr.rm(apply=True)
+        self.assertEqual(len(counted), 1)
+        self.stat_refused(result, "unreadable", str(rr.removing / "w00"), "EACCES")
+        self.assertIn("nothing was moved or deleted", result.error.next_step)
+        self.assertFalse(rr.removing.exists())
+        self.untouched(rr, before, folder_before, fds)
+        self.assertEqual(rr.renames, [])
+        self.assertEqual(rr.rm(apply=True).code, 0)
+
+    def test_w33_t5_a_stat_error_after_the_rename_names_where_the_folder_is(self):
+        # L0: this run renamed the folder; the first counted stat is step 3's, the second is step 4's
+        rr = self.env()
+        rr.prepared()
+        folder_before = rr.files(rr.root / ".ai-review" / "w00")
+        archive_before = (rr.adir / "w00.tar.zst").read_bytes()
+        fds = _fd_count()
+        with _stat_fails("_flow", "w00", errno.EIO, skip=1) as counted:
+            result = rr.rm(apply=True)
+        self.assertEqual(len(counted), 2)
+        self.stat_refused(result, "unreadable", str(rr.removing / "w00"), "EIO")
+        self.assertIn("the folder is whole in", result.error.next_step)
+        self.assertIn("remove w00 --apply", result.error.next_step)
+        self.assertEqual(rr.files(rr.removing / "w00"), folder_before)
+        self.assertFalse((rr.root / ".ai-review" / "w00").exists())
+        self.assertEqual((rr.adir / "w00.tar.zst").read_bytes(), archive_before)
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual(rr.rm(apply=True).code, 0)  # the resume
+        self.assertFalse((rr.removing / "w00").exists())
+        # L1: a leftover of an earlier run; this run renamed nothing and step 4 is the first counted stat
+        rr = self.env()
+        rr.prepared()
+        rr.park()
+        leftover_before = rr.files(rr.removing / "w00")
+        fds = _fd_count()
+        with _stat_fails("_flow", "w00", errno.EIO) as counted:
+            result = rr.rm(apply=True)
+        self.assertEqual(len(counted), 1)
+        self.stat_refused(result, "unreadable", str(rr.removing / "w00"), "EIO")
+        self.assertIn("may be incomplete", result.error.next_step)
+        self.assertIn("only in the archive", result.error.next_step)
+        self.assertNotIn("whole", result.error.next_step)
+        self.assertEqual(rr.files(rr.removing / "w00"), leftover_before)
+        self.assertEqual(_fd_count(), fds)
+        self.assertEqual(rr.rm(apply=True).code, 0)
+
+    def test_w33_t6_a_stat_error_while_restoring_is_restore_failed_with_both_causes(self):
+        rr = self.env()
+        folder = rr.prepared()
+        self.same_bytes_changed(folder / "a.txt")  # the verification refuses archive_mismatch
+        fds = _fd_count()
+        with _stat_fails("_restore", "w00", errno.EIO) as counted:
+            result = rr.rm(apply=True)
+        self.assertEqual(len(counted), 1)
+        ai_place = str(rr.root / ".ai-review" / "w00")
+        self.assertEqual((result.code, result.err_code), (2, "restore_failed"), getattr(result.error, "message", None))
+        self.assertIn(f"{ai_place} cannot be examined: EIO ", result.error.message)
+        self.assertIn("the refusal was archive_mismatch", result.error.message)
+        self.assertIn(str(rr.removing / "w00"), result.error.next_step)
+        self.assertIn("once it is readable `mv` it to " + ai_place, result.error.next_step)
+        self.assertTrue((rr.removing / "w00" / "a.txt").exists())
+        self.assertEqual(_fd_count(), fds)
 
     # -- T1 -------------------------------------------------------------
 
@@ -6754,6 +6978,50 @@ class RetentionPrune(unittest.TestCase):
         self.assertFalse(rr.archive_name("w00").exists())
         self.assertTrue(rr.archive_name("w02").exists())
         self.assertEqual(self.outside_of(rr), outside)
+
+    # -- T7, T8 of the stat-error refusal (W33) ------------------------------
+
+    def test_w33_t7_a_stat_error_at_the_selection_is_prune_failed_with_the_lists(self):
+        rr = self.env()
+        resolved = os.path.join(os.path.realpath(rr.archive_root), "widgets")
+        for apply in (False, True):
+            with self.subTest(apply=apply):
+                before, fds = rr.snap(times=False), _fd_count()
+                with _stat_fails("_prune_select", "w00.tar.zst", errno.EACCES):
+                    result = rr.pr(["w00", "w01", "w02"], apply=apply)
+                self.assertEqual((result.code, result.err_code), (2, "prune_failed"), getattr(result.error, "message", None))
+                self.assertEqual(result.error.message, "w00.tar.zst could not be examined: EACCES Permission denied; "
+                                 "removed: none; not removed: w00, w01, w02")
+                self.assertEqual(result.error.next_step, f"check the permissions of {resolved}; run `prune` again "
+                                 "for a fresh preview")
+                self.assertEqual(rr.snap(times=False), before)
+                self.assertEqual(_fd_count(), fds)
+                self.assertEqual(rr.unlinks, [])
+        code, out, err = rr.main_pr("w00", "w01", "w02", "--apply")
+        self.assertEqual(code, 0, err)
+
+    def test_w33_t8_steps_12_and_13a_keep_their_lists_and_the_leftover_probe_still_swallows(self):
+        for skip, removed, pending in ((0, "none", "w00, w01, w02"), (1, "w00", "w01, w02")):
+            with self.subTest(skip=skip):
+                rr = self.env()
+                name = "w00.tar.zst" if skip == 0 else "w01.tar.zst"
+                with _stat_fails("_unchanged", name, errno.EIO, skip=skip):
+                    result = rr.pr(["w00", "w01", "w02"], apply=True, guard=False)
+                self.assertEqual((result.code, result.err_code), (2, "prune_failed"))
+                self.assertIn("could not be examined: EIO", result.error.message)
+                self.assertTrue(result.error.message.endswith(f"removed: {removed}; not removed: {pending}"),
+                                result.error.message)
+                self.assertEqual(rr.archive_name("w00").exists(), skip == 0)
+                self.assertTrue(rr.archive_name("w02").exists())
+        # the swallowing probe: an error reads as "no leftover"
+        rr = self.env()
+        fd = os.open(rr.adir, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, fd)
+        os.mkdir(rr.adir / ".removing")
+        os.mkdir(rr.adir / ".removing" / "w00")
+        self.assertTrue(wr._has_leftover(fd, "w00"))
+        with unittest.mock.patch.object(os, "stat", side_effect=OSError(errno.EACCES, "Permission denied")):
+            self.assertFalse(wr._has_leftover(fd, "w00"))
 
     # -- P5 -------------------------------------------------------------
 

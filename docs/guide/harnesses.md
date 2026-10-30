@@ -109,7 +109,7 @@ name (`/usr/bin/gh` fails for lack of credentials and network, not because of th
 configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the
 tester's home, flags and any managed layer (`codex app-server`, `config/read`, no model request), compares every
 security-relevant value with the pinned tester profile leaf by leaf, and refuses a difference naming the value and its
-layer. It is a separate control from `check_launch`, and no launch path calls either yet (C10g-3b wires them). One
+layer. It is a separate control from `check_launch`, and no launch path calls either yet (C10g-3b2 wires them). One
 limit remains (the one entry of `KNOWN_LIMITS`, `composition_window`): the configuration is read by the `app-server`
 just before the launch, so a layer that changes in that window, or a setting only `exec` composes differently, is not
 seen. The reviewer's control makes the same assumption.

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-bridge",
+  "requirements": {
+    "R1": {
+      "description": "From a captured candidate the bridge builds the Codex tester's folder: a read-only clone equal to the candidate's manifest, a scratch bare origin, the output folder and writable-location targets inside the scratch area, the Controller-only check directory and item record outside it, the stand-ins on the `PATH`, and the controls of `codex_sandbox.build`; a mismatch or any failure refuses before anything runs and removes the folder (#222)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The clone sequence and the binding comparison are one implementation shared with the Claude tester through behaviour-preserving extractions, so the Claude tester's behaviour and tests are unchanged and no second set of checkout rules exists (#222)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "After a run the binding check reports any difference between the clone and the candidate in the shared words, and the scratch origin and output folder are not part of it (#222)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The tester's prompt for Codex is the one shared text with the Codex sandbox's own limits, checked against the profile; the Claude prompt is byte-identical when no limits are given (#222)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "Nothing launches Codex, no role is declared, and the launch paths, the reviewer, `build_verification`, settings, options, exit codes and gates are unchanged; the guide and roadmap say so (#222)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

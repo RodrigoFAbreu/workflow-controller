@@ -10,6 +10,10 @@ project and managed layers is compared with the pinned tester profile, which nar
 `composition_window`. Nothing calls the check until C10g-3b. The change is a `chore:` with no release. The plan is
 `docs/ai-workflow/CONTROLLER_COMPOSED_CONFIGURATION_CHECK_PLAN.md`.
 
+## In progress
+
+`workflow-controller-codex-tester-bridge` (C10g-3b, issue [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)): CP1 complete (`clone_candidate` and `bound_differences` extracted in `controller/functional_review.py`; `controller/codex_bridge.py` with `Bridge` and `build_bridge`; `tests/test_codex_bridge.py`). CP2 (binding check, Codex prompt, documents) is next. The plan is `docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md`.
+
 ## Next action
 
 `/milestone-plan` for C10g-3b (the Codex tester's sandbox bridge, [#222](https://github.com/RodrigoFAbreu/workflow-controller/issues/222)).

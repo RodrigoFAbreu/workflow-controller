@@ -11,10 +11,11 @@ before/after comparison of the real repository and the refusal mapping are C10g-
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from . import codex_bridge, codex_sandbox, functional_review, review
+from . import codex_bridge, codex_sandbox, functional_review, review, runtime, usage
 
 #: The outcomes of a run (D3).
 RAN, TIMEOUT, LIMIT, FAILED = "ran", "timeout", "limit", "failed"
@@ -66,19 +67,57 @@ def classify(result: review.RunResult, scan: review.RolloutScan, message: str, t
     return RAN, ""
 
 
+def _settle(result: dict, bridge: codex_bridge.Bridge, operator_home: Path) -> None:
+    """The steps of every path (D5): the readings, the sub-agent rollouts, the credential copy-back and the removal
+    of the credential copy. Each is guarded: one failing step never skips the next and never replaces the exception
+    already propagating; with nothing in flight the first failure is raised."""
+    built = bridge.built
+    layout = built.layout
+    failures: list[Exception] = []
+
+    def readings() -> None:
+        result["readings"] = usage.read_codex_home(layout.codex_home)
+
+    def subagents() -> None:
+        result["subagents"] = review.scan_rollouts(layout.codex_home).subagents
+
+    def copy_back() -> None:
+        if built.credential_digest:
+            result["credentials"] = review.copy_back_credentials(layout.job, operator_home, built.credential_digest,
+                                                                 review.CODEX)
+
+    def remove_copy() -> None:
+        runtime.remove_tree(layout.runtime_root, layout.rel("codex-home", review.CODEX.credential_file))
+
+    for step in (readings, subagents, copy_back, remove_copy):
+        try:
+            step()
+        except Exception as exc:  # noqa: BLE001 -- recorded; raised below only when nothing else is in flight
+            failures.append(exc)
+    if failures and sys.exc_info()[0] is None:
+        raise failures[0]
+
+
 def run_tester(bridge: codex_bridge.Bridge, flows: Sequence[functional_review.Flow], *, binary: Path,
-               timeout: float, system_dir: Path = review.SYSTEM_LAYER_DIR,
+               operator_home: Path, timeout: float, system_dir: Path = review.SYSTEM_LAYER_DIR,
                on_spawn: Callable[[int, int], None] | None = None,
                run: Callable[..., review.RunResult] | None = None) -> dict:
     """Run the controls, then ``codex exec`` on the tester's prompt (standard input) in the clone, and return the
-    outcome. ``run`` is the seam of the controls only; the launch itself always uses :func:`review.run_bounded`."""
-    _check_controls(bridge, binary, system_dir, run)
-    built = bridge.built
-    prompt = codex_bridge.prompt(bridge, flows, timeout_seconds=int(timeout))
-    result = review.run_bounded(list(built.argv), cwd=bridge.clone, env=built.environment, timeout=timeout,
-                                stdin_text=prompt, on_spawn=on_spawn)
-    scan = review.scan_rollouts(built.layout.codex_home)
-    message = _message(built.layout)
-    outcome, detail = classify(result, scan, message, timeout)
-    return {"outcome": outcome, "detail": detail, "tester_message": functional_review.tester_message_excerpt(message),
-            "exit_code": result.exit_code}
+    result of the Claude launch's shape (D6). ``run`` is the seam of the controls only; the launch itself always uses
+    :func:`review.run_bounded`. The credential copy is copied back and removed on every path, a refusal included."""
+    result: dict = {"outcome": FAILED, "detail": "", "tester_message": "", "readings": [], "first_readings": [],
+                    "subagents": [], "credentials": None, "telemetry": None, "exit_code": None}
+    try:
+        _check_controls(bridge, binary, system_dir, run)
+        built = bridge.built
+        prompt = codex_bridge.prompt(bridge, flows, timeout_seconds=int(timeout))
+        ran = review.run_bounded(list(built.argv), cwd=bridge.clone, env=built.environment, timeout=timeout,
+                                 stdin_text=prompt, on_spawn=on_spawn)
+        scan = review.scan_rollouts(built.layout.codex_home)
+        message = _message(built.layout)
+        outcome, detail = classify(ran, scan, message, timeout)
+        result.update(outcome=outcome, detail=detail, tester_message=functional_review.tester_message_excerpt(message),
+                      exit_code=ran.exit_code)
+    finally:
+        _settle(result, bridge, operator_home)
+    return result

@@ -51,8 +51,8 @@ class TesterFixture(BridgeFixture):
         return run
 
     def run_tester(self, bridge: cb.Bridge, *, timeout: float = 20, run=None, **kw) -> dict:
-        return ct.run_tester(bridge, FLOWS, binary=self.binary, timeout=timeout, system_dir=self.system,
-                             run=run or self.controls(bridge), **kw)
+        return ct.run_tester(bridge, FLOWS, binary=self.binary, operator_home=self.operator, timeout=timeout,
+                             system_dir=self.system, run=run or self.controls(bridge), **kw)
 
     def execs(self) -> list[dict]:
         return [entry for entry in fake_codex.read_log(self.log) if entry["kind"] == "exec"]
@@ -176,6 +176,71 @@ class LaunchTest(TesterFixture):
             self.run_tester(bridge)
         self.assertEqual(order, ["argv", "launch", "composed"])
 
+
+
+class SettleTest(TesterFixture):
+    def copy(self, bridge: cb.Bridge) -> Path:
+        return bridge.built.layout.codex_home / "auth.json"
+
+    def test_a_rotated_credential_is_copied_back_and_one_not_rotated_is_unchanged(self) -> None:
+        self.script(message="m", refresh_auth=True)
+        outcome = self.run_tester(self.bridge_for())
+        self.assertEqual(outcome["credentials"], "copied")
+        self.assertIn("rotated-", (self.operator / "auth.json").read_text())
+        self.script(message="m")
+        self.assertEqual(self.run_tester(self.bridge_for(job_id="job2"))["credentials"], "unchanged")
+
+    def test_an_operator_file_changed_meanwhile_is_reported_and_not_written(self) -> None:
+        self.script(message="m", refresh_auth=True)
+        bridge = self.bridge_for()
+        (self.operator / "auth.json").write_text('{"token": "changed"}')
+        self.assertEqual(self.run_tester(bridge)["credentials"], "operator-changed")
+        self.assertEqual((self.operator / "auth.json").read_text(), '{"token": "changed"}')
+
+    def test_the_credential_copy_is_gone_after_a_run_a_refusal_and_a_deadline(self) -> None:
+        self.script(message="m")
+        bridge = self.bridge_for()
+        self.run_tester(bridge)
+        self.assertFalse(self.copy(bridge).exists())
+        refused = self.bridge_for(job_id="job2")
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.run_tester(refused, run=lambda c, **kw: result(b"zz   enabled   stdio\n"))
+        self.assertFalse(self.copy(refused).exists())
+        self.script(verdict="hang")
+        hung = self.bridge_for(job_id="job3")
+        self.assertEqual(self.run_tester(hung, timeout=2)["outcome"], ct.TIMEOUT)
+        self.assertFalse(self.copy(hung).exists())
+
+    def test_a_copy_back_failure_is_raised_only_when_nothing_else_is_in_flight(self) -> None:
+        self.script(message="m")
+        with mock.patch.object(review, "copy_back_credentials", side_effect=OSError("copy-back")):
+            with self.assertRaisesRegex(OSError, "copy-back"):
+                self.run_tester(self.bridge_for())
+            refused = self.bridge_for(job_id="job2")
+            with self.assertRaises(ReviewLaunchRefusedError):  # the refusal wins; the copy is still removed
+                self.run_tester(refused, run=lambda c, **kw: result(b"zz   enabled   stdio\n"))
+            self.assertFalse(self.copy(refused).exists())
+
+    def test_a_failed_copy_back_does_not_skip_the_removal_of_the_copy(self) -> None:
+        self.script(message="m")
+        bridge = self.bridge_for()
+        with mock.patch.object(review, "copy_back_credentials", side_effect=OSError("x")):
+            with self.assertRaises(OSError):
+                self.run_tester(bridge)
+        self.assertFalse(self.copy(bridge).exists())
+
+    def test_the_readings_and_a_subagents_tokens_are_in_the_result(self) -> None:
+        self.script(message="m", subagent=777)
+        outcome = self.run_tester(self.bridge_for())
+        self.assertEqual({r["window"] for r in outcome["readings"]}, {"five_hour", "weekly"})
+        self.assertEqual([s["total_tokens"] for s in outcome["subagents"]], [777])
+
+    def test_the_result_holds_every_key_of_the_claude_launch(self) -> None:
+        self.script(message="m")
+        outcome = self.run_tester(self.bridge_for())
+        self.assertEqual(set(outcome), {"outcome", "detail", "tester_message", "readings", "first_readings",
+                                        "subagents", "credentials", "telemetry", "exit_code"})
+        self.assertEqual((outcome["first_readings"], outcome["telemetry"], outcome["exit_code"]), ([], None, 0))
 
 if __name__ == "__main__":
     unittest.main()

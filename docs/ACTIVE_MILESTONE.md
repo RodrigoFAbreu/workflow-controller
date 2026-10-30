@@ -6,7 +6,8 @@
 [#228](https://github.com/RodrigoFAbreu/workflow-controller/issues/228)), plan
 `docs/ai-workflow/CONTROLLER_CODEX_TESTER_RUN_PLAN.md`. CP1 done: `controller/codex_tester.py` runs the launch
 controls and `codex exec` and classifies the outcome; `Built` records the credential digest, model and effort. CP2
-(readings, credential copy-back, result dict) and CP3 (live test, documents) remain. The text below is the previous
+done: `run_tester` also collects the readings and sub-agent rollouts, copies the credential back and removes the
+credential copy on every path, and returns the Claude launch's result shape. CP3 (live test, documents) remains. The text below is the previous
 milestone's record and is replaced by CP3.
 
 ## Status

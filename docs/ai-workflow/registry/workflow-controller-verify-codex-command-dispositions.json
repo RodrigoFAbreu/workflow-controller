@@ -1,0 +1,46 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-verify-codex-command",
+ "dispositions": {
+  "F-0d0b8c00b1f9": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-297692995ea3": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-2b4fdb502692": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-5a5c65790d44": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-68f0237ee9de": {
+   "disposition": "fixed",
+   "note": "Applied in plan D1: the note compares launcher paths lexically."
+  },
+  "F-76c2f438bd45": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  },
+  "F-79d6293cb43f": {
+   "disposition": "fixed",
+   "note": "Applied in plan D7: exec_failed is its own refusal with the exit code and stderr tail."
+  },
+  "F-b2c90355b381": {
+   "disposition": "fixed",
+   "note": "Implemented in tests/test_verify_codex_live.py: the live test selects the operator Codex home explicitly."
+  },
+  "F-c7b502429959": {
+   "disposition": "fixed",
+   "note": "Applied in plan D6 (snapshot never follows symlinks or opens FIFOs, lists directories) and implemented with the snapshot tests."
+  },
+  "F-f6f3257055d8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/217"
+  }
+ }
+}

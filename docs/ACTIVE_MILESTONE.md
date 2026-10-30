@@ -2,9 +2,9 @@
 
 ## Status
 
-**Implemented, awaiting review.** `workflow-controller-verify-codex-command` (C10g-2b, issue
-[#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)) is implemented (CP1, CP2 and
-the self-review fixes).
+**Complete.** `workflow-controller-verify-codex-command` (C10g-2b, issue
+[#217](https://github.com/RodrigoFAbreu/workflow-controller/issues/217)) is implemented (CP1, CP2, the
+self-review fixes and the functional review).
 `controller/codex_verify.py` runs the C10g-1 probes (modelless `sandbox`, then one `exec` turn) in fresh jobs against
 host fixtures; `workflow-controller verify-codex [--force] [--codex-binary PATH]` records the build's digest in
 `verified-codex-builds.json` only when every probe held and the build was unchanged, and otherwise exits 20 with a named
@@ -13,7 +13,7 @@ refusal. Nothing launches on the record: `build_verification` for `codex` stays 
 
 ## Next action
 
-Implementation review of `workflow-controller-verify-codex-command`; then `/milestone-plan` for C10g-3.
+`/milestone-plan` for C10g-3 (the Codex tester).
 
 ## Functional review checklist
 

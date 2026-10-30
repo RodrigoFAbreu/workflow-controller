@@ -805,11 +805,24 @@ def _walk_chain(parts: list[str], fds: list[int], created: list[tuple[int, str]]
     return True
 
 
-def _lstat_at(name: str, adir_fd: int) -> os.stat_result | None:
+def _lstat_raw(name: str, adir_fd: int) -> os.stat_result | None:
+    """The `lstat` of an entry; None when it is absent, any other `OSError` goes through."""
     try:
         return os.stat(name, dir_fd=adir_fd, follow_symlinks=False)
     except FileNotFoundError:
         return None
+
+
+def _lstat_at(name: str, adir_fd: int, *, shown: str, code: str = "unreadable",
+              after: str = "nothing was written or removed") -> os.stat_result | None:
+    """`_lstat_raw`, but a stat error that is not "not found" is a coded refusal
+    naming `shown`, the full path of the entry; it never reads as "absent"."""
+    try:
+        return _lstat_raw(name, adir_fd)
+    except OSError as exc:
+        raise _refuse(code, f"{shown} cannot be examined: {errno.errorcode.get(exc.errno, exc.errno)} "
+                      f"{exc.strerror or exc}",
+                      f"check the permissions of {shown} and of the directory that holds it; {after}") from None
 
 
 def _index_unsafe(why: str) -> RetentionError:
@@ -877,7 +890,8 @@ def _open_index(adir_fd: int, *, write: bool, create: bool = False) -> tuple[int
     return fd, created
 
 
-def _judge_archive_side(adir_fd: int | None, item_id: str, *, check_partial: bool) -> None:
+def _judge_archive_side(adir_fd: int | None, item_id: str, resolved: str, *, check_partial: bool,
+                        after: str = "nothing was written or removed") -> None:
     """D-Selection step 7, after the walk: the index's integrity first, then the
     archive, then the index line, then the temporary."""
     if adir_fd is None:
@@ -890,7 +904,7 @@ def _judge_archive_side(adir_fd: int | None, item_id: str, *, check_partial: boo
         finally:
             os.close(fd)
     final = f"{item_id}{ARCHIVE_SUFFIX}"
-    if _lstat_at(final, adir_fd) is not None:
+    if _lstat_at(final, adir_fd, shown=os.path.join(resolved, final), after=after) is not None:
         if item_id in ids:
             raise _refuse("already_archived", f"{final} exists and {_INDEX_NAME} has its line",
                           "the item is archived; nothing to do")
@@ -902,7 +916,8 @@ def _judge_archive_side(adir_fd: int | None, item_id: str, *, check_partial: boo
         raise _refuse("already_indexed", f"{_INDEX_NAME} has a line for {item_id} but there is no {final}",
                       f"the archive was pruned or removed by hand; the engine never rewrites {_INDEX_NAME}, "
                       "so the owner decides")
-    if check_partial and _lstat_at(f".{item_id}.partial", adir_fd) is not None:
+    partial = f".{item_id}.partial"
+    if check_partial and _lstat_at(partial, adir_fd, shown=os.path.join(resolved, partial)) is not None:
         raise _refuse("partial_present", f".{item_id}.partial exists in the archive directory",
                       "confirm no other `archive` run is active, remove that file by hand and run it again")
 
@@ -1023,7 +1038,7 @@ def archive_item(repo_root, item_id: str, *, apply: bool = False, archive_root=D
     try:
         root, ai_fd, report, record, resolved, adir_fd = _select_finished(
             repo_root, item_id, archive_root, now, run, resolve, fds, "archive")
-        _judge_archive_side(adir_fd, item_id, check_partial=True)
+        _judge_archive_side(adir_fd, item_id, resolved, check_partial=True)
         folder = root / ".ai-review" / item_id
         if ai_fd is None or not _is_real_dir(ai_fd, item_id):
             raise _refuse("review_folder_absent", f"{folder} is not a real directory",
@@ -1130,7 +1145,9 @@ def _apply(ai_fd, item_id, program, resolved, fds, created, record, now) -> tupl
                 raise _refuse("archive_busy", "another `archive` run holds this repository's archive directory",
                               "wait for it to finish, then run it again") from None
             state["locked"] = True
-            _judge_archive_side(adir_fd, item_id, check_partial=False)
+            _judge_archive_side(adir_fd, item_id, resolved, check_partial=False,
+                                after="nothing was archived; the temporary and the directories this run created "
+                                      "were removed")
             _fsync(tmp_fd, tmp_name)
         finally:
             os.close(tmp_fd)
@@ -1453,7 +1470,8 @@ def _restore(removing_fd: int, ai_fd: int | None, item_id: str, *, removing_plac
         raise _refuse("restore_failed", f"{ai_place.rsplit(os.sep, 1)[0]} is absent, so the folder was not moved "
                       f"back: it stays in {removing_place}",
                       f"create `.ai-review`, then `mv` the folder from {removing_place} to {ai_place}")
-    if _lstat_at(item_id, ai_fd) is not None:
+    if _lstat_at(item_id, ai_fd, shown=ai_place, code="restore_failed",
+                 after=f"the folder stays in {removing_place}; once it is readable `mv` it to {ai_place}") is not None:
         raise _refuse("restore_failed", f"{ai_place} exists, so nothing was moved back: the folder stays in "
                       f"{removing_place}", f"compare the two by hand, move one aside, then `mv` {removing_place} "
                       f"to {ai_place}")
@@ -1493,7 +1511,7 @@ def _open_removing(adir_fd: int, fds: list[int], *, create: bool = False) -> int
     return fd
 
 
-def _judge_removal_archive(adir_fd: int | None, item_id: str) -> int:
+def _judge_removal_archive(adir_fd: int | None, item_id: str, resolved: str) -> int:
     """D-Selection 6: the index's integrity first, then the archive file and the
     index line. Returns the archive's size."""
     ids: set[str] = set()
@@ -1505,7 +1523,7 @@ def _judge_removal_archive(adir_fd: int | None, item_id: str) -> int:
             finally:
                 os.close(fd)
     final = f"{item_id}{ARCHIVE_SUFFIX}"
-    info = _lstat_at(final, adir_fd) if adir_fd is not None else None
+    info = _lstat_at(final, adir_fd, shown=os.path.join(resolved, final)) if adir_fd is not None else None
     has_file = info is not None and stat.S_ISREG(info.st_mode)
     if not has_file or item_id not in ids:
         missing = ("the archive file" if not has_file else "") + (" and " if not has_file and item_id not in ids
@@ -1529,7 +1547,7 @@ def _has_leftover(adir_fd: int | None, item_id: str) -> bool:
     except OSError:
         return False
     try:
-        info = _lstat_at(item_id, rm)
+        info = _lstat_raw(item_id, rm)
     except OSError:
         return False
     finally:
@@ -1543,15 +1561,17 @@ def _select_removal(repo_root, item_id, archive_root, now, run, resolve, zstd, f
     root, ai_fd, report, record, resolved, adir_fd = _select_finished(
         repo_root, item_id, archive_root, now, run, resolve, fds, "remove", needs=("rename",))
     try:
-        archive_bytes = _judge_removal_archive(adir_fd, item_id)                       # 6
+        archive_bytes = _judge_removal_archive(adir_fd, item_id, resolved)                       # 6
         if _git_tracked(root, item_id):                                                # 7
             raise _refuse("tracked_files", f"Git tracks an entry at or under .ai-review/{item_id}",
                           "this command removes the untracked folder only")
         removing_fd = _open_removing(adir_fd, fds)                                     # 8
-        leftover = removing_fd is not None and _lstat_at(item_id, removing_fd) is not None
-        in_place = ai_fd is not None and _lstat_at(item_id, ai_fd) is not None
+        left_place = os.path.join(resolved, _REMOVING, item_id)
+        leftover = removing_fd is not None and _lstat_at(item_id, removing_fd, shown=left_place) is not None
+        in_place = ai_fd is not None and _lstat_at(item_id, ai_fd, shown=str(root / ".ai-review" / item_id)) \
+            is not None
         if leftover:
-            real = stat.S_ISDIR(_lstat_at(item_id, removing_fd).st_mode)
+            real = stat.S_ISDIR(_lstat_at(item_id, removing_fd, shown=left_place).st_mode)
             if not real or in_place:
                 why = "it is not a real directory" if not real else f"{root / '.ai-review' / item_id} exists too"
                 raise _refuse("leftover_conflict", f"{os.path.join(resolved, _REMOVING, item_id)} cannot be "
@@ -1679,7 +1699,12 @@ def _flow(sel, item_id, name, archive, removing_place, ai_place, note, fds, repo
 
     before = None
     if not leftover:                                                                   # 3
-        if _lstat_at(item_id, removing_fd) is not None:
+        try:
+            present = _lstat_at(item_id, removing_fd, shown=removing_place,
+                                after="nothing was moved or deleted") is not None
+        except RetentionError as exc:
+            raise leave_in_place(exc) from None
+        if present:
             raise leave_in_place(_refuse("leftover_conflict", f"{removing_place} appeared after the check",
                                          "compare it by hand and move one aside; nothing was moved or deleted"))
         try:
@@ -1700,7 +1725,11 @@ def _flow(sel, item_id, name, archive, removing_place, ai_place, note, fds, repo
                  f"renamed back or deleted; run `remove {item_id} --apply` again")
         _fsync(ai_fd, ".ai-review", "place_failed", where)
         _fsync(removing_fd, _REMOVING, "place_failed", where)
-    info = _lstat_at(item_id, removing_fd)                                             # 4
+    resume = f"once it is readable run `remove {item_id} --apply` again"
+    info = _lstat_at(item_id, removing_fd, shown=removing_place,                       # 4
+                     after=(f"the leftover is untouched in {removing_place}, it may be incomplete and the missing "
+                            f"entries exist only in the archive; nothing was renamed or deleted; {resume}") if leftover
+                     else f"the folder is whole in {removing_place}; nothing was renamed back or deleted; {resume}")
     if info is None or not stat.S_ISDIR(info.st_mode) or \
             (before is not None and (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)):
         raise _refuse("folder_changed", f"{removing_place} is not the folder that was moved",
@@ -1798,7 +1827,10 @@ def _prune_select(repo_root, ids: list[str], archive_root, ttl_days: int, now, r
     seen = {}
     for item_id in ids:                                                                # 9
         entry = listed[item_id]
-        info = _lstat_at(entry["name"], adir_fd) if adir_fd is not None else None
+        try:
+            info = _lstat_raw(entry["name"], adir_fd) if adir_fd is not None else None
+        except OSError as exc:
+            raise _unexaminable(exc, entry, [], resolved, ids) from None
         if not _seen_by_report(entry, info):
             raise _refuse("archive_changed", f"{entry['name']} is not the file the report saw",
                           f"{_PRUNE_AGAIN}; nothing was removed")
@@ -1807,8 +1839,16 @@ def _prune_select(repo_root, ids: list[str], archive_root, ttl_days: int, now, r
 
 
 def _unchanged(entry: dict, adir_fd: int, seen: tuple) -> bool:
-    info = _lstat_at(entry["name"], adir_fd)
+    info = _lstat_raw(entry["name"], adir_fd)
     return info is not None and stat.S_ISREG(info.st_mode) and (info.st_size, info.st_mtime_ns) == seen
+
+
+def _unexaminable(exc: OSError, entry: dict, removed: list[str], resolved: str, pending: list[str]) -> RetentionError:
+    """`prune_failed` for an archive whose `lstat` failed, with the progress so far."""
+    return _refuse("prune_failed", _stop_after(removed, pending, f"{entry['name']} could not be examined: "
+                                                f"{errno.errorcode.get(exc.errno, exc.errno)} "
+                                                f"{exc.strerror or exc}"),
+                   f"check the permissions of {resolved}; {_PRUNE_AGAIN}")
 
 
 def _check_unchanged(entry: dict, adir_fd: int, seen: tuple, removed: list[str], pending: list[str],
@@ -1818,10 +1858,7 @@ def _check_unchanged(entry: dict, adir_fd: int, seen: tuple, removed: list[str],
     try:
         same = _unchanged(entry, adir_fd, seen)
     except OSError as exc:
-        raise _refuse("prune_failed", _stop_after(removed, pending, f"{entry['name']} could not be examined: "
-                                                   f"{errno.errorcode.get(exc.errno, exc.errno)} "
-                                                   f"{exc.strerror or exc}"),
-                      f"check the permissions of {resolved}; {_PRUNE_AGAIN}") from None
+        raise _unexaminable(exc, entry, removed, resolved, pending) from None
     if not same:
         raise _refuse("archive_changed", _stop_after(removed, pending, f"{entry['name']} changed after the "
                                                       "preview"), _PRUNE_AGAIN)

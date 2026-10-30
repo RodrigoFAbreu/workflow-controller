@@ -43207,7 +43207,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-run-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-run-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -43320,7 +43320,156 @@
           "workflow_release": "2.25.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "edb7032a4491c011304001e7d8b4945edd12853c03e5f46eb527566132f2cbe8",
+        "approved_review_content_id": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f9056094a94029acacd1207f8f5133ccd25271fa"
+          },
+          {
+            "path": "controller/codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "859a69733cdaecc68432c9bfe19e63781fa2f90a"
+          },
+          {
+            "path": "controller/codex_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "63174ccaa24300255a6370ae832ba688a2510200"
+          },
+          {
+            "path": "controller/codex_tester.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "72016de671aab9ec66b3fb68829abdb6d054f0a4"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-run-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c9ad694de871c2730f6354ff8d338bf932bdb277"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3255e83fe1d21464a84477dfcff514f65f094114"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a6bf47353d627fdd49b5d1ff14caff321f994cdf"
+          },
+          {
+            "path": "tests/fake_codex.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0e95e2405bcfc08560e885d7a338b1c921c91359"
+          },
+          {
+            "path": "tests/test_codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "636b17d198cd1fc2c2b958959fdbfc2ac079141c"
+          },
+          {
+            "path": "tests/test_codex_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7f54aeba111f3f2d7f67e8dbcf35d27102043f1c"
+          },
+          {
+            "path": "tests/test_codex_tester.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "43f51dceea3a1d881866dde00274eca1dc14bbed"
+          },
+          {
+            "path": "tests/test_codex_tester_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a90a44f0b56e55f132c8a83261010969a0ae1d6b"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6b480306a2f81274889cce35d8ed75dec6374c3a"
+          }
+        ],
+        "reviewed_content_commit": "87a86afc74473b285ba9133f8c5bc3b796d15cbd",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-30T21:36:57Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+            "ledger": {
+              "local": {
+                "bundle_id": "edb7032a4491c011304001e7d8b4945edd12853c03e5f46eb527566132f2cbe8",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "4637e14330c36e156e716d70a742d234bdc3ac2e2fd1d7f6d14405019205e8ab",
+                "ledger_entry_sha256": "c39a54f5ccc140f951354231cc1829c06c89d703e714d95e33ac6d5daa1a5111",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-run/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "edb7032a4491c011304001e7d8b4945edd12853c03e5f46eb527566132f2cbe8",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "8ff04ce89b6cc085e4873eb789e51c378d47211c562fb6ce3e9da9465e1d6d5b",
+                "ledger_entry_sha256": "952e70e2308099a25548c2de37cbd2ebef3093bb56a6293392c08570f1f81caf",
+                "run_ref": "codex:20261030T212949Z-883f12eb",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-30T21:36:57Z",
+          "workflow_release": "2.25.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "1b00344f90d226d66dab1e0b0960df4a0f9f23762adae240b305e40229faca0a",
@@ -43351,12 +43500,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-10-30T21:04:59Z",
+      "state_revision": 19,
+      "last_transition": "2026-10-30T21:36:57Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -43449,6 +43598,55 @@
               "at": "2026-10-30T20:11:34Z"
             }
           ]
+        },
+        "F-1431bf53b732": {
+          "digest": "1431bf53b732590a48f7015219c68a9b7599180e96014a03a5cb123bc3a18b53",
+          "text": "`codex_bridge.build_bridge(**options)` still forwards a `prompt=` option to `codex_sandbox.build`, which then pins that prompt as the last `argv` entry. `run_tester` rebuilds the command with `prompt=None` (`-`), so such a bridge is always refused before launch. This fails closed and no caller passes `prompt` today, but nothing documents it. C10g-3b2b could reject `prompt` in `build_bridge`, or note it in `run_tester`'s docstring (`controller/codex_tester.py`, `_check_controls`).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T21:26:19Z"
+            }
+          ]
+        },
+        "F-8cce040d9e72": {
+          "digest": "8cce040d9e728a346eb01c7d44be45967ba0f103dbf1957018c189dd7b21f56e",
+          "text": "`tests/test_codex_tester_live.py` says the test is skipped on CI, but `skip_reason()` does not check CI. With opt-in and prerequisites present, it runs there. Clarify the wording or add a CI guard; ordinary CI remains skipped through the default opt-out.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+              "verdict": "APPROVE",
+              "at": "2026-10-30T21:32:25Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "f190879a9a9ba635679def9459ae44b07dc2e0befa1c1ec4813d50259c4b9e4c",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "edb7032a4491c011304001e7d8b4945edd12853c03e5f46eb527566132f2cbe8",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T21:26:19Z",
+          "verdict_sha256": "4637e14330c36e156e716d70a742d234bdc3ac2e2fd1d7f6d14405019205e8ab",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-run/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "edb7032a4491c011304001e7d8b4945edd12853c03e5f46eb527566132f2cbe8",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-10-30T21:32:25Z",
+          "verdict_sha256": "8ff04ce89b6cc085e4873eb789e51c378d47211c562fb6ce3e9da9465e1d6d5b",
+          "run_ref": "codex:20261030T212949Z-883f12eb",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

@@ -50,7 +50,8 @@ class FakeCodexContractTest(unittest.TestCase):
                               capture_output=True, text=True, timeout=60, check=False)
 
     CAPTURES = ("features_list.0.163.0.txt", "exec_argv.json", "rollout_excerpt.jsonl", "stderr_shapes.txt",
-                "compose.txt", "state_entries.txt", "env.txt", "flags.txt", "sandbox_probe.txt")
+                "compose.txt", "state_entries.txt", "env.txt", "flags.txt", "sandbox_probe.txt",
+                "tester_compose.txt")
 
     def test_every_capture_digest_is_the_one_the_readme_records(self):
         readme = (CODEX_FIXTURES / "README.md").read_text()

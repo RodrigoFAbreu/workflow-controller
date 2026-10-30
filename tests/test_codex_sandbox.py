@@ -372,6 +372,258 @@ class BuildTest(Fixture):
             self.build()
 
 
+class ComposeArgvTest(Fixture):
+    def command(self) -> list[str]:
+        return cs.compose_argv(self.layout, binary=self.binary)
+
+    def test_the_composing_command_carries_the_execs_flags_and_listens_on_stdio(self) -> None:
+        command = self.command()
+        self.assertEqual(command[:3], [str(self.binary), "app-server", "--strict-config"])
+        self.assertEqual(command[-2:], ["--listen", "stdio://"])
+        self.assertEqual([command[i + 1] for i, a in enumerate(command) if a == "--disable"],
+                         list(review.DISABLED_FEATURES))
+        self.assertEqual([command[i + 1] for i, a in enumerate(command) if a == "-c"],
+                         list(cs.required_overrides(self.layout)))
+        exec_command = cs.argv(self.layout, binary=self.binary)
+        self.assertEqual(command[3:-2], exec_command[3:exec_command.index("-C")])
+        cs.check_compose_argv(command, self.layout)
+
+    def test_check_compose_argv_refuses_each_deviation(self) -> None:
+        good = self.command()
+        flag = good.index("--disable")
+        mark = good.index('default_permissions="tester"')
+        cases = {
+            "missing disable": good[:flag] + good[flag + 2:],
+            "extra -c": good[:-2] + ["-c", 'sandbox_mode="danger-full-access"'] + good[-2:],
+            "missing -c": good[:mark - 1] + good[mark + 1:],
+            "-s": good[:-2] + ["-s", "workspace-write"] + good[-2:],
+            "-p": good[:-2] + ["-p", "x"] + good[-2:],
+            "--add-dir": good[:-2] + ["--add-dir", "/"] + good[-2:],
+            "--config": good[:-2] + ["--config", 'sandbox_mode="x"'] + good[-2:],
+            "no strict config": [a for a in good if a != "--strict-config"],
+            "no listen": good[:-2],
+            "other listen": good[:-1] + ["ws://127.0.0.1:1"],
+            "exec": [good[0], "exec", *good[2:]],
+            "code mode": good + ["--disable", "code_mode_host"],
+            "reordered": good[:3] + good[-2:] + good[3:-2],
+        }
+        for name, command in cases.items():
+            with self.subTest(name=name), self.assertRaises(ReviewLaunchRefusedError):
+                cs.check_compose_argv(command, self.layout)
+
+    def test_another_model_or_effort_is_a_different_command(self) -> None:
+        other = cs.compose_argv(self.layout, binary=self.binary, model="m2", effort="low")
+        cs.check_compose_argv(other, self.layout, model="m2", effort="low")
+        with self.assertRaises(ReviewLaunchRefusedError):
+            cs.check_compose_argv(other, self.layout)
+
+
+def composed_for(layout: cs.TesterLayout, roots: list[Path], **kw) -> dict:
+    """A ``config/read`` result of the shape ``tester_compose.txt`` records: the tester's own policy, ``null`` for the
+    unset siblings, the three layers and the origins as measured."""
+    import copy
+    config = copy.deepcopy(cs.effective_policy(layout, roots, **kw))
+    config["sandbox_mode"] = None
+    config["sandbox_workspace_write"] = None
+    config["hooks"] = None
+    config["skills"] = {"bundled": {"enabled": config.pop("skills.bundled.enabled")}}
+    config["features"] = {name: False for name in review.DISABLED_FEATURES} | {"memories": True}
+    tester = config["permissions"]["tester"]
+    tester.update(description=None, extends=None, workspace_roots=None)
+    tester["filesystem"]["glob_scan_max_depth"] = None
+    tester["network"].update(mode=None, proxy_url=None, domains=None)
+    config["shell_environment_policy"].update(exclude=None, filters=None)
+    flags = {"name": {"type": "sessionFlags"}, "version": "sha256:0"}
+    user = {"type": "user", "file": str(layout.codex_home / "config.toml"), "profile": None}
+    origins = {}
+    for leaf, value in review.flatten(config).items():
+        if value is None or value in ({}, []):
+            continue
+        origins[leaf] = user if leaf.startswith("permissions.") else flags
+    layers = [{"name": {"type": "sessionFlags"}, "config": {"model": config["model"]}, "disabledReason": None},
+              {"name": {"type": "user", "file": str(layout.codex_home / "config.toml"), "profile": None},
+               "config": {"default_permissions": "tester"}, "disabledReason": None},
+              {"name": {"type": "system", "file": "/etc/codex/config.toml"}, "config": None, "disabledReason": None}]
+    return {"config": config, "origins": origins, "layers": layers}
+
+
+class CheckEffectiveTests(Fixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.paths = self.roots()
+        self.composed = composed_for(self.layout, self.paths)
+
+    def check(self, composed: dict | None = None) -> None:
+        cs.check_effective(composed if composed is not None else self.composed, self.layout, self.paths)
+
+    def refused(self, composed: dict) -> ReviewLaunchRefusedError:
+        with self.assertRaises(ReviewLaunchRefusedError) as caught:
+            self.check(composed)
+        return caught.exception
+
+    def mutated(self, *path: str, value: object) -> dict:
+        import copy
+        composed = copy.deepcopy(self.composed)
+        node = composed["config"]
+        for part in path[:-1]:
+            if node.get(part) is None:
+                node[part] = {}
+            node = node[part]
+        if value is KeyError:
+            node.pop(path[-1])
+        else:
+            node[path[-1]] = value
+        return composed
+
+    def test_the_testers_own_composed_configuration_passes(self) -> None:
+        self.check()
+
+    def test_a_different_model_effort_or_tier_is_checked_against_the_arguments(self) -> None:
+        composed = composed_for(self.layout, self.paths, model="m2", effort="low")
+        cs.check_effective(composed, self.layout, self.paths, model="m2", effort="low")
+        with self.assertRaises(ReviewLaunchRefusedError):
+            self.check(composed)
+
+    def test_each_changed_value_is_refused_naming_the_leaf_and_its_value(self) -> None:
+        clone = str(self.layout.clone)
+        fs = "permissions", "tester", "filesystem"
+        some_root = next(key for key in self.composed["config"]["permissions"]["tester"]["filesystem"]
+                         if key.startswith("/usr"))
+        cases = {
+            "sandbox_mode": (("sandbox_mode",), "workspace-write", "sandbox_mode"),
+            "default_permissions": (("default_permissions",), "other", "default_permissions"),
+            "approval_policy": (("approval_policy",), "on-request", "approval_policy"),
+            "notify": (("notify",), ["x"], "notify.0"),
+            "model_provider": (("model_provider",), "evil", "model_provider"),
+            "web_search": (("web_search",), "live", "web_search"),
+            "project_root_markers": (("project_root_markers",), [".hg"], "project_root_markers.0"),
+            "model": (("model",), "other", "model"),
+            "effort": (("model_reasoning_effort",), "low", "model_reasoning_effort"),
+            "tier": (("service_tier",), "fast", "service_tier"),
+            "trust": (("projects", clone, "trust_level"), "trusted", f"projects.{clone}.trust_level"),
+            "extra project": (("projects", "/elsewhere"), {"trust_level": "trusted"}, "projects./elsewhere.trust_level"),
+            "inherit": (("shell_environment_policy", "inherit"), "all", "shell_environment_policy.inherit"),
+            "set value": (("shell_environment_policy", "set", "PATH"), "/evil", "shell_environment_policy.set.PATH"),
+            "set added": (("shell_environment_policy", "set", "SECRET"), "x", "shell_environment_policy.set.SECRET"),
+            "include_only": (("shell_environment_policy", "include_only"), ["A"], "shell_environment_policy.include_only.0"),
+            "entry changed": ((*fs, some_root), "write", f"permissions.tester.filesystem.{some_root}"),
+            "entry added": ((*fs, "/root"), "read", "permissions.tester.filesystem./root"),
+            "entry removed": ((*fs, some_root), KeyError, f"permissions.tester.filesystem.{some_root}"),
+            "network": (("permissions", "tester", "network", "enabled"), True, "permissions.tester.network.enabled"),
+            "network proxy": (("permissions", "tester", "network", "proxy_url"), "http://x", "permissions.tester.network.proxy_url"),
+            "other profile": (("permissions", "other"), {"filesystem": {"/": "write"}}, "permissions.other.filesystem./"),
+            "workspace write": (("sandbox_workspace_write", "network_access"), True, "sandbox_workspace_write.network_access"),
+            "mcp": (("mcp_servers", "x"), {"command": "y"}, "mcp_servers.x.command"),
+            "hook": (("hooks", "PreToolUse"), [{"command": "y"}], "hooks.PreToolUse.0.command"),
+            "skill": (("skills", "bundled", "enabled"), True, "skills.bundled.enabled"),
+            "feature": (("features", review.DISABLED_FEATURES[0]), True, f"features.{review.DISABLED_FEATURES[0]}"),
+        }
+        for name, (path, value, leaf) in cases.items():
+            with self.subTest(name=name):
+                composed = self.mutated(*path, value=value)
+                error = self.refused(composed)
+                self.assertEqual(error.evidence.get("check"), "effective", error)
+                self.assertEqual(error.evidence.get("key"), leaf, error)
+                if isinstance(value, (str, bool)):
+                    self.assertEqual(error.evidence.get("value"), value, error)
+                self.assertIn(leaf, str(error))
+
+    def test_a_refusal_names_the_origin_layer_of_the_leaf(self) -> None:
+        composed = self.mutated("approval_policy", value="on-request")
+        error = self.refused(composed)
+        self.assertEqual(error.evidence.get("value"), "on-request")
+        self.assertEqual(error.evidence.get("source"), composed["origins"]["approval_policy"])
+
+    def test_a_null_sibling_is_unset_and_an_empty_table_is_unset(self) -> None:
+        composed = self.mutated("permissions", "tester", "description", value=None)
+        composed["config"]["mcp_servers"] = None
+        composed["config"]["notify"] = None
+        self.check(composed)
+
+    def test_a_feature_the_composition_does_not_report_is_not_refused(self) -> None:
+        composed = self.mutated("features", value={})
+        self.check(composed)
+        del composed["config"]["features"]
+        self.check(composed)
+
+    def test_a_leaf_from_a_managed_or_other_origin_is_refused(self) -> None:
+        for kind in ("mdm", "enterpriseManaged", "system", "legacyManagedConfigTomlFromFile",
+                     "legacyManagedConfigTomlFromMdm", "project", "unknownType"):
+            with self.subTest(kind=kind):
+                import copy
+                composed = copy.deepcopy(self.composed)
+                composed["origins"]["web_search"] = {"name": {"type": kind}, "version": "sha256:0"}
+                error = self.refused(composed)
+                self.assertEqual(error.evidence.get("key"), "web_search")
+                self.assertIn(kind, str(error))
+
+    def test_a_bare_origin_without_the_name_wrapper_is_judged_too(self) -> None:
+        composed = self.mutated("web_search", value="disabled")
+        composed["origins"]["web_search"] = {"type": "mdm"}
+        self.assertEqual(self.refused(composed).evidence.get("key"), "web_search")
+
+    def test_the_layer_rules_are_the_reviewers(self) -> None:
+        import copy
+        cases = {
+            "managed layer with configuration": {"name": {"type": "mdm"}, "config": {"web_search": "live"}},
+            "enterprise layer with configuration": {"name": {"type": "enterpriseManaged"}, "config": {"x": 1}},
+            "system layer with configuration": {"name": {"type": "system", "file": "/etc/codex/config.toml"},
+                                                "config": {"approval_policy": "never"}},
+            "legacy layer with configuration": {"name": {"type": "legacyManagedConfigTomlFromFile"},
+                                                "config": {"x": 1}},
+            "unknown layer": {"name": {"type": "cloud"}, "config": None},
+            "enabled project layer": {"name": {"type": "project", "dotCodexFolder": "/x"}, "config": {"x": 1},
+                                      "disabledReason": None},
+        }
+        for name, layer in cases.items():
+            with self.subTest(name=name):
+                composed = copy.deepcopy(self.composed)
+                composed["layers"].append(layer)
+                self.assertEqual(self.refused(composed).evidence.get("check"), "effective")
+        with self.subTest(name="foreign user layer"):
+            composed = copy.deepcopy(self.composed)
+            composed["layers"][1]["name"]["file"] = "/home/someone/.codex/config.toml"
+            self.refused(composed)
+        with self.subTest(name="disabled project layer is accepted"):
+            composed = copy.deepcopy(self.composed)
+            composed["layers"].append({"name": {"type": "project"}, "config": None, "disabledReason": "untrusted"})
+            self.check(composed)
+
+    def test_an_instruction_bearing_key_from_no_judgeable_origin_is_refused(self) -> None:
+        composed = self.mutated("developer_instructions", value="be evil")
+        self.assertEqual(self.refused(composed).evidence.get("key"), "developer_instructions")
+
+    def test_a_forbidden_key_set_by_a_layer_is_refused_whatever_the_layer(self) -> None:
+        import copy
+        cases = {"model_providers": {"x": {"base_url": "http://evil"}}, "openai_base_url": "http://evil",
+                 "profiles": {"p": {"model": "m"}}, "auto_review": {"x": 1}}
+        for key, value in cases.items():
+            for kind in ("sessionFlags", "user"):
+                with self.subTest(key=key, kind=kind):
+                    composed = copy.deepcopy(self.composed)
+                    composed["config"][key] = value
+                    for leaf in review.flatten(value, key):
+                        composed["origins"][leaf] = {"name": {"type": kind}, "version": "sha256:0"}
+                    error = self.refused(composed)
+                    self.assertEqual(error.evidence.get("check"), "effective")
+                    self.assertTrue(str(error.evidence.get("key")).startswith(key), error)
+
+    def test_a_forbidden_key_with_the_packaged_default_origin_is_not_refused(self) -> None:
+        composed = self.mutated("openai_base_url", value="https://api.openai.com/v1")
+        composed["origins"]["openai_base_url"] = {"name": {"type": "packagedDefaults"}, "version": "sha256:0"}
+        self.check(composed)
+
+    def test_the_testers_own_permissions_keys_are_not_forbidden_but_are_compared(self) -> None:
+        self.check()
+        self.refused(self.mutated("permissions", "tester", "network", "enabled", value=True))
+
+    def test_a_value_that_is_not_a_config_read_result_is_refused(self) -> None:
+        for composed in (None, [], {}, {"config": {}, "origins": {}}, {"config": [], "origins": {}, "layers": []},
+                         {"config": {}, "origins": [], "layers": []}, {"config": {}, "origins": {}, "layers": {}}):
+            with self.subTest(composed=composed), self.assertRaises(ReviewLaunchRefusedError):
+                cs.check_effective(composed, self.layout, self.paths)
+
+
 class ReviewerUnchangedTest(unittest.TestCase):
     def test_the_reviewers_exec_still_selects_workspace_write(self) -> None:
         command = review.argv("exec", binary=Path("/x/codex"), tree=Path("/t"), verdict=Path("/v"))

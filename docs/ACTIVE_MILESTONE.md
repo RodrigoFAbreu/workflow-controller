@@ -13,7 +13,7 @@ refusal. Nothing launches on the record: `build_verification` for `codex` stays 
 
 ## Next action
 
-`/milestone-plan` for C10g-3 (the Codex tester).
+`/milestone-plan` for C10g-3a (the Codex tester's composed-configuration check, [#221](https://github.com/RodrigoFAbreu/workflow-controller/issues/221)).
 
 ## Functional review checklist
 

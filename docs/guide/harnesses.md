@@ -107,7 +107,7 @@ real `gh` work. The measured results are in `tests/harness_contract/codex/tester
 Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
 name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). One check is open (the
 one entry of `KNOWN_LIMITS`): the composed configuration values, and managed layers that are not files, are verified
-only for their MCP servers and features, so a managed layer could still change another setting. C10g-3 builds that
+only for their MCP servers and features, so a managed layer could still change another setting. C10g-3a builds that
 check before the sandbox is wired.
 
 `controller/codex_build.py` names a Codex build and records which builds were verified, offline, and nothing calls it

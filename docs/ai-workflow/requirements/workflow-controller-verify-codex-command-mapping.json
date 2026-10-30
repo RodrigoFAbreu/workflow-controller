@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-verify-codex-command",
+  "requirements": {
+    "R1": {
+      "description": "A verification run executes the C10g-1 probes (modelless sandbox, then exec) against the launcher path a launch would run, with host fixtures a connection or write could reach, host checks that read bytes and run no git on a written tree, and the digest taken before the first run and after the last (#217)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Every case the probes cannot decide (no digest, no codex or bwrap, no credential, a refused launch control, no reachable model, a changed build) is a named refusal and is never recorded as a pass (#217)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "verify-codex [--force] [--codex-binary PATH] records the digest in verified-codex-builds.json only after every probe held, does not probe a recorded digest again without --force, never touches the settings file, and exits 0 or 20 (#217)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "verify-claude, the Codex reviewer, HarnessAdapter.build_verification for codex and the launch paths are unchanged; the guides, the exit-code page and the roadmap describe the command, and one opt-in live flow runs it against the real build (#217)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

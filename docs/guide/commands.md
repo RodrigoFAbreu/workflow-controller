@@ -21,6 +21,7 @@
 | `workflow-controller settings show\|path\|clean` | the user settings file (see [`settings`](#settings)); `show` and `path` are read-only |
 | `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by GROUPING] [<repo>]` | the recorded jobs' turns, tokens, cost and time (see [`telemetry`](#telemetry)); read-only |
 | `workflow-controller verify-claude [--force]` | run the live sandbox probes against the `claude` a launch would run and record its digest when every probe holds (see [`verify-claude`](#verify-claude)); takes no repository |
+| `workflow-controller verify-codex [--force] [--codex-binary PATH]` | run the sandbox boundary probes against the `codex` a launch would run and record its digest when every probe holds (see [`verify-codex`](#verify-codex)); takes no repository |
 | `workflow-controller notifications [--test]` | the effective SignalHub notification table and where the URL and key were found (never the key); `--test` sends one `info` test event through the real transport (see [`notifications`](#notifications)); takes no repository and writes nothing |
 | `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted |
 | `workflow-controller --version` | the version, then the running runtime (see [Runtime identity](runtime.md#runtime-identity)) |
@@ -204,6 +205,30 @@ The settings file is never created, filled or updated by this command. The recor
 checkout and the shared install each need their own run. The record defends against the sandboxed tester and
 against redirection, not against a lifecycle worker running as you, and a build file rewritten in place between the
 hash and the exec is not caught (see [runtime](runtime.md#controller-owned-runtime-state)).
+
+## `verify-codex`
+
+`workflow-controller verify-codex [--force] [--codex-binary PATH]` verifies a Codex build for the future Codex tester.
+It takes no repository. It resolves `codex` on `PATH` (the build a launch would run; `--codex-binary`, local to this
+command, names a different build and needs no `codex` on `PATH`: the command then notes that a launch runs the one on
+`PATH`, or that there is none), prints the launcher path and the build's SHA-256 digest, and then:
+
+- a digest already recorded is reported and **not probed**; `--force` probes it again, and a record that was ignored
+  prints its reason and the build is probed;
+- otherwise it runs two probes in fresh scratch jobs: `sandbox` (`codex sandbox`, no model) and then `exec` (one short
+  `codex exec` turn), both with the boundary probes of the Codex tester sandbox, against host fixtures the sandbox
+  could otherwise reach (a TCP and a Unix listener, a push origin, a canary file). **Cost:** one short model turn
+  with your Codex credentials; the usage budget gate is not consulted. A token Codex refreshes during the turn is
+  copied back to your Codex home, and the scratch credential copy is removed;
+- only when every probe holds and the build is unchanged by the run, it records the digest, version and probe results
+  in `verified-codex-builds.json` in the runtime root (see [runtime](runtime.md)) and exits `0`;
+- anything else exits `20`, names the refusal and records nothing: `identity` (the layout cannot be bound to a
+  digest), `host`, `credentials`, `launch_controls`, `sandbox` or `exec` (a probe line or a host effect failed),
+  `model_unreachable` (a login, credit, limit or timeout cause or no output: run it again), `exec_failed` (the turn
+  failed for another cause, with its exit code) and `build_changed`.
+
+The settings file is never created, filled or updated by this command. Nothing launches on the record yet: the Codex
+tester is declared in C10g-3, and the Codex reviewer keeps its own launch checks.
 
 ## `notifications`
 

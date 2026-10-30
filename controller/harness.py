@@ -79,9 +79,10 @@ CODEX = HarnessAdapter(
     roles=(REVIEWER,), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_DERIVED, pinned_version="codex-cli 0.163.0",
     fails_closed_on_unknown_version=True,
-    # No command yet: Codex keeps the fail-closed feature, layer, state and flag
-    # checks of its review launch until ``verify-codex`` ships (C10g-2), which
-    # then changes this one value.
+    # ``verify-codex`` exists (C10g-2b) but nothing at launch consults its record
+    # yet: Codex keeps the fail-closed feature, layer, state and flag checks of
+    # its review launch until C10g-3 declares the tester role, which then
+    # changes this one value.
     build_verification=None,
     # tests/harness_contract/codex/: exec_argv.json (model gpt-6.1-sol, effort
     # high) and sandbox_probe.txt (the catalog's effort xhigh).

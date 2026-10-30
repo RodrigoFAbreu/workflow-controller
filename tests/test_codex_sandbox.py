@@ -536,6 +536,34 @@ class CheckEffectiveTests(Fixture):
         self.assertEqual(error.evidence.get("value"), "on-request")
         self.assertEqual(error.evidence.get("source"), composed["origins"]["approval_policy"])
 
+    def test_a_refusal_names_the_origin_of_an_ancestor_table(self) -> None:
+        composed = self.mutated("shell_environment_policy", "inherit", value="all")
+        shell = {"type": "user", "file": "/x/config.toml", "profile": None}
+        for name in [n for n in composed["origins"] if n.startswith("shell_environment_policy.")]:
+            del composed["origins"][name]
+        composed["origins"]["shell_environment_policy"] = shell
+        error = self.refused(composed)
+        self.assertEqual(error.evidence.get("key"), "shell_environment_policy.inherit")
+        self.assertEqual(error.evidence.get("source"), shell)
+
+    def test_the_expected_policy_follows_the_argv_constructor(self) -> None:
+        pinned = cs.required_overrides(self.layout)
+        changed = tuple('approval_policy="on-request"' if i.startswith("approval_policy=") else i for i in pinned)
+        with mock.patch.object(cs, "required_overrides", return_value=changed):
+            policy = cs.effective_policy(self.layout, self.paths)
+            self.assertEqual(policy["approval_policy"], "on-request")
+            with self.assertRaises(ReviewLaunchRefusedError):
+                self.check()
+        self.assertEqual(cs.effective_policy(self.layout, self.paths)["approval_policy"], "never")
+        policy = cs.effective_policy(self.layout, self.paths)
+        for item in pinned:
+            key = item.partition("=")[0]
+            want = tomllib.loads(item)
+            for part in key.split("."):
+                want = want[part]
+            got = policy[key] if key in policy else review._lookup(policy, key)
+            self.assertEqual(got, want, key)
+
     def test_a_null_sibling_is_unset_and_an_empty_table_is_unset(self) -> None:
         composed = self.mutated("permissions", "tester", "description", value=None)
         composed["config"]["mcp_servers"] = None

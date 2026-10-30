@@ -450,20 +450,48 @@ def check_compose_argv(command: Sequence[str], layout: TesterLayout, *, model: s
                       entry="argv")
 
 
+def _override_values(layout: TesterLayout, *, model: str, effort: str) -> dict[str, object]:
+    """The value each ``-c`` item of :func:`required_overrides` sets, keyed by the dotted name as written: the item
+    parsed back as TOML, so the argv and the expected policy have one source. A dotted name the reviewer's table keeps
+    flat (``skills.bundled.enabled``) stays flat; any other is a leaf of its table, which is compared whole."""
+    out: dict[str, object] = {}
+    for item in required_overrides(layout, model=model, effort=effort):
+        key = item.partition("=")[0]
+        node: object = tomllib.loads(item)
+        for part in key.split("."):
+            node = node[part]
+        if "." in key and key not in review.EFFECTIVE_POLICY:
+            table, _, leaf = key.partition(".")
+            out.setdefault(table, {})[leaf] = node
+        else:
+            out[key] = node
+    return out
+
+
 def effective_policy(layout: TesterLayout, roots: Sequence[Path], *, model: str = review.DEFAULT_MODEL,
                      effort: str = review.DEFAULT_EFFORT) -> dict[str, object]:
-    """Every value the tester's composed ``config`` must equal (D1), built by the functions that write the profile
-    and the argv: the profile parsed back from :func:`profile_toml`, the shell policy, the clone's trust entry, the
-    model, effort and tier, the sandbox keys unset, and the reviewer's scalar table without its ``sandbox_mode``."""
+    """Every value the tester's composed ``config`` must equal (D1). The argv-pinned values (approval policy, model,
+    effort, tier, trust, shell policy, ``default_permissions``) are parsed back from :func:`required_overrides`, so a
+    constructor value cannot diverge from the expectation; the profile is parsed back from :func:`profile_toml`, the
+    sandbox keys are unset, and the reviewer's remaining defaults (its scalar table without ``sandbox_mode``) fill
+    the keys the argv does not pin."""
     profile = tomllib.loads(profile_toml(layout, roots))
     scalars = {key: value for key, value in review.EFFECTIVE_POLICY.items() if key != "sandbox_mode"}
     return {
-        **scalars, "model": model, "model_reasoning_effort": effort, "service_tier": review.SERVICE_TIER,
-        "default_permissions": profile["default_permissions"], "permissions": profile["permissions"],
-        "sandbox_mode": None, "sandbox_workspace_write": None,
-        "projects": {str(layout.clone): {"trust_level": "untrusted"}},
-        "shell_environment_policy": {"inherit": "none", "set": command_environment(layout)},
+        **scalars, **_override_values(layout, model=model, effort=effort),
+        "permissions": profile["permissions"], "sandbox_mode": None, "sandbox_workspace_write": None,
     }
+
+
+def _origin_of(origins: Mapping, leaf: str) -> object:
+    """The origin of ``leaf``: its own or one below it (:func:`review._origin`), else the nearest ancestor table's,
+    as ``config/read`` reports a table whose leaves were set together under the table's name."""
+    found = review._origin(origins, leaf)
+    parts = leaf.split(".")
+    while found is None and len(parts) > 1:
+        parts.pop()
+        found = origins.get(".".join(parts))
+    return found
 
 
 def _set_leaves(value: object, prefix: str) -> dict[str, object]:
@@ -497,7 +525,7 @@ def check_effective(composed: Mapping, layout: TesterLayout, roots: Sequence[Pat
         leaf = next((name for name in differing if name in got_leaves), differing[0])
         raise _refuse(f"the composed configuration sets {leaf} to {got_leaves.get(leaf, '<unset>')!r}, expected "
                       f"{wanted_leaves.get(leaf, '<unset>')!r}", check="effective", key=leaf,
-                      value=got_leaves.get(leaf), source=review._origin(origins, leaf))
+                      value=got_leaves.get(leaf), source=_origin_of(origins, leaf))
     for key in review.INSTRUCTION_KEYS:
         if config.get(key) and review._origin(origins, key) is None:
             raise _refuse(f"the composed configuration sets {key} from no layer the Controller can judge",

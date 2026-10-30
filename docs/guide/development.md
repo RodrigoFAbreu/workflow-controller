@@ -14,6 +14,7 @@ CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python3 -m unittest tests.test_packaged_run
 CONTROLLER_LIVE_WORKER=1 python3 -m unittest tests.test_integration_disposable_repo -v  # opt-in: live claude, real spend
 CONTROLLER_LIVE_CLAUDE_TESTS=1 python3 -m unittest tests.test_functional_enforcement -v  # opt-in: live sandbox probes, real spend, own HOME
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -m unittest tests.test_codex_sandbox_live -v  # opt-in: live Codex tester sandbox probes, one short model turn, own CODEX_HOME
+CONTROLLER_LIVE_CODEX_TESTS=1 python3 -m unittest tests.test_codex_tester_live -v  # opt-in: one live Codex tester run, one model turn
 CONTROLLER_TEST_OLD_GIT=/path/to/git-2.35 python3 -m unittest tests.test_workflow_contract -k fsmonitor  # opt-in: a Git before 2.36
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```

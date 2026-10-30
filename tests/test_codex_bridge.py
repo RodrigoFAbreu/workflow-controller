@@ -237,6 +237,21 @@ class PromptTest(BridgeFixture):
             self.assertNotIn(claim, text)
         self.assertNotIn("scratch `HOME`, `XDG_*`", text)
 
+    def test_every_read_entry_of_the_roots_is_a_known_kind_of_location(self) -> None:
+        bridge = self.bridge()
+        built = bridge.built
+        known = {bridge.clone, *map(Path, cs.SYSTEM_READ_DIRS), *cs.codex_install_roots(self.binary),
+                 *cs.interpreter_roots(), cs.controller_package_dir(), built.layout.bin}
+        known = {Path(os.path.abspath(path)) for path in known}
+        profile = tomllib.loads(built.config_text)["permissions"][cs.PROFILE]["filesystem"]
+        reads = {Path(path) for path, access in profile.items() if access == "read" and path != ":minimal"}
+        self.assertEqual(reads, {*map(Path, map(str, built.roots)), bridge.clone})
+        for root in built.roots:
+            with self.subTest(root=str(root)):
+                self.assertIn(Path(root), known)
+                self.assertFalse(Path(root).is_relative_to(built.layout.scratch))
+        self.assertIn(bridge.clone, reads)
+
     def test_the_limits_agree_with_the_profile_and_the_environment(self) -> None:
         bridge = self.bridge()
         profile = tomllib.loads(bridge.built.config_text)["permissions"][cs.PROFILE]
@@ -250,7 +265,7 @@ class PromptTest(BridgeFixture):
         self.assertFalse(bridge.clone.is_relative_to(bridge.layout.scratch))
         joined = " ".join(cb.SANDBOX_LIMITS)
         for fragment in ("no network", "`gh`", "`claude`, `codex` or `ssh`", "`PATH`", "read-only", "scratch area",
-                         "`TMPDIR`", "scratch `HOME` is read-only", "`HOME` inside `TMPDIR`"):
+                         "`TMPDIR`", "`HOME` is not writable and not a readable location", "`HOME` inside `TMPDIR`"):
             self.assertIn(fragment, joined)
         self.assertEqual(set(fr.FAKE_PROGRAMS) >= {"gh", "claude", "codex", "ssh"}, True)
 

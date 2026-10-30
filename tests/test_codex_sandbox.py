@@ -368,6 +368,16 @@ class BuildTest(Fixture):
         self.assertTrue(os.access(self.layout.bin / "gh", os.X_OK))
         self.assertEqual(list(built.argv[:2]), [str(self.binary), "exec"])
 
+    def test_build_records_the_credential_digest_model_and_effort(self) -> None:
+        digest = hashlib.sha256((self.operator / "auth.json").read_bytes()).hexdigest()
+        default = self.build()
+        self.assertEqual((default.credential_digest, default.model, default.effort),
+                         (digest, review.DEFAULT_MODEL, review.DEFAULT_EFFORT))
+        routed = self.build(job_id="job2", model="gpt-x", effort="low")
+        self.assertEqual((routed.model, routed.effort), ("gpt-x", "low"))
+        bare = cs.Built(default.layout, default.config_text, default.roots, default.argv, default.environment)
+        self.assertEqual((bare.credential_digest, bare.model), ("", review.DEFAULT_MODEL))
+
     def test_build_refuses_without_a_credential_file(self) -> None:
         (self.operator / "auth.json").unlink()
         with self.assertRaises(ReviewLaunchRefusedError):

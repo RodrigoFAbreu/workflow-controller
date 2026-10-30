@@ -119,8 +119,8 @@ SANDBOX_LIMITS: tuple[str, ...] = (
     "a writable location in the clone is a link to a folder in the scratch area: a tool that deletes and recreates "
     "the linked folder (`shutil.rmtree('build')`, `rm -rf build`) or a write through the link that is refused is a "
     "sandbox limit (`environment`), not a product `defect`",
-    "writes go to the scratch area only, which holds the output folder and `TMPDIR`; the scratch `HOME` is "
-    "read-only, so a flow that needs a writable home sets `HOME` inside `TMPDIR`",
+    "writes go to the scratch area only, which holds the output folder and `TMPDIR`; `HOME` is not writable and "
+    "not a readable location, so a flow that needs a writable home sets `HOME` inside `TMPDIR`",
 )
 
 

@@ -42,7 +42,8 @@ admits a build of that harness where the Controller checks one. For Claude Code
 that is `verify-claude`, and it admits the functional-tester launch only: the
 worker and reviewer launches run any build on `PATH`. Codex has none
 (`none: launch checks only`): its launch is refused by the checks of its
-surfaces described next. `verify-codex` exists, but nothing consults its record until the tester role is declared (C10g-3). `Unknown version refused`
+surfaces described next. `verify-codex` exists, but nothing consults its
+record until the tester role is declared (C10g-3). `Unknown version refused`
 keeps its meaning and does not mean a version string is compared: the
 launch is refused when an update changes a checked surface (an enabled feature,
 a configuration layer, a state entry or a flag), and an update that changes none
@@ -117,7 +118,8 @@ oversized tree) gives no digest, and the digest is recomputed from disk on every
 launcher (`node`) is not part of the identity; it only starts the native binary. The record is
 `verified-codex-builds.json` in the runtime root, with `verify-claude`'s trust rules (a regular file you own with no
 group or world write bit, created `0600`, never written through a symlink) and its own lock; `is_verified` answers
-from a fresh digest and the record and writes nothing. `workflow-controller verify-codex` writes the record (see [`verify-codex`](commands.md#verify-codex)); no launch reads it until C10g-3.
+from a fresh digest and the record and writes nothing. `workflow-controller verify-codex` writes the record (see
+[`verify-codex`](commands.md#verify-codex)); no launch reads it until C10g-3.
 
 ## Keeping the page current
 

@@ -187,6 +187,7 @@ class VerifyCodexCommandTests(base.Fixture):
         with mock.patch.dict(os.environ, {"PATH": "/nonexistent-wc-path"}):
             code, _, err = self.run_cli()
         self.assertEqual(code, 20)
+        self.assertIn("host:", err)
         self.assertIn("cannot be resolved", err)
 
     def test_the_command_is_classified(self) -> None:

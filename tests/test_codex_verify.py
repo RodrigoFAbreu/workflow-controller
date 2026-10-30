@@ -181,6 +181,19 @@ class VerifyBuildTests(Fixture):
         self.assertFalse((self.runtime / codex_build.RECORD_NAME).exists())
         self.assertEqual(self.credential_copies(), [])
 
+    def test_each_probe_carries_its_own_ownership_tag(self) -> None:
+        tags = []
+
+        def run(command, **kw):
+            tags.append(kw["env"].get(review.OWNERSHIP_VAR, ""))
+            return review.run_bounded(command, **kw)
+
+        self.verify(run=run)
+        own = {tag.rsplit(":", 1)[-1] for tag in tags}
+        self.assertEqual(len(own), 2, tags)  # one per probe job, never the shared default
+        self.assertNotIn("tester", own)
+        self.assertTrue(all(tag.startswith("verify-") for tag in own), own)
+
     def test_a_layout_with_no_digest(self) -> None:
         loose = self.tmp / "loose-codex"
         loose.write_text("#!/bin/sh\n")

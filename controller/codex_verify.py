@@ -263,9 +263,11 @@ def _prepare(name: str, *, binary: Path, runtime_root: Path, operator_home: Path
             canary_file=standin / "canary", canary_env=CANARY_ENV, credential=layout.codex_home / "auth.json",
             push_origin=origin, tcp_port=listeners.port, socket_path=listeners.socket_path)
         command = cs.probe_command(targets, marker=marker)
+        # The job's own ownership tag: a run's clean-up kills every process carrying it, so a shared one (the
+        # default ``tester``) would also kill a concurrent verification or tester.
         built = cs.build(runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, binary=binary,
-                         prompt=cs.probe_prompt(command) if name == "exec" else None, extra_readable=[folder],
-                         inherited={**os.environ, CANARY_ENV: CANARY_VALUE})
+                         ownership_tag=job_id, prompt=cs.probe_prompt(command) if name == "exec" else None,
+                         extra_readable=[folder], inherited={**os.environ, CANARY_ENV: CANARY_VALUE})
         digest = hashlib.sha256((layout.codex_home / "auth.json").read_bytes()).hexdigest()
         return _Job(name, built, command, marker, origin, standin, snapshot(layout.clone), snapshot(origin), digest)
     except ReviewLaunchRefusedError as exc:

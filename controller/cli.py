@@ -1626,7 +1626,10 @@ def cmd_verify_codex(args: argparse.Namespace, runtime_root: Path, ident: identi
     """``verify-codex`` (verify-codex-command D1-D9): probe the codex build a launch would run and record its
     digest only when every probe holds."""
     named = getattr(args, "codex_binary", None)
-    binary = review.resolve_binary(named or review.CODEX.default_binary)
+    try:
+        binary = review.resolve_binary(named or review.CODEX.default_binary)
+    except ControllerError as exc:  # D7: no codex is a `host` refusal
+        raise ControllerError(f"host: {exc.message}", evidence={"raised_by": "cli.cmd_verify_codex"}) from exc
     try:
         on_path = review.resolve_binary(review.CODEX.default_binary)
     except ControllerError:  # --codex-binary needs no codex on PATH; the note below says what that means

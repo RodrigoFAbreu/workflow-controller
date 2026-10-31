@@ -305,16 +305,27 @@ ADAPTER_ROLE: Mapping[str, str] = MappingProxyType({
 })
 
 
+#: ``(routing role, harness)`` pairs the registry declares but routing cannot
+#: select yet: the Codex tester launch exists (C10g-3b2b) and nothing calls it
+#: until C10g-3c, which deletes this set.
+NOT_YET_ROUTABLE: frozenset[tuple[str, str]] = frozenset({(FUNCTIONAL_TESTER, "codex")})
+
+
 def check_role_harness(role: str, name: str) -> str:
     """``name`` must be a registered harness whose adapter declares the
-    adapter role ``role`` is launched as (:data:`ADAPTER_ROLE`). Raises
-    ``ValueError`` naming the role, the harness and what it declares."""
+    adapter role ``role`` is launched as (:data:`ADAPTER_ROLE`) and routing can
+    select (:data:`NOT_YET_ROUTABLE`). Raises ``ValueError`` naming the role,
+    the harness and what it declares."""
     check_harness(name)
     adapter_role = ADAPTER_ROLE[role]
     declared = harness.ADAPTERS[name].roles
     if adapter_role not in declared:
         raise ValueError(
             f"role {role!r} runs as a {adapter_role!r} and harness {name!r} declares only {list(declared)}"
+        )
+    if (role, name) in NOT_YET_ROUTABLE:
+        raise ValueError(
+            f"harness {name!r} declares the {role!r} role but routing cannot select it until C10g-3c"
         )
     return name
 

@@ -5,9 +5,9 @@ and write test output into a scratch area, and nothing else. The mechanism is a
 restricted-read permissions profile in the tester's own ``CODEX_HOME/config.toml``
 (``default_permissions = "tester"``), selected in place of the reviewer's
 ``-s workspace-write``. The reviewer's pinned constants and controls in
-:mod:`controller.review` are imported and reused, never edited. Nothing calls this
-module yet: no role is declared and no launch path uses it (see
-``docs/ai-workflow/CONTROLLER_CODEX_TESTER_SANDBOX_PLAN.md``).
+:mod:`controller.review` are imported and reused, never edited. Its caller is
+the Codex tester launch in :mod:`controller.codex_tester` (through :mod:`controller.codex_bridge`); the tester role is
+declared, and routing refuses it until C10g-3c (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_SANDBOX_PLAN.md``).
 """
 
 from __future__ import annotations
@@ -616,6 +616,8 @@ class Built:
     #: The model and effort ``argv`` was built with, so a launch rebuilds and checks the same command.
     model: str = review.DEFAULT_MODEL
     effort: str = review.DEFAULT_EFFORT
+    #: The binary ``argv`` was built with (as given, symlink kept), so a launch refuses a different one; ``""`` when unknown.
+    binary: str = ""
 
 
 def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path, ownership_tag: str = "tester",
@@ -644,7 +646,7 @@ def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path,
     command = argv(layout, binary=binary, model=model, effort=effort, prompt=prompt)
     check_argv(command, layout, model=model, effort=effort)
     return Built(layout, config_text, tuple(roots), tuple(command),
-                 child_environment(layout, binary, ownership_tag, inherited), digest, model, effort)
+                 child_environment(layout, binary, ownership_tag, inherited), digest, model, effort, str(binary))
 
 
 # ---------------------------------------------------------------------------

@@ -576,7 +576,7 @@ class HarnessTableRuleTest(TreeTestCase):
     def test_a_registry_change_without_a_regeneration_fails_the_page(self) -> None:
         from controller import harness
         self.page()
-        added = dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER, harness.FUNCTIONAL_TESTER))
+        added = dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER,))
         with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": added}):
             self.assertEqual(len(check_docs.check_harness_table(self.tree.root, 6)), 1)
 

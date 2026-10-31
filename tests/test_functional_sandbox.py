@@ -935,11 +935,14 @@ class LayoutTest(unittest.TestCase):
         self.assertEqual(review.JobLayout(Path("/rt"), "j").base, Path("/rt/reviews/j"))
         self.assertEqual(review.JobLayout(Path("/rt"), "j").rel("x"), "reviews/j/x")
 
-    def test_the_role_is_declared_for_claude_code_only(self) -> None:
+    def test_the_role_is_declared_for_claude_code_and_codex_only(self) -> None:
         from controller import harness
         harness.for_role("claude-code", harness.FUNCTIONAL_TESTER)
+        harness.for_role("codex", harness.FUNCTIONAL_TESTER)
+        self.assertEqual([a.name for a in harness.ADAPTERS.values() if harness.FUNCTIONAL_TESTER in a.roles],
+                         ["claude-code", "codex"])
         with self.assertRaises(HarnessRoleError):
-            harness.for_role("codex", harness.FUNCTIONAL_TESTER)
+            harness.for_role("codex", harness.WORKER)
 
     def test_the_init_check_takes_the_testers_tool_set(self) -> None:
         init = {"tools": ["Bash"], "mcp_servers": [], "permissionMode": "dontAsk", "skills": [],

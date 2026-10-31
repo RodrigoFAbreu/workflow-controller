@@ -149,6 +149,23 @@ class LaunchTest(TesterFixture):
                     self.run_tester(bad)
         self.assertEqual(self.execs(), [])
 
+    def test_a_binary_other_than_the_one_the_bridge_was_built_with_is_refused_before_any_control(self) -> None:
+        self.script(message="ok")
+        bridge = self.bridge_for()
+        other = self.binary.parent / "other-codex"
+        other.symlink_to(self.binary)
+        with mock.patch.object(cs, "check_argv") as argv_check, self.assertRaises(ReviewLaunchRefusedError):
+            ct.run_tester(bridge, FLOWS, binary=other, operator_home=self.operator, timeout=20,
+                          system_dir=self.system, run=self.controls(bridge))
+        argv_check.assert_not_called()
+        self.assertEqual(self.execs(), [])
+
+    def test_a_built_with_no_recorded_binary_is_not_constrained(self) -> None:
+        self.script(message="ok")
+        bridge = self.bridge_for()
+        bare = cb.dataclasses.replace(bridge, built=cb.dataclasses.replace(bridge.built, binary=""))
+        self.assertEqual(self.run_tester(bare)["outcome"], ct.RAN)
+
     def test_each_refused_control_starts_no_exec_and_propagates(self) -> None:
         self.script(message="ok")
         bridge = self.bridge_for()

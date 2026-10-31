@@ -227,8 +227,9 @@ command, names a different build and needs no `codex` on `PATH`: the command the
   `model_unreachable` (a login, credit, limit or timeout cause or no output: run it again), `exec_failed` (the turn
   failed for another cause, with its exit code) and `build_changed`.
 
-The settings file is never created, filled or updated by this command. Nothing launches on the record yet: the Codex
-tester is declared in C10g-3, and the Codex reviewer keeps its own launch checks.
+The settings file is never created, filled or updated by this command. Only the Codex tester launch reads the record
+(`launch_codex_functional` refuses a build it has not recorded, naming this command); routing does not select the Codex
+tester until C10g-3c, and the Codex reviewer keeps its own launch checks.
 
 ## `notifications`
 

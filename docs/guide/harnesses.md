@@ -40,10 +40,11 @@ from (`codex-cli 0.163.0` for Codex); it is for information and is not compared
 at launch. The `Build verification` column names the Controller command that
 admits a build of that harness where the Controller checks one. For Claude Code
 that is `verify-claude`, and it admits the functional-tester launch only: the
-worker and reviewer launches run any build on `PATH`. Codex has none
-(`none: launch checks only`): its launch is refused by the checks of its
-surfaces described next. `verify-codex` exists, but nothing consults its
-record until the tester role is declared (C10g-3). `Unknown version refused`
+worker and reviewer launches run any build on `PATH`. For Codex it is
+`verify-codex`, and it admits the tester launch only (`launch_codex_functional`
+refuses a build it has not recorded); the tester role is declared but routing
+refuses it until C10g-3c. The Codex reviewer's launch is refused by the checks
+of its surfaces described next. `Unknown version refused`
 keeps its meaning and does not mean a version string is compared: the
 launch is refused when an update changes a checked surface (an enabled feature,
 a configuration layer, a state entry or a flag), and an update that changes none
@@ -68,7 +69,7 @@ that declares it.
 | Harness | `reviewer.harness` | Family | Roles | Restricts subagents | Restricts tools | Usage | Captured with | Build verification | Unknown version refused | Models | Efforts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `claude-code` | `claude` | anthropic | `worker`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
-| `codex` | `codex` | openai | `reviewer` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | none: launch checks only | yes | `gpt-6.1-sol` | `high`, `xhigh` |
+| `codex` | `codex` | openai | `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
 
 | Routing role | Runs as | `claude-code` | `codex` |
 | --- | --- | --- | --- |
@@ -95,9 +96,10 @@ that declares it.
 
 ## The Codex tester sandbox
 
-`controller/codex_sandbox.py` builds the sandbox a Codex functional tester would run in, and it is proven but not
-wired: no role is declared for it (`functional-tester` stays `no` for `codex` above), and nothing calls it except its
-tests. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
+`controller/codex_sandbox.py` builds the sandbox a Codex functional tester would run in, and the `functional-tester`
+role is declared for `codex` above, but routing refuses the pair (`NOT_YET_ROUTABLE`, the `no` in the routing column)
+until C10g-3c. `launch_codex_functional` (through `codex_bridge`) is the only caller, and nothing calls that launch
+yet. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
 `codex-cli 0.163.0`, with real attempts through `codex sandbox` (no model) and `codex exec` (one short turn), the
 tester cannot write the clone, write outside its scratch area, read a file under the operator's home, read the
 operator's environment variables, read its own credential copy, push, reach a host TCP or Unix socket, or make the
@@ -109,7 +111,7 @@ name (`/usr/bin/gh` fails for lack of credentials and network, not because of th
 configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the
 tester's home, flags and any managed layer (`codex app-server`, `config/read`, no model request), compares every
 security-relevant value with the pinned tester profile leaf by leaf, and refuses a difference naming the value and its
-layer. It is a separate control from `check_launch`, and no launch path calls either yet (C10g-3b2b wires them). One
+layer. It is a separate control from `check_launch`; `run_tester` runs both before it starts `codex exec`. One
 limit remains (the one entry of `KNOWN_LIMITS`, `composition_window`): the configuration is read by the `app-server`
 just before the launch, so a layer that changes in that window, or a setting only `exec` composes differently, is not
 seen. The reviewer's control makes the same assumption.
@@ -133,13 +135,26 @@ under a deadline with the bridge's prompt on standard input. The outcome is `tim
 message (an absent, empty or blank `-o` file), else `ran`; the final message is the `-o` file, never the transcript. The
 result has the Claude tester launch's shape (outcome, detail, message, readings, sub-agents, credential copy-back) and
 the credential copy in the job's Codex home is removed on every path. Whether the output folder holds valid results is
-not decided here. Nothing calls `run_tester`, no role is declared and the reviewer, `verify-claude` and `verify-codex`
-are unchanged: C10g-3b2b adds the `is_verified` gate, the before-and-after comparison of the real repository, the
-mapping of refusals to `functional_tester_unavailable`, the sandbox removal and the role declaration. One opt-in test
-(`tests/test_codex_tester_live.py`, `CONTROLLER_LIVE_CODEX_TESTS=1`, one model turn) runs a real tester turn.
+not decided here. One opt-in test (`tests/test_codex_tester_live.py`, `CONTROLLER_LIVE_CODEX_TESTS=1`, one model turn,
+skipped when `CI` is set) runs a real tester turn.
 
-`controller/codex_build.py` names a Codex build and records which builds were verified, offline, and nothing calls it
-except its tests. `build_digest` is a SHA-256 over every file a launch can run as Codex: the launcher's package and
+`launch_codex_functional` (same module) is the tester's surroundings and returns what `review.launch_functional`
+returns for the Claude tester, plus `subagents` and `exit_code`. In order: it checks that `harness.CODEX` declares the
+tester role, resolves the `codex` launcher (the symlink is kept, as `verify-codex` records it), and gates the build:
+`codex_build.is_verified` must admit it, and nothing is written or started before it does. It then sweeps a sandbox an
+earlier breach kept, checks the runtime root against the sandbox folders, snapshots the real repository (worktree,
+`HEAD`, refs) and the local origin's refs, builds the bridge, calls `run_tester`, snapshots again, runs the binding
+check and collects the stand-ins' call log. A *breach* is a difference between the snapshots, or a build that stops
+being the verified one during the run (the record removed, the digest changed, the launcher re-pointed); a breach sets
+`keep` and the sandbox is left for `review.settle_functional`. A changed clone is `unbound`. Every refusal inside the
+launch (an unverified build, no binary, a control, an altered argv, a clone mismatch, an existing job folder) is
+`functional_tester_unavailable`, with the sandbox and the credential copy removed. The adapter declares the tester
+role and `verify-codex` as its build verification, but routing refuses the pair (`NOT_YET_ROUTABLE`) until C10g-3c, so
+nothing calls the launch; the reviewer, `verify-claude`, `verify-codex`, settings, options, exit codes and gates are
+unchanged.
+
+`controller/codex_build.py` names a Codex build and records which builds were verified, offline; the Codex tester launch
+and its tests call it. `build_digest` is a SHA-256 over every file a launch can run as Codex: the launcher's package and
 each `optionalDependencies` package found where Node's resolution finds it in the launch environment. A layout it
 cannot bind (a shell shim, a package that declares `dependencies`, a symlink leaving the package, an unreadable or
 oversized tree) gives no digest, and the digest is recomputed from disk on every call. The interpreter that runs the
@@ -147,7 +162,8 @@ launcher (`node`) is not part of the identity; it only starts the native binary.
 `verified-codex-builds.json` in the runtime root, with `verify-claude`'s trust rules (a regular file you own with no
 group or world write bit, created `0600`, never written through a symlink) and its own lock; `is_verified` answers
 from a fresh digest and the record and writes nothing. `workflow-controller verify-codex` writes the record (see
-[`verify-codex`](commands.md#verify-codex)); no launch reads it until C10g-3.
+[`verify-codex`](commands.md#verify-codex)); the Codex tester launch reads it (a build it has not recorded is refused)
+and no other launch does.
 
 ## Keeping the page current
 

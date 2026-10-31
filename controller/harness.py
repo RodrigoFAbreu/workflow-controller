@@ -18,7 +18,7 @@ from controller.errors import HarnessRoleError, UnknownHarnessError
 WORKER = "worker"
 REVIEWER = "reviewer"
 #: The Controller-run functional tester (automated-functional-review D2): a
-#: shell-only, sandboxed ``claude -p`` job. Only Claude Code declares it.
+#: shell-only, sandboxed job. Claude Code and Codex declare it.
 FUNCTIONAL_TESTER = "functional-tester"
 
 #: How a harness reports usage: exactly, computed from its output, or not.
@@ -76,14 +76,13 @@ CLAUDE_CODE = HarnessAdapter(
 )
 CODEX = HarnessAdapter(
     name="codex", reviewer_name="codex", family="openai",
-    roles=(REVIEWER,), can_restrict_agents=True, can_restrict_tools=True,
+    roles=(REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True, can_restrict_tools=True,
     usage=USAGE_DERIVED, pinned_version="codex-cli 0.163.0",
     fails_closed_on_unknown_version=True,
-    # ``verify-codex`` exists (C10g-2b) but nothing at launch consults its record
-    # yet: Codex keeps the fail-closed feature, layer, state and flag checks of
-    # its review launch until C10g-3 declares the tester role, which then
-    # changes this one value.
-    build_verification=None,
+    # ``verify-codex`` admits the functional-tester launch only (it reads the
+    # digest it records); the reviewer keeps the fail-closed feature, layer,
+    # state and flag checks of its review launch.
+    build_verification="verify-codex",
     # tests/harness_contract/codex/: exec_argv.json (model gpt-6.1-sol, effort
     # high) and sandbox_probe.txt (the catalog's effort xhigh).
     models=("gpt-6.1-sol",),

@@ -29,6 +29,8 @@ FLOWS = [fr.Flow("flow-1", "1", "Read README.md in the clone and report its firs
 
 
 def skip_reason() -> str | None:
+    if os.environ.get("CI"):
+        return "the live Codex tester run is skipped on CI"
     if not ENABLED:
         return "set CONTROLLER_LIVE_CODEX_TESTS=1 to run the live Codex tester run (one model turn)"
     if shutil.which("codex") is None:

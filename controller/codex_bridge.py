@@ -5,8 +5,8 @@ clone, the scratch bare origin, the output folder and the writable-location targ
 write area), the Controller-only check directory and item record outside it, and everything
 :func:`controller.codex_sandbox.build` writes. The clone sequence and the binding comparison are the Claude
 tester's own (``functional_review.clone_candidate`` and ``bound_differences``), so the two testers share one set of
-checkout rules. Nothing calls this module yet: no ``codex`` is started and no role is declared (see
-``docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md``).
+checkout rules. Its caller is the Codex tester launch in :mod:`controller.codex_tester`; the tester role is
+declared, and routing refuses it until C10g-3c (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md``).
 """
 
 from __future__ import annotations
@@ -72,6 +72,8 @@ def build_bridge(candidate: Candidate, *, runtime_root: Path, job_id: str, work_
     ``options`` go to :func:`codex_sandbox.build` unchanged. A folder that already exists refuses and is left
     alone; any other failure, a checkout conversion included (``functional_tester_unavailable`` with cause
     ``clone_mismatch``), removes the folder before anything runs."""
+    if "prompt" in options:
+        raise TypeError("build_bridge takes no prompt option: the tester's prompt is always standard input")
     layout = codex_sandbox.TesterLayout(runtime_root, job_id)
     base = layout.base
     runtime.assert_contained(runtime_root, base)

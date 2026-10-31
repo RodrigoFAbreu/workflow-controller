@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-routing",
+  "requirements": {
+    "R1": {
+      "description": "Routing accepts codex for functional-tester at every entry point, with the Codex model and effort named explicitly (no Codex defaults), and still refuses a role an adapter does not declare; Claude-only configuration unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "_run_functional runs the launch, usage provider, credential and record fields of the route's harness; Claude path unchanged; a Codex refusal ends at functional_tester_unavailable",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "_reconcile_functional copies back the credential of the record's harness",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The tester stays outside the reviewer-independence rule (pinned by a test); the checklist-writer note states the limits both testers share",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R5": {
+      "description": "No new setting, option, exit code or gate; guides, table and roadmap state the new facts in place and name C10g-3c2 as what remains",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

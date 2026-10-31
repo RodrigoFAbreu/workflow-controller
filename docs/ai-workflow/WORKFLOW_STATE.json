@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-tester-routing",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -44879,6 +44879,291 @@
         },
         "evaluated_at": "2026-10-31T05:21:42Z",
         "workflow_release": "2.25.1"
+      }
+    },
+    "workflow-controller-codex-tester-routing": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-tester-routing",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-routing-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-routing-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "fc5e1316bcaeaa526ff85cc179697e5e848200bb",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+        "approved_review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d8e335bb11585b5e442cdfde040aa1eb2b99fd0b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-routing-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cbc219eb8f45a7dedbfc14d545eb4c824ff8ff4d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-routing-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7b45710b0f9aa365b97256079fda228d40c9dd2e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-31T07:08:37Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+            "ledger": {
+              "local": {
+                "bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "2bc51712a0da22ad0cefa6a0f71711f39a3d10864b784ea99adaffd521cfefdb",
+                "ledger_entry_sha256": "c790403e4db817aa29e9a21a89c66002f734fae5d8ae6756d7159a1e2259348d",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-routing/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "6dcd8826bf36b8db4468ac9f531c488c2fda972d816e32d051db5e430ed1eea4",
+                "ledger_entry_sha256": "d8ba8db8de4577801a3dc0f39e450007bbebba0f5729a690322ec85376ac0eea",
+                "run_ref": "codex:20261031T070403Z-5c4fcb69",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-31T07:08:37Z",
+          "workflow_release": "2.25.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-31T07:01:44Z",
+          "verdict_sha256": "2bc51712a0da22ad0cefa6a0f71711f39a3d10864b784ea99adaffd521cfefdb",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-routing/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-10-31T07:05:18Z",
+          "verdict_sha256": "6dcd8826bf36b8db4468ac9f531c488c2fda972d816e32d051db5e430ed1eea4",
+          "run_ref": "codex:20261031T070403Z-5c4fcb69",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-10-31T07:08:37Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-31T06:57:45Z",
+        "consumed": {
+          "review_content_id": "c0ba4ce87658cb16ac449587c9606984ea6aef716b925219ab9510f5aa865005",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+          "bundle_id": "8e3c8bdb60f60c2addd32c1e97b4ef49df879bfe5a12acc5074305f928cdeff9",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0fa5228584e23d1dbe3d524422bebb79f7bdd4a093812f57734e6fd479b84d30",
+        "48634d98ef6f1d2bcfedc72eb81dadc363fac4a8d7b05de48076c1f1b7c96e45",
+        "c0ba4ce87658cb16ac449587c9606984ea6aef716b925219ab9510f5aa865005"
+      ],
+      "optional_findings": {
+        "F-e8a0b2c2847a": {
+          "digest": "e8a0b2c2847a26353f9ff204a7bfe951979fac211d181eb8b96d74ac6e01ac1d",
+          "text": "D3's missing-option case is vague: \"`functional_tester_unavailable` with cause `no_binary`-style refusal text\". Name the cause (`UNAVAILABLE_NO_BINARY` or a new one; a new one would touch `functional_review`), and say whether it is raised before the record is written (D2 picks the harness \"before the record is written\"). If it is, say which path ends the step: the `TesterUnavailable` handler only wraps the launch call, and the usage token has already been admitted by then.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0fa5228584e23d1dbe3d524422bebb79f7bdd4a093812f57734e6fd479b84d30",
+              "verdict": "REVISE",
+              "at": "2026-10-31T06:34:39Z"
+            }
+          ]
+        },
+        "F-6b895c64b30e": {
+          "digest": "6b895c64b30e5b5110d61df65c260b1dfe4def67556a6c132f97f449cb4f7c88",
+          "text": "CP1 deletes `NOT_YET_ROUTABLE`, which changes `tools/harness_table.py`'s render, but the table in `docs/guide/harnesses.md` is not regenerated until CP3. Between CP1 and CP3, `python3 tools/check_docs.py` (and CI's docs check on a pushed intermediate commit) reports the region as stale. You could move the `--write` into CP1 or say the intermediate staleness is accepted.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0fa5228584e23d1dbe3d524422bebb79f7bdd4a093812f57734e6fd479b84d30",
+              "verdict": "REVISE",
+              "at": "2026-10-31T06:34:39Z"
+            }
+          ]
+        },
+        "F-ca02f0771811": {
+          "digest": "ca02f077181112e2be5c346a55711d16ae2bc22335f3efabb7e9ae692dba1819",
+          "text": "Besides the four bullets of \"What exists\", `_run_functional` also calls `review.settle_functional(result)` (`controller/job.py:7781`). It does not depend on the harness (it removes `result[\"sandbox\"]`'s folder, and `launch_codex_functional` leaves the sandbox for exactly this call), so no change is needed, but a sentence in D2 would make the \"single dispatch point\" claim checkably complete.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0fa5228584e23d1dbe3d524422bebb79f7bdd4a093812f57734e6fd479b84d30",
+              "verdict": "REVISE",
+              "at": "2026-10-31T06:34:39Z"
+            }
+          ]
+        },
+        "F-d4ba73d8760a": {
+          "digest": "d4ba73d8760a2e5340265c41c285953a2ecbc62355dd7b54cc3264f3529cab4f",
+          "text": "CP2's text says \"`_functional_launch` and the five call sites of `_run_functional`\", but `_run_functional` has one caller (`controller/job.py:8187`). It seems to mean the five Claude-only spots inside it (\"What exists\"). Say \"the five Claude-only spots in `_run_functional`\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "48634d98ef6f1d2bcfedc72eb81dadc363fac4a8d7b05de48076c1f1b7c96e45",
+              "verdict": "REVISE",
+              "at": "2026-10-31T06:42:23Z"
+            }
+          ]
+        },
+        "F-2c630fc439ed": {
+          "digest": "2c630fc439ed132dec9f99ee5b94fe9231565dce9770e47278cf30e97f06a41e",
+          "text": "`tests/test_codex_tester_live.py:6` says \"the operator-run functional round is C10g-3c\". After the split that round is C10g-3c2. The file is in no checkpoint; add it to CP3 for that one word, or leave it as an accepted historical reference.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "48634d98ef6f1d2bcfedc72eb81dadc363fac4a8d7b05de48076c1f1b7c96e45",
+              "verdict": "REVISE",
+              "at": "2026-10-31T06:42:23Z"
+            }
+          ]
+        },
+        "F-0d1908a35f5b": {
+          "digest": "0d1908a35f5b0b05055cffff3865710062d28547a1e61bf89cc74ae9d3c87a65",
+          "text": "D3 says the Claude fallback applies \"when a caller built `functional` without the key\". It does not say what happens when `harnesses` is present but has no entry for the route's harness, for example `{\"codex\": ...}` only and a Claude route. The plan implies, and the implementer could make explicit, that the fallback covers a missing per-harness entry for `claude-code` and that only a Codex route refuses.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "c0ba4ce87658cb16ac449587c9606984ea6aef716b925219ab9510f5aa865005",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T06:50:18Z"
+            }
+          ]
+        },
+        "F-f172d7f5e46b": {
+          "digest": "f172d7f5e46bd83a19639b42ec967b15cc660d32029549b796c7f170f6c48a16",
+          "text": "The release-type line lists \"a fallback entry\" among the selections after which \"the Controller then runs the functional review on Codex\", but D6 keeps selection at entry 0 of the chain, so a Codex fallback entry is accepted and validated but never run in this item (C10g-3c2). Reword so the CP3 guides do not promise that a fallback entry runs Codex.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T07:01:44Z"
+            }
+          ]
+        },
+        "F-0f6da87f60a1": {
+          "digest": "0f6da87f60a17a209b62219455725f85fc95f6a98e00cda0b49d1646f368a139",
+          "text": "D9 sits between D7 and D8 in the Decisions list. Moving it after D8 would make the decision order easier to read; nothing references the order.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "7e0f62f5a8e594c529a868cdd3702ef4166ec45205c111701fef10bb9c642865",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T07:01:44Z"
+            }
+          ]
+        }
       }
     }
   }

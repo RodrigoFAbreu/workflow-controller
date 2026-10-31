@@ -432,15 +432,15 @@ launches nothing:
 | Harness | Reviewer name | Family | Roles | Usage | Captured with | Build verification |
 |---|---|---|---|---|---|---|
 | `claude-code` | `claude` | `anthropic` | worker, reviewer, functional-tester | `reported` | `2.1.296 (Claude Code)` | `verify-claude` |
-| `codex` | `codex` | `openai` | reviewer | `derived` | `codex-cli 0.163.0` | none: launch checks only |
+| `codex` | `codex` | `openai` | reviewer, functional-tester | `derived` | `codex-cli 0.163.0` | `verify-codex` |
 
 `Captured with` is the build the captures were taken from, for information; it is not compared at launch. `Build verification`
 is the command that admits a build where the Controller checks one: `verify-claude` admits the functional-tester launch only
 (the worker and reviewer launches run any build on `PATH`), and for Codex `verify-codex` records verified builds and the Codex tester launch refuses a build it has not recorded (routing does not select that tester until C10g-3c).
 
 Each adapter also declares whether it can restrict sub-agents and tools, and
-that it fails closed when a build changes a checked surface (a feature, a layer, a state entry or a flag), not on the version string itself: the Codex pin is `codex-cli 0.163.0`, and until a person re-measures it after an update that changed a surface, the Codex review is run by hand. The functional tester (1.18.0) is a role of its own and only `claude-code` declares it, so a Codex
-tester is not available ([automation](automation.md#protocol-mode-workflow-27-and-later)). A role an adapter does not
+that it fails closed when a build changes a checked surface (a feature, a layer, a state entry or a flag), not on the version string itself: the Codex pin is `codex-cli 0.163.0`, and until a person re-measures it after an update that changed a surface, the Codex review is run by hand. The functional tester (1.18.0) is a role of its own: `claude-code` and `codex` declare it, but routing refuses
+`codex` for it until C10g-3c, so the tester runs on Claude Code ([automation](automation.md#protocol-mode-workflow-27-and-later)). A role an adapter does not
 declare is refused with `HarnessRoleError` (`codex` cannot be a worker), and a
 name that is not registered with `UnknownHarnessError`, both naming what is
 declared. `claude-code` and `claude` resolve to the same adapter. The family

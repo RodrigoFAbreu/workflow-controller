@@ -40,11 +40,11 @@ from (`codex-cli 0.163.0` for Codex); it is for information and is not compared
 at launch. The `Build verification` column names the Controller command that
 admits a build of that harness where the Controller checks one. For Claude Code
 that is `verify-claude`, and it admits the functional-tester launch only: the
-worker and reviewer launches run any build on `PATH`. Codex has none
-(`none: launch checks only`): its launch is refused by the checks of its
-surfaces described next. `verify-codex` records verified builds, and the Codex
-tester launch (`launch_codex_functional`) refuses a build it has not recorded;
-the tester role is declared but routing refuses it until C10g-3c. `Unknown version refused`
+worker and reviewer launches run any build on `PATH`. For Codex it is
+`verify-codex`, and it admits the tester launch only (`launch_codex_functional`
+refuses a build it has not recorded); the tester role is declared but routing
+refuses it until C10g-3c. The Codex reviewer's launch is refused by the checks
+of its surfaces described next. `Unknown version refused`
 keeps its meaning and does not mean a version string is compared: the
 launch is refused when an update changes a checked surface (an enabled feature,
 a configuration layer, a state entry or a flag), and an update that changes none

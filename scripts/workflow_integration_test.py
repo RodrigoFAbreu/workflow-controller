@@ -9080,6 +9080,30 @@ class TestArchiveFinishedItemCommand(unittest.TestCase):
         self.assertLess(body.index("**Preview.**"), body.index("**Ask and stop.**"))
         self.assertLess(body.index("**Ask and stop.**"), body.index(self.COMMANDS[2]))
 
+    def test_the_preview_result_pairs_and_the_catch_all_stop_are_pinned(self):
+        body = " ".join(self._body().split())
+        start = body.index("Read each result by its exit status")
+        end = body.index("3. **Ask and stop.**")
+        step = body[start:end]
+        pairs = [
+            "`archive` exits 0 and `remove` refuses `not_archived`",
+            "The run is **archive then remove**.",
+            "`archive` refuses `already_archived` and `remove` exits 0",
+            "The run is **remove only**;",
+            "any other combination, or any other refusal code: report both codes and their "
+            "`next step:` lines and stop. Nothing is applied and no sentence is asked for.",
+        ]
+        at = -1
+        for needle in pairs:
+            found = step.find(needle)
+            self.assertGreater(found, at, needle)
+            at = found
+        codes = re.findall(r"refuses `([a-z_]+)`", step)
+        self.assertEqual(codes, ["not_archived", "already_archived"])
+        engine = (_repo_root() / "scripts" / "workflow_retention.py").read_text()
+        for code in codes:
+            self.assertIn(f'_refuse("{code}"', engine)
+
     def test_the_documents_list_it(self):
         users = ["accept-milestone", "adopt-gate-policy", "approve-review", "archive-finished-item",
                  "prune-archives", "release-checkpoint-start", "request-plan-amendment",
@@ -9093,6 +9117,10 @@ class TestArchiveFinishedItemCommand(unittest.TestCase):
             self.assertIn(f"- `/{stem}`", doc)
             self.assertIn(f"`/{stem}`", reference)
         self.assertIn("### `/archive-finished-item <work-item-id>` \u2014 user-only", reference)
+        self.assertIn("no tracked file and no state. The engines write the archive and its index line "
+                      "in the archive store, and `remove` takes the untracked `.ai-review/<id>/` folder "
+                      "away.", reference)
+        self.assertNotIn("nothing in the repository and no state", reference)
         self.assertIn("for seven of them the exact work item", reference)
         self.assertNotIn("for six of them", reference)
 

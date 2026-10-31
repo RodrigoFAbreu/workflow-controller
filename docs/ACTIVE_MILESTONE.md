@@ -6,8 +6,10 @@
 [#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)); the plan is
 `docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md`. CP1 (chain selection before the spawn) is implemented:
 `codex_tester.selection_error` and `job._tester_probe` walk a `functional-tester` chain longer than one before anything
-is admitted or recorded, and `tests/test_functional_select.py` covers it. CP2 (usage figures, telemetry row) and CP3 (the
-live test, the first Codex round, the documents) follow.
+is admitted or recorded, and `tests/test_functional_select.py` covers it. CP2 (usage figures, telemetry row) is implemented:
+`codex_tester._settle` keeps the rollouts of its one scan as `usage_rollouts`, so a Codex tester's `usage_record` has real
+figures, and `job` writes a `telemetry` block (harness `codex`, no stream) for a launched Codex tester. CP3 (the live
+test, the first Codex round, the documents) follows.
 
 **Complete.** `workflow-controller-codex-tester-routing` (C10g-3c1, issue
 [#223](https://github.com/RodrigoFAbreu/workflow-controller/issues/223)) is implemented (CP1 to CP3 and the functional review) and

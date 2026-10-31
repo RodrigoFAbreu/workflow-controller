@@ -42,6 +42,15 @@ class HarnessRowTest(_HarnessCase):
         self.job("j-f", kind="functional", telemetry=no_harness, worker_route=self.route("claude-code"))
         self.assertEqual(self.by_id()["j-f"]["harness"], "claude-code")
 
+    def test_a_functional_row_reads_the_harness_of_either_tester(self) -> None:
+        # A Codex tester's block is a session of no stream (C10g-3c2 D7): its row exists and shows no figures.
+        codex = {**_block(results=0), "harness": "codex", "problems": [{"kind": "no_stream", "path": None}]}
+        self.job("j-fc", kind="functional", telemetry=codex, worker_route=self.route("codex"))
+        self.job("j-fl", kind="functional", telemetry=_block(), worker_route=self.route("claude-code"))
+        rows = self.by_id()
+        self.assertEqual((rows["j-fc"]["harness"], rows["j-fl"]["harness"]), ("codex", "claude-code"))
+        self.assertTrue(telemetry.unavailable(codex))
+
     def test_a_courier_row_reads_its_routes_harness(self) -> None:
         self.courier("j-codex", "codex")
         self.courier("j-claude", "claude-code")

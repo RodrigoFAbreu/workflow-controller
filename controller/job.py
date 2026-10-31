@@ -4524,6 +4524,19 @@ def _worker_usage_fields(streams: Mapping) -> dict:
     return _usage_fields(build)
 
 
+def _codex_tester_telemetry(record: Mapping, *, seconds: float | None) -> dict:
+    """The ``telemetry`` block of a launched Codex tester (C10g-3c2 D7): a session block of no stream, with the
+    ``no_stream`` problem ``telemetry.derive_block`` gives a record with none, the job's wall time and the
+    dimensions. Its tokens and cost are in the ``usage`` record. Never raises an ``Exception``."""
+    try:
+        block = worker_stream.session_telemetry([])
+        block["problems"] = [{"kind": telemetry.PROBLEM_NO_STREAM, "path": None}]
+        block.update(job_seconds=seconds, **telemetry.dimensions(record))
+        return block
+    except Exception as exc:  # the failure boundary of every telemetry block
+        return telemetry.failed_block(exc)
+
+
 def _review_usage_fields(harness: Any, out: Mapping, *, model: str, wall_ms: int | None) -> dict:
     """``usage_record`` of a review job in which an attempt ran. A Codex review's figures are the rollouts of
     the end-of-job scan (``usage_rollouts``, each root once whatever the retry did); a Claude review's are the
@@ -7748,6 +7761,8 @@ def _run_functional(
             seconds = telemetry.seconds_between(block.get("launched_at"), updated["updated_at"])
             updated.update(_review_usage_fields(chosen.harness, out, model=route.model,
                                                 wall_ms=None if seconds is None else seconds * 1000))
+            if chosen.harness.keeps_sessions and not isinstance(out.get("telemetry"), Mapping):
+                updated["telemetry"] = _codex_tester_telemetry(record, seconds=seconds)
         if usage_block is not None and started:
             updated["usage"] = _codex_end_block(usage_block, out.get("readings") or [], out.get("first_readings") or [])
         record = _persist(runtime_root, job_id, {**record, **updated}, event=event or _final_event(status),

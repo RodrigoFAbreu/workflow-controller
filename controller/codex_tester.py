@@ -87,7 +87,9 @@ def _settle(result: dict, bridge: codex_bridge.Bridge, operator_home: Path) -> N
         result["readings"] = usage.read_codex_home(layout.codex_home)
 
     def subagents() -> None:
-        result["subagents"] = review.scan_rollouts(layout.codex_home).subagents
+        scan = review.scan_rollouts(layout.codex_home)
+        result["subagents"] = scan.subagents
+        result["usage_rollouts"] = scan.rollouts
 
     def copy_back() -> None:
         if built.credential_digest:
@@ -114,7 +116,8 @@ def run_tester(bridge: codex_bridge.Bridge, flows: Sequence[functional_review.Fl
     result of the Claude launch's shape (D6). ``run`` is the seam of the controls only; the launch itself always uses
     :func:`review.run_bounded`. The credential copy is copied back and removed on every path, a refusal included."""
     result: dict = {"outcome": FAILED, "detail": "", "tester_message": "", "readings": [], "first_readings": [],
-                    "subagents": [], "credentials": None, "telemetry": None, "exit_code": None}
+                    "subagents": [], "usage_rollouts": [], "credentials": None, "telemetry": None,
+                    "exit_code": None}
     try:
         _check_controls(bridge, binary, system_dir, run)
         built = bridge.built
@@ -198,7 +201,7 @@ def launch_codex_functional(*, candidate: functional_review.Candidate, flows: Se
     result: dict = out if out is not None else {}
     result.update({"outcome": FAILED, "breach": [], "unbound": [], "fake_calls": {}, "output_dir": None,
                    "sandbox": None, "keep": False, "credentials": None, "detail": None, "readings": [],
-                   "first_readings": [], "subagents": [], "exit_code": None})
+                   "first_readings": [], "subagents": [], "usage_rollouts": [], "exit_code": None})
     try:
         harness_registry.for_role("codex", harness_registry.FUNCTIONAL_TESTER)
     except ControllerError as exc:

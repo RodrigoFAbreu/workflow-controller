@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import codex_tester, functional_review, job, review, routing, usage, worker  # noqa: E402
+from controller import codex_tester, functional_review, job, review, routing, telemetry, usage, worker  # noqa: E402
 from tests.test_protocol_job import IDENTITY, TesterLifecycle  # noqa: E402
 from tests import test_protocol_job  # noqa: E402
 
@@ -169,6 +169,53 @@ class ReconcileTest(unittest.TestCase):
     def test_a_claude_record_copies_the_claude_credential_back(self) -> None:
         credentials, copy = self.reconcile("claude", credential=True)
         self.assertIs(copy.call_args.args[3], review.CLAUDE)
+
+
+ROLLOUTS = [{"subagent": False, "usage": {"input_tokens": 1000, "cached_input_tokens": 200, "output_tokens": 50,
+                                          "reasoning_output_tokens": 10, "total_tokens": 1050}}]
+
+
+class UsageAndTelemetryTest(_Case):
+    def codex(self, **extra):
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        life.extra = extra
+        return life, life.step(gate=life.usage_gate())
+
+    def test_the_rollouts_give_the_job_a_usage_record_with_their_tokens(self) -> None:
+        _, record = self.codex(usage_rollouts=ROLLOUTS)
+        figures = record["usage_record"]
+        self.assertEqual((figures["harness"], figures["cache_read"], figures["output"], figures["input"] is None),
+                         ("codex", 200, 50, True))
+
+    def test_a_launch_without_rollouts_gives_the_empty_record(self) -> None:
+        _, record = self.codex(usage_rollouts=[])
+        figures = record["usage_record"]
+        self.assertEqual((figures["input"], figures["output"], figures["cost"]), (None, None, None))
+        _, absent = self.codex()
+        self.assertEqual(absent["usage_record"], figures)
+
+    def test_a_launched_codex_tester_has_a_telemetry_block_of_its_harness(self) -> None:
+        _, record = self.codex(usage_rollouts=ROLLOUTS)
+        block = record["telemetry"]
+        self.assertEqual((block["harness"], block["role"], block["model"]), ("codex", "functional-tester", "gpt-6.1-sol"))
+        self.assertNotIn("chain_position", block)
+        self.assertEqual([p["kind"] for p in block["problems"]], ["no_stream"])
+        self.assertTrue(telemetry.unavailable(block))
+
+    def test_a_tester_that_was_not_started_has_no_block(self) -> None:
+        life = self.life()
+        life.raises = functional_review.unavailable(functional_review.UNAVAILABLE_ENFORCEMENT, "not verified")
+        record = life.step(gate=life.usage_gate())
+        self.assertNotIn("telemetry", record)
+
+    def test_a_claude_tester_keeps_the_block_its_launch_left(self) -> None:
+        life = self.life()
+        life.plan = [("flow-1", "passed", None)]
+        life.extra = {"telemetry": {"version": 1, "results": 1, "marker": "claude"}}
+        record = life.step(gate=life.usage_gate(), route=routing.NO_OVERRIDES)
+        self.assertEqual(record["telemetry"]["marker"], "claude")
+        self.assertNotIn("problems", record["telemetry"])
 
 
 if __name__ == "__main__":

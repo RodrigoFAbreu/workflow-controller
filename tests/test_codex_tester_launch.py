@@ -23,7 +23,7 @@ from tests.test_codex_tester import TesterFixture  # noqa: E402
 
 D1_KEYS = {"outcome", "breach", "unbound", "fake_calls", "output_dir", "sandbox", "keep", "credentials", "detail",
            "readings", "first_readings", "head", "checklist_blob", "writable", "refused", "tester_message",
-           "telemetry", "subagents", "exit_code"}
+           "telemetry", "subagents", "usage_rollouts", "exit_code"}
 
 
 class LaunchFixture(TesterFixture):
@@ -144,6 +144,35 @@ class RunTest(LaunchFixture):
         with mock.patch.object(ct, "run_tester", using_gh):
             outcome = self.launch()
         self.assertEqual(outcome["fake_calls"].get("gh"), [{"argv": ["pr", "list"]}])
+
+
+class SettleRolloutsTest(LaunchFixture):
+    def bridge(self):
+        return mock.Mock(built=mock.Mock(layout=mock.Mock(codex_home=self.tmp), credential_digest=None))
+
+    def settle(self, scan, **patches) -> dict:
+        result: dict = {}
+        with mock.patch.object(ct.usage, "read_codex_home", return_value=[]), \
+                mock.patch.object(ct.runtime, "remove_tree"), \
+                mock.patch.object(review, "scan_rollouts", return_value=scan) as scanned:
+            ct._settle(result, self.bridge(), self.operator)
+        scanned.assert_called_once()
+        return result
+
+    def test_settle_stores_the_rollouts_of_its_single_scan(self) -> None:
+        rollouts = [{"subagent": False, "usage": {"total_tokens": 5}}]
+        result = self.settle(review.RolloutScan(rollouts=rollouts, subagents=[{"id": "s"}]))
+        self.assertEqual((result["usage_rollouts"], result["subagents"]), (rollouts, [{"id": "s"}]))
+
+    def test_a_failing_scan_is_guarded_like_the_other_steps(self) -> None:
+        result: dict = {}
+        with mock.patch.object(ct.usage, "read_codex_home", return_value=[]), \
+                mock.patch.object(ct.runtime, "remove_tree"), \
+                mock.patch.object(review, "scan_rollouts", side_effect=OSError("boom")):
+            with self.assertRaises(OSError):
+                ct._settle(result, self.bridge(), self.operator)
+        self.assertEqual(result["readings"], [])  # the step before it ran, and no key was half-written
+        self.assertNotIn("usage_rollouts", result)
 
 
 class BreachTest(LaunchFixture):

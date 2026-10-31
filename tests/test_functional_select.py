@@ -98,6 +98,13 @@ class SelectionTest(_Case):
         self.assertEqual(life.claude_launches, [])
         self.assertEqual(len(life.launches), 1)
 
+    def test_a_chosen_codex_entry_adds_the_selection_to_its_telemetry_block(self) -> None:
+        life = self.life()
+        self.missing = frozenset({"claude"})
+        block = self.step(life, chain_options())["telemetry"]
+        self.assertEqual((block["harness"], block["chain_position"], block["chain_skipped"]),
+                         ("codex", 1, ["launcher_unavailable"]))
+
     def codex_first(self, life: CodexLifecycle) -> dict:
         return self.step(life, chain_options("codex", "claude-code"))
 

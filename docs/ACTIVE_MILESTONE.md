@@ -3,7 +3,7 @@
 ## Status
 
 **Complete.** `workflow-controller-codex-tester-fallback` (C10g-3c2, issue
-[#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)) is implemented (CP1 to CP3); the functional review follows. The plan is
+[#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md`. A `functional-tester` chain longer than one is walked before the
 spawn (`codex_tester.selection_error`, `job._tester_probe`), a Codex tester has a `usage_record` from its rollouts and a
 `telemetry` block, and `tests/test_codex_tester_live.py` has a second opt-in test through `_functional_launch`. The first
@@ -62,6 +62,4 @@ record). No new setting, option, exit code or gate. The Codex worker (H4a to H4g
 
 ## Next action
 
-Test against the checklist above and put findings in the item's `FUNCTIONAL_REVIEW.md`. If clean, `/accept-milestone`
-(all checkpoints are `COMPLETE`); if there are findings, `/apply-functional-review`. After that, `/milestone-plan` for H4a
-(the Codex worker).
+`/milestone-plan` for H4a (the Codex worker), the next incomplete milestone in `docs/ROADMAP.md`.

@@ -1,0 +1,50 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-tester-fallback",
+ "dispositions": {
+  "F-08b630fc63d2": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-2904f56a0fb8": {
+   "disposition": "fixed",
+   "note": "Plan D2 now says login is a selection-time cause for Codex only, deliberately, and why the Claude tester's behaviour is kept."
+  },
+  "F-6b51776a7a78": {
+   "disposition": "dropped",
+   "reason": "Same bundle-template gap as F-08b630fc63d2 (revision-3 summary and test results). CHANGES_SINCE_REVIEW.md carried the EXT-001 fix and the review is closed; regenerating the bundle now would stale the approved implementation."
+  },
+  "F-731c300bff3d": {
+   "disposition": "fixed",
+   "note": "Plan D2 names the cause `enforcement` for the missing auth.json and CP1's selection_error login case asserts it."
+  },
+  "F-8e871c22059e": {
+   "disposition": "fixed",
+   "note": "Plan D3 states the Claude probe converts resolve_binary's ReviewLaunchRefusedError to functional_review.unavailable(UNAVAILABLE_NO_BINARY, ...)."
+  },
+  "F-9c08aa84831c": {
+   "disposition": "fixed",
+   "note": "Plan CP2 now says the scan assertion is on _settle alone, since run_tester makes its own earlier scan."
+  },
+  "F-9fdde747b48c": {
+   "disposition": "fixed",
+   "note": "tests/test_functional_select.py test_a_second_entry_codex_tester_leaves_the_reviewer_choice_unchanged asserts review_mode.distinct_harness before and after."
+  },
+  "F-ac6b4851a9ec": {
+   "disposition": "fixed",
+   "note": "controller/codex_tester.py module docstring now names CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md and route_select.select with job._tester_probe."
+  },
+  "F-bd98d10979aa": {
+   "disposition": "fixed",
+   "note": "Plan D7 names telemetry.derive_block's no_stream replacement of session_telemetry([])'s no_result problem as the analogue."
+  },
+  "F-c646bda5d8ca": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6546776353"
+  },
+  "F-e169259c0f62": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6546776353"
+  }
+ }
+}

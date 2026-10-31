@@ -43977,7 +43977,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-surroundings-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-surroundings-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -44121,12 +44121,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-10-31T01:04:37Z",
+      "state_revision": 17,
+      "last_transition": "2026-10-31T01:18:14Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -44287,6 +44287,48 @@
               "review_content_id": "fdaf71832d9feef7e1eb5203c10004d07835da21fcb45f355da3101c07f8fe8a",
               "verdict": "APPROVE",
               "at": "2026-10-30T23:57:29Z"
+            }
+          ]
+        },
+        "F-a65fd591bc35": {
+          "digest": "a65fd591bc35f5883dd7565ead473d206163fa619b0415c586fa686e468c3044",
+          "text": "`codex_tester.launch_codex_functional` removes the sandbox with `except BaseException: functional_review.remove_sandbox(...); raise`. If `remove_sandbox` itself raises, its exception replaces the original one: a `functional_tester_unavailable` from a refused control becomes, for example, an `OSError`, and the step loses the gate. The Claude launch (`controller/review.py:2406-2424`) collects the clean-up failures and raises one only when no other exception is in flight. Do the same here, or catch and log the clean-up failure.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "05fe5121c330557e1f8276e162eeac626c99fd991d2d1d139f397cdd24e88f31",
+              "verdict": "REVISE",
+              "at": "2026-10-31T01:18:14Z"
+            }
+          ]
+        },
+        "F-dfa5d121ccba": {
+          "digest": "dfa5d121ccba6f962aea8e6716a90e252cd0eeae1c1783ec69f472f7645ab485",
+          "text": "CP2's \"Done when\" lists a changed `HEAD` as its own breach case. `BreachTest.test_a_new_head_or_ref_is_a_breach` only creates a branch, which changes the refs and not `HEAD`. Add a commit, or a `git checkout` of another ref, in the real repository during the run, and assert the breach entry.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "05fe5121c330557e1f8276e162eeac626c99fd991d2d1d139f397cdd24e88f31",
+              "verdict": "REVISE",
+              "at": "2026-10-31T01:18:14Z"
+            }
+          ]
+        },
+        "F-52332765ddb4": {
+          "digest": "52332765ddb460cae53ddffac2f0a32f091865aa3d91cd6634ccbeb5fe6d83b4",
+          "text": "`BreachTest`'s build cases assert only the prefix (`\"codex build:\"`, `\"now resolves to\"`) for the removed record and the re-pointed launcher. The plan gives exact wording (D4, F-1bb47ba08fce). Assert the full entries, such as `f\"codex build: the launcher now resolves to {other}, not {target}\"` and the record-removed note, so that a wording change is caught.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "05fe5121c330557e1f8276e162eeac626c99fd991d2d1d139f397cdd24e88f31",
+              "verdict": "REVISE",
+              "at": "2026-10-31T01:18:14Z"
             }
           ]
         }

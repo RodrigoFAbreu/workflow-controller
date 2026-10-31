@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-command-render",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -46418,6 +46418,276 @@
         },
         "evaluated_at": "2026-10-31T17:31:04Z",
         "workflow_release": "2.25.2"
+      }
+    },
+    "workflow-controller-codex-command-render": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-command-render",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_COMMAND_RENDER_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-command-render-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-command-render-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "9b34cd3b5095e8cdbe1382e368daf2e4c27dbccb",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+        "approved_review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_COMMAND_RENDER_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c518da135846e710a48423fa6e52d8d760fa0a30"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-command-render-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "980554a6b5934da5cc8a830284774fd7b2ebbd07"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-command-render-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "962f7ee79321c12d4e6534d6ab0afb50c0882b8a"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-31T20:10:56Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+            "ledger": {
+              "local": {
+                "bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "5941bbf043daf8a632f15812e435a696f74d958ba70665cfbf002b3365dba292",
+                "ledger_entry_sha256": "ec48a79458c2e7fee0ef95869281e5f4a9b1cc1fe721515c146a3cd6446657d0",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-command-render/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "be2680ff77e9b75a78698a12544467335fcdd902ae59a7a5ce93a9a31dd820ad",
+                "ledger_entry_sha256": "75ae66d889620a6f3707fbce9358ba995301376d38748062eb1def681d04c13a",
+                "run_ref": "codex:20261031T200550Z-4324b724",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-31T20:10:56Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-31T20:03:22Z",
+          "verdict_sha256": "5941bbf043daf8a632f15812e435a696f74d958ba70665cfbf002b3365dba292",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-command-render/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-31T20:07:35Z",
+          "verdict_sha256": "be2680ff77e9b75a78698a12544467335fcdd902ae59a7a5ce93a9a31dd820ad",
+          "run_ref": "codex:20261031T200550Z-4324b724",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 13,
+      "last_transition": "2026-10-31T20:10:56Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-31T19:58:17Z",
+        "consumed": {
+          "review_content_id": "995a14b9b06edab51be55d090df7fd1ca1229f4a58177c291e47745ed48af923",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+          "bundle_id": "451d1adae1fb4850a512f75ada2f675a9c12f50212b07d5496050df05d5ace81",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0fd11f2fdba7c1f917cf2e2918b794fd28d14954a58037ab749a8818e0e5a61e",
+        "995a14b9b06edab51be55d090df7fd1ca1229f4a58177c291e47745ed48af923"
+      ],
+      "optional_findings": {
+        "F-9371a0be71f0": {
+          "digest": "9371a0be71f079eea355c65206388d53fbc22687e0d7e8c6a9ca63ca3fb1a7e4",
+          "text": "LPR-1-003: D4 says the user-only refusal runs \"before anything else is parsed\", but D7's name check and file lookup must come first to find the file. State the order: name check, lookup, read, user-only refusal, task scan, then frontmatter parse.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0fd11f2fdba7c1f917cf2e2918b794fd28d14954a58037ab749a8818e0e5a61e",
+              "verdict": "REVISE",
+              "at": "2026-10-31T19:43:30Z"
+            }
+          ]
+        },
+        "F-87ec57bb8733": {
+          "digest": "87ec57bb87333aa882b929c2aea27b5425a9ced726e37938dfb7fb99fa5bf689",
+          "text": "LPR-1-004: CP1's \"every command whose `argument-hint` is non-empty ... refuses an unplaced one\" is unclear: every such shipped body has `$ARGUMENTS` (checked: all 24 hinted files), so no argument is ever unplaced for them. Say which case is meant, or drop the clause; the fixture tests already cover `arguments_not_accepted`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0fd11f2fdba7c1f917cf2e2918b794fd28d14954a58037ab749a8818e0e5a61e",
+              "verdict": "REVISE",
+              "at": "2026-10-31T19:43:30Z"
+            }
+          ]
+        },
+        "F-5c5685f366e3": {
+          "digest": "5c5685f366e3dcfe02624b224054bec12ffd8281c32ea4da82939cda9bd34145",
+          "text": "LPR-1-005: D4 calls the private `worker._assert_not_user_only`. Either say that the private use is deliberate (a single scan shared with the launch), or test the behaviour through `worker.USER_ONLY_COMMANDS` so a rename inside `worker.py` does not silently break the module.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0fd11f2fdba7c1f917cf2e2918b794fd28d14954a58037ab749a8818e0e5a61e",
+              "verdict": "REVISE",
+              "at": "2026-10-31T19:43:30Z"
+            }
+          ]
+        },
+        "F-958d9a85e0b5": {
+          "digest": "958d9a85e0b598eab5bbda65d680a3406e668e3f02fb08a288dd1bb46fac5bbd",
+          "text": "LPR-2-001: CP1's neutrality check (\"no body contains the model's name or the harness tool name\") should name the contract's exact rule (`COMMAND_FILES.md`, \"Neutrality rules\"): the case-sensitive word `Claude` not followed by `-Session`, `SlashCommand`, and the harness product name. A case-insensitive search for `claude` would fail on the `.claude/` paths and the `anthropic/claude-opus-5-5` value format that 17 of the 25 bodies contain, and both are allowed identifiers.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "995a14b9b06edab51be55d090df7fd1ca1229f4a58177c291e47745ed48af923",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T19:50:32Z"
+            }
+          ]
+        },
+        "F-8bb2d6f85f12": {
+          "digest": "8bb2d6f85f124c458c1950e8969e354c062d3203f963e1d90b3ee411e9b977f6",
+          "text": "LPR-2-002: D7 does not say which check comes first when the name is invalid and `commands_dir` is also absent (`unknown_command` or `MissingCommandsDirectoryError`). D4's order puts the name check first, so the first reading is `unknown_command`. A one-line statement, or a test for the pair, would remove the doubt.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "995a14b9b06edab51be55d090df7fd1ca1229f4a58177c291e47745ed48af923",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T19:50:32Z"
+            }
+          ]
+        },
+        "F-c606ca0bb688": {
+          "digest": "c606ca0bb688f493ed9df8728ccc91adef664fe0e33179359e9a897ffe283472",
+          "text": "LPR-3-001: D4 defines a user-only file as one the two recognisers claim *or* whose parsed `disable-model-invocation` is `true` (any quoting), but the argument-scan set is only \"every file the union refuses\" plus `worker.USER_ONLY_COMMANDS`. If a later Workflow release quotes the flag on a command without the guard text, `/milestone-plan /<that-command>` would be refused as the requested command but pass as an argument. The eleven-name guarantee holds over the live directory (all eleven are recogniser-claimed, checked), so this is a consistency gap, not a defect. Build the scan set with the same rule as the requested-command refusal (and say how an unreadable or malformed sibling file is treated while building it, preferably as refused), or state the narrower set on purpose.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T20:03:22Z"
+            }
+          ]
+        },
+        "F-64a864d06497": {
+          "digest": "64a864d064975dca6803805dec7d874bbae920d50a1cce0fded2b59049bb7b51",
+          "text": "LPR-3-002: D4's order sentence (\"the user-only refusal, the task scan, then the frontmatter parse\") does not place the new parsed-value refusal, which can only run after the parse. Add it to the order: ..., frontmatter parse, parsed-flag refusal, substitution.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "f29c22cb713a87b7a61509b36a96eb2da9f072dcd6a67803ac7ee99676bd8731",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T20:03:22Z"
+            }
+          ]
+        }
       }
     }
   }

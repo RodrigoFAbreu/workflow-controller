@@ -26,7 +26,7 @@ class DeclaredFactsTest(unittest.TestCase):
         a = harness.ADAPTERS["codex"]
         self.assertEqual(
             (a.name, a.reviewer_name, a.family, a.roles, a.usage, a.pinned_version, a.fails_closed_on_unknown_version, a.build_verification),
-            ("codex", "codex", "openai", ("reviewer",), "derived", "codex-cli 0.163.0", True, None),
+            ("codex", "codex", "openai", ("reviewer", "functional-tester"), "derived", "codex-cli 0.163.0", True, "verify-codex"),
         )
 
     def test_registry_is_closed(self) -> None:
@@ -126,7 +126,7 @@ class LookupTest(unittest.TestCase):
         with self.assertRaises(HarnessRoleError) as ctx:
             harness.for_role("codex", "worker")
         self.assertIsInstance(ctx.exception, ControllerError)
-        self.assertEqual(ctx.exception.evidence, {"harness": "codex", "role": "worker", "declared_roles": ["reviewer"]})
+        self.assertEqual(ctx.exception.evidence, {"harness": "codex", "role": "worker", "declared_roles": ["reviewer", "functional-tester"]})
         self.assertIn("codex", ctx.exception.message)
 
     def test_declared_role_passes(self) -> None:

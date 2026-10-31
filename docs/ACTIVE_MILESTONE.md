@@ -2,6 +2,11 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-tester-surroundings` (C10g-3b2b, issue
+[#231](https://github.com/RodrigoFAbreu/workflow-controller/issues/231)): CP1 complete (Codex declares the tester role
+with `verify-codex`, routing refuses the pair until C10g-3c, the three carried findings fixed); CP2 and CP3 follow.
+The previous item is recorded below.
+
 **Complete.** `workflow-controller-codex-tester-run` (C10g-3b2a, issue
 [#228](https://github.com/RodrigoFAbreu/workflow-controller/issues/228)) is implemented (CP1 to CP3, the self-review fixes and the functional review) and accepted by policy. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_TESTER_RUN_PLAN.md`. `controller/codex_tester.py` adds `run_tester`: the launch

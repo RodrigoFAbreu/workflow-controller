@@ -120,6 +120,11 @@ class RefusalTest(BridgeFixture):
                 self.bridge()
         self.assertFalse((self.runtime / "functional" / "job1").exists())
 
+    def test_a_prompt_option_is_refused_before_anything_is_written(self) -> None:
+        with self.assertRaisesRegex(TypeError, "standard input"):
+            self.bridge(prompt="hello")
+        self.assertFalse((self.runtime / "functional").exists())
+
     def test_a_pre_existing_job_folder_refuses_and_is_left_alone(self) -> None:
         folder = self.runtime / "functional" / "job1"
         folder.mkdir(parents=True)

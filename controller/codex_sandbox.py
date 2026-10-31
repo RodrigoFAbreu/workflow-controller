@@ -616,6 +616,8 @@ class Built:
     #: The model and effort ``argv`` was built with, so a launch rebuilds and checks the same command.
     model: str = review.DEFAULT_MODEL
     effort: str = review.DEFAULT_EFFORT
+    #: The binary ``argv`` was built with (as given, symlink kept), so a launch refuses a different one; ``""`` when unknown.
+    binary: str = ""
 
 
 def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path, ownership_tag: str = "tester",
@@ -644,7 +646,7 @@ def build(*, runtime_root: Path, job_id: str, operator_home: Path, binary: Path,
     command = argv(layout, binary=binary, model=model, effort=effort, prompt=prompt)
     check_argv(command, layout, model=model, effort=effort)
     return Built(layout, config_text, tuple(roots), tuple(command),
-                 child_environment(layout, binary, ownership_tag, inherited), digest, model, effort)
+                 child_environment(layout, binary, ownership_tag, inherited), digest, model, effort, str(binary))
 
 
 # ---------------------------------------------------------------------------

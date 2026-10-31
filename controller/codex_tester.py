@@ -30,6 +30,9 @@ def _check_controls(bridge: codex_bridge.Bridge, binary: Path, system_dir: Path,
     propagates and nothing has been started by ``exec``."""
     built = bridge.built
     layout = built.layout
+    if built.binary and built.binary != str(binary):
+        raise review._refuse("the launch binary differs from the one the bridge was built with",
+                             check="binary", entry="binary")
     command = codex_sandbox.argv(layout, binary=binary, model=built.model, effort=built.effort)
     if tuple(command) != built.argv:
         raise review._refuse("the recorded command line does not reproduce from the bridge's binary, model and effort",

@@ -67,14 +67,14 @@ class RenderTest(unittest.TestCase):
                          ["Usage", "Captured with", "Build verification", "Unknown version refused"])
         self.assertNotIn("Pinned version", header)
         first = table_rows(text)[0]
-        self.assertEqual([r[8] for r in first], ["`verify-claude`", "none: launch checks only"])
+        self.assertEqual([r[8] for r in first], ["`verify-claude`", "`verify-codex`"])
 
-    def test_a_declared_codex_command_changes_exactly_that_cell(self) -> None:
+    def test_an_undeclared_codex_command_changes_exactly_that_cell(self) -> None:
         before = table_rows(ht.render())[0]
-        added = dataclasses.replace(harness.CODEX, build_verification="verify-codex")
-        with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": added}):
+        removed = dataclasses.replace(harness.CODEX, build_verification=None)
+        with mock.patch.object(harness, "ADAPTERS", {"claude-code": harness.CLAUDE_CODE, "codex": removed}):
             after = table_rows(ht.render())[0]
-        self.assertEqual(after[1][8], "`verify-codex`")
+        self.assertEqual(after[1][8], ht.NO_VERIFICATION_WORDING)
         self.assertEqual(after[0], before[0])
         self.assertEqual(after[1][:8] + after[1][9:], before[1][:8] + before[1][9:])
 
@@ -102,8 +102,10 @@ class RenderTest(unittest.TestCase):
             self.assertEqual(row[2:], ["yes", "no"])
 
     def test_the_second_table_follows_the_registry(self) -> None:
+        # Codex declares the tester role but routing cannot select it yet (NOT_YET_ROUTABLE): the cell says "no".
         before = table_rows(ht.render())[1]
-        with with_codex_roles(harness.REVIEWER, harness.FUNCTIONAL_TESTER):
+        self.assertEqual([r[3] for r in before], ["no"] * len(before))
+        with mock.patch.object(routing, "NOT_YET_ROUTABLE", frozenset()):
             after = table_rows(ht.render())[1]
         changed = [(b[0], a[3]) for b, a in zip(before, after) if b != a]
         self.assertEqual(changed, [("`functional-tester`", "yes")])
@@ -122,7 +124,7 @@ class RenderTest(unittest.TestCase):
             self.assertIn(ht.USAGE_WORDING[a.usage], row)
 
     def test_a_role_only_the_routing_table_names_is_listed_last(self) -> None:
-        only_reviewer = {"codex": harness.CODEX}
+        only_reviewer = {"codex": dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER,))}
         with mock.patch.object(harness, "ADAPTERS", only_reviewer):
             legend = [line.split("`")[1] for line in ht.render().splitlines() if line.startswith("- ")]
         self.assertEqual(legend, ["reviewer", "worker", "functional-tester"])

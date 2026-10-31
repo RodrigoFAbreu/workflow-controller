@@ -72,6 +72,8 @@ def build_bridge(candidate: Candidate, *, runtime_root: Path, job_id: str, work_
     ``options`` go to :func:`codex_sandbox.build` unchanged. A folder that already exists refuses and is left
     alone; any other failure, a checkout conversion included (``functional_tester_unavailable`` with cause
     ``clone_mismatch``), removes the folder before anything runs."""
+    if "prompt" in options:
+        raise TypeError("build_bridge takes no prompt option: the tester's prompt is always standard input")
     layout = codex_sandbox.TesterLayout(runtime_root, job_id)
     base = layout.base
     runtime.assert_contained(runtime_root, base)

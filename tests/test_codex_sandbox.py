@@ -376,7 +376,8 @@ class BuildTest(Fixture):
         routed = self.build(job_id="job2", model="gpt-x", effort="low")
         self.assertEqual((routed.model, routed.effort), ("gpt-x", "low"))
         bare = cs.Built(default.layout, default.config_text, default.roots, default.argv, default.environment)
-        self.assertEqual((bare.credential_digest, bare.model), ("", review.DEFAULT_MODEL))
+        self.assertEqual((bare.credential_digest, bare.model, bare.binary), ("", review.DEFAULT_MODEL, ""))
+        self.assertEqual(default.binary, str(self.binary))
 
     def test_build_refuses_without_a_credential_file(self) -> None:
         (self.operator / "auth.json").unlink()

@@ -322,9 +322,26 @@ class HarnessFieldTest(unittest.TestCase):
         accepted = {name: sorted(role for role in routing.ROLES
                                  if routing.ADAPTER_ROLE[role] in adapter.roles)
                     for name, adapter in harness.ADAPTERS.items()}
-        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": []})
+        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": ["functional-tester"]})
         for role in routing.ROLES:
             self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
+
+    def test_the_declared_codex_tester_is_not_yet_routable(self) -> None:
+        # C10g-3c deletes NOT_YET_ROUTABLE together with this test.
+        self.assertEqual(routing.NOT_YET_ROUTABLE, {("functional-tester", "codex")})
+        with self.assertRaises(ValueError) as ctx:
+            routing.check_role_harness("functional-tester", "codex")
+        self.assertEqual(str(ctx.exception), "harness 'codex' declares the 'functional-tester' role "
+                                             "but routing cannot select it until C10g-3c")
+        with self.assertRaises(ValueError):
+            routing.parse_role_harness("functional-tester=codex")
+        for section in (
+            {"roles": {"functional-tester": {"harness": "codex"}}},
+            {"roles": {"functional-tester": {"fallback": [{"harness": "claude-code", "model": "m"}, {"harness": "codex", "model": "m"}]}}},
+        ):
+            with self.subTest(section=section), self.assertRaises(RoutingConfigError) as ctx2:
+                _config(**section)
+            self.assertIn("until C10g-3c", ctx2.exception.message)
 
     def test_adapter_role_maps_every_routing_role_to_a_declared_one(self) -> None:
         self.assertEqual(set(routing.ADAPTER_ROLE), set(routing.ROLES))
@@ -334,24 +351,19 @@ class HarnessFieldTest(unittest.TestCase):
         for adapter_role in routing.ADAPTER_ROLE.values():
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
 
-    def test_a_later_codex_declaration_flips_exactly_that_row(self) -> None:
-        wider = dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER, harness.FUNCTIONAL_TESTER))
-        with unittest.mock.patch.dict(harness.ADAPTERS, {"codex": wider}):
-            self.assertEqual(routing.check_role_harness("functional-tester", "codex"), "codex")
-            with self.assertRaises(ValueError):
-                routing.check_role_harness("review-plan", "codex")
-            config = _config(roles={"functional-tester": {"harness": "codex"}})
-            self.assertEqual(dict(config.roles["functional-tester"]), {"harness": "codex"})
-
     def test_codex_is_refused_in_a_default_and_in_each_kind_of_role(self) -> None:
         for role in ("milestone-implement", "review-plan", "satisfy-gate", "functional-tester"):
             with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
                 _config(roles={role: {"harness": "codex"}})
-            self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
-                          f"declares only ['reviewer']", ctx.exception.message)
+            if role == "functional-tester":
+                self.assertIn("harness 'codex' declares the 'functional-tester' role but routing cannot select it "
+                              "until C10g-3c", ctx.exception.message)
+            else:
+                self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
+                              f"declares only ['reviewer', 'functional-tester']", ctx.exception.message)
             self.assertEqual({k: ctx.exception.evidence[k] for k in ("role", "adapter_role", "harness", "declared_roles")},
                              {"role": role, "adapter_role": routing.ADAPTER_ROLE[role], "harness": "codex",
-                              "declared_roles": ["reviewer"]})
+                              "declared_roles": ["reviewer", "functional-tester"]})
         with self.assertRaises(RoutingConfigError) as ctx:
             _config(default={"harness": "codex"})
         self.assertIn("role 'apply-functional-review'", ctx.exception.message)

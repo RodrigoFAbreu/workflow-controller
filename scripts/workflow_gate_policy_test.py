@@ -5107,6 +5107,162 @@ class TestFindingDispositions(unittest.TestCase):
                     impl["excluded_prefixes"]), "excluded")
 
 
+class TestLatestCheckRun(unittest.TestCase):
+    """The check state judges the latest run of each check (`_checks`)."""
+
+    ISSUE = "2026-10-27T11:10:00Z", "2026-10-27T11:40:00Z", "2026-10-27T12:39:00Z"
+
+    @staticmethod
+    def check(name, conclusion, started, workflow="validate", status="COMPLETED", done=None, **extra):
+        entry = {"__typename": "CheckRun", "name": name, "workflowName": workflow, "status": status,
+                 "conclusion": conclusion, "startedAt": started}
+        if done is not None:
+            entry["completedAt"] = done
+        entry.update(extra)
+        return entry
+
+    def both_orders(self, entries, expected):
+        for ordered in (entries, list(reversed(entries))):
+            self.assertEqual(forge._checks(ordered), expected)
+
+    def test_t1_a_failed_run_then_a_green_rerun_stands_as_success(self):
+        first, done, second = self.ISSUE
+        names = ("validate / tests (4)", "validate / tests-result")
+        entries = [self.check(n, "FAILURE", first, done=done) for n in names]
+        entries += [self.check(n, "SUCCESS", second, done="2026-10-27T12:50:00Z") for n in names]
+        self.both_orders(entries, {"state": "success", "failing": []})
+
+    def test_t2_a_green_run_then_a_later_failure_stands_as_failure(self):
+        first, done, second = self.ISSUE
+        entries = [self.check("a", "SUCCESS", first, done=done), self.check("a", "FAILURE", second)]
+        self.both_orders(entries, {"state": "failure", "failing": ["a"]})
+
+    def test_t3_an_unfinished_latest_run_is_pending_and_a_queued_rerun_fails_closed(self):
+        first, done, second = self.ISSUE
+        running = self.check("a", "", second, status="IN_PROGRESS", done="0001-01-01T00:00:00Z")
+        for earlier in ("FAILURE", "SUCCESS"):
+            self.both_orders([self.check("a", earlier, first, done=done), running],
+                             {"state": "pending", "failing": []})
+        queued = self.check("a", "", "0001-01-01T00:00:00Z", status="QUEUED")
+        self.both_orders([self.check("a", "FAILURE", first, done=done), queued],
+                         {"state": "failure", "failing": ["a"]})
+
+    def test_t4_identities_are_separate_per_workflow_and_per_kind(self):
+        first, done, second = self.ISSUE
+        two_workflows = [self.check("t", "FAILURE", first, workflow="validate", done=done),
+                         self.check("t", "SUCCESS", second, workflow="release")]
+        self.both_orders(two_workflows, {"state": "failure", "failing": ["t"]})
+        kinds = [self.check("t", "FAILURE", first, workflow="", done=done),
+                 {"__typename": "StatusContext", "context": "t", "state": "SUCCESS", "startedAt": second}]
+        self.both_orders(kinds, {"state": "failure", "failing": ["t"]})
+
+    def test_t5_a_repeated_identity_with_an_unusable_order_keeps_the_worst_state(self):
+        first, done, second = self.ISSUE
+        failed = self.check("a", "FAILURE", first, done=done)
+        unusable = {"equal": first, "zero": "0001-01-01T00:00:00Z", "unparseable": "not-a-time",
+                    "naive": "2026-10-27T12:39:00", "non-string": 12, "missing": None}
+        for label, value in unusable.items():
+            passed = self.check("a", "SUCCESS", value)
+            if value is None:
+                del passed["startedAt"]
+            with self.subTest(label):
+                self.both_orders([failed, passed], {"state": "failure", "failing": ["a"]})
+        z_form = self.check("a", "SUCCESS", "2026-10-27T11:10:00+00:00")
+        self.both_orders([failed, z_form], {"state": "failure", "failing": ["a"]})
+
+    def test_t6_a_single_entry_is_judged_as_before(self):
+        self.assertEqual(forge._checks([]), {"state": "pending", "failing": []})
+        self.assertEqual(forge._checks(None), {"state": "pending", "failing": []})
+        self.assertEqual(forge._checks([{"name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS"}]),
+                         {"state": "success", "failing": []})
+        self.assertEqual(forge._checks([{"name": "ci", "status": "IN_PROGRESS", "conclusion": ""}]),
+                         {"state": "pending", "failing": []})
+        self.assertEqual(forge._checks([{"context": "ci", "state": "SUCCESS"}]),
+                         {"state": "success", "failing": []})
+        mixed = [{"name": "b", "status": "COMPLETED", "conclusion": "FAILURE"},
+                 {"name": "a", "status": "COMPLETED", "conclusion": "TIMED_OUT"},
+                 {"name": "c", "status": "COMPLETED", "conclusion": "SUCCESS"}]
+        self.assertEqual(forge._checks(mixed), {"state": "failure", "failing": ["a", "b"]})
+        with self.assertRaises(forge.ForgeUnparseableError):
+            forge._checks(["nope"])
+
+    def test_t7_failing_names_only_the_identities_whose_latest_run_failed(self):
+        first, done, second = self.ISSUE
+        entries = [self.check("a", "FAILURE", first, done=done), self.check("a", "SUCCESS", second),
+                   self.check("b", "SUCCESS", first, done=done), self.check("b", "FAILURE", second),
+                   self.check("c", "SUCCESS", first)]
+        self.both_orders(entries, {"state": "failure", "failing": ["b"]})
+
+    def test_t8_the_stored_fact_and_both_requirements_follow_the_latest_run(self):
+        first, done, second = self.ISSUE
+        rerun = [self.check("t", "FAILURE", first, done=done), self.check("t", "SUCCESS", second)]
+        with AcceptanceRepo() as ev:
+            ev.flow()
+            record = pr_record(ev.anchor)
+            record["statusCheckRollup"] = rerun
+            ev.query([record])
+            self.assertEqual(ev.evidence()["pr"]["checks"], {"state": "success", "failing": []})
+            result = ev.evaluate()
+            self.assertEqual(self.unmet_ids(result), [])
+            self.assertEqual(g.actionable_pr_keys(ev.root, ev.state(), WI, ev.policy), [])
+            record["statusCheckRollup"] = [rerun[0], self.check("t", "FAILURE", second)]
+            ev.query([record])
+            result = ev.evaluate()
+            self.assertEqual(ev.evidence()["pr"]["checks"], {"state": "failure", "failing": ["t"]})
+            self.assertEqual(self.unmet_ids(result), ["no_standing_pr_objection", "ci_green"])
+            keys = g.actionable_pr_keys(ev.root, ev.state(), WI, ev.policy)
+            self.assertEqual([k["cause"] for k in keys], ["checks_failed"])
+
+    @staticmethod
+    def unmet_ids(evaluation):
+        return [r["id"] for r in evaluation["requirements"] if not r["met"]]
+
+    def test_t9_the_documentation_says_the_latest_run_of_each_check(self):
+        text = " ".join((REPO_ROOT / "docs/ai-workflow/GATE_POLICY.md").read_text().split())
+        self.assertIn("The checks are those of the latest run of each check, once the earlier run had "
+                      "completed before it started", text)
+        self.assertIn("counts as its worst run", text)
+
+    def test_t10_overlapping_or_unfinished_earlier_runs_keep_the_worst_state(self):
+        failed = self.check("a", "FAILURE", "2026-10-27T11:00:00Z", done="2026-10-27T11:50:00Z")
+        passed = self.check("a", "SUCCESS", "2026-10-27T11:10:00Z", done="2026-10-27T11:20:00Z")
+        self.both_orders([failed, passed], {"state": "failure", "failing": ["a"]})
+        for done in (None, "0001-01-01T00:00:00Z", "2026-10-27T11:30:00Z", "not-a-time"):
+            early = self.check("a", "FAILURE", "2026-10-27T11:00:00Z", done=done)
+            with self.subTest(done=done):
+                self.both_orders([early, passed], {"state": "failure", "failing": ["a"]})
+        finished = self.check("a", "FAILURE", "2026-10-27T11:00:00Z", done="2026-10-27T11:05:00Z")
+        self.both_orders([finished, passed], {"state": "success", "failing": []})
+
+    ZEROS = ("0001-01-01T00:00:00Z", "0001-01-01T00:00:00+00:00", "0001-01-01T00:00:00.000Z",
+             "0001-01-01T00:00:00-00:00", "0001-01-01T05:30:00+05:30", "0001-01-01T00:00:00+01:00")
+
+    def test_t11_the_zero_instant_in_any_spelling_as_an_earlier_start_keeps_the_failure(self):
+        first, done, second = self.ISSUE
+        for zero in self.ZEROS:
+            with self.subTest(zero=zero):
+                self.both_orders([self.check("a", "FAILURE", zero, done=done), self.check("a", "SUCCESS", second)],
+                                 {"state": "failure", "failing": ["a"]})
+
+    def test_t12_the_zero_instant_in_any_spelling_as_an_earlier_completion_keeps_the_failure(self):
+        first, done, second = self.ISSUE
+        for zero in self.ZEROS:
+            with self.subTest(zero=zero):
+                self.both_orders([self.check("a", "FAILURE", first, done=zero), self.check("a", "SUCCESS", second)],
+                                 {"state": "failure", "failing": ["a"]})
+
+    def test_t13_a_start_beyond_the_range_is_unusable_and_a_real_year_one_instant_is_not(self):
+        first, done, second = self.ISSUE
+        failed = self.check("a", "FAILURE", first, done=done)
+        self.both_orders([failed, self.check("a", "SUCCESS", "9999-12-31T23:59:59-05:00")],
+                         {"state": "failure", "failing": ["a"]})
+        self.both_orders([self.check("a", "FAILURE", "0001-01-01T00:00:01Z", done=done),
+                          self.check("a", "SUCCESS", second)], {"state": "success", "failing": []})
+
+    def test_t14_the_documentation_names_two_jobs_with_the_same_name(self):
+        text = " ".join((REPO_ROOT / "docs/ai-workflow/GATE_POLICY.md").read_text().split())
+        self.assertIn("of another job of the same workflow with the same `name:`", text)
+
 
 if __name__ == "__main__":
     unittest.main()

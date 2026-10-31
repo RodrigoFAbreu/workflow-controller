@@ -166,7 +166,12 @@ trailer `Workflow-Gate-Satisfied-By: policy:<digest first 12>`.
    identity. A fact for an older head (an unpushed fix) or different content
    blocks;
 5. `no_standing_pr_objection`: the pull request is not `CHANGES_REQUESTED` and
-   its checks are not `failure`;
+   its checks are not `failure`. The checks are those of the latest run of each
+   check, once the earlier run had completed before it started (a re-run); a
+   repeated check whose order cannot be established, or whose runs overlap,
+   counts as its worst run, and an earlier run of a different event that
+   completed first, or of another job of the same workflow with the same
+   `name:`, is not told from a re-run;
 6. `ci_green` (when `require_ci`) and `pr_approved` (when
    `requires_pr_approved`).
 

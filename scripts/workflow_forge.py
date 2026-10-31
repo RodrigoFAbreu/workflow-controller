@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 #: A full page of results is undecidable: `gh pr list` truncates at `--limit`,
@@ -162,24 +163,86 @@ def _default_run(argv: list[str], timeout: int) -> str:
     return result.stdout
 
 
+def _check_state(entry: dict) -> str:
+    """`failure`, `pending` or `success` for one rollup entry."""
+    conclusion = str(entry.get("conclusion") or entry.get("state") or "").upper()
+    status = str(entry.get("status") or "").upper()
+    if conclusion in _FAILED_CONCLUSIONS or conclusion in {"FAILURE", "ERROR"}:
+        return "failure"
+    if status in _PENDING_STATUSES or conclusion in _PENDING_STATUSES or conclusion == "EXPECTED":
+        return "pending"
+    if not conclusion or status not in {"", "COMPLETED"}:
+        return "pending"  # an entry with no conclusion, or an unfinished status, is not a pass
+    return "success"
+
+
+_STATE_RANK = {"success": 0, "pending": 1, "failure": 2}
+_FIRST_INSTANT = datetime(1, 1, 1, tzinfo=timezone.utc)  # what GitHub emits for an unset time
+_LAST_INSTANT = datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+def _check_time(value):
+    """A usable timezone-aware instant, or None (missing, not text, unparseable, naive, or out of range by value)."""
+    if not isinstance(value, str):
+        return None
+    text = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        return None
+    # compared as aware values, never converted: year 1 with a positive offset overflows in UTC
+    return moment if _FIRST_INSTANT < moment <= _LAST_INSTANT else None
+
+
+def _check_identity(entry: dict) -> tuple:
+    if entry.get("name") or not entry.get("context"):
+        return ("check", str(entry.get("workflowName") or ""), str(entry.get("name") or "unnamed"))
+    return ("context", str(entry["context"]))
+
+
+def _standing_state(group: list[dict]) -> str:
+    """The state one check identity stands at: that of its latest run when every
+    other run had completed before it started (a re-run); otherwise the worst."""
+    states = [_check_state(entry) for entry in group]
+    if len(group) == 1:
+        return states[0]
+    starts = [_check_time(entry.get("startedAt")) for entry in group]
+    worst = max(states, key=_STATE_RANK.__getitem__)
+    if any(start is None for start in starts):
+        return worst
+    latest = max(starts)
+    if starts.count(latest) != 1:
+        return worst
+    index = starts.index(latest)
+    for position, entry in enumerate(group):
+        if position == index:
+            continue
+        done = _check_time(entry.get("completedAt"))
+        if done is None or done > latest:
+            return worst  # concurrent with the latest run: the order cannot be established
+    return states[index]
+
+
 def _checks(rollup) -> dict:
-    """`{state, failing}`: `failure` when any check failed, else `pending` when
-    any is unfinished or none reported (fail closed), else `success`."""
-    failing: list[str] = []
-    pending = False
+    """`{state, failing}` over the latest run of each check: `failure` when any
+    check stands failed, else `pending` when any is unfinished or none reported
+    (fail closed), else `success`."""
+    groups: dict[tuple, list[dict]] = {}
     entries = rollup if isinstance(rollup, list) else []
     for entry in entries:
         if not isinstance(entry, dict):
             raise ForgeUnparseableError("a statusCheckRollup entry is not an object")
-        name = str(entry.get("name") or entry.get("context") or "unnamed")
-        conclusion = str(entry.get("conclusion") or entry.get("state") or "").upper()
-        status = str(entry.get("status") or "").upper()
-        if conclusion in _FAILED_CONCLUSIONS or conclusion in {"FAILURE", "ERROR"}:
-            failing.append(name)
-        elif status in _PENDING_STATUSES or conclusion in _PENDING_STATUSES or conclusion == "EXPECTED":
+        groups.setdefault(_check_identity(entry), []).append(entry)
+    failing: list[str] = []
+    pending = False
+    for identity, group in groups.items():
+        standing = _standing_state(group)
+        if standing == "failure":
+            failing.append(identity[-1])
+        elif standing == "pending":
             pending = True
-        elif not conclusion or status not in {"", "COMPLETED"}:
-            pending = True  # an entry with no conclusion, or an unfinished status, is not a pass
     if failing:
         state = "failure"
     elif pending or not entries:

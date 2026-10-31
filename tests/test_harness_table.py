@@ -99,16 +99,13 @@ class RenderTest(unittest.TestCase):
         for row in second:
             role = row[0].strip("`")
             self.assertEqual(row[1], f"`{routing.ADAPTER_ROLE[role]}`")
-            self.assertEqual(row[2:], ["yes", "no"])
+            self.assertEqual(row[2:], ["yes", "yes" if role == "functional-tester" else "no"])
 
     def test_the_second_table_follows_the_registry(self) -> None:
-        # Codex declares the tester role but routing cannot select it yet (NOT_YET_ROUTABLE): the cell says "no".
-        before = table_rows(ht.render())[1]
-        self.assertEqual([r[3] for r in before], ["no"] * len(before))
-        with mock.patch.object(routing, "NOT_YET_ROUTABLE", frozenset()):
-            after = table_rows(ht.render())[1]
-        changed = [(b[0], a[3]) for b, a in zip(before, after) if b != a]
-        self.assertEqual(changed, [("`functional-tester`", "yes")])
+        # Codex declares the tester role and routing selects it: the one `yes` in the Codex column.
+        rows = table_rows(ht.render())[1]
+        self.assertEqual([(r[0], r[3]) for r in rows if r[3] == "yes"], [("`functional-tester`", "yes")])
+        self.assertEqual([r[3] for r in rows if r[0] != "`functional-tester`"], ["no"] * (len(rows) - 1))
 
     def test_every_constant_has_wording(self) -> None:
         for role in (harness.WORKER, harness.REVIEWER, harness.FUNCTIONAL_TESTER):

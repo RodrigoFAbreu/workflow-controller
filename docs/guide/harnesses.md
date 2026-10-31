@@ -42,8 +42,8 @@ admits a build of that harness where the Controller checks one. For Claude Code
 that is `verify-claude`, and it admits the functional-tester launch only: the
 worker and reviewer launches run any build on `PATH`. For Codex it is
 `verify-codex`, and it admits the tester launch only (`launch_codex_functional`
-refuses a build it has not recorded); the tester role is declared but routing
-refuses it until C10g-3c. The Codex reviewer's launch is refused by the checks
+refuses a build it has not recorded); routing accepts `codex` for the tester
+role. The Codex reviewer's launch is refused by the checks
 of its surfaces described next. `Unknown version refused`
 keeps its meaning and does not mean a version string is compared: the
 launch is refused when an update changes a checked surface (an enabled feature,
@@ -87,7 +87,7 @@ that declares it.
 | `apply-pr-review` | `worker` | yes | no |
 | `satisfy-gate` | `worker` | yes | no |
 | `satisfy-gate-acceptance` | `worker` | yes | no |
-| `functional-tester` | `functional-tester` | yes | no |
+| `functional-tester` | `functional-tester` | yes | yes |
 
 - `worker`: runs a Workflow command (plan, implement, apply a review) as a background job
 - `reviewer`: reviews a plan or an implementation and returns a verdict
@@ -97,9 +97,9 @@ that declares it.
 ## The Codex tester sandbox
 
 `controller/codex_sandbox.py` builds the sandbox a Codex functional tester would run in, and the `functional-tester`
-role is declared for `codex` above, but routing refuses the pair (`NOT_YET_ROUTABLE`, the `no` in the routing column)
-until C10g-3c. `launch_codex_functional` (through `codex_bridge`) is the only caller, and nothing calls that launch
-yet. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
+role is declared for `codex` above and routing accepts the pair (the `yes` in the routing column).
+`launch_codex_functional` (through `codex_bridge`) is the only caller, and `job._run_functional` calls that launch for
+a route whose harness is `codex`. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
 `codex-cli 0.163.0`, with real attempts through `codex sandbox` (no model) and `codex exec` (one short turn), the
 tester cannot write the clone, write outside its scratch area, read a file under the operator's home, read the
 operator's environment variables, read its own credential copy, push, reach a host TCP or Unix socket, or make the
@@ -149,8 +149,7 @@ being the verified one during the run (the record removed, the digest changed, t
 `keep` and the sandbox is left for `review.settle_functional`. A changed clone is `unbound`. Every refusal inside the
 launch (an unverified build, no binary, a control, an altered argv, a clone mismatch, an existing job folder) is
 `functional_tester_unavailable`, with the sandbox and the credential copy removed. The adapter declares the tester
-role and `verify-codex` as its build verification, but routing refuses the pair (`NOT_YET_ROUTABLE`) until C10g-3c, so
-nothing calls the launch; the reviewer, `verify-claude`, `verify-codex`, settings, options, exit codes and gates are
+role and `verify-codex` as its build verification, and routing accepts the pair; the reviewer, `verify-claude`, `verify-codex`, settings, options, exit codes and gates are
 unchanged.
 
 `controller/codex_build.py` names a Codex build and records which builds were verified, offline; the Codex tester launch

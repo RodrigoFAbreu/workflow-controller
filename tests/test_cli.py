@@ -826,6 +826,13 @@ class RoutingOptionsParserTest(unittest.TestCase):
         self.assertEqual(args.role_effort, {"review-implementation": "max"})
         self.assertEqual(args.routing_config, "/cfg.json")
 
+    def test_the_role_harness_option_accepts_the_codex_tester(self) -> None:
+        args = cli.build_parser().parse_args([
+            "--role-harness", "functional-tester=codex", "--role-model", "functional-tester=gpt-6.1-sol",
+            "--role-effort", "functional-tester=high", "step", "/target"])
+        route = cli._routing_options(args).resolve("functional-tester")
+        self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
+
     def test_the_role_harness_option_parses_into_the_routing_options(self) -> None:
         args = cli.build_parser().parse_args([
             "--role-harness", "review-plan=claude-code", "--role-harness", "functional-tester=claude-code",
@@ -3350,13 +3357,13 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
     def test_an_unsupported_harness_in_the_settings_file_exits_20_before_any_job_record(self) -> None:
         job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
         self.settings_path.parent.mkdir(parents=True)
-        self.settings_path.write_text('{"routing": {"roles": {"functional-tester": {"harness": "codex"}}}}')
+        self.settings_path.write_text('{"routing": {"roles": {"review-plan": {"harness": "codex"}}}}')
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             code = cli.main(["--runtime-dir", str(self.runtime_root), "--workflow-manager", str(self.stub_manager),
                              "--settings", str(self.settings_path), "step", str(self.repo)])
         self.assertEqual(code, cli.EXIT_FAIL_CLOSED, err.getvalue())
-        self.assertIn("routing.roles.functional-tester.harness", err.getvalue())
+        self.assertIn("routing.roles.review-plan.harness", err.getvalue())
         self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
 
     def test_non_positive_flags_are_usage_errors(self) -> None:

@@ -6,9 +6,9 @@ with the tester's final message. It is the Codex counterpart of the Claude launc
 reviewer's launch (``review._codex_attempt``) is bound to the reviewer's layout and verdict file, so it is not
 reused; the bounded run, the rollout scan and the controls are. :func:`launch_codex_functional` (C10g-3b2b)
 adds what ``review.launch_functional`` does around its ``_claude_run``: the build gate, the before/after
-comparison of the real repository, the binding check and the refusal mapping. Nothing calls either yet: routing
-and the fallback to the other harness are C10g-3c (see
-``docs/ai-workflow/CONTROLLER_CODEX_TESTER_SURROUNDINGS_PLAN.md``).
+comparison of the real repository, the binding check and the refusal mapping. Routing accepts the Codex tester
+(C10g-3c1) and ``job._run_functional`` calls the launch for a route whose harness is ``codex``; the fallback to
+the other harness is C10g-3c2 (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md``).
 """
 
 from __future__ import annotations

@@ -129,6 +129,11 @@ SANDBOX_LIMITS: tuple[str, ...] = (
     "writes go to the output folder and the scratch `HOME`, `XDG_*` directories and `TMPDIR`",
 )
 
+#: The limits the Claude and the Codex tester's sandboxes both state, word for word (the first five of
+#: :data:`SANDBOX_LIMITS`; ``codex_bridge.SANDBOX_LIMITS`` repeats them). The row-37 launch writes the checklist
+#: before any tester is chosen, so its note states only these.
+SHARED_SANDBOX_LIMITS: tuple[str, ...] = SANDBOX_LIMITS[:5]
+
 
 class ChecklistUnrecognised(ControllerError):
     """No flow of the checklist can be recognised (D4): the section is
@@ -782,9 +787,10 @@ def derive_writable_locations(
 
 def sandbox_limits_note() -> str:
     """The short note the row-37 launch prompt carries (D4), so a new checklist
-    prefers flows that run offline."""
+    prefers flows that run offline. It states the limits both testers share
+    (:data:`SHARED_SANDBOX_LIMITS`), because the tester is not chosen yet."""
     return ("The Controller's functional tester runs each flow in a sandbox with these limits: "
-            + "; ".join(SANDBOX_LIMITS) + ". Prefer flows that run offline against the fake `gh` and a scratch origin.")
+            + "; ".join(SHARED_SANDBOX_LIMITS) + ". Prefer flows that run offline against the fake `gh` and a scratch origin.")
 
 
 def tester_prompt(

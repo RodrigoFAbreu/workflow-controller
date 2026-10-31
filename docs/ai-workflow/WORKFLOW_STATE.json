@@ -45693,7 +45693,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-fallback-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-fallback-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -45837,12 +45837,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-10-31T13:54:13Z",
+      "state_revision": 20,
+      "last_transition": "2026-10-31T14:10:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -45962,6 +45962,34 @@
               "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
               "verdict": "APPROVE",
               "at": "2026-10-31T11:55:29Z"
+            }
+          ]
+        },
+        "F-ac6b4851a9ec": {
+          "digest": "ac6b4851a9ec8fbb55cb92e1315bfbb4bfbf558849897fb5d4e03d4945d316d6",
+          "text": "**LOCAL-IMPL-R1-002: `controller/codex_tester.py:10-11` module docstring names the wrong plan and the wrong\n  chooser.** It says the chain's fallback \"is chosen before the spawn by :func:`selection_error` (C10g-3c2; see\n  `docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md`)\". The plan of C10g-3c2 is\n  `CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md`, and the entry is chosen by `route_select.select` with\n  `job._tester_probe`; `selection_error` is only the Codex entry's selection-time check.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "99f42021e654b46264f3335ebd6c8b7a170a750e4d517eed6b5f99a6a6b09bf3",
+              "verdict": "REVISE",
+              "at": "2026-10-31T14:10:13Z"
+            }
+          ]
+        },
+        "F-9fdde747b48c": {
+          "digest": "9fdde747b48c2cc1e71ed16b238814cdd559a115ae73ef979166cf81d411c8c2",
+          "text": "**LOCAL-IMPL-R1-003: D5's test checks `worker_families` only.** CP1's done-when says routing a second-entry\n  Codex tester leaves `worker_families` *and the reviewer choice* unchanged; `IndependenceTest` asserts only the\n  families. The reviewer choice is derived from them, so this is low risk, but one assertion on the reviewer\n  decision (for example through `review_mode`'s choice for the same options) would pin the stated property.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "99f42021e654b46264f3335ebd6c8b7a170a750e4d517eed6b5f99a6a6b09bf3",
+              "verdict": "REVISE",
+              "at": "2026-10-31T14:10:13Z"
             }
           ]
         }

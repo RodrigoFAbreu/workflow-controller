@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-surroundings",
+  "dispositions": {
+    "F-1bb47ba08fce": {"disposition": "fixed"},
+    "F-1f3d2abcf57c": {"disposition": "fixed"},
+    "F-3c3f37d57f06": {"disposition": "fixed"},
+    "F-46d3b680ed75": {"disposition": "dropped", "reason": "A parenthetical in D5 that repeats the Claude launch's wording; the launch reuses review.snapshot_repository and compare_snapshots unchanged, so behaviour is the same and the plan is a historical record."},
+    "F-52332765ddb4": {"disposition": "fixed"},
+    "F-5855fdbdfd27": {"disposition": "dropped", "reason": "A generic sentence in docs/guide/harnesses.md about a table cell becoming yes; the same guide states that routing refuses the Codex tester (NOT_YET_ROUTABLE) until C10g-3c, which deletes the exception and makes the sentence true."},
+    "F-69d79eff30da": {"disposition": "fixed"},
+    "F-795b8547a64b": {"disposition": "fixed"},
+    "F-7e2aab5f7a1c": {"disposition": "dropped", "reason": "Exit-20 evidence lists the declared roles beside the refusal message that names C10g-3c; the exception is temporary and C10g-3c deletes it."},
+    "F-8f2cc37a6628": {"disposition": "dropped", "reason": "Plan scoping only: the generated table is regenerated with the CP3 documentation and tools/harness_table.py --check passes on the final head (functional flow 4)."},
+    "F-a65fd591bc35": {"disposition": "fixed"},
+    "F-b172a2c77667": {"disposition": "fixed"},
+    "F-b3c54cdd3ed8": {"disposition": "fixed"},
+    "F-baae7c480fbb": {"disposition": "fixed"},
+    "F-c1e1315bb120": {"disposition": "dropped", "reason": "The bundle's TEST_RESULTS.md heading is a bundle artifact regenerated with each bundle; the later full-suite results are recorded in IMPLEMENTATION_SUMMARY.md and the functional evidence."},
+    "F-d7ae9d80b6f0": {"disposition": "fixed"},
+    "F-dfa5d121ccba": {"disposition": "fixed"},
+    "F-f9faed8a7f98": {"disposition": "dropped", "reason": "A wording nuance in docs/guide/harnesses.md about an existing job folder; the implementation and its test preserve that folder, which the guide's refusal list does not contradict in behaviour."}
+  }
+}

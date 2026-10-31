@@ -275,6 +275,15 @@ class RefusalTest(LaunchFixture):
                 self.launch()
         self.assertEqual(self.functional_dirs(), [])
 
+    def test_a_failing_sandbox_removal_does_not_replace_the_launchs_own_exception(self) -> None:
+        self.record()
+        gate = fr.unavailable(fr.UNAVAILABLE_ENFORCEMENT, "gate")
+        with mock.patch.object(ct, "run_tester", side_effect=gate), \
+                mock.patch.object(fr, "remove_sandbox", side_effect=OSError("busy")):
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                self.launch()
+        self.assertIs(caught.exception, gate)
+
 
 class UnchangedTest(unittest.TestCase):
     # C10g-3b2b's own scope guard, pinned to its base commit: C10g-3c, which edits `job.py` and calls the launch,

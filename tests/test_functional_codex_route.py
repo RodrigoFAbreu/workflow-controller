@@ -126,6 +126,10 @@ class CodexRouteTest(_Case):
                          ("claude", Path(life.functional["operator_home"])))
         self.assertEqual(life.launches, life.claude_launches)
 
+    def test_a_harness_with_no_launch_is_refused_by_name(self) -> None:
+        with self.assertRaisesRegex(ValueError, "'other'"):
+            job._functional_launch("other", {"operator_home": "/h", "binary": "claude"})
+
     def test_a_caller_without_harnesses_still_runs_claude_from_the_top_level_keys(self) -> None:
         life = self.life(with_entry=False)
         life.plan = [("flow-1", "passed", None)]

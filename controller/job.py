@@ -7587,6 +7587,8 @@ def _functional_launch(route_harness: str, functional: Mapping) -> SimpleNamespa
         return SimpleNamespace(harness=review.CODEX, provider=usage.PROVIDER_CODEX,
                                operator_home=Path(entry["operator_home"]), binary=str(entry["binary"]),
                                launch=codex_tester.launch_codex_functional)
+    if route_harness != "claude-code":  # routing validated the name; a new adapter needs its own branch here
+        raise ValueError(f"no functional tester launch for harness {route_harness!r}")
     entry = entries.get("claude-code")
     if not isinstance(entry, Mapping):
         entry = functional

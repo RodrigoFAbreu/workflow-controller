@@ -451,6 +451,25 @@ declaration fails a test by name. The [harness page](harnesses.md) shows the
 registry as tables. To add a harness, see
 [Adding a harness or a git host](development.md#adding-a-harness-or-a-git-host).
 
+### A Codex worker and the user-only commands
+
+A Codex worker does not exist yet; `command_files.render_command` ([harnesses](harnesses.md#the-shared-command-renderer)) is
+the first step. It refuses a user-only command as the requested command, and refuses an argument string that names one
+(`/milestone-plan /approve-review`, a backticked or sentence-final mention included). A command is user-only when either
+recogniser in `controller/decision.py` claims its file (the `disable-model-invocation: true` flag or the confirmation
+guard text), or its parsed `disable-model-invocation` value is `true` in any quoting, or its name is in
+`worker.USER_ONLY_COMMANDS`; a sibling file that cannot be read or parsed is treated as user-only.
+
+The refused set over the shipped commands is eleven names: the nine `COMMAND_FILES.md` lists (`accept-milestone`,
+`adopt-gate-policy`, `approve-review`, `archive-finished-item`, `prune-archives`, `release-checkpoint-start`,
+`request-plan-amendment`, `resume-implementation`, `retire-legacy-work-item`) plus `recover-implementation-provenance` and
+`satisfy-gate`, which carry the confirmation guard text without the flag. A Codex `/satisfy-gate` would need a deliberate rule
+change in H4e to H4g.
+
+The renderer sends a body verbatim, so it cannot stop a body that tells the agent to run a user-only command. What stops a
+nested invocation is each such command's own literal-confirmation check and, later, H4b's launch policy. The renderer does not
+claim to.
+
 ## The same-provider reviewer
 
 With `review.mode` `auto` (under a lowered gate policy) or `single-provider`

@@ -233,6 +233,9 @@ def launch_codex_functional(*, candidate: functional_review.Candidate, flows: Se
         result["fake_calls"] = functional_review.read_fake_calls(bridge.layout.fake_logs)
         result["keep"] = bool(breach or result["unbound"])
     except BaseException:
-        functional_review.remove_sandbox(runtime_root, job_id)
+        try:
+            functional_review.remove_sandbox(runtime_root, job_id)
+        except Exception:  # noqa: BLE001 -- the original failure is the one to raise
+            pass
         raise
     return result

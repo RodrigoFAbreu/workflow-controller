@@ -8,7 +8,9 @@ reused; the bounded run, the rollout scan and the controls are. :func:`launch_co
 adds what ``review.launch_functional`` does around its ``_claude_run``: the build gate, the before/after
 comparison of the real repository, the binding check and the refusal mapping. Routing accepts the Codex tester
 (C10g-3c1) and ``job._run_functional`` calls the launch for a route whose harness is ``codex``; the chain's
-fallback is chosen before the spawn by :func:`selection_error` (C10g-3c2; see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md``).
+fallback is chosen before the spawn by ``route_select.select`` with ``job._tester_probe`` (C10g-3c2; see
+``docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md``); :func:`selection_error` is only the Codex entry's
+selection-time check.
 """
 
 from __future__ import annotations

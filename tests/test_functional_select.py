@@ -188,6 +188,12 @@ class IndependenceTest(unittest.TestCase):
         self.assertEqual(review_mode.worker_families(options), review_mode.worker_families(routing.NO_OVERRIDES))
         self.assertNotIn(harness.get("codex").family, review_mode.worker_families(options))
 
+    def test_a_second_entry_codex_tester_leaves_the_reviewer_choice_unchanged(self) -> None:
+        reviewer = {"harness": "codex"}
+        before = review_mode.distinct_harness(reviewer, review_mode.worker_families(routing.NO_OVERRIDES))
+        after = review_mode.distinct_harness(reviewer, review_mode.worker_families(chain_options()))
+        self.assertEqual(before, after)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -266,6 +266,8 @@ class RefusalTest(LaunchFixture):
 
 
 class UnchangedTest(unittest.TestCase):
+    # C10g-3b2b's own scope guard, pinned to its base commit: C10g-3c, which edits `job.py` and calls the launch,
+    # deletes this class.
     def test_the_claude_launch_and_the_step_are_untouched(self) -> None:
         shown = subprocess.run(
             ["git", "diff", "01c67ac..HEAD", "--stat", "--", "controller/review.py", "controller/job.py",

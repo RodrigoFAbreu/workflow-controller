@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-fallback",
+  "requirements": {
+    "R1": {
+      "description": "The functional step walks the functional-tester chain before the spawn with the tester's selection-time causes; a started tester is never retried; a one-entry chain is unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The selection is recorded in worker_route.selection; every-entry-unavailable ends at functional_tester_unavailable, every-entry-held returns the usage hold",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The tester stays outside the reviewer-independence rule whichever entry is chosen",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "A Codex tester's usage record is built from its rollouts and a launched Codex tester has a telemetry row with the route's harness; the Claude tester is unchanged",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "One real functional round on Codex is run by hand and recorded; guides, compatibility and roadmap state the facts in place; no new setting, option, exit code or gate",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

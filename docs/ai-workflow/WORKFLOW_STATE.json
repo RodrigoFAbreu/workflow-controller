@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-tester-fallback",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -45682,6 +45682,276 @@
         },
         "evaluated_at": "2026-10-31T09:40:27Z",
         "workflow_release": "2.25.2"
+      }
+    },
+    "workflow-controller-codex-tester-fallback": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-tester-fallback",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-fallback-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-fallback-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "6ca4af02e8f477779c8586e82ad954636b81d57a",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+        "approved_review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e9c69c436533cc5f5394e788b0f376280f7a36a8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-tester-fallback-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "77a8923802dbfc3df2e7cc69f32a2b8ffa327467"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-fallback-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8d85d177881e6d5604dc9ffc9eb8728178baee8b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-10-31T12:02:56Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+            "ledger": {
+              "local": {
+                "bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "1f394f2117f7f478047de49b61f2ff8401fcd3ad2912a4b6a6965db2814444c1",
+                "ledger_entry_sha256": "1d8e3611dafb640374e947a0bdd35ed1f341ba1c8a06d734ec44daf9d03488ee",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-tester-fallback/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "b4d3a6404ab787f664fca0b90a46bf2b6e09e5721a4e6ccb72265e6982d1de27",
+                "ledger_entry_sha256": "d55c5c2a3ada3a138774fcaee277dcf581958c0343c6cd30d190c6a7331df0f5",
+                "run_ref": "codex:20261031T115746Z-03228109",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-10-31T12:02:56Z",
+          "workflow_release": "2.25.2"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-31T11:55:29Z",
+          "verdict_sha256": "1f394f2117f7f478047de49b61f2ff8401fcd3ad2912a4b6a6965db2814444c1",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-fallback/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-10-31T11:59:21Z",
+          "verdict_sha256": "b4d3a6404ab787f664fca0b90a46bf2b6e09e5721a4e6ccb72265e6982d1de27",
+          "run_ref": "codex:20261031T115746Z-03228109",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-10-31T12:02:56Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-10-31T11:50:44Z",
+        "consumed": {
+          "review_content_id": "7a974208c254f31c81657c9a32a1d47ca0afd4bc5c3197fd1578fa8afe6b88cb",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+          "bundle_id": "09f99fba06e50579c9c6de0aab5221c4fa5d878cff71f9a58d914abb0ce5274d",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "7a974208c254f31c81657c9a32a1d47ca0afd4bc5c3197fd1578fa8afe6b88cb",
+        "8d60f469128a0c26e73328fdf32e8d88990f1dac62d74a81d14ed0a435cb0b04"
+      ],
+      "optional_findings": {
+        "F-bd98d10979aa": {
+          "digest": "bd98d10979aac6c7795038ff4bd4d93dad77272ae595f8259f92e97bdd364983",
+          "text": "**LOCAL-R1-002: D7's \"exactly as a Codex worker's row does\" names a row that does not exist yet.** There is no\n  Codex worker before H4a; the nearest existing analogue is a derived block for a worker record with no readable\n  stream (`telemetry.derive_block`: `session_telemetry([])` with its problems replaced by `no_stream`), or a Codex\n  review courier row, which has no block at all. Name the analogue that exists (and note that\n  `session_telemetry([])` yields a `no_result` problem, which D7 replaces with `no_stream` as `derive_block` does).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8d60f469128a0c26e73328fdf32e8d88990f1dac62d74a81d14ed0a435cb0b04",
+              "verdict": "REVISE",
+              "at": "2026-10-31T11:40:30Z"
+            }
+          ]
+        },
+        "F-9c08aa84831c": {
+          "digest": "9c08aa84831c8be2d6ec77a617cccf065c7e77b36de4141c1684d87007027ff6",
+          "text": "**LOCAL-R1-003: CP2's \"one scan call asserted\" is ambiguous.** `run_tester` already calls `review.scan_rollouts`\n  once to classify the run before `_settle` scans again for `subagents`, so a run through `run_tester` makes two\n  scans. Say that the assertion is on `_settle` alone (its `subagents`/`usage_rollouts` step scans once), or decide\n  whether `_settle` should reuse `run_tester`'s scan.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8d60f469128a0c26e73328fdf32e8d88990f1dac62d74a81d14ed0a435cb0b04",
+              "verdict": "REVISE",
+              "at": "2026-10-31T11:40:30Z"
+            }
+          ]
+        },
+        "F-8e871c22059e": {
+          "digest": "8e871c22059ef5bb44acdd4c80f7f89ba3b0e814789cb71a4ae135a9fe299ee0",
+          "text": "**LOCAL-R1-004: D3 does not say the Claude probe converts `review.resolve_binary`'s refusal.** `resolve_binary`\n  raises `ReviewLaunchRefusedError`, while D4's every-entry-unavailable record reads the first error's `message`\n  and `evidence[\"cause\"]` (a `TesterUnavailable`). State that the Claude probe returns\n  `functional_review.unavailable(UNAVAILABLE_NO_BINARY, ...)` as the Codex launch does.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8d60f469128a0c26e73328fdf32e8d88990f1dac62d74a81d14ed0a435cb0b04",
+              "verdict": "REVISE",
+              "at": "2026-10-31T11:40:30Z"
+            }
+          ]
+        },
+        "F-2904f56a0fb8": {
+          "digest": "2904f56a0fb8a42ebd4cb6840599029d7280c450d7a84e6edba4530ff507e074",
+          "text": "**LOCAL-R1-005: Login is a selection-time cause for Codex only.** D2 skips a Codex entry with no `auth.json`\n  but not a Claude entry with no `.credentials.json` in its home; a Claude-then-Codex chain with a logged-out\n  Claude therefore ends after the spawn rather than falling through. If deliberate (the Claude tester's existing\n  behaviour is kept), say so in D2; otherwise add the Claude credential file check to the Claude probe.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8d60f469128a0c26e73328fdf32e8d88990f1dac62d74a81d14ed0a435cb0b04",
+              "verdict": "REVISE",
+              "at": "2026-10-31T11:40:30Z"
+            }
+          ]
+        },
+        "F-731c300bff3d": {
+          "digest": "731c300bff3d3d5893628f7a8315add72c32115b12ef3b5e68253bf69d6eaacb",
+          "text": "**LOCAL-R2-002: the Codex login probe's cause is ambiguous.** D2 gives the missing-`auth.json` skip as \"`no_binary`\n  family, text names the file\". `functional_review` has no family, only the causes `no_binary`, `role_refused`,\n  `enforcement` and `clone_mismatch`, and the launch's own refusal of a missing `auth.json` (the bridge build)\n  is `enforcement`. Since D4 copies the first error's `cause` into the every-entry-unavailable gate record, name\n  the exact cause (`no_binary` as D2 implies, or `enforcement` as the launch would report it) and let CP1's\n  `selection_error` login case assert it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7a974208c254f31c81657c9a32a1d47ca0afd4bc5c3197fd1578fa8afe6b88cb",
+              "verdict": "REVISE",
+              "at": "2026-10-31T11:47:32Z"
+            }
+          ]
+        },
+        "F-e169259c0f62": {
+          "digest": "e169259c0f620005a89ae0c476c80eda4b3ed7fca6e160728c2d40171779a837",
+          "text": "**LOCAL-R3-001: the mixed held-and-unavailable chain outcome is not named.** `route_select.select` returns `HELD`\n  whenever any entry was held, even when the other entries were skipped as unavailable (for example Claude held,\n  Codex with no `auth.json`). D4 then returns the usage hold and writes nothing, so the unavailable entry's error\n  never reaches a record. That is H9b's behaviour and is reasonable (a later run re-selects), but CP1's done-when\n  tests only \"every entry unavailable\" and \"every entry held\". A one-line case in `tests/test_functional_select.py`\n  would pin it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T11:55:29Z"
+            }
+          ]
+        },
+        "F-c646bda5d8ca": {
+          "digest": "c646bda5d8ca30ba18562df8c9902f5c9998808d45def4ae99d6e0d330102ff5",
+          "text": "**LOCAL-R3-002: D7's Codex telemetry block omits `worker_seconds`.** D7 builds the block with `job_seconds` and\n  `dimensions(record)` only, but a launched Codex tester's record has `worker_spawned` (from `on_spawn`) and a\n  terminal time, so `worker_seconds` could be filled as `derive_block` does. Without it, `telemetry` shows the\n  worker wall time as unavailable for every Codex tester. Either add it or say it is left out on purpose.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "9c7e8a82b419f22ea903821f9ade497ba7dc732c8598211771e4130bd8fd75ec",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T11:55:29Z"
+            }
+          ]
+        }
       }
     }
   }

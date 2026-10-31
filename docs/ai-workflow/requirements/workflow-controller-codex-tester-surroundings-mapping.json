@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-surroundings",
+  "requirements": {
+    "R1": {
+      "description": "launch_codex_functional refuses an unverified Codex build before any process or folder, naming verify-codex; every refusal is functional_tester_unavailable with the sandbox removed",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "real repository and local origin compared before and after; build change is a breach; changed clone is unbound; Claude-shaped result",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "harness.CODEX declares the tester role and verify-codex; routing still refuses the pair until C10g-3c; Claude-only config unchanged",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "three carried findings fixed: prompt option refused, Built records binary, live test honours CI",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R5": {
+      "description": "guides, generated table and roadmap state the new facts; review.py, job.py, functional_review.py and all commands/settings/gates unchanged",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    }
+  }
+}

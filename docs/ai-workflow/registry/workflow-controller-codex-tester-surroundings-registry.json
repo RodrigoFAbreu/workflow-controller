@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-surroundings",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The role declaration, the routing guard and the carried findings",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The Codex tester launch: gate, snapshots, binding and refusals",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The guides, the table and the roadmap",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

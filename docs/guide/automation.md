@@ -481,8 +481,9 @@ Workflow trusts reported evidence, as it does a person's. The sandbox has no net
 no real model and no tool outside `PATH`; a pull-request flow therefore **cannot run in the sandbox**
 (the Controller's `controller/forge.py` and the Workflow's `scripts/workflow_forge.py` keep
 refusing a scratch `gh` and a scratch origin, and neither is relaxed): such a flow is `environment`
-and ends at `flows_not_runnable` until a person runs it. A Codex tester does not exist yet (the Codex
-adapter declares only the reviewer role). `explain` at row 38e shows, read-only, the head, the
+and ends at `flows_not_runnable` until a person runs it. A Codex tester launch exists
+(`launch_codex_functional`) and the Codex adapter declares the tester role, but routing refuses it until C10g-3c, so
+the tester runs on Claude Code. `explain` at row 38e shows, read-only, the head, the
 checklist blob, the flow ids, the previous functional job, the `.gitignore` patterns the writable-location derivation
 refused (each with its reason) and any sandbox kept by an earlier breach.
 The design record is [ADR 0017](../adr/0017-automated-functional-review.md).

@@ -5,7 +5,8 @@
 **In progress.** `workflow-controller-codex-tester-surroundings` (C10g-3b2b, issue
 [#231](https://github.com/RodrigoFAbreu/workflow-controller/issues/231)): CP1 complete (Codex declares the tester role
 with `verify-codex`, routing refuses the pair until C10g-3c, the three carried findings fixed); CP2 complete (`codex_tester.launch_codex_functional`: the build gate, the
-before/after snapshots, the binding check and the refusal mapping, with `tests/test_codex_tester_launch.py`); CP3 follows.
+before/after snapshots, the binding check and the refusal mapping, with `tests/test_codex_tester_launch.py`); CP3 complete (the guides, the generated
+table and the roadmap state the new facts in place). Nothing calls the launch until C10g-3c; the change is a `chore:` with no release.
 The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-tester-run` (C10g-3b2a, issue
@@ -20,4 +21,4 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Next action
 
-`/milestone-plan` for C10g-3b2b (the Codex tester's surroundings, [#231](https://github.com/RodrigoFAbreu/workflow-controller/issues/231)), after this item is accepted.
+`/milestone-plan` for C10g-3c ([#223](https://github.com/RodrigoFAbreu/workflow-controller/issues/223), the Codex tester chosen through routing), after this item is accepted.

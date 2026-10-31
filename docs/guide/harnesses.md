@@ -136,7 +136,10 @@ message (an absent, empty or blank `-o` file), else `ran`; the final message is 
 result has the Claude tester launch's shape (outcome, detail, message, readings, sub-agents, credential copy-back) and
 the credential copy in the job's Codex home is removed on every path. Whether the output folder holds valid results is
 not decided here. One opt-in test (`tests/test_codex_tester_live.py`, `CONTROLLER_LIVE_CODEX_TESTS=1`, one model turn,
-skipped when `CI` is set) runs a real tester turn.
+skipped when `CI` is set) runs a real tester turn; a second test in that module runs `launch_codex_functional` through
+`job._functional_launch`'s Codex entry and asserts `ran`, no breach, nothing unbound, the sandbox removed and non-empty
+`usage_rollouts`. `_settle` keeps the rollouts of its one scan as `usage_rollouts`, which the job turns into the tester's
+`usage_record`.
 
 `launch_codex_functional` (same module) is the tester's surroundings and returns what `review.launch_functional`
 returns for the Claude tester, plus `subagents` and `exit_code`. In order: it checks that `harness.CODEX` declares the

@@ -696,7 +696,8 @@ generated table):
   Claude one and no Codex defaults exist: `--role-harness functional-tester=codex
   --role-model functional-tester=gpt-6.1-sol --role-effort functional-tester=high`
   (or the same in a routing entry; a fallback entry names its model and may
-  `inherit` the effort). A harness-only or model-only selection is refused at load
+  `inherit` the effort; the functional step walks that chain before the spawn and skips an entry whose binary,
+  Codex login or verified build is missing, see [automation](automation.md)). A harness-only or model-only selection is refused at load
   with the model or effort the harness does not declare. The Codex worker roles (H4a to H4e) will add roles to that declaration,
   and the same check then accepts them with no change to the file format or the
   settings generation.

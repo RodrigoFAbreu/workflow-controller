@@ -2,14 +2,15 @@
 
 ## Status
 
-**In progress.** `workflow-controller-codex-tester-fallback` (C10g-3c2, issue
-[#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)); the plan is
-`docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md`. CP1 (chain selection before the spawn) is implemented:
-`codex_tester.selection_error` and `job._tester_probe` walk a `functional-tester` chain longer than one before anything
-is admitted or recorded, and `tests/test_functional_select.py` covers it. CP2 (usage figures, telemetry row) is implemented:
-`codex_tester._settle` keeps the rollouts of its one scan as `usage_rollouts`, so a Codex tester's `usage_record` has real
-figures, and `job` writes a `telemetry` block (harness `codex`, no stream) for a launched Codex tester. CP3 (the live
-test, the first Codex round, the documents) follows.
+**Complete.** `workflow-controller-codex-tester-fallback` (C10g-3c2, issue
+[#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)) is implemented (CP1 to CP3); the functional review follows. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md`. A `functional-tester` chain longer than one is walked before the
+spawn (`codex_tester.selection_error`, `job._tester_probe`), a Codex tester has a `usage_record` from its rollouts and a
+`telemetry` block, and `tests/test_codex_tester_live.py` has a second opt-in test through `_functional_launch`. The first
+real round (31 October 2026: `gpt-6.1-sol`, effort `high`, `job.execute_step` on a scratch item at row 38e) ran to
+`findings` with a correct report, credentials `unchanged`, the sandbox removed, 12,594 input, 46,080 cache-read, 1,061
+output and 93 reasoning tokens in `usage_record` and a `telemetry` block with harness `codex`; no defect was found. The
+change is a `feat:`, a minor release. The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-tester-routing` (C10g-3c1, issue
 [#223](https://github.com/RodrigoFAbreu/workflow-controller/issues/223)) is implemented (CP1 to CP3 and the functional review) and
@@ -39,4 +40,4 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Next action
 
-`/milestone-plan` for C10g-3c2 (the Codex tester's fallback selection, telemetry dimensions and the operator-run Codex round).
+`/milestone-plan` for H4a (the Codex worker).

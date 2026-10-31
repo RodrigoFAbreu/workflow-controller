@@ -193,7 +193,7 @@ class UsageAndTelemetryTest(_Case):
         figures = record["usage_record"]
         self.assertEqual((figures["input"], figures["output"], figures["cost"]), (None, None, None))
         _, absent = self.codex()
-        self.assertEqual(absent["usage_record"], figures)
+        self.assertEqual({**absent["usage_record"], "wall_ms": None}, {**figures, "wall_ms": None})  # wall time is the clock's
 
     def test_a_launched_codex_tester_has_a_telemetry_block_of_its_harness(self) -> None:
         _, record = self.codex(usage_rollouts=ROLLOUTS)

@@ -19,7 +19,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import codex_bridge as cb, codex_tester as ct, functional_review as fr, review  # noqa: E402
+from controller import codex_bridge as cb, codex_build, codex_tester as ct, functional_review as fr, review  # noqa: E402
+from controller import job  # noqa: E402
 from tests.test_codex_sandbox_live import operator_codex_home  # noqa: E402
 from tests.test_functional_sandbox import make_repo  # noqa: E402
 
@@ -62,6 +63,37 @@ class LiveTesterRunTest(unittest.TestCase):
               f"{result['tester_message']}")
         self.assertEqual(result["outcome"], "ran", result["detail"])
         self.assertTrue(result["tester_message"].strip(), "the tester returned no final message")
+
+    def test_the_job_launch_runs_a_real_codex_tester_with_real_usage_figures(self) -> None:
+        """C10g-3c2 D8: ``_functional_launch``'s Codex entry, end to end: ``ran``, no breach, nothing unbound, the
+        sandbox removed by ``review.settle_functional`` and non-empty ``usage_rollouts`` (the usage figures are real).
+        The build is recorded in the scratch runtime root; the launch controls and the run are real."""
+        cache = Path.home() / ".cache"
+        cache.mkdir(exist_ok=True)
+        root = Path(tempfile.mkdtemp(prefix="codex-live-job-", dir=cache)).resolve()
+        self.addCleanup(shutil.rmtree, root, True)
+        repo = root / "repo"
+        head = make_repo(repo, {"README.md": "live tester fixture\n"})
+        runtime = root / "runtime"
+        binary = Path(review.resolve_binary("codex"))
+        digest = codex_build.build_digest(binary)
+        self.assertTrue(digest, "the Codex build cannot be bound to a digest")
+        codex_build.record_verified(runtime, digest, {"note": "live test"})
+        launch = job._functional_launch(
+            "codex", {"harnesses": {"codex": {"operator_home": str(operator_codex_home()), "binary": "codex"}}})
+        out: dict = {}
+        result = launch.launch(candidate=fr.capture_candidate(repo, head), flows=FLOWS, runtime_root=runtime,
+                               job_id="live2", work_item_id="live-item", operator_home=launch.operator_home,
+                               timeout=RUN_TIMEOUT, binary_name=launch.binary, out=out)
+        print(f"\n--- outcome: {result['outcome']} ---\n{result['detail']}")
+        try:
+            self.assertEqual(result["outcome"], "ran", result["detail"])
+            self.assertEqual(result["breach"], [])
+            self.assertEqual(result["unbound"], [])
+            self.assertTrue(result["usage_rollouts"], "the Codex tester left no usage rollouts")
+        finally:
+            review.settle_functional(result)
+        self.assertFalse(Path(result["sandbox"]).exists(), "the sandbox was not removed")
 
 
 if __name__ == "__main__":

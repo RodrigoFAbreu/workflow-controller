@@ -45693,7 +45693,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-fallback-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-fallback-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -45837,12 +45837,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-10-31T14:30:57Z",
+      "state_revision": 23,
+      "last_transition": "2026-10-31T15:14:39Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -45992,7 +45992,34 @@
               "at": "2026-10-31T14:10:13Z"
             }
           ]
+        },
+        "F-08b630fc63d2": {
+          "digest": "08b630fc63d2bf8a2b1eaa344bd666ce18704e7602021aa114f755a71880297e",
+          "text": "**LOCAL-IMPL-R2-001: the bundle's `TEST_RESULTS.md` is still headed \"implementation revision 1\".** It records\n  no run at revision 2 (`256b1b0`); the revision-2 full-suite pass is stated only in `IMPLEMENTATION_SUMMARY.md`'s\n  \"Review round 1 applied\" section. The template that writes the file should add a section per revision so the\n  test evidence and the reviewed revision match.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "19735a8fb8d58d91cc8c630d7155874c26b7ac4be340d692d1a809fad1c256a9",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T15:07:18Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "19735a8fb8d58d91cc8c630d7155874c26b7ac4be340d692d1a809fad1c256a9",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0766040a1061ff50d9959b90e5d26fe1c7c3337fc4ee28851c08a4ad33c6812e",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-10-31T15:07:18Z",
+          "verdict_sha256": "a0218dfe09708e58f1f670f2436fd174d0816079a18201d89afd6eb1ac262dc4",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-tester-fallback/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

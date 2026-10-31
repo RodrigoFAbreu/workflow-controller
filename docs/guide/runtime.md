@@ -691,10 +691,13 @@ that makes exactly these pairs valid (the [harness page](harnesses.md) shows the
 generated table):
 
 - `claude-code`: every routing role;
-- `codex`: no routing role yet, because its adapter declares `reviewer` only.
-  The Codex tester (C10g) and the Codex worker roles (H4a to H4e) will add roles to
-  that declaration, and the same check then accepts them with no change to the
-  file format or the settings generation.
+- `codex`: no routing role yet. Its adapter declares `reviewer` and
+  `functional-tester`, but routing refuses `functional-tester` for `codex` with
+  a message saying routing cannot select it until C10g-3c
+  (`routing.NOT_YET_ROUTABLE`), because nothing calls the Codex tester launch
+  yet. The Codex worker roles (H4a to H4e) will add roles to that declaration,
+  and the same check then accepts them with no change to the file format or the
+  settings generation.
 
 So this release gives the choice a name and a check; the choice becomes useful
 as the registry grows. Any other pair is refused at load, with exit `20` before
@@ -702,7 +705,7 @@ any job record is written, in the settings file, in a `--routing-config` file
 and for `--role-harness` alike (a usage error, exit `2`, on the command line). The
 message names the role, the harness and what the harness does declare, for
 example `role 'review-plan' runs as a 'worker' and harness 'codex' declares only
-['reviewer']`. An unsupported pair is never replaced by a fallback and never
+['reviewer', 'functional-tester']`. An unsupported pair is never replaced by a fallback and never
 launches. A `default.harness` is checked against every role that has no `harness`
 of its own, so it is refused even when `--role-harness` would override every one
 of them. The built-in `claude-code` applies when nothing names a harness, and no

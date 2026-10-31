@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-codex-tester-routing",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -44890,7 +44890,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-routing-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-routing-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -45241,8 +45241,8 @@
           "external": 1
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-10-31T08:51:08Z",
+      "state_revision": 27,
+      "last_transition": "2026-10-31T09:40:27Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -45415,6 +45415,273 @@
           "run_ref": "codex:20261031T084152Z-6281cb19",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:24:28Z",
+            "summary": {
+              "checklist_blob": "cb5c927cb9d86d78b73e4f8a6b4eb8ea2f10b95a",
+              "text": "101 tests (59+23+19) OK, exit 0."
+            },
+            "log_digest": "043e54aedd49b88463cbb698343c26d6b20a6efd6ed99aa6126dfce0c5933cd8",
+            "run_ref": "controller:20261031T091316Z-53c4a0c4",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:24:28Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:24:28Z",
+            "summary": {
+              "checklist_blob": "cb5c927cb9d86d78b73e4f8a6b4eb8ea2f10b95a",
+              "text": "9 tests OK."
+            },
+            "log_digest": "0ae8bb2cf89cb3dfc0d23040fd2ffa58d6e5ddbe5f310de9bfceac39332f4bfc",
+            "run_ref": "controller:20261031T091316Z-53c4a0c4",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:24:28Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:36:19Z",
+            "summary": {
+              "result": "passed",
+              "detail": "python3 -B -m unittest tests.test_functional_lifecycle tests.test_functional_review in an operator clone (real bubblewrap user namespaces available, writable /tmp): Ran 61 tests (4 lifecycle + 57), OK. The tester's sandbox cannot create user namespaces, so IsolationTest could not run there."
+            },
+            "log_digest": "4f7fc96d479aa99244aef4bfd6601c903b0a66e5d8ae6ad61120dc49963f18f0",
+            "run_ref": "operator-clone ~/.cache/c1-func/c10g3c1/operator",
+            "reporter": "operator",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:36:19Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:24:28Z",
+            "summary": {
+              "checklist_blob": "cb5c927cb9d86d78b73e4f8a6b4eb8ea2f10b95a",
+              "text": "221 tests (98+42+22+59) OK."
+            },
+            "log_digest": "8f817c4e06bdf0bbbf86a5f0ea22c46fa185582f0660259e2f90a76e93352c68",
+            "run_ref": "controller:20261031T091316Z-53c4a0c4",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:24:28Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:36:19Z",
+            "summary": {
+              "result": "passed",
+              "detail": "python3 -B -m unittest tests.test_cli in an operator clone with network and a writable /tmp: Ran 156 tests, OK (the tester's sandbox cannot run the pip editable-install test)."
+            },
+            "log_digest": "c8bc239ba24b0333d5660a54a92568c4a847402a58bf6e184aa5f60a3a1d89a5",
+            "run_ref": "operator-clone ~/.cache/c1-func/c10g3c1/operator",
+            "reporter": "operator",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:36:19Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:24:29Z",
+            "summary": {
+              "checklist_blob": "cb5c927cb9d86d78b73e4f8a6b4eb8ea2f10b95a",
+              "text": "tools/harness_table.py --check and tools/check_docs.py both exit 0."
+            },
+            "log_digest": "5b58010c454118e901b99415cb4e1d695177ead833327b6dd6fda51c48ad3c93",
+            "run_ref": "controller:20261031T091316Z-53c4a0c4",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:24:29Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:24:29Z",
+            "summary": {
+              "checklist_blob": "cb5c927cb9d86d78b73e4f8a6b4eb8ea2f10b95a",
+              "text": "No NOT_YET_ROUTABLE hits (grep exit 1); launch_codex_functional only in controller/codex_tester.py and controller/job.py."
+            },
+            "log_digest": "da0c412c608aa857d938da8a9791aaf9fe06a348288af6c711dce951ff1d6aa5",
+            "run_ref": "controller:20261031T091316Z-53c4a0c4",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:24:29Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "ran_at": "2026-10-31T09:24:29Z",
+            "summary": {
+              "checklist_blob": "cb5c927cb9d86d78b73e4f8a6b4eb8ea2f10b95a",
+              "text": "Docs checked by grep: harnesses.md, workers.md, runtime.md, automation.md, compatibility.md describe routing to codex with gpt-6.1-sol and high/xhigh, and verify-codex first; commands.md covers verify-codex as the tester's precondition. No 'until C10g-3c' or 'routing refuses' wording remains; only C10g-3c2 is mentioned as future work. ROADMAP C10g-3c1 is marked complete as a feat: change and C10g-3c2 is the next row."
+            },
+            "log_digest": "4f3896644331fcd13bfacddcc0d252cbaaec53ccc826e3b03cca35c55797a9dd",
+            "run_ref": "controller:20261031T091316Z-53c4a0c4",
+            "reporter": "workflow-controller 1.25.0",
+            "identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T09:24:29Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 237,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/237"
+          },
+          "state": "open",
+          "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+          "observed_at": "2026-10-31T09:40:27Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "cd7d611f2187e69051fb3899a04596796c0ba7ef",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-10-31T09:40:27Z",
+            "raw_sha256": "9132daef733f52c8a497eabb510c9d3ba8ba3f1d48f9ddb4dc53721ff19c8b8b",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "fdaa5c8609d2514ed6978db9989a3bce50eaf9d74af393dd912bffc194c112ed"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7', 'flow-8'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #237 at afed9ae7e7f44838c9b24ed8b6e60e8b163bb965 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "cd7d611f2187e69051fb3899a04596796c0ba7ef",
+          "anchor_identity": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "10b1085fd55aa5c4bc3f69bcd3176a3d3253a782582155c4645455df9681d85c",
+            "recorded_at": "2026-10-31T08:51:08Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "69f25717e86d6229f0d9be5e00b11e05261e89f2ff82c380be752b502c8a8deb",
+              "log_digest": "043e54aedd49b88463cbb698343c26d6b20a6efd6ed99aa6126dfce0c5933cd8",
+              "run_ref": "controller:20261031T091316Z-53c4a0c4"
+            },
+            "flow-2": {
+              "evidence_id": "c5bac655b2334029d6e7be60f8e11e56402ce2f76a1f8b9c209083ffbe5ee5cf",
+              "log_digest": "0ae8bb2cf89cb3dfc0d23040fd2ffa58d6e5ddbe5f310de9bfceac39332f4bfc",
+              "run_ref": "controller:20261031T091316Z-53c4a0c4"
+            },
+            "flow-3": {
+              "evidence_id": "e8c5e7c1682a9b1eaaeb57be47f8cdba265f11fa1524817814ca8669d7b8098d",
+              "log_digest": "4f7fc96d479aa99244aef4bfd6601c903b0a66e5d8ae6ad61120dc49963f18f0",
+              "run_ref": "operator-clone ~/.cache/c1-func/c10g3c1/operator"
+            },
+            "flow-4": {
+              "evidence_id": "7df9392abd20782f0d76996d5e6c568e1d49d0ca4f25697be2d4b599d9e3fbe3",
+              "log_digest": "8f817c4e06bdf0bbbf86a5f0ea22c46fa185582f0660259e2f90a76e93352c68",
+              "run_ref": "controller:20261031T091316Z-53c4a0c4"
+            },
+            "flow-5": {
+              "evidence_id": "4a348fa9575d5f97ecce5f483e938bdd07ffa65261b0ce320802d2e140cd54ed",
+              "log_digest": "c8bc239ba24b0333d5660a54a92568c4a847402a58bf6e184aa5f60a3a1d89a5",
+              "run_ref": "operator-clone ~/.cache/c1-func/c10g3c1/operator"
+            },
+            "flow-6": {
+              "evidence_id": "af893e2afef6019198f9f0691a6ee86756c622c52e0addf62f5250fbd2bbe8f7",
+              "log_digest": "5b58010c454118e901b99415cb4e1d695177ead833327b6dd6fda51c48ad3c93",
+              "run_ref": "controller:20261031T091316Z-53c4a0c4"
+            },
+            "flow-7": {
+              "evidence_id": "e81d134c69dad20667715243c6189d35fbe97e584017ddc280ded363ac84cc23",
+              "log_digest": "da0c412c608aa857d938da8a9791aaf9fe06a348288af6c711dce951ff1d6aa5",
+              "run_ref": "controller:20261031T091316Z-53c4a0c4"
+            },
+            "flow-8": {
+              "evidence_id": "1da3c0e6b6bbde6a2553f6c1a1874a01998bb20c68c186b03d62baefe9f85471",
+              "log_digest": "4f3896644331fcd13bfacddcc0d252cbaaec53ccc826e3b03cca35c55797a9dd",
+              "run_ref": "controller:20261031T091316Z-53c4a0c4"
+            }
+          },
+          "pr": {
+            "fact_id": "fdaa5c8609d2514ed6978db9989a3bce50eaf9d74af393dd912bffc194c112ed",
+            "head": "afed9ae7e7f44838c9b24ed8b6e60e8b163bb965",
+            "provenance": "workflow_gh",
+            "raw_sha256": "9132daef733f52c8a497eabb510c9d3ba8ba3f1d48f9ddb4dc53721ff19c8b8b"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-10-31T09:40:27Z",
+        "workflow_release": "2.25.2"
       }
     }
   }

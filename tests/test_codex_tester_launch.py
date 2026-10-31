@@ -172,6 +172,16 @@ class BreachTest(LaunchFixture):
         self.assertTrue(outcome["keep"])
         self.assertTrue(outcome["breach"])
 
+    def test_a_new_commit_moving_head_is_a_breach(self) -> None:
+        def commit(bridge):
+            (self.repo / "src" / "extra.txt").write_text("x\n")
+            git(self.repo, "add", "src/extra.txt")
+            git(self.repo, "commit", "-q", "-m", "stray")
+
+        outcome = self.breach_of(commit)
+        self.assertTrue(outcome["breach"])
+        self.assertTrue(outcome["keep"])
+
     def test_a_changed_local_origin_is_an_origin_refs_breach(self) -> None:
         def push(bridge):
             git(self.repo, "push", "-q", "origin", "main:refs/heads/other")
@@ -182,7 +192,7 @@ class BreachTest(LaunchFixture):
 
     def test_a_record_removed_during_the_run_is_a_codex_build_breach(self) -> None:
         outcome = self.breach_of(lambda bridge: (self.runtime / codex_build.RECORD_NAME).unlink())
-        self.assertTrue(any(entry.startswith("codex build:") for entry in outcome["breach"]), outcome["breach"])
+        self.assertIn(f"codex build: no {codex_build.RECORD_NAME} record exists", outcome["breach"])
         self.assertTrue(outcome["keep"])
 
     def test_a_digest_that_changes_to_another_recorded_digest_is_a_breach(self) -> None:
@@ -205,8 +215,9 @@ class BreachTest(LaunchFixture):
             self.binary.symlink_to(other)
 
         self.record()
+        target = self.binary.resolve()
         outcome = self.breach_of(repoint)
-        self.assertTrue(any("now resolves to" in entry for entry in outcome["breach"]), outcome["breach"])
+        self.assertIn(f"codex build: the launcher now resolves to {other.resolve()}, not {target}", outcome["breach"])
         self.assertTrue(outcome["keep"])
 
     def test_a_clone_altered_during_the_run_is_unbound(self) -> None:

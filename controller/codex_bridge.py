@@ -5,8 +5,8 @@ clone, the scratch bare origin, the output folder and the writable-location targ
 write area), the Controller-only check directory and item record outside it, and everything
 :func:`controller.codex_sandbox.build` writes. The clone sequence and the binding comparison are the Claude
 tester's own (``functional_review.clone_candidate`` and ``bound_differences``), so the two testers share one set of
-checkout rules. Nothing calls this module yet: no ``codex`` is started and no role is declared (see
-``docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md``).
+checkout rules. Its caller is the Codex tester launch in :mod:`controller.codex_tester`; the tester role is
+declared, and routing refuses it until C10g-3c (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_BRIDGE_PLAN.md``).
 """
 
 from __future__ import annotations

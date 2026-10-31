@@ -96,9 +96,10 @@ that declares it.
 
 ## The Codex tester sandbox
 
-`controller/codex_sandbox.py` builds the sandbox a Codex functional tester would run in, and it is proven but not
-wired: no role is declared for it (`functional-tester` stays `no` for `codex` above), and nothing calls it except its
-tests. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
+`controller/codex_sandbox.py` builds the sandbox a Codex functional tester would run in, and the `functional-tester`
+role is declared for `codex` above, but routing refuses the pair (`NOT_YET_ROUTABLE`, the `no` in the routing column)
+until C10g-3c. `launch_codex_functional` (through `codex_bridge`) is the only caller, and nothing calls that launch
+yet. It uses a restricted-read permissions profile (`default_permissions = "tester"`), which `codex exec` applies. On
 `codex-cli 0.163.0`, with real attempts through `codex sandbox` (no model) and `codex exec` (one short turn), the
 tester cannot write the clone, write outside its scratch area, read a file under the operator's home, read the
 operator's environment variables, read its own credential copy, push, reach a host TCP or Unix socket, or make the

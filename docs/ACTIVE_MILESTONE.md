@@ -4,7 +4,8 @@
 
 **In progress.** `workflow-controller-codex-tester-surroundings` (C10g-3b2b, issue
 [#231](https://github.com/RodrigoFAbreu/workflow-controller/issues/231)): CP1 complete (Codex declares the tester role
-with `verify-codex`, routing refuses the pair until C10g-3c, the three carried findings fixed); CP2 and CP3 follow.
+with `verify-codex`, routing refuses the pair until C10g-3c, the three carried findings fixed); CP2 complete (`codex_tester.launch_codex_functional`: the build gate, the
+before/after snapshots, the binding check and the refusal mapping, with `tests/test_codex_tester_launch.py`); CP3 follows.
 The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-tester-run` (C10g-3b2a, issue

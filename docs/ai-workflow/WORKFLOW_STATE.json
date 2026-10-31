@@ -45693,12 +45693,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-tester-fallback-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-tester-fallback-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 3,
-      "implementation_revision": 2,
+      "implementation_revision": 3,
       "functional_review_round": null,
       "base_commit": "6ca4af02e8f477779c8586e82ad954636b81d57a",
-      "reviewed_implementation_head": "256b1b02e91dca0662fd2d0ed8d623afd668b46c",
+      "reviewed_implementation_head": "22f1a9f97dcabe746e720b7f697d99a7289f9932",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
@@ -45841,8 +45841,8 @@
           "external": 1
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-10-31T15:14:39Z",
+      "state_revision": 24,
+      "last_transition": "2026-10-31T15:34:01Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

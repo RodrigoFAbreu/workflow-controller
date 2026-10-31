@@ -7756,6 +7756,10 @@ def _run_functional(
             updated["reconciliation_evidence"] = evidence_block
         if isinstance(out.get("telemetry"), Mapping):
             updated["telemetry"] = dict(out["telemetry"])
+            if selection_block is not None:  # a chain's Claude record carries the selection dimensions too (D4)
+                dims = telemetry.dimensions(record)
+                updated["telemetry"].update(chain_position=dims.get("chain_position"),
+                                            chain_skipped=dims.get("chain_skipped"))
         usage_block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
         if started:  # the run was paid for on every terminal status
             seconds = telemetry.seconds_between(block.get("launched_at"), updated["updated_at"])

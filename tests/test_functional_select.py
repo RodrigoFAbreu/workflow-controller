@@ -14,12 +14,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import codex_build, functional_review, harness, job, review, review_mode, routing, usage  # noqa: E402
+from controller import codex_build, functional_review, harness, job, review, review_mode, routing, telemetry, usage  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
 from tests.test_functional_codex_route import CODEX_ROUTE, CodexLifecycle  # noqa: E402
 from tests.test_protocol_job import IDENTITY  # noqa: E402
 
 CLAUDE_MODEL = "claude-sonnet-5-5"
+CLAUDE_FIGURES = {"results": 1, "turns": 3, "problems": []}  # what a Claude tester's stream leaves in ``out``
 
 
 def chain_options(first: str = "claude-code", second: str = "codex", third: str | None = None) -> routing.RoutingOptions:
@@ -104,6 +105,30 @@ class SelectionTest(_Case):
         block = self.step(life, chain_options())["telemetry"]
         self.assertEqual((block["harness"], block["chain_position"], block["chain_skipped"]),
                          ("codex", 1, ["launcher_unavailable"]))
+
+    def test_a_chosen_claude_entry_adds_the_selection_to_its_telemetry_rows(self) -> None:
+        life = self.life()
+        self.missing = frozenset({"codex-bin"})
+        life.extra = {"telemetry": dict(CLAUDE_FIGURES)}
+        record = self.codex_first(life)
+        self.assertEqual(record["functional"]["harness"], "claude")
+        (row,) = telemetry.rows([record])
+        self.assertEqual((row["harness"], row["telemetry"]["chain_position"], row["telemetry"]["chain_skipped"]),
+                         ("claude-code", 1, ["launcher_unavailable"]))
+
+    def test_a_first_choice_claude_entry_reports_position_zero_and_no_skips(self) -> None:
+        life = self.life()
+        life.extra = {"telemetry": dict(CLAUDE_FIGURES)}
+        record = self.step(life, chain_options())
+        (row,) = telemetry.rows([record])
+        self.assertEqual((row["telemetry"]["chain_position"], row["telemetry"]["chain_skipped"]), (0, []))
+
+    def test_a_one_entry_claude_record_has_no_selection_dimensions(self) -> None:
+        life = self.life()
+        life.extra = {"telemetry": dict(CLAUDE_FIGURES)}
+        record = self.step(life, routing.NO_OVERRIDES)
+        self.assertNotIn("chain_position", record["telemetry"])
+        self.assertNotIn("chain_skipped", record["telemetry"])
 
     def codex_first(self, life: CodexLifecycle) -> dict:
         return self.step(life, chain_options("codex", "claude-code"))

@@ -107,7 +107,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_tester, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -3267,10 +3267,11 @@ def _reconcile_functional(record: JobRecord, *, runtime_root: Path) -> JobRecord
     layout = review.JobLayout(runtime_root, job_id, area=functional_review.SANDBOX_AREA)
     credentials = None
     digest, operator_home = block.get("captured_digest"), block.get("operator_home")
+    selected = review.CODEX if block.get("harness") == review.CODEX.name else review.CLAUDE
     if (isinstance(digest, str) and isinstance(operator_home, str)
-            and (layout.base / review.CLAUDE.home_name / review.CLAUDE.credential_file).is_file()):
+            and (layout.base / selected.home_name / selected.credential_file).is_file()):
         with contextlib.suppress(Exception):
-            credentials = review.copy_back_credentials(layout, Path(operator_home), digest, review.CLAUDE)
+            credentials = review.copy_back_credentials(layout, Path(operator_home), digest, selected)
     with contextlib.suppress(Exception):
         functional_review.remove_sandbox(runtime_root, job_id)
     timed_out = False
@@ -7570,6 +7571,30 @@ def _functional_gate_decision(managed_repo: Any, work_item: Any, decision: Decis
     return protocol_decision.gate_for(managed_repo, work_item, decision, code, text)
 
 
+def _functional_launch(route_harness: str, functional: Mapping) -> SimpleNamespace:
+    """The one place the functional step tells the harnesses apart (D2, D3): the ``ReviewHarness``, usage
+    provider, operator home, binary name and launch callable of the route's harness. A caller that built
+    ``functional`` without ``harnesses`` gets the Claude entry from the top-level keys; a Codex route without its
+    entry is ``functional_tester_unavailable`` (``no_binary``), never a guess."""
+    entries = functional.get("harnesses") if isinstance(functional.get("harnesses"), Mapping) else {}
+    if route_harness == "codex":
+        entry = entries.get("codex")
+        if not isinstance(entry, Mapping) or not entry.get("operator_home") or not entry.get("binary"):
+            raise functional_review.unavailable(
+                functional_review.UNAVAILABLE_NO_BINARY,
+                "the functional options carry no `harnesses[\"codex\"]` entry (the Codex home and binary), so the "
+                "Codex tester cannot be launched")
+        return SimpleNamespace(harness=review.CODEX, provider=usage.PROVIDER_CODEX,
+                               operator_home=Path(entry["operator_home"]), binary=str(entry["binary"]),
+                               launch=codex_tester.launch_codex_functional)
+    entry = entries.get("claude-code")
+    if not isinstance(entry, Mapping):
+        entry = functional
+    return SimpleNamespace(harness=review.CLAUDE, provider=usage.PROVIDER_CLAUDE,
+                           operator_home=Path(entry["operator_home"]), binary=entry.get("binary") or "claude",
+                           launch=review.launch_functional)
+
+
 def _run_functional(
     managed_repo: Any, *, runtime_root: Path, identity: Any, run_id: str | None, work_item: Any,
     work_item_id: str | None, decision: Decision, pre_state: dict, usage_gate: Callable[..., Any] | None,
@@ -7591,16 +7616,26 @@ def _run_functional(
     candidate, flows, head = plan.candidate, list(plan.flows), plan.head
 
     route = route_options.resolve(routing.FUNCTIONAL_TESTER)
+    try:
+        chosen = _functional_launch(route.harness, functional)
+    except functional_review.TesterUnavailable as exc:
+        text = functional_review.gate_text(functional_review.GATE_TESTER_UNAVAILABLE, detail=exc.message)
+        gate = _functional_gate_decision(managed_repo, work_item, decision, functional_review.GATE_TESTER_UNAVAILABLE, text)
+        return _no_launch_record(
+            runtime_root, managed_repo, identity, work_item_id, decision.observed_phase, pre_state, gate,
+            status=STATUS_GATE_BLOCKED, run_id=run_id, extra={"functional": {
+                "gate": functional_review.GATE_TESTER_UNAVAILABLE, "head": head, "detail": exc.message,
+                "cause": exc.evidence["cause"]}})
     token: str | None = None
     if usage_gate is not None:
-        admitted = usage_gate(route, provider=usage.PROVIDER_CLAUDE)
+        admitted = usage_gate(route, provider=chosen.provider)
         if isinstance(admitted, (UsageHold, usage.Hold)):
             return _as_usage_hold(admitted, preflight_events)
         token = admitted
 
     job_id = _new_job_id()
     now = _now()
-    operator_home = Path(functional["operator_home"])
+    operator_home = chosen.operator_home
     timeout_seconds = int(functional["timeout_seconds"])
     record: JobRecord = {
         **_identity_block(managed_repo, identity, work_item_id, decision.observed_phase, job_id),
@@ -7620,9 +7655,9 @@ def _run_functional(
         "functional": {
             "row": info.row, "action_id": info.action_id, "state_identity": info.state_identity, "head": head,
             "checklist_blob": candidate.checklist_blob, "flows": [flow.flow_id for flow in flows],
-            "harness": review.CLAUDE.name, "launched": False, "timeout_seconds": timeout_seconds,
+            "harness": chosen.harness.name, "launched": False, "timeout_seconds": timeout_seconds,
             "operator_home": str(operator_home),
-            "captured_digest": review._sha256_file(operator_home / review.CLAUDE.credential_file),
+            "captured_digest": review._sha256_file(operator_home / chosen.harness.credential_file),
             "outcome": None, "recorded": [], "all_recorded": False,
         },
         "created_at": now,
@@ -7666,7 +7701,7 @@ def _run_functional(
         usage_block = record.get("usage") if isinstance(record.get("usage"), Mapping) else None
         if started:  # the run was paid for on every terminal status
             seconds = telemetry.seconds_between(block.get("launched_at"), updated["updated_at"])
-            updated.update(_review_usage_fields(review.CLAUDE, out, model=route.model,
+            updated.update(_review_usage_fields(chosen.harness, out, model=route.model,
                                                 wall_ms=None if seconds is None else seconds * 1000))
         if usage_block is not None and started:
             updated["usage"] = _codex_end_block(usage_block, out.get("readings") or [], out.get("first_readings") or [])
@@ -7718,10 +7753,10 @@ def _run_functional(
             ticker.start()
 
     try:
-        result = review.launch_functional(
+        result = chosen.launch(
             candidate=candidate, flows=flows, runtime_root=runtime_root, job_id=job_id,
             work_item_id=str(work_item_id), operator_home=operator_home, model=route.model, effort=route.effort,
-            timeout=float(timeout_seconds), binary_name=functional.get("binary") or "claude", on_spawn=on_spawn,
+            timeout=float(timeout_seconds), binary_name=chosen.binary, on_spawn=on_spawn,
             out=out)
     except functional_review.TesterUnavailable as exc:
         not_started = "pid" not in spawned

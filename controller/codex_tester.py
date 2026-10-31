@@ -7,8 +7,10 @@ reviewer's launch (``review._codex_attempt``) is bound to the reviewer's layout 
 reused; the bounded run, the rollout scan and the controls are. :func:`launch_codex_functional` (C10g-3b2b)
 adds what ``review.launch_functional`` does around its ``_claude_run``: the build gate, the before/after
 comparison of the real repository, the binding check and the refusal mapping. Routing accepts the Codex tester
-(C10g-3c1) and ``job._run_functional`` calls the launch for a route whose harness is ``codex``; the fallback to
-the other harness is C10g-3c2 (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md``).
+(C10g-3c1) and ``job._run_functional`` calls the launch for a route whose harness is ``codex``; the chain's
+fallback is chosen before the spawn by ``route_select.select`` with ``job._tester_probe`` (C10g-3c2; see
+``docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md``); :func:`selection_error` is only the Codex entry's
+selection-time check.
 """
 
 from __future__ import annotations
@@ -87,7 +89,9 @@ def _settle(result: dict, bridge: codex_bridge.Bridge, operator_home: Path) -> N
         result["readings"] = usage.read_codex_home(layout.codex_home)
 
     def subagents() -> None:
-        result["subagents"] = review.scan_rollouts(layout.codex_home).subagents
+        scan = review.scan_rollouts(layout.codex_home)
+        result["subagents"] = scan.subagents
+        result["usage_rollouts"] = scan.rollouts
 
     def copy_back() -> None:
         if built.credential_digest:
@@ -114,7 +118,8 @@ def run_tester(bridge: codex_bridge.Bridge, flows: Sequence[functional_review.Fl
     result of the Claude launch's shape (D6). ``run`` is the seam of the controls only; the launch itself always uses
     :func:`review.run_bounded`. The credential copy is copied back and removed on every path, a refusal included."""
     result: dict = {"outcome": FAILED, "detail": "", "tester_message": "", "readings": [], "first_readings": [],
-                    "subagents": [], "credentials": None, "telemetry": None, "exit_code": None}
+                    "subagents": [], "usage_rollouts": [], "credentials": None, "telemetry": None,
+                    "exit_code": None}
     try:
         _check_controls(bridge, binary, system_dir, run)
         built = bridge.built
@@ -155,6 +160,29 @@ def _origin_breach(repo_root: Path, before: str | None, error: str | None) -> li
         return [f"origin: {exc}"]
 
 
+def selection_error(operator_home: Path, binary_name: str, runtime_root: Path, *,
+                    system_path: str = review.SYSTEM_PATH) -> functional_review.TesterUnavailable | None:
+    """The reason a Codex entry cannot be chosen before anything is started (C10g-3c2 D2, D3), or ``None``: the
+    binary does not resolve (``no_binary``), the operator's Codex home has no ``auth.json`` or the build is not
+    verified (``enforcement``). The same calls :func:`launch_codex_functional` makes, which still makes them
+    itself, so a change between the selection and the launch ends at the gate as before."""
+    try:
+        binary = review.resolve_binary(binary_name)
+    except ReviewLaunchRefusedError as exc:
+        return functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc))
+    login = Path(operator_home) / review.CODEX.credential_file
+    if not login.is_file():
+        return functional_review.unavailable(
+            functional_review.UNAVAILABLE_ENFORCEMENT,
+            f"the Codex home has no {review.CODEX.credential_file} ({login}); log in to Codex first")
+    admitted = codex_build.is_verified(runtime_root, binary, system_path=system_path)
+    if not admitted.ok:
+        return functional_review.unavailable(
+            functional_review.UNAVAILABLE_ENFORCEMENT,
+            f"the Codex build is not verified ({admitted.reason}); run `workflow-controller verify-codex` first")
+    return None
+
+
 def launch_codex_functional(*, candidate: functional_review.Candidate, flows: Sequence[functional_review.Flow],
                             runtime_root: Path, job_id: str, work_item_id: str, operator_home: Path,
                             timeout: float, model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT,
@@ -175,7 +203,7 @@ def launch_codex_functional(*, candidate: functional_review.Candidate, flows: Se
     result: dict = out if out is not None else {}
     result.update({"outcome": FAILED, "breach": [], "unbound": [], "fake_calls": {}, "output_dir": None,
                    "sandbox": None, "keep": False, "credentials": None, "detail": None, "readings": [],
-                   "first_readings": [], "subagents": [], "exit_code": None})
+                   "first_readings": [], "subagents": [], "usage_rollouts": [], "exit_code": None})
     try:
         harness_registry.for_role("codex", harness_registry.FUNCTIONAL_TESTER)
     except ControllerError as exc:

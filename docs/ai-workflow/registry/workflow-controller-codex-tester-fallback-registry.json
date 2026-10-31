@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-fallback",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Chain selection before the spawn",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The Codex tester's usage figures and telemetry row",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The live test, the first Codex round and the documents",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

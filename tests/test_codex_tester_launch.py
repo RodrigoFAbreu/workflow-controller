@@ -23,7 +23,7 @@ from tests.test_codex_tester import TesterFixture  # noqa: E402
 
 D1_KEYS = {"outcome", "breach", "unbound", "fake_calls", "output_dir", "sandbox", "keep", "credentials", "detail",
            "readings", "first_readings", "head", "checklist_blob", "writable", "refused", "tester_message",
-           "telemetry", "subagents", "exit_code"}
+           "telemetry", "subagents", "usage_rollouts", "exit_code"}
 
 
 class LaunchFixture(TesterFixture):
@@ -146,6 +146,36 @@ class RunTest(LaunchFixture):
         self.assertEqual(outcome["fake_calls"].get("gh"), [{"argv": ["pr", "list"]}])
 
 
+class SettleRolloutsTest(LaunchFixture):
+    def bridge(self):
+        return mock.Mock(built=mock.Mock(layout=mock.Mock(codex_home=self.tmp), credential_digest=None))
+
+    def settle(self, scan, **patches) -> dict:
+        result: dict = {}
+        with mock.patch.object(ct.usage, "read_codex_home", return_value=[]), \
+                mock.patch.object(ct.runtime, "remove_tree"), \
+                mock.patch.object(review, "scan_rollouts", return_value=scan) as scanned:
+            ct._settle(result, self.bridge(), self.operator)
+        scanned.assert_called_once()
+        return result
+
+    def test_settle_stores_the_rollouts_of_its_single_scan(self) -> None:
+        rollouts = [{"subagent": False, "usage": {"total_tokens": 5}}]
+        result = self.settle(review.RolloutScan(rollouts=rollouts, subagents=[{"id": "s"}]))
+        self.assertEqual((result["usage_rollouts"], result["subagents"]), (rollouts, [{"id": "s"}]))
+
+    def test_a_failing_scan_is_guarded_like_the_other_steps(self) -> None:
+        result: dict = {}
+        with mock.patch.object(ct.usage, "read_codex_home", return_value=[]), \
+                mock.patch.object(ct.runtime, "remove_tree") as removed, \
+                mock.patch.object(review, "scan_rollouts", side_effect=OSError("boom")):
+            with self.assertRaises(OSError):
+                ct._settle(result, self.bridge(), self.operator)
+        self.assertEqual(result["readings"], [])  # the step before it ran, and no key was half-written
+        removed.assert_called_once()  # the step after it still ran
+        self.assertNotIn("usage_rollouts", result)
+
+
 class BreachTest(LaunchFixture):
     def breach_of(self, mutate) -> dict:
         self.record()
@@ -224,6 +254,41 @@ class BreachTest(LaunchFixture):
         outcome = self.breach_of(lambda bridge: (bridge.clone / "src" / "app.py").write_text("changed\n"))
         self.assertTrue(outcome["unbound"])
         self.assertTrue(outcome["keep"])
+
+
+class SelectionErrorTest(LaunchFixture):
+    """``selection_error`` (C10g-3c2 D3): the launch's own selection-time checks, answered before anything starts."""
+
+    def error(self, **kw):
+        kw.setdefault("operator_home", self.operator)
+        kw.setdefault("binary_name", str(self.binary))
+        return ct.selection_error(kw["operator_home"], kw["binary_name"], self.runtime, system_path=review.SYSTEM_PATH)
+
+    def test_a_verified_build_with_a_login_is_selectable(self) -> None:
+        self.record()
+        self.assertTrue((self.operator / "auth.json").is_file())
+        self.assertIsNone(self.error())
+
+    def test_a_missing_binary_is_no_binary(self) -> None:
+        self.record()
+        error = self.error(binary_name=str(self.tmp / "nowhere" / "codex"))
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_NO_BINARY)
+
+    def test_a_missing_login_is_enforcement_and_names_the_file(self) -> None:
+        self.record()
+        error = self.error(operator_home=self.tmp / "no-login")
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("auth.json", str(error))
+
+    def test_an_unverified_build_is_enforcement(self) -> None:
+        error = self.error()
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("verify-codex", str(error))
+
+    def test_it_starts_and_writes_nothing(self) -> None:
+        self.error()
+        self.assertEqual(self.functional_dirs(), [])
+        self.assertFalse(self.log.exists())
 
 
 class RefusalTest(LaunchFixture):

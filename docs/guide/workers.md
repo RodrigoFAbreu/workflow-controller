@@ -436,7 +436,7 @@ launches nothing:
 
 `Captured with` is the build the captures were taken from, for information; it is not compared at launch. `Build verification`
 is the command that admits a build where the Controller checks one: `verify-claude` admits the functional-tester launch only
-(the worker and reviewer launches run any build on `PATH`), and for Codex `verify-codex` records verified builds and the Codex tester launch refuses a build it has not recorded (routing accepts it for the functional tester).
+(the worker and reviewer launches run any build on `PATH`), and for Codex `verify-codex` records verified builds and the Codex tester launch refuses a build it has not recorded (routing accepts it for the functional tester, and a `functional-tester` chain is walked before the spawn like a worker's; a Codex tester's `usage_record` carries its rollouts' tokens).
 
 Each adapter also declares whether it can restrict sub-agents and tools, and
 that it fails closed when a build changes a checked surface (a feature, a layer, a state entry or a flag), not on the version string itself: the Codex pin is `codex-cli 0.163.0`, and until a person re-measures it after an update that changed a surface, the Codex review is run by hand. The functional tester (1.18.0) is a role of its own: `claude-code` and `codex` declare it and routing accepts both; the tester

@@ -256,7 +256,7 @@ class SettleTest(TesterFixture):
         self.script(message="m")
         outcome = self.run_tester(self.bridge_for())
         self.assertEqual(set(outcome), {"outcome", "detail", "tester_message", "readings", "first_readings",
-                                        "subagents", "credentials", "telemetry", "exit_code"})
+                                        "subagents", "usage_rollouts", "credentials", "telemetry", "exit_code"})
         self.assertEqual((outcome["first_readings"], outcome["telemetry"], outcome["exit_code"]), ([], None, 0))
 
 if __name__ == "__main__":

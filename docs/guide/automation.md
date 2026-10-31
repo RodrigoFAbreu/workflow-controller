@@ -488,8 +488,23 @@ harness, the model `gpt-6.1-sol` and an effort `high` or `xhigh`, because there 
 `--role-harness functional-tester=codex --role-model functional-tester=gpt-6.1-sol --role-effort functional-tester=high`,
 or the same in a routing entry), run `workflow-controller verify-codex` first (a build it has not recorded ends the step
 at `functional_tester_unavailable`), and log in to Codex. A Codex route without its binary option also ends there, with
-cause `no_binary`. A Codex tester's usage figures are empty for now, and walking the fallback chain before the spawn
-and the first operator-run Codex round are C10g-3c2. `explain` at row 38e shows, read-only, the head, the
+cause `no_binary`.
+
+A `functional-tester` chain longer than one is walked **before** the spawn, as a worker's chain is: an entry is skipped
+(cause `launcher_unavailable`) when its binary cannot be resolved, and, for a Codex entry, when its functional options
+carry no Codex home and binary, the Codex home has no `auth.json` (no login) or the Codex build is not the one
+`verify-codex` recorded. A held provider skips its remaining entries (`usage_held`). The first admitted entry is
+chosen and `worker_route.selection` and `telemetry` (`chain_position`, `chain_skipped`) show it. When every entry is
+unavailable the step ends at `functional_tester_unavailable` with the first entry's reason; when every entry is held it
+returns the usage hold. Every other refusal happens after the spawn (a control, a breach, a bridge error): the job ends
+there and the next entry is **never** tried, because a started tester is not retried on another entry. A chain of one
+selects nothing. A launched Codex tester's cost is its `usage_record` (built from its rollouts, so the usage budget and
+the `usage` command read it as they do for a Codex review) and its `telemetry` block has the route's harness `codex`
+with the token and cost figures shown as unavailable. The first real round (31 October 2026, `gpt-6.1-sol`, effort
+`high`, through `job.execute_step` on a scratch item at row 38e) ran the Codex tester to `findings`: it reported the one
+flow as failed for a real reason (the fixture's `README.md` has no heading), left the credentials `unchanged`,
+removed its sandbox, wrote a `usage_record` of 12,594 input, 46,080 cache-read, 1,061 output and 93 reasoning tokens
+(`derived`, cost unknown) and a `telemetry` block with `harness` `codex`. `explain` at row 38e shows, read-only, the head, the
 checklist blob, the flow ids, the previous functional job, the `.gitignore` patterns the writable-location derivation
 refused (each with its reason) and any sandbox kept by an earlier breach.
 The design record is [ADR 0017](../adr/0017-automated-functional-review.md).

@@ -101,9 +101,9 @@ Since 1.21.0 a routing entry may name a `harness` and the command line gains
 `settings clean` refuses, and a `--routing-config` file with `harness` is
 refused by it. This release accepts `claude-code` for every routing role and
 `codex` for none, and refuses any other pair at load (exit 20, before a job
-record exists). A later release that lets Codex take a role makes a file holding
-that pair valid for it and refused by 1.21.0: update the Controller or remove the
-entry. A same-provider review record's `worker_route.harness` reads `claude-code`
+record exists). Since 1.26.0 `codex` is also accepted for `functional-tester`
+(with `gpt-6.1-sol` and an effort `high` or `xhigh` named, as no Codex defaults exist), so a file holding that
+pair is valid for it and refused by 1.25.0 and earlier: update the Controller or remove the entry. A same-provider review record's `worker_route.harness` reads `claude-code`
 since 1.21.0 (it read `claude`); a reader that matched the old value needs the
 new one.
 

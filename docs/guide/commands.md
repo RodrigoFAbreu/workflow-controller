@@ -208,7 +208,7 @@ hash and the exec is not caught (see [runtime](runtime.md#controller-owned-runti
 
 ## `verify-codex`
 
-`workflow-controller verify-codex [--force] [--codex-binary PATH]` verifies a Codex build for the future Codex tester.
+`workflow-controller verify-codex [--force] [--codex-binary PATH]` verifies a Codex build for the Codex tester.
 It takes no repository. It resolves `codex` on `PATH` (the build a launch would run; `--codex-binary`, local to this
 command, names a different build and needs no `codex` on `PATH`: the command then notes that a launch runs the one on
 `PATH`, or that there is none), prints the launcher path and the build's SHA-256 digest, and then:
@@ -228,8 +228,8 @@ command, names a different build and needs no `codex` on `PATH`: the command the
   failed for another cause, with its exit code) and `build_changed`.
 
 The settings file is never created, filled or updated by this command. Only the Codex tester launch reads the record
-(`launch_codex_functional` refuses a build it has not recorded, naming this command); routing does not select the Codex
-tester until C10g-3c, and the Codex reviewer keeps its own launch checks.
+(`launch_codex_functional` refuses a build it has not recorded, naming this command); routing accepts `codex` for the
+functional tester (see [Harnesses](harnesses.md)), and the Codex reviewer keeps its own launch checks.
 
 ## `notifications`
 

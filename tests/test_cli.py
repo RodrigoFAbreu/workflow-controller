@@ -3179,6 +3179,19 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 cli.cmd_run(args, self.runtime_root, self.ident)
                 self.assertEqual(calls[-1]["functional"]["timeout_seconds"], timeout)
 
+    def test_the_functional_options_name_both_harnesses(self) -> None:
+        """codex-tester-routing D3: ``harnesses`` holds the Claude and the Codex home and binary, the top-level
+        keys keep the Claude ones, and no setting, option or exit code is added."""
+        options = cli._functional_options(cli._effective(self._args(None, max_steps=1)))
+        self.assertEqual(set(options), {"automated", "timeout_seconds", "operator_home", "binary", "harnesses"})
+        self.assertEqual(set(options["harnesses"]), {"claude-code", "codex"})
+        claude, codex = options["harnesses"]["claude-code"], options["harnesses"]["codex"]
+        self.assertEqual((claude["operator_home"], claude["binary"]), (options["operator_home"], options["binary"]))
+        self.assertEqual(options["binary"], "claude")
+        self.assertEqual((codex["operator_home"], codex["binary"]), (str(cli._codex_home()), "codex"))
+        self.assertEqual(set(claude), {"operator_home", "binary"})
+        self.assertEqual(set(codex), {"operator_home", "binary"})
+
     def test_the_local_and_external_caps_reach_the_effective_settings(self) -> None:
         """workflow-controller-round-caps D3: both optional caps are
         settings and options; the option beats the file and the deprecated

@@ -167,11 +167,12 @@ class SettleRolloutsTest(LaunchFixture):
     def test_a_failing_scan_is_guarded_like_the_other_steps(self) -> None:
         result: dict = {}
         with mock.patch.object(ct.usage, "read_codex_home", return_value=[]), \
-                mock.patch.object(ct.runtime, "remove_tree"), \
+                mock.patch.object(ct.runtime, "remove_tree") as removed, \
                 mock.patch.object(review, "scan_rollouts", side_effect=OSError("boom")):
             with self.assertRaises(OSError):
                 ct._settle(result, self.bridge(), self.operator)
         self.assertEqual(result["readings"], [])  # the step before it ran, and no key was half-written
+        removed.assert_called_once()  # the step after it still ran
         self.assertNotIn("usage_rollouts", result)
 
 

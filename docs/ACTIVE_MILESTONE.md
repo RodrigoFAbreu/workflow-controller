@@ -40,4 +40,5 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Next action
 
-`/milestone-plan` for H4a (the Codex worker).
+`/review-implementation workflow-controller-codex-tester-fallback` (the local implementation review), then the functional
+review and acceptance; after that, `/milestone-plan` for H4a (the Codex worker).

@@ -37,6 +37,10 @@ class CodexLifecycle(TesterLifecycle):
         self.providers: list[str] = []
         self.claude_launches: list[dict] = []
 
+    def snapshot_inputs(self) -> tuple:
+        # The Codex home and its login are part of the tree: a plain ``TesterLifecycle``'s snapshot has neither.
+        return (*super().snapshot_inputs(), "codex-home")
+
     def rebase(self, td: Path) -> None:
         super().rebase(td)
         self.codex_home = td / "codex-home"

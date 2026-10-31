@@ -4,8 +4,9 @@
 (its contract is ``docs/ai-workflow/COMMAND_FILES.md``). ``render_command``
 turns one such file and an argument string into the prompt a Codex run
 would be sent, applying what the contract tells an adapter to do for each
-frontmatter key and substituting ``$ARGUMENTS``. It reads one file and
-writes nothing, launches nothing and is called by nothing yet: the Codex
+frontmatter key and substituting ``$ARGUMENTS``. It reads the requested file
+and, to refuse an argument string that names a user-only command, every
+sibling command file in the directory; it writes nothing, launches nothing and is called by nothing yet: the Codex
 launch is a later step.
 
 The user-only commands are refused by the union of the two recognisers
@@ -61,6 +62,13 @@ def _unquote(value: str) -> str:
     return value
 
 
+def _read(path: Path) -> str:
+    """The file's text with its line endings untouched (no newline translation),
+    so the body is sent exactly as written."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def _parse(text: str, name: str, path: Path) -> tuple[dict[str, str], str]:
     """The frontmatter pairs and the body, as ``COMMAND_FILES.md`` states the
     format. A malformed file is refused with the line named."""
@@ -72,12 +80,13 @@ def _parse(text: str, name: str, path: Path) -> tuple[dict[str, str], str]:
     if not lines or lines[0].rstrip("\r\n") != _DELIMITER:
         raise bad(1, "the file does not open with a '---' line")
     pairs: dict[str, str] = {}
+    key_lines: dict[str, int] = {}
     for index in range(1, len(lines)):
         number = index + 1
         line = lines[index].rstrip("\r\n")
         if line == _DELIMITER:
             body = "".join(lines[index + 1:])
-            return _validate(pairs, name, path), body
+            return _validate(pairs, key_lines, number, name, path), body
         if not line.strip():
             continue
         key, colon, value = line.partition(":")
@@ -89,21 +98,27 @@ def _parse(text: str, name: str, path: Path) -> tuple[dict[str, str], str]:
         if key in pairs:
             raise bad(number, f"a duplicate frontmatter key {key!r}")
         pairs[key] = _unquote(value)
+        key_lines[key] = number
     raise bad(len(lines), "the frontmatter has no closing '---' line")
 
 
-def _validate(pairs: dict[str, str], name: str, path: Path) -> dict[str, str]:
+def _validate(pairs: dict[str, str], key_lines: dict[str, int], closing: int,
+              name: str, path: Path) -> dict[str, str]:
+    """Check the declared values. A bad value is reported at its own line; a
+    missing required key at the closing ``---`` line, where it should have been
+    declared."""
+    def bad(key: str, why: str) -> errors.CommandRenderError:
+        line = key_lines.get(key, closing)
+        return _refuse("malformed_frontmatter", name, path, f"{why} (line {line})", key=key, line=line)
+
     if pairs.get("state_writer") not in ("true", "false"):
-        raise _refuse("malformed_frontmatter", name, path,
-                      "state_writer must be declared as true or false", key="state_writer")
+        raise bad("state_writer", "state_writer must be declared as true or false")
     flag = pairs.get("disable-model-invocation")
     if flag is not None and flag not in ("true", "false"):
-        raise _refuse("malformed_frontmatter", name, path,
-                      "disable-model-invocation must be true or false", key="disable-model-invocation")
+        raise bad("disable-model-invocation", "disable-model-invocation must be true or false")
     subject = pairs.get("review-subject")
     if subject is not None and subject not in _REVIEW_SUBJECTS:
-        raise _refuse("malformed_frontmatter", name, path,
-                      "review-subject must be bundle, verdict or none", key="review-subject")
+        raise bad("review-subject", "review-subject must be bundle, verdict or none")
     return pairs
 
 
@@ -118,7 +133,7 @@ def _file_is_user_only(path: Path) -> bool:
     recognisers or a parsed ``disable-model-invocation`` of ``true``. A file
     that cannot be read or parsed is treated as user-only (fail closed)."""
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read(path)
     except (OSError, UnicodeDecodeError):
         return True
     if _claimed_user_only(text):
@@ -161,7 +176,7 @@ def render_command(name: str, arguments: str, commands_dir: Path) -> RenderedCom
     if not path.is_file():
         raise _refuse("unknown_command", name, path, "no such command file")
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read(path)
     except (OSError, UnicodeDecodeError) as exc:
         raise _refuse("unreadable", name, path, f"the file cannot be read ({exc})") from exc
 

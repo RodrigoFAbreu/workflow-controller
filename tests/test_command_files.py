@@ -115,10 +115,10 @@ class FrontmatterTest(Fixture):
             "no_colon": ("---\nstate_writer: true\nbroken\n---\nB\n", 3),
             "dup": ("---\nstate_writer: true\nstate_writer: false\n---\nB\n", 3),
             "bad_key": ("---\nstate_writer: true\nbad key!: 1\n---\nB\n", 3),
-            "no_state_writer": ("---\ndescription: x\n---\nB\n", None),
-            "bad_state_writer": ("---\nstate_writer: maybe\n---\nB\n", None),
-            "bad_flag": ("---\nstate_writer: true\ndisable-model-invocation: yes\n---\nB\n", None),
-            "bad_subject": ("---\nstate_writer: true\nreview-subject: other\n---\nB\n", None),
+            "no_state_writer": ("---\ndescription: x\n---\nB\n", 3),
+            "bad_state_writer": ("---\nstate_writer: maybe\n---\nB\n", 2),
+            "bad_flag": ("---\nstate_writer: true\ndisable-model-invocation: yes\n---\nB\n", 3),
+            "bad_subject": ("---\nstate_writer: true\nreview-subject: other\n---\nB\n", 3),
             "empty": ("", 1),
         }
         for label, (text, line) in cases.items():
@@ -128,8 +128,14 @@ class FrontmatterTest(Fixture):
                     self.render("c")
                 self.assertEqual(ctx.exception.evidence["cause"], "malformed_frontmatter")
                 self.assertIn("c.md", ctx.exception.evidence["file"])
-                if line is not None:
-                    self.assertEqual(ctx.exception.evidence["line"], line)
+                self.assertEqual(ctx.exception.evidence["line"], line)
+                self.assertIn(f"line {line}", str(ctx.exception))
+
+    def test_crlf_body_is_preserved_exactly(self) -> None:
+        raw = "---\r\nstate_writer: true\r\nargument-hint: x\r\n---\r\nFirst\r\nSecond $ARGUMENTS\r\n"
+        (self.dir / "c.md").write_bytes(raw.encode("utf-8"))
+        self.assertEqual(self.render("c").prompt, "First\r\nSecond \r\n")
+        self.assertEqual(self.render("c", "A").prompt, "First\r\nSecond A\r\n")
 
     def test_disable_model_invocation_false_is_not_refused(self) -> None:
         for spelling in ("false", '"false"'):
@@ -240,6 +246,12 @@ class RealDirectoryTest(unittest.TestCase):
         self.assertEqual(len(listed), 9)
         self.assertEqual(refused, listed | {"recover-implementation-provenance", "satisfy-gate"})
         self.assertEqual(refused, ELEVEN)
+
+    def test_arguments_naming_each_pinned_user_only_command_are_refused(self) -> None:
+        for user_only in sorted(ELEVEN):
+            for argument in (f"/{user_only}", f"see {user_only}."):
+                with self.subTest(user_only, argument=argument), self.assertRaises(UserOnlyCommandError):
+                    command_files.render_command("milestone-plan", argument, REAL_COMMANDS)
 
     def test_hinted_commands_render_with_a_representative_argument(self) -> None:
         for path in sorted(REAL_COMMANDS.glob("*.md")):

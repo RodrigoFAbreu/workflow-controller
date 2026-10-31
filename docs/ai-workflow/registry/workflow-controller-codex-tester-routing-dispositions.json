@@ -1,0 +1,42 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-tester-routing",
+ "dispositions": {
+  "F-0d1908a35f5b": {
+   "disposition": "fixed",
+   "note": "controller/job.py _functional_launch makes it explicit: a harnesses mapping without a claude-code entry falls back to the top-level keys, and only a Codex route refuses."
+  },
+  "F-0f6da87f60a1": {
+   "disposition": "dropped",
+   "reason": "Cosmetic ordering of D9 between D7 and D8 in the plan; nothing references the order, and a plan is a historical record once the milestone is accepted."
+  },
+  "F-2c630fc439ed": {
+   "disposition": "fixed",
+   "note": "CP3 names the one-word change and tests/test_codex_tester_live.py:6 now says C10g-3c2."
+  },
+  "F-6b895c64b30e": {
+   "disposition": "fixed",
+   "note": "CP1 now regenerates the harness table with tools/harness_table.py --write."
+  },
+  "F-73cbfd32bf2d": {
+   "disposition": "dropped",
+   "reason": "Wording nit in docs/guide/automation.md: the sentence is true for a caller that builds the functional options without the Codex entry. Editing the guide now would stale the approved implementation for no behavioural gain; reword it with the C10g-3c2 documentation edits."
+  },
+  "F-ca02f0771811": {
+   "disposition": "fixed",
+   "note": "Plan D2 now states that review.settle_functional does not depend on the harness, so _functional_launch is the single distinguishing place."
+  },
+  "F-d4ba73d8760a": {
+   "disposition": "fixed",
+   "note": "CP2 now says the five Claude-only spots in _run_functional."
+  },
+  "F-e8a0b2c2847a": {
+   "disposition": "fixed",
+   "note": "Plan D3 names the cause UNAVAILABLE_NO_BINARY and the path that ends the step before usage_gate."
+  },
+  "F-f172d7f5e46b": {
+   "disposition": "dropped",
+   "reason": "Only the plan's release-type line says a fallback entry runs Codex; the shipped guides make no such promise (grep of docs/guide finds none) and D6 states selection stays at entry 0. The plan is a historical record."
+  }
+ }
+}

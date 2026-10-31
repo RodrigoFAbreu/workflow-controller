@@ -326,22 +326,24 @@ class HarnessFieldTest(unittest.TestCase):
         for role in routing.ROLES:
             self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
 
-    def test_the_declared_codex_tester_is_not_yet_routable(self) -> None:
-        # C10g-3c deletes NOT_YET_ROUTABLE together with this test.
-        self.assertEqual(routing.NOT_YET_ROUTABLE, {("functional-tester", "codex")})
-        with self.assertRaises(ValueError) as ctx:
-            routing.check_role_harness("functional-tester", "codex")
-        self.assertEqual(str(ctx.exception), "harness 'codex' declares the 'functional-tester' role "
-                                             "but routing cannot select it until C10g-3c")
-        with self.assertRaises(ValueError):
-            routing.parse_role_harness("functional-tester=codex")
-        for section in (
-            {"roles": {"functional-tester": {"harness": "codex"}}},
-            {"roles": {"functional-tester": {"fallback": [{"harness": "claude-code", "model": "m"}, {"harness": "codex", "model": "m"}]}}},
-        ):
-            with self.subTest(section=section), self.assertRaises(RoutingConfigError) as ctx2:
-                _config(**section)
-            self.assertIn("until C10g-3c", ctx2.exception.message)
+    def test_the_codex_tester_is_accepted_at_every_entry_point(self) -> None:
+        self.assertFalse(hasattr(routing, "NOT_YET_ROUTABLE"))
+        self.assertEqual(routing.check_role_harness("functional-tester", "codex"), "codex")
+        self.assertEqual(routing.parse_role_harness("functional-tester=codex"), ("functional-tester", "codex"))
+        config = _config(roles={"functional-tester": {"harness": "codex"}})
+        self.assertEqual(config.roles["functional-tester"]["harness"], "codex")
+        config = _config(roles={"functional-tester": {"fallback": [
+            {"harness": "claude-code", "model": "claude-sonnet-5-5"},
+            {"harness": "codex", "model": "gpt-6.1-sol"}]}})
+        self.assertIn("functional-tester", config.roles)
+        self.assertEqual(dict(_config(default={"harness": "codex"}, roles={
+            role: {"harness": "claude-code"} for role in routing.ROLES if role != "functional-tester"}).default),
+            {"harness": "codex"})
+
+    def test_the_other_roles_still_refuse_codex(self) -> None:
+        for role in ("review-plan", "milestone-implement"):
+            with self.subTest(role=role), self.assertRaises(ValueError):
+                routing.parse_role_harness(f"{role}=codex")
 
     def test_adapter_role_maps_every_routing_role_to_a_declared_one(self) -> None:
         self.assertEqual(set(routing.ADAPTER_ROLE), set(routing.ROLES))
@@ -352,15 +354,11 @@ class HarnessFieldTest(unittest.TestCase):
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
 
     def test_codex_is_refused_in_a_default_and_in_each_kind_of_role(self) -> None:
-        for role in ("milestone-implement", "review-plan", "satisfy-gate", "functional-tester"):
+        for role in ("milestone-implement", "review-plan", "satisfy-gate"):
             with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
                 _config(roles={role: {"harness": "codex"}})
-            if role == "functional-tester":
-                self.assertIn("harness 'codex' declares the 'functional-tester' role but routing cannot select it "
-                              "until C10g-3c", ctx.exception.message)
-            else:
-                self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
-                              f"declares only ['reviewer', 'functional-tester']", ctx.exception.message)
+            self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
+                          f"declares only ['reviewer', 'functional-tester']", ctx.exception.message)
             self.assertEqual({k: ctx.exception.evidence[k] for k in ("role", "adapter_role", "harness", "declared_roles")},
                              {"role": role, "adapter_role": routing.ADAPTER_ROLE[role], "harness": "codex",
                               "declared_roles": ["reviewer", "functional-tester"]})
@@ -600,6 +598,39 @@ class RoutingOptionsHarnessCheckTest(unittest.TestCase):
         routing.RoutingOptions()
         lane = routing.load_routing_config(Path(__file__).resolve().parent / "fixtures" / "lane_routing.json")
         routing.RoutingOptions(config=lane)
+
+
+class CodexTesterRouteTest(unittest.TestCase):
+    """C10g-3c1 D9: the Codex tester names its model and effort; no Codex defaults exist."""
+
+    def test_a_harness_only_selection_is_refused_naming_the_claude_model(self) -> None:
+        for config in (_config(roles={"functional-tester": {"harness": "codex"}}),
+                       _config(roles={"functional-tester": {"harness": "codex", "effort": "high"}})):
+            with self.assertRaises(RoutingConfigError) as caught:
+                routing.RoutingOptions(config=config)
+            self.assertIn("functional-tester", caught.exception.message)
+            self.assertIn("claude-sonnet-5-5", caught.exception.message)
+
+    def test_a_codex_model_without_an_effort_is_refused_naming_the_claude_effort(self) -> None:
+        config = _config(roles={"functional-tester": {"harness": "codex", "model": "gpt-6.1-sol"}})
+        with self.assertRaises(RoutingConfigError) as caught:
+            routing.RoutingOptions(config=config)
+        self.assertIn("functional-tester", caught.exception.message)
+        self.assertIn("medium", caught.exception.message)
+
+    def test_harness_model_and_effort_resolve_to_a_codex_route(self) -> None:
+        for effort in ("high", "xhigh"):
+            with self.subTest(effort=effort):
+                options = routing.RoutingOptions(
+                    cli_role_harnesses={"functional-tester": "codex"},
+                    cli_role_models={"functional-tester": "gpt-6.1-sol"},
+                    cli_role_efforts={"functional-tester": effort})
+                route = options.resolve("functional-tester")
+                self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", effort))
+
+    def test_a_claude_only_configuration_resolves_as_before(self) -> None:
+        route = routing.RoutingOptions().resolve("functional-tester")
+        self.assertEqual((route.harness, route.model, route.effort), ("claude-code", "claude-sonnet-5-5", "medium"))
 
 
 if __name__ == "__main__":

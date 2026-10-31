@@ -1540,6 +1540,10 @@ def _functional_options(effective: settings.EffectiveSettings) -> dict:
         "timeout_seconds": effective["functional.timeout_seconds"],
         "operator_home": str(_claude_home()),
         "binary": review.CLAUDE.default_binary,
+        "harnesses": {
+            "claude-code": {"operator_home": str(_claude_home()), "binary": review.CLAUDE.default_binary},
+            "codex": {"operator_home": str(_codex_home()), "binary": review.CODEX.default_binary},
+        },
     }
 
 

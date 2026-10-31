@@ -463,6 +463,26 @@ class WorkerFamiliesTest(unittest.TestCase):
                         self.assertEqual(choose(mode, reviewer_options, stage, sig),
                                          choose(mode, reviewer_options, stage, sig, derived))
 
+    def test_a_codex_tester_changes_no_worker_family_and_no_reviewer_decision(self) -> None:
+        # C10g-3c1 D5: the tester is outside the reviewer-independence rule.
+        with_tester = routing.RoutingOptions(
+            cli_role_harnesses={"functional-tester": "codex"},
+            cli_role_models={"functional-tester": "gpt-6.1-sol"},
+            cli_role_efforts={"functional-tester": "high"})
+        self.assertEqual(with_tester.resolve("functional-tester").harness, "codex")
+        workers = review_mode.worker_families(with_tester)
+        self.assertEqual(workers, review_mode.worker_families())
+        for mode in MODES:
+            for reviewer_options in (None, reviewer("claude"), reviewer("codex")):
+                self.assertEqual(review_mode.distinct_harness(reviewer_options),
+                                 review_mode.distinct_harness(reviewer_options, workers))
+                for stage in STAGES:
+                    for name in SIGNALS:
+                        sig = None if name is None else signal(name)
+                        self.assertEqual(choose(mode, reviewer_options, stage, sig),
+                                         choose(mode, reviewer_options, stage, sig, workers))
+        self.assertEqual(review_mode.distinct_harness(reviewer("codex"), workers), "codex")
+
     def test_openai_workers_make_a_claude_reviewer_cross_model(self) -> None:
         patch, options = codex_workers(WORKER_ROLES)
         self.addCleanup(patch.stop)

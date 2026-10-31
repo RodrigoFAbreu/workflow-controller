@@ -481,9 +481,15 @@ Workflow trusts reported evidence, as it does a person's. The sandbox has no net
 no real model and no tool outside `PATH`; a pull-request flow therefore **cannot run in the sandbox**
 (the Controller's `controller/forge.py` and the Workflow's `scripts/workflow_forge.py` keep
 refusing a scratch `gh` and a scratch origin, and neither is relaxed): such a flow is `environment`
-and ends at `flows_not_runnable` until a person runs it. A Codex tester launch exists
-(`launch_codex_functional`) and the Codex adapter declares the tester role, but routing refuses it until C10g-3c, so
-the tester runs on Claude Code. `explain` at row 38e shows, read-only, the head, the
+and ends at `flows_not_runnable` until a person runs it. The tester runs on Claude Code
+unless the `functional-tester` role is routed to `codex`; then the Controller runs `launch_codex_functional` with the
+Codex usage admission, credential and record fields (`functional.harness` reads `codex`). Name all three of the
+harness, the model `gpt-6.1-sol` and an effort `high` or `xhigh`, because there are no Codex defaults (for example
+`--role-harness functional-tester=codex --role-model functional-tester=gpt-6.1-sol --role-effort functional-tester=high`,
+or the same in a routing entry), run `workflow-controller verify-codex` first (a build it has not recorded ends the step
+at `functional_tester_unavailable`), and log in to Codex. A Codex route without its binary option also ends there, with
+cause `no_binary`. A Codex tester's usage figures are empty for now, and walking the fallback chain before the spawn
+and the first operator-run Codex round are C10g-3c2. `explain` at row 38e shows, read-only, the head, the
 checklist blob, the flow ids, the previous functional job, the `.gitignore` patterns the writable-location derivation
 refused (each with its reason) and any sandbox kept by an earlier breach.
 The design record is [ADR 0017](../adr/0017-automated-functional-review.md).

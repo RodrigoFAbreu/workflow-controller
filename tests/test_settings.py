@@ -1025,8 +1025,7 @@ class RoutingHarnessTest(_TempSettings):
         self.assertEqual(_read(self.path)["routing"], {"default": {}, "roles": {}})
 
     def test_an_unsupported_pair_in_the_file_is_exit_20_through_load_fill_and_the_cli(self) -> None:
-        for section in ({"roles": {"functional-tester": {"harness": "codex"}}},
-                        {"roles": {"review-plan": {"model": "m", "harness": "codex"}}},
+        for section in ({"roles": {"review-plan": {"model": "m", "harness": "codex"}}},
                         {"default": {"harness": "codex"}}):
             with self.subTest(section=section):
                 self.path.unlink(missing_ok=True)
@@ -1048,9 +1047,23 @@ class RoutingHarnessTest(_TempSettings):
 
     def test_the_same_value_in_a_routing_config_file_is_exit_20(self) -> None:
         path = self.dir / "routing.json"
-        _write(path, {"schema_version": 1, "roles": {"functional-tester": {"harness": "codex"}}})
+        _write(path, {"schema_version": 1, "roles": {"review-plan": {"harness": "codex"}}})
         with self.assertRaises(RoutingConfigError):
             routing.load_routing_config(path)
+
+    def test_the_codex_tester_is_accepted_in_the_file_and_in_a_routing_config_file(self) -> None:
+        section = {"roles": {"functional-tester": {"harness": "codex", "model": "gpt-6.1-sol", "effort": "high"}}}
+        self.path.unlink(missing_ok=True)
+        settings.fill(self.path)
+        data = _read(self.path)
+        data["routing"] = section
+        _write(self.path, data)
+        loaded = settings.load(self.path)
+        route = routing.resolve_route("functional-tester", config=loaded.routing_config)
+        self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
+        path = self.dir / "routing.json"
+        _write(path, {"schema_version": 1, **section})
+        routing.load_routing_config(path)
 
 
 class ReviewRoundCapRowTest(_TempSettings):

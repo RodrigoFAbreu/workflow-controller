@@ -6,8 +6,9 @@ restricted-read permissions profile in the tester's own ``CODEX_HOME/config.toml
 (``default_permissions = "tester"``), selected in place of the reviewer's
 ``-s workspace-write``. The reviewer's pinned constants and controls in
 :mod:`controller.review` are imported and reused, never edited. Its caller is
-the Codex tester launch in :mod:`controller.codex_tester` (through :mod:`controller.codex_bridge`); the tester role is
-declared, and routing refuses it until C10g-3c (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_SANDBOX_PLAN.md``).
+the Codex tester launch in :mod:`controller.codex_tester` (through :mod:`controller.codex_bridge`); routing accepts the
+tester role for Codex and ``job._run_functional`` calls the launch (C10g-3c1, see
+``docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md``).
 """
 
 from __future__ import annotations

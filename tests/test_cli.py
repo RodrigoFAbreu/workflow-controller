@@ -826,6 +826,13 @@ class RoutingOptionsParserTest(unittest.TestCase):
         self.assertEqual(args.role_effort, {"review-implementation": "max"})
         self.assertEqual(args.routing_config, "/cfg.json")
 
+    def test_the_role_harness_option_accepts_the_codex_tester(self) -> None:
+        args = cli.build_parser().parse_args([
+            "--role-harness", "functional-tester=codex", "--role-model", "functional-tester=gpt-6.1-sol",
+            "--role-effort", "functional-tester=high", "step", "/target"])
+        route = cli._routing_options(args).resolve("functional-tester")
+        self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
+
     def test_the_role_harness_option_parses_into_the_routing_options(self) -> None:
         args = cli.build_parser().parse_args([
             "--role-harness", "review-plan=claude-code", "--role-harness", "functional-tester=claude-code",
@@ -3172,6 +3179,19 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
                 cli.cmd_run(args, self.runtime_root, self.ident)
                 self.assertEqual(calls[-1]["functional"]["timeout_seconds"], timeout)
 
+    def test_the_functional_options_name_both_harnesses(self) -> None:
+        """codex-tester-routing D3: ``harnesses`` holds the Claude and the Codex home and binary, the top-level
+        keys keep the Claude ones, and no setting, option or exit code is added."""
+        options = cli._functional_options(cli._effective(self._args(None, max_steps=1)))
+        self.assertEqual(set(options), {"automated", "timeout_seconds", "operator_home", "binary", "harnesses"})
+        self.assertEqual(set(options["harnesses"]), {"claude-code", "codex"})
+        claude, codex = options["harnesses"]["claude-code"], options["harnesses"]["codex"]
+        self.assertEqual((claude["operator_home"], claude["binary"]), (options["operator_home"], options["binary"]))
+        self.assertEqual(options["binary"], "claude")
+        self.assertEqual((codex["operator_home"], codex["binary"]), (str(cli._codex_home()), "codex"))
+        self.assertEqual(set(claude), {"operator_home", "binary"})
+        self.assertEqual(set(codex), {"operator_home", "binary"})
+
     def test_the_local_and_external_caps_reach_the_effective_settings(self) -> None:
         """workflow-controller-round-caps D3: both optional caps are
         settings and options; the option beats the file and the deprecated
@@ -3350,13 +3370,13 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
     def test_an_unsupported_harness_in_the_settings_file_exits_20_before_any_job_record(self) -> None:
         job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
         self.settings_path.parent.mkdir(parents=True)
-        self.settings_path.write_text('{"routing": {"roles": {"functional-tester": {"harness": "codex"}}}}')
+        self.settings_path.write_text('{"routing": {"roles": {"review-plan": {"harness": "codex"}}}}')
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             code = cli.main(["--runtime-dir", str(self.runtime_root), "--workflow-manager", str(self.stub_manager),
                              "--settings", str(self.settings_path), "step", str(self.repo)])
         self.assertEqual(code, cli.EXIT_FAIL_CLOSED, err.getvalue())
-        self.assertIn("routing.roles.functional-tester.harness", err.getvalue())
+        self.assertIn("routing.roles.review-plan.harness", err.getvalue())
         self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
 
     def test_non_positive_flags_are_usage_errors(self) -> None:

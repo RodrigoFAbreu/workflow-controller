@@ -285,22 +285,5 @@ class RefusalTest(LaunchFixture):
         self.assertIs(caught.exception, gate)
 
 
-class UnchangedTest(unittest.TestCase):
-    # C10g-3b2b's own scope guard, pinned to its base commit: C10g-3c, which edits `job.py` and calls the launch,
-    # deletes this class.
-    def test_the_claude_launch_and_the_step_are_untouched(self) -> None:
-        shown = subprocess.run(
-            ["git", "diff", "01c67ac..HEAD", "--stat", "--", "controller/review.py", "controller/job.py",
-             "controller/functional_review.py"], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
-        if shown.returncode != 0:
-            self.skipTest("the base commit is not available")
-        self.assertEqual(shown.stdout.strip(), "")
-
-    def test_only_the_launch_module_its_tests_and_the_package_reference_the_function(self) -> None:
-        found = subprocess.run(["git", "grep", "-l", "launch_codex_functional", "--", "controller", "tests"],
-                               cwd=REPO_ROOT, capture_output=True, text=True, check=False).stdout.split()
-        self.assertEqual(set(found) - {"controller/codex_tester.py", "tests/test_codex_tester_launch.py"}, set())
-
-
 if __name__ == "__main__":
     unittest.main()

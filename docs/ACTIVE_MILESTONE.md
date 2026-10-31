@@ -2,6 +2,14 @@
 
 ## Status
 
+**Complete.** `workflow-controller-codex-tester-routing` (C10g-3c1, issue
+[#223](https://github.com/RodrigoFAbreu/workflow-controller/issues/223)) is implemented (CP1 to CP3 and the functional review) and
+accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md`. Routing accepts `codex` for the
+`functional-tester` role (the model `gpt-6.1-sol` and an effort `high` or `xhigh` named, no Codex defaults), and
+`job._run_functional` runs the launch, usage provider, credential and record fields of the route's harness;
+`cli._functional_options` carries both harness homes and binaries. The guides, the table and the roadmap state it in place. The
+change is a `feat:`, a minor release. The previous item is recorded below.
+
 **Complete.** `workflow-controller-codex-tester-surroundings` (C10g-3b2b, issue
 [#231](https://github.com/RodrigoFAbreu/workflow-controller/issues/231)) is implemented (CP1 to CP3 and the functional
 review) and accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_CODEX_TESTER_SURROUNDINGS_PLAN.md`. Codex declares the
@@ -22,4 +30,4 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Next action
 
-`/milestone-plan` for C10g-3c ([#223](https://github.com/RodrigoFAbreu/workflow-controller/issues/223), the Codex tester chosen through routing); ready for planning.
+`/milestone-plan` for C10g-3c2 (the Codex tester's fallback selection, telemetry dimensions and the operator-run Codex round).

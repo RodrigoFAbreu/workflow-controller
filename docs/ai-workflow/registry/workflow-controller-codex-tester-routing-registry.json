@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-tester-routing",
+  "plan_revision": 4,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Routing accepts the Codex tester",
+      "depends_on": [],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The functional job runs the route's harness",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Options, the guides, the table and the roadmap",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

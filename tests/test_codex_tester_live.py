@@ -3,7 +3,7 @@
 Opt-in (``CONTROLLER_LIVE_CODEX_TESTS=1``), skipped by default and on CI, with its reason. It costs one model turn on
 the operator's credentials: it builds a bridge from a tiny checklist and runs ``run_tester`` with a real ``codex``,
 asserting an outcome of ``ran`` and a final message. It does not require valid results (the operator-run functional
-round is C10g-3c). Skipped, with the reason and before any run, when ``codex`` or ``bwrap`` is missing or the operator's
+round is C10g-3c2). Skipped, with the reason and before any run, when ``codex`` or ``bwrap`` is missing or the operator's
 Codex home has no ``auth.json``. ``python3 -m unittest tests.test_codex_tester_live -v``
 """
 

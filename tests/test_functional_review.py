@@ -664,9 +664,14 @@ class PromptTest(unittest.TestCase):
         self.assertIn("Refused as writable locations (so a flow that writes there is `environment`): none", text)
 
     def test_the_row_37_note_shares_the_limits(self) -> None:
+        from controller import codex_bridge
         note = fr.sandbox_limits_note()
-        for limit in fr.SANDBOX_LIMITS:
+        self.assertEqual(fr.SHARED_SANDBOX_LIMITS, fr.SANDBOX_LIMITS[:5])
+        for limit in fr.SHARED_SANDBOX_LIMITS:
             self.assertIn(limit, note)
+            self.assertIn(limit, codex_bridge.SANDBOX_LIMITS)
+        for limit in fr.SANDBOX_LIMITS[5:]:
+            self.assertNotIn(limit, note)
         self.assertIn("offline", note)
 
 

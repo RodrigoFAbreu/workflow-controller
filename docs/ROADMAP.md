@@ -35,7 +35,7 @@ user with one provider is never blocked at an external gate (C14, review modes,
 [11.14](#1114-review-modes)). 1.12.0 (PR #61) added the review round cap and per-round `telemetry`
 (C13, [11.13](#1113-review-convergence)). The Controller admits Workflow 2.5.1 and 2.6.0, and any
 Workflow that speaks Orchestration Protocol v1 (2.7.0 and later). This repository runs Workflow
-2.25.1 with automatic gates (since 2026-10-30). What is complete is marked in the tables below; what
+2.25.2 with automatic gates (since 2026-10-31). What is complete is marked in the tables below; what
 each release changed is in the [release history](release-history.md).
 
 **Next, in order** (owner decisions, 2026-10-14, 2026-10-15, 2026-10-16, 2026-10-18, 2026-10-22 and 2026-10-23; each item carries its complexity label in the table below):

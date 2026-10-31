@@ -962,8 +962,9 @@ committed"); if a round was refused with "must always transition phase", see
   write nothing), prints the sentence and stops. Only on the sentence it runs `archive <id>
   --apply`, then `remove <id> --apply`; with an archive already present it runs `remove`
   only. It packs, verifies and deletes nothing itself.
-- **Writes**: nothing in the repository and no state. The engines write the archive, its
-  index line and the removal in the archive store.
+- **Writes**: no tracked file and no state. The engines write the archive and its index
+  line in the archive store, and `remove` takes the untracked `.ai-review/<id>/` folder
+  away.
 - **Next**: nothing. The retention report lists the item as archived with no folder.
 - **Refuses**: a missing or wrong sentence; several or no ids; any engine refusal, whose
   code and next step it reports, without retrying and without running `remove` after an

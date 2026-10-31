@@ -5600,6 +5600,7 @@ class RetentionRemove(unittest.TestCase):
     def stat_refused(self, result, code, shown, errname):
         self.assertEqual((result.code, result.err_code), (2, code), getattr(result.error, "message", None))
         self.assertIn(f"{shown} cannot be examined: {errname} ", result.error.message)
+        self.assertIn("check the permissions of", result.error.next_step)
         self.assertIn(shown, result.error.next_step)
 
     def untouched(self, rr, before, folder_before, fds, item="w00"):

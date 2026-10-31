@@ -62,4 +62,4 @@ record). No new setting, option, exit code or gate. The Codex worker (H4a to H4g
 
 ## Next action
 
-`/milestone-plan` for H4a (the Codex worker), the next incomplete milestone in `docs/ROADMAP.md`.
+`/milestone-plan` for H4a (the Codex worker, [#242](https://github.com/RodrigoFAbreu/workflow-controller/issues/242)), the next incomplete milestone in `docs/ROADMAP.md`.

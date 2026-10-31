@@ -7,8 +7,8 @@ reviewer's launch (``review._codex_attempt``) is bound to the reviewer's layout 
 reused; the bounded run, the rollout scan and the controls are. :func:`launch_codex_functional` (C10g-3b2b)
 adds what ``review.launch_functional`` does around its ``_claude_run``: the build gate, the before/after
 comparison of the real repository, the binding check and the refusal mapping. Routing accepts the Codex tester
-(C10g-3c1) and ``job._run_functional`` calls the launch for a route whose harness is ``codex``; the fallback to
-the other harness is C10g-3c2 (see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md``).
+(C10g-3c1) and ``job._run_functional`` calls the launch for a route whose harness is ``codex``; the chain's
+fallback is chosen before the spawn by :func:`selection_error` (C10g-3c2; see ``docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md``).
 """
 
 from __future__ import annotations
@@ -153,6 +153,29 @@ def _origin_breach(repo_root: Path, before: str | None, error: str | None) -> li
         return ["origin refs"] if review._local_origin_refs(repo_root) != before else []
     except OSError as exc:
         return [f"origin: {exc}"]
+
+
+def selection_error(operator_home: Path, binary_name: str, runtime_root: Path, *,
+                    system_path: str = review.SYSTEM_PATH) -> functional_review.TesterUnavailable | None:
+    """The reason a Codex entry cannot be chosen before anything is started (C10g-3c2 D2, D3), or ``None``: the
+    binary does not resolve (``no_binary``), the operator's Codex home has no ``auth.json`` or the build is not
+    verified (``enforcement``). The same calls :func:`launch_codex_functional` makes, which still makes them
+    itself, so a change between the selection and the launch ends at the gate as before."""
+    try:
+        binary = review.resolve_binary(binary_name)
+    except ReviewLaunchRefusedError as exc:
+        return functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc))
+    login = Path(operator_home) / review.CODEX.credential_file
+    if not login.is_file():
+        return functional_review.unavailable(
+            functional_review.UNAVAILABLE_ENFORCEMENT,
+            f"the Codex home has no {review.CODEX.credential_file} ({login}); log in to Codex first")
+    admitted = codex_build.is_verified(runtime_root, binary, system_path=system_path)
+    if not admitted.ok:
+        return functional_review.unavailable(
+            functional_review.UNAVAILABLE_ENFORCEMENT,
+            f"the Codex build is not verified ({admitted.reason}); run `workflow-controller verify-codex` first")
+    return None
 
 
 def launch_codex_functional(*, candidate: functional_review.Candidate, flows: Sequence[functional_review.Flow],

@@ -7597,6 +7597,24 @@ def _functional_launch(route_harness: str, functional: Mapping) -> SimpleNamespa
                            launch=review.launch_functional)
 
 
+def _tester_probe(functional: Mapping, runtime_root: Path) -> Callable[[routing.ResolvedRoute], BaseException | None]:
+    """The selection-time causes of a tester chain entry (C10g-3c2 D2, D3): what can be decided before anything
+    is started. Every cause after the spawn ends the job at its gate and the next entry is never tried."""
+    def probe(entry: routing.ResolvedRoute) -> BaseException | None:
+        try:
+            launch = _functional_launch(entry.harness, functional)
+        except functional_review.TesterUnavailable as exc:
+            return exc
+        if launch.provider == usage.PROVIDER_CODEX:
+            return codex_tester.selection_error(launch.operator_home, launch.binary, runtime_root)
+        try:
+            review.resolve_binary(launch.binary)
+        except ReviewLaunchRefusedError as exc:
+            return functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc))
+        return None
+    return probe
+
+
 def _run_functional(
     managed_repo: Any, *, runtime_root: Path, identity: Any, run_id: str | None, work_item: Any,
     work_item_id: str | None, decision: Decision, pre_state: dict, usage_gate: Callable[..., Any] | None,
@@ -7617,23 +7635,45 @@ def _run_functional(
             status=STATUS_GATE_BLOCKED, run_id=run_id, extra={"functional": {"gate": plan.stop, "head": plan.head}})
     candidate, flows, head = plan.candidate, list(plan.flows), plan.head
 
-    route = route_options.resolve(routing.FUNCTIONAL_TESTER)
-    try:
-        chosen = _functional_launch(route.harness, functional)
-    except functional_review.TesterUnavailable as exc:
+    chain = route_options.chain(routing.FUNCTIONAL_TESTER)
+    selection_block: dict | None = None
+    token: str | None = None
+
+    def unavailable_record(exc: functional_review.TesterUnavailable, **more: Any) -> "JobRecord":
         text = functional_review.gate_text(functional_review.GATE_TESTER_UNAVAILABLE, detail=exc.message)
         gate = _functional_gate_decision(managed_repo, work_item, decision, functional_review.GATE_TESTER_UNAVAILABLE, text)
         return _no_launch_record(
             runtime_root, managed_repo, identity, work_item_id, decision.observed_phase, pre_state, gate,
             status=STATUS_GATE_BLOCKED, run_id=run_id, extra={"functional": {
                 "gate": functional_review.GATE_TESTER_UNAVAILABLE, "head": head, "detail": exc.message,
-                "cause": exc.evidence["cause"]}})
-    token: str | None = None
-    if usage_gate is not None:
-        admitted = usage_gate(route, provider=chosen.provider)
-        if isinstance(admitted, (UsageHold, usage.Hold)):
-            return _as_usage_hold(admitted, preflight_events)
-        token = admitted
+                "cause": exc.evidence["cause"], **more}})
+
+    if len(chain) == 1:
+        route = route_options.resolve(routing.FUNCTIONAL_TESTER)
+        try:
+            chosen = _functional_launch(route.harness, functional)
+        except functional_review.TesterUnavailable as exc:
+            return unavailable_record(exc)
+        if usage_gate is not None:
+            admitted = usage_gate(route, provider=chosen.provider)
+            if isinstance(admitted, (UsageHold, usage.Hold)):
+                return _as_usage_hold(admitted, preflight_events)
+            token = admitted
+    else:
+        # C10g-3c2: the chain is walked once, before anything is admitted or recorded; a started tester is never
+        # retried on another entry.
+        selected = route_select.select(chain, _tester_probe(functional, runtime_root), _chain_admit(usage_gate))
+        selection_block = {
+            "length": len(chain),
+            "skipped": [{"position": p, "harness": h, "cause": c} for p, h, c in selected.skipped],
+        }
+        if selected.outcome == route_select.HELD:
+            return _as_usage_hold(selected.hold, preflight_events)
+        if selected.outcome == route_select.UNAVAILABLE:
+            return unavailable_record(selected.error, selection=selection_block["skipped"])
+        route, token = selected.route, selected.token
+        selection_block["position"] = selected.position
+        chosen = _functional_launch(route.harness, functional)
 
     job_id = _new_job_id()
     now = _now()
@@ -7665,6 +7705,9 @@ def _run_functional(
         "created_at": now,
         "updated_at": now,
     }
+    if selection_block is not None:
+        record["worker_route"]["selection"] = {key: selection_block[key] for key in ("position", "length", "skipped")}
+        record["functional"]["selection"] = selection_block["skipped"]
     if run_id is not None:
         record["run_id"] = run_id
     if controller_settings is not None:

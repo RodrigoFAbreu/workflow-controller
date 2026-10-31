@@ -226,6 +226,41 @@ class BreachTest(LaunchFixture):
         self.assertTrue(outcome["keep"])
 
 
+class SelectionErrorTest(LaunchFixture):
+    """``selection_error`` (C10g-3c2 D3): the launch's own selection-time checks, answered before anything starts."""
+
+    def error(self, **kw):
+        kw.setdefault("operator_home", self.operator)
+        kw.setdefault("binary_name", str(self.binary))
+        return ct.selection_error(kw["operator_home"], kw["binary_name"], self.runtime, system_path=review.SYSTEM_PATH)
+
+    def test_a_verified_build_with_a_login_is_selectable(self) -> None:
+        self.record()
+        self.assertTrue((self.operator / "auth.json").is_file())
+        self.assertIsNone(self.error())
+
+    def test_a_missing_binary_is_no_binary(self) -> None:
+        self.record()
+        error = self.error(binary_name=str(self.tmp / "nowhere" / "codex"))
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_NO_BINARY)
+
+    def test_a_missing_login_is_enforcement_and_names_the_file(self) -> None:
+        self.record()
+        error = self.error(operator_home=self.tmp / "no-login")
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("auth.json", str(error))
+
+    def test_an_unverified_build_is_enforcement(self) -> None:
+        error = self.error()
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("verify-codex", str(error))
+
+    def test_it_starts_and_writes_nothing(self) -> None:
+        self.error()
+        self.assertEqual(self.functional_dirs(), [])
+        self.assertFalse(self.log.exists())
+
+
 class RefusalTest(LaunchFixture):
     def test_a_pre_existing_sandbox_refuses_and_is_left_alone(self) -> None:
         self.record()

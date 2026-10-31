@@ -2,6 +2,13 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-tester-fallback` (C10g-3c2, issue
+[#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)); the plan is
+`docs/ai-workflow/CONTROLLER_CODEX_TESTER_FALLBACK_PLAN.md`. CP1 (chain selection before the spawn) is implemented:
+`codex_tester.selection_error` and `job._tester_probe` walk a `functional-tester` chain longer than one before anything
+is admitted or recorded, and `tests/test_functional_select.py` covers it. CP2 (usage figures, telemetry row) and CP3 (the
+live test, the first Codex round, the documents) follow.
+
 **Complete.** `workflow-controller-codex-tester-routing` (C10g-3c1, issue
 [#223](https://github.com/RodrigoFAbreu/workflow-controller/issues/223)) is implemented (CP1 to CP3 and the functional review) and
 accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_CODEX_TESTER_ROUTING_PLAN.md`. Routing accepts `codex` for the

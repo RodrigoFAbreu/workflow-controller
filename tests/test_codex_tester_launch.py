@@ -17,7 +17,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from controller import codex_build, codex_tester as ct, functional_review as fr, review  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
-from tests import fake_codex  # noqa: E402
+from tests import fake_codex, fixtures  # noqa: E402
 from tests.test_codex_bridge import git  # noqa: E402
 from tests.test_codex_tester import TesterFixture  # noqa: E402
 
@@ -34,7 +34,7 @@ class LaunchFixture(TesterFixture):
         assert node, "the fixture's fake Codex needs node"
         (self.prefix / "bin" / "node").symlink_to(node)
         self.origin = self.tmp / "origin.git"
-        subprocess.run(["git", "init", "-q", "--bare", str(self.origin)], check=True)
+        fixtures.git_init(self.origin, "--bare")
         git(self.repo, "remote", "add", "origin", str(self.origin))
         git(self.repo, "push", "-q", "origin", "main")
         self.script(message="all flows passed")

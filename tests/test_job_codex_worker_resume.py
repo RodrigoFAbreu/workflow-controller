@@ -25,7 +25,8 @@ from controller import (  # noqa: E402
     codex_worker as cw, codex_worker_sandbox as ws, job, managed_repo, protocol, review, worker,
 )
 from controller.errors import (  # noqa: E402
-    DriftedInstallationError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError, StaleJobRecordError,
+    DriftedInstallationError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError,
+    PendingJobReconciliationError, StaleJobRecordError,
 )
 from tests import fixtures, process_fixtures  # noqa: E402
 from tests.test_job import FAKE_IDENTITY  # noqa: E402
@@ -163,7 +164,8 @@ class VerdictRowsTest(OrphanFixture):
         before = self.only_record()
         with self.assertRaises(LifecycleWorkerUnverifiableError) as raised:
             self.resume()
-        self.assertEqual(raised.exception.exit_code if hasattr(raised.exception, "exit_code") else 45, 45)
+        # a LifecycleWorkerActiveError subclass: the CLI maps it to exit 45, never the blanket 20
+        self.assertIsInstance(raised.exception, LifecycleWorkerActiveError)
         self.assertTrue(self.alive(self.leader.pid) and self.alive(self.child))
         self.assertEqual(self.only_record(), before)
         self.assertTrue((self.layout_of(record).codex_home / "auth.json").exists())
@@ -239,9 +241,9 @@ class VerdictRowsTest(OrphanFixture):
         record = self.orphan()
         recorded = dict(record["worker_process"], pid_namespace="pid:[4026539999]")
         self.rewrite(record, worker_process=recorded)
-        with self.assertRaises(Exception) as raised:
+        with self.assertRaises(PendingJobReconciliationError) as raised:
             self.run_step()
-        self.assertNotIsInstance(raised.exception, KeyboardInterrupt)
+        self.assertIn("pending", str(raised.exception).lower())
         self.assertEqual(len(list((self.runtime / "jobs").glob("*.json"))), 1)
         self.assertTrue(self.alive(self.leader.pid))
 
@@ -304,9 +306,10 @@ class ProtocolCodexTest(unittest.TestCase):
         self.assertIn(resumed["status"], (job.STATUS_INTERRUPTED, job.STATUS_FINISHED))
         self.assertEqual(process_fixtures.tagged_pids(record["job_id"]), [])
 
-    def drifted(self):
+    def drifted(self, *, change_a_script: bool = True):
         script = self.env.root / "scripts" / "workflow_state.py"
-        script.write_text("# changed after the job was decided\n" + script.read_text())
+        if change_a_script:
+            script.write_text("# changed after the job was decided\n" + script.read_text())
         stub = fixtures.write_stub_workflow_manager(self.env.td / "drifted-manager", release="2.7.0", verify_exit=1)
         target = managed_repo.inspect_for_resume(self.env.root, manager_bin=str(stub))
         self.assertIsNotNone(target.drift)
@@ -321,6 +324,18 @@ class ProtocolCodexTest(unittest.TestCase):
         self.assertEqual(self.env.records()[0]["status"], job.STATUS_LAUNCHED)
         self.assertTrue(fixture.alive(fixture.leader.pid) and fixture.alive(fixture.child))
         self.assertTrue((fixture.layout_of(record).codex_home / "auth.json").exists())
+
+    def test_a_protocol_record_not_admitted_is_refused_before_any_write_and_the_orphan_keeps_running(self) -> None:
+        record = self.orphan()
+        fixture = self.fixture
+        before = self.env.records()
+        target = self.drifted(change_a_script=False)
+        with self.assertRaises(DriftedInstallationError):
+            job.resume(target, identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(self.env.records(), before)
+        self.assertTrue(fixture.alive(fixture.leader.pid) and fixture.alive(fixture.child))
+        self.assertTrue((fixture.layout_of(record).codex_home / "auth.json").exists())
+        self.assertEqual(process_fixtures.tagged_pids(record["job_id"]).count(fixture.child), 1)
 
     def test_an_admitted_record_with_nothing_alive_is_failed_release_changed_with_the_copy_removed(self) -> None:
         record = self.orphan()

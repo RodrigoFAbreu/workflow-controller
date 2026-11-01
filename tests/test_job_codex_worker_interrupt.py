@@ -34,6 +34,24 @@ JOB_VAR = "H4C2_CHILD_JOB"
 CHILD = "tests.test_job_codex_worker_interrupt.ChildController.test_run"
 
 
+NESTED_WRAPPER = """#!{python}
+import os, subprocess, sys, time
+# the bwrap stand-in (D9): a child in its own session, outside the worker's group, that inherits the ownership tag
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"], start_new_session=True,
+                         stdin=subprocess.DEVNULL)
+open({pid_file!r} + ".tmp", "w").write(str(child.pid))
+os.replace({pid_file!r} + ".tmp", {pid_file!r})
+os.execv({fake!r}, [{fake!r}] + sys.argv[1:])
+"""
+
+
+def write_nested_wrapper(path: Path, fake: Path, state: Path) -> None:
+    """``path``: the test-side wrapper of D9. It starts a nested child in its own session, records its pid in
+    ``state/nested.pid``, then execs the fake Codex."""
+    path.write_text(NESTED_WRAPPER.format(python=sys.executable, pid_file=str(state / "nested.pid"), fake=str(fake)))
+    path.chmod(0o755)
+
+
 class ChildController(JobFixture):
     """The Controller of the process tests below. It does nothing unless a parent test started it with the two
     variables set: it scripts a fake Codex that hangs, then runs the job and blocks until it is killed."""
@@ -56,7 +74,8 @@ class ChildController(JobFixture):
         ready = state / "ready"
         scenario = {"log": str(self.log), "exec": {"verdict": "hang", "descendant": True, "refresh_auth": True},
                     "hang_seconds": 120, "orphan_seconds": 120, "ready_file": str(ready)}
-        fake_codex.write_binary(self.package / "bin", scenario, name="codex.js")
+        fake_codex.write_binary(self.package / "bin", scenario, name="codex-fake")
+        write_nested_wrapper(self.package / "bin" / "codex.js", self.package / "bin" / "codex-fake", state)
         (state / "state.json.tmp").write_text(json.dumps({"runtime": str(self.runtime), "root": str(self.managed.root)}))
         os.replace(state / "state.json.tmp", state / "state.json")
         self.run_step(timeout=300)
@@ -119,6 +138,19 @@ class KilledControllerTest(unittest.TestCase):
                         "the fake Codex and its descendant never both carried the tag")
         self.assertTrue(process_fixtures.wait_until(lambda: "worker_process" in self.record(), timeout=30.0))
         self.layout = ws.WorkerLayout(self.runtime, self.job_id)
+        self.nested = int((self.state / "nested.pid").read_text())
+        self.assertIn(self.nested, self.tagged())
+
+    def assert_nested_outside_the_group(self) -> None:
+        pgid = self.record()["worker_process"]["pgid"]
+        stat = process_fixtures.read_stat(self.nested)
+        self.assertIsNotNone(stat)
+        self.assertNotEqual(stat[1], pgid, "the nested child is in the recorded group")
+        self.assertNotEqual(os.getsid(self.nested), pgid)
+
+    def nested_gone(self) -> bool:
+        stat = process_fixtures.read_stat(self.nested)
+        return stat is None or stat[0] in ("Z", "X", "x")
 
     def end_everything(self) -> None:
         process_fixtures.kill_group(self.controller.pid)
@@ -144,8 +176,10 @@ class KilledControllerTest(unittest.TestCase):
 
     def test_a_controller_killed_with_sigint_leaves_no_tagged_process_and_resume_reconciles_it(self) -> None:
         self.assertTrue((self.layout.codex_home / "auth.json").exists())
+        self.assert_nested_outside_the_group()
         os.kill(self.controller.pid, signal.SIGINT)
         self.controller.wait(timeout=60)
+        self.assertTrue(process_fixtures.wait_until(self.nested_gone, timeout=30.0), "the nested child survived")
         self.assertTrue(process_fixtures.wait_until(lambda: not self.tagged(), timeout=30.0), self.tagged())
         self.assertFalse((self.layout.codex_home / "auth.json").exists())
         record = self.record()
@@ -159,13 +193,16 @@ class KilledControllerTest(unittest.TestCase):
     def test_a_controller_killed_with_sigkill_leaves_an_orphan_that_resume_ends_with_its_children(self) -> None:
         orphans = self.tagged()
         self.assertGreaterEqual(len(orphans), 2)
+        self.assert_nested_outside_the_group()
         os.kill(self.controller.pid, signal.SIGKILL)
         self.controller.wait(timeout=60)
         self.assertEqual(sorted(self.tagged()), sorted(orphans), "the orphan did not survive its Controller")
+        self.assertFalse(self.nested_gone())
         self.assertTrue((self.layout.codex_home / "auth.json").exists())
         (resumed,) = self.resume()
         self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED)
         self.assertTrue(process_fixtures.wait_until(lambda: not self.tagged(), timeout=30.0), self.tagged())
+        self.assertTrue(process_fixtures.wait_until(self.nested_gone, timeout=30.0), "resume left the nested child")
         self.assertFalse((self.layout.codex_home / "auth.json").exists())
         self.assertEqual(self.record()["status"], job.STATUS_INTERRUPTED)
 

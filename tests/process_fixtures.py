@@ -335,7 +335,7 @@ LEFTOVER_INVENTORY = (
      "(CONTROLLER_LIVE_CODEX_TESTS=1, skipped without codex, bwrap or a credential file): both waited by the test"),
     ("test_job_codex_worker_interrupt.py", "start:Popen", 1, "bounded",
      "the child Controller (a `unittest` run of `ChildController`) of the killed-Controller tests: killed by the test, "
-     "or by its cleanup, which also ends the fake Codex and its descendant it left; the fake's `hang_seconds` and "
+     "or by its cleanup, which also ends the fake Codex and the nested child (own session, from the test-side wrapper) it left; the fake's `hang_seconds` and "
      "`orphan_seconds` are 120 and the job's timeout is 300, so it ends by itself within five minutes"),
     ("test_codex_worker_ownership_live.py", "start:Popen", 1, "bounded",
      "the child Controller (a `unittest` run of `ChildLiveController`) of the live ownership proof, opt-in "

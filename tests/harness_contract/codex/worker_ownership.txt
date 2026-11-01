@@ -1,0 +1,16 @@
+# Codex worker ownership, codex-cli 0.163.0 (H4c2, workflow-controller-codex-worker-ownership)
+
+Not measured yet. The opt-in live proof is operator-run: it needs a real `codex`, `bwrap`, a recorded `verify-codex` build and
+a credential file, and it costs one model turn on the operator's credentials.
+
+    CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_ownership_live
+
+Setup: a child Controller (a `unittest` run of `ChildLiveController`) records the real build as verified in a scratch runtime
+root, registers the fixture role `codex-live-ownership` and a `CodexLauncher` subclass for the child only, and runs
+`job.execute_step` on a scratch clone with a command that asks the model to run `sleep 300`. The test waits for the record's
+`worker_process` and a process carrying the job's tag, kills the child Controller with `SIGKILL`, runs `job.resume` and checks
+that no process of the tag survives, that no credential copy is left and that the record is reconciled `INTERRUPTED`.
+
+The operator replaces this file with the measured output: the pids that carried the tag before the kill, the ones still alive
+after it (whether the real worker survives the loss of its output pipe is exactly what is measured here), what `resume`
+returned and that nothing of the tag was left.

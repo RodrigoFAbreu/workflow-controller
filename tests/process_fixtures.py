@@ -337,6 +337,10 @@ LEFTOVER_INVENTORY = (
      "the child Controller (a `unittest` run of `ChildController`) of the killed-Controller tests: killed by the test, "
      "or by its cleanup, which also ends the fake Codex and its descendant it left; the fake's `hang_seconds` and "
      "`orphan_seconds` are 120 and the job's timeout is 300, so it ends by itself within five minutes"),
+    ("test_codex_worker_ownership_live.py", "start:Popen", 1, "bounded",
+     "the child Controller (a `unittest` run of `ChildLiveController`) of the live ownership proof, opt-in "
+     "(CONTROLLER_LIVE_CODEX_TESTS=1, skipped without codex, bwrap or a credential file): killed by the test with SIGKILL "
+     "or by its cleanup, which also ends the real worker it left; the job's timeout is 600, so it ends by itself within ten minutes"),
     ("test_codex_worker.py", "start:Popen", 1, "bounded",
      "the other job's tagged sleeper of the deadline-kill test (a 30 second sleep): killed and waited by the test's cleanup"),
     ("test_functional_sandbox.py", "start:run", 5, "short",

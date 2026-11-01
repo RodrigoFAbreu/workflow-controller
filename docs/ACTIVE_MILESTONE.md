@@ -22,7 +22,7 @@ tagged process survived the killed Controller, and `resume` ended both and recon
 state what `resume` and `--abandon` do with a Codex record and why it is not re-attached to, and the roadmap marks H4c2 done
 (`chore:`, no release). Nothing real reaches the branch. The milestone is implemented, functionally reviewed and accepted by policy.
 
-Next action: `/milestone-plan` for H4d (usage windows and limit holds for Codex worker jobs), the next incomplete item on
+Next action: `/milestone-plan` for H4d ([#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266), usage windows and limit holds for Codex worker jobs), the next incomplete item on
 `docs/ROADMAP.md`. The previous item is recorded below.
 
 Previous item, now complete:

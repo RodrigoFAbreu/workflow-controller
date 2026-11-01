@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-user-only-scan",
+  "requirements": {
+    "R1": {
+      "description": "A user-only command name is found in every spelling the issue lists (a trailing ! or ?, brackets, quotes, an = prefix, the other wrapping characters), by the one shared tokeniser, in both the Claude launch scan and the Codex renderer (#247)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A command name inside a longer word or path, and every task that names no user-only command, is judged exactly as before; both directions are tested, and every user-only command of the real command directory is refused in every spelling (#247)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "No new setting, option, exit code or gate; the set of names, the refusal text and the evidence keep their shape; the guide and the roadmap state the rule in place (#247)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

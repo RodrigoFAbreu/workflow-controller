@@ -47,7 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import anchor, lock, observe, routing, worker, worker_stream  # noqa: E402
+from controller import anchor, evidence, functional_review, job, lock, observe, routing, worker, worker_stream  # noqa: E402
 from controller.errors import UserOnlyCommandError, WorkerLaunchError  # noqa: E402
 from tests import fake_claude, fixtures, process_fixtures, test_observe  # noqa: E402
 
@@ -281,6 +281,102 @@ class UserOnlyCommandTest(unittest.TestCase):
                 task="please pre-approve-review-notes for later", cwd=td, env_overrides={},
             )
             self.assertEqual(result.outcome, worker.SUCCESS)
+
+
+#: Spellings of a user-only name that the scan must refuse (TK1, #247); ``{n}``
+#: is the command name. The first group was already refused; the rest were not.
+REFUSED_SPELLINGS = (
+    "{n}", "/{n}", "`/{n}`", "/{n},", "/{n}.", "/{n};", "/{n}:", "/{n})", "/{n}...",
+    "run /{n}\nnext",
+    "/{n}!", "/{n}?", "/{n}>", "/{n}/", "/{n}&", "/{n}\\", "/{n}\u2014",
+    "(/{n})", "\"/{n}\"", "'/{n}'", "[/{n}]", "{{/{n}}}", "(`/{n}`)", "\u201c/{n}\u201d",
+    "--x=/{n}", "x=/{n}", "/{n}=x",
+    "<{n}>", "<{n}/>", "*/{n}*", "**/{n}**", "_/{n}_", "!/{n}", "?/{n}", "-/{n}",
+    "|/{n}|", "@/{n}", "#/{n}", "$/{n}", "run /{n}!", "~/{n}", "--{n}",
+)
+
+#: Spellings that carry the name inside a longer word or path: not refused.
+UNREFUSED_SPELLINGS = (
+    "foo/{n}-bar", "docs/ai-workflow/{n}.md", "{n}.md", "x{n}", "{n}er", "pre-{n}-notes",
+    "./{n}", "../{n}", "../../{n}", "a/{n}", "./a/{n}", "\u00e9{n}",
+)
+
+#: Task strings that name no user-only command at all (D6): the shipped
+#: commands' argument hints, lifecycle-test tasks, words that contain a name,
+#: and relative paths.
+CORPUS = (
+    "[work-item-id]", "<work_item_id> [--stage plan|implementation]", "[round] [path]",
+    "/milestone-plan workflow-controller-user-only-scan",
+    "/milestone-implement wi-1", "/review-implementation wi-1 --round 2",
+    "/apply-plan-review wi-1\n\nFix the confirmed findings.",
+    "please pre-approve-review-notes for later", "an approve-reviewer and an accept-milestones list",
+    "see docs/ai-workflow/approve-review.md and ../approve-review for details",
+    "open ./accept-milestone then ../../request-plan-amendment", "a/recover-implementation-provenance",
+    "it's \"fine\" (really); done: yes, no! ok? [x] {y} <z> a|b c&d *e* #f @g $h",
+    "", "   ", "...", "--", "= = =", "a=b=c", "x\u2014y \u201cquoted\u201d",
+)
+
+
+def _reference_tokens(task: str) -> list[str]:
+    """The pre-TK1 tokeniser, kept as the reference the corpus is judged by."""
+    return [raw.lstrip("`/").rstrip("`'\",.;:)]}") for raw in task.split()]
+
+
+def _reference_refused(task: str) -> bool:
+    return any(t in worker.USER_ONLY_COMMANDS for t in _reference_tokens(task))
+
+
+def _controller_built_tasks() -> list[str]:
+    tasks = [
+        job.worker_task(types.SimpleNamespace(command=f"/{c} wi-1", task_addendum=None))
+        for c in ("milestone-plan", "milestone-implement", "review-plan", "apply-plan-review",
+                  "apply-implementation-review", "prepare-review")
+    ]
+    addendum = evidence.pending_review_stage_write_addendum("wi-1", "IMPLEMENTING")
+    tasks.append(job.worker_task(types.SimpleNamespace(command="/apply-implementation-review wi-1", task_addendum=addendum)))
+    note = functional_review.sandbox_limits_note()
+    tasks.append(job.worker_task(types.SimpleNamespace(command="/prepare-functional-review wi-1", task_addendum=note)))
+    return tasks
+
+
+class UserOnlySpellingTest(unittest.TestCase):
+    def test_every_name_is_refused_in_every_spelling(self) -> None:
+        for name in sorted(worker.USER_ONLY_COMMANDS):
+            for spelling in REFUSED_SPELLINGS:
+                task = spelling.format(n=name)
+                with self.subTest(task=task), self.assertRaises(UserOnlyCommandError) as ctx:
+                    worker._assert_not_user_only(task)
+                self.assertEqual(ctx.exception.evidence["matched_token"], name)
+
+    def test_launch_starts_no_process_for_any_spelling(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td) / "diag.json"
+            for name in sorted(worker.USER_ONLY_COMMANDS):
+                for spelling in REFUSED_SPELLINGS:
+                    task = spelling.format(n=name)
+                    with self.subTest(task=task), self.assertRaises(UserOnlyCommandError):
+                        _launch(task=task, cwd=td, env_overrides={"FAKE_CLAUDE_DIAG_FILE": str(marker)})
+                    self.assertFalse(marker.exists(), task)
+
+    def test_a_name_inside_a_longer_word_or_path_is_not_refused(self) -> None:
+        for name in sorted(worker.USER_ONLY_COMMANDS):
+            for spelling in UNREFUSED_SPELLINGS:
+                task = spelling.format(n=name)
+                with self.subTest(task=task):
+                    worker._assert_not_user_only(task)
+
+    def test_the_fixed_corpus_agrees_with_the_reference_rule(self) -> None:
+        corpus = list(CORPUS) + _controller_built_tasks()
+        corpus += [f"/{c} " + spelling.format(n=name)
+                   for c in ("milestone-plan",) for name in worker.USER_ONLY_COMMANDS
+                   for spelling in UNREFUSED_SPELLINGS]
+        for task in corpus:
+            with self.subTest(task=task):
+                self.assertFalse(_reference_refused(task))
+                worker._assert_not_user_only(task)
+
+    def test_tokens_drop_empty_pieces_and_keep_path_dots(self) -> None:
+        self.assertEqual(worker._task_tokens("... -- = ./a ../b name."), ["./a", "../b", "name"])
 
 
 class LaunchMechanicsTest(unittest.TestCase):

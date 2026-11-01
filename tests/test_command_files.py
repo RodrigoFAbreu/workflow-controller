@@ -17,6 +17,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import command_files, decision, harness, worker, worker_launch
+from tests import test_worker
 from controller.errors import CommandRenderError, MissingCommandsDirectoryError, UserOnlyCommandError
 
 REPO = Path(__file__).resolve().parent.parent
@@ -201,6 +202,51 @@ class UserOnlyTest(Fixture):
                 self.render("ok", f"/{name}")
             with self.assertRaises(UserOnlyCommandError):
                 worker._assert_not_user_only(f"/ok /{name}")
+
+
+class UserOnlySpellingTest(Fixture):
+    """TK1 (#247): the renderer finds every user-only name of the real command
+    directory in every spelling, and keeps a longer word or path unrefused."""
+
+    def names(self) -> frozenset[str]:
+        """The names derived from a copy of the real command files, so the
+        renderer's own scan sees all eleven (the fixture directory alone
+        derives only the launch scan's four)."""
+        for path in REAL_COMMANDS.glob("*.md"):
+            (self.dir / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        names = command_files._user_only_names(self.dir)
+        self.assertEqual(names, ELEVEN)
+        return names
+
+    def test_every_derived_name_is_refused_in_every_spelling(self) -> None:
+        names = self.names()
+        self.put("ok", PLAIN)
+        for name in sorted(names):
+            for spelling in test_worker.REFUSED_SPELLINGS:
+                arguments = spelling.format(n=name)
+                with self.subTest(arguments=arguments), self.assertRaises(UserOnlyCommandError):
+                    self.render("ok", arguments)
+
+    def test_a_spelling_only_the_renderer_scan_catches(self) -> None:
+        """`satisfy-gate` is not one of the launch scan's four names."""
+        self.names()
+        self.put("ok", PLAIN)
+        self.assertNotIn("satisfy-gate", worker.USER_ONLY_COMMANDS)
+        for spelling in ("/{n}!", "(/{n})", "--x=/{n}", "\u201c/{n}\u201d"):
+            arguments = spelling.format(n="satisfy-gate")
+            with self.subTest(arguments=arguments):
+                worker._assert_not_user_only(arguments)
+                with self.assertRaises(UserOnlyCommandError):
+                    self.render("ok", arguments)
+
+    def test_a_longer_word_or_path_is_not_refused(self) -> None:
+        names = self.names()
+        self.put("ok", PLAIN)
+        for name in sorted(names):
+            for spelling in test_worker.UNREFUSED_SPELLINGS:
+                arguments = spelling.format(n=name)
+                with self.subTest(arguments=arguments):
+                    self.assertIn(arguments, self.render("ok", arguments).prompt)
 
 
 class NamesTest(Fixture):

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-worker-sandbox",
+  "requirements": {
+    "R1": {
+      "description": "A worker layout, a `worker` permissions profile (worktree and scratch writable, everything else read-only or absent, network off), its pinned `codex exec` command line and a build that starts no process, checked by `check_worktree`, `check_argv` and `check_home`, with the tester's module and tests unchanged (#252)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The worker's boundary probes and a fail-closed judge cover edit, create, rename, delete and commit inside the worktree, and the refusals outside it (home, credential, canary, push, `gh`, network, sockets), and a guard digest over every `.git` entry except what a commit writes detects any other change, including a new `commondir`, and, for the excluded paths, records only the root types, any symlink or non-regular entry and any `alternates` file and refuses those, so a commit and a plain `git gc` (which writes `packed-refs`, `objects/pack/*` and `info/refs`) leave it unchanged (#252)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The same probe command runs under `codex sandbox` and one `codex exec` turn on the pinned build, opt-in and skipped by default and on CI, and the measured result, including whether a nested read-only `.git/hooks` and `.git/config` held, is recorded and stated in the guides (#252)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Nothing is wired in: the module is only registered in the package, the Codex worker role stays undeclared, no launcher is registered, no real Codex runs in the default suite, and the Claude launch, reviewer, tester, settings, options, exit codes and gates are unchanged; the split, the open composed-configuration limit and H4b2 are stated in the guides and the roadmap (#252, #255)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-worker-sandbox",
+ "dispositions": {
+  "F-06f7c61705e6": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#255"
+  },
+  "F-1d7b5a44b4db": {
+   "disposition": "fixed",
+   "note": "Plan D7 now gives rename and delete files of their own, with the rename inside the tree, so the tracked file keeps the tracked probe's edit."
+  },
+  "F-1f8d3ba71eac": {
+   "disposition": "fixed",
+   "note": "Plan CP3 now says the single H4b row is split into H4b1 (done) and H4b2 (#255) and that H4c's depends_on moves to H4b2; docs/ROADMAP.md has both rows."
+  },
+  "F-66d56b5ab5bd": {
+   "disposition": "dropped",
+   "reason": "Cosmetic: two blank lines before a heading in docs/guide/harnesses.md render identically and the self-review already noted it. Acceptance edits no product file; any later edit to that guide can tidy it."
+  },
+  "F-66ea63049449": {
+   "disposition": "fixed",
+   "note": "Plan CP1 now names the stand-in launchers in <base>/bin (functional_review.write_launchers) in the build description."
+  },
+  "F-91f6f626a613": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#255"
+  },
+  "F-93d005a5fa29": {
+   "disposition": "fixed",
+   "note": "Plan D7 runs the hooks and gitconfig probes after the commit probe; hooks writes .git/hooks/probe-<marker> and gitconfig appends to .git/config without truncating. controller/codex_worker_sandbox.py follows it."
+  },
+  "F-c5dc4c49212e": {
+   "disposition": "fixed",
+   "note": "Plan Files now lists controller/runtime.py as the write primitives module."
+  },
+  "F-e65d50b0dd46": {
+   "disposition": "follow-up",
+   "link": "RodrigoFAbreu/workflow-controller#255"
+  }
+ }
+}

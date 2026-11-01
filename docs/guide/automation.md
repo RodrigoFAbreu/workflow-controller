@@ -155,7 +155,7 @@ the `user_gate` (a decision only a person can make: a human gate such as an
 approval, an acceptance, a merge left to a person or a BLOCK resolution, a
 review round cap, an isolation breach, a pull-request approval) and
 `lane_blocked` (a failed job, a refusal, a gate that needs a fix); by default
-they are the highest severities. A gate record always carries a
+they are the highest severities. A gate record of a Workflow-governed target carries a
 `protocol_gate` block (the table row, the disposition, the action, the reason
 code and the Controller's own `code`), and the announcement reads those
 recorded facts, never the message text. A stop the Workflow itself answers

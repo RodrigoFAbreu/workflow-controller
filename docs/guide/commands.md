@@ -263,8 +263,7 @@ category and severity, see
 | `blocker` | `lane_blocked` |
 
 [ADR 0012](../adr/0012-signalhub-notifications.md) says what each one is
-derived from, except `review_wait`, `checks_wait` and `orchestrator_wait`, added later:
-`orchestrator_wait` is a stop the orchestrator clears by waiting or re-running (a
+derived from, except `review_wait` and `checks_wait`, added later. `orchestrator_wait` is a stop the orchestrator clears by waiting or re-running (a
 pull-request fact or functional evidence awaited, the loop guard), `review_wait` is a stop that waits for an external reviewer or for the
 functional tester's fault to be looked at, `checks_wait` is a spent wait, or a
 stop in a repository without auto-merge, for a pull request's checks,

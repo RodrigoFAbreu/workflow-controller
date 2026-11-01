@@ -51326,6 +51326,48 @@
               "at": "2026-11-01T20:03:27Z"
             }
           ]
+        },
+        "F-dd73b98473a8": {
+          "digest": "dd73b98473a82da2b8eeb1402e18dcb047952a903a6898df362163963e6f6508",
+          "text": "**O1. The exit-code assertion in the `unverifiable` row is always true.** `test_unverifiable_is_refused_before_anything_is_ended_or_written` asserts `raised.exception.exit_code if hasattr(raised.exception, \"exit_code\") else 45` equals `45`. `LifecycleWorkerUnverifiableError` has no `exit_code` attribute, so the check compares `45` with `45`. Assert the error's real exit-code mapping instead (the CLI's exit table, or `isinstance(..., LifecycleWorkerActiveError)` with a comment on why that means exit 45), or drop the line.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b65ef4def394f4f9d4b37a81dc25cc8a53ebbc490ed012b708d7fc2d8e94f04c",
+              "verdict": "REVISE",
+              "at": "2026-11-01T20:57:00Z"
+            }
+          ]
+        },
+        "F-b95054ff3970": {
+          "digest": "b95054ff39702116a249715a07c3569a3e9834387942b1c6e03d2f906511eb72",
+          "text": "**O2. The `step`-refusal row asserts only a bare `Exception`.** `test_step_is_refused_while_the_pending_record_is_unreconciled_and_held` checks only that the exception is not a `KeyboardInterrupt`. I checked that it actually raises `PendingJobReconciliationError`, so the behaviour is right, but any unrelated error would also pass the test. Use `assertRaises(PendingJobReconciliationError)` and check that the message says the record is held.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b65ef4def394f4f9d4b37a81dc25cc8a53ebbc490ed012b708d7fc2d8e94f04c",
+              "verdict": "REVISE",
+              "at": "2026-11-01T20:57:00Z"
+            }
+          ]
+        },
+        "F-7b1e2a910f84": {
+          "digest": "7b1e2a910f842608a2792fbf8cd99317a4c0acc8d0139ad60054e5690587cbf0",
+          "text": "**O3. The live proof kills the Controller as soon as any process carries the tag.** The recorded run took 1.4 s in total, so the Controller was killed long before the model could have started the requested `sleep 300` inside `bwrap`. The capture is honest (\"a second tagged process it had started by then\"), but the proof does not show that a sandboxed tool process escaped the group and was reaped. To make the evidence match D1's `bwrap` wording, consider waiting until a tagged process whose command line contains `sleep` (or `bwrap`) exists before the kill, with a bounded timeout.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b65ef4def394f4f9d4b37a81dc25cc8a53ebbc490ed012b708d7fc2d8e94f04c",
+              "verdict": "REVISE",
+              "at": "2026-11-01T20:57:00Z"
+            }
+          ]
         }
       }
     }

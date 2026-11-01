@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-codex-worker-ownership` (H4c2, issue
+**Complete.** `workflow-controller-codex-worker-ownership` (H4c2, issue
 [#263](https://github.com/RodrigoFAbreu/workflow-controller/issues/263)) owns, judges and reaps a Codex worker's process on
 `resume` and `--abandon`. The plan is `docs/ai-workflow/CONTROLLER_CODEX_WORKER_OWNERSHIP_PLAN.md`. CP1 is complete:
 `_run_codex_worker` persists a `codex_worker` block (operator home, captured credential digest, `lock_inherited: false`)
@@ -20,8 +20,10 @@ with `SIGINT` (the launcher reaps) and `SIGKILL` (`resume` ends the orphan and i
 `tests/harness_contract/codex/worker_ownership.txt` records the measured run of the self-review: the real worker and a second
 tagged process survived the killed Controller, and `resume` ended both and reconciled the record `INTERRUPTED`), the harness, worker and development guides
 state what `resume` and `--abandon` do with a Codex record and why it is not re-attached to, and the roadmap marks H4c2 done
-(`chore:`, no release). Nothing real reaches the branch. Next: the implementation review of the whole item; H4d (usage windows
-and limit holds) follows.
+(`chore:`, no release). Nothing real reaches the branch. The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for H4d (usage windows and limit holds for Codex worker jobs), the next incomplete item on
+`docs/ROADMAP.md`. The previous item is recorded below.
 
 Previous item, now complete:
 

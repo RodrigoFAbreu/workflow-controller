@@ -1,0 +1,26 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-user-only-scan",
+ "dispositions": {
+  "F-22b2ed3bdc82": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6553009369"
+  },
+  "F-a69f3264c8af": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6553009369"
+  },
+  "F-29ed9fa7a5f9": {
+   "disposition": "dropped",
+   "reason": "Plan wording (R2 and D6 against the ~/name exception); D3 writes the exception down and the implementation tests ~/name as a refusal."
+  },
+  "F-4bfa43f0fe58": {
+   "disposition": "dropped",
+   "reason": "Plan wording about dot- and tilde-prefixed relative paths; the behaviour is in the fail-closed direction and the implementation tests it."
+  },
+  "F-67b868bb582c": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the D6 corpus selection; the implemented corpus is a fixed list. Its completeness against the real argument hints is the follow-up on the implementation finding."
+  }
+ }
+}

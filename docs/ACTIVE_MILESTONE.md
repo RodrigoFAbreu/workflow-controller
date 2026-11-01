@@ -2,6 +2,12 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-worker-job-record` (H4c1, issue
+[#260](https://github.com/RodrigoFAbreu/workflow-controller/issues/260)) records a Codex worker run as a job. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_JOB_RECORD_PLAN.md`. CP1 is complete: `controller/codex_worker_job.py` has the pure
+`launch_options`, `stream_texts` and `usage_builder`, with `tests/test_codex_worker_job.py`; nothing calls them yet (CP2 adds the
+job-layer branch). The previous item is recorded below.
+
 **Complete.** `workflow-controller-codex-worker-launch` (H4b2, issue
 [#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md`. `controller/codex_worker.py` has `launch_codex_worker` (headless

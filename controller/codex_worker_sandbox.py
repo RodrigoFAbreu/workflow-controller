@@ -160,11 +160,14 @@ def readable_roots(layout: WorkerLayout, binary: Path, *, extra: Sequence[Path] 
 
 def profile_toml(layout: WorkerLayout, roots: Sequence[Path]) -> str:
     """The ``worker`` permissions profile: ``:minimal``, the readable roots read, the worktree and the scratch area
-    write, ``.git/hooks`` and ``.git/config`` read under the writable worktree (D4, a narrower entry the live test
-    measures), the network off. Nothing of the operator's home is listed."""
+    write, ``.git`` write (Codex keeps ``.git`` read-only inside a writable root unless it is listed, which the live
+    test measured: without it ``git commit`` cannot create ``index.lock``), ``.git/hooks`` and ``.git/config`` read
+    under it (D4, a narrower entry the live test measures), the network off. Nothing of the operator's home is
+    listed."""
     entries = {str(root): "read" for root in roots}
     entries[str(layout.worktree)] = "write"
     entries[str(layout.scratch)] = "write"
+    entries[str(layout.worktree / ".git")] = "write"
     entries[str(layout.worktree / ".git" / "hooks")] = "read"
     entries[str(layout.worktree / ".git" / "config")] = "read"
     quote = codex_sandbox._quote

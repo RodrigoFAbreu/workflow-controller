@@ -473,7 +473,7 @@ The refused set over the shipped commands is eleven names: the nine `COMMAND_FIL
 change in H4e to H4g.
 
 The renderer sends a body verbatim, so it cannot stop a body that tells the agent to run a user-only command. What stops a
-nested invocation is each such command's own literal-confirmation check and, later, H4b's launch policy. The renderer does not
+nested invocation is each such command's own literal-confirmation check and, later, the Codex worker's launch policy (H4b2). The renderer does not
 claim to.
 
 ## The same-provider reviewer

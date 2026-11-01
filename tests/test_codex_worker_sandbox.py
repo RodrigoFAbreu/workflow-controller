@@ -171,6 +171,7 @@ class ProfileTest(Fixture):
         tree = self.layout.worktree
         self.assertIn(f'"{tree}" = "write"', text)
         self.assertIn(f'"{self.layout.scratch}" = "write"', text)
+        self.assertIn(f'"{tree}/.git" = "write"', text)  # live-measured: Codex keeps .git read-only unless listed
         self.assertIn(f'"{tree}/.git/hooks" = "read"', text)
         self.assertIn(f'"{tree}/.git/config" = "read"', text)
         self.assertIn('"/usr" = "read"', text)
@@ -178,9 +179,10 @@ class ProfileTest(Fixture):
             self.assertIn(f'"{root}" = "read"', text)
         self.assertIn('default_permissions = "worker"', text)
         self.assertIn("[permissions.worker.network]\nenabled = false", text)
-        self.assertEqual(text.count('= "write"'), 2)
+        self.assertEqual(text.count('= "write"'), 3)
         parsed = tomllib.loads(text)["permissions"]["worker"]["filesystem"]
         self.assertEqual(parsed[str(tree)], "write")
+        self.assertEqual(parsed[f"{tree}/.git"], "write")
         self.assertEqual(parsed[f"{tree}/.git/config"], "read")
 
     def test_nothing_of_the_operators_home_the_runtime_a_sibling_job_or_the_credential_is_listed(self) -> None:

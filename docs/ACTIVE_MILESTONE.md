@@ -3,14 +3,23 @@
 ## Status
 
 **In progress.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
-[#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is being implemented. The plan is
+[#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3), awaiting the implementation review. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`. CP1 is complete: `controller/codex_worker_sandbox.py` has
 `WorkerLayout`, `check_worktree`, the `worker` profile (worktree and scratch writable, `.git/hooks` and `.git/config`
 read, network off), the pinned `codex exec` line, `check_home`, `check_launch` and `build`, with
 `tests/test_codex_worker_sandbox.py`. CP2 is complete: the module also has the worker probes (`probe_command`, `probe_prompt`,
 `judge`, `sandbox_probe_argv`) and the git guard (`guard_digest`, `check_guard`), which detects any change under `.git`
 other than what a commit or a plain `git gc` writes, and refuses a symlink, a special file or an alternates file there.
-Nothing calls the module. CP3 (live proof, guides, roadmap) is next. The previous item is recorded below.
+CP3 is complete: `tests/test_codex_worker_sandbox_live.py` (opt-in, skipped by default and on CI) ran the identical probe
+command under `codex sandbox -P worker` and one `codex exec` turn on `codex-cli 0.163.0`, and both passed
+(`tests/harness_contract/codex/worker_sandbox.txt`). The live run found a defect in CP1's profile: Codex keeps `.git`
+read-only inside a writable root unless it is listed, so `git commit` failed on `index.lock`; the profile now lists the
+worktree's `.git` as `write`, and the nested read-only `.git/hooks` and `.git/config` entries then held (a write to either
+was refused). The harness and worker guides and the roadmap (H4b split into H4b1, done, and H4b2) state it in place.
+Nothing calls the module; the change is a `chore:` with no release.
+
+Next action: `/milestone-plan` for H4b2 ([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255), the Codex
+worker launcher, which also closes the composed-configuration and nested-repository limits). The previous item is recorded below.
 
 **Complete.** `workflow-controller-orchestrator-stops` (NF3, issue
 [#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)) is implemented (CP1 and CP2 and the functional review) and accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md`. A gate record

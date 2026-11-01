@@ -1,0 +1,65 @@
+# Codex worker sandbox, codex-cli 0.163.0 (H4b1, workflow-controller-codex-worker-sandbox)
+
+Measured 2026-11-01 with
+`CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_sandbox_live -v`
+(two tests: `codex sandbox -P worker`, no model; `codex exec`, one short model turn).
+
+Setup: runtime root under ~/.cache (not /tmp), a `git init` clone with one tracked file as the worktree, the worker
+home (config.toml = `codex_worker_sandbox.config_toml`, private auth.json copy), the stand-in launchers, a stand-in
+operator home with a canary file, a canary variable, a bare origin made readable by an extra root, and a listening TCP
+and Unix socket.
+
+## Finding 1: `.git` is read-only inside a writable root unless it is listed
+
+First run, profile = worktree `write`, `<worktree>/.git/hooks` and `<worktree>/.git/config` `read`:
+
+    PROBE commit FAILED
+    fatal: Unable to create '<worktree>/.git/index.lock': Read-only file system
+
+The same failure with the two nested `read` entries removed, so it is Codex's own protection of `.git`, not the nested
+entries. Adding `<worktree>/.git = "write"` to the profile makes the commit succeed. The profile therefore lists
+`.git` `write` (before the two nested `read` entries). The plan assumed `.git` was covered by the worktree entry; the
+measurement corrected it.
+
+## Finding 2: the nested read-only `.git/hooks` and `.git/config` held
+
+With `.git` `write` and the two nested `read` entries, in both runs (`codex sandbox` and `codex exec`):
+
+    hooks=REFUSED (hook file exists: False)
+    gitconfig=REFUSED (comment present: False)
+    guard_digest check_guard: accepted (the commit's writes only)
+
+Both lines held, so the second line of defence (`guard_digest`/`check_guard`) saw nothing to refuse. A launcher must
+still compare the digests around every run: a limit measured on one build is not a guarantee on the next.
+
+## Probe output (identical in `codex sandbox -P worker` and `codex exec`)
+
+    PROBE tracked WROTE
+    PROBE newfile WROTE
+    PROBE scratch WROTE
+    PROBE sibling WROTE
+    PROBE home REFUSED
+    PROBE tmp REFUSED
+    PROBE vartmp REFUSED
+    PROBE rename WROTE
+    PROBE delete WROTE
+    PROBE commit COMMITTED
+    PROBE hooks REFUSED
+    PROBE gitconfig REFUSED
+    PROBE canary_file BLOCKED
+    PROBE canary_env EMPTY
+    PROBE credential BLOCKED
+    PROBE push REFUSED
+    PROBE gh_name STANDIN
+    PROBE gh_path FAILED
+    PROBE tcp BLOCKED
+    PROBE unix BLOCKED
+
+Host effects asserted after each run: the tracked file changed, the new file and the renamed file exist, the deleted
+file is gone, a new commit exists in the worktree, nothing exists at the sibling, home, `/tmp` and `/var/tmp`
+locations, the bare origin has no ref, the scratch probe file exists and the fake `gh` log holds the call.
+
+## Not measured
+
+The composed-configuration check for the worker profile (H4b2, #255); a nested repository or submodule the worker
+commits into the tree (D4's open limit, H4b2); garbage collection and `git worktree` operations under the profile.

@@ -167,6 +167,39 @@ from a fresh digest and the record and writes nothing. `workflow-controller veri
 [`verify-codex`](commands.md#verify-codex)); the Codex tester launch reads it (a build it has not recorded is refused)
 and no other launch does.
 
+
+## The Codex worker sandbox
+
+`controller/codex_worker_sandbox.py` (H4b1, [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) builds and
+proves the sandbox a Codex **worker** would run in. Nothing calls it: the `codex` harness still declares no worker role,
+no launcher is registered and no setting, option, exit code or gate changes. The launcher is H4b2
+([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)).
+
+The `worker` permissions profile (`default_permissions = "worker"`) differs from the tester's in one thing: the job's
+worktree is writable. Under it a worker can edit, create, rename and delete files in the worktree and commit there; it cannot
+write anywhere else, read outside the readable roots, read the operator's home, environment or its own credential copy, push,
+reach a TCP or Unix socket, or make the real `gh` work (the network is off). The worktree must have a `.git` directory of its
+own (`check_worktree` refuses a missing `.git`, a symlink and a `.git` file such as a linked worktree's); how a real job gets
+such a tree is H4b2's and H4c's decision.
+
+Measured on `codex-cli 0.163.0` (`tests/harness_contract/codex/worker_sandbox.txt`; opt-in, see
+[Development](development.md#working-from-a-checkout), skipped by default and on CI): the same probe command gave the same
+result under `codex sandbox -P worker` and one `codex exec` turn. Two facts came out of it. Codex keeps `.git` read-only inside
+a writable root unless it is listed, so the profile lists the worktree's `.git` as `write`; without it `git commit` cannot
+create `index.lock`. With that entry, a nested read-only `.git/hooks` and `.git/config` **held**: a write to either was
+refused.
+
+A limit measured on one build is not a guarantee on the next, so a second line of defence exists. `guard_digest` hashes every
+entry of `.git` except what a commit or a plain `git gc` writes (`objects/`, `refs/`, `logs/`, `index`, `HEAD`, `ORIG_HEAD`,
+`COMMIT_EDITMSG`, `packed-refs`, `info/refs`, lock files) and records, for those, only their root types, any symlink or
+special file and any `alternates` file. `check_guard(before, after)` refuses any other change, naming the entry (a new hook, an
+edited `config`, a `commondir`, a `.git` swapped for a file or symlink). A launcher compares the two digests around every run.
+
+Open limits, all H4b2's before any worker is launched: the composed-configuration check for the worker profile does not exist
+yet (a layer outside the home, or a setting only the app server composes differently, is not seen); and a nested repository or
+submodule the worker commits into the tree (a `.git` of its own below the worktree root) is not covered by the digest, so the
+launcher must refuse a nested `.git` entry after the run.
+
 ## The shared command renderer
 
 `controller/command_files.py` holds `render_command(name, arguments, commands_dir)`, a pure function over the shared

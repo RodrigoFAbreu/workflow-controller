@@ -17,7 +17,8 @@ settled), and `tests/test_job_codex_worker_interrupt.py` covers the interrupts b
 with `SIGINT` (the launcher reaps) and `SIGKILL` (`resume` ends the orphan and its descendant). CP3 is complete:
 `tests/test_codex_worker_ownership_live.py` is the opt-in live proof (a child Controller runs a real worker and is killed with
 `SIGKILL`, then `resume` must leave no process of the job's tag; skipped by default and on CI, with its reason; the capture
-`tests/harness_contract/codex/worker_ownership.txt` awaits the operator's measured run), the harness, worker and development guides
+`tests/harness_contract/codex/worker_ownership.txt` records the measured run of the self-review: the real worker and a second
+tagged process survived the killed Controller, and `resume` ended both and reconciled the record `INTERRUPTED`), the harness, worker and development guides
 state what `resume` and `--abandon` do with a Codex record and why it is not re-attached to, and the roadmap marks H4c2 done
 (`chore:`, no release). Nothing real reaches the branch. Next: the implementation review of the whole item; H4d (usage windows
 and limit holds) follows.

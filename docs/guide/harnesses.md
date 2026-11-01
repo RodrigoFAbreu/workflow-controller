@@ -281,7 +281,8 @@ with that record, so a lost Controller never leaves an orphan `codex` or `bwrap`
 The tree stays undecided (it is left in place), and nothing real reaches the branch: the `codex` adapter still declares no worker
 role, no setting selects it and no real launcher is registered. The opt-in live proof is
 `tests.test_codex_worker_ownership_live`: it kills a child Controller that is running a real worker and checks that `resume`
-leaves no process of the tag; its measured result goes in `tests/harness_contract/codex/worker_ownership.txt`.
+leaves no process of the tag; its measured result is `tests/harness_contract/codex/worker_ownership.txt` (the real worker
+outlives its killed Controller, and `resume` ends it).
 
 ## The shared command renderer
 

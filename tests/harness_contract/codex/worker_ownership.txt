@@ -1,9 +1,9 @@
 # Codex worker ownership, codex-cli 0.163.0 (H4c2, workflow-controller-codex-worker-ownership)
 
-Not measured yet. The opt-in live proof is operator-run: it needs a real `codex`, `bwrap`, a recorded `verify-codex` build and
-a credential file, and it costs one model turn on the operator's credentials.
-
-    CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_ownership_live
+Measured 2026-11-01 with
+`CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_ownership_live`
+(three tests, 1.4 s: `LiveCommandRendersTest`, no model, passed; `ChildLiveController`, skipped as it is started only by the
+proof; `LiveOwnershipTest`, a real `codex exec` on the operator's credentials, passed).
 
 Setup: a child Controller (a `unittest` run of `ChildLiveController`) records the real build as verified in a scratch runtime
 root, registers the fixture role `codex-live-ownership` and a `CodexLauncher` subclass for the child only, and runs
@@ -11,6 +11,11 @@ root, registers the fixture role `codex-live-ownership` and a `CodexLauncher` su
 `worker_process` and a process carrying the job's tag, kills the child Controller with `SIGKILL`, runs `job.resume` and checks
 that no process of the tag survives, that no credential copy is left and that the record is reconciled `INTERRUPTED`.
 
-The operator replaces this file with the measured output: the pids that carried the tag before the kill, the ones still alive
-after it (whether the real worker survives the loss of its output pipe is exactly what is measured here), what `resume`
-returned and that nothing of the tag was left.
+Result:
+
+    --- tagged before the kill [3054038], alive after it [3054038, 3054045], resume ['INTERRUPTED'], tagged after resume [], record INTERRUPTED (None) ---
+
+The real worker survives the loss of its Controller and its output pipe: the one tagged process seen before the kill was
+still alive after it, with a second tagged process it had started by then. That is the orphan D1 is about. `resume` ended
+both (nothing of the tag was left), reconciled the record `INTERRUPTED` (the clone is not the managed repository, so nothing
+durable happened) and left no credential copy.

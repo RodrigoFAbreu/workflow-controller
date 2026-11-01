@@ -1,0 +1,426 @@
+"""`workflow-controller-codex-worker-job-record` CP2: a Codex worker run recorded as a job (`controller.job`).
+
+Offline, through ``job.execute_step``: a fixture adapter and a ``CodexLauncher`` subclass are registered for the test
+only, a route reaches them, both module seams are set and the worker is the scripted fake Codex of H4b2. Nothing real
+reaches the branch: the real registry is asserted unchanged at the end.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from controller import (  # noqa: E402
+    cli, codex_worker as cw, codex_worker_job, codex_worker_sandbox as ws, harness, job, protocol_decision, review,
+    routing, usage_record, worker, worker_launch,
+)
+from controller.decision import phase_from_wire  # noqa: E402
+from controller.errors import WorkerLaunchError  # noqa: E402
+from tests import test_codex_worker as cwtest  # noqa: E402
+from tests.test_codex_worker_sandbox import make_clone  # noqa: E402
+from tests.test_job import FAKE_IDENTITY, _build_target  # noqa: E402
+from tests.test_protocol_decision import IDENTITY  # noqa: E402
+from tests.test_protocol_outcome import _Env  # noqa: E402
+
+FIXTURE = "codex-fixture"
+EIGHT = {"runtime_root", "job_id", "operator_home", "cwd", "timeout", "on_spawn", "model", "effort"}
+GENERIC_COMMAND = "---\ndescription: a fixture command\nargument-hint: \"<x>\"\nstate_writer: false\n---\nRun: $ARGUMENTS\n"
+
+
+class FixtureLauncher(cw.CodexLauncher):
+    """A ``CodexLauncher`` whose ``launch`` adds the launcher's own test seams to the eight options the job passes."""
+
+    def __init__(self, test: "JobFixture") -> None:
+        self.test = test
+        self.calls: list[dict] = []
+
+    def launch(self, task: str, **options):
+        self.calls.append(dict(options))
+        test = self.test
+        if test.write_command:
+            (test.commands).mkdir(exist_ok=True)
+            name = task.split()[0][1:]
+            if not (test.commands / f"{name}.md").exists():
+                (test.commands / f"{name}.md").write_text(GENERIC_COMMAND)
+        return super().launch(
+            task, commands_dir=test.commands, binary_name=str(test.binary), system_dir=test.system,
+            real_home=test.real_home, run=test.controls(options["job_id"]), **options)
+
+
+class JobFixture(cwtest.LaunchFixture):
+    write_command = True
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.recorded = False
+        self.ids = 0
+        self.launcher = FixtureLauncher(self)
+        fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None, roles=(harness.WORKER,))
+        self.enterContext(mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}))
+        self.enterContext(mock.patch.object(worker_launch, "LAUNCHERS",
+                                            {**worker_launch.LAUNCHERS, FIXTURE: self.launcher}))
+        self.enterContext(mock.patch.object(job, "_new_job_id", self.next_id))
+        self.enterContext(mock.patch.object(job, "CODEX_WORKTREE_PREPARER", self.prepare))
+        self.enterContext(mock.patch.object(job, "CODEX_HOME_RESOLVER", lambda: self.operator))
+        self.options = self.routing_options()
+        (self.tmp / "legacy-root").mkdir()
+        self.managed = _build_target(self.tmp / "legacy-root", phase="PLANNING", governing_workflow_version="2.1")
+
+    def next_id(self) -> str:
+        self.ids += 1
+        return f"job{self.ids}"
+
+    def prepare(self, managed_repo, layout) -> Path:
+        if not layout.worktree.exists():
+            make_clone(layout.worktree)
+        return layout.worktree
+
+    def routing_options(self) -> routing.RoutingOptions:
+        roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
+                 for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
+        config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
+        return routing.RoutingOptions(config=config, config_source="settings")
+
+    def run_step(self, **kw) -> dict:
+        if not self.recorded:
+            self.record()
+        kw.setdefault("timeout", 30)
+        return job.execute_step(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime, routing=self.options, **kw)
+
+    def only_record(self) -> dict:
+        (path,) = sorted((self.runtime / "jobs").glob("*.json"))
+        return json.loads(path.read_text())
+
+    def assert_not_started(self, error: str) -> dict:
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["code"], job.WORKER_NOT_STARTED_CODE)
+        self.assertEqual(record["reconciliation_evidence"]["error"], error)
+        self.assertNotIn("worker_process", record)
+        self.assertEqual(self.execs(), [])
+        self.assert_no_copy()
+        return record
+
+    def assert_no_copy(self) -> None:
+        for path in (self.runtime / "worker").glob("*/codex-home/auth.json"):
+            self.fail(f"a credential copy is left at {path}")
+
+
+class CleanRunTest(JobFixture):
+    def test_a_clean_run_on_a_legacy_target_is_recorded_in_the_claude_shape(self) -> None:
+        self.script(message="all done", subagent=500)
+        record = self.run_step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["reason"], "phase_not_in_to_any_of")
+        self.assertFalse(record["transition_verified"])
+        self.assertEqual(record["worker_outcome"], worker.SUCCESS)
+        block = record["worker"]
+        self.assertEqual((block["subtype"], block["exit_code"], block["is_error"]), ("success", 0, False))
+        for field in ("session_id", "num_turns", "total_cost_usd", "permission_denials", "terminal_reason",
+                      "stop_reason", "owned_processes_seen"):
+            self.assertIsNone(block[field], field)
+        self.assertEqual(block["result_excerpt"], "all done")
+        self.assertEqual(block["stream_diagnosis"]["harness"], "codex")
+        self.assertEqual(record["worker_state"]["state"], worker.ENDED)
+        self.assertEqual(record["ownership_tag"], "job1")
+        self.assertIn("pid", record["worker_process"])
+        self.assertEqual(record["worker_streams"]["format"], "text")
+        self.assertEqual(Path(record["worker_streams"]["stdout_path"]).read_text(), self.launcher_result_stdout())
+        rollouts = block["stream_diagnosis"]["usage_rollouts"]
+        self.assertEqual(record["usage_record"], usage_record.from_codex_rollouts(
+            rollouts, model=review.DEFAULT_MODEL, wall_ms=block["duration_ms"]).to_dict())
+        self.assertEqual((record["usage_record"]["harness"], record["usage_record"]["subagent_total_tokens"]),
+                         ("codex", 500))
+        self.assertNotIn("usage", record)
+        self.assertEqual(record["telemetry"]["problems"], [{"kind": "no_stream", "path": None}])
+        self.assertEqual(record["telemetry"]["harness"], FIXTURE)
+        validity = job.validate_record(record, managed_repo=self.managed, identity=FAKE_IDENTITY)
+        self.assertTrue(validity.valid, validity)
+        self.assert_no_copy()
+
+    def launcher_result_stdout(self) -> str:
+        return Path(self.only_record()["worker_streams"]["stdout_path"]).read_text()
+
+    def test_the_option_mapping_reaches_the_launcher_with_exactly_the_eight_keys(self) -> None:
+        self.run_step()
+        (options,) = self.launcher.calls
+        self.assertEqual(set(options), EIGHT)
+        self.assertEqual(options["operator_home"], self.operator)
+        self.assertEqual(options["cwd"], ws.WorkerLayout(self.runtime, "job1").worktree)
+        self.assertEqual((options["model"], options["effort"]), (review.DEFAULT_MODEL, review.DEFAULT_EFFORT))
+        self.assertEqual(options["timeout"], 30)
+
+    def test_a_build_that_raises_gives_usage_record_failed_and_nothing_escapes(self) -> None:
+        def broken(result, route):
+            def build():
+                raise ValueError("no figures")
+            return build
+
+        with mock.patch.object(codex_worker_job, "usage_builder", broken):
+            record = self.run_step()
+        self.assertEqual(record["usage_record_failed"], "ValueError: no figures")
+        self.assertNotIn("usage_record", record)
+        self.assertEqual(record["worker_outcome"], worker.SUCCESS)
+
+    def test_the_credential_is_copied_back_into_the_codex_home_the_resolver_names(self) -> None:
+        self.script(message="done", refresh_auth=True)
+        record = self.run_step()
+        self.assertIn("rotated-", (self.operator / "auth.json").read_text())
+        self.assertIsNotNone(record["worker"]["stream_diagnosis"]["credentials"])
+        self.assert_no_copy()
+
+    def test_a_codex_home_without_a_credential_file_ends_worker_not_started(self) -> None:
+        (self.operator / "auth.json").unlink()
+        with self.assertRaises(Exception):
+            self.run_step()
+        self.assert_not_started("ReviewLaunchRefusedError")
+
+
+class CodexHomeTest(unittest.TestCase):
+    def test_the_job_layers_codex_home_is_the_clis_with_and_without_the_environment_variable(self) -> None:
+        for env in ({"CODEX_HOME": "/somewhere/codex"}, {}):
+            with self.subTest(env=env), mock.patch.dict(os.environ, env):
+                if not env:
+                    os.environ.pop("CODEX_HOME", None)
+                self.assertEqual(job._codex_home(), cli._codex_home())
+
+
+class UsageGateTest(JobFixture):
+    def test_a_supplied_usage_gate_is_not_called_and_no_reservation_or_usage_block_exists(self) -> None:
+        gate = mock.Mock(side_effect=AssertionError("the usage gate was called"))
+        record = self.run_step(usage_gate=gate)
+        gate.assert_not_called()
+        self.assertNotIn("usage", record)
+        self.assertEqual(record["worker_outcome"], worker.SUCCESS)
+
+    def test_a_chain_selecting_the_codex_entry_under_a_gate_ends_worker_not_started_and_releases_the_reservation(
+            self) -> None:
+        roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT,
+                        "fallback": [{"harness": FIXTURE, "model": review.DEFAULT_MODEL,
+                                      "effort": review.DEFAULT_EFFORT},
+                                     {"harness": "claude-code", "model": "opus"}]}
+                 for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
+        config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
+        self.options = routing.RoutingOptions(config=config, config_source="settings")
+        gate = mock.Mock(return_value="token-1")
+        completed = []
+        with mock.patch.object(job.usage, "bind_job"), \
+                mock.patch.object(job, "_usage_start_block", return_value={"token": "token-1"}), \
+                mock.patch.object(job.usage, "complete", lambda *a, **k: completed.append(a[2:4])), \
+                mock.patch.object(job, "_usage_account") as account:
+            with self.assertRaises(WorkerLaunchError):
+                self.run_step(usage_gate=gate)
+        record = self.assert_not_started("WorkerLaunchError")
+        self.assertEqual(record["usage"], {"token": "token-1"})
+        account.assert_called_once()
+
+
+class OutcomeTest(JobFixture):
+    def test_a_timeout_run_is_failed_with_an_interrupted_outcome_and_the_timeout_subtype(self) -> None:
+        self.script(verdict="hang", message="late")
+        record = self.run_step(timeout=2)
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual((record["worker_outcome"], record["worker"]["subtype"]), (worker.INTERRUPTED, "timeout"))
+        self.assertEqual(self.tagged("job1"), [])
+        self.assert_no_copy()
+
+    def test_a_limit_record_is_a_failure_with_the_limit_subtype_and_no_usage_limit_fact(self) -> None:
+        self.script(verdict="limit", message="partial")
+        record = self.run_step()
+        self.assertEqual((record["worker_outcome"], record["worker"]["subtype"]), (worker.FAILURE, "usage_limit"))
+        self.assertNotIn("usage_limit", record["worker"]["stream_diagnosis"])
+        self.assertIsNone(job.usage_limit_of(record))
+        self.assertNotEqual(record["status"], job.STATUS_INTERRUPTED)
+
+    def test_a_breach_is_a_failure_and_never_finished_even_when_the_transition_would_verify(self) -> None:
+        to_phase = phase_from_wire(self.expected_to_phase())
+        with mock.patch.object(job, "_observe_post_phase", return_value=to_phase), \
+                mock.patch.object(job, "_postcondition_for_phase", return_value=None):
+            clean = self.run_step()
+            self.assertEqual(clean["status"], job.STATUS_FINISHED)  # the control: this run verifies
+            self.script(message="done", write_outside=[str(self.worktree.parent.parent / "job2" / "tree" / ".git"
+                                                           / "hooks" / "pre-commit")])
+            self.recorded = False  # a new script is a new build digest
+            breached = self.run_step()
+        self.assertEqual((breached["worker_outcome"], breached["worker"]["subtype"]), (worker.FAILURE,
+                                                                                       "sandbox_breach"))
+        self.assertNotEqual(breached["status"], job.STATUS_FINISHED)
+        self.assertFalse(breached["transition_verified"])
+        self.assert_no_copy()
+
+    def expected_to_phase(self) -> str:
+        """The phase the legacy transition expects, from a throwaway refused run on a scratch runtime."""
+        scratch = Path(tempfile.mkdtemp(prefix="codex-probe-", dir=self.tmp))
+        with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", None), self.assertRaises(WorkerLaunchError):
+            job.execute_step(self.managed, identity=FAKE_IDENTITY, runtime=scratch, routing=self.options, timeout=30)
+        (path,) = sorted((scratch / "jobs").glob("*.json"))
+        self.ids = 0
+        return json.loads(path.read_text())["expected_transition"]["to_any_of"][0]
+
+
+class RefusalTest(JobFixture):
+    def test_an_unverified_build_ends_worker_not_started(self) -> None:
+        self.recorded = True  # nothing recorded in the build record
+        with self.assertRaises(Exception):
+            job.execute_step(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime, routing=self.options,
+                             timeout=30)
+        self.assert_not_started("ReviewLaunchRefusedError")
+
+    def test_a_task_that_is_not_a_slash_command_ends_worker_not_started(self) -> None:
+        with mock.patch.object(job, "worker_task", return_value="not a command"), self.assertRaises(Exception):
+            self.run_step()
+        self.assert_not_started("ReviewLaunchRefusedError")
+
+    def test_an_unknown_command_ends_worker_not_started(self) -> None:
+        self.write_command = False
+        with self.assertRaises(Exception) as ctx:
+            self.run_step()
+        self.assert_not_started(type(ctx.exception).__name__)
+
+    def test_a_user_only_command_ends_worker_not_started(self) -> None:
+        self.write_command = False
+        (self.commands / "milestone-plan.md").write_text(cwtest.USER_ONLY)
+        with self.assertRaises(Exception) as ctx:
+            self.run_step()
+        self.assert_not_started(type(ctx.exception).__name__)
+
+    def test_a_missing_commands_directory_ends_worker_not_started(self) -> None:
+        self.write_command = False
+        self.commands = self.tmp / "no-such-commands"
+        with self.assertRaises(Exception) as ctx:
+            self.run_step()
+        self.assert_not_started(type(ctx.exception).__name__)
+
+    def test_the_missing_tree_seam_is_a_worker_launch_error_and_no_process_starts(self) -> None:
+        with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", None), self.assertRaises(WorkerLaunchError):
+            self.run_step()
+        self.assert_not_started("WorkerLaunchError")
+        self.assertEqual(self.launcher.calls, [])
+
+
+class UnexpectedPathsTest(JobFixture):
+    def launch_that(self, behaviour):
+        def fake(task, **options):
+            behaviour(options)
+
+        return mock.patch.object(cw, "launch_codex_worker", fake)
+
+    def spawn(self, options) -> None:
+        options["on_spawn"](os.getpid(), os.getpgid(0))
+
+    def test_a_keyboard_interrupt_after_the_spawn_leaves_a_launched_record_with_the_process(self) -> None:
+        def behaviour(options):
+            self.spawn(options)
+            raise KeyboardInterrupt
+
+        with self.launch_that(behaviour), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        self.assertEqual(record["worker_process"]["pid"], os.getpid())
+        self.assertEqual(record["ownership_tag"], "job1")
+
+    def test_any_other_exception_after_the_spawn_ends_the_record_failed_naming_it(self) -> None:
+        def behaviour(options):
+            self.spawn(options)
+            raise RuntimeError("boom")
+
+        with self.launch_that(behaviour), self.assertRaises(RuntimeError):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"], {"code": "RuntimeError", "message": "boom"})
+        self.assertIn("worker_process", record)
+
+    def test_a_controller_error_after_the_spawn_is_failed_not_worker_not_started(self) -> None:
+        def behaviour(options):
+            self.spawn(options)
+            raise WorkerLaunchError("late", evidence={})
+
+        with self.launch_that(behaviour), self.assertRaises(WorkerLaunchError):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["code"], "WorkerLaunchError")
+
+    def test_a_non_controller_error_before_the_spawn_ends_the_record_failed_naming_it(self) -> None:
+        def behaviour(options):
+            raise OSError("disk")
+
+        with self.launch_that(behaviour), self.assertRaises(OSError):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["code"], "OSError")
+        self.assertNotIn("worker_process", record)
+
+
+class ProtocolDecisionTest(unittest.TestCase):
+    """A protocol decision reaches the Codex branch with the shared currency check and the Workflow's own reconcile."""
+
+    def setUp(self) -> None:
+        self.fixture = JobFixture("run_step")
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.env = _Env(self)
+        self.fixture.managed = self.env.inspect()
+        self.fixture.runtime = self.env.runtime
+
+    def step(self) -> dict:
+        fixture = self.fixture
+        fixture.record()
+        return job.execute_step(self.env.inspect(), identity=IDENTITY, runtime=self.env.runtime,
+                                routing=fixture.options, timeout=30)
+
+    def test_a_stale_answer_before_the_spawn_ends_the_terminal_record_with_no_process(self) -> None:
+        stale = SimpleNamespace(current=False, reason="answer_changed", evidence=lambda: {"reason": "answer_changed"})
+        real = protocol_decision.check_currency
+
+        def check(*args, **kwargs):  # only the check immediately before the spawn answers stale
+            return stale if sys._getframe(1).f_code.co_name == "_launch_job" else real(*args, **kwargs)
+
+        with mock.patch.object(protocol_decision, "check_currency", check):
+            self.step()
+        (record,) = self.env.records()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["reconciliation_evidence"]["code"], protocol_decision.DECISION_STALE_AT_LAUNCH)
+        self.assertNotIn("worker_process", record)
+        self.assertEqual(self.fixture.launcher.calls, [])
+
+    def test_a_clean_run_on_the_unlanded_clone_is_finished_with_progress_none_not_failed(self) -> None:
+        record = self.step()
+        self.assertEqual(record["protocol"]["reconcile"]["class"], "no_progress")
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertTrue(record["transition_verified"])
+        self.assertEqual(record["protocol"]["progress"], "none")
+        self.assertEqual(record["worker_outcome"], worker.SUCCESS)
+        self.assertEqual(record["worker_streams"]["format"], "text")
+
+
+class UnchangedClaudePathTest(unittest.TestCase):
+    def test_the_real_registrations_and_the_claude_stream_format_are_unchanged(self) -> None:
+        self.assertEqual(set(worker_launch.LAUNCHERS), {harness.CLAUDE_CODE.name})
+        self.assertNotIn(harness.WORKER, harness.CODEX.roles)
+        self.assertEqual(job.WORKER_STREAM_FORMAT, "stream-json")
+        self.assertFalse(job._is_codex_launcher(worker_launch.for_harness(harness.CLAUDE_CODE.name)))
+        self.assertIsNone(job.CODEX_WORKTREE_PREPARER)
+        self.assertIs(job.CODEX_HOME_RESOLVER, job._codex_home)
+
+    def test_the_predicate_is_on_the_launcher_object(self) -> None:
+        self.assertTrue(job._is_codex_launcher(cw.CodexLauncher()))
+        self.assertTrue(job._is_codex_launcher(type("Sub", (cw.CodexLauncher,), {})()))
+        self.assertFalse(job._is_codex_launcher(object()))
+
+
+if __name__ == "__main__":
+    unittest.main()

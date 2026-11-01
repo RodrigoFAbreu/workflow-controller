@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-codex-worker-job-record` (H4c1, issue
+**Complete.** `workflow-controller-codex-worker-job-record` (H4c1, issue
 [#260](https://github.com/RodrigoFAbreu/workflow-controller/issues/260)) records a Codex worker run as a job. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_JOB_RECORD_PLAN.md`. CP1 is complete: `controller/codex_worker_job.py` has the pure
 `launch_options`, `stream_texts` and `usage_builder`, with `tests/test_codex_worker_job.py`. CP2 is complete: `controller/job.py` has
@@ -11,8 +11,11 @@ the `CODEX_WORKTREE_PREPARER` (default `None`, so the branch refuses before the 
 `runtime.fill_log_file` writes the two stream files; `tests/test_job_codex_worker.py` drives it through `execute_step` with the
 fake Codex. CP3 is complete: `tests/test_codex_worker_job_live.py` is the opt-in live proof (its measured run is
 `tests/harness_contract/codex/worker_job.txt`), and the harness, worker and development guides and the roadmap state the branch, its
-limits (the tree and landing are undecided, ownership is H4c2) in place. Nothing real reaches the branch. Next action: the
-implementation review, then H4c2 (ownership, liveness and abandon; parent #260). The previous item is recorded below.
+limits (the tree and landing are undecided, ownership is H4c2) in place. Nothing real reaches the branch. The milestone is
+implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for H4c2 (ownership, liveness and abandon; parent #260), the next incomplete item on
+`docs/ROADMAP.md`. The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-worker-launch` (H4b2, issue
 [#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is

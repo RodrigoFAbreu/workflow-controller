@@ -19,8 +19,18 @@ imports `command_files`, which D4(a) requires (the plan listed that test as unch
 `tests.test_codex_tester`, `tests.test_worker_launch`, `tests.test_harness`, `tests.test_command_files`,
 `tests.test_write_containment` and `tests.test_fake_claude_contract` pass. CP3 is complete: `tests/test_codex_worker_live.py` (opt-in, skipped by default and on CI) runs one real launch; it was not
 run in this session (it costs a model turn), so `tests/harness_contract/codex/worker_launch.txt` says *not yet measured* until
-the operator runs it. The harness and worker guides, the development page and the roadmap state the launcher in place. Next:
-the self-review, then H4c (the job record, usage and reaping) once this item is accepted.
+the operator runs it. The harness and worker guides, the development page and the roadmap state the launcher in place. The
+self-review fixed one defect: the settling read `sys.exc_info()` to decide whether an exception was in flight, which also
+reports an exception the launch's own caller is handling, so a failed credential-copy removal on a clean run was swallowed
+when the launch was called from an `except` block; the launch now passes `in_flight` explicitly, and
+`SettlingTest.test_an_exception_the_caller_is_handling_is_not_taken_for_one_in_flight` covers it. The full suite then
+showed a latent cross-shard collision in the new tests: the classes of `tests/test_codex_worker.py` run in parallel shards
+and three of them hang a fake under the same `...:job1` tag, so one deadline kill could end another shard's fake (shown by
+staggering two of them by a second); each test now has its own inherited tag prefix and `tagged` matches the exact tag. The
+same collision in the unchanged `tests/test_codex_tester.py` (every bridge's tag is `tester`; `OutcomeTest` and `SettleTest`
+fail together when run concurrently) is pre-existing and outside this item (D1 leaves those tests unedited); it is reported
+for a follow-up issue. It also mended a broken sentence in the workers guide. Next: the implementation review, then H4c (the job record, usage and reaping) once this item
+is accepted.
 
 **Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
 [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is

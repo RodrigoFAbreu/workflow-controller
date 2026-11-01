@@ -14,7 +14,6 @@ gate selects it, ``harness.CODEX`` declares no worker role and ``worker_launch.L
 from __future__ import annotations
 
 import os
-import sys
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -68,11 +67,13 @@ def classify(result: review.RunResult, scan: review.RolloutScan, message: str, t
 
 
 def _settle(diagnosis: dict, layout: codex_worker_sandbox.WorkerLayout, built: codex_worker_sandbox.Built | None,
-            operator_home: Path) -> review.RolloutScan:
+            operator_home: Path, *, in_flight: bool) -> review.RolloutScan:
     """The steps of every path (D6): the readings, the sub-agent rollouts, the credential copy-back and the removal of
     the credential copy. With no ``built`` (``build`` raised) nothing is read or copied back and the copy is removed.
     Each step is guarded: one failing step never skips the next and never replaces the exception already
-    propagating; with nothing in flight the first failure is raised. Returns the rollout scan (empty when none)."""
+    propagating; with nothing in flight the first failure is raised. ``in_flight`` is passed by the caller, not read
+    from ``sys.exc_info()``, which also reports an exception the launch's own caller is handling. Returns the rollout
+    scan (empty when none)."""
     failures: list[Exception] = []
     scanned: list[review.RolloutScan] = []
 
@@ -99,7 +100,7 @@ def _settle(diagnosis: dict, layout: codex_worker_sandbox.WorkerLayout, built: c
             step()
         except Exception as exc:  # noqa: BLE001 -- recorded; raised below only when nothing else is in flight
             failures.append(exc)
-    if failures and sys.exc_info()[0] is None:
+    if failures and not in_flight:
         raise failures[0]
     return scanned[0] if scanned else review.RolloutScan()
 
@@ -184,7 +185,6 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
                                  "credentials": None, "breach": [], "detail": ""}
     built: codex_worker_sandbox.Built | None = None
     ran: review.RunResult | None = None
-    scan = review.RolloutScan()
     duration_ms = 0
     try:
         built = codex_worker_sandbox.build(runtime_root=runtime_root, job_id=job_id, operator_home=operator_home,
@@ -202,8 +202,10 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
         ran = review.run_bounded(list(built.argv), cwd=layout.worktree, env=built.environment, timeout=timeout,
                                  stdin_text=rendered.prompt, on_spawn=on_spawn)
         duration_ms = int((time.monotonic() - started) * 1000)
-    finally:
-        scan = _settle(diagnosis, layout, built, Path(operator_home))
+    except BaseException:
+        _settle(diagnosis, layout, built, Path(operator_home), in_flight=True)
+        raise
+    scan = _settle(diagnosis, layout, built, Path(operator_home), in_flight=False)
     assert ran is not None  # a raise above never reaches here
     message = _message(layout)
     outcome, subtype, detail = classify(ran, scan, message, timeout)

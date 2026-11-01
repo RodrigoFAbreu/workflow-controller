@@ -34,6 +34,11 @@ USER_ONLY = "---\ndescription: only the user\ndisable-model-invocation: true\n--
 class LaunchFixture(Fixture):
     def setUp(self) -> None:
         super().setUp()
+        # Each test's own inherited tag: the classes of this module run in parallel shards, and a deadline kills every
+        # process of the user carrying the exact tag, so a shared `...:job1` would let one shard kill another's fake.
+        inherited = os.environ.get(review.OWNERSHIP_VAR)
+        self.tag_prefix = f"{inherited + ':' if inherited else ''}{self.id().rsplit('.', 1)[-1]}-{os.getpid()}"
+        self.enterContext(mock.patch.dict(os.environ, {review.OWNERSHIP_VAR: self.tag_prefix}))
         node = shutil.which("node")
         assert node, "the fixture's fake Codex needs node"
         (self.prefix / "bin" / "node").symlink_to(node)
@@ -107,7 +112,7 @@ class LaunchFixture(Fixture):
                     for item in (entry / "environ").read_bytes().split(b"\0"):
                         value = item.decode("utf-8", "replace").partition("=")[2] \
                             if item.startswith(f"{review.OWNERSHIP_VAR}=".encode()) else ""
-                        if value == tag or value.endswith(f":{tag}"):
+                        if value == f"{self.tag_prefix}:{tag}":
                             found.append(int(entry.name))
                 except OSError:
                     continue
@@ -146,11 +151,11 @@ class CleanRunTest(LaunchFixture):
     def test_the_child_environment_carries_the_job_id_as_its_ownership_tag(self) -> None:
         self.launch()
         (entry,) = self.execs()
-        self.assertTrue(entry["env"][review.OWNERSHIP_VAR].endswith(":job1"), entry["env"][review.OWNERSHIP_VAR])
+        self.assertEqual(entry["env"][review.OWNERSHIP_VAR], f"{self.tag_prefix}:job1")
 
     def test_a_deadline_kill_leaves_a_process_tagged_with_another_job_alive(self) -> None:
         other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
-                                 env={**os.environ, review.OWNERSHIP_VAR: "other-job"}, start_new_session=True)
+                                 env={**os.environ, review.OWNERSHIP_VAR: f"{self.tag_prefix}:other-job"}, start_new_session=True)
         self.addCleanup(other.wait)
         self.addCleanup(other.kill)
         self.script(verdict="hang", message="late", descendant=True)
@@ -362,6 +367,15 @@ class SettlingTest(LaunchFixture):
         with mock.patch.object(review, "scan_rollouts", side_effect=OSError("scan broke")), \
                 mock.patch.object(review, "copy_back_credentials", side_effect=OSError("copy broke")):
             error = self.refusal()
+        self.assertEqual(str(error), "scan broke")
+        self.assertFalse(self.credential_copy().exists())
+
+    def test_an_exception_the_caller_is_handling_is_not_taken_for_one_in_flight(self) -> None:
+        with mock.patch.object(review, "scan_rollouts", side_effect=OSError("scan broke")):
+            try:
+                raise KeyError("the caller's own")
+            except KeyError:
+                error = self.refusal()
         self.assertEqual(str(error), "scan broke")
         self.assertFalse(self.credential_copy().exists())
 

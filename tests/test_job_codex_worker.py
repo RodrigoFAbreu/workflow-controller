@@ -43,6 +43,7 @@ class FixtureLauncher(cw.CodexLauncher):
     def __init__(self, test: "JobFixture") -> None:
         self.test = test
         self.calls: list[dict] = []
+        self.results: list = []
 
     def launch(self, task: str, **options):
         self.calls.append(dict(options))
@@ -52,9 +53,11 @@ class FixtureLauncher(cw.CodexLauncher):
             name = task.split()[0][1:]
             if not (test.commands / f"{name}.md").exists():
                 (test.commands / f"{name}.md").write_text(GENERIC_COMMAND)
-        return super().launch(
+        result = super().launch(
             task, commands_dir=test.commands, binary_name=str(test.binary), system_dir=test.system,
             real_home=test.real_home, run=test.controls(options["job_id"]), **options)
+        self.results.append(result)
+        return result
 
 
 class JobFixture(cwtest.LaunchFixture):
@@ -118,7 +121,7 @@ class JobFixture(cwtest.LaunchFixture):
 
 class CleanRunTest(JobFixture):
     def test_a_clean_run_on_a_legacy_target_is_recorded_in_the_claude_shape(self) -> None:
-        self.script(message="all done", subagent=500)
+        self.script(message="all done", subagent=500, stdout="the run said this", stderr="a transcript line")
         record = self.run_step()
         self.assertEqual(record["status"], job.STATUS_FAILED)
         self.assertEqual(record["reconciliation_evidence"]["reason"], "phase_not_in_to_any_of")
@@ -135,7 +138,12 @@ class CleanRunTest(JobFixture):
         self.assertEqual(record["ownership_tag"], "job1")
         self.assertIn("pid", record["worker_process"])
         self.assertEqual(record["worker_streams"]["format"], "text")
-        self.assertEqual(Path(record["worker_streams"]["stdout_path"]).read_text(), self.launcher_result_stdout())
+        (result,) = self.launcher.results
+        self.assertIn("the run said this", result.stdout)
+        self.assertIn("a transcript line", result.stderr)
+        streams = record["worker_streams"]
+        self.assertEqual(Path(streams["stdout_path"]).read_text(), result.stdout)
+        self.assertEqual(Path(streams["stderr_path"]).read_text(), result.stderr)
         rollouts = block["stream_diagnosis"]["usage_rollouts"]
         self.assertEqual(record["usage_record"], usage_record.from_codex_rollouts(
             rollouts, model=review.DEFAULT_MODEL, wall_ms=block["duration_ms"]).to_dict())
@@ -147,9 +155,6 @@ class CleanRunTest(JobFixture):
         validity = job.validate_record(record, managed_repo=self.managed, identity=FAKE_IDENTITY)
         self.assertTrue(validity.valid, validity)
         self.assert_no_copy()
-
-    def launcher_result_stdout(self) -> str:
-        return Path(self.only_record()["worker_streams"]["stdout_path"]).read_text()
 
     def test_the_option_mapping_reaches_the_launcher_with_exactly_the_eight_keys(self) -> None:
         self.run_step()

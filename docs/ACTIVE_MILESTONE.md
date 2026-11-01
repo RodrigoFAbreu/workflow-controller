@@ -14,7 +14,7 @@ fake Codex. CP3 is complete: `tests/test_codex_worker_job_live.py` is the opt-in
 limits (the tree and landing are undecided, ownership is H4c2) in place. Nothing real reaches the branch. The milestone is
 implemented, functionally reviewed and accepted by policy.
 
-Next action: `/milestone-plan` for H4c2 (ownership, liveness and abandon; parent #260), the next incomplete item on
+Next action: `/milestone-plan` for H4c2 ([#263](https://github.com/RodrigoFAbreu/workflow-controller/issues/263), ownership, liveness and abandon; parent #260), the next incomplete item on
 `docs/ROADMAP.md`. The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-worker-launch` (H4b2, issue

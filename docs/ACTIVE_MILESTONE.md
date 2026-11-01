@@ -2,8 +2,8 @@
 
 ## Status
 
-**In progress.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
-[#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3), awaiting the implementation review. The plan is
+**Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
+[#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`. CP1 is complete: `controller/codex_worker_sandbox.py` has
 `WorkerLayout`, `check_worktree`, the `worker` profile (worktree and scratch writable, `.git/hooks` and `.git/config`
 read, network off), the pinned `codex exec` line, `check_home`, `check_launch` and `build`, with

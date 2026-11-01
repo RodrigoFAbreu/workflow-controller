@@ -112,6 +112,7 @@ import datetime
 import fcntl
 import json
 import os
+import re
 import secrets
 import signal
 import socket
@@ -163,21 +164,6 @@ USER_ONLY_COMMANDS: frozenset[str] = frozenset({
     "request-plan-amendment",
 })
 
-#: Trailing punctuation a command mention can carry in ordinary prose (a
-#: backticked or sentence-final mention) -- stripped from a token's tail
-#: before the denylist comparison, per the plan's own text model.
-_TRAILING_PUNCTUATION = "`'\",.;:)]}"
-
-#: Leading characters a command mention can carry: the ``/`` the plan's
-#: text model names explicitly, plus the opening backtick of a backticked
-#: mention -- both stripped as a run before the denylist comparison. The
-#: plan's own worked example (a backticked `` `/approve-review` `` mention
-#: recognised the same as the bare token) requires stripping the opening
-#: backtick as well as the slash: a token that begins with a literal
-#: backtick immediately followed by ``/`` has no leading ``/`` to strip
-#: until the backtick is stripped first.
-_LEADING_MARKERS = "`/"
-
 #: The two required fields the last ``result`` event must carry for its
 #: result to be decidable at all (every other field is optional and
 #: defaults to ``None`` when absent).
@@ -193,16 +179,27 @@ _OPTIONAL_FIELDS = (
 
 
 def _task_tokens(task: str) -> list[str]:
-    """Split ``task`` on whitespace runs into tokens, each with a leading
-    ``/`` and any run of trailing punctuation from ``_TRAILING_PUNCTUATION``
-    stripped -- the plan's own text model (revision 47), so a backticked
-    `` `/approve-review` `` or a sentence-final ``/approve-review.`` is
-    recognised the same as the bare token ``approve-review``."""
+    """Split ``task`` into the pieces a command name can hide in.
+
+    Each whitespace chunk is split on ``=`` and on every run of characters
+    that is not a letter, digit, ``_``, ``-``, ``.`` or ``/`` -- quotes,
+    brackets, ``!``, ``?``, ``|``, a backtick, a curly quote and the like
+    only decorate a word, so they delimit; the characters a path or file
+    name keeps do not. Each piece then loses leading ``/``, ``-`` and ``_``
+    (so ``/name``, ``--name`` and ``_name_`` read as ``name``) and trailing
+    ``/``, ``.``, ``-`` and ``_`` (so ``name.``, ``name...`` and ``name/``
+    do). A leading ``.`` is kept, so a relative path (``./name``,
+    ``../name``) stays a path and is not a name; a name inside a longer word
+    or path (``foo/name-bar``, ``name.md``) is one piece that is not a name.
+    ``~`` delimits, so ``~/name`` reads as ``/name`` and is refused -- the
+    fail-closed side. Only non-empty pieces are returned: every caller tests
+    membership."""
     tokens = []
-    for raw in task.split():
-        token = raw.lstrip(_LEADING_MARKERS)
-        token = token.rstrip(_TRAILING_PUNCTUATION)
-        tokens.append(token)
+    for chunk in task.split():
+        for piece in re.split(r"[^\w./-]+|=", chunk):
+            piece = piece.lstrip("/-_").rstrip("/.-_")
+            if piece:
+                tokens.append(piece)
     return tokens
 
 

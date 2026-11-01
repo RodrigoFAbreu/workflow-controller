@@ -47767,7 +47767,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestrator-stops-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestrator-stops-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -47907,12 +47907,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-11-01T06:07:06Z",
+      "state_revision": 27,
+      "last_transition": "2026-11-01T06:25:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -48007,6 +48007,62 @@
               "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
               "verdict": "APPROVE",
               "at": "2026-11-01T04:58:02Z"
+            }
+          ]
+        },
+        "F-9636346abad9": {
+          "digest": "9636346abad9b2420c37a836bea4298417d0cff3b6ff926499a4bcc05b42bd46",
+          "text": "`_protocol_gate`'s docstring (`controller/job.py:5258-5259`) still says the block is `{row, disposition, action_id}` and that a Controller-coded gate is written without one. Both statements are stale now that every gate decision writes the five-key block.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ecc36309753e939be84b2b28f2b211d975c1b27ec0a52c96913d9ec33351f66a",
+              "verdict": "REVISE",
+              "at": "2026-11-01T06:25:00Z"
+            }
+          ]
+        },
+        "F-6106a4e42ccd": {
+          "digest": "6106a4e42ccddf3543a2c6848eb048217c286d3356354174fdcde243015d8ab3",
+          "text": "`ORCHESTRATOR_HANDLED_CODES` and `ORCHESTRATOR_BLOCKED_CODES` (`controller/job.py:5266-5268`) repeat as literals the codes that `protocol_decision.NO_PROGRESS_REPEATED`, `pr_report.GATE_UNCHANGED`, `pr_report.ROW_EVIDENCE_NEEDED` and `protocol_decision.WORKFLOW_UNHEALTHY` already name. Using the constants would keep a renamed code from silently falling back to `user_gate`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ecc36309753e939be84b2b28f2b211d975c1b27ec0a52c96913d9ec33351f66a",
+              "verdict": "REVISE",
+              "at": "2026-11-01T06:25:00Z"
+            }
+          ]
+        },
+        "F-e6a9ced5e8d0": {
+          "digest": "e6a9ced5e8d0b3e87c523891b1db93bbc83f29d37c96d29ed96714951530e5d8",
+          "text": "`docs/guide/automation.md` says \"A gate record always carries a `protocol_gate` block\". A gate with neither a Workflow answer nor a Controller code, such as a legacy target's gate, writes none (`_protocol_gate_block` returns `None`). The same paragraph also covers records without the newer keys. \"A gate record of a Workflow-governed target carries ...\" would be exact.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ecc36309753e939be84b2b28f2b211d975c1b27ec0a52c96913d9ec33351f66a",
+              "verdict": "REVISE",
+              "at": "2026-11-01T06:25:00Z"
+            }
+          ]
+        },
+        "F-0749d6e86662": {
+          "digest": "0749d6e86662e13687a93ef9201b98bfcfcf37e1396fca80b5d19bb235be95db",
+          "text": "`tests/test_pr_report.py` `ReportTest` already builds a real `stale` reporter record (`third`) without asserting its event. Asserting `user_gate` there would back the second reporter code of CP1's Done-when through the real path, not only through the synthetic `stop_record` row.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ecc36309753e939be84b2b28f2b211d975c1b27ec0a52c96913d9ec33351f66a",
+              "verdict": "REVISE",
+              "at": "2026-11-01T06:25:00Z"
             }
           ]
         }

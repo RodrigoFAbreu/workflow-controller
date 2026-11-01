@@ -50132,7 +50132,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-job-record-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-job-record-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -50276,12 +50276,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 20,
-      "last_transition": "2026-11-01T17:39:03Z",
+      "state_revision": 21,
+      "last_transition": "2026-11-01T17:46:42Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -50461,6 +50461,34 @@
               "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
               "verdict": "APPROVE",
               "at": "2026-11-01T16:54:09Z"
+            }
+          ]
+        },
+        "F-5388e1decd4d": {
+          "digest": "5388e1decd4d4576874bf262014557b19504bd73a29725d324ef8bcf758d79d1",
+          "text": "`runtime.fill_log_file`'s docstring says the file \"is never followed through a symlink\", but the function calls `full_path.resolve()` before `os.open(..., O_NOFOLLOW)`, so a symlink at `rel_path` that points inside the runtime root is followed. Only the containment check holds. This is the same pattern as `create_log_file`. Either open the unresolved path with `O_NOFOLLOW` after the containment check, or reword the docstring.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ffad3654870bb18522ab269ba063007a4d14684f4e2ffdaa97efc79eafb3fa3c",
+              "verdict": "REVISE",
+              "at": "2026-11-01T17:46:42Z"
+            }
+          ]
+        },
+        "F-a81644ea8537": {
+          "digest": "a81644ea853784cbd1981f467c61d2747c1675a6dfc05a1d60fb304298cd8b3e",
+          "text": "A Codex job's `worker_streams.format` changes to `text` only in the completion write. The LAUNCHED record, and the FAILED record that `_run_codex_worker` writes after an exception once the process has spawned, still say `stream-json` for a plain-text stream. Consider setting the format when the Codex branch is taken (before the spawn flush), or say in the guide that the field is final only on a completed record.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "ffad3654870bb18522ab269ba063007a4d14684f4e2ffdaa97efc79eafb3fa3c",
+              "verdict": "REVISE",
+              "at": "2026-11-01T17:46:42Z"
             }
           ]
         }

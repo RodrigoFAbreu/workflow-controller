@@ -339,9 +339,10 @@ class WiringTest(unittest.TestCase):
         self.assertNotIn(harness.WORKER, harness.CODEX.roles)
         self.assertEqual(set(worker_launch.LAUNCHERS), {a.name for a in harness.ADAPTERS.values() if harness.WORKER in a.roles})
 
-    def test_nothing_in_controller_imports_the_module_but_the_package_init(self) -> None:
+    def test_nothing_in_controller_imports_the_module_but_the_package_init_and_the_codex_worker_launch(self) -> None:
+        # H4b2: the Codex worker launch is the one consumer (it renders the command it launches).
         for path in sorted((REPO / "controller").glob("*.py")):
-            if path.stem in {"command_files", "__init__"}:
+            if path.stem in {"command_files", "__init__", "codex_worker"}:
                 continue
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 names = [a.name for a in node.names] if isinstance(node, (ast.Import, ast.ImportFrom)) else []

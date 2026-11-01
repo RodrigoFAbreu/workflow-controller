@@ -2,6 +2,19 @@
 
 ## Status
 
+**Complete.** `workflow-controller-codex-worker-launch` (H4b2, issue
+[#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md`. `controller/codex_worker.py` has `launch_codex_worker` (headless
+one-shot `codex exec` in the job's worktree under the H4b1 sandbox, on a build verified by `verify-codex`), `classify`, the
+settling and `CodexLauncher`, with the worker's composed-configuration check and the nested-repository refusal in
+`controller/codex_worker_sandbox.py`. It is registered for a fixture role only: `CODEX.roles` and `worker_launch.LAUNCHERS` are
+unchanged. `tests/test_codex_worker_live.py` is opt-in and its measured run is recorded in
+`tests/harness_contract/codex/worker_launch.txt`. The guides and the roadmap state the launcher in place; the change is a
+`chore:` with no release. A cross-shard tag collision in `tests/test_codex_tester.py` is pre-existing and reported for a
+follow-up issue.
+
+Next action: `/milestone-plan` for H4c (the Codex worker's job record, usage and reaping), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
+
 **Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
 [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`. CP1 is complete: `controller/codex_worker_sandbox.py` has
@@ -85,28 +98,32 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-codex-worker-sandbox` (H4b1, issue [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)),
-implementation revision 1. Every flow is offline and unit-level (no real Claude, Codex, network or `gh`) except flow 8, which
-is the opt-in live proof and is operator-run. Run from the product clone with `TMPDIR` set to a writable scratch directory,
-one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp` and a restricted
-`PATH`: a flow that creates folders there or runs git (flows 1, 3) is `environment`-limited and operator-run.
+Item `workflow-controller-codex-worker-launch` (H4b2, issue [#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)),
+implementation revision 3. Every flow is offline and unit-level (no real Claude, Codex, network, `gh` or `ssh`; the launch
+tests use a fake Codex) except flow 9, the opt-in live proof, which is operator-run. Run from the product clone with `TMPDIR`
+set to a writable scratch directory, one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a
+read-only `/tmp` and a restricted `PATH`: a flow that creates folders or runs git (flows 1 to 3) is `environment`-limited
+there and operator-run. No flow writes inside the product clone.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Layout, profile, command line, build, probes, git guard (R1, R2) | `python3 -B -m unittest tests.test_codex_worker_sandbox` | Passes: the `worker` profile makes the worktree and scratch writable (the worktree's `.git` listed `write`, `.git/hooks` and `.git/config` read) with network off; the pinned `codex exec` line; `build` starts no process; the judge fails closed; the guard digest ignores what a commit or a plain `git gc` writes and detects any other `.git` change (new `commondir`, symlink, special file, `alternates`). |
-| 2 | Module registered, nothing wired (R4) | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment` | Passes: the module is in the package list; the write-containment scan accepts it. |
-| 3 | Neighbouring modules unchanged (R1, R4) | `python3 -B -m unittest tests.test_codex_sandbox tests.test_codex_tester tests.test_worker_launch tests.test_harness` | Passes: the tester sandbox, the Claude launch and the harness declarations are unchanged; the Codex worker role is still undeclared. |
-| 4 | Test-hygiene inventory | `python3 -B -m unittest tests.test_fake_claude_contract` | Passes: `LEFTOVER_INVENTORY` has a row for each new test file. |
-| 5 | Live test skipped by default (R3) | `python3 -B -m unittest tests.test_codex_worker_sandbox_live -v` | Every test is reported `skipped` (opt-in variable unset); no process is started. |
-| 6 | Documents (R3, R4) | `python3 -B tools/check_docs.py` | Exits 0; `docs/guide/harnesses.md` and `workers.md` state the profile, the measured boundary, the open composed-configuration limit and the H4b1/H4b2 split; the roadmap row is split. |
-| 7 | Generated harness table | `python3 -B tools/harness_table.py --check` | Exits 0 (no drift; the worker sandbox adds no declaration). |
-| 8 | Live proof (R3), operator-run | `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_sandbox_live -v` | Needs real `codex` (0.163.0), `bwrap` and a recorded `verify-codex` build. Both the `codex sandbox -P worker` probe and the one `codex exec` turn pass; the output matches `tests/harness_contract/codex/worker_sandbox.txt` (edit, create, rename, delete and `git commit` inside the worktree succeed; writes to `.git/hooks` and `.git/config`, home, credential, canary, push, `gh`, network and sockets are refused). |
+| 1 | Launcher: order of the launch, outcomes, settling (R2, R3) | `python3 -B -m unittest tests.test_codex_worker` | Passes (fake Codex, no network): an unverified build is refused naming `verify-codex` before any write or process; the four outcomes (`SUCCESS`, `TIMEOUT`, `LIMIT`, `FAILED`) classify; a changed guard digest is a breach; the credential copy is removed on every path, including a launch called from an `except` block. |
+| 2 | Composed-configuration check and nested-repository refusal (R1) | `python3 -B -m unittest tests.test_codex_worker_sandbox` | Passes: `compose_argv`, `check_compose_argv`, `effective_policy`, `check_effective`, `check_composed` and `nested_git_entries`/`check_nested` accept the worker profile and refuse a layer, setting or nested `.git` entry that widens it. |
+| 3 | Neighbouring modules unchanged (R1, R3) | `python3 -B -m unittest tests.test_codex_sandbox tests.test_codex_tester tests.test_worker_launch tests.test_harness tests.test_command_files` | Passes: the tester modules, the Claude launch and the harness declarations are unchanged; `CODEX.roles` and `worker_launch.LAUNCHERS` have no real Codex worker entry; `codex_worker` is the one module importing `command_files`. |
+| 4 | Registration and write containment (R3) | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment` | Passes: `codex_worker` is in the package list and dependency order; the scan accepts both new modules. |
+| 5 | Test-hygiene inventory | `python3 -B -m unittest tests.test_fake_claude_contract` | Passes: `LEFTOVER_INVENTORY` has a row for each new test file. |
+| 6 | Live test skipped by default (R4) | `python3 -B -m unittest tests.test_codex_worker_live -v` | Every test is reported `skipped` (opt-in variable unset); no process is started. |
+| 7 | Documents (R4) | `python3 -B tools/check_docs.py` | Exits 0; `docs/guide/harnesses.md`, `workers.md` and `development.md` and the roadmap state the launcher, its limits and H4c as next. |
+| 8 | Generated harness table | `python3 -B tools/harness_table.py --check` | Exits 0 (no drift; the launcher adds no declaration). |
+| 9 | Live proof (R4), operator-run | `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_live -v` | Needs real `codex` (0.163.0), `bwrap`, a recorded `verify-codex` build and a credential file. Both tests pass (the rendered command, then one short real turn): outcome `SUCCESS` with a non-empty final message, no breach, a new commit in the clone, the guard digest accepted, no nested `.git`, the credential copy removed. Matches `tests/harness_contract/codex/worker_launch.txt` (measured 2026-11-01). |
 
-**Known limitations / out of scope.** Nothing calls the module: no launcher (H4b2,
-[#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)), no Codex worker role, setting, option, exit code or
-gate. The composed-configuration check and the nested-repository limit for the worker profile are open and belong to H4b2.
-The change is a `chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206).
+**Known limitations / out of scope.** Nothing reaches the launcher: it is registered for a fixture role only, with no real
+`LAUNCHERS` key, Codex worker role, setting, option, exit code or gate. The job's worktree is created by the caller (H4c
+prepares it); job records, usage derivation, ownership tags and reaping on a timeout are H4c; usage windows H4d; review roles
+H4e; `milestone-implement` on Codex H4f. A worktree that legitimately vendors a nested repository is refused. The change is a
+`chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206;
+`tests/test_codex_tester.py` has a pre-existing shared-tag collision reported for a follow-up).
 
 ## Next action
 
-Manual functional review of H4b1 (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4b2 ([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255), the Codex worker launcher).
+Manual functional review of H4b2 (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4c (the job record, usage and reaping).

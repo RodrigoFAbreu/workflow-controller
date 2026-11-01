@@ -1,0 +1,23 @@
+# Codex worker launch, codex-cli 0.163.0 (H4b2, workflow-controller-codex-worker-launch)
+
+Measured 2026-11-01 with
+`CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_live`
+(two tests, 13.8 s: `LiveCommandRendersTest`, no model; `LiveWorkerLaunchTest`, one short real model turn). An
+earlier run of the same command during implementation round 2 also passed (2 tests, 21.9 s).
+
+Setup: a scratch clone at the layout's worktree path with a recorded `verify-codex` entry for the real build, a
+one-line command file, a private copy of the operator's `auth.json` under the job's `codex-home/`, and the digest
+taken by `check_guard` before the run.
+
+Result: the test passed through a real `codex exec`:
+
+    --- outcome: SUCCESS (success), exit 0, 12362 ms ---
+    done
+    --- diagnosis ---
+    harness: codex; readings: five_hour 15.0 %, weekly 33.0 % (read from the job's rollout under codex-home/sessions/);
+    usage_rollouts: one non-subagent rollout, 42033 input / 228 output tokens; subagents: [];
+    credentials: unchanged; breach: []; detail: ''; subtype: success
+
+Asserted and held: outcome `SUCCESS` with a non-empty final message, no breach entries, a new commit in the clone,
+`check_guard` accepting the digest taken before the run, no nested `.git` entry, and the credential copy under the
+job's `codex-home/` removed.

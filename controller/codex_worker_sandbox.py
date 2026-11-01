@@ -4,8 +4,9 @@ A Codex **worker** changes the job's worktree and commits there, and nothing els
 (:mod:`controller.codex_sandbox`): a restricted-read permissions profile in the worker's own ``CODEX_HOME/config.toml``
 (``default_permissions = "worker"``), selected in place of ``-s``, with the worktree and a scratch area writable and the
 network off. The tester's module is imported for the helpers that depend only on strings and paths and is never edited;
-the helpers typed to its layout are written again here over :class:`WorkerLayout`. Nothing calls this module yet: the
-launcher is H4b2 (see ``docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md``).
+the helpers typed to its layout are written again here over :class:`WorkerLayout`. The composed-configuration check and
+the nested-repository refusal (H4b2) are here too. Nothing outside the tests calls this module yet (see
+``docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`` and ``CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md``).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import re
 import shlex
 import stat
 import sys
+import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -219,7 +221,7 @@ def check_launch(layout: WorkerLayout, config_text: str, binary: Path, env: Mapp
     """The pre-launch controls, in order, before every ``codex exec`` and ``codex sandbox`` run: the layers outside
     the home, then the home before each of ``mcp list`` and ``features list`` and once more after both (a listing
     writes Codex state into the home). Both listings run in the worktree. The first refusal stops the rest. The
-    composed configuration is not checked here: it is H4b2's (D6)."""
+    composed configuration is :func:`check_composed`'s, a separate control."""
     run = run or review.run_bounded
     review.check_outside_layers(system_dir)
     for kind in ("mcp", "features"):
@@ -319,6 +321,217 @@ def check_argv(command: Sequence[str], layout: WorkerLayout, *, model: str = rev
     for flag, expected in (("-C", str(layout.worktree)), ("-o", str(layout.last_message)), ("--color", "never")):
         if value_of(flag) != expected:
             raise _refuse(f"the command line does not pin {flag} {expected}", check="argv", entry=flag)
+
+
+# ---------------------------------------------------------------------------
+# The composed configuration (H4b2, D2)
+# ---------------------------------------------------------------------------
+
+
+def compose_argv(layout: WorkerLayout, *, binary: Path, model: str = review.DEFAULT_MODEL,
+                 effort: str = review.DEFAULT_EFFORT) -> list[str]:
+    """The only constructor of the worker's composing command: ``app-server`` with the exec's own ``--disable`` and
+    ``-c`` items, so the composed values are the ones the worker runs under."""
+    out = [str(binary), "app-server", "--strict-config"]
+    for feature in review.DISABLED_FEATURES:
+        out += ["--disable", feature]
+    for item in required_overrides(layout, model=model, effort=effort):
+        out += ["-c", item]
+    return out + ["--listen", "stdio://"]
+
+
+def check_compose_argv(command: Sequence[str], layout: WorkerLayout, *, model: str = review.DEFAULT_MODEL,
+                       effort: str = review.DEFAULT_EFFORT) -> None:
+    """Refuse a composing command line that omits a pinned item, adds a ``-c`` outside :func:`required_overrides`,
+    selects a sandbox or carries a banned flag, then require it to equal :func:`compose_argv` for its own binary."""
+    if len(command) < 3 or command[1] != "app-server":
+        raise _refuse("the command line is not an app-server run", check="argv", entry=command[1] if len(command) > 1
+                      else "")
+    present_disables = {command[i + 1] for i, a in enumerate(command[:-1]) if a == "--disable"}
+    for feature in review.DISABLED_FEATURES:
+        if feature not in present_disables:
+            raise _refuse(f"the command line does not disable the {feature!r} feature", check="argv", entry=feature)
+    if "code_mode_host" in present_disables:
+        raise _refuse("the command line disables the 'code_mode_host' tool", check="argv", entry="code_mode_host")
+    present = [command[i + 1] for i, a in enumerate(command[:-1]) if a == "-c"]
+    required = required_overrides(layout, model=model, effort=effort)
+    for item in required:
+        if item not in present:
+            raise _refuse(f"the command line omits the pinned override {item!r}", check="argv", entry=item)
+    for item in present:
+        if item not in required:
+            raise _refuse(f"the command line carries the unpinned override {item!r}", check="argv", entry=item)
+    for arg in command[1:]:
+        if arg in BANNED_FLAGS:
+            raise _refuse(f"the command line carries {arg!r}", check="argv", entry=arg)
+        if arg == "--config" or arg.startswith(("--config=", "--sandbox", "--add-dir=", "-c=")):
+            raise _refuse(f"the command line carries the equivalent spelling {arg!r}", check="argv", entry=arg)
+    if "--strict-config" not in command:
+        raise _refuse("the command line omits --strict-config", check="argv", entry="--strict-config")
+    if command.count("--listen") != 1 or command.index("--listen") + 1 >= len(command) \
+            or command[command.index("--listen") + 1] != "stdio://":
+        raise _refuse("the command line does not listen on stdio", check="argv", entry="--listen")
+    if list(command) != compose_argv(layout, binary=Path(command[0]), model=model, effort=effort):
+        raise _refuse("the command line differs from the composing command the Controller builds", check="argv",
+                      entry="argv")
+
+
+def _override_values(layout: WorkerLayout, *, model: str, effort: str) -> dict[str, object]:
+    """The value each ``-c`` item of :func:`required_overrides` sets, keyed by the dotted name as written: the item
+    parsed back as TOML, so the argv and the expected policy have one source. A dotted name the reviewer's table keeps
+    flat (``skills.bundled.enabled``) stays flat; any other is a leaf of its table, which is compared whole."""
+    out: dict[str, object] = {}
+    for item in required_overrides(layout, model=model, effort=effort):
+        key = item.partition("=")[0]
+        node: object = tomllib.loads(item)
+        for part in key.split("."):
+            node = node[part]
+        if "." in key and key not in review.EFFECTIVE_POLICY:
+            table, _, leaf = key.partition(".")
+            out.setdefault(table, {})[leaf] = node
+        else:
+            out[key] = node
+    return out
+
+
+def effective_policy(layout: WorkerLayout, roots: Sequence[Path], *, model: str = review.DEFAULT_MODEL,
+                     effort: str = review.DEFAULT_EFFORT) -> dict[str, object]:
+    """Every value the worker's composed ``config`` must equal: the argv-pinned values parsed back from
+    :func:`required_overrides`, the profile parsed back from :func:`profile_toml`, the sandbox keys unset, and the
+    reviewer's remaining scalar defaults for the keys the argv does not pin."""
+    profile = tomllib.loads(profile_toml(layout, roots))
+    scalars = {key: value for key, value in review.EFFECTIVE_POLICY.items() if key != "sandbox_mode"}
+    return {
+        **scalars, **_override_values(layout, model=model, effort=effort),
+        "permissions": profile["permissions"], "sandbox_mode": None, "sandbox_workspace_write": None,
+    }
+
+
+def check_effective(composed: Mapping, layout: WorkerLayout, roots: Sequence[Path], *,
+                    model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT) -> None:
+    """``composed`` is the ``config/read`` result with layers. The layers follow the reviewer's rules, every key of
+    :func:`effective_policy` is compared leaf by leaf (``null`` is unset, an unexpected leaf refuses), every origin must
+    be an allowed layer, no layer other than the packaged defaults may set a forbidden key (the worker's own
+    ``permissions`` and ``default_permissions`` are compared in full instead) and no disabled feature may be reported
+    enabled. The error names the leaf, its value and its origin layer."""
+    config = composed.get("config") if isinstance(composed, Mapping) else None
+    origins = composed.get("origins") if isinstance(composed, Mapping) else None
+    layers = composed.get("layers") if isinstance(composed, Mapping) else None
+    if not isinstance(config, Mapping) or not isinstance(origins, Mapping) or not isinstance(layers, list):
+        raise _refuse("the composed configuration is not a config/read result with layers", check="effective")
+    review._check_layers(layers, layout.codex_home)
+    for key, want in effective_policy(layout, roots, model=model, effort=effort).items():
+        got = review._lookup(config, key)
+        wanted_leaves = codex_sandbox._set_leaves(want, key)
+        got_leaves = codex_sandbox._set_leaves(got, key)
+        if wanted_leaves == got_leaves:
+            continue
+        differing = [leaf for leaf in sorted({*wanted_leaves, *got_leaves})
+                     if wanted_leaves.get(leaf, "<unset>") != got_leaves.get(leaf, "<unset>")]
+        leaf = next((name for name in differing if name in got_leaves), differing[0])
+        raise _refuse(f"the composed configuration sets {leaf} to {got_leaves.get(leaf, '<unset>')!r}, expected "
+                      f"{wanted_leaves.get(leaf, '<unset>')!r}", check="effective", key=leaf,
+                      value=got_leaves.get(leaf), source=codex_sandbox._origin_of(origins, leaf))
+    for key in review.INSTRUCTION_KEYS:
+        if config.get(key) and review._origin(origins, key) is None:
+            raise _refuse(f"the composed configuration sets {key} from no layer the Controller can judge",
+                          check="effective", key=key, value=config.get(key))
+    forbidden = tuple(key for key in review.FORBIDDEN_EFFECTIVE_KEYS if key not in ("permissions", "default_permissions"))
+    leaves = review.flatten(config)
+    for name in sorted(origins):
+        origin = origins[name]
+        source = origin.get("name", origin) if isinstance(origin, Mapping) else origin
+        if isinstance(source, Mapping) and source.get("type") == "packagedDefaults":
+            continue
+        kind = source.get("type") if isinstance(source, Mapping) else None
+        if kind not in review.ORIGIN_ALLOWED and review.MANAGED_APPROVED_LEAVES.get(name, object()) != leaves.get(name):
+            raise _refuse(f"the composed configuration sets {name} from a {kind} layer", check="effective",
+                          key=name, value=leaves.get(name), source=origin)
+        if name.split(".", 1)[0] in forbidden or (name.startswith("skills.") and name != "skills.bundled.enabled"):
+            raise _refuse(f"the composed configuration sets {name}", check="effective", key=name,
+                          value=leaves.get(name), source=origin)
+    features = config.get("features")
+    for feature in review.DISABLED_FEATURES:
+        if isinstance(features, Mapping) and feature in features and features[feature] is not False:
+            raise _refuse(f"the composed configuration sets features.{feature} to {features[feature]!r}", check="effective",
+                          key=f"features.{feature}", value=features[feature],
+                          source=review._origin(origins, f"features.{feature}"))
+
+
+def _compose_config(layout: WorkerLayout, binary: Path, env: Mapping[str, str], *, model: str, effort: str,
+                    timeout: float, run: Callable[..., review.RunResult] | None = None) -> dict:
+    """Run the worker's composing command in the worktree and return the ``config/read`` result with its layers (the
+    exchange of :func:`review.compose_config`: ``initialize``, ``initialized``, ``config/read`` with ``includeLayers``,
+    stdin held open until the answer). It needs no credential and starts no model request."""
+    command = compose_argv(layout, binary=binary, model=model, effort=effort)
+    check_compose_argv(command, layout, model=model, effort=effort)
+    requests = [
+        {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "workflow-controller", "version": "1"}}},
+        {"method": "initialized"},
+        {"id": 2, "method": "config/read", "params": {"includeLayers": True, "cwd": str(layout.worktree)}},
+    ]
+    run = run or review.run_bounded
+    result = run(command, cwd=layout.worktree, env=env, timeout=timeout,
+                 stdin_text="".join(json.dumps(item) + "\n" for item in requests), hold_open_until=review._answered)
+    stderr = result.stderr.decode("utf-8", "replace")
+    if result.timed_out or result.exit_code != 0:
+        raise _refuse("the composing command did not run", check="effective", value=stderr.strip()[-400:])
+    for line in result.stdout.decode("utf-8", "replace").splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get("id") == 2:
+            if isinstance(message.get("result"), dict):
+                return message["result"]
+            raise _refuse("the composing command answered config/read with an error", check="effective",
+                          value=json.dumps(message.get("error"))[:400])
+    raise _refuse("the composing command printed no config/read answer", check="effective", value=stderr.strip()[-400:])
+
+
+def check_composed(layout: WorkerLayout, config_text: str, roots: Sequence[Path], binary: Path,
+                   env: Mapping[str, str], *, model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT,
+                   run: Callable[..., review.RunResult] | None = None, timeout: float = LISTING_TIMEOUT) -> None:
+    """The composed-configuration launch control: compose through the ``run`` seam with the worktree as ``cwd``, check
+    the home again (the composing command writes Codex state into it), then compare with :func:`check_effective`. A
+    separate control from :func:`check_launch`; a caller runs both before each launch. ``roots``, ``model`` and
+    ``effort`` are the ones :func:`build` was given (``Built.roots``); the first refusal stops the rest. The
+    composition is read from a separate app-server process, not from the ``exec`` itself."""
+    composed = _compose_config(layout, binary, env, model=model, effort=effort, timeout=timeout, run=run)
+    check_home(layout, config_text)
+    check_effective(composed, layout, roots, model=model, effort=effort)
+
+
+# ---------------------------------------------------------------------------
+# Nested repositories (H4b2, D3)
+# ---------------------------------------------------------------------------
+
+
+def nested_git_entries(worktree: Path) -> list[str]:
+    """The relative path of every entry named ``.git`` below the worktree's root, of any type (a directory, a file as a
+    submodule or linked worktree has, a symlink). The walk never follows a symlink and skips the top-level ``.git``
+    (which :func:`guard_digest` covers). Sorted."""
+    found: list[str] = []
+    stack = [worktree]
+    while stack:
+        directory = stack.pop()
+        with os.scandir(directory) as entries:
+            children = sorted(entries, key=lambda entry: entry.name)
+        for entry in children:
+            top = directory == worktree and entry.name == ".git"
+            if entry.name == ".git" and not top:
+                found.append(os.path.relpath(entry.path, worktree))
+            if not top and entry.is_dir(follow_symlinks=False):
+                stack.append(Path(entry.path))
+    return sorted(found)
+
+
+def check_nested(worktree: Path) -> None:
+    """Refuse a worktree with a nested ``.git`` entry, naming the first. A nested repository holds hooks and a config
+    that run later, outside the sandbox, when git is next used there."""
+    nested = nested_git_entries(worktree)
+    if nested:
+        raise _refuse(f"the worktree holds a nested git entry ({nested[0]})", check="nested", entry=nested[0])
 
 
 # ---------------------------------------------------------------------------

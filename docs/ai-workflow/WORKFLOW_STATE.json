@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-orchestrator-stops",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -47756,6 +47756,251 @@
         },
         "evaluated_at": "2026-11-01T04:05:00Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-orchestrator-stops": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-orchestrator-stops",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestrator-stops-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestrator-stops-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "07a87a2def79392b848a9a1603070df8dfa100ca",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+        "approved_review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ee97a1a14c5e2fa40308a9b174a9e8e5e858e964"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-orchestrator-stops-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4416b61547687ba6c0dd1ec6a7ee3d228ab14262"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-orchestrator-stops-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "660aa3dc73bb9495a7dec5627b77a3b17d3724eb"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T05:01:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+            "ledger": {
+              "local": {
+                "bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "72df0e9869801b0f5caf2e048e8145a9df75d62f8e8a13bab0e7c31bf18ebeeb",
+                "ledger_entry_sha256": "808bd75c0bae2a364efcdac141de84fb40cfe5596631f01b5b3fe968e160db1b",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-orchestrator-stops/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "c7ed57943cfb010b847df362c40bd1a734a985ac84434f40bd6f7631805073af",
+                "ledger_entry_sha256": "8a5edabe8f9dbb535ebd4e6b92d2d60fdb8dab31c0f7baf55c698fa6508c0dda",
+                "run_ref": "codex:20261101T045650Z-e50a2fe6",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T05:01:00Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-01T04:56:22Z",
+          "verdict_sha256": "72df0e9869801b0f5caf2e048e8145a9df75d62f8e8a13bab0e7c31bf18ebeeb",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-orchestrator-stops/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-01T04:58:02Z",
+          "verdict_sha256": "c7ed57943cfb010b847df362c40bd1a734a985ac84434f40bd6f7631805073af",
+          "run_ref": "codex:20261101T045650Z-e50a2fe6",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 6,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 21,
+      "last_transition": "2026-11-01T05:01:00Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-01T04:54:04Z",
+        "consumed": {
+          "review_content_id": "13d20102cd537fcfab73427cd95884a1da2bfce5fc32c79fd9a5dbf3a4c187d0",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+          "bundle_id": "ef591b7a73696ba667828242fd6e6da83d1e37049d8c31a095fa0b24daaf0199",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0ff99c695b0a9f8426db87439a75da1a852c7d67fc7d7a0fbef66d197ce40ae4",
+        "13d20102cd537fcfab73427cd95884a1da2bfce5fc32c79fd9a5dbf3a4c187d0",
+        "6be5ae1074407fb3ea1ed44ea6d973d7a012aa6ef80ff125b6448c6635648496",
+        "78a13f27624a14faaced1a1eddc6a63a6533b87c4e1aac3b282f43dbc6369545",
+        "7e0520a6fd0609e368d1ba029b9ed232e039941ab52b57172b4b3824d0812a79"
+      ],
+      "optional_findings": {
+        "F-b1d10f986831": {
+          "digest": "b1d10f986831c23e5cfae5660a0c40d589d69cccbecbdaa24dc006a00ecee19d",
+          "text": "\"What exists\" says a Controller-coded gate \"carries neither\" `protocol_gate` nor a code. That holds for gates returned through their own `_no_launch_record` call (the review-mode refusals at `job.py:8297`/`8313`, the external cap at `job.py:8324`, the tester's pre-run stops), but not for those returned by `_decide_protocol_current`: `no_progress_repeated`, `decision_unstable` and the `_automatic` refusals (`unknown_action`, `user_only_action`, `invocation_mismatch` ...) reach the fall-through at `job.py:8344` and already carry `protocol_gate` `{row, disposition, action_id}` with the Workflow's disposition (`validation` for the 8 `no_progress_repeated` stops). Stating this keeps D4's legacy case precise: a 1.27.0 `no_progress_repeated` record has a `protocol_gate` without `code`, and is judged `user_gate`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "78a13f27624a14faaced1a1eddc6a63a6533b87c4e1aac3b282f43dbc6369545",
+              "verdict": "REVISE",
+              "at": "2026-11-01T04:36:57Z"
+            }
+          ]
+        },
+        "F-162627cb0636": {
+          "digest": "162627cb0636c027005c3a3c656513c38a48a72618502c6588e8b5b1b4c58964",
+          "text": "D2 lists `no_progress_repeated` as a wait the orchestrator handles, but its gate text asks to \"change the work item (take the action by hand, or fix what stops it)\". The issue's guidance accepts it as a non-decision; consider naming in the guide paragraph (CP2) that a repeated `orchestrator_wait` for the same stop is the signal to look, since at `LOW` it may go unnoticed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "78a13f27624a14faaced1a1eddc6a63a6533b87c4e1aac3b282f43dbc6369545",
+              "verdict": "REVISE",
+              "at": "2026-11-01T04:36:57Z"
+            }
+          ]
+        },
+        "F-cf436c6b8d71": {
+          "digest": "cf436c6b8d71679859c419ecb2c6e69a595b1bded1e7d2e7e974e48f655a0114",
+          "text": "CP2 says \"the settings page\" (`docs/guide/runtime.md`) lists `orchestrator_wait`, but that page names no individual event today (`checks_wait` and `review_wait` appear only in `docs/guide/commands.md` and `docs/guide/automation.md`; `runtime.md` documents the `notifications.events` shape). Either name the section that gets the entry, or drop `runtime.md` from CP2 so it does not gain a one-off event list.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "0ff99c695b0a9f8426db87439a75da1a852c7d67fc7d7a0fbef66d197ce40ae4",
+              "verdict": "REVISE",
+              "at": "2026-11-01T04:42:52Z"
+            }
+          ]
+        },
+        "F-8b0a3b7e310d": {
+          "digest": "8b0a3b7e310def29b6804aa5feeb525db7b44bb686027bfe3ff52998cafaef18",
+          "text": "CP2 adds `orchestrator_wait` to ADR 0012's event table (`docs/adr/0012-signalhub-notifications.md:42-52`), but that table lists neither `review_wait` nor `checks_wait`; `docs/guide/commands.md:266` explains that those two were \"added later\" than the ADR. Adding only the new event makes the ADR table half-current. Either list the three later `state` events together in the ADR, or leave the ADR table as the original decision and extend `docs/guide/commands.md:266`'s \"added later\" sentence to name `orchestrator_wait` as well.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T04:56:22Z"
+            }
+          ]
+        },
+        "F-a38619c7d618": {
+          "digest": "a38619c7d6184dcfcf2bafd75a9fbd1062914e80a93cd6c94ee52daaf57a28f3",
+          "text": "CP1 says existing `review_wait` tests pass unchanged, but `tests/test_protocol_job.py:1195` asserts the exact three-field `protocol_gate`, and line 1261 asserts Controller-coded records have none. D1 intentionally changes both shapes. Include this test module in CP1’s files and allow updating those assertions while preserving the event expectations.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T04:58:02Z"
+            }
+          ]
+        }
       }
     }
   }

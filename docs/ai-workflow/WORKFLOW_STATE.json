@@ -47228,7 +47228,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-user-only-scan-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-user-only-scan-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -47337,7 +47337,108 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "4c665cf61c99ffd0351518ec24d065e60e8d69a523081ffa09b2b043589d469b",
+        "approved_review_content_id": "34080611652a1144527b49ed6f5a7b9ced89327c3ac37faaa38b29ea6d1d758b",
+        "review_content_manifest": [
+          {
+            "path": "controller/worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57947881d91c3e840383b5ed948da3b140d21283"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-user-only-scan-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "134dbbf1da2c811b6a5051f8313b810ac9f44e49"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "78d4d2ff5e829b41dc59da86880f5848a40d2619"
+          },
+          {
+            "path": "tests/test_command_files.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c0ccb347355c89497d76c2f18877e875486e724"
+          },
+          {
+            "path": "tests/test_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4b2ac93d719d11024219ca8bdfc74a0d31f6513a"
+          }
+        ],
+        "reviewed_content_commit": "92d9f43b84396439dac7872bb3b45f87b6a9917b",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T03:30:30Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "34080611652a1144527b49ed6f5a7b9ced89327c3ac37faaa38b29ea6d1d758b",
+            "ledger": {
+              "local": {
+                "bundle_id": "4c665cf61c99ffd0351518ec24d065e60e8d69a523081ffa09b2b043589d469b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ed015754cc85a273a14bb58088dbbe709fcaaaf74dbba5fdff4a46f51dcb9bd9",
+                "ledger_entry_sha256": "b83257c4422764ea70630918863337dd7d96812fd1665221f2303fee818dabb7",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-user-only-scan/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "4c665cf61c99ffd0351518ec24d065e60e8d69a523081ffa09b2b043589d469b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ecad00b9184043c8870124758c498e843089e76a6dbc2e3e1b8f833729d37822",
+                "ledger_entry_sha256": "e646b4b45686d5e84c6450652db38e89bbe2acc09553f5eed63ae0eae5fe963f",
+                "run_ref": "codex:20261101T032147Z-802932ec",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T03:30:30Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
@@ -47368,12 +47469,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 15,
-      "last_transition": "2026-11-01T03:04:54Z",
+      "state_revision": 18,
+      "last_transition": "2026-11-01T03:30:30Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -47435,11 +47536,60 @@
               "at": "2026-11-01T02:12:22Z"
             }
           ]
+        },
+        "F-a69f3264c8af": {
+          "digest": "a69f3264c8af44582dab9a433f44d642dcbf25005c57422879bc5fa86b40876f",
+          "text": "OPT-1 (D6 corpus, argument hints and Controller-built tasks): the corpus in `tests/test_worker.py` uses three made-up hint strings rather than the shipped commands' real `argument-hint` values (for example `<plan|implementation|acceptance> [work-item-id]`, `\"<base-sha> <stage> [work-item-id]\"`, `\"<work-item-id> <checkpoint-id>\"`), and `_controller_built_tasks` covers six of the commands the Controller issues; `/record-manual-plan-review`, `/record-manual-implementation-review`, `/review-implementation`, `/apply-functional-review` and `/recover-implementation-provenance` are not in it. A probe of the new tokeniser over every real `argument-hint` in `.claude/commands/` finds no user-only token, so nothing is wrong today. Reading the hints from `.claude/commands/*.md` and listing every issued command would make the test cover what D6 names.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34080611652a1144527b49ed6f5a7b9ced89327c3ac37faaa38b29ea6d1d758b",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T03:18:27Z"
+            }
+          ]
+        },
+        "F-22b2ed3bdc82": {
+          "digest": "22b2ed3bdc825861fc605d56fde67d5bc18f7b87cbfc55ec6853f15e45397f5a",
+          "text": "OPT-2 (D2 boundary, ASCII dot prefix): a leading `.` stops the leading strip, so `.approve-review` and `...approve-review` (an ASCII ellipsis glued to the name) are not refused, while `…/approve-review` (a Unicode ellipsis) is. This follows D2 and is no regression (the old rule did not refuse them either), but the guide text names only `./` and `../` as kept paths. One sentence in `docs/guide/workers.md`, or one row in `UNREFUSED_SPELLINGS`, would record the boundary.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "34080611652a1144527b49ed6f5a7b9ced89327c3ac37faaa38b29ea6d1d758b",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T03:18:27Z"
+            }
+          ]
         }
       },
       "consumed_plan_review_content_ids": [
         "c64dd2e406d9482aff4a36c95c3deb55f7e8e1c272dadfabcb30cf0172f2a50c"
-      ]
+      ],
+      "implementation_review_stages": {
+        "review_content_id": "34080611652a1144527b49ed6f5a7b9ced89327c3ac37faaa38b29ea6d1d758b",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4c665cf61c99ffd0351518ec24d065e60e8d69a523081ffa09b2b043589d469b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-01T03:18:27Z",
+          "verdict_sha256": "ed015754cc85a273a14bb58088dbbe709fcaaaf74dbba5fdff4a46f51dcb9bd9",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-user-only-scan/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4c665cf61c99ffd0351518ec24d065e60e8d69a523081ffa09b2b043589d469b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-01T03:23:42Z",
+          "verdict_sha256": "ecad00b9184043c8870124758c498e843089e76a6dbc2e3e1b8f833729d37822",
+          "run_ref": "codex:20261101T032147Z-802932ec",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      }
     }
   }
 }

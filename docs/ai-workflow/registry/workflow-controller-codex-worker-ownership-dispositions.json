@@ -1,0 +1,62 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-worker-ownership",
+ "dispositions": {
+  "F-37442c1324b8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6565537361"
+  },
+  "F-4ca55ebc1646": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  },
+  "F-4facc3f82ac7": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  },
+  "F-74863b72f9f2": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6565537361"
+  },
+  "F-7859f8799cfa": {
+   "disposition": "dropped",
+   "reason": "Plan wording about two 'next resume' situations of the unlistable /proc case; the implementation tests both."
+  },
+  "F-7b1e2a910f84": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6565537361"
+  },
+  "F-7cf61116c192": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  },
+  "F-a444dee7fe82": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  },
+  "F-b338e11f5475": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-b95054ff3970": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: the step-refusal test asserts the exact exception."
+  },
+  "F-d52805afb6b5": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  },
+  "F-dd73b98473a8": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: the unverifiable test asserts the real exit-code mapping."
+  },
+  "F-f2c22b1672d6": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  },
+  "F-fb9323a06254": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states it."
+  }
+ }
+}

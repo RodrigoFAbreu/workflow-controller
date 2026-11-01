@@ -246,10 +246,43 @@ supplies (`None` by default, which refuses the launch before it starts and leave
 test sets it to a clone. Because a clone is not the managed repository, a finished Codex job does not prove its effects landed:
 on a legacy target the record ends `FAILED` with `phase_not_in_to_any_of`, and on a protocol decision `reconcile` answers
 `no_progress` and the job ends `FINISHED` with `protocol.progress: "none"`. How the tree is made and how its commits land is an
-owner decision needed before H4e. **Ownership**: liveness, `resume`/`--abandon` and reaping after a Controller interrupt are
-H4c2, and a Codex worker does not inherit the lifecycle lock's descriptor, so nothing real may reach this branch before H4c2. The
+owner decision needed before H4e. **Ownership** is described in the next section. The
 Codex home comes from `job.CODEX_HOME_RESOLVER` (the CLI's own `$CODEX_HOME` rule). The opt-in live proof is
 `tests.test_codex_worker_job_live`; its measured result is `tests/harness_contract/codex/worker_job.txt`.
+
+### A Codex worker on `resume` and `--abandon`
+
+H4c2 ([#263](https://github.com/RodrigoFAbreu/workflow-controller/issues/263)) decides what `resume` and `resume --abandon` do
+with that record, so a lost Controller never leaves an orphan `codex` or `bwrap` process of the job's tag.
+
+- **The `codex_worker` block.** `_run_codex_worker` persists `codex_worker` (`operator_home`, the `captured_digest` of the
+  operator's credential file, and `lock_inherited: false`) as its first write, before the tree is prepared and so before any
+  spawn. The digest is what the credential copy-back needs and a lost Controller cannot rebuild it. The block is also the
+  predicate: `job._is_codex_worker_record` is true for a non-review, non-tester record that carries it, whatever the adapter's
+  name. `lock_inherited` is a statement for operators and `inspect` only; the Controller never reads it. A Codex worker is
+  started with `close_fds=True` and so does not hold the lifecycle lock's descriptor, which is why the liveness verdict reads
+  only `worker_process` and the ownership tag, never the lock.
+- **`resume` ends what it finds; it never re-attaches.** A Codex record has no stream to replay (the files are filled once,
+  after the run), no stdin anchor and no Controller to read the exit status, so a live worker found by `resume` is an orphan,
+  not something to wait for. `resume` ends the recorded process group and every process carrying the tag (the rule it already
+  applies to a review or tester record), verifies them gone, copies a refreshed credential back (only over an operator file that
+  still has the captured digest), removes the credential copy and hands the record to the shared rows, so an unlanded clone ends
+  `INTERRUPTED` and a protocol decision reaches the Workflow's own `reconcile`. A Claude worker is still followed, on purpose. A
+  verdict of `unverifiable`, or an unlistable `/proc`, is refused with exit 45 and nothing is reconciled; under a drifted
+  installation nothing about a Codex record changes and a live orphan is not ended until the installation is repaired.
+- **`resume --abandon`** follows Claude's rules: a live worker or owned process is refused naming `resume` (which ends an
+  orphan); with the target root gone the refusal names the pid, the pgid and the by-hand end, then `resume --abandon`;
+  `unverifiable` needs `--acknowledge-unverifiable-worker`; an `inactive` or acknowledged worker is marked `FAILED`
+  (`OperatorAbandoned`) after the credentials are settled.
+- **An interrupt before the spawn** (in the `codex_worker` persist, the tree preparer or the Codex-home resolver) leaves the
+  record `LAUNCHED` at `STARTING` with no `worker_process`; `resume` ends it `INTERRUPTED`, as for a Claude worker, and never
+  `FAILED`, which would count a run that never started against the apply relaunch bound.
+
+The tree stays undecided (it is left in place), and nothing real reaches the branch: the `codex` adapter still declares no worker
+role, no setting selects it and no real launcher is registered. The opt-in live proof is
+`tests.test_codex_worker_ownership_live`: it kills a child Controller that is running a real worker and checks that `resume`
+leaves no process of the tag; its measured result is `tests/harness_contract/codex/worker_ownership.txt` (the real worker
+outlives its killed Controller, and `resume` ends it).
 
 ## The shared command renderer
 

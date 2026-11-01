@@ -3150,8 +3150,22 @@ def _drift_decides(record: Mapping, managed_repo: Any) -> bool:
 _REVIEW_KILL_SETTLE_SECONDS = 5.0
 
 
+def _group_label(record: Mapping) -> str:
+    """What a group-ending message calls the record: a Codex worker's own name, else ``<harness> review``."""
+    if _is_codex_worker_record(record):
+        return "Codex worker"
+    return f"{_review_display(record)} review"
+
+
+def _is_codex_worker_record(record: Mapping) -> bool:
+    """A Codex worker's record (H4c2, D5): a non-review, non-tester record carrying the ``codex_worker`` block that
+    ``_run_codex_worker`` persists before it prepares the tree. The adapter's name is never read."""
+    return (not is_review_record(record) and not is_functional_record(record)
+            and isinstance(record.get("codex_worker"), Mapping))
+
+
 def _end_review_group(record: Mapping, root: Path) -> None:
-    """Kill the review's process group, or verify it dead (D9). The
+    """Kill the review's (or a Codex worker's) process group, or verify it dead (D9). The
     group is found by the recorded process identity **and** by the ownership
     tag in its environment, so a Controller killed between the spawn and the
     `worker_process` flush still has its group found. A process that cannot
@@ -3163,7 +3177,7 @@ def _end_review_group(record: Mapping, root: Path) -> None:
         assessment = worker.assess_worker_liveness(worker_process)
         if assessment.verdict == worker.UNVERIFIABLE:
             raise LifecycleWorkerUnverifiableError(
-                f"job {job_id}'s {_review_display(record)} review process cannot be judged from here: "
+                f"job {job_id}'s {_group_label(record)} process cannot be judged from here: "
                 f"{_unverifiable_guidance(job_id, assessment, root)}",
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()})
         pgid = worker_process.get("pgid")
@@ -3182,14 +3196,40 @@ def _end_review_group(record: Mapping, root: Path) -> None:
         time.sleep(0.05)
     if entries:
         raise LifecycleWorkerActiveError(
-            f"job {job_id}'s {_review_display(record)} review process group could not be ended (pids "
+            f"job {job_id}'s {_group_label(record)} process group could not be ended (pids "
             f"{', '.join(str(e['pid']) for e in entries)}); nothing was reconciled",
             evidence={"job_id": job_id, "owned_processes": entries})
     raise LifecycleWorkerUnverifiableError(
-        f"job {job_id}'s {_review_display(record)} review processes cannot be verified from here: /proc could not "
+        f"job {job_id}'s {_group_label(record)} processes cannot be verified from here: /proc could not "
         f"be listed, or a "
         f"same-uid process's stat could not be read, so none is assumed gone",
         evidence={"job_id": job_id})
+
+
+def _settle_codex_credentials(record: Mapping, runtime_root: Path) -> None:
+    """A Codex worker record's credentials (H4c2, D6b): copy the credential back when the block holds a digest and the
+    copy exists, then always remove the copy. Each step is guarded so one failure never skips the next."""
+    job_id = record["job_id"]
+    block = record.get("codex_worker") if isinstance(record.get("codex_worker"), Mapping) else {}
+    layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
+    digest, operator_home = block.get("captured_digest"), block.get("operator_home")
+    if (isinstance(digest, str) and isinstance(operator_home, str)
+            and (layout.codex_home / review.CODEX.credential_file).is_file()):
+        with contextlib.suppress(Exception):
+            review.copy_back_credentials(layout.job, Path(operator_home), digest, review.CODEX)
+    with contextlib.suppress(Exception):
+        runtime.remove_tree(runtime_root, layout.rel("codex-home", review.CODEX.credential_file))
+
+
+def _reconcile_codex_worker(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """The ``resume`` branch of a non-terminal Codex worker record (H4c2, D1, D6): end its process group and every
+    process carrying its tag (never re-attached to), settle the credentials, then the shared ``LAUNCHED`` or
+    ``COMPLETED`` reconciliation. A group that cannot be judged or ended raises before anything is written."""
+    _end_review_group(record, managed_repo.root)
+    _settle_codex_credentials(record, runtime_root)
+    if record.get("status") == STATUS_COMPLETED:
+        return _reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    return _reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime_root)
 
 
 def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | None = None) -> JobRecord:
@@ -3570,11 +3610,17 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             results.append({**_reconcile_review(record, runtime_root=runtime), "reconciled_this_call": True})
         elif is_functional_record(record) and status in NON_TERMINAL_STATUSES:
             results.append({**_reconcile_functional(record, runtime_root=runtime), "reconciled_this_call": True})
+        elif (not drifted and status in (STATUS_LAUNCHED, STATUS_COMPLETED)
+              and _is_codex_worker_record(record)):
+            results.append({**_reconcile_codex_worker(record, managed_repo=managed_repo, runtime_root=runtime),
+                            "reconciled_this_call": True})
         elif drifted and status in NON_TERMINAL_STATUSES:
             marked = _owned_work_hold(record, root) if status != STATUS_PLANNED else None
             if marked is not None:
                 results.append(marked)
             elif _drift_decides(record, managed_repo):
+                if _is_codex_worker_record(record):
+                    _settle_codex_credentials(record, runtime)
                 results.append({**_resume_drifted_protocol(record, managed_repo=managed_repo, runtime_root=runtime),
                                 "reconciled_this_call": True})
             else:
@@ -3971,11 +4017,14 @@ _OTHER_HOLDER_SENTENCE = (
 )
 
 
-def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: Path) -> str:
+def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: Path, *,
+                     then: str | None = None) -> str:
     """What to do about an ``active`` recorded worker (round 1's O3 of the
     manual external plan review): the process group to end when the
     recorded leader itself was matched; the discovered members, to verify
-    first, when only a member scan found the group running."""
+    first, when only a member scan found the group running. ``then`` is the command to run
+    afterwards (``resume`` by default)."""
+    then = then or _resume_command(root)
     pid, pgid = assessment.recorded.get("pid"), assessment.recorded.get("pgid")
     process = assessment.process
     if process is not None and process.basis == "member_scan":
@@ -3985,11 +4034,11 @@ def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: P
             f"process(es) {members} are in its recorded process group {pgid}. That group number may "
             f"have been reused since the job started: verify those processes "
             f"(`ps -o pid,pgid,lstart,args -g {pgid}`) before ending the group "
-            f"(`kill -TERM -- -{pgid}`), or wait for them; then run `{_resume_command(root)}`."
+            f"(`kill -TERM -- -{pgid}`), or wait for them; then run `{then}`."
         )
     return (
         f"Job {job_id}'s recorded worker is running: pid {pid}, process group {pgid}. Wait for it, or "
-        f"end that group (`kill -TERM -- -{pgid}`); then run `{_resume_command(root)}`."
+        f"end that group (`kill -TERM -- -{pgid}`); then run `{then}`."
     )
 
 
@@ -4169,13 +4218,21 @@ def _worker_liveness_hold(record: JobRecord, root: Path) -> JobRecord | None:
     return {**record, "resume_marked": {"outcome": outcome, "reason": reason, "liveness": assessment.to_dict()}}
 
 
-def _owned_guidance(job_id: Any, entries: list[dict], root: Path, *, then: str | None = None) -> str:
+def _owned_guidance(job_id: Any, entries: list[dict], root: Path, *, then: str | None = None,
+                    resume_ends: bool = False) -> str:
     """What to do about a job whose owned processes still run (plan E):
     each pid with its command line, and the two ways on (``then``, the
-    command to run afterwards: ``resume`` by default)."""
+    command to run afterwards: ``resume`` by default). ``resume_ends`` is a Codex worker's record,
+    whose orphan ``resume`` ends (H4c2, D7): the worker may not have ended, and ``resume`` is the way on."""
     listed = ", ".join(f"pid {entry.get('pid')} ({entry.get('cmdline') or 'command line unreadable'})"
                        for entry in entries)
     pids = " ".join(str(entry.get("pid")) for entry in entries)
+    if resume_ends:
+        return (
+            f"Job {job_id}'s {len(entries)} process(es) it owns are still running: {listed}. "
+            f"`{_resume_command(root)}` ends them (it ends a Codex worker it finds); or end them yourself "
+            f"(`kill {pids}`) and then run `{then or _resume_command(root)}`."
+        )
     return (
         f"Job {job_id}'s worker has ended, but {len(entries)} process(es) it owns are still running: "
         f"{listed}. Wait for them, or end them (`kill {pids}`); then run `{then or _resume_command(root)}`."
@@ -4290,7 +4347,8 @@ def _supervise_records(managed_repo: Any, *, identity: Any, runtime_root: Path,
     target can have held the lifecycle lock at a time, so at most one is
     actually re-attached to."""
     for path in _job_file_paths(runtime_root):
-        if _supervision_candidate(path, managed_repo, identity) is not None:
+        candidate = _supervision_candidate(path, managed_repo, identity)
+        if candidate is not None and not _is_codex_worker_record(candidate):
             _supervise_record(managed_repo, identity=identity, runtime_root=runtime_root, path=path,
                               drain_detach_seconds=drain_detach_seconds)
 
@@ -4614,14 +4672,17 @@ def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path
         record = _supervision_candidate(path, managed_repo, identity, valid=False)
         if record is None:
             return
+        codex = _is_codex_worker_record(record)
         worker_process = record.get("worker_process")
         if worker_process is not None:
             assessment = worker.assess_worker_liveness(worker_process if isinstance(worker_process, Mapping) else {})
             if assessment.verdict == worker.ACTIVE:
+                # A Codex orphan is ended by `resume`, never followed (H4c2, D7).
+                way_on = (f"`{_resume_command(root)}` ends a Codex worker it finds." if codex
+                          else f"Follow it: `{follow_command(runtime_root, root)}`")
                 raise LifecycleWorkerActiveError(
                     f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                    f"{_active_guidance(job_id, assessment, root)} Follow it: "
-                    f"`{follow_command(runtime_root, root)}`",
+                    f"{_active_guidance(job_id, assessment, root)} {way_on}",
                     evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
                 )
             if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
@@ -4634,7 +4695,7 @@ def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path
         if entries:
             raise LifecycleWorkerActiveError(
                 f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                f"{_owned_guidance(job_id, entries, root, then=_abandon_command(job_id, root))}",
+                f"{_owned_guidance(job_id, entries, root, then=_abandon_command(job_id, root), resume_ends=codex)}",
                 evidence={"job_id": job_id, "owned_processes": entries},
             )
         if not verifiable and not acknowledge:
@@ -4810,9 +4871,14 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
             worker_process if isinstance(worker_process, Mapping) else {},
         )
         if assessment.verdict == worker.ACTIVE:
+            # `resume` refuses this record (its root is gone) and ends nothing, so a Codex record is
+            # never sent there: the by-hand end, then this command (H4c2, D7).
+            guidance = (_active_guidance(job_id, assessment, root, then=_abandon_command(job_id, root))
+                        if _is_codex_worker_record(record)
+                        else f"{_active_guidance(job_id, assessment, root)} Follow it: "
+                             f"`{follow_command(runtime_root, root)}`")
             raise LifecycleWorkerActiveError(
-                f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                f"{_active_guidance(job_id, assessment, root)} Follow it: `{follow_command(runtime_root, root)}`",
+                f"`resume --abandon {job_id!r}` refused, and no flag overrides it: {guidance}",
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
             )
         if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
@@ -4822,6 +4888,8 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
             )
         worker_liveness = {**assessment.to_dict(), "acknowledged": assessment.verdict == worker.UNVERIFIABLE}
+    if _is_codex_worker_record(record):
+        _settle_codex_credentials(record, runtime_root)
     validity = _validity_or_none(record, managed_repo, identity)
     now = _now()
     abandoned: JobRecord = {
@@ -8703,6 +8771,13 @@ def _run_codex_worker(
                 "a Codex worker takes no usage reservation (the budget is not wired to it yet); the fallback chain "
                 "selected it under a usage gate",
                 evidence={"job_id": job_id, "harness": route.harness})
+        operator_home = CODEX_HOME_RESOLVER()
+        record = _persist(runtime_root, job_id, {
+            **record, "codex_worker": {
+                "operator_home": str(operator_home),
+                "captured_digest": review._sha256_file(Path(operator_home) / review.CODEX.credential_file),
+                "lock_inherited": False},
+            "updated_at": _now()}, event="codex_worker_prepared")
         preparer = CODEX_WORKTREE_PREPARER
         if preparer is None:
             raise WorkerLaunchError(
@@ -8711,7 +8786,7 @@ def _run_codex_worker(
                 evidence={"job_id": job_id, "harness": route.harness})
         cwd = Path(preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id)))
         options = codex_worker_job.launch_options(
-            runtime_root=runtime_root, job_id=job_id, operator_home=CODEX_HOME_RESOLVER(), cwd=cwd, timeout=timeout,
+            runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, cwd=cwd, timeout=timeout,
             on_spawn=on_spawn, route=route)
         result = launcher.launch(worker_task(decision.action), **options)
         stdout_text, stderr_text = codex_worker_job.stream_texts(result)

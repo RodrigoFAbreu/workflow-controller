@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-worker-launch",
+  "requirements": {
+    "R1": {
+      "description": "A composed-configuration check for the worker profile (the tester's check over the worker's profile, argv and layout) and a before-and-after nested-repository refusal, closing both open limits of H4b1, with the tester's modules and tests unchanged (#255)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A headless one-shot `codex exec` launch in the job's worktree behind the H3 seam: it renders the command, refuses an unverified build naming `verify-codex` before any write or process, runs the controls, compares the guard digest around the run, settles the credential copy on every path and returns a `WorkerResult` with one of four outcomes (#255)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The launcher is registered for a fixture role only: the real `LAUNCHERS` keys, `harness.CODEX.roles`, settings, options, exit codes and gates are unchanged and no real Codex runs in the default suite (#255)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "One opt-in live test runs a real `codex exec` turn through the launcher and its measured result is recorded; the guides and the roadmap state the launcher, its limits and H4c as next (#255)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

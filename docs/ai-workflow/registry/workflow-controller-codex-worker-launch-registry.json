@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-worker-launch",
+  "plan_revision": 4,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The composed-configuration check and the nested-repository scan",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The launcher, its outcomes and the fixture registration",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The opt-in live proof, the guides and the roadmap",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

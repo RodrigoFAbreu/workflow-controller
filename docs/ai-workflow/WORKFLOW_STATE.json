@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-worker-launch",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -49234,6 +49234,347 @@
         },
         "evaluated_at": "2026-11-01T12:20:06Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-codex-worker-launch": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-worker-launch",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-launch-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-launch-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "0637ad690f6138eddb180782a14c1f32489284d2",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+        "approved_review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ff01cbae8e4eee55d5f7cde330366b2c3ba43e1a"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-launch-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "46fd580ad85926026894ff05e72f737fd229f695"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-launch-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3c253648435faa5f3b8eeece16f2fef0558b5dae"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T13:18:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+            "ledger": {
+              "local": {
+                "bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "19ffdb5e8b6303384dca8e870e5272b6fadb5e0690344df36a5d494cf0418137",
+                "ledger_entry_sha256": "058d38f95487b9e4d6cbf70b8752c04300d2d12f87b708acfac29a6645f1d7b9",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-codex-worker-launch/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "67d64fb1befd2432ea973218239fb3255ecaa3f2ed3c1854e041ae87807ae07b",
+                "ledger_entry_sha256": "665655416d81fb9c66e21c59f964b0ab3af730ff21fef4682fdb2432f04f2f40",
+                "run_ref": "codex:20261101T131544Z-15befe1a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T13:18:38Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-01T13:15:30Z",
+          "verdict_sha256": "19ffdb5e8b6303384dca8e870e5272b6fadb5e0690344df36a5d494cf0418137",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-codex-worker-launch/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-01T13:17:20Z",
+          "verdict_sha256": "67d64fb1befd2432ea973218239fb3255ecaa3f2ed3c1854e041ae87807ae07b",
+          "run_ref": "codex:20261101T131544Z-15befe1a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-11-01T13:18:38Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-01T13:11:14Z",
+        "consumed": {
+          "review_content_id": "9ab228fe6ea60bc5d50063ff05918e6f9fedc4bd387784a5268a1e9449cdb294",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+          "bundle_id": "21901680be83e0ac329303a3aca452bc94b2ca15f6e7b0622f41e8ff755015dc",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "09bd6d11d16aee3d5287ed40d6363850473cf8d8eebea27653b5af6dce801ce5",
+        "9ab228fe6ea60bc5d50063ff05918e6f9fedc4bd387784a5268a1e9449cdb294",
+        "dc1999735717b4215c5c58cf1918f3c1f7b75a9af2c762e6b8d3b8e7f3156ec4"
+      ],
+      "optional_findings": {
+        "F-5e75fa632e4c": {
+          "digest": "5e75fa632e4c48f3b26c4e7e5043d770b770c3fb437d2635c4dad5ef3a8bcf2d",
+          "text": "**LOCAL-R1-003 -- The fixture registration test must also patch `harness.ADAPTERS`.** `worker_launch.for_harness` first calls `harness.for_role(name, harness.WORKER)` over `harness.ADAPTERS`, so patching `LAUNCHERS` alone cannot reach `CodexLauncher` while no adapter declares the worker role. D7/CP2 say \"a fixture adapter declaring the worker role\", which implies the patch. Naming `harness.ADAPTERS` (patched for the test only, with the real `harness.CODEX` untouched) as part of the fixture would make CP2's test unambiguous.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "dc1999735717b4215c5c58cf1918f3c1f7b75a9af2c762e6b8d3b8e7f3156ec4",
+              "verdict": "REVISE",
+              "at": "2026-11-01T12:55:09Z"
+            }
+          ]
+        },
+        "F-7d9b287c97e3": {
+          "digest": "7d9b287c97e3b07f5cae345ab7fc67b44e102579d0e13807fc17cf5cc17d130f",
+          "text": "**LOCAL-R1-004 -- A reused job's Codex home can carry an earlier run's rollouts.** `check_home` accepts Codex-written state entries such as `sessions/`, so a second launch with the same `job_id` would find the previous run's rollouts in `scan_rollouts`: a stale usage-limit record could turn a clean run into `FAILURE`, and the readings for H4c would mix two runs. Consider either requiring a fresh Codex home (refuse an existing `codex-home/` at D4(d)) or stating that each launch takes a new `job_id`, which is H4c's to guarantee.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "dc1999735717b4215c5c58cf1918f3c1f7b75a9af2c762e6b8d3b8e7f3156ec4",
+              "verdict": "REVISE",
+              "at": "2026-11-01T12:55:09Z"
+            }
+          ]
+        },
+        "F-5f82f570695a": {
+          "digest": "5f82f570695a15cc13d202342691fe1defcbcf5e3dfce32705e01f4c7fa052af",
+          "text": "**LOCAL-R1-005 -- State the launch options.** D4 needs `runtime_root`, `job_id`, `operator_home`, `timeout`, `cwd`, `on_spawn`, `commands_dir`, the model and effort, and the `run`/`system_path`/`real_home` seams. The plan does not list which options `CodexLauncher.launch(task, **options)` accepts, or how they relate to `worker.launch`'s (`stdout_path`/`stderr_path`, `permission_mode`, `ownership_tag`). One sentence in D7 would pin the seam H4c builds on.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "dc1999735717b4215c5c58cf1918f3c1f7b75a9af2c762e6b8d3b8e7f3156ec4",
+              "verdict": "REVISE",
+              "at": "2026-11-01T12:55:09Z"
+            }
+          ]
+        },
+        "F-e1bab0bfecf0": {
+          "digest": "e1bab0bfecf0cf7041345ff0c293d60e1d76e5c6d55b84be89f01c2e3631f6f6",
+          "text": "**LOCAL-R2-002 -- Name every `WorkerResult` field.** `worker.WorkerResult` (`controller/worker.py:224-262`) also requires `terminal_reason`, `stop_reason`, `permission_denials` and `duration_ms`. D5 lists only `session_id`, `total_cost_usd`, `raw_json` and `num_turns` as `None`. One clause in D5 (for example `None` for all four, or `duration_ms` measured around `run_bounded`) would leave nothing for the implementer to guess.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "09bd6d11d16aee3d5287ed40d6363850473cf8d8eebea27653b5af6dce801ce5",
+              "verdict": "REVISE",
+              "at": "2026-11-01T12:59:11Z"
+            }
+          ]
+        },
+        "F-f5d1dccd5cd6": {
+          "digest": "f5d1dccd5cd671b3696223d3611bebb35c67a2713ac89d27e50d1135ca691dec",
+          "text": "**LOCAL-R2-003 -- `on_spawn` has a different shape from `worker.launch`'s.** `review.run_bounded` calls `on_spawn(pid, pgid)`, but `worker.launch` calls `on_spawn(worker_process, anchor=..., ownership_tag=...)` (`controller/worker.py:1406`). D7 passes `on_spawn` through under the same name, so H4c, which maps its job fields onto these options, could hand over a callback of the wrong shape. Stating the callback's signature in D7 would prevent that.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "09bd6d11d16aee3d5287ed40d6363850473cf8d8eebea27653b5af6dce801ce5",
+              "verdict": "REVISE",
+              "at": "2026-11-01T12:59:11Z"
+            }
+          ]
+        },
+        "F-e169259c0f62": {
+          "digest": "e169259c0f620005a89ae0c476c80eda4b3ed7fca6e160728c2d40171779a837",
+          "text": "**LOCAL-R3-001: the mixed held-and-unavailable chain outcome is not named.** `route_select.select` returns `HELD`\n  whenever any entry was held, even when the other entries were skipped as unavailable (for example Claude held,\n  Codex with no `auth.json`). D4 then returns the usage hold and writes nothing, so the unavailable entry's error\n  never reaches a record. That is H9b's behaviour and is reasonable (a later run re-selects), but CP1's done-when\n  tests only \"every entry unavailable\" and \"every entry held\". A one-line case in `tests/test_functional_select.py`\n  would pin it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "9ab228fe6ea60bc5d50063ff05918e6f9fedc4bd387784a5268a1e9449cdb294",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T11:55:21Z"
+            }
+          ]
+        },
+        "F-c646bda5d8ca": {
+          "digest": "c646bda5d8ca30ba18562df8c9902f5c9998808d45def4ae99d6e0d330102ff5",
+          "text": "**LOCAL-R3-002: D7's Codex telemetry block omits `worker_seconds`.** D7 builds the block with `job_seconds` and\n  `dimensions(record)` only, but a launched Codex tester's record has `worker_spawned` (from `on_spawn`) and a\n  terminal time, so `worker_seconds` could be filled as `derive_block` does. Without it, `telemetry` shows the\n  worker wall time as unavailable for every Codex tester. Either add it or say it is left out on purpose.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "9ab228fe6ea60bc5d50063ff05918e6f9fedc4bd387784a5268a1e9449cdb294",
+              "verdict": "APPROVE",
+              "at": "2026-10-31T11:55:21Z"
+            }
+          ]
+        },
+        "F-1851652044df": {
+          "digest": "1851652044df900c1b5a5dd9873b738516e440202aa9e82764d0c6cd783a4324",
+          "text": "**LOCAL-R4-001 -- D10 accepts EXT-001 but does not say what happens to the imported findings.** EXT-001's acceptance criterion also asks for the \"imported findings\" to be replaced. This item's `optional_findings` ledger still holds `F-e169259c0f62` (`route_select` mixed held-and-unavailable outcome) and `F-c646bda5d8ca` (the Codex telemetry `worker_seconds`). Both were raised by the misattributed round 3. They concern `workflow-controller-codex-tester-fallback`, which is at `MILESTONE_COMPLETE` and holds both keys in its own ledger. Neither is about this plan. At completion each finding needs a disposition (`finding_dispositions_report`, `scripts/workflow_state.py:16662`), so both will surface again under H4b2. One sentence in D10 would settle it: name both keys as another item's and mark them `dropped` with that reason. Then the external reviewer can see the acceptance criterion is fully met.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T13:15:30Z"
+            }
+          ]
+        },
+        "F-31259c902805": {
+          "digest": "31259c9028051e36dbc9dca4905fc44db3d17d13cd933c65dfefc1e16295e994",
+          "text": "**LOCAL-R4-002 -- D5 does not fix `is_error` and `subtype` outside the breach path.** D5 says what `is_error`/`subtype` are on a breach and lists the fields that are `None`, but leaves both open for `SUCCESS`, `FAILURE`, `AMBIGUOUS` and `INTERRUPTED`. `job.py` records both into the job record (`controller/job.py:4974-4975`). One clause would pin them: for example `is_error` false only on `SUCCESS`, and `subtype` `None` except `sandbox_breach`, or a stated subtype for a limit record so that H4d can tell a limit from an ordinary non-zero exit.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T13:15:30Z"
+            }
+          ]
+        },
+        "F-488ec7a99572": {
+          "digest": "488ec7a995725469507f2711bc82dd79b3fcdd053efb50917fa534500c0e3be7",
+          "text": "**LOCAL-R4-003 -- CP1's done-when for `effective_policy` leaves out the reviewer's scalar defaults.** D2 (like `codex_sandbox.effective_policy`, `controller/codex_sandbox.py:472-485`) includes \"the reviewer's remaining scalar defaults\" (`review.EFFECTIVE_POLICY` without `sandbox_mode`). CP1's done-when only lists \"the argv-pinned values, the profile and the unset sandbox keys\". Adding the scalars to the done-when stops a test from passing on a policy that drops them.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T13:15:30Z"
+            }
+          ]
+        },
+        "F-08e53df82f21": {
+          "digest": "08e53df82f2151a1090964ddd8c73d7a80ca358e6bb3bcdc3424bd28b2d66b43",
+          "text": "**LOCAL-R4-004 -- The leftover-inventory counts are exact, and their checker is not named.** `tests/process_fixtures.py`'s `LEFTOVER_INVENTORY` rows must match the scan count for each file (`check_inventory`, run by `tests/test_fake_claude_contract.py:1541`). CP2 adds a row for `tests/test_codex_worker.py`, but neither CP2's neighbouring-test list nor the functional-review flows run `tests.test_fake_claude_contract`. CP1 adds tests to `tests/test_codex_worker_sandbox.py`, whose row says 9 `start:run` sites, without declaring `tests/process_fixtures.py`, so a new direct `subprocess.run(` there would break the row. CP1 can route git through the existing `_git` helper (`tests/test_codex_worker_sandbox.py:37`), or declare the fixtures file. Either way, adding `tests.test_fake_claude_contract` to CP2's list makes the check visible.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T13:15:30Z"
+            }
+          ]
+        },
+        "F-dfa7226cb3fc": {
+          "digest": "dfa7226cb3fc2511a2cb3b8e5596a5d15e15d89ce1220f3e9df6dc4905626b42",
+          "text": "**EXT-002 — Dispose of the unrelated imported findings.** EXT-001’s approval issue is resolved: the current local verdict reviews this item’s revision 4, its identifiers match, and its hash matches the recorded approval. However, `WORKFLOW_STATE.json:49383` still carries `F-e169259c0f62` and `F-c646bda5d8ca` from the unrelated tester-fallback review. Record both as `dropped`, explaining their misattribution, so they do not resurface as unresolved findings at milestone acceptance.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "42762b47b609c30549a7ddeef49b499193e5d453d4987900da69a1502897c1b1",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T13:17:20Z"
+            }
+          ]
+        }
       }
     }
   }

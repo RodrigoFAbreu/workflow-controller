@@ -314,11 +314,27 @@ class ReportTest(ReporterCase):
         self.assertEqual(second["pr_report"]["outcome"], "unchanged")
         self.assertIn(pr_report.GATE_UNCHANGED, second["human_gate_pending"]["what_is_required"])
         self.assertIn("reported; the report changed nothing", second["human_gate_pending"]["what_is_required"])
+        # NF3: over row 38f the unchanged report is a wait for the pull-request fact, announced as one.
+        self.assertEqual((second["protocol_gate"]["code"], second["protocol_gate"]["row"]), ("pr_report_unchanged", "38f"))
+        [wait] = job.derive_job_event(second)
+        self.assertEqual((wait.event_type, wait.supersedes), ("orchestrator_wait", "user_gate"))
         self.assertEqual(self.reported(life)["ingest_seq"], seq)
         # a changed output is not "unchanged"; the first report moved the Workflow state, so this gate is stale
         third = self.report(life, [lambda commit: raw_of(commit, rollup=(FAILED,))], decision=decision)
         self.assertEqual(third["pr_report"]["outcome"], "stale")
         self.assertEqual(self.reported(life)["ingest_seq"], seq)
+
+    def test_an_unchanged_report_over_row_38g_stays_a_user_gate(self) -> None:
+        life = self.at_38f()
+        self.bind(life)
+        at_38g = self.decision(life, row="38g", text="the automatic acceptance gate awaits an approved pull request")
+        output = lambda commit: raw_of(commit)  # noqa: E731
+        self.assertEqual(self.report(life, [output], decision=at_38g)["pr_report"]["outcome"], "reported")
+        second = self.report(life, [output], decision=at_38g)
+        self.assertEqual(second["pr_report"]["outcome"], "unchanged")
+        self.assertEqual((second["protocol_gate"]["code"], second["protocol_gate"]["row"]), ("pr_report_unchanged", "38g"))
+        # NF3 D1a: the approval is still missing, so the request must not be hidden as a wait.
+        self.assertEqual([e.event_type for e in job.derive_job_event(second)], ["user_gate"])
 
     def test_a_workflow_refusal_ends_in_a_gate_naming_it_and_writes_nothing(self) -> None:
         life = self.at_38f()
@@ -328,6 +344,9 @@ class ReportTest(ReporterCase):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(record["pr_report"]["outcome"], "refused")
         self.assertIn(pr_report.GATE_REFUSED, record["human_gate_pending"]["what_is_required"])
+        # NF3 D1a: the Controller code decides over the row-38f reason code, so the refusal stays a user_gate.
+        self.assertEqual(record["protocol_gate"]["code"], pr_report.GATE_REFUSED)
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
         self.assertIn("ForgeUnavailableError", record["human_gate_pending"]["what_is_required"])
         self.assertIsNone(self.reported(life))
 

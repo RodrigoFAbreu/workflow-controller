@@ -766,6 +766,10 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         third = life.step()
         self.assertEqual(third["status"], job.STATUS_GATE_BLOCKED)
         self.assertIn("no_progress_repeated", json.dumps(third["human_gate_pending"]))
+        # NF3: the loop guard records its code and is announced as a wait the orchestrator handles.
+        self.assertEqual(third["protocol_gate"]["code"], "no_progress_repeated")
+        self.assertEqual([(e.event_type, e.supersedes) for e in job.derive_job_event(third)],
+                         [("orchestrator_wait", "user_gate")])
         self.assertEqual(len(life.tasks), launched)
         self.assertEqual(life.tasks, ["review-plan", "satisfy-gate plan", "satisfy-gate plan"])
         explained = life.explain()
@@ -795,7 +799,8 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(life.rows[-1], "38f")
         self.assertEqual(len(life.tasks), launched)
-        self.assertEqual([e.event_type for e in job.derive_job_event(stopped)], ["user_gate"])
+        # NF3: row 38f awaits a pull-request fact, which nobody decides, so it is a wait (the reporter did not apply).
+        self.assertEqual([e.event_type for e in job.derive_job_event(stopped)], ["orchestrator_wait"])
         # The checks turn green, but next-action never queries GitHub, so the answer does not change (D7).
         life.checks.write_text("green")
         self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38f")

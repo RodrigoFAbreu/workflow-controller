@@ -1054,6 +1054,8 @@ class TheFaultStopsTest(_TesterCase):
                 self.assertEqual(life.evidence(), {})
                 self.assertEqual(life.reservations(), {})  # released: nothing started
                 self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
+                # NF3 D1/D1a: the record now carries the code, and the functional block still routes it.
+                self.assertEqual(record["protocol_gate"]["code"], "functional_tester_unavailable")
 
     def test_a_breach_records_nothing_and_keeps_the_sandbox(self) -> None:
         life = self.life()
@@ -1061,6 +1063,8 @@ class TheFaultStopsTest(_TesterCase):
         life.extra = {"breach": ["worktree digest"], "keep": True}
         record = life.step(gate=life.usage_gate())
         self.assertEqual(self.gate_of(record), "isolation_breach")
+        self.assertEqual(record["protocol_gate"]["code"], "isolation_breach")
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])  # NF3 D1a
         self.assertIn("kept at", record["human_gate_pending"]["what_is_required"])
         self.assertEqual((life.evidence(), life.reservations()), ({}, {}))
         self.assertTrue(Path(record["functional"]["sandbox"]).is_dir())
@@ -1192,7 +1196,8 @@ class ReviewWaitProductionPathTest(unittest.TestCase):
         for record in (wait, block):
             self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
             self.assertNotIn("protocol", record)  # the block `resume` reads as a launched protocol job is not added
-        self.assertEqual(wait["protocol_gate"], {"row": wait_row, "disposition": "external_gate", "action_id": action})
+        self.assertEqual(wait["protocol_gate"], {"row": wait_row, "disposition": "external_gate", "action_id": action,
+                                                 "reason_code": "awaiting_external_review", "code": None})
         self.assertEqual(block["protocol_gate"]["row"], block_row)
         self.assertEqual(block["protocol_gate"]["disposition"], "human_gate")
         self.assertEqual(block["protocol_gate"]["action_id"], "review.resolve_block")
@@ -1222,10 +1227,10 @@ class ReviewWaitProductionPathTest(unittest.TestCase):
 
 class BlockedDispositionProductionPathTest(unittest.TestCase):
     """Notification-fix D7 (implementation round 1 I1): a gate the Workflow itself disposes ``blocked`` is written
-    by the production fall-through with ``protocol_gate`` and no ``protocol`` block, and derives what it derived
-    at the base commit -- a ``user_gate``, never a ``review_wait``."""
+    by the production fall-through with ``protocol_gate`` and no ``protocol`` block, and derives a ``lane_blocked``
+    (NF3 D2), never a ``review_wait``."""
 
-    def test_a_blocked_disposition_gate_is_a_user_gate_without_a_protocol_block(self) -> None:
+    def test_a_blocked_disposition_gate_is_a_lane_blocked_without_a_protocol_block(self) -> None:
         life = lifecycle.GateLifecycle(self)
         life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
         real = protocol.next_action
@@ -1242,8 +1247,8 @@ class BlockedDispositionProductionPathTest(unittest.TestCase):
         self.assertNotIn("protocol", record)
         self.assertEqual(record["protocol_gate"]["disposition"], "blocked")
         [event] = job.derive_job_event(record)
-        self.assertEqual(event.event_type, "user_gate")
-        self.assertIsNone(event.supersedes)
+        self.assertEqual(event.event_type, "lane_blocked")  # NF3 D2: the Workflow calls the stop a blocker
+        self.assertEqual(event.supersedes, "user_gate")
 
 
 from controller import notify  # noqa: E402
@@ -1253,12 +1258,12 @@ from tests.fake_signalhub import FakeSignalHub  # noqa: E402
 
 class ControllerCodedGateOverARow14DecisionTest(rj._ReviewCase):
     """Notification-fix D7: the Controller-coded gates over a row-14 decision (the review-mode refusal, the
-    external round cap) are written without ``protocol_gate``, so they stay ``user_gate``; the plain wait of the
-    same row is the ``review_wait``."""
+    external round cap) carry a ``protocol_gate`` with their ``code`` (NF3 D1a), so they stay ``user_gate``; the
+    plain wait of the same row is the ``review_wait``."""
 
-    def assert_user_gate(self, record: dict) -> None:
+    def assert_user_gate(self, record: dict, code: str) -> None:
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
-        self.assertNotIn("protocol_gate", record)
+        self.assertEqual(record["protocol_gate"]["code"], code)  # NF3 D1a: the code decides, not the row-14 match
         self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["user_gate"])
 
     def test_the_review_mode_refusal_is_a_user_gate(self) -> None:
@@ -1266,13 +1271,13 @@ class ControllerCodedGateOverARow14DecisionTest(rj._ReviewCase):
             record = job.execute_step(self.life.inspect(), identity=IDENTITY, runtime=self.runtime_root,
                                       reviewer=None, review_mode_options={"mode": "cross-model", "source": "cli"})
         self.assertIn("review_mode_unavailable", record["human_gate_pending"]["what_is_required"])
-        self.assert_user_gate(record)
+        self.assert_user_gate(record, "review_mode_unavailable")
 
     def test_the_external_round_cap_is_a_user_gate(self) -> None:
         with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(1, 4)):
             record = self.step()
         self.assertTrue(record["human_gate_pending"]["what_is_required"].startswith("review_round_cap_reached: "))
-        self.assert_user_gate(record)
+        self.assert_user_gate(record, "review_round_cap_reached")
 
     def test_the_plain_wait_of_the_same_row_is_a_review_wait(self) -> None:
         record = self.step(reviewer_options=None)

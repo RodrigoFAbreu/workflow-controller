@@ -2,6 +2,13 @@
 
 ## Status
 
+**In progress.** `workflow-controller-orchestrator-stops` (NF3, issue
+[#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)). The plan is
+`docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md`. CP1 is implemented: a gate record carries `protocol_gate`
+with `row`, `disposition`, `action_id`, `reason_code` and the Controller's own `code`, and `derive_job_event` announces a
+stop an orchestrator handles as `orchestrator_wait` (a wait) or `lane_blocked` (a repair) instead of `user_gate`. CP2
+(the documents, the roadmap and this record) is next.
+
 **Complete.** `workflow-controller-user-only-scan` (TK1, issue
 [#247](https://github.com/RodrigoFAbreu/workflow-controller/issues/247)) is implemented (CP1 and CP2). The plan is
 `docs/ai-workflow/CONTROLLER_USER_ONLY_SCAN_PLAN.md`. `worker._task_tokens` splits a task on `=` and on every character a

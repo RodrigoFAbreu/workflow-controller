@@ -229,7 +229,7 @@ def preflight(managed_repo: Any, work_item: Any, *,
         evidence=(f"protocol verify ({WORKFLOW_UNHEALTHY})",)
         + tuple(f"verify {check.id}: {check.status}: {check.detail}" for check in failing) + advisories,
         action=None, automatic=False, gate=gate, declined=False,
-        reason=f"{phase_text}: {WORKFLOW_UNHEALTHY}: {details}"), advisories
+        reason=f"{phase_text}: {WORKFLOW_UNHEALTHY}: {details}", gate_code=WORKFLOW_UNHEALTHY), advisories
 
 
 def health_gate(managed_repo: Any, work_item: Any, *, timeout: float | None = None) -> Decision | None:
@@ -440,7 +440,8 @@ class _Context:
         )
 
     def gate(self, what: str, *, evidence_label: str, resume: str, route: str | None,
-             extra_evidence: tuple[str, ...] = (), artifact_path: str | None = None) -> Decision:
+             extra_evidence: tuple[str, ...] = (), artifact_path: str | None = None,
+             gate_code: str | None = None) -> Decision:
         phase_text = self.phase if isinstance(self.phase, str) else "NO_PHASE"
         gate = HumanGate(
             repository=str(self.managed_repo.root), work_item_id=self.work_item_id or "", phase=phase_text,
@@ -449,11 +450,12 @@ class _Context:
             observed_phase=self.phase, evidence=self.evidence(evidence_label) + extra_evidence, action=None,
             automatic=False, gate=gate, declined=False,
             reason=f"{phase_text}: {self.answer.reason.code}: {self.answer.reason.text}",
-            protocol=self.info(route))
+            protocol=self.info(route), gate_code=gate_code)
 
     def blocked(self, code: str, text: str) -> Decision:
         return self.gate(f"{code}: {text}", evidence_label=code,
-                         resume=explain_gate_command(self.managed_repo.root, self.work_item_id or ""), route=None)
+                         resume=explain_gate_command(self.managed_repo.root, self.work_item_id or ""), route=None,
+                         gate_code=code)
 
 
 # ---------------------------------------------------------------------------

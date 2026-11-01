@@ -260,7 +260,7 @@ def _bounded_rounds(judge: Judge, life: FunctionalCycle, bound: int) -> None:
 # ---------------------------------------------------------------------------
 
 def flow_stops_before_or_without_a_run(judge: Judge, test: unittest.TestCase, *, mutation: str = "") -> None:
-    """(5) ``functional.automated`` false keeps the old stop with ``user_gate``; (6) flows the sandbox cannot run
+    """(5) ``functional.automated`` false keeps the old stop, announced as ``orchestrator_wait`` (NF3); (6) flows the sandbox cannot run
     (the network, a forge call, a tool off the ``PATH``) end at ``flows_not_runnable`` with the results recorded, no
     findings and no applier; (7) a checklist with no recognised flow gives ``checklist_unrecognised`` before any
     tester job, sandbox or usage reservation exists."""
@@ -269,7 +269,8 @@ def flow_stops_before_or_without_a_run(judge: Judge, test: unittest.TestCase, *,
         record = life.step(functional=functional)
         judge.equal(record["status"], job.STATUS_GATE_BLOCKED, f"automated off ({functional is None}): the stop")
         judge.check("kind" not in record, "automated off: no tester job record")
-        judge.equal([e.event_type for e in job.derive_job_event(record)], ["user_gate"], "automated off: user_gate")
+        judge.equal([e.event_type for e in job.derive_job_event(record)], ["orchestrator_wait"],
+                    "automated off: orchestrator_wait (NF3: the functional evidence is awaited, nobody decides)")
     judge.equal(life.launches, [], "automated off: the tester never ran")
     judge.observe("automated-off", {"launches": 0})
 

@@ -21,7 +21,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import codex_build, codex_worker as cw, codex_worker_sandbox as cws, review, worker  # noqa: E402
+from controller import codex_build, command_files, codex_worker as cw, codex_worker_sandbox as cws, review, worker  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_codex_worker_sandbox_live import git, operator_codex_home  # noqa: E402
 
@@ -29,6 +29,7 @@ ENABLED = os.environ.get("CONTROLLER_LIVE_CODEX_TESTS") == "1"
 RUN_TIMEOUT = 600
 COMMAND = """---
 description: Live proof command
+state_writer: false
 ---
 In the current directory, append the line `live` to the file `src.txt`, then run `git add src.txt` and
 `git commit -m "live: append"`. Reply with the single word `done`.
@@ -47,6 +48,16 @@ def skip_reason() -> str | None:
     if not (operator_codex_home() / "auth.json").is_file():
         return f"no Codex credential file at {operator_codex_home() / 'auth.json'}"
     return None
+
+
+class LiveCommandRendersTest(unittest.TestCase):
+    """Offline: the live proof's exact command text must pass the launcher's renderer."""
+
+    def test_the_live_command_renders(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "live-proof.md").write_text(COMMAND)
+            rendered = command_files.render_command("live-proof", "", Path(tmp))
+        self.assertIn("src.txt", str(rendered))
 
 
 @unittest.skipIf(skip_reason() is not None, skip_reason() or "")

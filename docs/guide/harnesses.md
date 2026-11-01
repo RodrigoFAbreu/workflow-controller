@@ -213,7 +213,7 @@ gates are unchanged, and nothing an operator runs reaches it.
 The order is fixed and nothing is written before the gate: the task must be `/<name> [arguments]` and is rendered from
 `commands_dir` (default `<cwd>/.claude/commands`; a user-only command is refused); the binary is resolved; the build must be
 recorded by `workflow-controller verify-codex`, else the launch is refused naming that command; `cwd` must be the layout's
-worktree (`<runtime>/worker/<job>/worktree`), with its own `.git`, no nested `.git`, the runtime root outside it, and no
+worktree (`<runtime>/worker/<job>/tree`), with its own `.git`, no nested `.git`, the runtime root outside it, and no
 `codex-home/` yet (a launch takes a fresh job id); the guard digest is taken; the sandbox is built with the job id as the
 ownership tag; `check_argv`, `check_launch` and `check_composed` run; `codex exec` runs under the deadline; the credential is
 copied back and its copy removed on every path, including a refusal; the guard digest, the nested scan and the build are

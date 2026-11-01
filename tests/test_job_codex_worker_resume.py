@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -23,7 +24,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from controller import (  # noqa: E402
     codex_worker as cw, codex_worker_sandbox as ws, job, managed_repo, protocol, review, worker,
 )
-from controller.errors import DriftedInstallationError, LifecycleWorkerUnverifiableError  # noqa: E402
+from controller.errors import (  # noqa: E402
+    DriftedInstallationError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError, StaleJobRecordError,
+)
 from tests import fixtures, process_fixtures  # noqa: E402
 from tests.test_job import FAKE_IDENTITY  # noqa: E402
 from tests.test_job_codex_worker import JobFixture  # noqa: E402
@@ -80,6 +83,9 @@ class OrphanFixture(JobFixture):
         process_fixtures.end_pid(self.child)
         self.leader.wait(timeout=10)
         self.assertTrue(process_fixtures.wait_until(lambda: not self.alive(self.child)))
+
+    def replace(self, record: dict) -> None:
+        (self.runtime / "jobs" / f"{record['job_id']}.json").write_text(json.dumps(record))
 
     def rewrite(self, record: dict, **changes) -> None:
         path = self.runtime / "jobs" / f"{record['job_id']}.json"
@@ -327,6 +333,97 @@ class ProtocolCodexTest(unittest.TestCase):
         self.assertEqual(failed["reconciliation_evidence"]["reason"], "workflow_release_changed")
         self.assertFalse((fixture.layout_of(record).codex_home / "auth.json").exists())
         self.assertIn("rotated-by-the-worker", (fixture.operator / "auth.json").read_text())
+
+
+class AbandonTest(OrphanFixture):
+    """``resume --abandon`` of a Codex record follows Claude's rules row by row (H4c2, D7), one test per row."""
+
+    def abandon(self, record: dict, *, acknowledge: bool = False, managed=None) -> dict:
+        return job.abandon(managed or self.managed, identity=FAKE_IDENTITY, runtime=self.runtime,
+                           job_id=record["job_id"], acknowledge_unverifiable_worker=acknowledge)
+
+    def assert_abandoned(self, record: dict, abandoned: dict) -> None:
+        self.assertEqual(abandoned["status"], job.STATUS_FAILED)
+        self.assertEqual(abandoned["reconciliation_evidence"]["code"], "OperatorAbandoned")
+        self.assertEqual(self.only_record()["status"], job.STATUS_FAILED)
+        self.assertFalse((self.layout_of(record).codex_home / "auth.json").exists())
+
+    def test_an_active_worker_is_refused_naming_resume_and_nothing_is_ended_or_written(self) -> None:
+        record = self.orphan()
+        before = self.only_record()
+        with self.assertRaises(LifecycleWorkerActiveError) as raised:
+            self.abandon(record)
+        message = raised.exception.message
+        self.assertIn("no flag overrides it", message)
+        self.assertIn("workflow-controller resume", message)
+        self.assertNotIn("Follow it", message)
+        self.assertTrue(self.alive(self.leader.pid) and self.alive(self.child))
+        self.assertEqual(self.only_record(), before)
+        self.assertTrue((self.layout_of(record).codex_home / "auth.json").exists())
+
+    def test_a_tag_scan_only_record_with_an_owned_process_alive_is_refused_naming_resume(self) -> None:
+        record = self.orphan()
+        self.end_and_reap_leader_only()
+        stored = {key: value for key, value in self.only_record().items() if key != "worker_process"}
+        self.replace(stored)
+        before = self.only_record()
+        with self.assertRaises(LifecycleWorkerActiveError) as raised:
+            self.abandon(record)
+        message = raised.exception.message
+        self.assertIn("ends them", message)
+        self.assertIn(f"`workflow-controller resume {self.managed.root}`", message)
+        self.assertIn(f"then run `workflow-controller resume --abandon {record['job_id']} {self.managed.root}`", message)
+        self.assertNotIn("worker has ended", message)
+        self.assertTrue(self.alive(self.child))
+        self.assertEqual(self.only_record(), before)
+
+    def end_and_reap_leader_only(self) -> None:
+        process_fixtures.kill_group(self.leader.pid)
+        self.leader.wait(timeout=10)
+
+    def test_a_missing_root_refuses_a_live_record_by_hand_and_resume_ends_nothing(self) -> None:
+        record = self.orphan()
+        shutil.rmtree(self.managed.root)
+        with self.assertRaises(LifecycleWorkerActiveError) as raised:
+            self.abandon(record)
+        message = raised.exception.message
+        pid, pgid = record["worker_process"]["pid"], record["worker_process"]["pgid"]
+        self.assertIn(f"pid {pid}, process group {pgid}", message)
+        self.assertIn(f"kill -TERM -- -{pgid}", message)
+        self.assertIn(f"then run `workflow-controller resume --abandon {record['job_id']} {self.managed.root}`", message)
+        self.assertNotIn("Follow it", message)
+        self.assertNotIn(f"`workflow-controller resume {self.managed.root}`", message)
+        with self.assertRaises(StaleJobRecordError) as stale:
+            self.resume()
+        self.assertIn(f"resume --abandon {record['job_id']}", str(stale.exception))
+        self.assertTrue(self.alive(self.leader.pid) and self.alive(self.child))
+
+    def test_unverifiable_is_refused_without_the_acknowledgement_and_abandoned_with_it(self) -> None:
+        record = self.orphan()
+        self.end_and_reap()
+        recorded = dict(record["worker_process"], pid_namespace="pid:[4026539999]")
+        self.rewrite(record, worker_process=recorded)
+        before = self.only_record()
+        with self.assertRaises(LifecycleWorkerUnverifiableError):
+            self.abandon(record)
+        self.assertEqual(self.only_record(), before)
+        self.assertTrue((self.layout_of(record).codex_home / "auth.json").exists())
+        self.assert_abandoned(record, self.abandon(record, acknowledge=True))
+        self.assertIn("rotated-by-the-worker", (self.operator / "auth.json").read_text())
+
+    def test_inactive_is_marked_failed_with_the_credential_copy_gone(self) -> None:
+        record = self.orphan()
+        self.end_and_reap()
+        abandoned = self.abandon(record)
+        self.assert_abandoned(record, abandoned)
+        self.assertEqual(abandoned["reconciliation_evidence"]["abandoned_status"], job.STATUS_LAUNCHED)
+        self.assertIn("rotated-by-the-worker", (self.operator / "auth.json").read_text())
+
+    def test_a_missing_root_with_a_dead_worker_is_marked_failed_and_settles_the_credentials(self) -> None:
+        record = self.orphan()
+        self.end_and_reap()
+        shutil.rmtree(self.managed.root)
+        self.assert_abandoned(record, self.abandon(record))
 
 
 class UnchangedTest(unittest.TestCase):

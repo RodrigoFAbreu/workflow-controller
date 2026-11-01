@@ -4017,11 +4017,14 @@ _OTHER_HOLDER_SENTENCE = (
 )
 
 
-def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: Path) -> str:
+def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: Path, *,
+                     then: str | None = None) -> str:
     """What to do about an ``active`` recorded worker (round 1's O3 of the
     manual external plan review): the process group to end when the
     recorded leader itself was matched; the discovered members, to verify
-    first, when only a member scan found the group running."""
+    first, when only a member scan found the group running. ``then`` is the command to run
+    afterwards (``resume`` by default)."""
+    then = then or _resume_command(root)
     pid, pgid = assessment.recorded.get("pid"), assessment.recorded.get("pgid")
     process = assessment.process
     if process is not None and process.basis == "member_scan":
@@ -4031,11 +4034,11 @@ def _active_guidance(job_id: Any, assessment: worker.LivenessAssessment, root: P
             f"process(es) {members} are in its recorded process group {pgid}. That group number may "
             f"have been reused since the job started: verify those processes "
             f"(`ps -o pid,pgid,lstart,args -g {pgid}`) before ending the group "
-            f"(`kill -TERM -- -{pgid}`), or wait for them; then run `{_resume_command(root)}`."
+            f"(`kill -TERM -- -{pgid}`), or wait for them; then run `{then}`."
         )
     return (
         f"Job {job_id}'s recorded worker is running: pid {pid}, process group {pgid}. Wait for it, or "
-        f"end that group (`kill -TERM -- -{pgid}`); then run `{_resume_command(root)}`."
+        f"end that group (`kill -TERM -- -{pgid}`); then run `{then}`."
     )
 
 
@@ -4215,13 +4218,21 @@ def _worker_liveness_hold(record: JobRecord, root: Path) -> JobRecord | None:
     return {**record, "resume_marked": {"outcome": outcome, "reason": reason, "liveness": assessment.to_dict()}}
 
 
-def _owned_guidance(job_id: Any, entries: list[dict], root: Path, *, then: str | None = None) -> str:
+def _owned_guidance(job_id: Any, entries: list[dict], root: Path, *, then: str | None = None,
+                    resume_ends: bool = False) -> str:
     """What to do about a job whose owned processes still run (plan E):
     each pid with its command line, and the two ways on (``then``, the
-    command to run afterwards: ``resume`` by default)."""
+    command to run afterwards: ``resume`` by default). ``resume_ends`` is a Codex worker's record,
+    whose orphan ``resume`` ends (H4c2, D7): the worker may not have ended, and ``resume`` is the way on."""
     listed = ", ".join(f"pid {entry.get('pid')} ({entry.get('cmdline') or 'command line unreadable'})"
                        for entry in entries)
     pids = " ".join(str(entry.get("pid")) for entry in entries)
+    if resume_ends:
+        return (
+            f"Job {job_id}'s {len(entries)} process(es) it owns are still running: {listed}. "
+            f"`{_resume_command(root)}` ends them (it ends a Codex worker it finds); or end them yourself "
+            f"(`kill {pids}`) and then run `{then or _resume_command(root)}`."
+        )
     return (
         f"Job {job_id}'s worker has ended, but {len(entries)} process(es) it owns are still running: "
         f"{listed}. Wait for them, or end them (`kill {pids}`); then run `{then or _resume_command(root)}`."
@@ -4661,14 +4672,17 @@ def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path
         record = _supervision_candidate(path, managed_repo, identity, valid=False)
         if record is None:
             return
+        codex = _is_codex_worker_record(record)
         worker_process = record.get("worker_process")
         if worker_process is not None:
             assessment = worker.assess_worker_liveness(worker_process if isinstance(worker_process, Mapping) else {})
             if assessment.verdict == worker.ACTIVE:
+                # A Codex orphan is ended by `resume`, never followed (H4c2, D7).
+                way_on = (f"`{_resume_command(root)}` ends a Codex worker it finds." if codex
+                          else f"Follow it: `{follow_command(runtime_root, root)}`")
                 raise LifecycleWorkerActiveError(
                     f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                    f"{_active_guidance(job_id, assessment, root)} Follow it: "
-                    f"`{follow_command(runtime_root, root)}`",
+                    f"{_active_guidance(job_id, assessment, root)} {way_on}",
                     evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
                 )
             if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
@@ -4681,7 +4695,7 @@ def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path
         if entries:
             raise LifecycleWorkerActiveError(
                 f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                f"{_owned_guidance(job_id, entries, root, then=_abandon_command(job_id, root))}",
+                f"{_owned_guidance(job_id, entries, root, then=_abandon_command(job_id, root), resume_ends=codex)}",
                 evidence={"job_id": job_id, "owned_processes": entries},
             )
         if not verifiable and not acknowledge:
@@ -4857,9 +4871,14 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
             worker_process if isinstance(worker_process, Mapping) else {},
         )
         if assessment.verdict == worker.ACTIVE:
+            # `resume` refuses this record (its root is gone) and ends nothing, so a Codex record is
+            # never sent there: the by-hand end, then this command (H4c2, D7).
+            guidance = (_active_guidance(job_id, assessment, root, then=_abandon_command(job_id, root))
+                        if _is_codex_worker_record(record)
+                        else f"{_active_guidance(job_id, assessment, root)} Follow it: "
+                             f"`{follow_command(runtime_root, root)}`")
             raise LifecycleWorkerActiveError(
-                f"`resume --abandon {job_id!r}` refused, and no flag overrides it: "
-                f"{_active_guidance(job_id, assessment, root)} Follow it: `{follow_command(runtime_root, root)}`",
+                f"`resume --abandon {job_id!r}` refused, and no flag overrides it: {guidance}",
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
             )
         if assessment.verdict == worker.UNVERIFIABLE and not acknowledge:
@@ -4869,6 +4888,8 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
             )
         worker_liveness = {**assessment.to_dict(), "acknowledged": assessment.verdict == worker.UNVERIFIABLE}
+    if _is_codex_worker_record(record):
+        _settle_codex_credentials(record, runtime_root)
     validity = _validity_or_none(record, managed_repo, identity)
     now = _now()
     abandoned: JobRecord = {

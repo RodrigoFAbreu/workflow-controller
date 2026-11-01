@@ -9,8 +9,13 @@
 before the tree is prepared; `job._is_codex_worker_record` is the predicate; `resume`'s phase 1 never re-attaches to such a
 record; and `_reconcile_codex_worker` ends the group and every tagged process, settles the credentials and hands the record
 to the shared `LAUNCHED`/`COMPLETED` rows (under a drifted installation nothing changes). `tests/test_job_codex_worker_resume.py`
-drives it with real test-owned processes (`process_fixtures.spawn_tagged_worker`). Next: CP2 (`--abandon`, the interrupts and
-the killed Controller end to end), then CP3.
+drives it with real test-owned processes (`process_fixtures.spawn_tagged_worker`). CP2 is complete: `resume --abandon` of a
+Codex record follows Claude's rules (an `active` worker or a live owned process is refused naming `resume`, which ends a Codex
+orphan; with the target root gone the refusal names the pid, pgid and by-hand end and then `resume --abandon`; an
+`unverifiable` worker needs the acknowledgement; an `inactive` or acknowledged one is marked `FAILED` after the credentials are
+settled), and `tests/test_job_codex_worker_interrupt.py` covers the interrupts before the spawn and a child Controller killed
+with `SIGINT` (the launcher reaps) and `SIGKILL` (`resume` ends the orphan and its descendant). Next: CP3 (the opt-in live
+proof, the guides and the roadmap).
 
 Previous item, now complete:
 

@@ -453,7 +453,7 @@ registry as tables. To add a harness, see
 
 ### A Codex worker and the user-only commands
 
-A Codex worker does not exist yet; `command_files.render_command` ([harnesses](harnesses.md#the-shared-command-renderer)) is
+A Codex worker launcher exists for a fixture role only ([harnesses](harnesses.md#the-codex-worker-launcher)); it calls `command_files.render_command` ([harnesses](harnesses.md#the-shared-command-renderer)) is
 the first step. It refuses a user-only command as the requested command, and refuses an argument string that names one
 (`/milestone-plan /approve-review`, a backticked or sentence-final mention included). The scan is the one tokeniser
 `worker._task_tokens` that the Claude launch also uses: it splits each whitespace chunk on `=` and on every character that
@@ -473,7 +473,7 @@ The refused set over the shipped commands is eleven names: the nine `COMMAND_FIL
 change in H4e to H4g.
 
 The renderer sends a body verbatim, so it cannot stop a body that tells the agent to run a user-only command. What stops a
-nested invocation is each such command's own literal-confirmation check and, later, the Codex worker's launch policy (H4b2). The renderer does not
+nested invocation is each such command's own literal-confirmation check and, later, the Codex worker's launch policy (H4b2's launcher renders only the requested command). The renderer does not
 claim to.
 
 ## The same-provider reviewer

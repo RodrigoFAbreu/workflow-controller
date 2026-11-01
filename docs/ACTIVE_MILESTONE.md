@@ -17,8 +17,10 @@ the launch at the fake; `tests/test_command_files.py`'s wiring guard now names `
 imports `command_files`, which D4(a) requires (the plan listed that test as unchanged). Verified:
 `tests.test_codex_worker`, `tests.test_codex_worker_sandbox`, `tests.test_package_structure`, `tests.test_codex_sandbox`,
 `tests.test_codex_tester`, `tests.test_worker_launch`, `tests.test_harness`, `tests.test_command_files`,
-`tests.test_write_containment` and `tests.test_fake_claude_contract` pass. Next: CP3, the opt-in live proof, the guides and
-the roadmap.
+`tests.test_write_containment` and `tests.test_fake_claude_contract` pass. CP3 is complete: `tests/test_codex_worker_live.py` (opt-in, skipped by default and on CI) runs one real launch; it was not
+run in this session (it costs a model turn), so `tests/harness_contract/codex/worker_launch.txt` says *not yet measured* until
+the operator runs it. The harness and worker guides, the development page and the roadmap state the launcher in place. Next:
+the self-review, then H4c (the job record, usage and reaping) once this item is accepted.
 
 **Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
 [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is

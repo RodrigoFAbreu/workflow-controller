@@ -173,14 +173,14 @@ and no other launch does.
 `controller/codex_worker_sandbox.py` (H4b1, [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) builds and
 proves the sandbox a Codex **worker** would run in. Nothing calls it: the `codex` harness still declares no worker role,
 no launcher is registered and no setting, option, exit code or gate changes. The launcher is H4b2
-([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)).
+([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)), described [below](#the-codex-worker-launcher).
 
 The `worker` permissions profile (`default_permissions = "worker"`) differs from the tester's in one thing: the job's
 worktree is writable. Under it a worker can edit, create, rename and delete files in the worktree and commit there; it cannot
 write anywhere else, read outside the readable roots, read the operator's home, environment or its own credential copy, push,
 reach a TCP or Unix socket, or make the real `gh` work (the network is off). The worktree must have a `.git` directory of its
 own (`check_worktree` refuses a missing `.git`, a symlink and a `.git` file such as a linked worktree's); how a real job gets
-such a tree is H4b2's and H4c's decision.
+such a tree is H4c's decision (the launcher requires it to exist already).
 
 Measured on `codex-cli 0.163.0` (`tests/harness_contract/codex/worker_sandbox.txt`; opt-in, see
 [Development](development.md#working-from-a-checkout), skipped by default and on CI): the same probe command gave the same
@@ -195,10 +195,37 @@ entry of `.git` except what a commit or a plain `git gc` writes (`objects/`, `re
 special file and any `alternates` file. `check_guard(before, after)` refuses any other change, naming the entry (a new hook, an
 edited `config`, a `commondir`, a `.git` swapped for a file or symlink). A launcher compares the two digests around every run.
 
-Open limits, all H4b2's before any worker is launched: the composed-configuration check for the worker profile does not exist
-yet (a layer outside the home, or a setting only the app server composes differently, is not seen); and a nested repository or
-submodule the worker commits into the tree (a `.git` of its own below the worktree root) is not covered by the digest, so the
-launcher must refuse a nested `.git` entry after the run.
+The two limits H4b1 left open are closed by H4b2, in the same module. `check_composed` composes the worker's configuration
+with `codex app-server --strict-config` (the exec's own `--disable` and `-c` items) and compares every value leaf by leaf with
+`effective_policy`, naming the leaf and its origin layer; a layer outside the home, a forbidden key set by a layer other than
+the packaged defaults, or a re-enabled disabled feature refuses. Its remaining window: the composition is read from a separate
+app-server process started just before the launch, not from the `exec` itself. `nested_git_entries` and `check_nested` refuse
+a `.git` entry of any type (directory, file, symlink) below the worktree root, before and after the run, because `guard_digest`
+covers only the top-level `.git`; a worktree that vendors a repository is refused.
+
+## The Codex worker launcher
+
+`controller/codex_worker.py` (H4b2, [#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)) launches one
+rendered command as a headless `codex exec` in the job's worktree and returns the `WorkerResult` the Claude launch returns.
+It is registered for a **fixture role only**: `CODEX.roles`, `worker_launch.LAUNCHERS`, the settings, options, exit codes and
+gates are unchanged, and nothing an operator runs reaches it.
+
+The order is fixed and nothing is written before the gate: the task must be `/<name> [arguments]` and is rendered from
+`commands_dir` (default `<cwd>/.claude/commands`; a user-only command is refused); the binary is resolved; the build must be
+recorded by `workflow-controller verify-codex`, else the launch is refused naming that command; `cwd` must be the layout's
+worktree (`<runtime>/worker/<job>/worktree`), with its own `.git`, no nested `.git`, the runtime root outside it, and no
+`codex-home/` yet (a launch takes a fresh job id); the guard digest is taken; the sandbox is built with the job id as the
+ownership tag; `check_argv`, `check_launch` and `check_composed` run; `codex exec` runs under the deadline; the credential is
+copied back and its copy removed on every path, including a refusal; the guard digest, the nested scan and the build are
+compared. A refusal before `exec` raises `ReviewLaunchRefusedError` and no `exec` has started.
+
+The four outcomes follow the Claude classifier's precedence: the deadline or a death by signal is `INTERRUPTED`; a usage-limit
+record or a non-zero exit is `FAILURE`; a zero exit with no final message is `AMBIGUOUS`; otherwise `SUCCESS`. A breach found
+after the run (a changed guard digest, a nested `.git`, a changed build) turns any outcome into `FAILURE` with `subtype`
+`sandbox_breach` and the entries in `stream_diagnosis`, because the worktree can no longer be trusted. Job records, usage
+derivation and reaping beyond the deadline are H4c's. The opt-in live proof is
+`tests.test_codex_worker_live` (see [Development](development.md#working-from-a-checkout)); its measured result goes in
+`tests/harness_contract/codex/worker_launch.txt`.
 
 ## The shared command renderer
 

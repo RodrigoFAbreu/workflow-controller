@@ -1,0 +1,13 @@
+# Codex worker launch, codex-cli 0.163.0 (H4b2, workflow-controller-codex-worker-launch)
+
+Status: NOT YET MEASURED. The live test is written and skipped by default; it costs one real model turn on the
+operator's credentials, so it is operator-run. Replace this file with the output of
+
+    CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_live -v
+
+when it has run (needs `codex`, `bwrap`, a credential file at ~/.codex/auth.json or CONTROLLER_LIVE_CODEX_HOME).
+
+What the test asserts, on a scratch clone at the layout's worktree path with a recorded `verify-codex` entry for the
+real build and a one-line command file: outcome `SUCCESS` with a non-empty final message, no breach entries, a new
+commit in the clone, `check_guard` accepting the digest taken before the run, no nested `.git` entry, and the
+credential copy under the job's `codex-home/` removed.

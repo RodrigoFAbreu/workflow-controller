@@ -49245,12 +49245,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-launch-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-launch-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "0637ad690f6138eddb180782a14c1f32489284d2",
-      "reviewed_implementation_head": "895d1848013e61cff4bd4b76c169fd2138520907",
+      "reviewed_implementation_head": "9451b326f99bcfebc87dbae3bc10b45e2b9145ad",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
@@ -49393,8 +49393,8 @@
           "external": 1
         }
       },
-      "state_revision": 25,
-      "last_transition": "2026-11-01T14:09:22Z",
+      "state_revision": 26,
+      "last_transition": "2026-11-01T14:32:46Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

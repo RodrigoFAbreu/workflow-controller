@@ -82,6 +82,14 @@ class ResolutionTest(unittest.TestCase):
         self.assertEqual(ignored, [])
         self.assertFalse(notify.resolve("checks_wait", clean).enabled)
 
+    def test_orchestrator_wait_is_a_low_info_state_event_on_by_default_and_the_operator_can_change_it(self) -> None:
+        self.assertEqual(notify.EVENT_TABLE["orchestrator_wait"], "state")
+        r = notify.resolve("orchestrator_wait")
+        self.assertEqual((r.enabled, r.category, r.severity), (True, "INFO", "LOW"))
+        clean, ignored = notify.validate_events_mapping({"events": {"orchestrator_wait": {"enabled": False}}})
+        self.assertEqual(ignored, [])
+        self.assertFalse(notify.resolve("orchestrator_wait", clean).enabled)
+
     def test_event_entry_over_kind_entry_over_default_field_by_field(self) -> None:
         clean, ignored = notify.validate_events_mapping({
             "kinds": {"state": {"severity": "high"}, "info": {"enabled": False}},

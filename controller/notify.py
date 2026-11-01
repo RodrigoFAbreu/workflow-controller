@@ -74,6 +74,7 @@ EVENT_TABLE: Mapping[str, str] = {
     "run_finished": STATE,
     "review_wait": STATE,
     "checks_wait": STATE,
+    "orchestrator_wait": STATE,
     "milestone_started": INFO,
     "milestone_planned": INFO,
     "approval_recorded": INFO,

@@ -907,6 +907,98 @@ class ReviewWaitDeriveTest(unittest.TestCase):
                 self.assertEqual(event.event_type, "user_gate")
 
 
+def stop_record(*, row=None, disposition=None, action_id=None, reason_code=None, code=None, **extra) -> dict:
+    """A gate record with the NF3 ``protocol_gate`` block (all five keys, as every 1.28 gate record has)."""
+    return wait_record("AWAITING_USER_ACCEPTANCE", protocol_gate={
+        "row": row, "disposition": disposition, "action_id": action_id, "reason_code": reason_code, "code": code},
+        **extra)
+
+
+class OrchestratorStopDeriveTest(unittest.TestCase):
+    """NF3 (#244): a stop no person has to decide is ``orchestrator_wait`` or ``lane_blocked``; the rule reads the
+    recorded gate code, then (for a gate with no code) the Workflow's reason code and disposition."""
+
+    def kinds(self, record: dict) -> list:
+        return [(e.event_type, e.supersedes) for e in job.derive_job_event(record)]
+
+    def test_each_row_of_the_issue_table_gets_the_event_the_rule_names(self) -> None:
+        wait, blocked, gate = ("orchestrator_wait", "user_gate"), ("lane_blocked", "user_gate"), ("user_gate", None)
+        cases = {
+            "no_progress_repeated": (stop_record(row="14a", disposition="validation", action_id="x",
+                                                 reason_code="r", code="no_progress_repeated"), wait),
+            "no_progress_repeated at a human gate row": (stop_record(row="11", disposition="human_gate",
+                                                                      code="no_progress_repeated"), wait),
+            "pr evidence (38f)": (stop_record(row="38f", disposition="external_gate", action_id="pr.report",
+                                              reason_code="pr_evidence_needed"), wait),
+            "functional evidence (38e)": (stop_record(row="38e", disposition="external_gate",
+                                                      reason_code="functional_evidence_needed"), wait),
+            "pr_report_unchanged over 38f": (stop_record(row="38f", disposition="external_gate",
+                                                         reason_code="pr_evidence_needed",
+                                                         code="pr_report_unchanged"), wait),
+            "gate_evidence_unmet": (stop_record(row="22", disposition="blocked",
+                                                reason_code="gate_evidence_unmet"), blocked),
+            "condition_refused": (stop_record(row="22", disposition="blocked", reason_code="condition_refused"), blocked),
+            "workflow_unhealthy": (stop_record(code="workflow_unhealthy"), blocked),
+            "review_round_cap_reached": (stop_record(row="14", disposition="external_gate",
+                                                     action_id="plan.review.external", reason_code="awaiting_external_review",
+                                                     code="review_round_cap_reached"), gate),
+            "isolation_breach": (stop_record(row="38e", disposition="external_gate", reason_code="functional_evidence_needed",
+                                             code="isolation_breach"), gate),
+            "pr_report_refused over 38f": (stop_record(row="38f", disposition="external_gate",
+                                                       reason_code="pr_evidence_needed", code="pr_report_refused"), gate),
+            "pr_report_stale": (stop_record(row="38f", disposition="external_gate", code="pr_report_stale",
+                                            reason_code="pr_evidence_needed"), gate),
+            "pr_report_unchanged over 38g": (stop_record(row="38g", disposition="external_gate",
+                                                         reason_code="pr_approval_needed",
+                                                         code="pr_report_unchanged"), gate),
+            "pr_report_unchanged, no row": (stop_record(code="pr_report_unchanged"), gate),
+            "pr_approval_needed (38g)": (stop_record(row="38g", disposition="external_gate",
+                                                     reason_code="pr_approval_needed"), gate),
+            "human_gate": (stop_record(row="11", disposition="human_gate", reason_code="plan_approval_needed"), gate),
+            "unknown reason code": (stop_record(row="40", disposition="external_gate", reason_code="something_new"), gate),
+            "unknown code": (stop_record(row="38f", disposition="external_gate", reason_code="pr_evidence_needed",
+                                         code="something_new"), gate),
+        }
+        for name, (record, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.kinds(record), [expected])
+
+    def test_a_record_from_before_this_change_stays_a_user_gate(self) -> None:
+        old = {"row": "14a", "disposition": "validation", "action_id": "x"}  # a 1.27.0 no_progress_repeated record
+        for name, record in {"three-key block": wait_record("AWAITING_USER_ACCEPTANCE", protocol_gate=old),
+                             "no block": wait_record("AWAITING_USER_ACCEPTANCE", protocol_gate=None)}.items():
+            with self.subTest(name):
+                self.assertEqual(self.kinds(record), [("user_gate", None)])
+
+    def test_the_event_keeps_the_stops_identity_and_is_a_duplicate_of_the_old_user_gate(self) -> None:
+        record = stop_record(row="14a", disposition="validation", code="no_progress_repeated")
+        [event] = job.derive_job_event(record)
+        self.assertEqual(event.title, "Waiting: no_progress_repeated (wi-1)")
+        legacy = job.derive_job_event({**record, "protocol_gate": None})[0]
+        self.assertEqual((legacy.event_type, legacy.ident), ("user_gate", event.ident))
+        again = job.derive_job_event({**copy.deepcopy(record), "job_id": "20261012T999999Z-bbbb"})[0]
+        self.assertEqual((again.ident, again.title), (event.ident, event.title))
+        resolved = notify.resolve(event.event_type, None)
+        self.assertEqual((resolved.enabled, resolved.category, resolved.severity), (True, "INFO", "LOW"))
+
+    def test_a_code_overrides_the_review_wait_match_and_a_null_code_keeps_it(self) -> None:
+        coded = wait_record(protocol_gate={"row": "14", "disposition": "external_gate", "action_id": "plan.review.external",
+                                           "reason_code": "awaiting_external_review", "code": "review_round_cap_reached"})
+        self.assertEqual(self.kinds(coded), [("user_gate", None)])
+        plain = wait_record(protocol_gate={"row": "14", "disposition": "external_gate", "action_id": "plan.review.external",
+                                           "reason_code": "awaiting_external_review", "code": None})
+        self.assertEqual(self.kinds(plain), [("review_wait", "user_gate")])
+
+    def test_a_tester_record_with_a_code_is_still_routed_by_its_functional_block(self) -> None:
+        for gate_code, expected in (("functional_tester_unavailable", "review_wait"), ("flows_not_runnable", "review_wait"),
+                                    ("isolation_breach", "user_gate"), ("functional_unchanged", "lane_blocked")):
+            with self.subTest(gate_code):
+                record = wait_record("AWAITING_FUNCTIONAL_REVIEW", functional={"gate": gate_code}, protocol_gate={
+                    "row": "38e", "disposition": "external_gate", "action_id": None,
+                    "reason_code": "functional_evidence_needed", "code": gate_code})
+                self.assertEqual(self.kinds(record)[0][0], expected)
+
+
 class SupersededNoticeTest(unittest.TestCase):
     """The old ``user_gate`` of a stop that now sends ``review_wait`` is never followed by a second notice (D3)."""
 

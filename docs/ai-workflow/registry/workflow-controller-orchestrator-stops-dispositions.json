@@ -1,0 +1,50 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-orchestrator-stops",
+ "dispositions": {
+  "F-0749d6e86662": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: the real stale reporter record in tests/test_pr_report.py asserts its event."
+  },
+  "F-162627cb0636": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the guide paragraph names a repeated orchestrator_wait for the same stop as the signal to look."
+  },
+  "F-6106a4e42ccd": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: the code sets use the protocol_decision and pr_report constants."
+  },
+  "F-8b0a3b7e310d": {
+   "disposition": "dropped",
+   "reason": "Plan wording about where the new event is listed in the ADR table versus the commands guide; settled in the implementation and checked by the reviews."
+  },
+  "F-9636346abad9": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: the _protocol_gate docstring describes the five-key block."
+  },
+  "F-a38619c7d618": {
+   "disposition": "dropped",
+   "reason": "Plan wording: the implementation updated the protocol_gate assertions in tests/test_protocol_job.py and the suite passes."
+  },
+  "F-b1d10f986831": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan's 'what exists' text separates the gates returned through _decide_protocol_current."
+  },
+  "F-c00ddf5b3e02": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-cf436c6b8d71": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: runtime.md was dropped from CP2 or its section named."
+  },
+  "F-dafeb226014b": {
+   "disposition": "dropped",
+   "reason": "Covered by the revision-2 fix of F-0749d6e86662: the real stale reporter record now asserts its event."
+  },
+  "F-e6a9ced5e8d0": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: the automation guide limits the always-carries statement to Workflow-governed targets."
+  }
+ }
+}

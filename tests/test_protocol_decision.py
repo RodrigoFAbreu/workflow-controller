@@ -852,6 +852,12 @@ class JobWiringTest(unittest.TestCase):
                 self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
                 what = record["human_gate_pending"]["what_is_required"]
                 self.assertTrue(what.startswith(protocol_decision.WORKFLOW_UNHEALTHY), what)
+                # NF3 D1: the preflight gate records its code with null Workflow fields; it is a blocker.
+                self.assertEqual(record["protocol_gate"], {
+                    "row": None, "disposition": None, "action_id": None, "reason_code": None,
+                    "code": protocol_decision.WORKFLOW_UNHEALTHY})
+                [event] = job.derive_job_event(record)
+                self.assertEqual((event.event_type, event.supersedes), ("lane_blocked", "user_gate"))
                 for check in failing:
                     self.assertIn(f"{check.id}: {check.detail}", what)
                 self.assertFalse(diag.exists())

@@ -48,6 +48,7 @@ preflight writes and the lines of `usage-events.jsonl`.
    | `milestone_started`, `milestone_planned`, `approval_recorded`, `milestone_accepted` | info | the matching lifecycle transition, read from the job's validated states |
    | `pr_merged` | info | a person merged on GitHub, or the Controller's squash merge was seen to land |
    | `release_published` | info | the auto-merge release wait closed out a release |
+   | `orchestrator_wait` | state | a gate the orchestrator clears by waiting or re-running (rows 38e and 38f evidence waits, `no_progress_repeated`, an unchanged pull-request report over row 38f) |
    | `user_gate` | gate | a human gate, or a merge the policy leaves to a person |
    | `lane_blocked` | blocker | a failed or incomplete job, a fail-closed refusal (exit 20) of `step`, `run` or `resume`, and every branch gate that needs a person to fix something |
 

@@ -697,6 +697,9 @@ class Decision:
     #: decision was made from, added last so every existing construction is
     #: unchanged.
     protocol: "ProtocolInfo | None" = None
+    #: The Controller's own code of a gate it made over (or without) the Workflow's answer
+    #: (``no_progress_repeated``, ``workflow_unhealthy``, ...); ``None`` for a gate the Workflow answered itself.
+    gate_code: str | None = None
 
 
 def apply_dispatch_rule(selected: Decision, governing_workflow_version: str | None) -> Decision:

@@ -1226,6 +1226,12 @@ class NotificationsRowsTest(_TempSettings):
             "kinds": {"state": {"enabled": False, "severity": "HIGH"}},
             "events": {"user_gate": {"category": "BLOCKED"}}})
 
+    def test_orchestrator_wait_validates_in_a_settings_file(self) -> None:
+        _write(self.path, {"notifications": {"events": {"events": {"orchestrator_wait": {"enabled": False}}}}})
+        loaded, err = self.stderr_of(settings.load, self.path)
+        self.assertEqual(err, "")
+        self.assertEqual(loaded.values["notifications.events"]["events"], {"orchestrator_wait": {"enabled": False}})
+
     def test_a_bad_category_severity_or_enabled_refuses_and_leaves_the_file(self) -> None:
         for events, path in (
             ({"events": {"user_gate": {"category": "LOUD"}}}, "events.user_gate.category"),

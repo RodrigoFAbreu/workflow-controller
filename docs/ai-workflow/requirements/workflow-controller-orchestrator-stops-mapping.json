@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-orchestrator-stops",
+  "requirements": {
+    "R1": {
+      "description": "Each stop of issue #244's table is announced by the event D2 names (orchestrator_wait or lane_blocked), and each real decision stays user_gate; one test per row",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The rule reads recorded protocol facts and the gate code, never message text; an unclassified or legacy stop stays user_gate; a stop already announced is not announced again",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "orchestrator_wait is a state event, on by default, accepted by the settings file; no new exit code, gate or gate identity; the guides, ADR and roadmap state the rule in place",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

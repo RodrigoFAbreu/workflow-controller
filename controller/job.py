@@ -5238,6 +5238,12 @@ def derive_job_event(record: Mapping, *, new_work_item_id: str | None = None) ->
                 out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body))
             elif (wait_title := _review_wait_title(record, work_item)) is not None:
                 out.append(DerivedEvent("review_wait", ident, wait_title, work_item, body, supersedes="user_gate"))
+            elif (stop_kind := _orchestrator_stop(record)) == "wait":
+                out.append(DerivedEvent("orchestrator_wait", ident, f"Waiting: {_stop_name(record)} ({work_item})",
+                                        work_item, body, supersedes="user_gate"))
+            elif stop_kind == "blocked":
+                out.append(DerivedEvent("lane_blocked", ident, f"Blocked: {work_item}", work_item, body,
+                                        supersedes="user_gate"))
             else:
                 out.append(DerivedEvent("user_gate", ident, f"Your decision is needed: {work_item}", work_item, body))
     return out
@@ -5249,10 +5255,46 @@ REVIEW_WAIT_ACTIONS = frozenset({"plan.review.external", "implementation.review.
 
 
 def _protocol_gate(record: Mapping) -> Mapping | None:
-    """The Workflow's own protocol gate (``{row, disposition, action_id}``) a fall-through record carries,
-    or ``None`` for every record written without one (a legacy target, a Controller-coded gate)."""
+    """The protocol gate block (``{row, disposition, action_id, reason_code, code}``) a gate record carries,
+    or ``None`` for every record written without one (a legacy target, a record of an earlier release)."""
     block = record.get("protocol_gate")
     return block if isinstance(block, Mapping) else None
+
+
+#: NF3 D4: the closed tables of the stops an orchestrator session handles. A Controller gate code maps to the
+#: row it is handled at (``None``: any row); a Workflow reason code is read only when the gate has no Controller code.
+ORCHESTRATOR_HANDLED_CODES: Mapping[str, str | None] = {
+    protocol_decision.NO_PROGRESS_REPEATED: None, pr_report.GATE_UNCHANGED: pr_report.ROW_EVIDENCE_NEEDED}
+ORCHESTRATOR_HANDLED_REASONS = frozenset({"pr_evidence_needed", "functional_evidence_needed"})
+ORCHESTRATOR_BLOCKED_CODES = frozenset({protocol_decision.WORKFLOW_UNHEALTHY})
+
+
+def _orchestrator_stop(record: Mapping) -> str | None:
+    """``"wait"`` or ``"blocked"`` for a gate record whose stop no person has to decide (NF3 D1-D4), else
+    ``None`` (``user_gate``). A non-null Controller ``code`` decides alone; the Workflow's reason code and
+    disposition are read only for a gate with no code. A record without the block, or without its
+    ``code`` and ``reason_code`` keys (written by an earlier release), is ``None``."""
+    block = _protocol_gate(record)
+    if block is None or "code" not in block or "reason_code" not in block:
+        return None
+    code = block.get("code")
+    if code is not None:
+        if code in ORCHESTRATOR_BLOCKED_CODES:
+            return "blocked"
+        if code in ORCHESTRATOR_HANDLED_CODES:
+            row = ORCHESTRATOR_HANDLED_CODES[code]
+            return "wait" if row is None or block.get("row") == row else None
+        return None
+    if block.get("disposition") == "blocked":
+        return "blocked"
+    if block.get("disposition") == "external_gate" and block.get("reason_code") in ORCHESTRATOR_HANDLED_REASONS:
+        return "wait"
+    return None
+
+
+def _stop_name(record: Mapping) -> str:
+    block = _protocol_gate(record) or {}
+    return str(block.get("code") or block.get("reason_code") or "stop")
 
 
 def _review_wait_title(record: Mapping, work_item: object) -> str | None:
@@ -5269,6 +5311,7 @@ def _review_wait_title(record: Mapping, work_item: object) -> str | None:
         return None
     protocol_gate = _protocol_gate(record)
     if (protocol_gate is not None and isinstance(gate, Mapping) and gate.get("phase") in REVIEW_WAIT_PHASES
+            and protocol_gate.get("code") is None
             and protocol_gate.get("disposition") == "external_gate"
             and protocol_gate.get("action_id") in REVIEW_WAIT_ACTIONS):
         return f"Waiting for the external review: {work_item}"
@@ -5880,6 +5923,21 @@ def _announce_group_drain(pid: int, remaining_pids: list[int]) -> None:
         pass
 
 
+def _protocol_gate_block(decision: Decision) -> dict | None:
+    """The job record's ``protocol_gate`` block of a gate ``decision`` (NF3 D1): the Workflow's ``row``,
+    ``disposition``, ``action_id`` and ``reason_code`` of the answer it was made over (all ``None`` for a gate
+    with no answer) and the Controller's own ``code`` (``None`` for a gate the Workflow answered itself).
+    ``None`` for a decision with neither, so a legacy gate record is unchanged."""
+    info = decision.protocol
+    if info is None and decision.gate_code is None:
+        return None
+    reason = info.document.get("reason") if info is not None else None
+    reason_code = reason.get("code") if isinstance(reason, Mapping) else None
+    return {"row": None if info is None else info.row, "disposition": None if info is None else info.disposition,
+            "action_id": None if info is None else info.action_id,
+            "reason_code": reason_code if isinstance(reason_code, str) else None, "code": decision.gate_code}
+
+
 def _no_launch_record(
     runtime_root: Path, managed_repo: Any, ident: Any, work_item_id: str | None, observed_phase: Any,
     pre_state: dict, decision: Decision, *, status: str, run_id: str | None = None,
@@ -5906,6 +5964,8 @@ def _no_launch_record(
     }
     if run_id is not None:
         record["run_id"] = run_id
+    if status == STATUS_GATE_BLOCKED and (block := _protocol_gate_block(decision)) is not None:
+        record["protocol_gate"] = block
     if extra:
         record.update(extra)
     details: dict = {"reason": decision.reason}
@@ -7458,6 +7518,8 @@ def _run_pr_report(managed_repo: Any, *, runtime_root: Path, identity: Any, run_
     }
     if stop is None:
         record.update(transition_verified=True, observed_phase_after=final.phase_after)
+    elif (block_gate := _protocol_gate_block(stop)) is not None:
+        record["protocol_gate"] = block_gate
     if run_id is not None:
         record["run_id"] = run_id
     _run_job_started(run_id, job_id)
@@ -7754,6 +7816,8 @@ def _run_functional(
                          "human_gate_pending": None if gate is None else _human_gate_dict(gate.gate)}
         if evidence_block is not None:
             updated["reconciliation_evidence"] = evidence_block
+        if gate is not None and (gate_block := _protocol_gate_block(gate)) is not None:
+            updated["protocol_gate"] = gate_block
         if isinstance(out.get("telemetry"), Mapping):
             updated["telemetry"] = dict(out["telemetry"])
             if selection_block is not None:  # a chain's Claude record carries the selection dimensions too (D4)
@@ -8340,12 +8404,9 @@ def _execute_step_locked(
                 mode=options.get("mode", review_mode.MODE_AUTO), mode_source=options.get("source", "default"),
                 choice=choice,
             )
-        protocol = decision.protocol
         return _no_launch_record(
             runtime, managed_repo, identity, resolved_work_item_id, decision.observed_phase, pre_state,
             decision, status=STATUS_GATE_BLOCKED, run_id=run_id,
-            extra=None if protocol is None else {"protocol_gate": {
-                "row": protocol.row, "disposition": protocol.disposition, "action_id": protocol.action_id}},
         )
     if decision.declined:
         return _no_launch_record(

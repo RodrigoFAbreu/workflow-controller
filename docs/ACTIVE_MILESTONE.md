@@ -2,9 +2,8 @@
 
 ## Status
 
-**Implemented.** `workflow-controller-orchestrator-stops` (NF3, issue
-[#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)) and self-reviewed; it awaits the implementation
-reviews and the functional review. The plan is `docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md`. A gate record
+**Complete.** `workflow-controller-orchestrator-stops` (NF3, issue
+[#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)) is implemented (CP1 and CP2 and the functional review) and accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md`. A gate record
 carries `protocol_gate` with `row`, `disposition`, `action_id`, `reason_code` and the Controller's own `code`, and
 `derive_job_event` announces a stop the orchestrator handles as `orchestrator_wait` (a wait) or `lane_blocked` (a repair)
 instead of `user_gate`; every other, unknown or legacy stop stays `user_gate`. The automation and commands guides, ADR 0012
@@ -12,15 +11,7 @@ and the roadmap state the rule in place. The self-review changed one test: the s
 `scenario-codex-review-implementation-stage-limit` stops at a `gate_evidence_unmet` technical approval gate, so it now
 expects `lane_blocked` there, not `user_gate` (D2). The change is a `fix:`, a patch release.
 
-Functional-review checklist (offline, unit-level; run one module at a time with `python3 -B`, a writable `TMPDIR`, no
-`PYTHONPATH=.`): `tests/test_notifications_wiring.py` (a record per stop of the issue's table gives the named event, and
-each real decision stays `user_gate`), `tests/test_notify.py` (`orchestrator_wait` is `INFO`/`LOW`, can be disabled and
-validates in a settings file), `tests/test_protocol_job.py`, `tests/test_pr_report.py` and
-`tests/test_functional_lifecycle.py` (the existing `review_wait`, `checks_wait` and `lane_blocked` cases pass unchanged),
-and `python3 -B tools/check_docs.py`.
-
-Next action: the implementation reviews of the bundle `/milestone-implement` prepared (local, then external). The next
-item on the roadmap is H4b.
+Next action: `/milestone-plan` for H4b, the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
 
 **Complete.** `workflow-controller-user-only-scan` (TK1, issue
 [#247](https://github.com/RodrigoFAbreu/workflow-controller/issues/247)) is implemented (CP1 and CP2). The plan is

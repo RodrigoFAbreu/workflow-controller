@@ -47767,7 +47767,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestrator-stops-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestrator-stops-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 6,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -47876,7 +47876,180 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "45501ed0b399541e6e7d4790c8db593a07245f04f6edf4058c983fcee36e24df",
+        "approved_review_content_id": "321c4534085a26932ad694ff73ecefd125101efecaffd6f22784e7bb39783c01",
+        "review_content_manifest": [
+          {
+            "path": "controller/decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "854daac6efcd3daa091528a7ec0ca90d8e2940cc"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "19f97a1ad06ed5e5c0137c2ca3942d0730bc924b"
+          },
+          {
+            "path": "controller/notify.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f3f76ac5f6c6ac5eb71b4f9b1d7d5651881e7846"
+          },
+          {
+            "path": "controller/protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b33a13a99b511782957d3e35818f9ff78f024da0"
+          },
+          {
+            "path": "docs/adr/0012-signalhub-notifications.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7807bc6c520bbf272fdba4d933c4c3513278ce8d"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-orchestrator-stops-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b85a6a2442a90cb8c9f108c57f70e0c18f06a7f"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7b05d4b9a7fb7d9fd40549fe152b261d13315f09"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fd15005e815153a58325d566cbb48567ce5b9ea8"
+          },
+          {
+            "path": "tests/scenarios/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f274a17aa6e14a819e438fe34c9b0ed3ec407c48"
+          },
+          {
+            "path": "tests/test_functional_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ef09e649ed777da3aec54001fffd67eed42bd64"
+          },
+          {
+            "path": "tests/test_notifications_wiring.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3ea45718d5e244a2a8822aef7f48787832a8d5c3"
+          },
+          {
+            "path": "tests/test_notify.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b3160c8fb24e521e2525a585c7fa8c6fd6cf42a8"
+          },
+          {
+            "path": "tests/test_pr_report.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6e81961899102dbbae401d964a289651eac3a4a9"
+          },
+          {
+            "path": "tests/test_protocol_decision.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "16ca16035845599d38e702236fc1afb58a24d93b"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "860cf59dd5f3ef93406c58105bb788e0a5f42fe6"
+          },
+          {
+            "path": "tests/test_protocol_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d24494c36aa844750cb96d3403b076d05903aa72"
+          },
+          {
+            "path": "tests/test_settings.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4ab89cb2368a6b1a57d7d8bb7f65b5d1928d6982"
+          }
+        ],
+        "reviewed_content_commit": "65ddf14b3ec4fb7c4b8a202fdf3e2810e8a6cb2e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T07:09:07Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "321c4534085a26932ad694ff73ecefd125101efecaffd6f22784e7bb39783c01",
+            "ledger": {
+              "local": {
+                "bundle_id": "45501ed0b399541e6e7d4790c8db593a07245f04f6edf4058c983fcee36e24df",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "def4bf38d70cde3928b2ab96efe27658f6592dd346be95bd98518cb7b2962919",
+                "ledger_entry_sha256": "ae99e611ec908a4ee2e5dd0832b5b361dcf609902a1d58b2ba48bc22188b56d2",
+                "run_ref": "session:local .ai-review/workflow-controller-orchestrator-stops/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "45501ed0b399541e6e7d4790c8db593a07245f04f6edf4058c983fcee36e24df",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "a8ac078bed0bb4be480abc46af10e8802bb9b19a45100aade27d28e0df942320",
+                "ledger_entry_sha256": "a14fd331818d9ac15d809a79ab0bd9b183bc694cc2949a3cea053944600f0701",
+                "run_ref": "codex:20261101T070525Z-105a6b1a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T07:09:07Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "8786d9f169cf6710671263ae63bc643e65923ab1f13c2537f522755eb841236d",
@@ -47907,12 +48080,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 28,
-      "last_transition": "2026-11-01T06:48:21Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-01T07:09:07Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -48065,6 +48238,55 @@
               "at": "2026-11-01T06:25:00Z"
             }
           ]
+        },
+        "F-c00ddf5b3e02": {
+          "digest": "c00ddf5b3e028eb406a447f2535031d4c03b1e7947e8fcb6e7a4e0194e2f72bc",
+          "text": "`TEST_RESULTS.md` in the bundle is still headed \"implementation revision 1\" and records only the runs at 2d5bbc1. The revision-2 verification (`tools/run_tests.py`, 5213 tests, and `check_docs`) appears only in `IMPLEMENTATION_SUMMARY.md`'s post-fix section. Adding a revision-2 row to `TEST_RESULTS.md` would keep the bundle's test record current.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "321c4534085a26932ad694ff73ecefd125101efecaffd6f22784e7bb39783c01",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T07:05:05Z"
+            }
+          ]
+        },
+        "F-dafeb226014b": {
+          "digest": "dafeb226014b54d7af6b6fec7e8c2ef77834e0fd8aa1bcbaf6ec20a504f95a49",
+          "text": "In `tests/test_pr_report.py:323`, assert that the real stale reporter record carries `code=\"pr_report_stale\"` and derives `user_gate`. That event assertion currently covers only a synthetic stale record.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "321c4534085a26932ad694ff73ecefd125101efecaffd6f22784e7bb39783c01",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T07:07:35Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "321c4534085a26932ad694ff73ecefd125101efecaffd6f22784e7bb39783c01",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "45501ed0b399541e6e7d4790c8db593a07245f04f6edf4058c983fcee36e24df",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-01T07:05:05Z",
+          "verdict_sha256": "def4bf38d70cde3928b2ab96efe27658f6592dd346be95bd98518cb7b2962919",
+          "run_ref": "session:local .ai-review/workflow-controller-orchestrator-stops/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "45501ed0b399541e6e7d4790c8db593a07245f04f6edf4058c983fcee36e24df",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-01T07:07:35Z",
+          "verdict_sha256": "a8ac078bed0bb4be480abc46af10e8802bb9b19a45100aade27d28e0df942320",
+          "run_ref": "codex:20261101T070525Z-105a6b1a",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

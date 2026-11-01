@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-command-render",
+  "requirements": {
+    "R1": {
+      "description": "A pure function renders a shared command file and an argument string into the prompt, applying the contract's key classes, with no per-harness copy and the body unchanged apart from $ARGUMENTS (#242)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The user-only commands (the contract's nine plus the two the guard recogniser also claims) are refused by the union of the two recognisers and an argument string naming any of them, or a quoted `true` flag, is refused; the nested-invocation limit is stated, not faked (#242)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Unknown command, unreadable file, malformed frontmatter and unplaced arguments are closed refusals, and every real command file renders or is refused for the contract's reason (#242)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "Nothing is wired in: the module is only registered in the package, the Codex worker role stays undeclared, no launcher is registered, and the Claude launch, reviewer, tester, settings, options, exit codes and gates are unchanged; guides and roadmap state it in place (#242)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

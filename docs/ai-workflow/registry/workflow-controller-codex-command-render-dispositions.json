@@ -1,0 +1,58 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-command-render",
+ "dispositions": {
+  "F-01756c1019d1": {
+   "disposition": "fixed",
+   "note": "The module and guide now describe the sibling scan required for argument refusal (revision 2 of the implementation)."
+  },
+  "F-1898b9192927": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-198efd3813c2": {
+   "disposition": "dropped",
+   "reason": "Wording of one cause in the harnesses guide; the four causes are named in the code and the workers guide."
+  },
+  "F-5c5685f366e3": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D4 states the private use of worker._assert_not_user_only is deliberate."
+  },
+  "F-6346db969849": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6551328724"
+  },
+  "F-64a864d06497": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the position of the parsed-flag refusal in D4's order sentence; the implementation orders it after the parse."
+  },
+  "F-87ec57bb8733": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the unclear CP1 clause was clarified."
+  },
+  "F-8a6993ce5776": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/247"
+  },
+  "F-8bb2d6f85f12": {
+   "disposition": "dropped",
+   "reason": "Plan wording about which check comes first for an invalid name with an absent directory; the implementation does the name check first."
+  },
+  "F-9371a0be71f0": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D4 and D7 state the order name check, lookup, read, user-only refusal, task scan, frontmatter parse."
+  },
+  "F-958d9a85e0b5": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the neutrality check; the implemented test uses the contract's rule."
+  },
+  "F-c606ca0bb688": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6551328724"
+  },
+  "F-c719fb9b4bfd": {
+   "disposition": "dropped",
+   "reason": "Cosmetic: some added lines pass the 120-column wrap."
+  }
+ }
+}

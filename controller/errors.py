@@ -936,3 +936,20 @@ class ForgeKindUnregisteredError(ControllerError):
     names the ``kind`` and the ``registered`` kinds."""
 
     code = "FORGE_KIND_UNREGISTERED"
+
+
+# ---------------------------------------------------------------------------
+# workflow-controller-codex-command-render CP1 -- rendering a shared Workflow
+# command file for a Codex worker (``controller.command_files``).
+# ---------------------------------------------------------------------------
+
+
+class CommandRenderError(ControllerError):
+    """``controller.command_files.render_command`` refused to render a
+    command. ``evidence['cause']`` is one of ``unknown_command``,
+    ``unreadable``, ``malformed_frontmatter`` and ``arguments_not_accepted``;
+    ``evidence`` also names the ``command`` and the ``file`` (and, for a
+    malformed frontmatter, the ``line``). A user-only command is not this
+    class: it is the existing :class:`UserOnlyCommandError`."""
+
+    code = "COMMAND_RENDER_REFUSED"

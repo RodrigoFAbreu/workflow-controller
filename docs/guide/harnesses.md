@@ -167,6 +167,24 @@ from a fresh digest and the record and writes nothing. `workflow-controller veri
 [`verify-codex`](commands.md#verify-codex)); the Codex tester launch reads it (a build it has not recorded is refused)
 and no other launch does.
 
+## The shared command renderer
+
+`controller/command_files.py` holds `render_command(name, arguments, commands_dir)`, a pure function over the shared
+command files in `.claude/commands/` (contract: `docs/ai-workflow/COMMAND_FILES.md`). It reads the requested file (and, to
+refuse an argument string that names a user-only command, every sibling command file), applies what the
+contract tells an adapter to do for each frontmatter key, replaces every `$ARGUMENTS` with the argument string verbatim, leaving the body's line endings untouched
+and returns a `RenderedCommand` (the prompt, the description, the argument hint, `state_writer` and `review-subject`).
+There is no per-harness copy of a command. Nothing calls it yet: the `codex` adapter still declares no worker role and no
+launcher is registered, so the Claude launch, the reviewer, the tester, the settings, the options, the exit codes and the
+gates are unchanged.
+
+It refuses, with `CommandRenderError` (code `COMMAND_RENDER_REFUSED`, the `cause`, the command and the file in its
+evidence): a name that is not a bare lower-case command name or has no file (`unknown_command`), a file that cannot be
+read, malformed frontmatter with the line named (a missing `state_writer` is reported at the closing `---` line), and an argument string given to a command that declares no
+`argument-hint` or has no `$ARGUMENTS` in its body (`arguments_not_accepted`). A missing commands directory is
+`MissingCommandsDirectoryError`. User-only commands are refused with `UserOnlyCommandError`; see
+[Workers](workers.md#a-codex-worker-and-the-user-only-commands).
+
 ## Keeping the page current
 
 Run `python3 tools/harness_table.py` to print the tables without touching the

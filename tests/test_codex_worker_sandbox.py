@@ -1,4 +1,4 @@
-"""`workflow-controller-codex-worker-sandbox` CP1: the Codex worker sandbox builder
+"""`workflow-controller-codex-worker-sandbox` CP1 and CP2: the Codex worker sandbox builder, probes and git guard
 (`controller.codex_worker_sandbox`). Offline: no `codex`, no network, no sandbox run; the
 runtime is a temporary folder, the worktree a real temporary clone made with `git`, and the
 listing controls use a fake runner.
@@ -7,6 +7,9 @@ listing controls use a fake runner.
 from __future__ import annotations
 
 import hashlib
+import os
+import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -421,6 +424,371 @@ class BuildTest(Fixture):
         self.build()
         self.assertFalse((self.runtime / "functional").exists())
         self.assertTrue((self.runtime / "worker" / "job1").is_dir())
+
+
+# ---------------------------------------------------------------------------
+# CP2: the probes
+# ---------------------------------------------------------------------------
+
+ALL_HELD = "\n".join(f"PROBE {n} {r}" for n, r in ws.PROBE_EXPECTED.items()) + "\n" + \
+    "\n".join(f"PROBE {n} REFUSED" for n in ws.PROBE_INFORMATIONAL) + "\n"
+
+
+class ProbeFixture(Fixture):
+    def targets(self, tree: Path) -> ws.ProbeTargets:
+        for name in ("scratch", "sibling-dir", "home", "origin"):
+            (self.tmp / name).mkdir(exist_ok=True)
+        if not (self.tmp / "origin" / "HEAD").exists():
+            subprocess.run(["git", "init", "-q", "--bare", str(self.tmp / "origin")], check=True, capture_output=True)
+        return ws.ProbeTargets(tree, self.tmp / "scratch", self.tmp / "sibling-dir" / "probe", self.tmp / "home",
+                               self.tmp / "canary.txt", "CANARY_ENV_X", self.tmp / "cred.json", self.tmp / "origin",
+                               1, self.tmp / "no.sock")
+
+
+class ProbeCommandTest(ProbeFixture):
+    def test_every_probe_is_named_once_with_absolute_quoted_paths(self) -> None:
+        tree = self.tmp / "tree with space"
+        make_clone(tree)
+        command = ws.probe_command(self.targets(tree), marker="m1")
+        lines = command.splitlines()
+        for name in (*ws.PROBE_EXPECTED, *ws.PROBE_INFORMATIONAL):
+            emitting = [line for line in lines if "$1" not in line
+                        and re.search(rf"(PROBE {name} |^(w|ap|ah) {name} )", line)]
+            self.assertEqual(len(emitting), 1, name)
+        self.assertIn(shlex.quote(str(tree / "src.txt")), command)
+        self.assertIn("git -C " + shlex.quote(str(tree)), command)
+        self.assertIn("-c user.name=probe -c user.email=probe@example.invalid", command)
+
+    def test_a_marker_that_is_not_a_plain_name_refuses(self) -> None:
+        tree = self.tmp / "t"
+        make_clone(tree)
+        for marker in ("a b", "a;b", "", "a'b"):
+            with self.assertRaises(ReviewLaunchRefusedError):
+                ws.probe_command(self.targets(tree), marker=marker)
+
+    def test_run_unsandboxed_in_a_clone_every_writable_side_probe_reports_its_result(self) -> None:
+        tree = self.tmp / "tree"
+        make_clone(tree)
+        head = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"], capture_output=True, text=True).stdout
+        out = subprocess.run(["sh", "-c", ws.probe_command(self.targets(tree), marker="m2")], capture_output=True,
+                             text=True, cwd=self.tmp).stdout
+        lines = dict(line[len("PROBE "):].split(" ", 1) for line in out.splitlines() if line.startswith("PROBE "))
+        for name in ("tracked", "newfile", "rename", "delete", "commit", "scratch", "home", "hooks", "gitconfig"):
+            self.assertEqual(lines[name], ws.PROBE_EXPECTED.get(name, "WROTE") if name != "home" else "WROTE", name)
+        self.assertEqual((tree / "src.txt").read_text(), "one\nprobe\n")
+        self.assertTrue((tree / ws.PROBE_RENAME_TARGET).exists())
+        self.assertFalse((tree / ws.PROBE_RENAME_SOURCE).exists())
+        self.assertFalse((tree / ws.PROBE_DELETE_FILE).exists())
+        self.assertNotEqual(subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"], capture_output=True,
+                                           text=True).stdout, head)
+        self.assertTrue((tree / ".git" / "hooks" / "probe-m2").exists())
+        config = (tree / ".git" / "config").read_text()
+        self.assertTrue(config.startswith("[core]") and config.rstrip().endswith("# probe-m2"))
+        git(tree, "status", "--porcelain")  # git still works after the config append
+
+    def test_hooks_and_gitconfig_come_after_commit_and_never_truncate_the_config(self) -> None:
+        tree = self.tmp / "tree"
+        make_clone(tree)
+        command = ws.probe_command(self.targets(tree), marker="m3")
+        commit = command.index("PROBE commit COMMITTED")
+        self.assertGreater(command.index("ah hooks "), commit)
+        self.assertGreater(command.index("PROBE gitconfig WROTE"), commit)
+        config_line = next(line for line in command.splitlines() if "PROBE gitconfig WROTE" in line)
+        self.assertIn(">> " + shlex.quote(str(tree / ".git" / "config")), config_line)
+        self.assertNotIn(": > " + shlex.quote(str(tree / ".git" / "config")), command)
+        self.assertNotIn("w gitconfig", command)
+        self.assertNotIn("w hooks", command)
+        self.assertIn("probe-m3", command)
+        self.assertIn(shlex.quote(str(tree / ".git" / "hooks" / "probe-m3")), command)
+
+    def test_rename_and_delete_use_files_of_their_own_not_the_tracked_one(self) -> None:
+        tree = self.tmp / "tree"
+        make_clone(tree)
+        command = ws.probe_command(self.targets(tree), marker="m4")
+        for line in command.splitlines():
+            if "PROBE rename" in line or "PROBE delete" in line:
+                self.assertNotIn("src.txt", line)
+        self.assertIn(ws.PROBE_RENAME_SOURCE, command)
+        self.assertIn(ws.PROBE_DELETE_FILE, command)
+
+
+class JudgeTest(unittest.TestCase):
+    def test_the_all_held_output_passes(self) -> None:
+        self.assertEqual(ws.judge(ALL_HELD), [])
+        self.assertEqual(ws.judge(ALL_HELD.replace("hooks REFUSED", "hooks WROTE")), [])
+
+    def test_each_departure_fails_closed(self) -> None:
+        cases = {
+            "a missing line": ALL_HELD.replace("PROBE push REFUSED\n", ""),
+            "a conflicting repeat": ALL_HELD + "PROBE push PUSHED\n",
+            "an unexpected result": ALL_HELD.replace("PROBE tcp BLOCKED", "PROBE tcp CONNECTED"),
+            "an expected probe refused": ALL_HELD.replace("PROBE commit COMMITTED", "PROBE commit FAILED"),
+            "an invalid informational result": ALL_HELD.replace("PROBE tmp REFUSED", "PROBE tmp ODD"),
+            "an unknown probe": ALL_HELD + "PROBE surprise WROTE\n",
+            "empty output": "",
+            "a missing informational line": ALL_HELD.replace("PROBE gitconfig REFUSED\n", ""),
+        }
+        for what, output in cases.items():
+            self.assertTrue(ws.judge(output), what)
+
+    def test_the_old_testers_names_are_not_known(self) -> None:
+        self.assertTrue(ws.judge(ALL_HELD + "PROBE git REFUSED\n"))
+
+
+class SandboxProbeArgvTest(Fixture):
+    def test_the_command_selects_the_worker_profile_and_the_worktree_and_no_sandbox_flag(self) -> None:
+        command = ws.sandbox_probe_argv(self.layout, binary=self.binary, command="echo hi")
+        self.assertEqual(command[:7], [str(self.binary), "sandbox", "-P", "worker", "-C", str(self.layout.worktree),
+                                       "-c"])
+        self.assertEqual(command[-4:], ["--", "sh", "-c", "echo hi"])
+        for item in ws.shell_policy_overrides(self.layout):
+            self.assertIn(item, command)
+        for flag in ("-s", "--sandbox", "--add-dir", "--full-auto"):
+            self.assertNotIn(flag, command)
+
+
+# ---------------------------------------------------------------------------
+# CP2: the git guard
+# ---------------------------------------------------------------------------
+
+
+class GuardFixture(ProbeFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.tree = self.tmp / "gtree"
+        make_clone(self.tree)
+        self.git = self.tree / ".git"
+
+    def digest(self) -> dict:
+        return ws.guard_digest(self.tree)
+
+    def refused(self, before: dict, after: dict | None = None, entry: str | None = None) -> str:
+        with self.assertRaises(ReviewLaunchRefusedError) as caught:
+            ws.check_guard(before, after if after is not None else self.digest())
+        message = str(caught.exception)
+        if entry is not None:
+            self.assertIn(entry, message)
+        return message
+
+
+class GuardDigestTest(GuardFixture):
+    def test_an_unchanged_tree_gives_an_equal_digest_and_passes(self) -> None:
+        before = self.digest()
+        self.assertEqual(before, self.digest())
+        ws.check_guard(before, self.digest())
+        self.assertEqual(before["git"], "dir")
+        self.assertEqual(sorted(before["roots"]), ["logs", "objects", "refs"])
+
+    def test_each_listed_change_is_detected_and_named(self) -> None:
+        def new_hook() -> None:
+            (self.git / "hooks" / "pre-commit").write_text("#!/bin/sh\n")
+
+        def edit_hook() -> None:
+            (self.git / "hooks" / "pre-commit.sample").write_text("# edited\n")
+
+        def chmod_hook() -> None:
+            os.chmod(self.git / "hooks" / "pre-commit.sample", 0o700)
+
+        def edit_config() -> None:
+            with open(self.git / "config", "a") as f:
+                f.write("# x\n")
+
+        def info_exclude() -> None:
+            (self.git / "info").mkdir(exist_ok=True)
+            (self.git / "info" / "exclude").write_text("x\n")
+
+        cases = {
+            "hooks/pre-commit": new_hook, "hooks/pre-commit.sample": edit_hook, "chmod": chmod_hook,
+            "config": edit_config, "info/exclude": info_exclude,
+            "commondir": lambda: (self.git / "commondir").write_text("../elsewhere\n"),
+            "config.worktree": lambda: (self.git / "config.worktree").write_text("[core]\n"),
+            "gitdir": lambda: (self.git / "gitdir").write_text("x\n"),
+            "other": lambda: (self.git / "other-file").write_text("x\n"),
+            "modules": lambda: ((self.git / "modules" / "x").mkdir(parents=True),
+                                         (self.git / "modules" / "x" / "config").write_text("[core]\n")),
+        }
+        if not (self.git / "hooks" / "pre-commit.sample").exists():
+            (self.git / "hooks").mkdir(exist_ok=True)
+            (self.git / "hooks" / "pre-commit.sample").write_text("# sample\n")
+        for name, change in cases.items():
+            with self.subTest(name):
+                before = self.digest()
+                change()
+                self.refused(before, entry=name if "/" in name or name in ("config", "commondir", "gitdir")
+                             else None)
+
+    def test_a_removed_entry_is_detected(self) -> None:
+        before = self.digest()
+        (self.git / "config").unlink()
+        self.refused(before, entry="config")
+
+    def test_info_refs_appearing_is_accepted_and_a_symlink_or_fifo_there_is_refused(self) -> None:
+        (self.git / "info").mkdir(exist_ok=True)
+        before = self.digest()
+        (self.git / "info" / "refs").write_text("x\n")
+        ws.check_guard(before, self.digest())
+        (self.git / "info" / "refs").unlink()
+        os.symlink(self.tmp, self.git / "info" / "refs")
+        self.refused(before, entry="info/refs")
+        (self.git / "info" / "refs").unlink()
+        os.mkfifo(self.git / "info" / "refs")
+        self.refused(before, entry="info/refs")
+
+    def test_a_commit_leaves_the_digest_unchanged_on_a_fresh_clone(self) -> None:
+        fresh = self.tmp / "fresh"
+        subprocess.run(["git", "clone", "-q", str(self.tree), str(fresh)], check=True, capture_output=True)
+        self.assertFalse((fresh / ".git" / "COMMIT_EDITMSG").exists())
+        self.assertFalse((fresh / ".git" / "ORIG_HEAD").exists())
+        before = ws.guard_digest(fresh)
+        (fresh / "new.txt").write_text("n\n")
+        git(fresh, "add", "-A")
+        git(fresh, "commit", "-q", "-m", "second")
+        self.assertTrue((fresh / ".git" / "COMMIT_EDITMSG").exists())
+        after = ws.guard_digest(fresh)
+        self.assertEqual(before, after)
+        ws.check_guard(before, after)
+
+    def test_a_first_commit_that_creates_logs_in_a_new_repository_is_accepted(self) -> None:
+        fresh = self.tmp / "newrepo"
+        fresh.mkdir()
+        subprocess.run(["git", "init", "-q", str(fresh)], check=True, capture_output=True)
+        before = ws.guard_digest(fresh)
+        self.assertNotIn("logs", before["roots"])
+        (fresh / "a.txt").write_text("a\n")
+        git(fresh, "add", "-A")
+        git(fresh, "commit", "-q", "-m", "first")
+        after = ws.guard_digest(fresh)
+        self.assertEqual(after["roots"]["logs"], "dir")
+        ws.check_guard(before, after)
+
+    def test_a_removed_excluded_root_is_refused(self) -> None:
+        before = self.digest()
+        subprocess.run(["rm", "-rf", str(self.git / "logs")], check=True)
+        self.refused(before, entry="logs")
+
+    def test_a_plain_gc_leaves_the_digest_unchanged(self) -> None:
+        self.assertFalse((self.git / "info" / "refs").exists())
+        before = self.digest()
+        git(self.tree, "gc", "-q")
+        self.assertTrue((self.git / "packed-refs").exists())
+        self.assertTrue((self.git / "info" / "refs").exists())
+        self.assertTrue(any((self.git / "objects" / "pack").glob("*.pack")))
+        after = self.digest()
+        self.assertEqual(before, after)
+        ws.check_guard(before, after)
+
+    def test_the_probe_command_run_unsandboxed_changes_the_digest_only_through_hooks_and_config(self) -> None:
+        before = self.digest()
+        subprocess.run(["sh", "-c", ws.probe_command(self.targets(self.tree), marker="m5")], capture_output=True,
+                       cwd=self.tmp)
+        message = self.refused(before)
+        self.assertTrue("hooks" in message or "config" in message)
+        (self.git / "hooks" / "probe-m5").unlink()
+        text = (self.git / "config").read_text()
+        (self.git / "config").write_text(text.replace("# probe-m5\n", ""))
+        ws.check_guard(before, self.digest())
+
+    def test_lock_files_appearing_leave_the_digest_unchanged(self) -> None:
+        before = self.digest()
+        (self.git / "index.lock").write_text("")
+        (self.git / "refs" / "heads" / "x.lock").write_text("")
+        ws.check_guard(before, self.digest())
+
+
+class GuardGitEntryTest(GuardFixture):
+    def test_the_digest_records_the_type_of_git_and_never_follows_a_symlink(self) -> None:
+        copy = self.tmp / "gitcopy"
+        subprocess.run(["cp", "-a", str(self.git), str(copy)], check=True)
+        before = self.digest()
+        self.assertEqual(before["git"], "dir")
+        for what in ("file", "symlink", "removed"):
+            with self.subTest(what):
+                tree = self.tmp / f"tree-{what}"
+                subprocess.run(["cp", "-a", str(self.tree), str(tree)], check=True)
+                before = ws.guard_digest(tree)
+                subprocess.run(["rm", "-rf", str(tree / ".git")], check=True)
+                if what == "file":
+                    (tree / ".git").write_text("gitdir: evil\n")
+                elif what == "symlink":
+                    os.symlink(copy, tree / ".git")
+                after = ws.guard_digest(tree)
+                self.assertNotEqual(after["git"], "dir")
+                self.assertEqual(after["entries"], {})
+                self.refused(before, after, entry=".git")
+                self.refused(after, before, entry=".git")
+
+
+class GuardRedirectionTest(GuardFixture):
+    def redirections(self, g: Path, other: Path) -> dict:
+        """Each change, as a function of a tree's git directory, with the entry the refusal must name."""
+        first = next(p for p in (g / "objects").iterdir() if len(p.name) == 2)
+
+        def to_symlink(path: Path, target: Path):
+            def change() -> None:
+                if path.is_dir() and not path.is_symlink():
+                    subprocess.run(["rm", "-rf", str(path)], check=True)
+                else:
+                    path.unlink()
+                os.symlink(target, path)
+            return change
+
+        def to_file(root: str):
+            def change() -> None:
+                subprocess.run(["rm", "-rf", str(g / root)], check=True)
+                (g / root).write_text("x\n")
+            return change
+
+        def alternates() -> None:
+            (g / "objects" / "info").mkdir(exist_ok=True)
+            (g / "objects" / "info" / "alternates").write_text(str(other / ".git" / "objects") + "\n")
+
+        return {
+            "objects": to_symlink(g / "objects", other / ".git" / "objects"),
+            f"objects/{first.name}": to_symlink(first, other),
+            "objects/pack": to_symlink(g / "objects" / "pack", other),
+            "refs/heads/link": lambda: os.symlink(other, g / "refs" / "heads" / "link"),
+            "logs/link": lambda: os.symlink(other, g / "logs" / "link"),
+            "COMMIT_EDITMSG": to_symlink(g / "COMMIT_EDITMSG", other / "f"),
+            "index": to_symlink(g / "index", other / "f"),
+            "HEAD": to_symlink(g / "HEAD", other / "f"),
+            "refs": to_file("refs"), "logs": to_file("logs"),
+            "refs/fifo": lambda: os.mkfifo(g / "refs" / "fifo"),
+            "objects/info/alternates": alternates,
+        }
+
+    def test_each_structural_redirection_is_refused_naming_the_entry(self) -> None:
+        other = self.tmp / "other-repo"
+        make_clone(other)
+        template = self.tmp / "template"
+        make_clone(template)
+        (template / ".git" / "objects" / "pack").mkdir(exist_ok=True)
+        (template / ".git" / "COMMIT_EDITMSG").write_text("x\n")
+        names = list(self.redirections(template / ".git", other))
+        for index, name in enumerate(names):
+            with self.subTest(name):
+                tree = self.tmp / f"rtree-{index}"
+                subprocess.run(["cp", "-a", str(template), str(tree)], check=True)
+                before = ws.guard_digest(tree)
+                ws.check_guard(before, ws.guard_digest(tree))
+                self.redirections(tree / ".git", other)[name]()
+                after = ws.guard_digest(tree)
+                with self.assertRaises(ReviewLaunchRefusedError) as caught:
+                    ws.check_guard(before, after)
+                self.assertIn(name.split("/")[-1] if name.startswith(("refs/", "logs/")) else name,
+                              str(caught.exception), name)
+
+    def test_a_symlink_already_in_the_baseline_is_refused_not_accepted(self) -> None:
+        os.symlink(self.tmp, self.git / "refs" / "heads" / "link")
+        before = self.digest()
+        self.assertEqual(before["special"], ["refs/heads/link"])
+        self.refused(before, before, entry="refs/heads/link")
+
+    def test_an_alternates_file_in_the_baseline_is_refused(self) -> None:
+        (self.git / "objects" / "info").mkdir(exist_ok=True)
+        (self.git / "objects" / "info" / "alternates").write_text("/x\n")
+        before = self.digest()
+        self.assertTrue(before["alternates"])
+        self.refused(before, before, entry="alternates")
 
 
 if __name__ == "__main__":

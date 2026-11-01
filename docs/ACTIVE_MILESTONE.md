@@ -7,8 +7,10 @@
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`. CP1 is complete: `controller/codex_worker_sandbox.py` has
 `WorkerLayout`, `check_worktree`, the `worker` profile (worktree and scratch writable, `.git/hooks` and `.git/config`
 read, network off), the pinned `codex exec` line, `check_home`, `check_launch` and `build`, with
-`tests/test_codex_worker_sandbox.py`. Nothing calls the module. CP2 (probes and the git guard) and CP3 (live proof, guides,
-roadmap) are next. The previous item is recorded below.
+`tests/test_codex_worker_sandbox.py`. CP2 is complete: the module also has the worker probes (`probe_command`, `probe_prompt`,
+`judge`, `sandbox_probe_argv`) and the git guard (`guard_digest`, `check_guard`), which detects any change under `.git`
+other than what a commit or a plain `git gc` writes, and refuses a symlink, a special file or an alternates file there.
+Nothing calls the module. CP3 (live proof, guides, roadmap) is next. The previous item is recorded below.
 
 **Complete.** `workflow-controller-orchestrator-stops` (NF3, issue
 [#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)) is implemented (CP1 and CP2 and the functional review) and accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md`. A gate record

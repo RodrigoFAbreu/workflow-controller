@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-user-only-scan",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -47218,6 +47218,219 @@
         "evaluated_at": "2026-11-01T00:44:30Z",
         "workflow_release": "2.25.4"
       }
+    },
+    "workflow-controller-user-only-scan": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-user-only-scan",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_USER_ONLY_SCAN_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-user-only-scan-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-user-only-scan-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "d10fc049a3e14e16dacea99b2d2cdb41b3fafcbf",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+        "approved_review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_USER_ONLY_SCAN_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "371c029824bfb2d918d67a5b82adba531149043b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-user-only-scan-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4c344275491d849df3e3cdb1494e9ac8ae58672a"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-user-only-scan-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cebf269702dbf71e2a7b490955e37fc440625137"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T02:22:55Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
+            "ledger": {
+              "local": {
+                "bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "15239113d5a9733d28b8055df0021f0cfdb6d58304c515e698efffba5733052c",
+                "ledger_entry_sha256": "b9fa469808c67fdb841c8b5396c919e1d4152763508e01b0488fcf70f2a44bdb",
+                "run_ref": "session:local .ai-review/workflow-controller-user-only-scan/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "c18ed4bbec1fd2a4a35f95ef89ec631e16914e7ecee0253a6062db19c98df5cf",
+                "ledger_entry_sha256": "0b84ae9b14b4c2e6b7ab31a02bd32cd222d7e14536b7dbf8076b56fd10c08e6f",
+                "run_ref": "codex:20261101T021453Z-e8d07bdd",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T02:22:55Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-01T02:12:22Z",
+          "verdict_sha256": "15239113d5a9733d28b8055df0021f0cfdb6d58304c515e698efffba5733052c",
+          "run_ref": "session:local .ai-review/workflow-controller-user-only-scan/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-01T02:18:04Z",
+          "verdict_sha256": "c18ed4bbec1fd2a4a35f95ef89ec631e16914e7ecee0253a6062db19c98df5cf",
+          "run_ref": "codex:20261101T021453Z-e8d07bdd",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 10,
+      "last_transition": "2026-11-01T02:22:55Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-01T02:06:16Z",
+        "consumed": {
+          "review_content_id": "c64dd2e406d9482aff4a36c95c3deb55f7e8e1c272dadfabcb30cf0172f2a50c",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
+          "bundle_id": "22e3a9dfcb1f657061074c94062156f57fee217e076feb365187f016c5a8a0fb",
+          "plan_revision": 2
+        }
+      },
+      "optional_findings": {
+        "F-4bfa43f0fe58": {
+          "digest": "4bfa43f0fe588ffe0baff2634489839c80ec83f0fa44b7ee42aa123826e175c8",
+          "text": "OPT-1 (D3 wording, paths with a dot or tilde prefix): D2 strips `.` and `/` at a piece's edges, and D1 makes `~` a delimiter, so `./approve-review`, `../approve-review` and `~/approve-review` are all refused (checked with a prototype of the D1/D2 rule), while `a/approve-review` is not. D3's sentence \"a path that ends in the name's segment ... stays unrefused\" is therefore not quite true for relative paths with a dot or tilde prefix. This is the fail-closed direction and harmless, but D3 (and the guide text in CP2) should state it, and CP1 should test it, so the boundary is written down rather than accidental.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "c64dd2e406d9482aff4a36c95c3deb55f7e8e1c272dadfabcb30cf0172f2a50c",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T01:59:37Z"
+            }
+          ]
+        },
+        "F-67b868bb582c": {
+          "digest": "67b868bb582c262d521bb56588de6e959528fe5bc82a301f5daee1c598a20ad6",
+          "text": "OPT-2 (D6 corpus selection): D6 requires the same verdict \"on every one that names no user-only command in a missed spelling\". If the implementation picks that subset with the new tokeniser, the test proves nothing. Make the corpus a fixed list of strings that name no user-only command at all, and require that the old and new rule agree on every entry with no filter. Also add the task strings the Controller builds itself: `job.worker_task` output for each rendered action command, `functional_review.sandbox_limits_note()` and `evidence.pending_review_stage_write_addendum(...)`. These are what `worker.launch` actually scans in production. A prototype of the new rule finds no user-only name in either addendum or in any shipped command's `argument-hint`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "c64dd2e406d9482aff4a36c95c3deb55f7e8e1c272dadfabcb30cf0172f2a50c",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T01:59:37Z"
+            }
+          ]
+        },
+        "F-29ed9fa7a5f9": {
+          "digest": "29ed9fa7a5f9c6472187cc46fb2787206c8ac39ff772e4d64bc449ae1cae3342",
+          "text": "OPT-1 (R2 and D6 wording against the `~/name` exception): R2 says every task \"that names no user-only command, is judged exactly as before\", and D6's principle repeats it, while D3 classifies a path ending in the name's segment (`a/approve-review`) as not naming the command and yet refuses `~/approve-review`. A task such as `inspect ~/approve-review` therefore names no user-only command by D3's own boundary and is newly refused. D3 writes the exception down, so this is wording only: the implementation should keep `~/name` out of the D6 corpus and test it as a refusal (which CP1 already requires), and R2/D6 could name the `~` exception so the requirement text does not overclaim.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "2c70868fb055629195c63862072b7413d7c72adf27d5e12ff2f307666d4494b6",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T02:12:22Z"
+            }
+          ]
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "c64dd2e406d9482aff4a36c95c3deb55f7e8e1c272dadfabcb30cf0172f2a50c"
+      ]
     }
   }
 }

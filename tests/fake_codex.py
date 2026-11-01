@@ -59,7 +59,7 @@ kinds ``revise_then_approve``, ``revise_then_revise`` and ``no_status_then_exact
 header on the retry, with the ``Status:`` the name says), ``exit``,
 ``limit_shape`` (``string``, ``http429`` or ``percent``: how the rollout reports the
 limit), ``message`` (text written to the ``-o`` file instead of a review verdict, so a tester's final message can be scripted; ``""``
-writes an empty file), ``stderr`` (text printed on stderr, a transcript line), ``subagent``
+writes an empty file), ``stderr`` (text printed on stderr, a transcript line), ``stdout`` (text printed on stdout), ``subagent``
 (write a sub-agent rollout with that many total tokens),
 ``write_outside`` (list of paths to write), ``escape_to`` (a real-worktree path
 the fake writes as if the sandbox failed), ``git`` (argvs run in the working
@@ -550,6 +550,8 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
     thread = _write_rollout(home, scenario, spec)
     if spec.get("subagent"):
         _write_rollout(home, scenario, spec, subagent_of=thread, tokens=int(spec["subagent"]))
+    if spec.get("stdout"):
+        print(spec["stdout"], flush=True)
     if spec.get("stderr"):
         print(spec["stderr"], file=sys.stderr)
     notify = merged.get("notify")

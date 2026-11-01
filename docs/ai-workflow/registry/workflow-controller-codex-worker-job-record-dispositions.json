@@ -1,0 +1,62 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-worker-job-record",
+ "dispositions": {
+  "F-10f6a66f3963": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6562215129"
+  },
+  "F-342ead89121d": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/263"
+  },
+  "F-5388e1decd4d": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 2: fill_log_file opens the unresolved path with O_NOFOLLOW after the containment check, or its docstring is accurate."
+  },
+  "F-59e78838bc32": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: CP2 names the worker_outcome field for the timeout case."
+  },
+  "F-703e3e8fa9b3": {
+   "disposition": "dropped",
+   "reason": "Plan wording about a leftover-inventory row; the implementation matched the inventory to the scan and the check passes."
+  },
+  "F-7be8c00a6cf5": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/263"
+  },
+  "F-8cc4bfe1fc2b": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6562215129"
+  },
+  "F-a3f5ecea95ad": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-a81644ea8537": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6562215129"
+  },
+  "F-aa10a776a472": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the inputs of launch_options; the implementation states them in its docstring and tests."
+  },
+  "F-bdf6d7060afa": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D4 states how the fixture launcher supplies the launcher's test seams."
+  },
+  "F-d53b8dfa3e5c": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D1 and D4 state the no-deadline default and the stream format of a Codex job."
+  },
+  "F-f4998d149da0": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6562215129"
+  },
+  "F-f87da60f31f5": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: CP2 names the real execute_step test modules."
+  }
+ }
+}

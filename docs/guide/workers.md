@@ -453,7 +453,8 @@ registry as tables. To add a harness, see
 
 ### A Codex worker and the user-only commands
 
-A Codex worker launcher exists for a fixture role only ([harnesses](harnesses.md#the-codex-worker-launcher)), and it renders
+A Codex worker launcher exists for a fixture role only ([harnesses](harnesses.md#the-codex-worker-launcher)), the job layer records
+its run ([harnesses](harnesses.md#a-codex-worker-run-as-a-job-record)), and it renders
 its command with `command_files.render_command` ([harnesses](harnesses.md#the-shared-command-renderer)). It refuses a user-only command as the requested command, and refuses an argument string that names one
 (`/milestone-plan /approve-review`, a backticked or sentence-final mention included). The scan is the one tokeniser
 `worker._task_tokens` that the Claude launch also uses: it splits each whitespace chunk on `=` and on every character that

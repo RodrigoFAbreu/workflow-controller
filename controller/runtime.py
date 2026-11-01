@@ -248,6 +248,21 @@ def create_log_file(runtime_root: Path, rel_path: str | os.PathLike) -> Path:
     return full_path
 
 
+def fill_log_file(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) -> Path:
+    """Write ``data`` into the log file :func:`create_log_file` made at ``<runtime_root>/<rel_path>`` and return its
+    resolved path (``workflow-controller-codex-worker-job-record`` CP2: the stream file of a worker that did not write
+    it itself). Containment-checked; the file must already exist, is never followed through a symlink and keeps its
+    mode, and the bytes are ``fsync``ed."""
+    full_path = runtime_root / rel_path
+    _assert_contained(runtime_root, full_path)
+    fd = os.open(full_path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    return full_path.resolve()
+
+
 def open_lock_file(root: Path, rel_path: str | os.PathLike) -> int:
     """Open ``<root>/<rel_path>`` for an ``flock``, creating it (mode
     ``0o600``, parent directories as needed) when absent, and return the

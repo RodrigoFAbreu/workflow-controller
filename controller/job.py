@@ -107,7 +107,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_tester, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_tester, codex_worker, codex_worker_job, codex_worker_sandbox, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -8454,7 +8454,8 @@ def _execute_step_locked(
         # for `resume`. A hold never waits here: the decision and pre-state
         # are this boundary's, and the caller re-enters the whole boundary
         # after a wait.
-        if usage_gate is not None:
+        # H4c1 (D7): a Codex launcher takes no reservation -- the budget sees only the Claude provider here.
+        if usage_gate is not None and not _is_codex_launcher(launcher):
             admitted = usage_gate(route)
             if isinstance(admitted, (UsageHold, usage.Hold)):
                 return _as_usage_hold(admitted, preflight_events)
@@ -8651,6 +8652,90 @@ def _supervisor_lock(runtime_root: Path, job_id: str, *, record: Mapping | None 
         os.close(fd)
 
 
+#: The tree a Codex worker runs in (H4c1, D5): ``(managed_repo, layout) -> Path``, the layout's worktree prepared.
+#: ``None`` by default -- how the tree is made and how its commits return to the managed repository is an owner
+#: decision (needed before H4e), so with no preparer the branch refuses before the launch.
+CODEX_WORKTREE_PREPARER: Callable[[Any, codex_worker_sandbox.WorkerLayout], Path] | None = None
+
+#: ``worker_streams.format`` of a Codex job: its stdout is plain text, not stream-json.
+CODEX_STREAM_FORMAT = "text"
+
+
+def _codex_home() -> Path:
+    """The operator's Codex home, the directory holding ``auth.json``: ``$CODEX_HOME``, else ``~/.codex`` (the rule
+    of ``cli._codex_home``, which this module cannot import)."""
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+
+
+#: The Codex home a Codex worker job takes its credential from and copies it back to (H4c1, D4).
+CODEX_HOME_RESOLVER: Callable[[], Path] = _codex_home
+
+
+def _is_codex_launcher(launcher: Any) -> bool:
+    """Whether the route's launcher is the Codex worker's (H4c1, D2): on the launcher object, not a harness name."""
+    return isinstance(launcher, codex_worker.CodexLauncher)
+
+
+def _run_codex_worker(
+    managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
+    route: routing.ResolvedRoute, timeout: float | None, launcher: Any,
+    worker_not_started: Callable[[ControllerError], None],
+) -> tuple[worker.WorkerResult, JobRecord, dict]:
+    """The call-and-wait block of a Codex worker (H4c1, D2, D4, D8): the tree and Codex home from their seams, the
+    launch with the eight options of D4, ``worker_process`` flushed on spawn and the two stream files filled after
+    the run. Returns ``(result, record, spawned)``. A ``ControllerError`` before the spawn is a terminal
+    ``WorkerNotStarted``; ``KeyboardInterrupt`` leaves the record ``LAUNCHED``; any other exception (or any once
+    ``worker_process`` is flushed) ends the record ``FAILED`` naming it. Every case re-raises."""
+    spawned: dict[str, Any] = {}
+
+    def on_spawn(pid: int, pgid: int) -> None:
+        nonlocal record
+        spawned["worker_process"] = worker.capture_worker_process(pid)
+        record = _persist(runtime_root, job_id, {**record, "worker_process": spawned["worker_process"].to_dict(),
+                                                 "updated_at": _now()},
+                          event="worker_spawned", details={"pid": pid, "pgid": pgid})
+        spawned["flushed"] = True
+        spawned["spawned_at"] = record["updated_at"]
+
+    try:
+        if record.get("usage") is not None:
+            raise WorkerLaunchError(
+                "a Codex worker takes no usage reservation (the budget is not wired to it yet); the fallback chain "
+                "selected it under a usage gate",
+                evidence={"job_id": job_id, "harness": route.harness})
+        preparer = CODEX_WORKTREE_PREPARER
+        if preparer is None:
+            raise WorkerLaunchError(
+                "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to the "
+                "managed repository is not decided yet",
+                evidence={"job_id": job_id, "harness": route.harness})
+        cwd = Path(preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id)))
+        options = codex_worker_job.launch_options(
+            runtime_root=runtime_root, job_id=job_id, operator_home=CODEX_HOME_RESOLVER(), cwd=cwd, timeout=timeout,
+            on_spawn=on_spawn, route=route)
+        result = launcher.launch(worker_task(decision.action), **options)
+        stdout_text, stderr_text = codex_worker_job.stream_texts(result)
+        runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stdout", stdout_text.encode("utf-8"))
+        runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stderr", stderr_text.encode("utf-8"))
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:
+        if isinstance(exc, ControllerError) and "worker_process" not in spawned:
+            worker_not_started(exc)
+        else:
+            with contextlib.suppress(Exception):
+                failed = _persist(runtime_root, job_id, {
+                    **record,
+                    "status": STATUS_FAILED,
+                    "transition_verified": False,
+                    "reconciliation_evidence": {"code": type(exc).__name__, "message": str(exc)},
+                    "updated_at": _now(),
+                }, event=_final_event(STATUS_FAILED), details={"error": type(exc).__name__})
+                _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
+        raise
+    return result, record, spawned
+
+
 def _launch_job(
     managed_repo: Any,
     *,
@@ -8815,41 +8900,47 @@ def _launch_job(
                 "evidence": currency.evidence(),
             }, protocol_decision.DECISION_STALE_AT_LAUNCH)
 
-    try:
-        result = launcher.launch(
-            worker_task(decision.action),
-            cwd=managed_repo.root,
-            permission_mode=permission_mode,
-            timeout=resolved_timeout,
-            stdout_path=worker_streams["stdout_path"],
-            stderr_path=worker_streams["stderr_path"],
-            claude_bin=claude_bin,
-            pass_fds=(lifecycle_lock.fd,),
-            on_spawn=on_spawn,
-            on_group_drain=on_group_drain,
-            model=route.model,
-            effort=route.effort,
-            disallowed_tools=_worker_disallowed_tools(route, binding),
-            ownership_tag=job_id,
-            supervisor_lock_path=supervisor_lock_path,
-            on_state_change=on_state_change,
-            drain_detach_seconds=drain_detach_seconds,
-        )
-    except (UserOnlyCommandError, WorkerLaunchError) as exc:
-        if "worker_process" not in spawned:
-            worker_not_started(exc)
-        raise
-    except KeyboardInterrupt:
-        # CP5: Ctrl-C ends only the Controller. After the worker_process
-        # flush the record stays LAUNCHED with it, so `resume` applies the
-        # liveness verdict later; the interrupt propagates unchanged.
-        if spawned.get("flushed"):
-            _announce_orphaned_worker(spawned["worker_process"], managed_repo.root, runtime,
-                                      drained=spawned.get("drained", False), anchor=spawned.get("anchor"))
-        raise
-    finally:
-        if ticker is not None:
-            ticker.stop()
+    codex = _is_codex_launcher(launcher)
+    if codex:
+        result, record, spawned = _run_codex_worker(
+            managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
+            route=route, timeout=resolved_timeout, launcher=launcher, worker_not_started=worker_not_started)
+    else:
+        try:
+            result = launcher.launch(
+                worker_task(decision.action),
+                cwd=managed_repo.root,
+                permission_mode=permission_mode,
+                timeout=resolved_timeout,
+                stdout_path=worker_streams["stdout_path"],
+                stderr_path=worker_streams["stderr_path"],
+                claude_bin=claude_bin,
+                pass_fds=(lifecycle_lock.fd,),
+                on_spawn=on_spawn,
+                on_group_drain=on_group_drain,
+                model=route.model,
+                effort=route.effort,
+                disallowed_tools=_worker_disallowed_tools(route, binding),
+                ownership_tag=job_id,
+                supervisor_lock_path=supervisor_lock_path,
+                on_state_change=on_state_change,
+                drain_detach_seconds=drain_detach_seconds,
+            )
+        except (UserOnlyCommandError, WorkerLaunchError) as exc:
+            if "worker_process" not in spawned:
+                worker_not_started(exc)
+            raise
+        except KeyboardInterrupt:
+            # CP5: Ctrl-C ends only the Controller. After the worker_process
+            # flush the record stays LAUNCHED with it, so `resume` applies the
+            # liveness verdict later; the interrupt propagates unchanged.
+            if spawned.get("flushed"):
+                _announce_orphaned_worker(spawned["worker_process"], managed_repo.root, runtime,
+                                          drained=spawned.get("drained", False), anchor=spawned.get("anchor"))
+            raise
+        finally:
+            if ticker is not None:
+                ticker.stop()
 
     if isinstance(result, worker.DrainDetached):
         # CP4 (worker-lifecycle-ownership, plan D): owned processes outlived
@@ -8874,8 +8965,15 @@ def _launch_job(
     # failure boundary before the one completion write, whose other fields
     # never read it (I6).
     completed_at = _now()
-    block = _telemetry_block(record, worker_streams, completed_at=completed_at,
-                             spawned_at=spawned.get("spawned_at"))
+    if codex:
+        # H4c1 (D6, D7): the telemetry of a run with no stream, the usage derived from the rollouts, and the stream
+        # files' format named for what they hold.
+        block = _codex_tester_telemetry(record, seconds=result.duration_ms / 1000)
+        usage_fields = _usage_fields(codex_worker_job.usage_builder(result, route))
+    else:
+        block = _telemetry_block(record, worker_streams, completed_at=completed_at,
+                                 spawned_at=spawned.get("spawned_at"))
+        usage_fields = _worker_usage_fields(worker_streams)
     record = {
         **record,
         "status": STATUS_COMPLETED,
@@ -8883,9 +8981,11 @@ def _launch_job(
                                stderr_path=worker_streams["stderr_path"]),
         "worker_outcome": result.outcome,
         "telemetry": block,
-        **_worker_usage_fields(worker_streams),
+        **usage_fields,
         "updated_at": completed_at,
     }
+    if codex:
+        record["worker_streams"] = {**worker_streams, "format": CODEX_STREAM_FORMAT}
     if usage_block is not None:
         # Usage budget (CP3, D6): the end figures and `accounting:
         # "pending"` ride in the write that reads the stream; every later

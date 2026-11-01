@@ -156,6 +156,42 @@ class WriteJsonTest(unittest.TestCase):
             self.assertIsNone(runtime.read_json(Path(td) / "nope.json"))
 
 
+class FillLogFileTest(unittest.TestCase):
+    def test_it_fills_an_existing_log_file_and_keeps_its_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            made = runtime.create_log_file(root, "jobs/j/worker.stdout")
+            filled = runtime.fill_log_file(root, "jobs/j/worker.stdout", b"first output\n")
+            self.assertEqual(filled, made)
+            self.assertEqual(made.read_bytes(), b"first output\n")
+            self.assertEqual(made.stat().st_mode & 0o777, 0o600)
+
+    def test_it_refuses_an_absent_file(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(FileNotFoundError):
+                runtime.fill_log_file(Path(td), "jobs/j/worker.stdout", b"x")
+            self.assertFalse((Path(td) / "jobs/j/worker.stdout").exists())
+
+    def test_it_refuses_a_path_outside_the_root(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            outside = Path(td) / "outside.log"
+            outside.write_bytes(b"keep")
+            root = Path(td) / "root"
+            root.mkdir()
+            with self.assertRaises(RuntimeContainmentError):
+                runtime.fill_log_file(root, "../outside.log", b"x")
+            self.assertEqual(outside.read_bytes(), b"keep")
+
+    def test_it_does_not_follow_a_symlink_even_inside_the_root(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            target = runtime.create_log_file(root, "real.log")
+            (root / "link.log").symlink_to(target)
+            with self.assertRaises(OSError):
+                runtime.fill_log_file(root, "link.log", b"x")
+            self.assertEqual(target.read_bytes(), b"")
+
+
 class UsageLockTest(unittest.TestCase):
     def test_usage_lock_is_exclusive_and_released_on_exit(self) -> None:
         import fcntl

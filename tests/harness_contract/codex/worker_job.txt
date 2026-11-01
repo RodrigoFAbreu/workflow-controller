@@ -1,0 +1,30 @@
+# Codex worker job record, codex-cli 0.163.0 (H4c1, workflow-controller-codex-worker-job-record)
+
+Measured 2026-11-01 with
+`CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_job_live`
+(two tests, 5.1 s: `LiveCommandRendersTest`, no model; `LiveJobRecordTest`, one short real model turn).
+
+Setup: a scratch target repository (legacy, non-protocol, phase `PLANNING`), a recorded `verify-codex` entry for the
+real build, the fixture role `codex-live-fixture` and a `CodexLauncher` subclass registered for the test only, a scratch
+clone as the job's worktree through `job.CODEX_WORKTREE_PREPARER`, the operator's Codex home through
+`job.CODEX_HOME_RESOLVER`, and a one-line command file.
+
+Result: the test passed through `job.execute_step` and a real `codex exec`:
+
+    --- status: FAILED (phase_not_in_to_any_of), worker_outcome SUCCESS, subtype success, exit 0, 3740 ms ---
+    done
+    --- usage_record ---
+    harness codex, provider openai, model gpt-6.1-sol, input 10352, output 5, cache_read 0, cache_write 0,
+    reasoning 0, every quality `derived`, cost None / cost_source `unknown` (the price table has no price for
+    the model), wall_ms 3740
+    --- diagnosis ---
+    harness: codex; readings: five_hour 0.0 %, weekly 34.0 %; usage_rollouts: one non-subagent rollout,
+    10352 input / 5 output tokens; subagents: []; credentials: unchanged; breach: []; detail: ''; subtype: success
+
+Asserted and held: `worker_outcome` `SUCCESS` with subtype `success` and a non-empty final message, no breach entries,
+`worker_state` `ENDED`, `ownership_tag` equal to the job id, `worker_process` with a pid, `worker_streams.format`
+`text` with a non-empty stdout file, a `usage_record` for harness `codex` with tokens, no `usage` block, a record
+`validate_record` accepts and no credential copy left under the job's `codex-home/`.
+
+The record's `status` is `FAILED` with `phase_not_in_to_any_of`: the tree is a clone, not the managed repository, so the
+legacy transition check sees no change (D5). That is the visible limit until the tree-and-landing decision is made.

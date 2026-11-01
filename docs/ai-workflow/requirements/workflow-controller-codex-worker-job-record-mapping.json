@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-worker-job-record",
+  "requirements": {
+    "R1": {
+      "description": "Pure helpers map a Codex worker result to the job's launch options, the stream-file text and the builder of a derived `usage_record`, importing nothing from `job`, with the existing `job.py` helpers (`_worker_dict`, `_usage_fields`, `_codex_tester_telemetry`) reused where they are (#260)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The job layer records a completed Codex worker run through a launcher-keyed branch, in the Claude record's shape: outcome, stream files, `worker_process`, `ownership_tag`, `usage_record`, the unchanged transition verification or, for a protocol decision, the Workflow's own `reconcile`, no usage reservation, the operator's Codex home for the credential copy-back, and a breach that never ends `FINISHED`; the Claude path is unchanged (#260)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Every path ends the record or leaves it where `resume` expects: a refusal or a missing tree is a terminal `WorkerNotStarted`, an interrupt leaves `LAUNCHED`, any other fault ends `FAILED`, and the credential copy is gone after each (#260)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Nothing real reaches the branch: no real launcher key, Codex worker role, setting, option, exit code or gate; the tree is a seam (default refusal) and H4c2 is named, with the live proof recorded and the guides and roadmap stating it (#260)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    }
+  }
+}

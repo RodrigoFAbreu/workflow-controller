@@ -8,8 +8,17 @@
 also has the worker's composed-configuration check (`compose_argv`, `check_compose_argv`, `effective_policy`,
 `check_effective`, `check_composed`) and the nested-repository refusal (`nested_git_entries`, `check_nested`), with
 tests in `tests/test_codex_worker_sandbox.py`; the tester's modules are unchanged. Verified: `tests.test_codex_worker_sandbox`
-(87), `tests.test_codex_sandbox`, `tests.test_write_containment` and `tests.test_package_structure` pass. Next: CP2, the
-launcher.
+(87), `tests.test_codex_sandbox`, `tests.test_write_containment` and `tests.test_package_structure` pass. CP2 is complete:
+`controller/codex_worker.py` has `launch_codex_worker` (the order of D4), `classify`, the settling of D6 and
+`CodexLauncher`; it is registered in `controller/__init__.py` and the dependency order, with a leftover-inventory row for
+`tests/test_codex_worker.py` (35 tests, a fake Codex, no network). Nothing reaches it: `CODEX.roles` and
+`worker_launch.LAUNCHERS` are unchanged. Two seams beyond D7's list, `binary_name` and `system_dir`, let a test point
+the launch at the fake; `tests/test_command_files.py`'s wiring guard now names `codex_worker` as the one module that
+imports `command_files`, which D4(a) requires (the plan listed that test as unchanged). Verified:
+`tests.test_codex_worker`, `tests.test_codex_worker_sandbox`, `tests.test_package_structure`, `tests.test_codex_sandbox`,
+`tests.test_codex_tester`, `tests.test_worker_launch`, `tests.test_harness`, `tests.test_command_files`,
+`tests.test_write_containment` and `tests.test_fake_claude_contract` pass. Next: CP3, the opt-in live proof, the guides and
+the roadmap.
 
 **Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
 [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is

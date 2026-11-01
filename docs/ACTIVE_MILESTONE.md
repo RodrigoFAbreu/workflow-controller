@@ -110,32 +110,33 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-codex-worker-launch` (H4b2, issue [#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)),
-implementation revision 3. Every flow is offline and unit-level (no real Claude, Codex, network, `gh` or `ssh`; the launch
-tests use a fake Codex) except flow 9, the opt-in live proof, which is operator-run. Run from the product clone with `TMPDIR`
-set to a writable scratch directory, one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a
-read-only `/tmp` and a restricted `PATH`: a flow that creates folders or runs git (flows 1 to 3) is `environment`-limited
-there and operator-run. No flow writes inside the product clone.
+Item `workflow-controller-codex-worker-job-record` (H4c1, issue [#260](https://github.com/RodrigoFAbreu/workflow-controller/issues/260)),
+implementation revision 2. Every flow is offline and unit-level (no real Claude, Codex, network, `gh` or `ssh`; the job tests use
+the fake Codex) except flow 8, the opt-in live proof, which is operator-run. Run from the product clone with `TMPDIR` set to a
+writable scratch directory, one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a read-only
+`/tmp` and a restricted `PATH`: a flow that creates folders or runs git (flows 2 and 3) is `environment`-limited there and
+operator-run. No flow writes inside the product clone.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Launcher: order of the launch, outcomes, settling (R2, R3) | `python3 -B -m unittest tests.test_codex_worker` | Passes (fake Codex, no network): an unverified build is refused naming `verify-codex` before any write or process; the four outcomes (`SUCCESS`, `TIMEOUT`, `LIMIT`, `FAILED`) classify; a changed guard digest is a breach; the credential copy is removed on every path, including a launch called from an `except` block. |
-| 2 | Composed-configuration check and nested-repository refusal (R1) | `python3 -B -m unittest tests.test_codex_worker_sandbox` | Passes: `compose_argv`, `check_compose_argv`, `effective_policy`, `check_effective`, `check_composed` and `nested_git_entries`/`check_nested` accept the worker profile and refuse a layer, setting or nested `.git` entry that widens it. |
-| 3 | Neighbouring modules unchanged (R1, R3) | `python3 -B -m unittest tests.test_codex_sandbox tests.test_codex_tester tests.test_worker_launch tests.test_harness tests.test_command_files` | Passes: the tester modules, the Claude launch and the harness declarations are unchanged; `CODEX.roles` and `worker_launch.LAUNCHERS` have no real Codex worker entry; `codex_worker` is the one module importing `command_files`. |
-| 4 | Registration and write containment (R3) | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment` | Passes: `codex_worker` is in the package list and dependency order; the scan accepts both new modules. |
-| 5 | Test-hygiene inventory | `python3 -B -m unittest tests.test_fake_claude_contract` | Passes: `LEFTOVER_INVENTORY` has a row for each new test file. |
-| 6 | Live test skipped by default (R4) | `python3 -B -m unittest tests.test_codex_worker_live -v` | Every test is reported `skipped` (opt-in variable unset); no process is started. |
-| 7 | Documents (R4) | `python3 -B tools/check_docs.py` | Exits 0; `docs/guide/harnesses.md`, `workers.md` and `development.md` and the roadmap state the launcher, its limits and H4c as next. |
-| 8 | Generated harness table | `python3 -B tools/harness_table.py --check` | Exits 0 (no drift; the launcher adds no declaration). |
-| 9 | Live proof (R4), operator-run | `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_live -v` | Needs real `codex` (0.163.0), `bwrap`, a recorded `verify-codex` build and a credential file. Both tests pass (the rendered command, then one short real turn): outcome `SUCCESS` with a non-empty final message, no breach, a new commit in the clone, the guard digest accepted, no nested `.git`, the credential copy removed. Matches `tests/harness_contract/codex/worker_launch.txt` (measured 2026-11-01). |
+| 1 | Pure record helpers (R1) | `python3 -B -m unittest tests.test_codex_worker_job` | 12 tests pass: `launch_options` returns exactly the eight launcher keys, `stream_texts` the two stream-file texts and `usage_builder` the zero-argument builder of a derived `usage_record`; the module imports nothing from `job`. |
+| 2 | Job-layer branch, every path (R2, R3) | `python3 -B -m unittest tests.test_job_codex_worker` | 25 tests pass through `execute_step` with the fake Codex: a completed run records outcome, stream files (`worker_streams.format` `text`), `worker_process`, `ownership_tag` equal to the job id and a derived `usage_record`, with no `usage` block or reservation; a refusal, a missing tree seam or a chain-selected usage reservation ends `WorkerNotStarted`; an interrupt leaves `LAUNCHED`; any other fault ends `FAILED`; a breach never ends `FINISHED`; the credential copy is gone after each. |
+| 3 | Stream files and `runtime` primitive | `python3 -B -m unittest tests.test_runtime` | 17 tests pass, including `fill_log_file` (written without following a symlink; content equals the run's output). |
+| 4 | Neighbouring modules unchanged (R2, R4) | `python3 -B -m unittest tests.test_codex_worker tests.test_worker_launch tests.test_harness` | 69 tests pass: the launcher, the Claude launch and the harness declarations are unchanged; `CODEX.roles` and `worker_launch.LAUNCHERS` have no real Codex worker entry. |
+| 5 | Registration and write containment (R4) | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment` | 23 tests pass: `codex_worker_job` is in the package list and dependency order before `job`; the scan accepts the new code (no direct write or `.replace(` call). |
+| 6 | Test-hygiene inventory | `python3 -B -m unittest tests.test_fake_claude_contract` | Passes (100 tests, 1 skipped): `LEFTOVER_INVENTORY` has a row for each new test file. About 50 s. |
+| 7 | Live test skipped by default; documents (R4) | `python3 -B -m unittest tests.test_codex_worker_job_live -v`, then `python3 -B tools/check_docs.py`, then `python3 -B tools/harness_table.py --check` | `LiveCommandRendersTest` passes (no model) and `LiveJobRecordTest` is `skipped` (opt-in variable unset), no process started; `check_docs.py` and `harness_table.py --check` exit 0; `docs/guide/harnesses.md`, `workers.md` and `development.md` and the roadmap state the branch, its limits and H4c2 as next. |
+| 8 | Live proof (R4), operator-run | `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_job_live -v` | Needs real `codex` (0.163.0), `bwrap`, a recorded `verify-codex` build and a credential file. Both tests pass: `worker_outcome` `SUCCESS` with a non-empty final message, no breach, `worker_state` `ENDED`, a `usage_record` for harness `codex` with tokens, no credential copy left under `codex-home/`. The record's `status` is `FAILED` (`phase_not_in_to_any_of`) because the tree is a clone (D5). Matches `tests/harness_contract/codex/worker_job.txt` (measured 2026-11-01). |
 
-**Known limitations / out of scope.** Nothing reaches the launcher: it is registered for a fixture role only, with no real
-`LAUNCHERS` key, Codex worker role, setting, option, exit code or gate. The job's worktree is created by the caller (H4c
-prepares it); job records, usage derivation, ownership tags and reaping on a timeout are H4c; usage windows H4d; review roles
-H4e; `milestone-implement` on Codex H4f. A worktree that legitimately vendors a nested repository is refused. The change is a
-`chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206;
-`tests/test_codex_tester.py` has a pre-existing shared-tag collision reported for a follow-up).
+**Known limitations / out of scope.** Nothing real reaches the branch: no real `LAUNCHERS` key, Codex worker role, setting,
+option, exit code or gate. The tree is a seam (`job.CODEX_WORKTREE_PREPARER`, default `None`, so the branch refuses before the
+launch); how the tree is made and how its commits land is an owner decision needed before H4e. On an unlanded clone a legacy
+job ends `FAILED` with `phase_not_in_to_any_of` and a protocol job can end `FINISHED` with `protocol.progress: "none"`.
+Ownership, liveness, `resume`/`--abandon` and reaping after a Controller interrupt are H4c2; usage windows H4d; review roles
+H4e; `milestone-implement` on Codex H4f. The change is a `chore:` with no release. The full suite is not a flow
+(`test_functional_sandbox` has a known CI flake, #206; `tests/test_codex_tester.py` has a pre-existing shared-tag collision
+reported for a follow-up).
 
 ## Next action
 
-Manual functional review of H4b2 (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4c (the job record, usage and reaping).
+Manual functional review of H4c1 (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4c2 (ownership, liveness and abandon).

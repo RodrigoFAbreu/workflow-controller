@@ -9,8 +9,10 @@
 the launcher-keyed Codex branch (`_is_codex_launcher`, `_run_codex_worker`, the usage-gate skip and the Codex completion fields),
 the `CODEX_WORKTREE_PREPARER` (default `None`, so the branch refuses before the launch) and `CODEX_HOME_RESOLVER` seams, and
 `runtime.fill_log_file` writes the two stream files; `tests/test_job_codex_worker.py` drives it through `execute_step` with the
-fake Codex. Nothing real reaches the branch. CP3 adds the opt-in live proof, the guides and the roadmap. The previous item is
-recorded below.
+fake Codex. CP3 is complete: `tests/test_codex_worker_job_live.py` is the opt-in live proof (its measured run is
+`tests/harness_contract/codex/worker_job.txt`), and the harness, worker and development guides and the roadmap state the branch, its
+limits (the tree and landing are undecided, ownership is H4c2) in place. Nothing real reaches the branch. Next action: the
+implementation review, then H4c2 (ownership, liveness and abandon; parent #260). The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-worker-launch` (H4b2, issue
 [#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is

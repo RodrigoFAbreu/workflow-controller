@@ -180,7 +180,7 @@ worktree is writable. Under it a worker can edit, create, rename and delete file
 write anywhere else, read outside the readable roots, read the operator's home, environment or its own credential copy, push,
 reach a TCP or Unix socket, or make the real `gh` work (the network is off). The worktree must have a `.git` directory of its
 own (`check_worktree` refuses a missing `.git`, a symlink and a `.git` file such as a linked worktree's); how a real job gets
-such a tree is H4c's decision (the launcher requires it to exist already).
+such a tree is an owner decision needed before H4e (the launcher requires it to exist already; H4c1 leaves a seam).
 
 Measured on `codex-cli 0.163.0` (`tests/harness_contract/codex/worker_sandbox.txt`; opt-in, see
 [Development](development.md#working-from-a-checkout), skipped by default and on CI): the same probe command gave the same
@@ -222,10 +222,34 @@ compared. A refusal before `exec` raises `ReviewLaunchRefusedError` (or the rend
 The four outcomes follow the Claude classifier's precedence: the deadline or a death by signal is `INTERRUPTED`; a usage-limit
 record or a non-zero exit is `FAILURE`; a zero exit with no final message is `AMBIGUOUS`; otherwise `SUCCESS`. A breach found
 after the run (a changed guard digest, a nested `.git`, a changed build) turns any outcome into `FAILURE` with `subtype`
-`sandbox_breach` and the entries in `stream_diagnosis`, because the worktree can no longer be trusted. Job records, usage
-derivation and reaping beyond the deadline are H4c's. The opt-in live proof is
+`sandbox_breach` and the entries in `stream_diagnosis`, because the worktree can no longer be trusted. The opt-in live proof is
 `tests.test_codex_worker_live` (see [Development](development.md#working-from-a-checkout)); its measured result goes in
 `tests/harness_contract/codex/worker_launch.txt`.
+
+### A Codex worker run as a job record
+
+`controller/job.py` (H4c1, [#260](https://github.com/RodrigoFAbreu/workflow-controller/issues/260)) records one such run as a
+job, behind the same seam and for a fixture role only. `job._is_codex_launcher(launcher)` is true for a `CodexLauncher`, and the
+job layer branches on it in three places and nowhere else: `execute_step` skips the usage gate for a single-entry route,
+`_run_codex_worker` replaces the call-and-wait block, and the completion write takes the `worker`, `telemetry` and
+`usage_record` fields from `controller/codex_worker_job.py` (pure helpers: the option mapping, the stream-file text and the usage
+builder). Everything around them is shared with the Claude path, so a Claude record is the record it was. The record carries
+`worker_outcome`, a `worker` block (`session_id`, `num_turns`, `total_cost_usd`, `permission_denials`, `terminal_reason`,
+`stop_reason` and `owned_processes_seen` are `None` for Codex; `subtype` is the launcher's), the two stream files holding the
+run's plain text with `worker_streams.format` `text`, `worker_state` `ENDED`, an `ownership_tag` equal to the job id and
+`worker_process`. The `usage_record` is derived from the job's rollouts and flagged `derived` (`unknown` when there is no rollout,
+`usage_record_failed` when the build raises); there is no `usage` block, because the budget is H4d. A Codex job has no deadline
+unless a timeout is set, as for a Claude worker.
+
+Two things are deliberately undecided. The **tree**: the job runs in a worktree the module seam `job.CODEX_WORKTREE_PREPARER`
+supplies (`None` by default, which refuses the launch before it starts and leaves a terminal `WorkerNotStarted` record). A
+test sets it to a clone. Because a clone is not the managed repository, a finished Codex job does not prove its effects landed:
+on a legacy target the record ends `FAILED` with `phase_not_in_to_any_of`, and on a protocol decision `reconcile` answers
+`no_progress` and the job ends `FINISHED` with `protocol.progress: "none"`. How the tree is made and how its commits land is an
+owner decision needed before H4e. **Ownership**: liveness, `resume`/`--abandon` and reaping after a Controller interrupt are
+H4c2, and a Codex worker does not inherit the lifecycle lock's descriptor, so nothing real may reach this branch before H4c2. The
+Codex home comes from `job.CODEX_HOME_RESOLVER` (the CLI's own `$CODEX_HOME` rule). The opt-in live proof is
+`tests.test_codex_worker_job_live`; its measured result is `tests/harness_contract/codex/worker_job.txt`.
 
 ## The shared command renderer
 

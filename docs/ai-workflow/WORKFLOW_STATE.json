@@ -47767,12 +47767,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-orchestrator-stops-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-orchestrator-stops-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 6,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "07a87a2def79392b848a9a1603070df8dfa100ca",
-      "reviewed_implementation_head": "2d5bbc115063a853b64edb9ab5aa3c26eacc0e20",
+      "reviewed_implementation_head": "65ddf14b3ec4fb7c4b8a202fdf3e2810e8a6cb2e",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -47911,8 +47911,8 @@
           "external": 0
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-01T06:25:00Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-01T06:48:21Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

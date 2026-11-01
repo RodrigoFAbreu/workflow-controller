@@ -51025,7 +51025,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -51138,7 +51138,138 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "1d16ee81e8ede075fd12922900ffc8a941c7b28010b71c4c0213df75b137d47b",
+        "approved_review_content_id": "7c641f661654e2bc792f5e20a1501b946de801f5cc58d4d9eed08331f28d8870",
+        "review_content_manifest": [
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cccffe996495dddefbccd7cbcdaeedd2906a79a4"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-ownership-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9b69effe9b03cb27c8d60efdded426bd43691dfa"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e0294eafad8ab8b7f46f0df63cc7773c1dcb1dbf"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4bad970fe10b8da360ff4fe603f1a05b5b05bf0c"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "86c443f173865e327d8dbea8cbac9f8e2d3161b3"
+          },
+          {
+            "path": "tests/harness_contract/codex/worker_ownership.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d072588d181362059eced3be368ed8359656e3ae"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "108fe81a9f66509315b650cebb110e2775782618"
+          },
+          {
+            "path": "tests/test_codex_worker_ownership_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f189f1f6839a281b7bf94676050565994a2bc614"
+          },
+          {
+            "path": "tests/test_job_codex_worker_interrupt.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "86d3445ba9bd37c23a668f3c5e3a82b458e714a7"
+          },
+          {
+            "path": "tests/test_job_codex_worker_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a581ba482e29f97358bf53aeb9097a38ce3ddb51"
+          }
+        ],
+        "reviewed_content_commit": "7f52fb9fe73349828bb0db0429d6aca6303e13e6",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T22:26:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "7c641f661654e2bc792f5e20a1501b946de801f5cc58d4d9eed08331f28d8870",
+            "ledger": {
+              "local": {
+                "bundle_id": "1d16ee81e8ede075fd12922900ffc8a941c7b28010b71c4c0213df75b137d47b",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "1de95f8755b6a7c5549a466dd2a30a49b74e3170d72b515560d4b6e8bf9a9b7c",
+                "ledger_entry_sha256": "9c975d9aba135b1cf4a5e66f074f8cc078fd8848abd1b3545c8405d7e68c17f9",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-worker-ownership/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "1d16ee81e8ede075fd12922900ffc8a941c7b28010b71c4c0213df75b137d47b",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "4b968c8c4e35f3a938a3a3332226ec62812380dae503f05331f98c96c86efade",
+                "ledger_entry_sha256": "d1f8d3b3acec83f6186224f18a6267a2cd20f350a9f7153e5781e9bdd1d58fcc",
+                "run_ref": "codex:20261101T222156Z-0d010dac",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T22:26:00Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
@@ -51169,12 +51300,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 28,
-      "last_transition": "2026-11-01T22:06:37Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-01T22:26:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -51368,6 +51499,55 @@
               "at": "2026-11-01T20:57:00Z"
             }
           ]
+        },
+        "F-b338e11f5475": {
+          "digest": "b338e11f5475eb02b143d3589ce51b525fa63dfae8fe416e5550a6d2ba3559ad",
+          "text": "**O1. `TEST_RESULTS.md` was not regenerated for revision 2.** Its heading still says \"implementation revision 1\" and its head is `ecbccca`. The revision-2 verification (four modules in the foreground, and a full suite run under `&` with five SIGINT errors that passed on a foreground rerun) appears only in `IMPLEMENTATION_SUMMARY.md`. A reviewer reading `TEST_RESULTS.md` alone sees results for code that is no longer the head. Next time, refresh `TEST_RESULTS.md` with the post-fix runs, or state at its top that it is superseded. This review's own full-suite run at `90e6e02` passed (see below), so nothing is unverified.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "7c641f661654e2bc792f5e20a1501b946de801f5cc58d4d9eed08331f28d8870",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T22:21:35Z"
+            }
+          ]
+        },
+        "F-37442c1324b8": {
+          "digest": "37442c1324b8341ff7eebcec9a3627a54f806bfc1e33965742986929bc25d789",
+          "text": "In `tests/test_codex_worker_ownership_live.py:175`, assert that `survivors` is nonempty before calling `resume`. Currently, the live proof can pass if the worker exits before reconciliation, without exercising orphan termination. The recorded capture does show survivors; this would strengthen future runs.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "7c641f661654e2bc792f5e20a1501b946de801f5cc58d4d9eed08331f28d8870",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T22:24:26Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "7c641f661654e2bc792f5e20a1501b946de801f5cc58d4d9eed08331f28d8870",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "1d16ee81e8ede075fd12922900ffc8a941c7b28010b71c4c0213df75b137d47b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-01T22:21:35Z",
+          "verdict_sha256": "1de95f8755b6a7c5549a466dd2a30a49b74e3170d72b515560d4b6e8bf9a9b7c",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-ownership/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "1d16ee81e8ede075fd12922900ffc8a941c7b28010b71c4c0213df75b137d47b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-01T22:24:26Z",
+          "verdict_sha256": "4b968c8c4e35f3a938a3a3332226ec62812380dae503f05331f98c96c86efade",
+          "run_ref": "codex:20261101T222156Z-0d010dac",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

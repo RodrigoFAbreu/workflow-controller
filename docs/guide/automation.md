@@ -151,23 +151,38 @@ sends from records it already keeps (a finished job, a run that closed, a
 branch gate, a line of `usage-events.jsonl`), never from a separate source,
 and the events are the closed table in
 [`notifications`](commands.md#notifications). The ones that need you are
-the `user_gate` (a human gate, or a merge left to a person) and
+the `user_gate` (a decision only a person can make: a human gate such as an
+approval, an acceptance, a merge left to a person or a BLOCK resolution, a
+review round cap, an isolation breach, a pull-request approval) and
 `lane_blocked` (a failed job, a refusal, a gate that needs a fix); by default
-they are the highest severities. A stop the Workflow itself answers with
-the disposition `blocked` is a `lane_blocked` ("Blocked: <work item>"), not a
-`user_gate`, because no person's decision is asked for. The exception is a
-gate the step records through its fall-through, with a `protocol_gate` and no
-`protocol` block: that one stays a `user_gate`, as it was before `review_wait`
-existed. Any other human gate (an
-approval, an acceptance, a merge left to a person, a BLOCK-resolution gate)
-stays a `user_gate`. A wait that needs no decision from you sends
-`review_wait` (`INFO`/`LOW`, "Waiting for the external review: <work item>"):
-the wait for an external reviewer's verdict on a Workflow-governed target (a
-legacy target keeps `user_gate` for every gate at those phases) and the
-functional tester's fault stops, each titled "Waiting: <stop>
-(<work item>)", except `isolation_breach`, whose text says a person must look
-at what changed, and which stays a `user_gate`. A wait whose `user_gate` an
-earlier version already delivered is not announced again. A finished step, a
+they are the highest severities. A gate record always carries a
+`protocol_gate` block (the table row, the disposition, the action, the reason
+code and the Controller's own `code`), and the announcement reads those
+recorded facts, never the message text. A stop the Workflow itself answers
+with the disposition `blocked`, and the Controller's `workflow_unhealthy`,
+is a `lane_blocked` ("Blocked: <work item>"), because something must be
+repaired but no person's decision is asked for. A stop the orchestrator
+clears by itself or by waiting sends `orchestrator_wait` (`INFO`/`LOW`,
+"Waiting: <stop> (<work item>)"): a pull-request fact or functional evidence
+that is awaited (rows 38f and 38e), `no_progress_repeated` (the loop guard;
+the orchestrator re-runs or repairs the step) and `pr_report_unchanged` over
+row 38f only. Over row 38g the unchanged report still waits for a person's
+approval of the pull request and stays a `user_gate`, as does every other
+reporter stop. Every other stop stays a `user_gate`: a Controller-coded gate
+is a `user_gate` even at a review phase, and a record without the newer
+keys (written by an earlier release), an unknown code or an unknown reason
+code is a `user_gate` too, because a false alert costs a glance and a missed
+decision stalls the lane. Because `orchestrator_wait` is `LOW`, a repeated
+one for the same stop (`no_progress_repeated`) is the signal to look. A wait
+that needs no decision from you also sends `review_wait`
+(`INFO`/`LOW`, "Waiting for the external review: <work item>"): the wait for
+an external reviewer's verdict on a Workflow-governed target (a legacy target
+keeps `user_gate` for every gate at those phases) and the functional tester's
+fault stops, each titled "Waiting: <stop> (<work item>)", although the
+tester's record now also carries `protocol_gate`; `isolation_breach` stays a
+`user_gate`, because a person must look at what changed. A wait whose
+`user_gate` an earlier version already delivered is not announced again.
+A finished step, a
 usage pause and a run that closed are `INFO`/`LOW`.
 
 To set it up:

@@ -217,7 +217,7 @@ worktree (`<runtime>/worker/<job>/tree`), with its own `.git`, no nested `.git`,
 `codex-home/` yet (a launch takes a fresh job id); the guard digest is taken; the sandbox is built with the job id as the
 ownership tag; `check_argv`, `check_launch` and `check_composed` run; `codex exec` runs under the deadline; the credential is
 copied back and its copy removed on every path, including a refusal; the guard digest, the nested scan and the build are
-compared. A refusal before `exec` raises `ReviewLaunchRefusedError` and no `exec` has started.
+compared. A refusal before `exec` raises `ReviewLaunchRefusedError` (or the renderer's own `CommandRenderError`) and no `exec` has started.
 
 The four outcomes follow the Claude classifier's precedence: the deadline or a death by signal is `INTERRUPTED`; a usage-limit
 record or a non-zero exit is `FAILURE`; a zero exit with no final message is `AMBIGUOUS`; otherwise `SUCCESS`. A breach found

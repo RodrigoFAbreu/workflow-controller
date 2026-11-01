@@ -49245,7 +49245,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-launch-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-launch-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -49389,12 +49389,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-11-01T14:00:39Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-01T14:09:22Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -49587,7 +49587,62 @@
               "at": "2026-11-01T13:17:20Z"
             }
           ]
+        },
+        "F-3987ade95541": {
+          "digest": "3987ade955415f94ed036eec5e1f35ca862227ab5203129367babb66db1901b7",
+          "text": "**LOCAL-IMPL-R1-001 -- A settling failure on a clean run skips the post-run comparison.** In `launch_codex_worker` (`controller/codex_worker.py:208-212`), `_settle(..., in_flight=False)` raises its first failure, for example a failed `remove_tree` of the credential copy or a failed copy-back, before `_breach` runs. The launch then raises after `codex exec` has run and possibly committed, and nothing has compared the guard digest, run the nested scan or compared the build. No `SUCCESS` is claimed, so the caller still sees a failure, but the exception does not say whether the worktree can still be trusted. D4 orders (i) before (j) and does not cover this case. Consider running `_breach` before the settling failure is raised, or attaching its entries to the exception, so that H4c can tell a settling fault on a clean tree from one on a breached tree.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0a4178bb9608a09282f291e130d14b04dbf07f0a2b8aa67412c1ba999197b292",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T14:05:32Z"
+            }
+          ]
+        },
+        "F-854d7478f0f1": {
+          "digest": "854d7478f0f170f5cac1291e53f9d7b67fb8e9c5aebad95c3f265a6c3fdbef3f",
+          "text": "**LOCAL-IMPL-R1-002 -- File the follow-up for the tester's shared ownership tag.** `TEST_RESULTS.md` shows two failures in a full-suite run, both in the unchanged `tests/test_codex_tester.py` (`OutcomeTest` and `SettleTest`). Parallel shards hang fakes under the same `<inherited>:tester` tag, so one shard's deadline can kill another shard's fake. D1 keeps the tester's tests unedited, and this item fixed the same hazard in `tests/test_codex_worker.py`. The tester defect should become its own prioritised issue so that it does not keep reappearing as a CI flake.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0a4178bb9608a09282f291e130d14b04dbf07f0a2b8aa67412c1ba999197b292",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T14:05:32Z"
+            }
+          ]
+        },
+        "F-f23e953310e3": {
+          "digest": "f23e953310e347b5c373e92554c52f78861505d64135f8082d5a02e5ca5d8fe3",
+          "text": "`docs/guide/harnesses.md:216` gives the worktree path as `<runtime>/worker/<job>/worktree`; `WorkerLayout.worktree` actually resolves to `<runtime>/worker/<job>/tree`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0a4178bb9608a09282f291e130d14b04dbf07f0a2b8aa67412c1ba999197b292",
+              "verdict": "REVISE",
+              "at": "2026-11-01T14:09:22Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "0a4178bb9608a09282f291e130d14b04dbf07f0a2b8aa67412c1ba999197b292",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "60084b40c4db483dfec7570f50d54bb21e3233c8641afbb3d83b1760811d6b4a",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-01T14:05:32Z",
+          "verdict_sha256": "c50ea71ad367fe2e52b12dcdcebaa3d276c0acfa72cae334059ff9e99dd99005",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-launch/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

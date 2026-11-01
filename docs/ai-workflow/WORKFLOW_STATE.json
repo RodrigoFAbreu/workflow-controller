@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-worker-ownership",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -51014,6 +51014,306 @@
         },
         "evaluated_at": "2026-11-01T18:41:02Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-codex-worker-ownership": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-worker-ownership",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_OWNERSHIP_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-ownership-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-ownership-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "6c31a43fde13e730574bafcedc5a6582b5123396",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+        "approved_review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_OWNERSHIP_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca8d3cb70d47689ca47d5061230dcaaf5e51117b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-ownership-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8b090531937139702ff1cfbd2549d2a2def0b690"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-ownership-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1d958dfb6a31d765be51ea878702661784e680f3"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T20:07:59Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
+            "ledger": {
+              "local": {
+                "bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "40c37477996364caf2420205ceab662e2379ecadba424feb127c98c414102d08",
+                "ledger_entry_sha256": "875e67d88a6b8edc6015334dc0ef8363bc51d35362aa8d9be751652ec57f1514",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-worker-ownership/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "e2d5211ac686566aead4e1504cdd2ed435746209489c4eb4a9f3270f4a815cab",
+                "ledger_entry_sha256": "cc4017ce3842ad69b1515cb2da6195a2867243e4edcca7f8be098c2059358de2",
+                "run_ref": "codex:20261101T200358Z-47b8647f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T20:07:59Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-01T20:03:27Z",
+          "verdict_sha256": "40c37477996364caf2420205ceab662e2379ecadba424feb127c98c414102d08",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-ownership/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-01T20:05:37Z",
+          "verdict_sha256": "e2d5211ac686566aead4e1504cdd2ed435746209489c4eb4a9f3270f4a815cab",
+          "run_ref": "codex:20261101T200358Z-47b8647f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 5,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 19,
+      "last_transition": "2026-11-01T20:07:59Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-01T20:01:18Z",
+        "consumed": {
+          "review_content_id": "bd1315abad58747fac37dfc851ce325237e3dd69c530aa75cd403151b5a698d6",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
+          "bundle_id": "d532c92acda668a2000676819b7c66d97bdb573ce0c2361335de05145cccfbcf",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "378f044b0cb1393c85fff5c7d1ad17fbd072f50f2bce81e71a7582449b788515",
+        "4f5d09b0c5473f21a74d12ec3804c7508a0556b80864a21d0ca29be163e5bcb6",
+        "51b9b6d8b7604834aa9bf9daa91c2bec36a6922ae217e64aeefb3f318769b53b",
+        "bd1315abad58747fac37dfc851ce325237e3dd69c530aa75cd403151b5a698d6"
+      ],
+      "optional_findings": {
+        "F-d52805afb6b5": {
+          "digest": "d52805afb6b5cbae00424ef1766fb2f6c371fa4ff265ef007bef96edb42e6f21",
+          "text": "**O1. `lock_inherited: false` has no reader.** D3 says the field exists so that \"a later reader (the lock refusal text, `resume`'s unreconcilable message)\" does not read a free lock as proof that the worker ended, but D3 also says the message is not edited. D4 says the block is read only by the Codex branches, and those read only `operator_home` and `captured_digest`. Either name the reader, or describe the field as a record-only statement for operators and `inspect` and say that the Controller never reads it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4f5d09b0c5473f21a74d12ec3804c7508a0556b80864a21d0ca29be163e5bcb6",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:45:14Z"
+            }
+          ]
+        },
+        "F-a444dee7fe82": {
+          "digest": "a444dee7fe8292245017a1571cd7e73cdf3fa157f95e5e3059464c1bff7097bc",
+          "text": "**O2. D7 changes the guidance in one of two places.** `_abandon_mark_failed` repeats the \"Follow it: `follow ...`\" text for an `active` worker (`controller/job.py`, the `assessment.verdict == worker.ACTIVE` branch). That branch is reached without phase 1 when the target root is no longer a directory (`abandon` → `_abandon_locked` directly). Phase 1 also skips any record without `worker_state`. Either route that branch through the same predicate so it names `resume`, or say that it stays as it is.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4f5d09b0c5473f21a74d12ec3804c7508a0556b80864a21d0ca29be163e5bcb6",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:45:14Z"
+            }
+          ]
+        },
+        "F-f2c22b1672d6": {
+          "digest": "f2c22b1672d6f294d0b2f1b470b334a30c2725e14479179e58a969d03975cfb0",
+          "text": "**O3. Drift and the dispatch order are unstated.** `_refuse_drift_unless_decided` counts a Codex worker record as pending, because it is neither a review record nor a tester record. Under a drifted installation `resume` therefore refuses before it ends a live Codex orphan, and the orphan keeps running. Separately, D6 does not say whether the new branch comes before the `drifted` branch in `_resume_records`, as the review and tester branches do. If it comes after, a protocol Codex record that `_drift_decides` reaches `_resume_drifted_protocol` with its group never ended. State the order, and say whether a Codex orphan is ended under drift.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4f5d09b0c5473f21a74d12ec3804c7508a0556b80864a21d0ca29be163e5bcb6",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:45:14Z"
+            }
+          ]
+        },
+        "F-fb9323a06254": {
+          "digest": "fb9323a06254e0c4d1b75cf80e7277298c3827a55d11f28f7b564f3456282bb4",
+          "text": "**O4. The nested-child mode of the fake Codex has no declared file.** D9 says the existing fake `codex` is \"extended in the test with a mode that starts a nested child in its own session\". `tests/fake_codex.py` is not in any checkpoint's `**Files:**`. Either name it in CP1 and CP2, together with `tests/test_fake_codex_contract.py` if the scenario keys are pinned there, or say that the nested child is started by a test-side wrapper and that the fake is not edited.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4f5d09b0c5473f21a74d12ec3804c7508a0556b80864a21d0ca29be163e5bcb6",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:45:14Z"
+            }
+          ]
+        },
+        "F-4facc3f82ac7": {
+          "digest": "4facc3f82ac7090989fe5b7e85d4c78e08616a1f10fc1f0562edcd375990957a",
+          "text": "**O1. The owned-processes refusal of `--abandon` keeps the Claude text.** D7 changes only the \"Follow it\" wording. For a Codex record with no `worker_process`, D2's tag-scan-only row, `_abandon_supervision`'s `entries` branch answers with `_owned_guidance`: \"Job ...'s worker has ended, but N process(es) it owns are still running ... then run `resume --abandon ...`\". The tagged process may be `codex exec` itself, so \"the worker has ended\" is not established, and `resume` is the command that ends it. CP2's row \"`active` or an owned process alive is refused with exit 45 naming `resume`\" asks for more than D7 describes. Say whether that branch also names `resume` for a Codex record.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "51b9b6d8b7604834aa9bf9daa91c2bec36a6922ae217e64aeefb3f318769b53b",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:49:19Z"
+            }
+          ]
+        },
+        "F-7cf61116c192": {
+          "digest": "7cf61116c192ec12d57ca85bbe49438ffb2791039448f96983e4fdb435a7e475",
+          "text": "**O2. `_abandon_mark_failed` makes no tag scan.** When the target root is no longer a directory, `abandon` reaches `_abandon_mark_failed` without phase 1. That function judges only `worker_process`. A Codex record with no `worker_process` and a tagged process alive is then marked `FAILED`, and its orphan is left running. The Claude path has the same gap, so this may stay as it is, but D7 could say so.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "51b9b6d8b7604834aa9bf9daa91c2bec36a6922ae217e64aeefb3f318769b53b",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:49:19Z"
+            }
+          ]
+        },
+        "F-4ca55ebc1646": {
+          "digest": "4ca55ebc1646ffd9adb4cc3579f9c13f3122e447b3119983972ef759b049bdc4",
+          "text": "**O3. D5 says \"used in four places\" but the plan lists more.** The predicate is read by phase 1's skip, the dispatch branch, the drift pending list (D6), `_abandon_supervision`'s guidance, `_abandon_mark_failed`'s `active` branch and its credential settling (D7). Drop the count or correct it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "51b9b6d8b7604834aa9bf9daa91c2bec36a6922ae217e64aeefb3f318769b53b",
+              "verdict": "REVISE",
+              "at": "2026-11-01T19:49:19Z"
+            }
+          ]
+        },
+        "F-74863b72f9f2": {
+          "digest": "74863b72f9f246652333ab18b6b970a915882e573a3490f4e70b1a382fe82c04",
+          "text": "**O1. The by-hand end for a missing root reaches only the group.** For a Codex record, D7's missing-root `active` branch keeps `_active_guidance`'s `kill -TERM -- -<pgid>`, then `resume --abandon <id>`. A nested `bwrap` or tool process that left the group (D2: in its own session, found only by the tag scan) survives that kill. The following `--abandon` then marks the record `FAILED` with no tag scan (D7 keeps this), so the nested process is left running. This is the same gap D7 already accepts for a record with no `worker_process`; this row is a second way into it. Consider having the Codex text also say how to find the job's tagged processes (for example, processes whose environment carries the job id) before `--abandon`. Or say in D7 that the by-hand end covers the group only.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "bd1315abad58747fac37dfc851ce325237e3dd69c530aa75cd403151b5a698d6",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T19:57:27Z"
+            }
+          ]
+        },
+        "F-7859f8799cfa": {
+          "digest": "7859f8799cfa3050af490c9974575d3094f4d6044d8654b50f42131b649b50d3",
+          "text": "**O1. Two different \"next resume\" situations in the second unlistable-`/proc` case.** D2 says the next `resume` \"finds the group gone\". In CP1's live-leader case, termination is mocked, so when the second `resume` runs (with `/proc` listable), the group is still alive. That `resume` therefore ends it for real through the `active` path and then reconciles. That is the right behaviour, but the test should state it. It should check that the second run ends the still-live group and leaves nothing tagged. It should not check that the group was already gone, which a mocked first termination cannot produce.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "c6d7ef4349d6cbe3a134561888be34c242e80ceebc61a48f562fbea041c695f5",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T20:03:27Z"
+            }
+          ]
+        }
       }
     }
   }

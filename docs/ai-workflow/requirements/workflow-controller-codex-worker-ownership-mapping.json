@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-worker-ownership",
+  "requirements": {
+    "R1": {
+      "description": "A Codex worker record names what a lost Controller needs, written before the tree is prepared: the operator home, the captured credential digest and `lock_inherited: false`, with the tag equal to the job id; the liveness design reads only `worker_process` and the tag, never the lifecycle lock; the block is also the predicate that marks the record as a Codex worker's, whatever the adapter's name (#263)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "`resume` never re-attaches to a Codex worker: it ends the recorded group and every process carrying the tag, judges `active`, `inactive` and `unverifiable` as the review and tester records are judged, copies the credential back, removes the copy and reconciles through the shared rows, the protocol reconciliation included (#263)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "`resume --abandon` of a Codex record follows Claude's rules row by row (active refused naming `resume`, unverifiable needing the acknowledgement, inactive marked `FAILED`) and settles the credentials (#263)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Every interrupt is covered: a `KeyboardInterrupt` before the spawn leaves `LAUNCHED` and reconciles to `INTERRUPTED`; a Controller killed with `SIGINT` leaves no tagged process; one killed with `SIGKILL` leaves an orphan that `resume` ends, with its nested children (#263)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "Nothing real reaches the branch and the Claude worker, the tester and the reviewer are unchanged with their tests: no real launcher key, Codex worker role, setting, option, exit code or gate; the live proof is recorded and the guides and roadmap state the facts in place (#263)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3"
+      ]
+    }
+  }
+}

@@ -51025,7 +51025,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-ownership-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-ownership-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -51169,12 +51169,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-11-01T20:46:20Z",
+      "state_revision": 27,
+      "last_transition": "2026-11-01T20:57:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

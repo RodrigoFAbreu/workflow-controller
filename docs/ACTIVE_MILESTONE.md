@@ -2,6 +2,14 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
+[#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is being implemented. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`. CP1 is complete: `controller/codex_worker_sandbox.py` has
+`WorkerLayout`, `check_worktree`, the `worker` profile (worktree and scratch writable, `.git/hooks` and `.git/config`
+read, network off), the pinned `codex exec` line, `check_home`, `check_launch` and `build`, with
+`tests/test_codex_worker_sandbox.py`. Nothing calls the module. CP2 (probes and the git guard) and CP3 (live proof, guides,
+roadmap) are next. The previous item is recorded below.
+
 **Complete.** `workflow-controller-orchestrator-stops` (NF3, issue
 [#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)) is implemented (CP1 and CP2 and the functional review) and accepted by policy. The plan is `docs/ai-workflow/CONTROLLER_ORCHESTRATOR_STOPS_PLAN.md`. A gate record
 carries `protocol_gate` with `row`, `disposition`, `action_id`, `reason_code` and the Controller's own `code`, and

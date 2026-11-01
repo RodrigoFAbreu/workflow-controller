@@ -549,8 +549,9 @@ def codex_review_implementation_stage_limit(kit) -> None:
                       "the operator's file was overwritten by the copy-back")
             kit.equal((done.code, life.tasks[claude_tasks:]), (cli.EXIT_GATE, []),
                       "the re-admitted run stops at the technical approval gate, no Claude worker launched")
+            # the technical approval gate is gate_evidence_unmet (disposition blocked): a repair, not a decision (NF3 D2)
             kit.equal(event_types(hub), ["lane_blocked", "run_finished", "usage_paused", "run_finished", "step_done",
-                                         "user_gate", "run_finished"], "the notifications of the three runs, in order")
+                                         "lane_blocked", "run_finished"], "the notifications of the three runs, in order")
             kit.check(secret not in json.dumps([r["body"] for r in hub.requests]), "the API key is in an event body")
             kit.observe("readmitted", {"exit": done.code, "phase": world.phase(), "events": event_types(hub)})
     finally:

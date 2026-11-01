@@ -1,0 +1,74 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-worker-launch",
+ "dispositions": {
+  "F-08e53df82f21": {
+   "disposition": "dropped",
+   "reason": "Plan wording about naming the leftover-inventory checker; the implementation added the inventory rows and the check passes."
+  },
+  "F-1851652044df": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the imported findings; handled by dropping them (see the imported findings below)."
+  },
+  "F-30f8bf10d7e6": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 3: the guide names the renderer's own error."
+  },
+  "F-31259c902805": {
+   "disposition": "dropped",
+   "reason": "Plan wording about is_error and subtype outside the breach path; settled in the implementation and checked by its reviews."
+  },
+  "F-3987ade95541": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6560026765"
+  },
+  "F-488ec7a99572": {
+   "disposition": "dropped",
+   "reason": "Plan wording about the done-when of effective_policy; the implementation includes the reviewer's scalar defaults."
+  },
+  "F-5e75fa632e4c": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the fixture registration test patches harness.ADAPTERS as well as LAUNCHERS."
+  },
+  "F-5f82f570695a": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D4 states the launch options CodexLauncher.launch accepts."
+  },
+  "F-7d9b287c97e3": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: a reused job's Codex home is refused or cleared so earlier rollouts cannot mix into a run."
+  },
+  "F-854d7478f0f1": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/259"
+  },
+  "F-b4a50ac3b8a4": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-c646bda5d8ca": {
+   "disposition": "dropped",
+   "reason": "Imported from the unrelated tester-fallback review through a feedback file with the wrong work item header; it is already recorded as a follow-up on #174 (https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6546776353), not a finding of this item."
+  },
+  "F-dfa7226cb3fc": {
+   "disposition": "dropped",
+   "reason": "EXT-002 asked to drop the two imported findings of the unrelated tester-fallback review; both are dropped here and recorded as follow-ups on #174."
+  },
+  "F-e169259c0f62": {
+   "disposition": "dropped",
+   "reason": "Imported from the unrelated tester-fallback review through a feedback file with the wrong work item header; it is already recorded as a follow-up on #174 (https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6546776353), not a finding of this item."
+  },
+  "F-e1bab0bfecf0": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D5 names every WorkerResult field."
+  },
+  "F-f23e953310e3": {
+   "disposition": "fixed",
+   "note": "Applied in implementation revision 3: the guide gives the worktree path as tree."
+  },
+  "F-f5d1dccd5cd6": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D7 states the on_spawn shape difference."
+  }
+ }
+}

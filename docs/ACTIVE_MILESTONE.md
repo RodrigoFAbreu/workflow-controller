@@ -2,35 +2,18 @@
 
 ## Status
 
-**In progress.** `workflow-controller-codex-worker-launch` (H4b2, issue
-[#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)), plan
-`docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md` (revision 4). CP1 is complete: `controller/codex_worker_sandbox.py`
-also has the worker's composed-configuration check (`compose_argv`, `check_compose_argv`, `effective_policy`,
-`check_effective`, `check_composed`) and the nested-repository refusal (`nested_git_entries`, `check_nested`), with
-tests in `tests/test_codex_worker_sandbox.py`; the tester's modules are unchanged. Verified: `tests.test_codex_worker_sandbox`
-(87), `tests.test_codex_sandbox`, `tests.test_write_containment` and `tests.test_package_structure` pass. CP2 is complete:
-`controller/codex_worker.py` has `launch_codex_worker` (the order of D4), `classify`, the settling of D6 and
-`CodexLauncher`; it is registered in `controller/__init__.py` and the dependency order, with a leftover-inventory row for
-`tests/test_codex_worker.py` (35 tests, a fake Codex, no network). Nothing reaches it: `CODEX.roles` and
-`worker_launch.LAUNCHERS` are unchanged. Two seams beyond D7's list, `binary_name` and `system_dir`, let a test point
-the launch at the fake; `tests/test_command_files.py`'s wiring guard now names `codex_worker` as the one module that
-imports `command_files`, which D4(a) requires (the plan listed that test as unchanged). Verified:
-`tests.test_codex_worker`, `tests.test_codex_worker_sandbox`, `tests.test_package_structure`, `tests.test_codex_sandbox`,
-`tests.test_codex_tester`, `tests.test_worker_launch`, `tests.test_harness`, `tests.test_command_files`,
-`tests.test_write_containment` and `tests.test_fake_claude_contract` pass. CP3 is complete: `tests/test_codex_worker_live.py` (opt-in, skipped by default and on CI) runs one real launch; it was not
-run in this session (it costs a model turn), so `tests/harness_contract/codex/worker_launch.txt` says *not yet measured* until
-the operator runs it. The harness and worker guides, the development page and the roadmap state the launcher in place. The
-self-review fixed one defect: the settling read `sys.exc_info()` to decide whether an exception was in flight, which also
-reports an exception the launch's own caller is handling, so a failed credential-copy removal on a clean run was swallowed
-when the launch was called from an `except` block; the launch now passes `in_flight` explicitly, and
-`SettlingTest.test_an_exception_the_caller_is_handling_is_not_taken_for_one_in_flight` covers it. The full suite then
-showed a latent cross-shard collision in the new tests: the classes of `tests/test_codex_worker.py` run in parallel shards
-and three of them hang a fake under the same `...:job1` tag, so one deadline kill could end another shard's fake (shown by
-staggering two of them by a second); each test now has its own inherited tag prefix and `tagged` matches the exact tag. The
-same collision in the unchanged `tests/test_codex_tester.py` (every bridge's tag is `tester`; `OutcomeTest` and `SettleTest`
-fail together when run concurrently) is pre-existing and outside this item (D1 leaves those tests unedited); it is reported
-for a follow-up issue. It also mended a broken sentence in the workers guide. Next: the implementation review, then H4c (the job record, usage and reaping) once this item
-is accepted.
+**Complete.** `workflow-controller-codex-worker-launch` (H4b2, issue
+[#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md`. `controller/codex_worker.py` has `launch_codex_worker` (headless
+one-shot `codex exec` in the job's worktree under the H4b1 sandbox, on a build verified by `verify-codex`), `classify`, the
+settling and `CodexLauncher`, with the worker's composed-configuration check and the nested-repository refusal in
+`controller/codex_worker_sandbox.py`. It is registered for a fixture role only: `CODEX.roles` and `worker_launch.LAUNCHERS` are
+unchanged. `tests/test_codex_worker_live.py` is opt-in and its measured run is recorded in
+`tests/harness_contract/codex/worker_launch.txt`. The guides and the roadmap state the launcher in place; the change is a
+`chore:` with no release. A cross-shard tag collision in `tests/test_codex_tester.py` is pre-existing and reported for a
+follow-up issue.
+
+Next action: `/milestone-plan` for H4c (the Codex worker's job record, usage and reaping), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
 [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is

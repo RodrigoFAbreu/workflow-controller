@@ -49245,7 +49245,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-launch-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-launch-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -49389,12 +49389,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 1
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-11-01T14:32:46Z",
+      "state_revision": 27,
+      "last_transition": "2026-11-01T14:35:35Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -49627,6 +49627,20 @@
               "review_content_id": "0a4178bb9608a09282f291e130d14b04dbf07f0a2b8aa67412c1ba999197b292",
               "verdict": "REVISE",
               "at": "2026-11-01T14:09:22Z"
+            }
+          ]
+        },
+        "F-30f8bf10d7e6": {
+          "digest": "30f8bf10d7e6d96f67c18f91052d67eb093a00b947a5541773766bf35cd4e2bb",
+          "text": "`docs/guide/harnesses.md` (the launcher section) says \"A refusal before `exec` raises `ReviewLaunchRefusedError`\". D4 and the code also let the renderer's own error (`command_files.CommandRenderError`, for an unknown or user-only command) propagate unchanged. One clause, \"(or the renderer's own error)\", would make the guide match D4.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c13edbb4d5d6a9d4c43677b823888bdac4f823073c6be3e014e7122ebd786e30",
+              "verdict": "REVISE",
+              "at": "2026-11-01T14:35:35Z"
             }
           ]
         }

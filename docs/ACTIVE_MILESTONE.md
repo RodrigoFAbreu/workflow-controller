@@ -16,7 +16,9 @@ command under `codex sandbox -P worker` and one `codex exec` turn on `codex-cli 
 read-only inside a writable root unless it is listed, so `git commit` failed on `index.lock`; the profile now lists the
 worktree's `.git` as `write`, and the nested read-only `.git/hooks` and `.git/config` entries then held (a write to either
 was refused). The harness and worker guides and the roadmap (H4b split into H4b1, done, and H4b2) state it in place.
-Nothing calls the module; the change is a `chore:` with no release.
+Nothing calls the module; the change is a `chore:` with no release. The self-review's full suite found two hygiene
+guards the new tests broke: `tests/test_codex_worker_sandbox.py` now creates its repositories through
+`fixtures.git_init`/`git_clone`, and `tests/process_fixtures.py`'s `LEFTOVER_INVENTORY` has a row for each new test file.
 
 Next action: `/milestone-plan` for H4b2 ([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255), the Codex
 worker launcher, which also closes the composed-configuration and nested-repository limits). The previous item is recorded below.

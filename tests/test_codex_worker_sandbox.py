@@ -23,6 +23,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from controller import codex_sandbox as cs, codex_worker_sandbox as ws, review  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
+from tests import fixtures  # noqa: E402
 
 NO_SERVERS = b"No MCP servers configured yet.\n"
 FEATURES = b"shell_tool    stable    true\nbrowser_use   stable    false\n"
@@ -40,7 +41,7 @@ def git(path: Path, *args: str) -> None:
 def make_clone(path: Path) -> None:
     """A real repository with one tracked file, as a worker's worktree must be."""
     path.mkdir(parents=True)
-    subprocess.run(["git", "init", "-q", str(path)], check=True, capture_output=True)
+    fixtures.git_init(path)
     (path / "src.txt").write_text("one\n")
     git(path, "add", "src.txt")
     git(path, "commit", "-q", "-m", "init")
@@ -441,7 +442,7 @@ class ProbeFixture(Fixture):
         for name in ("scratch", "sibling-dir", "home", "origin"):
             (self.tmp / name).mkdir(exist_ok=True)
         if not (self.tmp / "origin" / "HEAD").exists():
-            subprocess.run(["git", "init", "-q", "--bare", str(self.tmp / "origin")], check=True, capture_output=True)
+            fixtures.git_init(self.tmp / "origin", "--bare")
         return ws.ProbeTargets(tree, self.tmp / "scratch", self.tmp / "sibling-dir" / "probe", self.tmp / "home",
                                self.tmp / "canary.txt", "CANARY_ENV_X", self.tmp / "cred.json", self.tmp / "origin",
                                1, self.tmp / "no.sock")
@@ -638,7 +639,7 @@ class GuardDigestTest(GuardFixture):
 
     def test_a_commit_leaves_the_digest_unchanged_on_a_fresh_clone(self) -> None:
         fresh = self.tmp / "fresh"
-        subprocess.run(["git", "clone", "-q", str(self.tree), str(fresh)], check=True, capture_output=True)
+        fixtures.git_clone(self.tree, fresh)
         self.assertFalse((fresh / ".git" / "COMMIT_EDITMSG").exists())
         self.assertFalse((fresh / ".git" / "ORIG_HEAD").exists())
         before = ws.guard_digest(fresh)
@@ -653,7 +654,7 @@ class GuardDigestTest(GuardFixture):
     def test_a_first_commit_that_creates_logs_in_a_new_repository_is_accepted(self) -> None:
         fresh = self.tmp / "newrepo"
         fresh.mkdir()
-        subprocess.run(["git", "init", "-q", str(fresh)], check=True, capture_output=True)
+        fixtures.git_init(fresh)
         before = ws.guard_digest(fresh)
         self.assertNotIn("logs", before["roots"])
         (fresh / "a.txt").write_text("a\n")

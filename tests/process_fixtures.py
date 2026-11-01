@@ -327,6 +327,12 @@ LEFTOVER_INVENTORY = (
     ("test_codex_sandbox_live.py", "start:run", 2, "bounded",
      "the live `codex sandbox` probe run (timeout=180) and the one-turn `codex exec` run (timeout=600), opt-in "
      "(CONTROLLER_LIVE_CODEX_TESTS=1, skipped without codex, bwrap or a credential file): both waited by the test"),
+    ("test_codex_worker_sandbox.py", "start:run", 9, "short",
+     "git calls, the unsandboxed `sh -c` runs of the worker probe command and the `cp -a`/`rm -rf` tree edits of the "
+     "guard tests, run by the test and waited for; each exits at once"),
+    ("test_codex_worker_sandbox_live.py", "start:run", 2, "bounded",
+     "the live `codex sandbox -P worker` probe run (timeout=180) and the one-turn `codex exec` run (timeout=600), opt-in "
+     "(CONTROLLER_LIVE_CODEX_TESTS=1, skipped without codex, bwrap or a credential file): both waited by the test"),
     ("test_functional_sandbox.py", "start:run", 5, "short",
      "git calls, the fakes' launchers and the `cp -a` copies of the copy rule run by the test and waited for; each exits at once"),
     ("test_harness.py", "start:run", 1, "short",

@@ -255,13 +255,12 @@ def fill_log_file(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) 
     mode, and the bytes are ``fsync``ed."""
     full_path = runtime_root / rel_path
     _assert_contained(runtime_root, full_path)
-    full_path = full_path.resolve()
     fd = os.open(full_path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC)
     with os.fdopen(fd, "wb") as fh:
         fh.write(data)
         fh.flush()
         os.fsync(fh.fileno())
-    return full_path
+    return full_path.resolve()
 
 
 def open_lock_file(root: Path, rel_path: str | os.PathLike) -> int:

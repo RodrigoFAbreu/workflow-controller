@@ -2,11 +2,11 @@
 
 ## Status
 
-**Implemented, awaiting review.** `workflow-controller-codex-command-render` (H4a, issue
-[#242](https://github.com/RodrigoFAbreu/workflow-controller/issues/242)); the plan is
-`docs/ai-workflow/CONTROLLER_CODEX_COMMAND_RENDER_PLAN.md`. CP1 and CP2 are complete: `controller/command_files.py` adds
+**Complete.** `workflow-controller-codex-command-render` (H4a, issue
+[#242](https://github.com/RodrigoFAbreu/workflow-controller/issues/242)) is implemented (CP1 and CP2 and the functional review) and accepted by policy. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_COMMAND_RENDER_PLAN.md`. `controller/command_files.py` adds
 `render_command`, a pure function that renders a shared command file and an argument string into a Codex prompt and
-refuses the user-only commands (`tests/test_command_files.py`). Nothing calls it. The harness and worker guides and the roadmap state it in place; the change is a `chore:` with no release.
+refuses the user-only commands (`tests/test_command_files.py`). Nothing calls it. The harness and worker guides and the roadmap state it in place; the change is a `chore:` with no release. The previous item is recorded below.
 
 **Complete.** `workflow-controller-codex-tester-fallback` (C10g-3c2, issue
 [#236](https://github.com/RodrigoFAbreu/workflow-controller/issues/236)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
@@ -74,4 +74,4 @@ flake, #206). No new setting, option, exit code or gate; the change is a `chore:
 
 ## Next action
 
-`/milestone-plan` for H4b (the headless Codex launch behind the H3 seam), the next incomplete milestone in `docs/ROADMAP.md`, once H4a is accepted.
+`/milestone-plan` for H4b (the headless Codex launch behind the H3 seam), the next incomplete milestone in `docs/ROADMAP.md` (H4a is accepted).

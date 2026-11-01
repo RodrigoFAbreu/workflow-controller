@@ -1273,10 +1273,29 @@ class ControllerCodedGateOverARow14DecisionTest(rj._ReviewCase):
         self.assertIn("review_mode_unavailable", record["human_gate_pending"]["what_is_required"])
         self.assert_user_gate(record, "review_mode_unavailable")
 
+    def assert_review_shaped(self, record: dict) -> None:
+        """The record would have matched the review-wait source without its code (NF3 D1a)."""
+        block = record["protocol_gate"]
+        self.assertEqual(block["disposition"], "external_gate")
+        self.assertIn(block["action_id"], job.REVIEW_WAIT_ACTIONS)
+
     def test_the_external_round_cap_is_a_user_gate(self) -> None:
         with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(1, 4)):
             record = self.step()
         self.assertTrue(record["human_gate_pending"]["what_is_required"].startswith("review_round_cap_reached: "))
+        self.assert_review_shaped(record)
+        self.assert_user_gate(record, "review_round_cap_reached")
+
+    def test_the_external_round_cap_at_the_implementation_phase_is_a_user_gate(self) -> None:
+        self.assertEqual(self.step()["status"], job.STATUS_FINISHED)
+        self.life.run_until("AWAITING_PLAN_APPROVAL")
+        self.life.user_step(rj._APPROVE_PLAN)
+        self.life.run_until("AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        with mock.patch.object(job.review_rounds, "split_rounds", return_value=job.review_rounds.SplitRounds(1, 4)):
+            record = self.step()
+        self.assertEqual(self.life.phase(), "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW")
+        self.assertTrue(record["human_gate_pending"]["what_is_required"].startswith("review_round_cap_reached: "))
+        self.assert_review_shaped(record)
         self.assert_user_gate(record, "review_round_cap_reached")
 
     def test_the_plain_wait_of_the_same_row_is_a_review_wait(self) -> None:

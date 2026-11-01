@@ -5255,17 +5255,18 @@ REVIEW_WAIT_ACTIONS = frozenset({"plan.review.external", "implementation.review.
 
 
 def _protocol_gate(record: Mapping) -> Mapping | None:
-    """The Workflow's own protocol gate (``{row, disposition, action_id}``) a fall-through record carries,
-    or ``None`` for every record written without one (a legacy target, a Controller-coded gate)."""
+    """The protocol gate block (``{row, disposition, action_id, reason_code, code}``) a gate record carries,
+    or ``None`` for every record written without one (a legacy target, a record of an earlier release)."""
     block = record.get("protocol_gate")
     return block if isinstance(block, Mapping) else None
 
 
 #: NF3 D4: the closed tables of the stops an orchestrator session handles. A Controller gate code maps to the
 #: row it is handled at (``None``: any row); a Workflow reason code is read only when the gate has no Controller code.
-ORCHESTRATOR_HANDLED_CODES: Mapping[str, str | None] = {"no_progress_repeated": None, "pr_report_unchanged": "38f"}
+ORCHESTRATOR_HANDLED_CODES: Mapping[str, str | None] = {
+    protocol_decision.NO_PROGRESS_REPEATED: None, pr_report.GATE_UNCHANGED: pr_report.ROW_EVIDENCE_NEEDED}
 ORCHESTRATOR_HANDLED_REASONS = frozenset({"pr_evidence_needed", "functional_evidence_needed"})
-ORCHESTRATOR_BLOCKED_CODES = frozenset({"workflow_unhealthy"})
+ORCHESTRATOR_BLOCKED_CODES = frozenset({protocol_decision.WORKFLOW_UNHEALTHY})
 
 
 def _orchestrator_stop(record: Mapping) -> str | None:

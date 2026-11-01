@@ -48506,7 +48506,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-sandbox-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-sandbox-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 6,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -48619,7 +48619,144 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "2827b1f39d605d1a67aeb3ea598065893b74f7c26deb68fd21f830f8a874dcf8",
+        "approved_review_content_id": "9b20532c2e7f25c3bc7d74a6ed3ec85a82931697bd31cafe5588f9a9ecfd616e",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7c31888f18744a3a2b885bc610479de92eb69ac"
+          },
+          {
+            "path": "controller/codex_worker_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0cd2ab9f22adf87d03649bb8ea62f6003c7691be"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-sandbox-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ca2a7daf7cd419ad4d12189f4c5be650a219f8e"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7b9efee789261cd1f334f1824bff76296fb55039"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "af5ce80758c4f0cdbbf2d1508eaa1da35f00b2d7"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9b6c04b7236e7adb2e63594e002fe6e06a248a42"
+          },
+          {
+            "path": "tests/harness_contract/codex/worker_sandbox.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f4f690239dc08b57c4a5e4b4212ce87020e7625c"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "48a11077cc1d39528c563d3033cf2a591298fab6"
+          },
+          {
+            "path": "tests/test_codex_worker_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5468b2c1307e2ea6bc722231d981dcf946f731b9"
+          },
+          {
+            "path": "tests/test_codex_worker_sandbox_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a044e002d3760b23f278e7c13df172ce6385b447"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4417d182868e24b6e6314774eea5810c9b9b663b"
+          }
+        ],
+        "reviewed_content_commit": "2621b289c65031a46f62fa45169d39a10e4f2bbd",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T11:34:22Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9b20532c2e7f25c3bc7d74a6ed3ec85a82931697bd31cafe5588f9a9ecfd616e",
+            "ledger": {
+              "local": {
+                "bundle_id": "2827b1f39d605d1a67aeb3ea598065893b74f7c26deb68fd21f830f8a874dcf8",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "0b8a53a0aa0d53d116352c8eefa289a28c7a7460c7fd8ea9ff27efc7f7ec4432",
+                "ledger_entry_sha256": "92d0fa80f9c9a2f06848fac4a1442bec0f9fe15acc584fd7d82a128d419b53a6",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-worker-sandbox/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "2827b1f39d605d1a67aeb3ea598065893b74f7c26deb68fd21f830f8a874dcf8",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "05981ea44d367eb54f77d49c095a6bc5f3a98d27f31bc533201c5b483af578c0",
+                "ledger_entry_sha256": "719e3845dfdadecf0c830538660abe1b6695aba70d7548bb004bd04bf13962ed",
+                "run_ref": "codex:20261101T112959Z-061e19a2",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T11:34:22Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "c499737ef72996a87762f07a2029cbd6921692a3e6f66692db47acfa1750c55b",
@@ -48650,12 +48787,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 30,
-      "last_transition": "2026-11-01T11:05:40Z",
+      "state_revision": 33,
+      "last_transition": "2026-11-01T11:34:22Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -48780,6 +48917,55 @@
               "at": "2026-11-01T10:10:13Z"
             }
           ]
+        },
+        "F-91f6f626a613": {
+          "digest": "91f6f626a613094d07e3569dd4bd1f3183fd242f85400180e45f9641949f496f",
+          "text": "`controller/codex_worker_sandbox.py` `guard_digest`/`check_guard`: a commit that triggers git's automatic gc (`gc.autoDetach`, the default) can leave `.git/gc.pid` (while the detached gc runs) or `.git/gc.log` (after a warning). Both are top-level names outside the D4 exclusions, so `check_guard` refuses a legitimate run. This fails closed and is consistent with D4 as written; only a repository past the auto-gc threshold hits it. H4b2 should decide whether the launcher disables auto gc for the worker's commits (`-c gc.auto=0`, or the command environment) or tolerates these names, before it compares digests around a real run.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "9b20532c2e7f25c3bc7d74a6ed3ec85a82931697bd31cafe5588f9a9ecfd616e",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T11:29:26Z"
+            }
+          ]
+        },
+        "F-66d56b5ab5bd": {
+          "digest": "66d56b5ab5bddf3c75ac3bc3ccac71dfdcc07181e03af739ead14b7f422ab742",
+          "text": "`docs/guide/harnesses.md`: two blank lines before `## The Codex worker sandbox` (already noted in the self-review).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "9b20532c2e7f25c3bc7d74a6ed3ec85a82931697bd31cafe5588f9a9ecfd616e",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T11:29:26Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "9b20532c2e7f25c3bc7d74a6ed3ec85a82931697bd31cafe5588f9a9ecfd616e",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "2827b1f39d605d1a67aeb3ea598065893b74f7c26deb68fd21f830f8a874dcf8",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-01T11:29:26Z",
+          "verdict_sha256": "0b8a53a0aa0d53d116352c8eefa289a28c7a7460c7fd8ea9ff27efc7f7ec4432",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-sandbox/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "2827b1f39d605d1a67aeb3ea598065893b74f7c26deb68fd21f830f8a874dcf8",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-01T11:33:18Z",
+          "verdict_sha256": "05981ea44d367eb54f77d49c095a6bc5f3a98d27f31bc533201c5b483af578c0",
+          "run_ref": "codex:20261101T112959Z-061e19a2",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

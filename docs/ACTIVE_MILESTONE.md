@@ -73,20 +73,22 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-user-only-scan`, implementation revision 1. Every flow is offline and unit-level (no real Claude,
-Codex, network or `gh`). Run from the product clone with `TMPDIR` set to a writable scratch directory, one module at a
-time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp`: the flows that run `tests.test_worker`
-or `tests.test_command_files` create folders there, so on that sandbox they are `environment`-limited and operator-run.
+Item `workflow-controller-orchestrator-stops` (NF3, issue [#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)),
+implementation revision 2. Every flow is offline and unit-level (no real Claude, Codex, network or `gh`). Run from the
+product clone with `TMPDIR` set to a writable scratch directory, one module at a time, `python3 -B` and no
+`PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp`: a flow whose module creates folders there is
+`environment`-limited and operator-run.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Claude launch scan (R1, R2) | `python3 -B -m unittest tests.test_worker` | Passes: each of the four `USER_ONLY_COMMANDS` is refused by `_assert_not_user_only` and by `launch` (no process started) in every spelling (`!`, `?`, brackets, quotes, `=`, markup, `~/name`); longer-word and path forms (`./name`, `../name`, `a/name`, `name.md`) are not refused; the fixed corpus agrees with the old rule on every entry. |
-| 2 | Codex renderer (R1, R2) | `python3 -B -m unittest tests.test_command_files` | Passes: every user-only name derived from `.claude/commands/` (eleven) is refused in the same spellings, in the argument string and by the renderer's own scan alone; path forms are not refused. |
-| 3 | Documents (R3) | `python3 -B tools/check_docs.py` | Exits 0; `docs/guide/workers.md` states the delimiter rule; `docs/ROADMAP.md` marks TK1 done. |
+| 1 | Event per stop (R1, R2) | `python3 -B -m unittest tests.test_notifications_wiring` | Passes: a record per stop of the issue's table gives `orchestrator_wait` or `lane_blocked`; each real decision, unknown or legacy stop stays `user_gate`; a stop already announced is not announced again. |
+| 2 | Event settings (R3) | `python3 -B -m unittest tests.test_notify tests.test_settings` | Passes: `orchestrator_wait` is `INFO`/`LOW`, on by default, can be disabled, and validates in a settings file. |
+| 3 | Protocol decision and job (R2) | `python3 -B -m unittest tests.test_protocol_decision tests.test_protocol_job tests.test_protocol_lifecycle` | Passes: the gate record carries `protocol_gate` (`row`, `disposition`, `action_id`, `reason_code`, `code`); the rule reads those facts, never message text. |
+| 4 | Existing waits unchanged | `python3 -B -m unittest tests.test_pr_report tests.test_functional_lifecycle` | Passes: the `review_wait`, `checks_wait` and `lane_blocked` cases are unchanged; the scenario `scenario-codex-review-implementation-stage-limit` expects `lane_blocked` at its `gate_evidence_unmet` gate. |
+| 5 | Documents (R3) | `python3 -B tools/check_docs.py` | Exits 0; the automation and commands guides, ADR 0012 and the roadmap state the rule in place. |
 
-**Known limitations / out of scope.** The set of user-only names is unchanged; a name glued to letters is not seen; the
-nested-invocation limit, NF3 and H4b are later items. No new setting, option, exit code or gate; the change is a `fix:`, a
-patch release.
+**Known limitations / out of scope.** No new setting, option, exit code, gate or gate identity; message text is never
+parsed; H4b is a later item. The change is a `fix:`, a patch release.
 
 ## Next action
 

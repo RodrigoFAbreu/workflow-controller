@@ -74,4 +74,4 @@ flake, #206). No new setting, option, exit code or gate; the change is a `chore:
 
 ## Next action
 
-`/milestone-plan` for H4b (the headless Codex launch behind the H3 seam), the next incomplete milestone in `docs/ROADMAP.md` (H4a is accepted).
+`/milestone-plan` for TK1 (the user-only scan fix, [#247](https://github.com/RodrigoFAbreu/workflow-controller/issues/247)), then NF3 ([#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)), then H4b (the headless Codex launch behind the H3 seam); H4a is accepted.

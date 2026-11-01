@@ -341,8 +341,9 @@ LEFTOVER_INVENTORY = (
      "the fresh-interpreter import of one module: exits at once"),
     ("test_usage_record.py", "start:run", 1, "short",
      "the fresh-interpreter import of a copied package: exits at once"),
-    ("process_fixtures.py", "start:Popen", 2, "bounded",
-     "spawn_sleeper (LEFTOVER_LIFETIME_SECONDS) and the ZombieGroup helper (its release wait has a total deadline)"),
+    ("process_fixtures.py", "start:Popen", 3, "bounded",
+     "spawn_sleeper (LEFTOVER_LIFETIME_SECONDS), spawn_tagged_worker (its release wait has a total deadline) and the "
+     "ZombieGroup helper (its release wait has a total deadline)"),
     ("process_fixtures.py", "wait", 1, "exception",
      "the scan's own pattern text, not a loop"),
     ("scenarios/kit.py", "start:Popen", 2, "deadline",
@@ -550,6 +551,43 @@ def spawn_sleeper(test_case: unittest.TestCase) -> subprocess.Popen:
     test_case.addCleanup(_cleanup)
     assert wait_until(lambda: read_stat(proc.pid) is not None)
     return proc
+
+
+def spawn_tagged_worker(test_case: unittest.TestCase, tag: str, directory: "str | os.PathLike", *,
+                        nested: bool = True) -> tuple[subprocess.Popen, int | None]:
+    """A test-owned stand-in for a Codex worker (H4c2): a leader in its own session carrying ``tag`` in
+    ``WORKFLOW_CONTROLLER_OWNERSHIP`` and, with ``nested``, a child in another session that carries it too (the
+    ``bwrap`` stand-in, outside the leader's group). Both wait for ``<directory>/release`` for at most
+    ``LEFTOVER_LIFETIME_SECONDS``; the leader writes ``<directory>/ready`` once the child's pid is in
+    ``<directory>/nested.pid``. Returns once ready: ``(leader, nested pid)``. Cleanup ends both."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    wait = python_release_wait("os.path.join(_d, 'release')")
+    child = "import os, sys, time\n_d = sys.argv[1]\n" + wait
+    leader = ("import os, subprocess, sys, time\n_d = sys.argv[1]\n"
+              + (f"_c = subprocess.Popen([sys.executable, '-c', {child!r}, _d], start_new_session=True)\n"
+                 "open(os.path.join(_d, 'nested.pid'), 'w').write(str(_c.pid))\n" if nested else "")
+              + "open(os.path.join(_d, 'ready'), 'w').write(str(os.getpid()))\n" + wait)
+    proc = subprocess.Popen([sys.executable, "-c", leader, str(directory)], start_new_session=True,
+                            env={**os.environ, OWNERSHIP_VAR: tag})
+    inner: list[int] = []
+
+    def _cleanup() -> None:
+        kill_group(proc.pid)
+        for pid in inner:
+            end_pid(pid)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+
+    test_case.addCleanup(_cleanup)
+    if not wait_until((directory / "ready").exists, timeout=30.0):
+        raise AssertionError(f"the tagged worker {proc.pid} never announced readiness in {directory}")
+    if nested:
+        inner.append(int((directory / "nested.pid").read_text()))
+        wait_until(lambda: read_stat(inner[0]) is not None)
+    return proc, inner[0] if inner else None
 
 
 def wait_fake_ready(ready_file: "str | os.PathLike", pid: int, on_waiting=None, *, timeout: float = 30.0) -> None:

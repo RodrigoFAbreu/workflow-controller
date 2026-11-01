@@ -2,6 +2,18 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-worker-ownership` (H4c2, issue
+[#263](https://github.com/RodrigoFAbreu/workflow-controller/issues/263)) owns, judges and reaps a Codex worker's process on
+`resume` and `--abandon`. The plan is `docs/ai-workflow/CONTROLLER_CODEX_WORKER_OWNERSHIP_PLAN.md`. CP1 is complete:
+`_run_codex_worker` persists a `codex_worker` block (operator home, captured credential digest, `lock_inherited: false`)
+before the tree is prepared; `job._is_codex_worker_record` is the predicate; `resume`'s phase 1 never re-attaches to such a
+record; and `_reconcile_codex_worker` ends the group and every tagged process, settles the credentials and hands the record
+to the shared `LAUNCHED`/`COMPLETED` rows (under a drifted installation nothing changes). `tests/test_job_codex_worker_resume.py`
+drives it with real test-owned processes (`process_fixtures.spawn_tagged_worker`). Next: CP2 (`--abandon`, the interrupts and
+the killed Controller end to end), then CP3.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-codex-worker-job-record` (H4c1, issue
 [#260](https://github.com/RodrigoFAbreu/workflow-controller/issues/260)) records a Codex worker run as a job. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_JOB_RECORD_PLAN.md`. CP1 is complete: `controller/codex_worker_job.py` has the pure

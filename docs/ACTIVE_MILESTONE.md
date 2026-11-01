@@ -85,23 +85,28 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-orchestrator-stops` (NF3, issue [#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244)),
-implementation revision 2. Every flow is offline and unit-level (no real Claude, Codex, network or `gh`). Run from the
-product clone with `TMPDIR` set to a writable scratch directory, one module at a time, `python3 -B` and no
-`PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp`: a flow whose module creates folders there is
-`environment`-limited and operator-run.
+Item `workflow-controller-codex-worker-sandbox` (H4b1, issue [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)),
+implementation revision 1. Every flow is offline and unit-level (no real Claude, Codex, network or `gh`) except flow 8, which
+is the opt-in live proof and is operator-run. Run from the product clone with `TMPDIR` set to a writable scratch directory,
+one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp` and a restricted
+`PATH`: a flow that creates folders there or runs git (flows 1, 3) is `environment`-limited and operator-run.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Event per stop (R1, R2) | `python3 -B -m unittest tests.test_notifications_wiring` | Passes: a record per stop of the issue's table gives `orchestrator_wait` or `lane_blocked`; each real decision, unknown or legacy stop stays `user_gate`; a stop already announced is not announced again. |
-| 2 | Event settings (R3) | `python3 -B -m unittest tests.test_notify tests.test_settings` | Passes: `orchestrator_wait` is `INFO`/`LOW`, on by default, can be disabled, and validates in a settings file. |
-| 3 | Protocol decision and job (R2) | `python3 -B -m unittest tests.test_protocol_decision tests.test_protocol_job tests.test_protocol_lifecycle` | Passes: the gate record carries `protocol_gate` (`row`, `disposition`, `action_id`, `reason_code`, `code`); the rule reads those facts, never message text. |
-| 4 | Existing waits unchanged | `python3 -B -m unittest tests.test_pr_report tests.test_functional_lifecycle` | Passes: the `review_wait`, `checks_wait` and `lane_blocked` cases are unchanged; the scenario `scenario-codex-review-implementation-stage-limit` expects `lane_blocked` at its `gate_evidence_unmet` gate. |
-| 5 | Documents (R3) | `python3 -B tools/check_docs.py` | Exits 0; the automation and commands guides, ADR 0012 and the roadmap state the rule in place. |
+| 1 | Layout, profile, command line, build, probes, git guard (R1, R2) | `python3 -B -m unittest tests.test_codex_worker_sandbox` | Passes: the `worker` profile makes the worktree and scratch writable (the worktree's `.git` listed `write`, `.git/hooks` and `.git/config` read) with network off; the pinned `codex exec` line; `build` starts no process; the judge fails closed; the guard digest ignores what a commit or a plain `git gc` writes and detects any other `.git` change (new `commondir`, symlink, special file, `alternates`). |
+| 2 | Module registered, nothing wired (R4) | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment` | Passes: the module is in the package list; the write-containment scan accepts it. |
+| 3 | Neighbouring modules unchanged (R1, R4) | `python3 -B -m unittest tests.test_codex_sandbox tests.test_codex_tester tests.test_worker_launch tests.test_harness` | Passes: the tester sandbox, the Claude launch and the harness declarations are unchanged; the Codex worker role is still undeclared. |
+| 4 | Test-hygiene inventory | `python3 -B -m unittest tests.test_fake_claude_contract` | Passes: `LEFTOVER_INVENTORY` has a row for each new test file. |
+| 5 | Live test skipped by default (R3) | `python3 -B -m unittest tests.test_codex_worker_sandbox_live -v` | Every test is reported `skipped` (opt-in variable unset); no process is started. |
+| 6 | Documents (R3, R4) | `python3 -B tools/check_docs.py` | Exits 0; `docs/guide/harnesses.md` and `workers.md` state the profile, the measured boundary, the open composed-configuration limit and the H4b1/H4b2 split; the roadmap row is split. |
+| 7 | Generated harness table | `python3 -B tools/harness_table.py --check` | Exits 0 (no drift; the worker sandbox adds no declaration). |
+| 8 | Live proof (R3), operator-run | `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_sandbox_live -v` | Needs real `codex` (0.163.0), `bwrap` and a recorded `verify-codex` build. Both the `codex sandbox -P worker` probe and the one `codex exec` turn pass; the output matches `tests/harness_contract/codex/worker_sandbox.txt` (edit, create, rename, delete and `git commit` inside the worktree succeed; writes to `.git/hooks` and `.git/config`, home, credential, canary, push, `gh`, network and sockets are refused). |
 
-**Known limitations / out of scope.** No new setting, option, exit code, gate or gate identity; message text is never
-parsed; H4b is a later item. The change is a `fix:`, a patch release.
+**Known limitations / out of scope.** Nothing calls the module: no launcher (H4b2,
+[#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)), no Codex worker role, setting, option, exit code or
+gate. The composed-configuration check and the nested-repository limit for the worker profile are open and belong to H4b2.
+The change is a `chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206).
 
 ## Next action
 
-`/milestone-plan` for NF3 ([#244](https://github.com/RodrigoFAbreu/workflow-controller/issues/244), the false ACTION_REQUIRED alerts), then H4b (the headless Codex launch behind the H3 seam); TK1 is implemented.
+Manual functional review of H4b1 (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4b2 ([#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255), the Codex worker launcher).

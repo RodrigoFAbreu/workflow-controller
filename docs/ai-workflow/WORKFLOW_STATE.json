@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-worker-job-record",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -50121,6 +50121,336 @@
         },
         "evaluated_at": "2026-11-01T15:32:41Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-codex-worker-job-record": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-worker-job-record",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_JOB_RECORD_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-job-record-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-job-record-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "0e7f3237a7581f2f4fe0fa97d951f055ca7c2248",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+        "approved_review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_JOB_RECORD_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d697309485fb18ca45d83b3fcfb25eeb0efd01db"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-job-record-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "23f79ab8dfdc7981a00271f845f042ef843e03a4"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-job-record-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ebc248ca864d9a7bac74d4bbca1f867d5b05cf6e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-01T16:57:32Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+            "ledger": {
+              "local": {
+                "bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "4d4efb1e0fb059fbc58ec84ae3143dbc8446c04c6f8c0bb5f61fe586d6d5ca75",
+                "ledger_entry_sha256": "2c37aac8ad5abe54a6f7498fab265ba8235363df9d0c6f484fca4c004d153731",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-worker-job-record/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "bf33e33a83fa917b6209a3cf7d88c9d8a68dff5a4efb1c9922c90d9224446b80",
+                "ledger_entry_sha256": "e89160d1634d86fdc54506211adb358001e2d67803c7ec30d03bca77a7cefe12",
+                "run_ref": "codex:20261101T165428Z-c12a09e0",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-01T16:57:32Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-01T16:54:09Z",
+          "verdict_sha256": "4d4efb1e0fb059fbc58ec84ae3143dbc8446c04c6f8c0bb5f61fe586d6d5ca75",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-job-record/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-01T16:56:01Z",
+          "verdict_sha256": "bf33e33a83fa917b6209a3cf7d88c9d8a68dff5a4efb1c9922c90d9224446b80",
+          "run_ref": "codex:20261101T165428Z-c12a09e0",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 13,
+      "last_transition": "2026-11-01T16:57:32Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-01T16:50:26Z",
+        "consumed": {
+          "review_content_id": "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+          "bundle_id": "2d2fa310552e00a7b807b56d37f97181a11ed599e0f6b6c8367f9d2aefb2530b",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+        "912586e2ef29c229fd6b94e2f3cff2cb8cb0bb7b6ed3d6c2896f0036fd29e33d"
+      ],
+      "optional_findings": {
+        "F-f87da60f31f5": {
+          "digest": "f87da60f31f560b78bba492f5a95edfae1b83efe779f5aec9b31d7abf5cebccf",
+          "text": "CP2's \"Done when\" cites \"the existing `tests.test_job`, `tests.test_worker_launch`, `tests.test_execute_step*` modules\". No `tests/test_execute_step*` module exists; the `execute_step` tests are in `tests/test_job.py`, `tests/test_job_validation.py`, `tests/test_resume.py` and others. Name the real modules so that this criterion can be checked.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "912586e2ef29c229fd6b94e2f3cff2cb8cb0bb7b6ed3d6c2896f0036fd29e33d",
+              "verdict": "REVISE",
+              "at": "2026-11-01T16:37:40Z"
+            }
+          ]
+        },
+        "F-bdf6d7060afa": {
+          "digest": "bdf6d7060afabd2426672c4057b65a4a4ba1bc7af9099eee89c9d3ed8cc4fbc4",
+          "text": "D4's mapping of exactly eight keys leaves the offline job-layer tests (D9) no way to reach the launcher's test seams (`run`, `system_dir`, `system_path`, `real_home`). H4b2's tests pass all four. State how the fixture launcher supplies them, for example a `CodexLauncher` subclass in the test that adds them; that subclass still takes D2's `isinstance` branch.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "912586e2ef29c229fd6b94e2f3cff2cb8cb0bb7b6ed3d6c2896f0036fd29e33d",
+              "verdict": "REVISE",
+              "at": "2026-11-01T16:37:40Z"
+            }
+          ]
+        },
+        "F-d53b8dfa3e5c": {
+          "digest": "d53b8dfa3e5cdd911d00e9f1b4b9156ab4be9af6b5e5b5984405a26ded798525",
+          "text": "`_launch_job` passes `DEFAULT_WORKER_TIMEOUT` (`None`) unless the operator set a timeout. Passed through as D4 says, `run_bounded` waits with no deadline, so D1's \"the deadline kill is already the launcher's\" holds only when a timeout is given. State that this is intended, or name a bound. The record's `worker_streams.format` is also `stream-json`, which a Codex job's plain-text stdout is not. State what a Codex job records there.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "912586e2ef29c229fd6b94e2f3cff2cb8cb0bb7b6ed3d6c2896f0036fd29e33d",
+              "verdict": "REVISE",
+              "at": "2026-11-01T16:37:40Z"
+            }
+          ]
+        },
+        "F-59e78838bc32": {
+          "digest": "59e78838bc323000c3055a8d2646da9aa671e3b63ac7ae3ade4bc7c8d63d8c94",
+          "text": "CP2 says \"a timeout run is `INTERRUPTED` with subtype `timeout`\". With a clone tree the record `status` is `FAILED`, and `INTERRUPTED` is the `worker_outcome`. Name the field so the test asserts the intended one.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "912586e2ef29c229fd6b94e2f3cff2cb8cb0bb7b6ed3d6c2896f0036fd29e33d",
+              "verdict": "REVISE",
+              "at": "2026-11-01T16:37:40Z"
+            }
+          ]
+        },
+        "F-8cc4bfe1fc2b": {
+          "digest": "8cc4bfe1fc2b362736de5273723f646b753a5a2c63da3b50e46b91a5e23cfbda",
+          "text": "D5 and the guide text in CP3 state that the clone tree's limit is a `FAILED` job with `phase_not_in_to_any_of`. That is true only on the legacy tail. Under a protocol decision, which every Workflow 2.7+ repository and so every H4e target uses, `reconcile` on an unchanged repository answers `no_progress`. With `worker_outcome` `SUCCESS`, `_protocol_resolution` then ends the job `FINISHED` with `transition_verified` true and `progress: \"none\"` (`controller/job.py:3079-3082`). State this second form of the limit in D5 and in the guide, and assert the status in CP2's protocol test, so that whoever decides on the tree before H4e sees both.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:45:52Z"
+            }
+          ]
+        },
+        "F-703e3e8fa9b3": {
+          "digest": "703e3e8fa9b367df5b521fa5009789ae830d25bd20ad61282e64c117cdbe5a18",
+          "text": "CP1 adds a `LEFTOVER_INVENTORY` row in `tests/process_fixtures.py` for `tests/test_codex_worker_job.py`. That file starts no process (\"no process\"), so the scan finds no match and `check_inventory` reports the row as stale (\"stale inventory row (no match)\"). Drop the row, or add it only if the scan finds a construct.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:45:52Z"
+            },
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:54:09Z"
+            }
+          ]
+        },
+        "F-aa10a776a472": {
+          "digest": "aa10a776a472affa6e258300184dbf729553891f08137b03879ff3eff482b24a",
+          "text": "D3 says `launch_options`, `stream_texts` and `usage_builder` are \"each a function of the result and the route\". `launch_options` runs before any result exists. Its inputs are the runtime root, job id, Codex home, tree, timeout, `on_spawn` and the route. Also, `inspect.signature(launch_codex_worker).bind` needs the positional `task` as well as the eight keys. State the inputs and the bound call.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:45:52Z"
+            },
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:54:09Z"
+            }
+          ]
+        },
+        "F-342ead89121d": {
+          "digest": "342ead89121d862c326de28e6ae361b0c502430c9c7071990ed94ea984d37a1f",
+          "text": "D8 does not cover a `KeyboardInterrupt` before the spawn, for example during the `CODEX_WORKTREE_PREPARER` clone. The Claude branch leaves that record `LAUNCHED` without `worker_process`. State whether the Codex branch does the same, or ends it `FAILED`, which \"any other exception\" might be read to include.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:45:52Z"
+            },
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:54:09Z"
+            }
+          ]
+        },
+        "F-7be8c00a6cf5": {
+          "digest": "7be8c00a6cf5378873ef45bddc301b29662fc99f639de1865c4e1802c44da881",
+          "text": "A Codex worker does not inherit the lifecycle lock's descriptor, because `review.run_bounded` uses `close_fds=True` and the D4 mapping has no `pass_fds`. A Codex job's record therefore does not satisfy the job's `lifecycle_lock` invariant (\"any worker this record spawns inherits its descriptor\"). That is H4c2's scope. Name it in D1 or the H4c2 row so that the liveness design does not assume the lock.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "45a8f088f7fb38176618f1827516ebeb33e7a28b9cb17b10f49c4aa96274f851",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:45:52Z"
+            },
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "051ecd6af330d574cc6e9265f574a19a170e7d36a7f954806dc124487eb9d104",
+              "verdict": "APPROVE",
+              "at": "2026-11-01T16:54:09Z"
+            }
+          ]
+        }
       }
     }
   }

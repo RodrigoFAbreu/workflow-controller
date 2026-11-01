@@ -11,7 +11,7 @@ and the roadmap state the rule in place. The self-review changed one test: the s
 `scenario-codex-review-implementation-stage-limit` stops at a `gate_evidence_unmet` technical approval gate, so it now
 expects `lane_blocked` there, not `user_gate` (D2). The change is a `fix:`, a patch release.
 
-Next action: `/milestone-plan` for H4b, the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
+Next action: `/milestone-plan` for H4b ([#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252), the Codex worker launch), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
 
 **Complete.** `workflow-controller-user-only-scan` (TK1, issue
 [#247](https://github.com/RodrigoFAbreu/workflow-controller/issues/247)) is implemented (CP1 and CP2). The plan is

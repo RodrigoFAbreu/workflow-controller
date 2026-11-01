@@ -2,6 +2,15 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-worker-launch` (H4b2, issue
+[#255](https://github.com/RodrigoFAbreu/workflow-controller/issues/255)), plan
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md` (revision 4). CP1 is complete: `controller/codex_worker_sandbox.py`
+also has the worker's composed-configuration check (`compose_argv`, `check_compose_argv`, `effective_policy`,
+`check_effective`, `check_composed`) and the nested-repository refusal (`nested_git_entries`, `check_nested`), with
+tests in `tests/test_codex_worker_sandbox.py`; the tester's modules are unchanged. Verified: `tests.test_codex_worker_sandbox`
+(87), `tests.test_codex_sandbox`, `tests.test_write_containment` and `tests.test_package_structure` pass. Next: CP2, the
+launcher.
+
 **Complete.** `workflow-controller-codex-worker-sandbox` (H4b1, issue
 [#252](https://github.com/RodrigoFAbreu/workflow-controller/issues/252)) is implemented (CP1 to CP3 and the functional review) and accepted by policy. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_SANDBOX_PLAN.md`. CP1 is complete: `controller/codex_worker_sandbox.py` has

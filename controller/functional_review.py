@@ -2033,11 +2033,13 @@ def gate_text(code: str, **facts: Any) -> str:
     kept = (f" The sandbox is kept at {sandbox} for inspection and is removed when the next functional run starts."
             if sandbox else "")
     if code == GATE_CHECKLIST_UNRECOGNISED:
-        return ("the functional review checklist has no flow the Controller can recognise "
-                f"({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
+        lead = ("the functional review checklist is only partly recognised" if facts.get("partial")
+                else "the functional review checklist has no flow the Controller can recognise")
+        return (f"{lead} ({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
                 f"'{SECTION_TITLE}' of docs/ACTIVE_MILESTONE.md must carry its flows as table rows whose first cell is a "
-                "short label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
-                f"or as a numbered list; or set `{SETTING_AUTOMATED}` false to keep the stop for a person")
+                "flow label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
+                f"or as a numbered list, and every item of the shape it uses must be a flow; or set `{SETTING_AUTOMATED}` "
+                "false to keep the stop for a person")
     if code == GATE_TESTER_UNAVAILABLE:
         return (f"the functional tester cannot run here ({detail}): nothing was started and nothing was recorded. "
                 f"Install what is missing, or {MANUAL_REMEDY}")

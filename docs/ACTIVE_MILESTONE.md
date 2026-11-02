@@ -14,7 +14,11 @@ returning the partial list. `tests/test_functional_review.py` covers the grammar
 Manager checklists are fixtures. The history measurement (D6) found no new refusal; the checklists it reads differently are
 `settings-and-telemetry` (16 flows to 29, `B1`..`B6` and the others read as their own flows), `adaptive-test-sharding` (13 to 17,
 the rows `L1`..`L4` the old reader dropped) and `usage-limit-mid-job` (9 to 10, the row `7b`), none losing a line of text. CP2
-(the shape words, the guides and the roadmap) is next.
+is complete: `gate_text` for `checklist_unrecognised` says "a flow label" and opens "the functional review checklist is only
+partly recognised" when the refusal carried `recognised` (`job._FunctionalPlan.partial`), `tests/test_functional_lifecycle.py`
+asserts both leads, `docs/guide/automation.md` states the label with a table of examples and the refusal of a partly
+recognised checklist, `docs/common-problems.md` and `docs/guide/troubleshooting.md` name the new case, and `docs/ROADMAP.md`
+marks FL1 done (a `fix:` patch, 1.27.3, no new setting). The milestone is implemented and awaits review.
 
 Previous item, now complete:
 

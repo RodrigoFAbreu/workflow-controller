@@ -7643,6 +7643,7 @@ class _FunctionalPlan:
     detail: str = ""
     rounds: int = 0
     previous: Mapping | None = None
+    partial: bool = False
 
 
 def _functional_plan(runtime_root: Path, managed_repo: Any, work_item_id: str | None, decision: Decision) -> _FunctionalPlan:
@@ -7659,7 +7660,8 @@ def _functional_plan(runtime_root: Path, managed_repo: Any, work_item_id: str | 
     except functional_review.TesterUnavailable as exc:
         return _FunctionalPlan(**base, stop=functional_review.GATE_TESTER_UNAVAILABLE, detail=exc.message)
     except functional_review.ChecklistUnrecognised as exc:
-        return _FunctionalPlan(**base, stop=functional_review.GATE_CHECKLIST_UNRECOGNISED, detail=exc.message)
+        return _FunctionalPlan(**base, stop=functional_review.GATE_CHECKLIST_UNRECOGNISED, detail=exc.message,
+                               partial=bool((exc.evidence or {}).get("recognised")))
     base.update(candidate=candidate, flows=flows)
     block = previous.get("functional") if previous is not None else None
     if (isinstance(block, Mapping) and block.get("head") == head and block.get("checklist_blob") == candidate.checklist_blob
@@ -7673,7 +7675,7 @@ def _functional_plan(runtime_root: Path, managed_repo: Any, work_item_id: str | 
 
 
 def _plan_gate_text(plan: _FunctionalPlan) -> str:
-    return functional_review.gate_text(plan.stop, detail=plan.detail, rounds=plan.rounds)
+    return functional_review.gate_text(plan.stop, detail=plan.detail, rounds=plan.rounds, partial=plan.partial)
 
 
 def functional_forecast(runtime_root: Path, managed_repo: Any, work_item: Any, decision: Decision,

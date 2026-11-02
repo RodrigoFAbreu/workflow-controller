@@ -431,9 +431,25 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
 
 1. reads the checklist (the "Functional review checklist" section of `docs/ACTIVE_MILESTONE.md` at
    the head) and the flows it lists. The recognised shapes are table rows whose first cell is a
-   short label, bold labelled paragraphs (`**A. ...`), headings that start with a label or `Flow`,
-   and a numbered list; flow ids are the Controller's (`flow-1`, ...). A checklist with none stops
-   at `checklist_unrecognised` before any job, sandbox or usage reservation exists;
+   flow label, bold labelled paragraphs (`**A. ...`), headings that start with a label or `Flow`,
+   and a numbered list; flow ids are the Controller's (`flow-1`, ...). A flow label is a letter
+   with up to two digits, or a number of one or two digits with dotted parts and one optional
+   letter, either with one hyphenated qualifier:
+
+   | Label | Accepted |
+   |---|---|
+   | `A`, `7` | yes |
+   | `F1`, `3a`, `6.1` | yes |
+   | `6b-split` | yes |
+   | `Flow 4`, `long`, `123` | no (a word, or a number of three digits) |
+
+   A checklist with no flow stops at `checklist_unrecognised` before any job, sandbox or usage
+   reservation exists. So does a **partly recognised** checklist: when the shape that finds flows
+   leaves an item that looks like a flow (a table row whose first cell is not a label, a bold
+   label or heading that is not one), the Controller refuses it instead of testing only the
+   recognised part. The stop opens "the functional review checklist is only partly recognised"
+   and its evidence carries the `shape`, `recognised` of `total` and the `unrecognised` names;
+   words, sub-labels and prose inside a flow are not refused;
 2. builds a **sandbox** under `<runtime root>/functional/<job_id>/`: a `git clone --no-hardlinks`
    of the item's branch at its head, whose `origin` is a scratch bare repository; a `bin/` first on
    `PATH` with a fake `gh`, `claude`, `codex` and `ssh` (each logs its arguments and refuses);

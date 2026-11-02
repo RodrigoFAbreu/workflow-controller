@@ -298,7 +298,21 @@ def flow_stops_before_or_without_a_run(judge: Judge, test: unittest.TestCase, *,
                 "unrecognised: the stop")
     judge.equal((life.launches, tester_runs(life), life.reservations()), ([], [], {}),
                 "unrecognised: no tester job, sandbox or reservation")
+    judge.check("has no flow the Controller can recognise" in record["human_gate_pending"]["what_is_required"],
+                "unrecognised: a checklist with none keeps the 'has no flow' lead")
     judge.observe("unrecognised", {"gate": record["functional"]["gate"]})
+
+    life = new_cycle(test, checklist="| flow | do | expect |\\n|---|---|---|\\n| A | do | ok |\\n| long | no | label |\\n")
+    life.plan = [("flow-1", "passed", None)]
+    record = life.step(gate=life.usage_gate())
+    said = record["human_gate_pending"]["what_is_required"]
+    judge.equal((record["status"], record["functional"]["gate"]), (job.STATUS_GATE_BLOCKED, "checklist_unrecognised"),
+                "partly recognised: the stop")
+    judge.check(said.startswith("checklist_unrecognised: the functional review checklist is only partly recognised")
+                and "`long`" in said and "has no flow" not in said,
+                "partly recognised: the gate text says so and names the item")
+    judge.equal((life.launches, tester_runs(life), life.reservations()), ([], [], {}),
+                "partly recognised: no tester job, sandbox or reservation")
 
 
 # ---------------------------------------------------------------------------

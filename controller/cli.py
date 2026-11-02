@@ -1777,8 +1777,9 @@ def _mid_job_hold(record: dict, fact: dict) -> job.UsageHold:
     """The D6 hold for a job that reached the usage limit having changed
     nothing: waitable until the fact's reset, whatever ``usage.enabled`` says."""
     window = fact.get("window") or "unknown"
-    harness_name = (record.get("worker_route") or {}).get("harness") if isinstance(record.get("worker_route"), dict) else None
-    provider = (route_select.usage_provider(harness_name) if isinstance(harness_name, str) else usage.PROVIDER_CLAUDE)
+    route = record.get("worker_route")
+    harness_name = route.get("harness") if isinstance(route, dict) else None
+    provider = route_select.usage_provider(harness_name) if isinstance(harness_name, str) else usage.PROVIDER_CLAUDE
     return job.UsageHold(
         provider=provider, window=window, percent=100.0, forecast=0.0, resume_at=fact["resets_at"],
         reason=f"job {record.get('job_id')} reached the {window} usage limit mid-job", waitable=True,

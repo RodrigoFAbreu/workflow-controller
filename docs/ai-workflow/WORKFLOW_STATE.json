@@ -53367,12 +53367,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-cross-shape-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-cross-shape-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 7,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "11bd0c4b2b631a3f46b8228d88153dd0c20ed215",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "66f260ff3183a893718db68011ccff9c9a9e14c3",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -53511,8 +53511,8 @@
           "external": 0
         }
       },
-      "state_revision": 28,
-      "last_transition": "2026-11-02T22:39:32Z",
+      "state_revision": 29,
+      "last_transition": "2026-11-02T22:52:31Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

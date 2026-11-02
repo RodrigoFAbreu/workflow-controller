@@ -52544,7 +52544,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-recogniser-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-recogniser-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -52653,7 +52653,138 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+        "approved_review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+        "review_content_manifest": [
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "31267ae640571a21eb85999c488ffe75c97ec0ec"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f017b6b0bd1d897f5872184d52c382bf63f785e3"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checklist-recogniser-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8c7646579d25c2dc3d7ea7b7daf5e571993c815f"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1fc14dd7a90979caad5955d00c3a37dc6f627897"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bba4abe96a8e6973be5c23a7a162b43a7d34c926"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9911972645f924c3e2d5e190ec8b5d28534db079"
+          },
+          {
+            "path": "tests/fixtures/functional_checklists/table_f_labels_cache_miss_message.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "62ff93131f177d431b645d1befde416c1a668dab"
+          },
+          {
+            "path": "tests/fixtures/functional_checklists/table_f_labels_http_read_test_strength.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8e6179533d8237fba41188296f5af1eb3a99dca2"
+          },
+          {
+            "path": "tests/test_functional_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "521fa10f4c6fab168f7653a9fbaf347bfed5900f"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1feba79a680e5d43a441494cbde135094d25a9fd"
+          }
+        ],
+        "reviewed_content_commit": "718d0a8573fc3db423e5f3dc2a5e62e7a3496785",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T09:37:08Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "ledger": {
+              "local": {
+                "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "90ae41ea8b1739407e1b7fa59a7d3aeb6a7420f52623a7318ca040033da86ce9",
+                "ledger_entry_sha256": "b841b498e90b0960104628ec6fb66c794dbe29ffdec38ac28ecfbfc45c55c5ea",
+                "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "57bcd1628b1b0cda4088348dce062edae5a37b6f4f8d66edf410b5409cd5a79c",
+                "ledger_entry_sha256": "d22b69f42da8ec18ef10dad794509b796707a8eddf457347d361abddc0b374b4",
+                "run_ref": "codex:20261102T093237Z-6acda843",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T09:37:08Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
@@ -52684,12 +52815,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-02T08:07:11Z",
+      "state_revision": 30,
+      "last_transition": "2026-11-02T09:37:08Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -52897,20 +53028,56 @@
               "at": "2026-11-02T07:48:08Z"
             }
           ]
+        },
+        "F-3b3889232a8a": {
+          "digest": "3b3889232a8ac45cc8de22dbe1a75f02f21a0187c20e4b0acb446abc6aee2a51",
+          "text": "**O1. `TEST_RESULTS.md` still describes revision 1.** The bundle's `TEST_RESULTS.md` names head `3551258` and 5465 tests. The result for revision 2 (head `718d0a8`, 5468 tests) appears only in the prose of `IMPLEMENTATION_SUMMARY.md`. I re-ran it myself and it passes (see below). The next generation should refresh the file so that the external reviewer reads the current result.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T08:28:45Z"
+            }
+          ]
+        },
+        "F-9bff1d432fd8": {
+          "digest": "9bff1d432fd868c22bd7491a6da8479f2f78e8ca617083083624f3f325d555c3",
+          "text": "**O2. A compact title after `Flow` keeps the old label.** `### Flow 6.1.Title` reads as `6` (the baseline fallback), while `### 6.1.Title` and `**6.1.Title.**` read as `6.1`. D2 asks for exactly this (\"any other text after `Flow` is read as today\"), and the round-1 test pins `6.1.123` to `6`. Nothing is dropped, but the two heading forms now disagree. A follow-up could let `_FLOW_LABEL_RE` accept a closing mark followed by a non-digit, as `_HEADING_MARK_RE` already does.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T08:28:45Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+        "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "87c1494824f93f4fcc7b61a18625fbd8457dc4361d46cd1a40d877a776bdc428",
+          "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-02T07:48:08Z",
-          "verdict_sha256": "1434a833aeaf2332f7b90be47cba7f9b4b16f218b108b1aa256412ac76abfe65",
+          "round": 2,
+          "completed_at": "2026-11-02T08:28:45Z",
+          "verdict_sha256": "90ae41ea8b1739407e1b7fa59a7d3aeb6a7420f52623a7318ca040033da86ce9",
           "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-02T09:35:04Z",
+          "verdict_sha256": "57bcd1628b1b0cda4088348dce062edae5a37b6f4f8d66edf410b5409cd5a79c",
+          "run_ref": "codex:20261102T093237Z-6acda843",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

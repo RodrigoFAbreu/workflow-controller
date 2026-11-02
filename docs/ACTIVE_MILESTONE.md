@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-checklist-recogniser` (FL1, issue
+**Complete.** `workflow-controller-checklist-recogniser` (FL1, issue
 [#227](https://github.com/RodrigoFAbreu/workflow-controller/issues/227)) makes the functional checklist recogniser read
 `F1`, `3a`, `6.1` and `6b-split` style labels and refuse a partly recognised checklist. The plan is
 `docs/ai-workflow/CONTROLLER_CHECKLIST_RECOGNISER_PLAN.md`. CP1 is complete: `controller/functional_review.py` accepts the D2
@@ -18,7 +18,9 @@ is complete: `gate_text` for `checklist_unrecognised` says "a flow label" and op
 partly recognised" when the refusal carried `recognised` (`job._FunctionalPlan.partial`), `tests/test_functional_lifecycle.py`
 asserts both leads, `docs/guide/automation.md` states the label with a table of examples and the refusal of a partly
 recognised checklist, `docs/common-problems.md` and `docs/guide/troubleshooting.md` name the new case, and `docs/ROADMAP.md`
-marks FL1 done (a `fix:` patch, 1.27.3, no new setting). The milestone is implemented and awaits review.
+marks FL1 done (a `fix:` patch, 1.27.3, no new setting). The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for CU3c (clean-up, part 3), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
 
 Previous item, now complete:
 

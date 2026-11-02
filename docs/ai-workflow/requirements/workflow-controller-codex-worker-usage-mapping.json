@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-codex-worker-usage",
+  "requirements": {
+    "R1": {
+      "description": "A Codex worker job is admitted on the Codex provider before any record exists: `usage_gate(route, provider=codex)` for a Codex launcher while a Claude launcher keeps the unchanged call; a hold returns `UsageHold` with no record, reservation or process (exit 17 reused); a fallback chain selecting the Codex entry carries its token (#266)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A Codex worker job's reservation is bound to the job, renewed while it runs and accounted from the readings of the job's own Codex home, so the `usage` block has the Claude worker's shape; a never-started job is released with no charge and a run failing after the spawn is charged as unknown (#266)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A Codex usage limit reached mid-job is held and repeated, never resumed: the launcher derives `usage_limit` from the job's readings only when Codex's own limit record classified the run, no reset time is invented, a breach carries none, and the existing INTERRUPTED rule and `run`'s wait loop apply unchanged, and `step` exits 17 without waiting (#266)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The mid-job hold and its pause event name the provider that is limited (Codex for a Codex job; Claude for a record with no routed harness; the stop lines keep their text) and the `usage` command and budget pauses show a Codex worker as any Codex job, with no new setting, option, exit code or gate (#266)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "Nothing real reaches the branch and the Claude worker, the tester and the reviewer are unchanged with their tests: no real launcher key, Codex worker role, setting, option, exit code or gate; one opt-in live test records the admission and the usage block, and the guides and roadmap state the facts in place (#266)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3"
+      ]
+    }
+  }
+}

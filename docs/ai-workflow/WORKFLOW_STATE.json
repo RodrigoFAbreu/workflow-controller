@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-codex-worker-usage",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -51796,6 +51796,247 @@
         },
         "evaluated_at": "2026-11-01T23:32:20Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-codex-worker-usage": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-codex-worker-usage",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_USAGE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-usage-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-usage-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "c1c769822cf85f264f2e4c1e02e1f96bf061e6f5",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+        "approved_review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_USAGE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4f3e9967032b4398e7b194d10c642304f9d458df"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-usage-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1354c29a916e81303cccb13a1f2f1769c947611e"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-usage-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "18bfa5101a57fb56e90351f14acf61110f687ecd"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T00:41:53Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+            "ledger": {
+              "local": {
+                "bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "ecf3cbf9f6b9f491933b3a07c8ac9dee3e143aae67c3768bacfa2a0081f31bac",
+                "ledger_entry_sha256": "983c9d2b67737ca70cbf1f62a884405e689589fad0c97eafa13cf131ec14916e",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-worker-usage/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "cb7b13532ecdcbcb4ba46d3c0bc9013735fb6b8dfb48659b7c88b97c7a8cbe90",
+                "ledger_entry_sha256": "532436dfbe266b5bb8e100a41181eab85f2e4ec4a077448d6b1f6ee25fb53568",
+                "run_ref": "codex:20261102T003923Z-2947d66d",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T00:41:53Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-02T00:38:47Z",
+          "verdict_sha256": "ecf3cbf9f6b9f491933b3a07c8ac9dee3e143aae67c3768bacfa2a0081f31bac",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-usage/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-02T00:40:44Z",
+          "verdict_sha256": "cb7b13532ecdcbcb4ba46d3c0bc9013735fb6b8dfb48659b7c88b97c7a8cbe90",
+          "run_ref": "codex:20261102T003923Z-2947d66d",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-02T00:41:53Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-02T00:35:43Z",
+        "consumed": {
+          "review_content_id": "f570a29d1c628a7dfe02a04353182b825f4693e7c50979e520ad78c694756799",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+          "bundle_id": "57a4d6fcb1cb67d184bebe945e35aa8c1721aafd55bd5d9a3aedc2c5ce7fcb10",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "f570a29d1c628a7dfe02a04353182b825f4693e7c50979e520ad78c694756799"
+      ],
+      "optional_findings": {
+        "F-ecf9d05e7a6b": {
+          "digest": "ecf9d05e7a6b6789938e4e73b4355eb11b4e8e991f7f890a8a6c96616bbad075",
+          "text": "**L1-O1: The limit derivation (D3) has no real-world evidence, and the `rate_limit_reached_type` the rollout carries goes unused.** `tests/harness_contract/codex/stderr_shapes.txt:81-96` records that no real Codex usage-limit event was ever captured, and that `token_count.rate_limits.rate_limit_reached_type` was null in every capture. D3 relies on a 100-percent reading being present when Codex's limit record classifies the run, and that has only been shown against the fake. Consider saying so in Risks (the fact may be inert against the real binary, and the fallback is a safe ordinary failure). Consider also filling `rate_limit_type` from `rate_limit_reached_type` when it is present instead of always `null`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f570a29d1c628a7dfe02a04353182b825f4693e7c50979e520ad78c694756799",
+              "verdict": "REVISE",
+              "at": "2026-11-02T00:34:11Z"
+            }
+          ]
+        },
+        "F-bba224085a0e": {
+          "digest": "bba224085a0e229fcb67bf002b41c0c4ed59d284c31c5571fd5a79e8c62f5bbb",
+          "text": "**L1-O2: A Risks test is not in any done-when.** Risks says \"a test pins that a second admission after a finished job sees the new percent\", but CP1's done-when does not list it. Add it to CP1 so the promised test is checked at the checkpoint.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f570a29d1c628a7dfe02a04353182b825f4693e7c50979e520ad78c694756799",
+              "verdict": "REVISE",
+              "at": "2026-11-02T00:34:11Z"
+            }
+          ]
+        },
+        "F-ed488353b415": {
+          "digest": "ed488353b4159b642b7cea824c5e8afd897668ae9b3d9256861d869d24f9415f",
+          "text": "**L1-O3: \"the latest such window\" (D3) and \"the latest-reset window\" (CP2) differ.** D3 could be read as the latest observed reading, CP2 says the latest `resets_at`. Use one wording, and say what happens on a tie between the five-hour and weekly windows.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f570a29d1c628a7dfe02a04353182b825f4693e7c50979e520ad78c694756799",
+              "verdict": "REVISE",
+              "at": "2026-11-02T00:34:11Z"
+            }
+          ]
+        },
+        "F-fb08908b6b3e": {
+          "digest": "fb08908b6b3e67137b214678085db6ce34b66ca218aa1a9f853e91329cc78fc2",
+          "text": "**L2-O1: The \"changed nothing\" test reads the managed repository, but a Codex worker writes in its own prepared tree.** `_limit_moved_nothing` (`controller/job.py:2919`) compares the phase, `HEAD` and the tracked-change baseline of the managed repository root. `_run_codex_worker` runs the worker in the tree `CODEX_WORKTREE_PREPARER` returns (`job.py:8787`), not in the managed root. So a limited Codex job always passes the three-part test and becomes `INTERRUPTED`, whatever it did in its own tree. For this milestone that is true: no preparer is decided and nothing the worker writes returns to the managed repository. But D3's \"apply unchanged\" will stop being true once H4e decides how a Codex worker's commits land. Consider adding a Risks line saying the test reads the managed repository only, and that the worktree-preparer decision before H4e must revisit it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T00:38:47Z"
+            }
+          ]
+        },
+        "F-132dafed381c": {
+          "digest": "132dafed381ca17dd9b4961b9fbcb5f79b2814211d16c9b22d154ed89f096603",
+          "text": "Clarify D3’s “changed nothing” scope: `_limit_moved_nothing` (`controller/job.py:2919`) checks the managed repository, while `_run_codex_worker` launches in the prepared worker tree (`controller/job.py:8787`). Changes confined to that tree therefore do not prevent repetition. This fits the fixture milestone; documenting it would help the future worktree and commit-landing decision revisit the rule.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T00:40:44Z"
+            }
+          ]
+        }
       }
     }
   }

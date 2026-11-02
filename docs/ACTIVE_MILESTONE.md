@@ -2,6 +2,22 @@
 
 ## Status
 
+**In progress.** `workflow-controller-checklist-recogniser` (FL1, issue
+[#227](https://github.com/RodrigoFAbreu/workflow-controller/issues/227)) makes the functional checklist recogniser read
+`F1`, `3a`, `6.1` and `6b-split` style labels and refuse a partly recognised checklist. The plan is
+`docs/ai-workflow/CONTROLLER_CHECKLIST_RECOGNISER_PLAN.md`. CP1 is complete: `controller/functional_review.py` accepts the D2
+label in the four shapes (the table first cell, the bold and heading label, the numbered item, `### Flow 6.1`), each shape
+returns its recognised items, their line spans and the items that look like a flow and are not, and `_flows_of_lines`
+follows D7's four steps, so a shape that recognises some items and not others raises `checklist_unrecognised` with
+`shape`, `recognised`, `total` and `unrecognised` (and `first_cells` when a table is seen and nothing is found) instead of
+returning the partial list. `tests/test_functional_review.py` covers the grammar, completeness and shape choice, and the two
+Manager checklists are fixtures. The history measurement (D6) found no new refusal; the checklists it reads differently are
+`settings-and-telemetry` (16 flows to 29, `B1`..`B6` and the others read as their own flows), `adaptive-test-sharding` (13 to 17,
+the rows `L1`..`L4` the old reader dropped) and `usage-limit-mid-job` (9 to 10, the row `7b`), none losing a line of text. CP2
+(the shape words, the guides and the roadmap) is next.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-codex-worker-usage` (H4d, issue
 [#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)) admits a Codex worker job against the Codex usage
 budget, accounts it and holds it on its usage limit, for a fixture role. The plan is

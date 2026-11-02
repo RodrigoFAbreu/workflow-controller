@@ -57,7 +57,7 @@ written here once the watchdog is armed: a test that orphans a fake waits for it
 ``none``, ``limit``, ``hang``, ``missing_status``, ``block``, ``revise``; the header-retry
 kinds ``revise_then_approve``, ``revise_then_revise`` and ``no_status_then_exact`` each give a wrong id first and an exact
 header on the retry, with the ``Status:`` the name says), ``exit``,
-``limit_shape`` (``string``, ``http429`` or ``percent``: how the rollout reports the
+``limit_shape`` (``string``, ``http429``, ``percent`` or ``string_full`` (the string error with the five-hour window at 100 percent): how the rollout reports the
 limit), ``message`` (text written to the ``-o`` file instead of a review verdict, so a tester's final message can be scripted; ``""``
 writes an empty file), ``stderr`` (text printed on stderr, a transcript line), ``stdout`` (text printed on stdout), ``subagent``
 (write a sub-agent rollout with that many total tokens),
@@ -367,13 +367,15 @@ def _write_rollout(home: Path, scenario: dict, spec: dict | None = None, *, suba
     source = {"subagent": {"thread_spawn": {"parent_thread_id": subagent_of, "depth": 1}}} if subagent_of else "exec"
     limit = spec.get("verdict") == "limit" and subagent_of is None
     shape = spec.get("limit_shape", "string")
-    reading = {"primary": {"used_percent": 100.0 if limit and shape == "percent" else limits["primary"],
+    full = limit and shape in ("percent", "string_full")
+    reading = {"primary": {"used_percent": 100.0 if full else limits["primary"],
                            "window_minutes": 300, "resets_at": int(now.timestamp()) + 3600},
                "secondary": {"used_percent": limits["secondary"], "window_minutes": 10080,
                              "resets_at": int(now.timestamp()) + 86400}}
     complete = {"type": "task_complete", "last_agent_message": None}
-    if limit and shape in _LIMIT_INFO:
-        complete["error"] = {"message": "You've hit your usage limit.", "codex_error_info": _LIMIT_INFO[shape]}
+    if limit and shape in _LIMIT_INFO or limit and shape == "string_full":
+        info = _LIMIT_INFO["string" if shape == "string_full" else shape]
+        complete["error"] = {"message": "You've hit your usage limit.", "codex_error_info": info}
     lines = [
         {"timestamp": stamp, "type": "session_meta", "payload": {"id": thread, "source": source, "originator": "codex_exec"}},
         {"timestamp": stamp, "type": "event_msg", "payload": {

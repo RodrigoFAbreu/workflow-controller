@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from . import codex_build, codex_tester, codex_worker_sandbox, command_files, review, runtime, usage, worker
+from . import codex_build, codex_tester, codex_worker_job, codex_worker_sandbox, command_files, review, runtime, usage, worker
 from .errors import ReviewLaunchRefusedError
 
 #: ``subtype`` of a result, by cause. ``sandbox_breach`` is the one the plan fixes (D5).
@@ -214,6 +214,11 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
     if breach:
         outcome, subtype = worker.FAILURE, SUBTYPE_BREACH
         diagnosis["subtype"] = subtype
+    elif subtype == SUBTYPE_LIMIT:
+        # H4d (D3): the structured fact only when Codex's own limit record classified the run and the readings show it.
+        fact = codex_worker_job.limit_fact(diagnosis.get("readings"))
+        if fact is not None:
+            diagnosis["usage_limit"] = fact
     return worker.WorkerResult(
         outcome=outcome, returncode=ran.exit_code, session_id=None, is_error=outcome != worker.SUCCESS,
         subtype=subtype, terminal_reason=None, stop_reason=None, result=message, num_turns=None,

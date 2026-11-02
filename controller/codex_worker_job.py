@@ -9,11 +9,11 @@ the derived ``usage_record``. Each is a function of its arguments; none writes a
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from . import usage_record, worker
+from . import usage, usage_record, worker
 
 
 def launch_options(*, runtime_root: Path, job_id: str, operator_home: Path, cwd: Path, timeout: float | None,
@@ -42,3 +42,23 @@ def usage_builder(result: worker.WorkerResult, route: Any) -> Callable[[], usage
         return usage_record.from_codex_rollouts(rollouts, model=route.model, wall_ms=result.duration_ms)
 
     return build
+
+
+def limit_fact(readings: Iterable[Mapping] | None) -> dict[str, Any] | None:
+    """The ``usage_limit`` fact of a run whose job-home readings show the shape of a limit (H4d, D3): a window at 100
+    percent or more with a finite ``resets_at``. Of several such windows the one with the latest ``resets_at`` is taken,
+    the weekly one on a tie. ``None`` for no such window (a reset time is never invented). ``rate_limit_type`` is null:
+    the readings do not carry Codex's ``rate_limit_reached_type``."""
+    best: Mapping | None = None
+    for reading in readings or ():
+        percent, resets_at = reading.get("percent"), reading.get("resets_at")
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and v - v == 0 for v in (percent, resets_at)):
+            continue
+        if percent < 100:
+            continue
+        if best is None or (resets_at, reading.get("window") == usage.WEEKLY) > (
+                best["resets_at"], best.get("window") == usage.WEEKLY):
+            best = reading
+    if best is None:
+        return None
+    return {"resets_at": best["resets_at"], "window": best.get("window"), "rate_limit_type": None}

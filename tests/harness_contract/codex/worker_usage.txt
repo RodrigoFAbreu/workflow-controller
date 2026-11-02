@@ -1,0 +1,29 @@
+# Codex worker usage, codex-cli 0.163.0 (H4d, workflow-controller-codex-worker-usage)
+
+Measured 2026-11-02 with
+`CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_usage_live`
+(two tests, 4.6 s: `LiveCommandRendersTest`, no model; `LiveUsageTest`, one short real model turn).
+
+Setup: as `worker_job.txt` (scratch legacy target in phase `PLANNING`, a recorded `verify-codex` entry for the real
+build, the fixture role `codex-live-fixture`, a scratch clone as the worktree, the operator's Codex home), plus a real
+usage gate: `usage.admit(provider=codex)` over the scratch runtime root, so the operator's shared record is not touched.
+
+Result: the test passed through `job.execute_step` and a real `codex exec`:
+
+    --- status: FAILED (phase_not_in_to_any_of), worker_outcome SUCCESS, subtype success, exit 0, 3047 ms ---
+    done
+    --- usage block ---
+    accounting done, provider codex, role milestone-plan, model gpt-6.1-sol, a token bound to the job,
+    reserved five_hour 8.0 / weekly 1.0, charged 8.0, end readings five_hour_end 3.0 % and weekly_end 37.0 %
+    (both read from the job's own Codex home), end_window_resets_at 1793589865, weekly_end_resets_at 1793776825
+    --- usage_record ---
+    harness codex, provider openai, model gpt-6.1-sol, input 10327, output 5, every quality `derived`,
+    cost None / cost_source `unknown` (the price table has no price for the model), wall_ms 3047
+
+Asserted and held: the gate was asked once with provider `codex` and returned a token; a reservation for that token
+existed at admission; the `usage` block carries the token and `accounting` `done`; the shared record was left with no open
+reservation, the token in `settled` and one ledger entry of provider `codex`; plus every assertion of `worker_job.txt`.
+
+Not covered: a Codex usage limit cannot be provoked, so the mid-job hold (D3, D4) is proven only against the fake Codex.
+`rate_limit_reached_type` was not observed (see `stderr_shapes.txt`). The record's `status` is `FAILED` for the reason
+`worker_job.txt` states: the tree is a clone, not the managed repository.

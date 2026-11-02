@@ -1,0 +1,42 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-codex-worker-usage",
+ "dispositions": {
+  "F-132dafed381c": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6568385796"
+  },
+  "F-207331f3735c": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6568385796"
+  },
+  "F-50c8e1b1d4c6": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6568385796"
+  },
+  "F-94eccb65ed94": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6568385796"
+  },
+  "F-bba224085a0e": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the promised second-admission test is listed in CP1's done-when."
+  },
+  "F-c4a799cccd8a": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6568385796"
+  },
+  "F-ecf9d05e7a6b": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D3 states the lack of real-world evidence, the safe fallback to an ordinary failure, and that rate_limit_reached_type is unused."
+  },
+  "F-ed488353b415": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: D3 and CP2 use one wording (the latest resets_at, the weekly window on a tie)."
+  },
+  "F-fb08908b6b3e": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6568385796"
+  }
+ }
+}

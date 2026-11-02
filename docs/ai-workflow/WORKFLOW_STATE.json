@@ -51807,7 +51807,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-codex-worker-usage-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-codex-worker-usage-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -51920,7 +51920,186 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "77420355de7370f8bbc05d0d9ca94a9128d5ec5ecc0ae52bd8e7057d82e6be76",
+        "approved_review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2c97deb8895bcc4c762d7786cf55b88a5368aa05"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4afa3472a3406d71205f66441122328a0950be33"
+          },
+          {
+            "path": "controller/codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "006b8bb521dd1cbab9064d20fa82d046820eac5f"
+          },
+          {
+            "path": "controller/codex_worker_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9193cfe379986cd4b156b960efc8bcf680efcb57"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d64edfdc006e0f7483ba3af29077b87b698aede8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-codex-worker-usage-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9cbb0a0825d6b533d8264cfe43dec9b3a5b5aa51"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "254277afa64e90f9d80d07398d7d96ec576fedb9"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "240fbc8210ecfd0560bd4fe8cdc58079f98bc1a7"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6bdeea65b398b9abbe634210e39361420c97222c"
+          },
+          {
+            "path": "tests/fake_codex.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "300df0a8c3ebfd4b0fbe2427482f5a08eac6098d"
+          },
+          {
+            "path": "tests/harness_contract/codex/worker_usage.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "150553d7e723ef46046b8b6c2c1a09697b96087f"
+          },
+          {
+            "path": "tests/test_codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7cc2fe1aab17b956d783e8cc5206c89b240d6602"
+          },
+          {
+            "path": "tests/test_codex_worker_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1a684ed9727d371c5774e7610c05f5849c97b3a1"
+          },
+          {
+            "path": "tests/test_codex_worker_usage_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5b8923e61bfe77c093744cac16bc0a3fe7dc77cb"
+          },
+          {
+            "path": "tests/test_job_codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "df45ab477420b4d7566071dbe51b798c49609f2d"
+          },
+          {
+            "path": "tests/test_job_codex_worker_limit.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e268ae52b4eb7b243797d9c5fd05e45116ee6da4"
+          },
+          {
+            "path": "tests/test_job_codex_worker_usage.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2de6ae43190c0178be6c3ba68fc0cfa2e346b0f3"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fe683ae5473e3077bbc751e9074da5fa9643c272"
+          }
+        ],
+        "reviewed_content_commit": "5f3ea5a90fc165c598bfc1491c70e64d0f3da3ee",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T01:43:37Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+            "ledger": {
+              "local": {
+                "bundle_id": "77420355de7370f8bbc05d0d9ca94a9128d5ec5ecc0ae52bd8e7057d82e6be76",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "9939234b1943ceefdb05021af200793b863b3c2860e9f113e3cd2e4fb4b03e0b",
+                "ledger_entry_sha256": "a5ba9502fe657c4307af42e1bd5933d5c79127dcb8865ed439304cc9586c3c5e",
+                "run_ref": "session:local .ai-review/workflow-controller-codex-worker-usage/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "77420355de7370f8bbc05d0d9ca94a9128d5ec5ecc0ae52bd8e7057d82e6be76",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "fda60035cb5716fa81d4b0ad08e06df7811aa4d65e4ee5f56cfc66d11d27229d",
+                "ledger_entry_sha256": "66adb9b98d8b61d0691b28bbe473ad1fb384e060c57b5fb10808f7d7d3ca0196",
+                "run_ref": "codex:20261102T013921Z-fc76f8f0",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T01:43:37Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "acd86a7b4a32f31fe543c03308594a3766b652e3e216b2a28f483c09d215f5cc",
@@ -51951,12 +52130,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-11-02T01:18:52Z",
+      "state_revision": 19,
+      "last_transition": "2026-11-02T01:43:37Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -52049,6 +52228,83 @@
               "at": "2026-11-02T00:40:44Z"
             }
           ]
+        },
+        "F-207331f3735c": {
+          "digest": "207331f3735c9c0d0c06710efa67bd9ef91c3e7a601bcd3ed2e8c8c41cd47e6f",
+          "text": "**O1. The \"second admission\" test does not admit a second time.** `tests/test_job_codex_worker_usage.py` `test_a_second_admission_after_a_finished_job_sees_its_end_percent` checks that the shared record's Codex `five_hour` reading is 7.0 after the job, which is what the next admission reads, but it never runs a second `usage.admit`/gate call. CP1's done-when says \"a second admission ... sees the percent\". A follow-up could admit again and assert the hold or forecast reflects the merged percent.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T01:38:56Z"
+            }
+          ]
+        },
+        "F-c4a799cccd8a": {
+          "digest": "c4a799cccd8af53299aa941d2cc478ff6b21a62fadffa576cf1dcaad91241605",
+          "text": "**O2. The `run` loop test replaces `_usage_wait` rather than driving a fake clock.** `tests/test_job_codex_worker_limit.py` `RunAndStepTest` replaces `execute_step` and `cli._usage_wait`, so it proves the provider, the repeat count and the stop line but not that the wait targets the Codex `resets_at`. CP2 named \"through the CLI with a fake clock\". The unchanged `tests.test_usage_limit_mid_job` covers the wait mechanics for any provider, so the risk is low.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T01:38:56Z"
+            }
+          ]
+        },
+        "F-94eccb65ed94": {
+          "digest": "94eccb65ed94d7e8fe6edf7a893a815b6243d2e1cb1e2a49838e39f366dc9bd7",
+          "text": "**O3. `docs/guide/workers.md` \"How a usage limit is recognised\" describes only the Claude stream fields.** The Codex derivation (a limit record plus a full window in the job's home) is in `docs/guide/harnesses.md#a-codex-worker-on-the-usage-budget`. A one-line pointer from the workers section would help readers who start there.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T01:38:56Z"
+            }
+          ]
+        },
+        "F-50c8e1b1d4c6": {
+          "digest": "50c8e1b1d4c69537bd09706b01e0e6a00fd0023865cd3ea6f1b1fee4025bc7ec",
+          "text": "Strengthen `tests/test_job_codex_worker_usage.py:109–121`: the second-admission test only inspects stored readings, and the renewal test only checks mocked `start`/`stop` calls. Exercise a second admission and an actual renewal using readiness signals to pin the intended behavior.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T01:41:53Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "2340a73e666605a4162e32a824bcb36636714583ac155eda008b5972daca8d39",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "77420355de7370f8bbc05d0d9ca94a9128d5ec5ecc0ae52bd8e7057d82e6be76",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-02T01:38:56Z",
+          "verdict_sha256": "9939234b1943ceefdb05021af200793b863b3c2860e9f113e3cd2e4fb4b03e0b",
+          "run_ref": "session:local .ai-review/workflow-controller-codex-worker-usage/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "77420355de7370f8bbc05d0d9ca94a9128d5ec5ecc0ae52bd8e7057d82e6be76",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-02T01:41:53Z",
+          "verdict_sha256": "fda60035cb5716fa81d4b0ad08e06df7811aa4d65e4ee5f56cfc66d11d27229d",
+          "run_ref": "codex:20261102T013921Z-fc76f8f0",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

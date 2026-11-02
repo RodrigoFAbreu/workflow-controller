@@ -20,7 +20,7 @@ asserts both leads, `docs/guide/automation.md` states the label with a table of 
 recognised checklist, `docs/common-problems.md` and `docs/guide/troubleshooting.md` name the new case, and `docs/ROADMAP.md`
 marks FL1 done (a `fix:` patch, 1.27.3, no new setting). The milestone is implemented, functionally reviewed and accepted by policy.
 
-Next action: `/milestone-plan` for CU3c (clean-up, part 3), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
+Next action: `/milestone-plan` for FL2 ([#271](https://github.com/RodrigoFAbreu/workflow-controller/issues/271), the cross-shape checklist drop), then CU3c (clean-up, part 3), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
 
 Previous item, now complete:
 

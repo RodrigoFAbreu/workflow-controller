@@ -16,7 +16,7 @@ of the shape used (or hold a table's rows), `tests/test_functional_lifecycle.py`
 (no job, sandbox or reservation), the automation guide states the rule, the two problem pages name the case and the roadmap
 marks FL2 done (1.27.4).
 
-Next action: `/milestone-implement` again (full verification, then the implementation review bundle).
+Next action: manual functional review of FL2 (the checklist below), then `/accept-milestone`.
 
 Previous item, now complete:
 
@@ -193,30 +193,35 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-checklist-recogniser` (FL1, issue [#227](https://github.com/RodrigoFAbreu/workflow-controller/issues/227)),
-implementation revision 2. The change is a pure parser (`controller/functional_review.py`) plus the words of one gate text, so every
+Item `workflow-controller-checklist-cross-shape` (FL2, issue [#271](https://github.com/RodrigoFAbreu/workflow-controller/issues/271)),
+implementation revision 1. The change is a pure parser (`controller/functional_review.py`) plus the words of one gate text, so every
 flow is offline and unit-level: no network, `gh`, `claude`, `codex` or `ssh`, and no flow writes inside the product clone. Run from
-the product clone with `TMPDIR` set to a writable scratch directory, `python3 -B` and no `PYTHONPATH=.`. Flows 2 to 5 read text with
-`python3 -B -c` and create no folder; the history measurement of D6 needs the full git history and is operator-run if the clone is
-shallow.
+the product clone with `TMPDIR` set to a writable scratch directory, `python3 -B` and no `PYTHONPATH=.`. Flows 2 to 6 read text with
+`python3 -B -c` and create no folder. Flow 7 runs real lifecycle scenarios in folders under `/tmp` (about two minutes) and is
+operator-run when the sandbox is tight. The history measurement of D6 needs the full git history and is operator-run.
+
+Setup for flows 2 to 6: each prints either the flows read or the refusal; `H` below is the heading `## Functional review checklist`.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Label grammar, completeness and shape choice (CP1) | `python3 -B -m unittest tests.test_functional_review` | All tests pass (80 `test_` functions): the D2 label in the four shapes, a partly recognised shape refused with `shape`, `recognised`, `total`, `unrecognised`, the D7 shape-choice order, and the two Manager checklists and `settings-and-telemetry` as fixtures. |
-| 2 | Manager fixture reads as five flows (R3) | `python3 -B -c "import controller.functional_review as fr; fs=fr.read_flows(open('tests/fixtures/functional_checklists/table_f_labels_cache_miss_message.md').read()); print([(f.flow_id, f.label) for f in fs])"` | Five flows, `flow-1`..`flow-5`, labelled `F1`..`F5`. The `http_read_test_strength` fixture gives five too. |
-| 3 | A partly recognised table is refused (R2) | `python3 -B -c "import controller.functional_review as fr; t='## Functional review checklist\n\n| # | Flow | Expected |\n|---|---|---|\n' + ''.join(f'| {c} | do | ok |\n' for c in ['A','B','C','Flow 4','Flow 5','Flow 6','Flow 7','Flow 8','Flow 9']); fr.read_flows(t)"` | Raises `ChecklistUnrecognised` (the traceback message is the refusal; code `checklist_unrecognised`): the table shape recognised 3 of 9 items and the message names the six `Flow N` first cells and states the accepted label; it does not say "no functional flow can be recognised". |
-| 4 | Words inside a flow are not refused (R2) | `python3 -B -c "import controller.functional_review as fr; t='## Functional review checklist\n\n**1. Run it.**\n\n**Setup.** make a folder.\n**Expected:** it prints ok.\n\n**2. Check it.**\n\n**Expected:** exit 0.\n'; print([(f.flow_id, f.label) for f in fr.read_flows(t)])"` | Two flows, `flow-1` (`1`) and `flow-2` (`2`); `**Setup.**` and `**Expected:**` stay in their flow's text and nothing is refused. |
-| 5 | Older headings checklist keeps every flow (D7, R4) | `python3 -B -c "import controller.functional_review as fr; t=open('docs/milestones/completed/workflow-controller-documentation-reorganisation.md').read(); print([f.label for f in fr.read_flows(t)])"` | Nine flows `A`..`I`, `C` (the read-through) among them; the nested `A1`, `B1`, `D1` rows stay inside their headings. If the file lacks a recognised checklist section, note the error text. |
-| 6 | Gate text for a partial refusal (CP2) | `python3 -B -m unittest tests.test_functional_lifecycle` | Pass: a checklist with one recognised and one unrecognised flow stops at `checklist_unrecognised` and the gate text begins "the functional review checklist is only partly recognised", names the item and does not contain "has no flow"; a checklist with none keeps the "has no flow the Controller can recognise" lead and says "a flow label". |
-| 7 | Neighbours, containment, documents | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_protocol_job`, then `python3 -B tools/check_docs.py` | All pass and `check_docs.py` exits 0; `docs/guide/automation.md` states the label with its table of examples and the refusal of a partly recognised checklist, `docs/common-problems.md` and `docs/guide/troubleshooting.md` name the new case, and `docs/ROADMAP.md` marks FL1 done. |
+| 1 | Cross-shape tests (CP1) | `python3 -B -m unittest tests.test_functional_review` | All 90 tests pass, including the `CrossShapeTest` class (heading before and after a bold flow, a group heading, the second case of the issue, one refusal per deciding shape, the forms that are not refused, the evidence, precedence, and the historical checklists as fixtures). |
+| 2 | First case of the issue is refused (R1) | `python3 -B -c "import controller.functional_review as fr; fr.read_flows('## Functional review checklist\n\n### A. One\ngo\n\n**B. Two.** x\n')"` | Raises `ChecklistUnrecognised` (code `checklist_unrecognised`): the bold shape decided 1 flow; the heading `A` another shape recognised would not run. Evidence: `shape` `bold`, `recognised` 1, `total` 2, `unrecognised` `['A']`, `dropped` `[{'shape': 'heading', 'label': 'A'}]`. It no longer reads the one flow `B`. |
+| 3 | Position rule, both sides (D1, D7) | Same as flow 2 with `\n\n### Notes\nz\n` appended; then the bold flow first and the heading after: `'## Functional review checklist\n\n**B. Two.** x\n\n### A. One\ngo\n'` | Each is refused naming `A` with `shape` `bold`: a heading ended by a later heading, or placed after the bold flow, is not inside the flow and would not run. |
+| 4 | Second case of the issue (R1) | `python3 -B -c "import controller.functional_review as fr; fr.read_flows('## Functional review checklist\n\n### A. Login\n\nrun the cases:\n\n| # | Case | Expected |\n|---|---|---|\n| 1 | go | ok |\n| 2 | stop | ok |\n\n### C. Read\n\nread the page aloud and check it.\n')"` | Refused naming `C` only (`unrecognised` `['C']`, `dropped` `[{'shape': 'heading', 'label': 'C'}]`): heading `A` holds the rows of the table that decided, so it is accepted; the table-less `C` would not run. |
+| 5 | Nested and setup items are not refused (R2) | `python3 -B -c "import controller.functional_review as fr; H='## Functional review checklist\n\n'; print([f.label for f in fr.read_flows(H+'**A. One.** run it.\n\n1. nested step\n2. another\n\n**B. Two.** x\n')]); print([f.label for f in fr.read_flows(H+'### Setup\n\n1. a\n2. b\n\n**A. One.** run\n\n**B. Two.** x\n')])"` | Prints `['A', 'B']` twice: a numbered list inside a bold flow, and a numbered list under `### Setup`, are accepted; flow ids and order are the bold shape's, as before. |
+| 6 | Historical checklists read as before (R3) | `python3 -B -c "import controller.functional_review as fr; t=open('docs/milestones/completed/workflow-controller-documentation-reorganisation.md').read(); print([f.label for f in fr.read_flows(t)])"` | Nine flows `A`..`I` (the heading shape with nested tables); no refusal. If the file lacks a recognised checklist section, note the error text. |
+| 7 | Gate text and lifecycle (CP2) | `python3 -B -m unittest tests.test_functional_lifecycle` (operator-run) | Passes: a checklist where the bold shape decides and a heading flow lies outside it stops at `checklist_unrecognised` before any job, sandbox or reservation exists; the gate text begins "the functional review checklist is only partly recognised", names the heading's label, and states that a flow another shape recognised must lie inside a flow of the shape used (or hold a table's rows). |
+| 8 | Neighbours, containment, documents (R4) | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_protocol_job`, then `python3 -B tools/check_docs.py` | All pass and `check_docs.py` exits 0; `docs/guide/automation.md` states the rule once (accounted for by starting inside a flow, or holding the rows of the table that decided; the non-flow regions; the evidence `dropped`), `docs/common-problems.md` and `docs/guide/troubleshooting.md` refer to it, and `docs/ROADMAP.md` marks FL2 done (1.27.4). |
+| 9 | History measurement (D6, operator-run) | Rerun the one-off measurement over every revision of `docs/ACTIVE_MILESTONE.md`, `docs/milestones/completed/`, the Manager checklists and the vendored fixtures, in a `mktemp -d` copy | No checklist the base read completely is newly refused or read differently (CP1's report recorded 392 texts, 64 distinct sections, 63 read on the base, none newly refused). |
 
 **Known limitations / out of scope.** No setting, option, exit code, gate or result contract changes; the refusal keeps its code,
-shape list and remedy. An optional, qualified flow header (`**Optional, K. Title.**`) is deliberately neither a flow nor a refusal
-candidate. `settings-and-telemetry` now reads as 29 flows, not 16 (D6, named and pinned by a test; nothing is dropped). A label with
-no closing mark (`**6.1 Title.**`) is neither a flow nor a candidate. The change is a `fix:` patch release (1.27.3). The full suite is
-not a flow (`test_functional_sandbox` has a known CI flake, #206; `tests/test_codex_tester.py` has a pre-existing shared-tag
-collision).
+shape list and remedy, and gains the `dropped` evidence. The label grammar, the order of the four shapes, `flow-N` ids and the
+tester's prompt are unchanged. A numbered list in the prose of a heading that holds a table's rows, a heading that groups bold
+flows, and a numbered setup list under a differently worded heading (`**Preparation.**`) are refused by design (D1, D7, Risks); the
+remedy is bullets, `### Setup`, or one shape per section. The numbered deciding shape has no cross-shape candidate. The change is
+a `fix:` patch release (1.27.4). The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206;
+`tests/test_codex_tester.py` has a pre-existing shared-tag collision).
 
 ## Next action
 
-Manual functional review of FL1 (the checklist above), then `/accept-milestone`.
+Manual functional review of FL2 (the checklist above), then `/accept-milestone`.

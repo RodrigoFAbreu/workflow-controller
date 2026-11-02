@@ -94,10 +94,13 @@ class FlowShapesTest(unittest.TestCase):
         self.assertEqual(flows[0].text, "1. first\n   continued")
 
     def test_the_first_rule_that_finds_a_flow_decides(self) -> None:
-        text = checklist("1. numbered\n\n**A. bold.** x\n\n| # | d |\n| --- | --- |\n| B | y |\n")
-        # Rule 1 (the table) wins over bold paragraphs and the list.
-        self.assertEqual([f.label for f in fr.read_flows(text)], ["B"])
-        no_table = checklist("1. numbered\n\n**A. bold.** x\n")
+        # Each other shape's item lies where it is accounted for (FL2): inside a flow read, or in a setup region.
+        nested = checklist("**A. bold.** x\n\n1. numbered\n\n**B. more.** y\n")
+        self.assertEqual([f.label for f in fr.read_flows(nested)], ["A", "B"])
+        held = checklist("### Setup\n\n1. numbered\n\n**A. bold.** x\n\n| # | d |\n| --- | --- |\n| B | y |\n")
+        # Rule 1 (the table) wins over a bold paragraph that holds its rows.
+        self.assertEqual([f.label for f in fr.read_flows(held)], ["B"])
+        no_table = checklist("### Setup\n\n1. numbered\n\n**A. bold.** x\n")
         self.assertEqual([f.label for f in fr.read_flows(no_table)], ["A"])
 
     def test_fenced_lines_are_never_a_flow_for_any_rule(self) -> None:
@@ -389,6 +392,126 @@ class ShapeChoiceTest(unittest.TestCase):
         start = names.index("B")
         self.assertEqual(names[start:start + 7], ["B", "B1", "B2", "B3", "B4", "B5", "B6"])
         self.assertEqual(len(flows[start].text.strip().splitlines()), 1)
+
+
+class CrossShapeTest(unittest.TestCase):
+    """FL2: a flow another shape recognised is accounted for by position, or refused. Each test states the
+    position of its item."""
+
+    OLD = TABLE_HEAD + "| 1 | do | ok |\n| 2 | do | ok |\n"
+
+    def dropped(self, body: str) -> dict:
+        evidence = refusal(checklist(body))
+        self.assertNotEqual(evidence["recognised"], 0)
+        return evidence
+
+    def test_the_heading_before_a_bold_flow_is_refused(self) -> None:
+        # position: starts before the bold flow it runs into
+        for body in ("### A. One\ngo\n\n**B. Two.** x", "### A. One\ngo\n\n**B. Two.** x\n\n### Notes\nhi"):
+            with self.subTest(body=body):
+                evidence = self.dropped(body)
+                self.assertEqual((evidence["shape"], evidence["recognised"], evidence["total"]), ("bold", 1, 2))
+                self.assertEqual(evidence["unrecognised"], ["A"])
+                self.assertEqual(evidence["dropped"], [{"shape": "heading", "label": "A"}])
+
+    def test_the_heading_after_a_bold_flow_is_refused(self) -> None:
+        # position: starts after the bold flow, which a heading ends
+        self.assertEqual(self.dropped("**B. Two.** x\n\n### A. One\ngo")["unrecognised"], ["A"])
+
+    def test_a_heading_that_groups_bold_flows_is_refused(self) -> None:
+        # position: starts before the bold flows
+        grouped = self.dropped("### A. Group\n\n**A1.** check x\n\n**A2.** check y")
+        self.assertEqual((grouped["shape"], grouped["unrecognised"]), ("bold", ["A"]))
+        self.assertEqual(labels(checklist("### A. One\n\n**Expected.** check x\n")), ["A"])
+
+    def test_the_second_case_of_the_issue(self) -> None:
+        # heading A holds the rows of the table that decided; heading C starts outside every flow
+        body = "### A. Login\ngo\n\n" + self.OLD + "\n### C. Read\nread the guide\n"
+        evidence = self.dropped(body)
+        self.assertEqual((evidence["shape"], evidence["recognised"], evidence["total"]), ("table", 2, 3))
+        self.assertEqual(evidence["dropped"], [{"shape": "heading", "label": "C"}])
+        self.assertEqual(labels(checklist("### A. Login\ngo\n\n" + self.OLD)), ["1", "2"])
+        self.assertEqual(labels(checklist("**A. Login.** go\n\n" + self.OLD)), ["1", "2"])
+
+    def test_one_refusal_per_deciding_shape(self) -> None:
+        # table: a bold paragraph ended before the table by a heading, and a numbered item before the table
+        ended = self.dropped("**A. One.** go\n\n### Notes\n\n" + self.OLD)
+        self.assertEqual(ended["dropped"], [{"shape": "bold", "label": "A"}])
+        before = self.dropped("1. Build.\n2. Scratch.\n\n" + self.OLD)
+        self.assertEqual(before["unrecognised"], ["1", "2"])
+        # bold: a numbered item before the first flow, and a heading before it
+        self.assertEqual(self.dropped("1. Build.\n\n**A. One.** go")["dropped"],
+                         [{"shape": "numbered", "label": "1"}])
+        # heading: a numbered item before the first heading flow
+        self.assertEqual(self.dropped("1. Build.\n\n### A. One\ngo")["dropped"],
+                         [{"shape": "numbered", "label": "1"}])
+        # Flows is no non-flow region
+        for flows in ("### Flows", "**Flows.**"):
+            with self.subTest(flows=flows):
+                self.assertEqual(self.dropped(f"**A. One.** go\n\n{flows}\n\n1. f\n2. g\n")["unrecognised"],
+                                 ["1", "2"])
+        # a numbered list in a table holder's prose is not passed to the tester (LMPR-R6-O2)
+        holder = self.dropped("### A. Login\n\n1. open\n2. type\n\n" + self.OLD)
+        self.assertEqual((holder["shape"], holder["unrecognised"]), ("table", ["1", "2"]))
+
+    def test_flows_after_a_region_are_candidates(self) -> None:
+        for setup in ("**Setup.**", "**Setup**"):
+            for flows in ("**Flows.**", "**Flows and expected results.**", "**Flows and expected results**"):
+                for decider in ("**A. One.** go\n\n", self.OLD + "\n"):
+                    with self.subTest(setup=setup, flows=flows, decider=decider[:6]):
+                        body = f"{decider}{setup}\n\n1. prepare\n\n{flows}\n\n1. f\n2. g\n"
+                        evidence = self.dropped(body)
+                        self.assertEqual(evidence["unrecognised"], ["1", "2"])
+
+    def test_forms_that_are_not_refused(self) -> None:
+        nested = "**A. One.** go\n1. step\n\n| id | do |\n| --- | --- |\n| F1 | x |\n\n**B. Two.** go"
+        self.assertEqual(labels(checklist(nested)), ["A", "B"])  # a numbered list after the first line
+        in_heading = "### A. One\nrun\n\n1. step\n\n| id | do |\n| --- | --- |\n| A1 | x |\n\n**Expected.** ok\n"
+        self.assertEqual(labels(checklist(in_heading)), ["A"])
+        for region in ("### Setup", "### Test data", "### Known limitations", "### Out of scope"):
+            with self.subTest(region=region):
+                self.assertEqual(labels(checklist(f"{region}\n\n1. a\n2. b\n\n**A. One.** go")), ["A"])
+        for opener in ("**Setup.**", "**Out of scope**"):
+            for end in ("### Next", "**B. flow.** x", "**Test data.**", "**Flows.**"):
+                with self.subTest(opener=opener, end=end):
+                    text = checklist(f"**A. One.** go\n\n{opener}\n\n1. a\n2. b\n\n{end}\n")
+                    self.assertEqual(labels(text)[0], "A")
+        pr_defect = checklist("### Setup\n\n1. a\n2. b\n3. c\n\n" + self.OLD)
+        self.assertEqual(labels(pr_defect), ["1", "2"])
+        outside = refusal(checklist("1. a\n2. b\n\n" + self.OLD))
+        self.assertEqual(outside["unrecognised"], ["1", "2"])
+
+    def test_the_evidence_names_eight_then_the_count(self) -> None:
+        body = "".join(f"### {c}. h\nx\n\n" for c in "BCDEFGHIJK") + "**A. One.** go"
+        evidence = refusal(checklist(body))
+        self.assertEqual((evidence["total"], evidence["unrecognised"]), (11, list("BCDEFGHIJK")))
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist(body))
+        self.assertIn("`I` (heading), and 2 more", caught.exception.message)
+
+    def test_a_partly_recognised_deciding_shape_is_refused_first(self) -> None:
+        evidence = refusal(checklist("**A. One.** go\n\n**B2x3x.** bad\n\n### C. Two\n"))
+        self.assertNotIn("dropped", evidence)
+
+    def test_the_historical_checklists_read_as_before(self) -> None:
+        done = REPO_ROOT / "docs" / "milestones" / "completed"
+        expected = {
+            "workflow-controller-pr-defect-loop.md": [str(n) for n in range(1, 13)],
+            "workflow-controller-ci-reliability.md": list("ABCDEFGHIJ"),
+        }
+        for name, want in expected.items():
+            path = done / name
+            if not path.exists():
+                continue
+            with self.subTest(name=name):
+                self.assertEqual(labels(path.read_text(encoding="utf-8")), want)
+        for name in ("workflow-controller-round-caps.md", "workflow-controller-codex-reviewer.md"):
+            path = done / name
+            if path.exists():
+                with self.subTest(name=name):
+                    self.assertTrue(labels(path.read_text(encoding="utf-8")))
+        self.assertEqual(labels((FIXTURES / "bold_labelled_454ffe7.md").read_text(encoding="utf-8")),
+                         list("ABCDEFGHIJ"))
 
 
 class DroppedRowsTest(unittest.TestCase):

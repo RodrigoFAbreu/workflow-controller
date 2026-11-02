@@ -233,6 +233,7 @@ _SECTION_END_RE = re.compile(
     + r")[ \t]*(?:[:.]|\*\*)"
     # or a flow header: one qualifier word, a comma, then the label (``**Optional, K. Title.**``)
     rf"|^\*\*[ \t]*[A-Za-z]+,[ \t]*{_LABEL}[.)][ \t]", re.IGNORECASE)
+_BOLD_LABELLED_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):](?!\d)")
 _HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")
 #: ``Flow <label>``: a complete label, alone or closed by a marker, else the text is read as before.
@@ -463,20 +464,94 @@ def _table_decides(rows: Sequence[_Row]) -> list[tuple[str, str]]:
     return flows
 
 
+#: The words of the checklist's own non-flow regions (D2): ``NEVER_FLOWS`` without ``flows``, which is where a
+#: checklist conventionally lists its flows, and with ``out of scope``.
+_REGION_WORDS = tuple(word for word in NEVER_FLOWS if word != "flows") + ("out of scope",)
+_REGION_OPEN_RE = re.compile(
+    r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in _REGION_WORDS) + r")[ \t]*(?:[:.]|\*\*)", re.IGNORECASE)
+#: A bold line whose first word is ``Flows`` (``**Flows.**``, ``**Flows and expected results**``) ends a region.
+_FLOWS_BOLD_RE = re.compile(r"^\*\*[ \t]*flows\b", re.IGNORECASE)
+
+
+def _nonflow_regions(lines: Sequence[str], mask: Sequence[bool], section_level: int) -> list[tuple[int, int]]:
+    """The line spans the checklist marks as not holding flows (D2): a heading below the section's own that starts
+    with one of the region words, up to the next heading of the same or a higher level, and a bold line that opens
+    one, up to the next heading, labelled bold paragraph, section-opening bold line or ``Flows`` bold line."""
+    regions: list[tuple[int, int]] = []
+    for index, line in enumerate(lines):
+        heading = _heading(line, mask[index])
+        if heading:
+            if heading[0] > section_level and heading[1].strip().lower().startswith(_REGION_WORDS):
+                end = next((later for later in range(index + 1, len(lines))
+                            if (nested := _heading(lines[later], mask[later])) and nested[0] <= heading[0]),
+                           len(lines))
+                regions.append((index, end))
+        elif not mask[index] and _REGION_OPEN_RE.match(line):
+            end = next((later for later in range(index + 1, len(lines))
+                        if not mask[later] and (_heading(lines[later], False) or _BOLD_LABELLED_RE.match(lines[later])
+                                                or _SECTION_END_RE.match(lines[later])
+                                                or _FLOWS_BOLD_RE.match(lines[later]))), len(lines))
+            regions.append((index, end))
+    return regions
+
+
+def _unaccounted(deciding: str, spans: Sequence[tuple[int, int]], held_rows: Sequence[int],
+                 found_by: Sequence[tuple[str, _Found]], regions: Sequence[tuple[int, int]],
+                 ) -> list[tuple[int, str, str]]:
+    """The items another shape recognised that would not run (D1): neither starting inside a flow that was read
+    (``spans``), nor sharing a line with a row of the table that decided (``held_rows``), nor inside a non-flow
+    region (D2). Returns (line, shape, label) in line order."""
+    dropped: list[tuple[int, str, str]] = []
+    for shape, found in found_by:
+        if shape == deciding:
+            continue
+        for (label, _), (start, end) in zip(found.items, found.spans):
+            if (any(first <= start < last for first, last in spans)
+                    or any(start <= line < end for line in held_rows)
+                    or any(first <= start < last for first, last in regions)):
+                continue
+            dropped.append((start, shape, label))
+    return sorted(dropped)
+
+
+def _dropped(deciding: str, read: int, dropped: Sequence[tuple[int, str, str]]) -> ChecklistUnrecognised:
+    """The refusal of a flow another shape recognised and the deciding shape would drop (D3)."""
+    named = [f"`{label}` ({shape})" for _, shape, label in dropped]
+    more = f", and {len(named) - EVIDENCE_NAMES} more" if len(named) > EVIDENCE_NAMES else ""
+    return _unrecognised(
+        f"the {deciding} shape decided {read} flow(s); {len(named)} item(s) another shape recognised neither start "
+        f"inside one of them nor hold a row of a table that decided, and would not run: "
+        f"{', '.join(named[:EVIDENCE_NAMES])}{more}. Put each inside a flow of the {deciding} shape, or give the "
+        f"section one shape",
+        shape=deciding, recognised=read, total=read + len(named), unrecognised=[label for _, _, label in dropped][:20],
+        dropped=[{"shape": shape, "label": label} for _, shape, label in dropped][:20])
+
+
 def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str, str]]:
     """D7's four steps, in order. The table shape decides when any row is
     old-form, or when no other shape found a flow; otherwise the first of the
     bold, heading and numbered shapes that found one decides, and a table row
-    only the widened label accepts is nested in a flow's span or refused."""
+    only the widened label accepts is nested in a flow's span or refused. An
+    item another shape recognised must then start inside a flow read, hold the
+    rows of the table that decided, or lie in a non-flow region, or the
+    checklist is refused (FL2)."""
     mask = _fence_mask(lines)
     rows = _table_rows(lines, mask)
     recognised = [row for row in rows if row.recognised]
-    if any(_OLD_LABEL_RE.match(row.label) for row in recognised):
-        return _table_decides(rows)
-    for shape, found in (
+    found_by = (
         ("bold", _paragraph_found(lines, mask)), ("heading", _heading_found(lines, mask, section_level)),
         ("numbered", _numbered_found(lines, mask)),
-    ):
+    )
+    regions = _nonflow_regions(lines, mask, section_level)
+    if any(_OLD_LABEL_RE.match(row.label) for row in recognised):
+        flows = _table_decides(rows)
+        proven = {row.table for row in rows if row.recognised}
+        read = [row.line for row in recognised if row.table in proven]
+        dropped = _unaccounted("table", [(line, line + 1) for line in read], read, found_by, regions)
+        if dropped:
+            raise _dropped("table", len(flows), dropped)
+        return flows
+    for shape, found in found_by:
         if not found.items:
             continue
         loose = [(row.line, row.label) for row in recognised
@@ -484,6 +559,9 @@ def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str,
         bad = sorted(found.unrecognised + loose)
         if bad:
             raise _partly_recognised(shape, len(found.items), bad)
+        dropped = _unaccounted(shape, found.spans, [], found_by, regions)
+        if dropped:
+            raise _dropped(shape, len(found.items), dropped)
         return found.items
     return _table_decides(rows)
 

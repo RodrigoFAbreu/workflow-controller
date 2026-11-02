@@ -2,6 +2,21 @@
 
 ## Status
 
+**In progress.** `workflow-controller-checklist-cross-shape` (FL2, issue
+[#271](https://github.com/RodrigoFAbreu/workflow-controller/issues/271)) makes the functional checklist recogniser refuse a
+flow that another shape recognised and the deciding shape would drop silently. The plan is
+`docs/ai-workflow/CONTROLLER_CHECKLIST_CROSS_SHAPE_PLAN.md`. CP1 is complete: `_flows_of_lines` keeps what the bold, heading
+and numbered finders found (also when the table decides) and, after FL1's checks, `_unaccounted` accepts an item only when it
+starts inside a flow that was read, holds a row of the table that decided, or lies in a non-flow region (`_nonflow_regions`:
+`Setup`, `Test data`, `Known limitations`, `Out of scope`, not `Flows`); otherwise `_dropped` raises `checklist_unrecognised`
+with the evidence `shape`, `recognised`, `total`, `unrecognised` and `dropped`. `CrossShapeTest` pins both cases of the issue
+and the position rule; the refusal tests fail on the base commit. The history measurement (D6, 392 texts, 64 distinct
+sections, 63 read on the base) found no checklist newly refused or read differently. CP2 (gate text, guides, roadmap) is next.
+
+Next action: `/milestone-implement` for CP2, then the implementation review.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-checklist-recogniser` (FL1, issue
 [#227](https://github.com/RodrigoFAbreu/workflow-controller/issues/227)) makes the functional checklist recogniser read
 `F1`, `3a`, `6.1` and `6b-split` style labels and refuse a partly recognised checklist. The plan is
@@ -19,10 +34,6 @@ partly recognised" when the refusal carried `recognised` (`job._FunctionalPlan.p
 asserts both leads, `docs/guide/automation.md` states the label with a table of examples and the refusal of a partly
 recognised checklist, `docs/common-problems.md` and `docs/guide/troubleshooting.md` name the new case, and `docs/ROADMAP.md`
 marks FL1 done (a `fix:` patch, 1.27.3, no new setting). The milestone is implemented, functionally reviewed and accepted by policy.
-
-Next action: `/milestone-plan` for FL2 ([#271](https://github.com/RodrigoFAbreu/workflow-controller/issues/271), the cross-shape checklist drop), then CU3c (clean-up, part 3), the next incomplete item on `docs/ROADMAP.md`. The previous item is recorded below.
-
-Previous item, now complete:
 
 **Complete.** `workflow-controller-codex-worker-usage` (H4d, issue
 [#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)) admits a Codex worker job against the Codex usage

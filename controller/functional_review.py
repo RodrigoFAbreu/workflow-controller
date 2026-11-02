@@ -194,20 +194,36 @@ def sha256_file(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 SECTION_TITLE = "Functional review checklist"
+#: How a table row with no first cell is named in a refusal, and how many names it shows.
+EMPTY_NAME = "(empty)"
+EVIDENCE_NAMES = 8
 #: Section and heading names that are never flows.
 NEVER_FLOWS = ("setup", "flows", "test data", "known limitations")
 FLOW_SHAPES = (
-    "table rows whose first cell is a short label (`| A | do | expect |`)",
+    "table rows whose first cell is a flow label (`| A | do | expect |`, `| F1 | ... |`)",
     "bold labelled paragraphs (`**A. The title.**`)",
     "headings below the section's own that start with a label or `Flow`",
     "a top-level numbered list",
 )
+#: What a flow label is, said once for the refusal (D2).
+LABEL_RULE = (
+    "A flow label is a letter with up to two digits (`A`, `F1`), or a number of one or two digits with dotted "
+    "parts and one optional letter (`7`, `3a`, `6.1`), either with one hyphenated qualifier (`6b-split`)"
+)
 
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
-_LABEL = r"(?:[A-Za-z]|\d{1,2})"
-_LABEL_CELL_RE = re.compile(rf"^{_LABEL}$")
-_BOLD_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):]")
+_QUALIFIER = r"(?:-[A-Za-z][A-Za-z0-9]{0,15})?"
+_LABEL = rf"(?:(?:[A-Za-z]\d{{0,2}}|\d{{1,2}}(?:\.\d{{1,2}})*[A-Za-z]?){_QUALIFIER})"
+_LABEL_RE = re.compile(rf"^{_LABEL}$")
+#: The label before the digit-led forms were accepted; a table row it accepts is "old-form" (D7).
+_OLD_LABEL_RE = re.compile(r"^(?:[A-Za-z]|\d{1,2})$")
+_NUMBERED_LABEL = rf"\d{{1,3}}(?:\.\d{{1,2}})*[A-Za-z]?{_QUALIFIER}"
+#: A marker token that is not a label: at most 24 letters, digits, ``.`` and ``-``, closed by ``.``,
+#: ``)`` or ``:``. A label is tried first and has no length bound of its own (D2), so the bound only
+#: limits the candidates of D1.
+_TOKEN = r"[A-Za-z0-9.\-]{1,24}"
+_BOLD_RE = re.compile(rf"^\*\*(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
 #: checklist's own non-flow sections; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
@@ -217,8 +233,12 @@ _SECTION_END_RE = re.compile(
     + r")[ \t]*(?:[:.]|\*\*)"
     # or a flow header: one qualifier word, a comma, then the label (``**Optional, K. Title.**``)
     rf"|^\*\*[ \t]*[A-Za-z]+,[ \t]*{_LABEL}[.)][ \t]", re.IGNORECASE)
-_HEADING_FLOW_RE = re.compile(rf"^(?:(?P<label>{_LABEL})[.):]|Flow\b[ \t]*(?P<rest>[^ \t.:)]*))")
-_NUMBERED_RE = re.compile(r"^(?P<label>\d{1,3})[.)][ \t]+\S")
+_HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
+_HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")
+#: ``Flow <label>``: a complete label, alone or closed by a marker, else the text is read as before.
+_FLOW_LABEL_RE = re.compile(rf"^(?P<label>{_LABEL})(?:[.):]?(?=[ \t]|$))")
+_NUMBERED_RE = re.compile(
+    rf"^(?:(?P<label>{_NUMBERED_LABEL})|(?P<token>{_TOKEN}))[.)](?=[ \t]+\S)")
 _SEPARATOR_RE = re.compile(r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$")
 _LINK_RE = re.compile(r"^(?:[-*][ \t]+)?\[[^\]]*\]\((?P<target>[^)\s]+)\)\.?$")
 
@@ -289,71 +309,128 @@ def checklist_section(text: str) -> Section | None:
     return Section(level=level, lines=tuple(lines[start + 1:end]))
 
 
-def _table_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[str, str]]:
-    flows: list[tuple[str, str]] = []
+@dataclasses.dataclass
+class _Found:
+    """What one shape finds in the section: its recognised ``items``
+    (label, text), the line ``spans`` of their text, and the ``unrecognised``
+    items (line, name) that look like a flow and are not one (D1)."""
+
+    items: list[tuple[str, str]] = dataclasses.field(default_factory=list)
+    spans: list[tuple[int, int]] = dataclasses.field(default_factory=list)
+    unrecognised: list[tuple[int, str]] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(frozen=True)
+class _Row:
+    """One data row of a table: its line, the table it is in, its first cell
+    and whether every cell is empty."""
+
+    line: int
+    table: int
+    label: str
+    blank: bool
+    text: str
+
+    @property
+    def recognised(self) -> bool:
+        return bool(_LABEL_RE.match(self.label))
+
+
+def _table_rows(lines: Sequence[str], mask: Sequence[bool]) -> list[_Row]:
+    rows: list[_Row] = []
+    tables = 0
     index = 1
     while index < len(lines):
         if mask[index] or mask[index - 1] or "|" not in lines[index - 1] or not _SEPARATOR_RE.match(lines[index]):
             index += 1
             continue
         index += 1
+        tables += 1
         while index < len(lines) and not mask[index] and "|" in lines[index]:
-            cells = lines[index].strip().strip("|").split("|")
-            label = cells[0].strip().strip("*").strip()
-            if _LABEL_CELL_RE.match(label):
-                flows.append((label, lines[index].strip()))
+            cells = [cell.strip() for cell in lines[index].strip().strip("|").split("|")]
+            rows.append(_Row(index, tables, cells[0].strip("*").strip(), not any(cells), lines[index].strip()))
             index += 1
-    return flows
+    return rows
 
 
-def _paragraph_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[str, str]]:
-    flows: list[tuple[str, str]] = []
+def _is_candidate(token: str, numbered: bool = False) -> bool:
+    """Whether a marker token that is not a label still looks like one (D1):
+    it holds a digit (the numbered shape: it starts with one). A token with no
+    digit is a word (``Expected``, ``Setup``) and is never a flow."""
+    return token[:1].isdigit() if numbered else any(char.isdigit() for char in token)
+
+
+def _paragraph_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
+    found = _Found()
     for index, line in enumerate(lines):
         match = None if mask[index] else _BOLD_RE.match(line)
         if not match:
+            continue
+        token = match.group("label") or match.group("token")
+        if not match.group("label"):
+            if _is_candidate(token):
+                found.unrecognised.append((index, token))
             continue
         # A flow runs to the next flow, heading or bold paragraph: a blank line
         # does not end it, since a table or a list of cases may follow one. A
         # bold paragraph stays in the flow unless it opens a non-flow section.
         end = index + 1
         while end < len(lines):
-            if not mask[end] and (_BOLD_RE.match(lines[end]) or _heading(lines[end], False)
+            later = None if mask[end] else _BOLD_RE.match(lines[end])
+            if not mask[end] and ((later and later.group("label")) or _heading(lines[end], False)
                                   or (lines[end].startswith("**") and not lines[end - 1].strip()
                                       and _SECTION_END_RE.match(lines[end]))):
                 break
             end += 1
-        flows.append((match.group("label"), "\n".join(lines[index:end]).rstrip()))
-    return flows
+        found.items.append((token, "\n".join(lines[index:end]).rstrip()))
+        found.spans.append((index, end))
+    return found
 
 
-def _heading_flows(lines: Sequence[str], mask: Sequence[bool], section_level: int) -> list[tuple[str, str]]:
-    flows: list[tuple[str, str]] = []
+def _heading_found(lines: Sequence[str], mask: Sequence[bool], section_level: int) -> _Found:
+    found = _Found()
     for index, line in enumerate(lines):
-        found = _heading(line, mask[index])
-        if not found or found[0] <= section_level:
+        heading = _heading(line, mask[index])
+        if not heading or heading[0] <= section_level:
             continue
-        title = found[1].strip()
+        title = heading[1].strip()
         if any(title.lower().startswith(word) for word in NEVER_FLOWS):
             continue
-        match = _HEADING_FLOW_RE.match(title)
-        if not match:
-            continue
-        label = match.group("label") or match.group("rest") or "Flow"
+        flow = _HEADING_FLOW_RE.match(title)
+        if flow:
+            rest = title[flow.end():]
+            named = _FLOW_LABEL_RE.match(rest)
+            label = named.group("label") if named else re.match(r"[^ \t.:)]*", rest).group() or "Flow"
+        else:
+            marked = _HEADING_MARK_RE.match(title)
+            if not marked:
+                continue
+            label = marked.group("label") or marked.group("token")
+            if not marked.group("label"):
+                if _is_candidate(label):
+                    found.unrecognised.append((index, label))
+                continue
         end = len(lines)
         for later in range(index + 1, len(lines)):
             nested = _heading(lines[later], mask[later])
-            if nested and nested[0] <= found[0]:
+            if nested and nested[0] <= heading[0]:
                 end = later
                 break
-        flows.append((label, "\n".join(lines[index:end]).rstrip()))
-    return flows
+        found.items.append((label, "\n".join(lines[index:end]).rstrip()))
+        found.spans.append((index, end))
+    return found
 
 
-def _numbered_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[str, str]]:
-    flows: list[tuple[str, str]] = []
+def _numbered_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
+    found = _Found()
     for index, line in enumerate(lines):
         match = None if mask[index] else _NUMBERED_RE.match(line)
         if not match:
+            continue
+        token = match.group("label") or match.group("token")
+        if not match.group("label"):
+            if _is_candidate(token, numbered=True):
+                found.unrecognised.append((index, token))
             continue
         end = index + 1
         while end < len(lines):
@@ -361,8 +438,9 @@ def _numbered_flows(lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[st
                 end += 1
                 continue
             break
-        flows.append((match.group("label"), "\n".join(lines[index:end]).rstrip()))
-    return flows
+        found.items.append((token, "\n".join(lines[index:end]).rstrip()))
+        found.spans.append((index, end))
+    return found
 
 
 def _continues(lines: Sequence[str], mask: Sequence[bool], blank: int) -> bool:
@@ -372,15 +450,48 @@ def _continues(lines: Sequence[str], mask: Sequence[bool], blank: int) -> bool:
     return following < len(lines) and (mask[following] or lines[following][:1] in (" ", "\t"))
 
 
+def _table_decides(rows: Sequence[_Row]) -> list[tuple[str, str]]:
+    """The flows of the tables that hold a recognised row; every non-empty row
+    of such a table must have a recognised first cell, or the checklist is
+    refused (D1). A table with no recognised row is not a flow table."""
+    proven = {row.table for row in rows if row.recognised}
+    flows = [(row.label, row.text) for row in rows if row.table in proven and row.recognised]
+    bad = [(row.line, row.label or EMPTY_NAME) for row in rows
+           if row.table in proven and not row.recognised and not row.blank]
+    if bad:
+        raise _partly_recognised("table", len(flows), bad)
+    return flows
+
+
 def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str, str]]:
+    """D7's four steps, in order. The table shape decides when any row is
+    old-form, or when no other shape found a flow; otherwise the first of the
+    bold, heading and numbered shapes that found one decides, and a table row
+    only the widened label accepts is nested in a flow's span or refused."""
     mask = _fence_mask(lines)
-    for found in (
-        _table_flows(lines, mask), _paragraph_flows(lines, mask),
-        _heading_flows(lines, mask, section_level), _numbered_flows(lines, mask),
+    rows = _table_rows(lines, mask)
+    recognised = [row for row in rows if row.recognised]
+    if any(_OLD_LABEL_RE.match(row.label) for row in recognised):
+        return _table_decides(rows)
+    for shape, found in (
+        ("bold", _paragraph_found(lines, mask)), ("heading", _heading_found(lines, mask, section_level)),
+        ("numbered", _numbered_found(lines, mask)),
     ):
-        if found:
-            return found
-    return []
+        if not found.items:
+            continue
+        loose = [(row.line, row.label) for row in recognised
+                 if not any(start <= row.line < end for start, end in found.spans)]
+        bad = sorted(found.unrecognised + loose)
+        if bad:
+            raise _partly_recognised(shape, len(found.items), bad)
+        return found.items
+    return _table_decides(rows)
+
+
+def _table_first_cells(lines: Sequence[str]) -> list[str]:
+    """The first cells of the data rows of the tables, for the refusal that
+    finds no flow (D3)."""
+    return [row.label or EMPTY_NAME for row in _table_rows(lines, _fence_mask(lines)) if not row.blank]
 
 
 def _linked_path(body: Sequence[str]) -> str | None:
@@ -409,12 +520,26 @@ def _numbered(found: Iterable[tuple[str, str]]) -> list[Flow]:
 
 def _unrecognised(reason: str, **evidence: Any) -> ChecklistUnrecognised:
     shapes = "; ".join(f"({number}) {shape}" for number, shape in enumerate(FLOW_SHAPES, start=1))
+    lead = (f"the flows of the '{SECTION_TITLE}' section are only partly recognised" if evidence.get("recognised")
+            else f"no functional flow can be recognised in the '{SECTION_TITLE}' section")
     return ChecklistUnrecognised(
-        f"no functional flow can be recognised in the '{SECTION_TITLE}' section: {reason}. The section has to "
+        f"{lead}: {reason}. The section has to "
         f"carry flows of one of these shapes: {shapes}. Fix the checklist, or set `functional.automated` false to "
         f"keep the person's stop.",
         evidence={"section": SECTION_TITLE, "reason": reason, **evidence},
     )
+
+
+def _partly_recognised(shape: str, recognised: int, bad: Sequence[tuple[int, str]]) -> ChecklistUnrecognised:
+    """The refusal of a shape that recognised some of its items and not all
+    (D1, D3): it names the first eight that were not."""
+    names = [name for _, name in sorted(bad)]
+    shown = ", ".join(f"`{name}`" for name in names[:EVIDENCE_NAMES])
+    more = f", and {len(names) - EVIDENCE_NAMES} more" if len(names) > EVIDENCE_NAMES else ""
+    total = recognised + len(names)
+    return _unrecognised(
+        f"the {shape} shape recognised {recognised} of {total} items; not recognised: {shown}{more}. {LABEL_RULE}",
+        shape=shape, recognised=recognised, total=total, unrecognised=names[:20])
 
 
 def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = None) -> list[Flow]:
@@ -436,6 +561,12 @@ def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = Non
         lines, level = tuple(content.split("\n")), 0
     flows = _numbered(_flows_of_lines(lines, level))
     if not flows:
+        cells = _table_first_cells(lines)
+        if cells:
+            shown = ", ".join(f"`{cell}`" for cell in cells[:EVIDENCE_NAMES])
+            raise _unrecognised(
+                f"none of the four shapes finds a flow; no table row has a flow label as its first cell "
+                f"(first cells: {shown}). {LABEL_RULE}", first_cells=cells[:EVIDENCE_NAMES])
         raise _unrecognised("none of the four shapes finds a flow")
     return flows
 
@@ -1906,11 +2037,13 @@ def gate_text(code: str, **facts: Any) -> str:
     kept = (f" The sandbox is kept at {sandbox} for inspection and is removed when the next functional run starts."
             if sandbox else "")
     if code == GATE_CHECKLIST_UNRECOGNISED:
-        return ("the functional review checklist has no flow the Controller can recognise "
-                f"({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
+        lead = ("the functional review checklist is only partly recognised" if facts.get("partial")
+                else "the functional review checklist has no flow the Controller can recognise")
+        return (f"{lead} ({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
                 f"'{SECTION_TITLE}' of docs/ACTIVE_MILESTONE.md must carry its flows as table rows whose first cell is a "
-                "short label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
-                f"or as a numbered list; or set `{SETTING_AUTOMATED}` false to keep the stop for a person")
+                "flow label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
+                f"or as a numbered list, and every item of the shape it uses must be a flow; or set `{SETTING_AUTOMATED}` "
+                "false to keep the stop for a person")
     if code == GATE_TESTER_UNAVAILABLE:
         return (f"the functional tester cannot run here ({detail}): nothing was started and nothing was recorded. "
                 f"Install what is missing, or {MANUAL_REMEDY}")

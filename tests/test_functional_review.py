@@ -61,11 +61,15 @@ class SectionTest(unittest.TestCase):
 
 class FlowShapesTest(unittest.TestCase):
     def test_table_rows_below_a_header_and_separator(self) -> None:
-        text = checklist("| # | do | expect |\n| --- | --- | --- |\n| A | one | ok |\n| 2 | two | ok |\n"
-                         "| long | no | label |\n\nafter")
-        flows = fr.read_flows(text)
+        rows = "| # | do | expect |\n| --- | --- | --- |\n| A | one | ok |\n| 2 | two | ok |\n"
+        flows = fr.read_flows(checklist(rows + "\nafter"))
         self.assertEqual([(f.flow_id, f.label) for f in flows], [("flow-1", "A"), ("flow-2", "2")])
         self.assertEqual(flows[0].text, "| A | one | ok |")
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist(rows + "| long | no | label |\n\nafter"))
+        evidence = caught.exception.evidence
+        self.assertEqual((evidence["shape"], evidence["recognised"], evidence["total"], evidence["unrecognised"]),
+                         ("table", 2, 3, ["long"]))
 
     def test_bold_labelled_paragraphs_with_each_punctuation(self) -> None:
         text = checklist("**Setup.** not a flow\n\n**A. First.** run it\nsecond line\n\n**B) Second.** go\n\n"
@@ -142,9 +146,12 @@ class FlowShapesTest(unittest.TestCase):
                 text = checklist(f"**A. One.** go\n\n**{section}**\nnote\n")
                 self.assertNotIn(section, fr.read_flows(text)[0].text)
 
-    def test_a_label_is_one_letter_or_one_or_two_digits(self) -> None:
-        text = checklist("**AB. no.** x\n\n**123. no.** x\n\n**12. yes.** x\n")
-        self.assertEqual([f.label for f in fr.read_flows(text)], ["12"])
+    def test_a_word_is_ignored_and_a_digit_token_that_is_no_label_is_refused(self) -> None:
+        word = checklist("**AB. no.** x\n\n**12. yes.** x\n")
+        self.assertEqual([f.label for f in fr.read_flows(word)], ["12"])
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist("**AB. no.** x\n\n**123. no.** x\n\n**12. yes.** x\n"))
+        self.assertEqual(caught.exception.evidence["unrecognised"], ["123"])
 
     def test_a_checklist_with_no_flow_is_unrecognised(self) -> None:
         for body in ("Just prose.", "### Setup\nnothing", "", "- bullets only", "**Setup.** only"):
@@ -160,6 +167,246 @@ class FlowShapesTest(unittest.TestCase):
         with self.assertRaises(fr.ChecklistUnrecognised) as missing:
             fr.read_flows("# Active\n\n## Goal\n\n**A. x.** y\n")
         self.assertIn("missing", missing.exception.message)
+
+
+def labels(text: str) -> list[str]:
+    return [flow.label for flow in fr.read_flows(text)]
+
+
+def refusal(text: str) -> dict:
+    with unittest.TestCase().assertRaises(fr.ChecklistUnrecognised) as caught:
+        fr.read_flows(text)
+    assert caught.exception.code == "checklist_unrecognised"
+    return caught.exception.evidence
+
+
+TABLE_HEAD = "| id | do | expect |\n| --- | --- | --- |\n"
+ACCEPTED = ("A", "7", "F1", "H10", "3a", "6.1", "6.1b", "6b-split", "F1-retry")
+
+
+class LabelGrammarTest(unittest.TestCase):
+    """D2: the label forms real checklists use, in each of the four shapes."""
+
+    def test_every_accepted_label_form_in_each_shape(self) -> None:
+        for label in ACCEPTED:
+            with self.subTest(label=label):
+                table = checklist(TABLE_HEAD + f"| {label} | do | ok |\n| Z9 | do | ok |\n")
+                self.assertEqual(labels(table), [label, "Z9"])
+                bold = checklist(f"**{label}. One.** go\n\n**Z9. Two.** go\n")
+                self.assertEqual(labels(bold), [label, "Z9"])
+                heading = checklist(f"### {label}. One\ngo\n\n### Z9. Two\ngo\n")
+                self.assertEqual(labels(heading), [label, "Z9"])
+                flows = fr.read_flows(bold)
+                self.assertEqual([f.flow_id for f in flows], ["flow-1", "flow-2"])
+        for label in ("1", "12", "123", "3a", "6.1", "6b-split", "6.1b"):
+            with self.subTest(numbered=label):
+                self.assertEqual(labels(checklist(f"{label}. one\n{label}) two\n")), [label, label])
+
+    def test_flow_headings_take_the_same_label(self) -> None:
+        text = checklist("### Flow 6.1\ndo a\n\n### Flow 6.2\ndo b\n\n### Flow 3\nc\n\n### Flow\nd\n")
+        self.assertEqual(labels(text), ["6.1", "6.2", "3", "Flow"])
+
+    def test_a_compact_title_after_the_closing_mark_keeps_its_flow(self) -> None:
+        for title in ("Run", "Run2", "Step.Run"):
+            with self.subTest(title=title):
+                bold = fr.read_flows(checklist(f"**A.{title}.** do A\n\n**B. Other.** do B\n"))
+                self.assertEqual([f.label for f in bold], ["A", "B"])
+                self.assertIn("do A", bold[0].text)
+                heading = fr.read_flows(checklist(f"### A.{title}.\ndo A\n\n### B. Other\ndo B\n"))
+                self.assertEqual([f.label for f in heading], ["A", "B"])
+                self.assertIn("do A", heading[0].text)
+
+    def test_a_label_longer_than_the_candidate_bound_is_a_label_in_every_shape(self) -> None:
+        long = "12.12.12b-abcdefghijklmnop"
+        self.assertGreater(len(long), 24)
+        shapes = (
+            TABLE_HEAD + f"| {long} | do | ok |\n| Z9 | do | ok |\n",
+            f"**{long}. One.** go\n\n**Z9. Two.** go\n",
+            f"### {long}. One\ngo\n\n### Z9. Two\ngo\n",
+            f"{long}. one\n{long}) two\n",
+        )
+        for body in shapes:
+            with self.subTest(body=body[:20]):
+                self.assertEqual(labels(checklist(body))[0], long)
+        self.assertEqual(len(labels(checklist(shapes[3]))), 2)
+
+    def test_flow_headings_that_are_not_a_whole_label_keep_the_old_label(self) -> None:
+        text = checklist("### Flow F1-retry-again\na\n\n### Flow 6.1.123\nb\n\n### Flow 6.1. Title\nc\n")
+        self.assertEqual(labels(text), ["F1-retry-again", "6", "6.1"])
+
+    def test_a_label_after_a_flow_header_ends_the_flow(self) -> None:
+        text = checklist("**A. One.** go\n\n**Optional, F1. Extra.** later\n\n**B. Two.** go\n")
+        flows = fr.read_flows(text)
+        self.assertEqual([f.label for f in flows], ["A", "B"])
+        self.assertNotIn("Optional", flows[0].text)
+
+    def test_the_manager_checklists_read_as_five_flows(self) -> None:
+        for name in ("table_f_labels_cache_miss_message.md", "table_f_labels_http_read_test_strength.md"):
+            with self.subTest(name=name):
+                text = (FIXTURES / name).read_text(encoding="utf-8")
+                flows = fr.read_flows(text)
+                self.assertEqual([f.label for f in flows], ["F1", "F2", "F3", "F4", "F5"])
+                self.assertEqual([f.flow_id for f in flows], [f"flow-{n}" for n in range(1, 6)])
+                relabelled = text.replace("| F3 |", "| F3 and F4 |", 1)
+                self.assertNotEqual(relabelled, text)
+                self.assertEqual(refusal(relabelled)["unrecognised"], ["F3 and F4"])
+
+    def test_a_table_of_no_labels_names_its_first_cells(self) -> None:
+        text = checklist(TABLE_HEAD + "| 6 `step` | do | ok |\n| 1 (optional) | do | ok |\n")
+        evidence = refusal(text)
+        self.assertEqual(evidence["first_cells"], ["6 `step`", "1 (optional)"])
+        self.assertIn("6 `step`", evidence["reason"])
+        self.assertNotIn("recognised", {key for key in evidence if key == "recognised"})
+
+
+class CompletenessTest(unittest.TestCase):
+    """D1, D3: a shape that recognises some items recognises all or refuses."""
+
+    def check(self, evidence: dict, shape: str, recognised: int, names: list[str]) -> None:
+        self.assertEqual((evidence["shape"], evidence["recognised"], evidence["total"]),
+                         (shape, recognised, recognised + len(names)))
+        self.assertEqual(evidence["unrecognised"], names)
+        self.assertEqual(evidence["section"], fr.SECTION_TITLE)
+
+    def test_a_table_of_nine_rows_with_three_labels(self) -> None:
+        rows = "".join(f"| {label} | do | ok |\n" for label in ("A", "B", "C", "3.x", "F1 b2", "Flow 4", "x 1", "y 1", "z 1"))
+        evidence = refusal(checklist(TABLE_HEAD + rows))
+        self.check(evidence, "table", 3, ["3.x", "F1 b2", "Flow 4", "x 1", "y 1", "z 1"])
+        self.assertIn("recognised 3 of 9 items", evidence["reason"])
+
+    def test_the_refusal_names_eight_and_counts_the_rest(self) -> None:
+        names = [f"w{n} x" for n in range(12)]
+        rows = "| A | do | ok |\n" + "".join(f"| {name} | d | o |\n" for name in names)
+        evidence = refusal(checklist(TABLE_HEAD + rows))
+        self.assertEqual(len(evidence["unrecognised"]), 12)
+        self.assertIn("and 4 more", evidence["reason"])
+        self.assertIn("`w7 x`", evidence["reason"])
+        self.assertNotIn("`w8 x`", evidence["reason"])
+
+    def test_one_bad_item_in_each_other_shape(self) -> None:
+        self.check(refusal(checklist("**A. One.** go\n\n**123. Two.** go\n")), "bold", 1, ["123"])
+        self.check(refusal(checklist("### A. One\ngo\n\n### F1b2. Two\ngo\n")), "heading", 1, ["F1b2"])
+        self.check(refusal(checklist("1. one\n\n1234. two\n")), "numbered", 1, ["1234"])
+
+    def test_the_message_says_partly_and_the_lead_for_none_stays(self) -> None:
+        partial = fr.ChecklistUnrecognised
+        with self.assertRaises(partial) as caught:
+            fr.read_flows(checklist("**A. One.** go\n\n**123. Two.** go\n"))
+        message = caught.exception.message
+        self.assertIn("only partly recognised", message)
+        self.assertNotIn("no functional flow", message)
+        for shape in fr.FLOW_SHAPES:
+            self.assertIn(shape, message)
+        self.assertIn("functional.automated", message)
+        with self.assertRaises(partial) as none:
+            fr.read_flows(checklist("Just prose."))
+        self.assertIn("no functional flow can be recognised", none.exception.message)
+        self.assertNotIn("recognised", none.exception.evidence)
+
+    def test_edge_cases_of_the_candidate_rule(self) -> None:
+        continuation = checklist(TABLE_HEAD + "| A | do | ok |\n| | more | steps |\n")
+        self.check(refusal(continuation), "table", 1, ["(empty)"])
+        self.check(refusal(checklist("**A. One.** go\n\n**Step1.** x\n")), "bold", 1, ["Step1"])
+        self.assertEqual(labels(checklist("**A. One.** go\n\n**S1:** x\n")), ["A", "S1"])
+        optional = checklist("**A. One.** go\n\n**Optional, K. Title.** extra\n\n**B. Two.** go\n")
+        self.assertEqual(labels(optional), ["A", "B"])
+
+    def test_what_is_not_refused(self) -> None:
+        bold = checklist("**A. One.** go\n\n**Expected:** x\n\n**Verify.** y\n\n**Setup.** z\n\n"
+                         "| case | want |\n| --- | --- |\n| a b | c |\n\nStep 3. is prose\n\n**B. Two.** go\n")
+        self.assertEqual(labels(bold), ["A", "B"])
+        empty_row = checklist(TABLE_HEAD + "| A | do | ok |\n| | | |\n| B | do | ok |\n")
+        self.assertEqual(labels(empty_row), ["A", "B"])
+        heading = checklist("### A. One\ngo\n\n### Environment, not defects\nnotes\n")
+        self.assertEqual(labels(heading), ["A"])
+        self.assertEqual(labels(checklist("**AB. word.** x\n\n**B. real.** y\n")), ["B"])
+        numbered = checklist("1. one\n   continued 12. here\n2. two\n\nA closing 3. paragraph.\n")
+        self.assertEqual(labels(numbered), ["1", "2"])
+
+
+class ShapeChoiceTest(unittest.TestCase):
+    """D7: which shape decides, and a table row only the widened label accepts."""
+
+    REPO_DOC = REPO_ROOT / "docs" / "milestones" / "completed"
+
+    def section_of(self, name: str) -> str:
+        path = self.REPO_DOC / name
+        if not path.exists():
+            self.skipTest(f"{name} is not in this clone")
+        return path.read_text(encoding="utf-8")
+
+    def test_a_nested_new_form_table_stays_in_its_heading(self) -> None:
+        text = checklist("### A. One\nrun it\n\n| id | do |\n| --- | --- |\n| A1 | x |\n\n"
+                         "### C. Read-through\nread the whole guide\n")
+        flows = fr.read_flows(text)
+        self.assertEqual([f.label for f in flows], ["A", "C"])
+        self.assertIn("read the whole guide", flows[1].text)
+        self.assertIn("| A1 | x |", flows[0].text)
+
+    def test_a_nested_new_form_row_in_a_bold_or_numbered_flow(self) -> None:
+        table = "| id | do |\n| --- | --- |\n| F1 | x |\n"
+        self.assertEqual(labels(checklist("**A. One.** go\n\n" + table + "\n**B. Two.** go\n")), ["A", "B"])
+        self.assertEqual(labels(checklist("1. one\n   " + table.replace("\n", "\n   ").rstrip() + "\n2. two\n")),
+                         ["1", "2"])
+
+    def test_an_old_form_row_anywhere_makes_the_table_decide(self) -> None:
+        text = checklist("**A. One.** go\n\n| id | do |\n| --- | --- |\n| B | x |\n")
+        self.assertEqual(labels(text), ["B"])
+        cases = checklist("### A. One\ngo\n\n| id | do |\n| --- | --- |\n| 1 | x |\n| 2 | x |\n| 2a | x |\n")
+        self.assertEqual(labels(cases), ["1", "2", "2a"])
+
+    def test_a_standalone_new_form_table_decides(self) -> None:
+        text = checklist(TABLE_HEAD + "| F1 | a | b |\n| F2 | a | b |\n\nA prose line.\n")
+        self.assertEqual(labels(text), ["F1", "F2"])
+
+    def test_a_new_form_row_outside_every_span_is_refused(self) -> None:
+        before = checklist(TABLE_HEAD + "| F1 | a | b |\n\n### A. Setup\ngo\n")
+        self.assertEqual(refusal(before)["unrecognised"], ["F1"])
+        numbered = checklist("1. Build the tool.\n2. Create a scratch directory.\n\n" + TABLE_HEAD
+                             + "".join(f"| F{n} | a | b |\n" for n in range(1, 6)))
+        evidence = refusal(numbered)
+        self.assertEqual((evidence["shape"], evidence["recognised"], evidence["unrecognised"]),
+                         ("numbered", 2, [f"F{n}" for n in range(1, 6)]))
+        ended = checklist("### A. One\ngo\n\n### Notes\n\n" + TABLE_HEAD + "| A1 | a | b |\n")
+        self.assertEqual(refusal(ended)["unrecognised"], ["A1"])
+
+    def test_a_row_nested_in_a_shape_that_did_not_decide_is_refused(self) -> None:
+        text = checklist("### A. One\ngo\n\n" + TABLE_HEAD + "| F1 | a | b |\n\n**B. Two.** x\n")
+        # the bold shape decides; the table lies in the heading's span only
+        self.assertEqual(refusal(text)["shape"], "bold")
+
+    def test_the_documentation_reorganisation_checklist_keeps_its_headings(self) -> None:
+        text = self.section_of("workflow-controller-documentation-reorganisation.md")
+        flows = fr.read_flows(text)
+        self.assertEqual([f.label for f in flows], list("ABCDEFGHI"))
+        self.assertIn("Read-through", flows[2].text)
+
+    def test_the_settings_and_telemetry_checklist_reads_its_sub_steps_as_flows(self) -> None:
+        text = self.section_of("workflow-controller-settings-and-telemetry.md")
+        flows = fr.read_flows(text)
+        self.assertEqual(len(flows), 29)
+        names = [f.label for f in flows]
+        start = names.index("B")
+        self.assertEqual(names[start:start + 7], ["B", "B1", "B2", "B3", "B4", "B5", "B6"])
+        self.assertEqual(len(flows[start].text.strip().splitlines()), 1)
+
+
+class DroppedRowsTest(unittest.TestCase):
+    """D6: two committed checklists the old reader read "completely" while
+    dropping rows whose label it did not know (``L1``..``L4``, ``7b``)."""
+
+    def read(self, name: str) -> list[str]:
+        path = REPO_ROOT / "docs" / "milestones" / "completed" / name
+        if not path.exists():
+            self.skipTest(f"{name} is not in this clone")
+        return labels(path.read_text(encoding="utf-8"))
+
+    def test_rows_the_old_reader_dropped_are_now_flows(self) -> None:
+        sharding = self.read("workflow-controller-adaptive-test-sharding.md")
+        self.assertEqual(sharding[-4:], ["L1", "L2", "L3", "L4"])
+        self.assertEqual(len(sharding), 17)
+        limit = self.read("workflow-controller-usage-limit-mid-job.md")
+        self.assertEqual(limit, ["1", "2", "3", "4", "5", "6", "7", "7b", "8", "9"])
 
 
 class LinkedChecklistTest(unittest.TestCase):

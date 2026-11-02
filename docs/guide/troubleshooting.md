@@ -415,7 +415,8 @@ disposition and action beside it.
   `false`), the Controller acts itself. The functional review ends in `flows_not_runnable`,
   `checklist_unrecognised`, `functional_tester_unavailable`, `results_invalid`,
   `isolation_breach`, `tested_bytes_unbound`, `recording_refused`, `functional_rounds_exhausted`
-  or `functional_unchanged`; each message names its remedy, and the kept sandbox of a breach or an
+  or `functional_unchanged`; `checklist_unrecognised` also covers a checklist of which only some
+  items were recognised (its message names the others: fix their labels); each message names its remedy, and the kept sandbox of a breach or an
   unbound clone is under `<runtime root>/functional/<job_id>/` until the next functional run
   starts (see "The automated functional review" in the
   [automation guide](automation.md#protocol-mode-workflow-27-and-later)). The pull request stops it ends in (`pr_checks_pending`,

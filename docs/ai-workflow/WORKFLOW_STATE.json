@@ -52534,6 +52534,829 @@
         "evaluated_at": "2026-11-02T03:32:19Z",
         "workflow_release": "2.25.4"
       }
+    },
+    "workflow-controller-checklist-recogniser": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-checklist-recogniser",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CHECKLIST_RECOGNISER_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-recogniser-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-recogniser-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 5,
+      "implementation_revision": 2,
+      "functional_review_round": null,
+      "base_commit": "3aa95fe3377fe1fa84d9160b1c016f4e9210f8b2",
+      "reviewed_implementation_head": "718d0a8573fc3db423e5f3dc2a5e62e7a3496785",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP2",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "8516c72ae58fb67a990acca1d9be15c3031523b0"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "fb3bf75b3884c5bfce11c708d3b39e6efe0597d9"
+        }
+      },
+      "current_bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+        "approved_review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CHECKLIST_RECOGNISER_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bbc037d2a69e88eb390921f9e592bd45e450aca8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checklist-recogniser-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b4db052270c08012c134fe77f29696f4cae6a54f"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-checklist-recogniser-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "58fad9ec364bdf1418e0f70c834d9db4fc91cf98"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T05:36:48Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+            "ledger": {
+              "local": {
+                "bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "2d88db70625e0caf2819322b01de128f5ff09cd9415ab70597e9e9e3687e68e8",
+                "ledger_entry_sha256": "66a32ac8fd40ee5015b25de9ff90dce5301dace383ef6ccb68dc4ceb2082d711",
+                "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "a5808be6365ac0ac232cf2bee8d33f43fe786155f62647f85ad4faa87d2e17eb",
+                "ledger_entry_sha256": "a56c5a6fc2c389f0f85cbdb77219553b17bb64c60889001dfe8e40fb370ad167",
+                "run_ref": "codex:20261102T053330Z-f5afdb9c",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T05:36:48Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+        "approved_review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+        "review_content_manifest": [
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "31267ae640571a21eb85999c488ffe75c97ec0ec"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f017b6b0bd1d897f5872184d52c382bf63f785e3"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checklist-recogniser-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8c7646579d25c2dc3d7ea7b7daf5e571993c815f"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1fc14dd7a90979caad5955d00c3a37dc6f627897"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bba4abe96a8e6973be5c23a7a162b43a7d34c926"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9911972645f924c3e2d5e190ec8b5d28534db079"
+          },
+          {
+            "path": "tests/fixtures/functional_checklists/table_f_labels_cache_miss_message.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "62ff93131f177d431b645d1befde416c1a668dab"
+          },
+          {
+            "path": "tests/fixtures/functional_checklists/table_f_labels_http_read_test_strength.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8e6179533d8237fba41188296f5af1eb3a99dca2"
+          },
+          {
+            "path": "tests/test_functional_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "521fa10f4c6fab168f7653a9fbaf347bfed5900f"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1feba79a680e5d43a441494cbde135094d25a9fd"
+          }
+        ],
+        "reviewed_content_commit": "718d0a8573fc3db423e5f3dc2a5e62e7a3496785",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T09:37:08Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "ledger": {
+              "local": {
+                "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "90ae41ea8b1739407e1b7fa59a7d3aeb6a7420f52623a7318ca040033da86ce9",
+                "ledger_entry_sha256": "b841b498e90b0960104628ec6fb66c794dbe29ffdec38ac28ecfbfc45c55c5ea",
+                "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "57bcd1628b1b0cda4088348dce062edae5a37b6f4f8d66edf410b5409cd5a79c",
+                "ledger_entry_sha256": "d22b69f42da8ec18ef10dad794509b796707a8eddf457347d361abddc0b374b4",
+                "run_ref": "codex:20261102T093237Z-6acda843",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T09:37:08Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-02T05:33:10Z",
+          "verdict_sha256": "2d88db70625e0caf2819322b01de128f5ff09cd9415ab70597e9e9e3687e68e8",
+          "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-02T05:35:38Z",
+          "verdict_sha256": "a5808be6365ac0ac232cf2bee8d33f43fe786155f62647f85ad4faa87d2e17eb",
+          "run_ref": "codex:20261102T053330Z-f5afdb9c",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 5,
+          "external": 2
+        },
+        "implementation": {
+          "local": 2,
+          "external": 2
+        }
+      },
+      "state_revision": 31,
+      "last_transition": "2026-11-02T10:12:01Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-02T05:29:19Z",
+        "consumed": {
+          "review_content_id": "ac7fa0a0e9b777f8d80c00ac6ea6154bc93122f9819ede607031b5b52d9ea9e3",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+          "bundle_id": "d7470abedf1a5528f2fb4d1e42b697742fef9120ad8d5218e2947c88d10cb081",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "987186bac63839175f13cb44f623a7543d2a8700099565c0beceb46eb0e01bcd",
+        "a5140973fb615cf93a58a75b8078262ccea0b27dfc1de5b874b069da6f57acd5",
+        "ac7fa0a0e9b777f8d80c00ac6ea6154bc93122f9819ede607031b5b52d9ea9e3",
+        "fff30b2ad8e0f946cca87da77d221373e9acf9db2e44c82ee7b707a752f53e94"
+      ],
+      "optional_findings": {
+        "F-e66216d63812": {
+          "digest": "e66216d6381209a6a94b574f24790e22b51b8f980b5d115fbe32e68f0a9e92c9",
+          "text": "**O1.** `**Optional, K. Title.**` is a flow header by `_SECTION_END_RE`'s own comment, and the vendored `bold_labelled_454ffe7.md` uses it. It is still dropped silently and is never a D1 candidate, which goes against D1's stated principle (\"anything that can be [a label] is either a flow or a refusal\"). Say in D1 or Out of scope that an optional, qualified flow header is deliberately not run.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "987186bac63839175f13cb44f623a7543d2a8700099565c0beceb46eb0e01bcd",
+              "verdict": "REVISE",
+              "at": "2026-11-02T05:08:17Z"
+            }
+          ]
+        },
+        "F-bb664a7b3576": {
+          "digest": "bb664a7b35761028f40199eef64dac96a60a742cd8b4e2f116293619f126f9bf",
+          "text": "**O2.** `_HEADING_FLOW_RE`'s `Flow` alternative captures `rest` with `[^ \\t.:)]*`, so `### Flow 6.1` gets the label `6`, and `### Flow 6.1` and `### Flow 6.2` share one label. D2 does not say whether `Flow <label>` gains the D2 grammar. Decide, and test it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "987186bac63839175f13cb44f623a7543d2a8700099565c0beceb46eb0e01bcd",
+              "verdict": "REVISE",
+              "at": "2026-11-02T05:08:17Z"
+            }
+          ]
+        },
+        "F-54ad68d1e3b9": {
+          "digest": "54ad68d1e3b9a865568bb9aff10f8ecc336f3f1ed97c7dac5d552891172f2fd3",
+          "text": "**O3.** The Manager checklists live in the `workflow-manager` repository (for example `fd55aba` for `cache-miss-message`). `_from_git` runs `git -C REPO_ROOT show` in this clone, so a byte-for-byte check \"in the style of `_from_git`\" would always skip. Name the source repository and commit in the fixture header, and say that no in-clone byte check exists.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "987186bac63839175f13cb44f623a7543d2a8700099565c0beceb46eb0e01bcd",
+              "verdict": "REVISE",
+              "at": "2026-11-02T05:08:17Z"
+            }
+          ]
+        },
+        "F-d214e58b3c59": {
+          "digest": "d214e58b3c59f104c6134679f7b46e566aa11e6a48276c8f4a48b8769f8963aa",
+          "text": "**O4.** A table continuation row (an empty first cell with other cells filled) becomes an unrecognised `(empty)` item and refuses the table. That is consistent with the principle, because today the step is dropped from the flow's text, but no decision or test states it. Add one.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "987186bac63839175f13cb44f623a7543d2a8700099565c0beceb46eb0e01bcd",
+              "verdict": "REVISE",
+              "at": "2026-11-02T05:08:17Z"
+            }
+          ]
+        },
+        "F-60b96611750a": {
+          "digest": "60b96611750a3ea8b290bf145806475792978a49d2fe3b9159a49fadddd4d466",
+          "text": "**O1. The new `settings-and-telemetry` test reads a live narrative, not a vendored copy.** CP1 reads `docs/milestones/completed/workflow-controller-settings-and-telemetry.md` from the tree. `CommittedChecklistsTest` vendors its checklists in `tests/fixtures/functional_checklists/` \"so the test never depends on history\". No existing test reads a real `docs/milestones/` file, and that prefix is excluded in the implementation stage. A move or rename of the narrative would break a parser test for a reason that has nothing to do with the parser. To vendor the section instead, CP1's `**Files:**` must name the fixture path. As written, the \"no edit outside the declared files\" rule rules that out. This is acceptable because completed narratives are not edited by policy, and the test fails loudly if the file moves.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a5140973fb615cf93a58a75b8078262ccea0b27dfc1de5b874b069da6f57acd5",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T05:19:13Z"
+            }
+          ]
+        },
+        "F-ea06fc9c97d9": {
+          "digest": "ea06fc9c97d9f6c3e80a07c21efafe303b1751c3c24bbafb3db670c307e4488b",
+          "text": "**O2. D6 says `B`, `K` and `L` \"shrink to their title lines\", but `K` keeps its setup paragraph.** `**K.**` (line 597 of the narrative) is followed by a seven-line paragraph that defines the `fresh` sandbox before `**K1.**`. Under D2 that paragraph stays in `K`, so `K` does not become title-only. `B` and `L` do. Nothing is lost: the tester prompt lists every flow's text in order (`controller/functional_review.py:848-849`), so `K1`..`K5` still follow that setup. CP1 pins only `B`. Say \"`B` and `L` shrink to their title lines, and `K` to its introduction\" in the report or the pull request.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a5140973fb615cf93a58a75b8078262ccea0b27dfc1de5b874b069da6f57acd5",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T05:19:13Z"
+            }
+          ]
+        },
+        "F-7c7fdd3e8919": {
+          "digest": "7c7fdd3e8919004496c84d105fc2be20a0caff44e875915b9c8a71a299c87a4b",
+          "text": "**O1.** In a table that decides through an old-grammar row, D7 still exempts nested new-form rows. Example: a case table inside a heading flow with rows `1`, `2`, `2a`. The table decides, and `2a` is neither recognised nor refused, so it is dropped silently. The old parser did the same, so this is not a regression, but it goes against D1's principle. Rule (2) of I2's fix closes it: once a table decides, D7's exemption no longer applies to its rows.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "ac7fa0a0e9b777f8d80c00ac6ea6154bc93122f9819ede607031b5b52d9ea9e3",
+              "verdict": "REVISE",
+              "at": "2026-11-02T05:27:41Z"
+            }
+          ]
+        },
+        "F-b7dd42161f92": {
+          "digest": "b7dd42161f924c37428b9c64c0c81edc6042bc3ec8a23cafc218292093c231dd",
+          "text": "**O1.** A step-4 refusal may point the operator at the wrong reading. Example: a checklist with a numbered `### Setup` list (`1.`, `2.`) and a column-0 `F1`..`F5` table under `### Flows`. The numbered shape decides, and D3's reason reads like \"the numbered shape recognised 2 of 7 items; not recognised: `F1`, ...\", although the author meant the table. The refusal is correct and better than today's silent `[1, 2]`, but the fix is not obvious from the message. When the un-nested rows are table rows, the reason could add one clause: a table outside the flows of the deciding shape is not read, so either nest it in a flow or remove the other shape's labels.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T05:33:10Z"
+            }
+          ]
+        },
+        "F-abd8a1cfc4c7": {
+          "digest": "abd8a1cfc4c764fa6b5496c1e0d02386b719c9f34f25bf6d147c24141e492958",
+          "text": "**O2.** Step 2 keeps one silent drop that crosses shapes. Example: a heading checklist in which one nested case table has an old-form row (`| 1 |`), and a table-less heading `C` holds its instructions as prose. The table shape decides, and `C`'s instructions are dropped without a word. The old parser did the same, and the D6 content check passes because the old flows never held `C`, so this is not a regression, and D7 accepts it deliberately. It is still #227's defect 2 across shapes. Worth a follow-up issue rather than a change here.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "f148bb3c753569ebc46927e8adb77b73ba4eadfb61fdc9ba1010df9d990807e8",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T05:33:10Z"
+            }
+          ]
+        },
+        "F-f35dfad80f71": {
+          "digest": "f35dfad80f719e65a0d60dbb1608ea0ae42361224ca453d8530feb01f3ee33c2",
+          "text": "**O1. A recognised flow of a shape that does not decide is still dropped without a word (pre-existing, outside the plan).** `_flows_of_lines` (`controller/functional_review.py`) makes the first of the bold, heading and numbered shapes with an item decide, and never looks at the items the later shapes recognised. `### A. One\\ngo\\n\\n**B. Two.** x` reads as `[B]`; heading flow `A` is not run and nothing is said. The base reads it the same way and the plan keeps the shape order (\"the order of the four shapes does not change\"), so this is not a defect of this implementation. It is the same silent-drop class #227 names, though, one level up (across shapes instead of within one). Suggest a follow-up issue: refuse when a shape that does not decide recognised an item outside the deciding shape's spans, the same rule D7 already applies to new-form table rows.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-d0014f96344a": {
+          "digest": "d0014f96344ade28a94a42869b423f259c4140702f66467137cfa3731851d1d9",
+          "text": "**O2. The automation guide's example table says `123` is never a label.** `docs/guide/automation.md` lists `` `Flow 4`, `long`, `123` `` as \"no (a word, or a number of three digits)\". That holds for the table, bold and heading shapes, but the numbered shape keeps its three-digit number (D2, `_NUMBERED_LABEL_RE`), so `123. step` in a numbered list is a flow. The self-review noted this and left it. A short \"(a numbered list also accepts a three-digit number)\" would make the guide accurate. Also, the line the troubleshooting edit inserted (`docs/guide/troubleshooting.md`, \"items were recognised (its message names the others: fix their labels); each message...\") runs past the wrap width of the paragraph around it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-aa156a9a997a": {
+          "digest": "aa156a9a997ad550433468f4193e9eb8baa0bcefc47913cd767c81a4db18a38c",
+          "text": "**O3. The D6 report does not list every differing file.** An independent re-run over `docs/milestones/completed/*.md` and every revision of `docs/ACTIVE_MILESTONE.md` (386 inputs) agrees with the report that there is no new refusal and no lost line. It also finds two differences the report does not name: `docs/milestones/completed/workflow-controller-test-leftover-lifetime.md` (the old reader refused it, the new one reads `F1`..`F7`, which D6 allows as \"the other allowed difference\") and three earlier `ACTIVE_MILESTONE.md` revisions of adaptive-test-sharding (`f015b34`, `d62a6f6`, `595fb85`: 11 to 15 flows, rows `L1`..`L4`, no loss). D6 asks the report and the pull request to list each differing file, so add both to the pull request text.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-72408df34cb3": {
+          "digest": "72408df34cb35fe15e8d3dd5a82cbd486470a3477d174eee062e825cd818cc57",
+          "text": "**O4. Three rejections in the D2 table are not pinned by a test.** `F123`, `A1b2` and `6b-` (the \"has a digit but is not a label\" row) are refused correctly (checked by hand: each refuses a table that has one recognised row, naming it), but only `123`, `F1b2` and `1234` have tests. A one-line subTest loop in `CompletenessTest` would pin the rest of the row. Smaller still: `LabelGrammarTest.test_a_table_of_no_labels_names_its_first_cells` checks for a missing `recognised` key through a set expression where `assertNotIn(\"recognised\", evidence)` is the plain form, and the `refusal()` helper checks the code with a bare `assert`, which `python -O` skips.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-3b3889232a8a": {
+          "digest": "3b3889232a8ac45cc8de22dbe1a75f02f21a0187c20e4b0acb446abc6aee2a51",
+          "text": "**O1. `TEST_RESULTS.md` still describes revision 1.** The bundle's `TEST_RESULTS.md` names head `3551258` and 5465 tests. The result for revision 2 (head `718d0a8`, 5468 tests) appears only in the prose of `IMPLEMENTATION_SUMMARY.md`. I re-ran it myself and it passes (see below). The next generation should refresh the file so that the external reviewer reads the current result.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T08:28:45Z"
+            }
+          ]
+        },
+        "F-9bff1d432fd8": {
+          "digest": "9bff1d432fd868c22bd7491a6da8479f2f78e8ca617083083624f3f325d555c3",
+          "text": "**O2. A compact title after `Flow` keeps the old label.** `### Flow 6.1.Title` reads as `6` (the baseline fallback), while `### 6.1.Title` and `**6.1.Title.**` read as `6.1`. D2 asks for exactly this (\"any other text after `Flow` is read as today\"), and the round-1 test pins `6.1.123` to `6`. Nothing is dropped, but the two heading forms now disagree. A follow-up could let `_FLOW_LABEL_RE` accept a closing mark followed by a non-digit, as `_HEADING_MARK_RE` already does.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T08:28:45Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-02T08:28:45Z",
+          "verdict_sha256": "90ae41ea8b1739407e1b7fa59a7d3aeb6a7420f52623a7318ca040033da86ce9",
+          "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "86d4d389ae2dafd10ee67e4813b77f6dcef9a7db3e9efc99dd4de3e12b39a697",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-02T09:35:04Z",
+          "verdict_sha256": "57bcd1628b1b0cda4088348dce062edae5a37b6f4f8d66edf410b5409cd5a79c",
+          "run_ref": "codex:20261102T093237Z-6acda843",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:50:08Z",
+            "summary": {
+              "checklist_blob": "c8cd867cc631862bd0ba8673a96a2a89a46ca944",
+              "text": "80 tests ran, all OK."
+            },
+            "log_digest": "12b21f264f8f06ce43bedaccd9f8a10f65ee983c7a3341cb872131136e8523f6",
+            "run_ref": "controller:20261102T094238Z-5f6cd6f2",
+            "reporter": "workflow-controller 1.27.2",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:50:08Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:50:08Z",
+            "summary": {
+              "checklist_blob": "c8cd867cc631862bd0ba8673a96a2a89a46ca944",
+              "text": "cache_miss_message and table_f_labels_http_read_test_strength fixtures each give flow-1..flow-5 labelled F1..F5. The checklist names the second fixture 'http_read_test_strength'; the file is table_f_labels_http_read_test_strength.md, so the literal command for it hits FileNotFoundError (naming only)."
+            },
+            "log_digest": "b83648a4d85aa24f2901cba50a3e8b80aee712959d24325bf56871f9bed1519d",
+            "run_ref": "controller:20261102T094238Z-5f6cd6f2",
+            "reporter": "workflow-controller 1.27.2",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:50:08Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:50:08Z",
+            "summary": {
+              "checklist_blob": "c8cd867cc631862bd0ba8673a96a2a89a46ca944",
+              "text": "Raised ChecklistUnrecognised: table shape recognised 3 of 9, names Flow 4..Flow 9, states the accepted label, no 'no functional flow can be recognised' wording."
+            },
+            "log_digest": "beaf4d3958b4800366c33a49ebfaa158a4f26c12ea6b433bf2aabbcefade8639",
+            "run_ref": "controller:20261102T094238Z-5f6cd6f2",
+            "reporter": "workflow-controller 1.27.2",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:50:08Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:50:08Z",
+            "summary": {
+              "checklist_blob": "c8cd867cc631862bd0ba8673a96a2a89a46ca944",
+              "text": "Two flows: flow-1 ('1'), flow-2 ('2'); nothing refused."
+            },
+            "log_digest": "665cb9f49191b58b9a46659db10a0b8f553acd4c3e340eed44f4feda4c1a04cd",
+            "run_ref": "controller:20261102T094238Z-5f6cd6f2",
+            "reporter": "workflow-controller 1.27.2",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:50:09Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:50:09Z",
+            "summary": {
+              "checklist_blob": "c8cd867cc631862bd0ba8673a96a2a89a46ca944",
+              "text": "Nine flows A..I, C included."
+            },
+            "log_digest": "de4ddd72affbd68ad7a4d613c887cea42564afc135c911877d422bf2d0251dd7",
+            "run_ref": "controller:20261102T094238Z-5f6cd6f2",
+            "reporter": "workflow-controller 1.27.2",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:50:09Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:55:36Z",
+            "summary": {
+              "result": "passed",
+              "detail": "python3 -B -m unittest tests.test_functional_lifecycle in an operator clone (real bubblewrap user namespaces, writable /tmp): Ran 4 tests, OK, including the partial-refusal gate-text test and IsolationTest that the tester's sandbox could not run."
+            },
+            "log_digest": "2f55edbd6ad2dc04863c7679efdf7cbff509f854764696aca0a64a8aef8427f9",
+            "run_ref": "operator-clone ~/.cache/c1-func/fl1/operator",
+            "reporter": "operator",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:55:36Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "ran_at": "2026-11-02T09:50:09Z",
+            "summary": {
+              "checklist_blob": "c8cd867cc631862bd0ba8673a96a2a89a46ca944",
+              "text": "101 tests OK and check_docs.py exit 0. I did not open the docs to check the required statements (automation.md, common-problems.md, troubleshooting.md, ROADMAP FL1); check_docs passing is the only evidence."
+            },
+            "log_digest": "c4323233cb2286dea23f6f49976165c2a5f0106c9703138b5dd9122f5a5a9c0e",
+            "run_ref": "controller:20261102T094238Z-5f6cd6f2",
+            "reporter": "workflow-controller 1.27.2",
+            "identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:50:09Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 270,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/270"
+          },
+          "state": "open",
+          "head": "1df93f972efb734f140216c4642349d44fdf528d",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+          "observed_at": "2026-11-02T10:12:01Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "718d0a8573fc3db423e5f3dc2a5e62e7a3496785",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-11-02T10:12:01Z",
+            "raw_sha256": "002f3fd9a9edcb2d186c94b0f25a359e05a23946308fc9d0fbf3376f6a17c27a",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "0dbdfff6b525a02a271176b9b15534c45184a5607c4dce5de9c5f1280d5e170b"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 270,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/270"
+          },
+          "state": "open",
+          "head": "1df93f972efb734f140216c4642349d44fdf528d",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+          "observed_at": "2026-11-02T10:06:55Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "718d0a8573fc3db423e5f3dc2a5e62e7a3496785",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.27.2"
+            },
+            "fetched_at": "2026-11-02T10:06:55Z",
+            "raw_sha256": "002f3fd9a9edcb2d186c94b0f25a359e05a23946308fc9d0fbf3376f6a17c27a",
+            "run_ref": "controller:20261102T100655Z-e54deda8"
+          },
+          "fact_id": "dba7f09ed88de6e511ec7857207e08695feb125453a46fb9933557873ce5c692"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #270 at 1df93f972efb734f140216c4642349d44fdf528d is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "718d0a8573fc3db423e5f3dc2a5e62e7a3496785",
+          "anchor_identity": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "3bde255f31532dc788f7313ff4058a2e79d90d78f53f8df087dc770cad21fce2",
+            "recorded_at": "2026-11-02T09:37:08Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "d5fe531e929243ae0a8e7928045a44dbb422c80986f56f6b0cbaf55027d8fd2a",
+              "log_digest": "12b21f264f8f06ce43bedaccd9f8a10f65ee983c7a3341cb872131136e8523f6",
+              "run_ref": "controller:20261102T094238Z-5f6cd6f2"
+            },
+            "flow-2": {
+              "evidence_id": "a62333aca7dfc96ac2f3699ee62b335c46555bbffa24186955c676bb634c686c",
+              "log_digest": "b83648a4d85aa24f2901cba50a3e8b80aee712959d24325bf56871f9bed1519d",
+              "run_ref": "controller:20261102T094238Z-5f6cd6f2"
+            },
+            "flow-3": {
+              "evidence_id": "f28eef017ff0e52a9030273f161da2ff941d15e9821a9a609bcfc5051b10e08f",
+              "log_digest": "beaf4d3958b4800366c33a49ebfaa158a4f26c12ea6b433bf2aabbcefade8639",
+              "run_ref": "controller:20261102T094238Z-5f6cd6f2"
+            },
+            "flow-4": {
+              "evidence_id": "4bed354d22b5685561a2a22ed83c9e8ae6dfc65d29e1c0c0cc6c9208ab0bc938",
+              "log_digest": "665cb9f49191b58b9a46659db10a0b8f553acd4c3e340eed44f4feda4c1a04cd",
+              "run_ref": "controller:20261102T094238Z-5f6cd6f2"
+            },
+            "flow-5": {
+              "evidence_id": "66fb624ba0ed95c858659ce18081af03f51df05d4beac298b12b5f2c9674d1b6",
+              "log_digest": "de4ddd72affbd68ad7a4d613c887cea42564afc135c911877d422bf2d0251dd7",
+              "run_ref": "controller:20261102T094238Z-5f6cd6f2"
+            },
+            "flow-6": {
+              "evidence_id": "3128dec88528078ea04117d6f5d073dc5229db032244fc48f7f4e346b9c955b7",
+              "log_digest": "2f55edbd6ad2dc04863c7679efdf7cbff509f854764696aca0a64a8aef8427f9",
+              "run_ref": "operator-clone ~/.cache/c1-func/fl1/operator"
+            },
+            "flow-7": {
+              "evidence_id": "a0f902239e940514abacf3b4044337e7329ed138b091a473aa9a56355cd47a19",
+              "log_digest": "c4323233cb2286dea23f6f49976165c2a5f0106c9703138b5dd9122f5a5a9c0e",
+              "run_ref": "controller:20261102T094238Z-5f6cd6f2"
+            }
+          },
+          "pr": {
+            "fact_id": "0dbdfff6b525a02a271176b9b15534c45184a5607c4dce5de9c5f1280d5e170b",
+            "head": "1df93f972efb734f140216c4642349d44fdf528d",
+            "provenance": "workflow_gh",
+            "raw_sha256": "002f3fd9a9edcb2d186c94b0f25a359e05a23946308fc9d0fbf3376f6a17c27a"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-11-02T10:12:01Z",
+        "workflow_release": "2.25.4"
+      }
     }
   }
 }

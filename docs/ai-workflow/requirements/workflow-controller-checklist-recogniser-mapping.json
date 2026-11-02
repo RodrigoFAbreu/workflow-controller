@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-checklist-recogniser",
+  "requirements": {
+    "R1": {
+      "description": "A table first cell, a bold label, a heading label and a numbered item accept the D2 label forms (`F1`, `3a`, `6.1`, `6b-split` among them) with every existing label (a letter, one or two digits) unchanged and flow ids still `flow-N` in order",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A shape that recognises some items and not others refuses with `checklist_unrecognised`, naming the unrecognised items and `recognised` of `total`, in each of the four shapes, instead of returning the partial list; words, sub-labels, case tables and prose inside a flow are not refused; a newly accepted table label nested in a flow of another shape stays in that flow, so a checklist the old parser read as headings, bold labels or numbered items keeps every flow (D7)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The refusal keeps its code, shape list and remedy, adds the D3 evidence, and names a table's first cells when nothing is found; the two Manager checklists are read as five flows each",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The measured history shows no checklist read completely by the old parser that the new one refuses for a name that is not a flow; the only checklist it reads differently without a refusal is a named, reasoned difference (`settings-and-telemetry`, 16 flows to 29, D6), pinned by a test, and no flow text the old parser read is lost",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R5": {
+      "description": "The shape wording, the guides and the roadmap state the rule; no setting, option, exit code, gate or result contract changes",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

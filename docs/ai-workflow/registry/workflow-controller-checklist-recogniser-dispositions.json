@@ -1,0 +1,66 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-checklist-recogniser",
+ "dispositions": {
+  "F-3b3889232a8a": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow/issues/142"
+  },
+  "F-54ad68d1e3b9": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states or decides it."
+  },
+  "F-60b96611750a": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6574519553"
+  },
+  "F-72408df34cb3": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6574519553"
+  },
+  "F-7c7fdd3e8919": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states or decides it."
+  },
+  "F-9bff1d432fd8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6574519553"
+  },
+  "F-aa156a9a997a": {
+   "disposition": "dropped",
+   "reason": "The reviewer's own re-run agrees there is no new refusal and no lost line; the two extra differing files are named by the reviewer and are not regressions."
+  },
+  "F-abd8a1cfc4c7": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/271"
+  },
+  "F-b7dd42161f92": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6574519553"
+  },
+  "F-bb664a7b3576": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states or decides it."
+  },
+  "F-d0014f96344a": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6574519553"
+  },
+  "F-d214e58b3c59": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states or decides it."
+  },
+  "F-e66216d63812": {
+   "disposition": "fixed",
+   "note": "Applied in a plan revision: the plan now states or decides it."
+  },
+  "F-ea06fc9c97d9": {
+   "disposition": "dropped",
+   "reason": "Plan wording about which sections shrink to their title lines; nothing is lost and the implementation pins the real result."
+  },
+  "F-f35dfad80f71": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/271"
+  }
+ }
+}

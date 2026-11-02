@@ -52544,7 +52544,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-recogniser-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-recogniser-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -52684,12 +52684,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 24,
-      "last_transition": "2026-11-02T07:35:34Z",
+      "state_revision": 26,
+      "last_transition": "2026-11-02T07:54:09Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -52841,7 +52841,76 @@
               "at": "2026-11-02T05:33:10Z"
             }
           ]
+        },
+        "F-f35dfad80f71": {
+          "digest": "f35dfad80f719e65a0d60dbb1608ea0ae42361224ca453d8530feb01f3ee33c2",
+          "text": "**O1. A recognised flow of a shape that does not decide is still dropped without a word (pre-existing, outside the plan).** `_flows_of_lines` (`controller/functional_review.py`) makes the first of the bold, heading and numbered shapes with an item decide, and never looks at the items the later shapes recognised. `### A. One\\ngo\\n\\n**B. Two.** x` reads as `[B]`; heading flow `A` is not run and nothing is said. The base reads it the same way and the plan keeps the shape order (\"the order of the four shapes does not change\"), so this is not a defect of this implementation. It is the same silent-drop class #227 names, though, one level up (across shapes instead of within one). Suggest a follow-up issue: refuse when a shape that does not decide recognised an item outside the deciding shape's spans, the same rule D7 already applies to new-form table rows.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-d0014f96344a": {
+          "digest": "d0014f96344ade28a94a42869b423f259c4140702f66467137cfa3731851d1d9",
+          "text": "**O2. The automation guide's example table says `123` is never a label.** `docs/guide/automation.md` lists `` `Flow 4`, `long`, `123` `` as \"no (a word, or a number of three digits)\". That holds for the table, bold and heading shapes, but the numbered shape keeps its three-digit number (D2, `_NUMBERED_LABEL_RE`), so `123. step` in a numbered list is a flow. The self-review noted this and left it. A short \"(a numbered list also accepts a three-digit number)\" would make the guide accurate. Also, the line the troubleshooting edit inserted (`docs/guide/troubleshooting.md`, \"items were recognised (its message names the others: fix their labels); each message...\") runs past the wrap width of the paragraph around it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-aa156a9a997a": {
+          "digest": "aa156a9a997ad550433468f4193e9eb8baa0bcefc47913cd767c81a4db18a38c",
+          "text": "**O3. The D6 report does not list every differing file.** An independent re-run over `docs/milestones/completed/*.md` and every revision of `docs/ACTIVE_MILESTONE.md` (386 inputs) agrees with the report that there is no new refusal and no lost line. It also finds two differences the report does not name: `docs/milestones/completed/workflow-controller-test-leftover-lifetime.md` (the old reader refused it, the new one reads `F1`..`F7`, which D6 allows as \"the other allowed difference\") and three earlier `ACTIVE_MILESTONE.md` revisions of adaptive-test-sharding (`f015b34`, `d62a6f6`, `595fb85`: 11 to 15 flows, rows `L1`..`L4`, no loss). D6 asks the report and the pull request to list each differing file, so add both to the pull request text.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
+        },
+        "F-72408df34cb3": {
+          "digest": "72408df34cb35fe15e8d3dd5a82cbd486470a3477d174eee062e825cd818cc57",
+          "text": "**O4. Three rejections in the D2 table are not pinned by a test.** `F123`, `A1b2` and `6b-` (the \"has a digit but is not a label\" row) are refused correctly (checked by hand: each refuses a table that has one recognised row, naming it), but only `123`, `F1b2` and `1234` have tests. A one-line subTest loop in `CompletenessTest` would pin the rest of the row. Smaller still: `LabelGrammarTest.test_a_table_of_no_labels_names_its_first_cells` checks for a missing `recognised` key through a set expression where `assertNotIn(\"recognised\", evidence)` is the plain form, and the `refusal()` helper checks the code with a bare `assert`, which `python -O` skips.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T07:48:08Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "0dd2deda703751dae9f8f2c23bed04c58360982f98861ae0f3eb813d5b158e4d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "87c1494824f93f4fcc7b61a18625fbd8457dc4361d46cd1a40d877a776bdc428",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-02T07:48:08Z",
+          "verdict_sha256": "1434a833aeaf2332f7b90be47cba7f9b4b16f218b108b1aa256412ac76abfe65",
+          "run_ref": "session:local .ai-review/workflow-controller-checklist-recogniser/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

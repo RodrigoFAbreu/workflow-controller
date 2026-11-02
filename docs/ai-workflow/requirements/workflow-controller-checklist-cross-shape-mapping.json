@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-checklist-cross-shape",
+  "requirements": {
+    "R1": {
+      "description": "When a shape has decided, a flow that another shape recognised and that neither starts inside a flow read nor, for a deciding table, holds a row read is refused with `checklist_unrecognised`, the evidence naming its shape and label (`dropped`), for the table, bold and heading deciding shapes (the numbered deciding shape has no candidate, D1) and for both cases of the issue, instead of being dropped silently",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "An item that starts inside a flow's text, a heading or bold paragraph that holds the rows of the table that decided, and an item inside a non-flow region (`Setup`, `Test data`, `Known limitations`, `Out of scope`; not `Flows`) are not refused; the flows read, their order, labels and `flow-N` ids, the label grammar and the order of the four shapes are unchanged, and FL1's refusal still comes first",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The measured history (every revision of `docs/ACTIVE_MILESTONE.md`, the completed milestones, the Manager's checklists and the vendored fixtures) shows no checklist the base read completely that the new rule refuses; the four checklists in which several shapes recognise something are pinned by tests",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The gate text, the guides and the roadmap state the rule; no setting, option, exit code, gate or result contract changes",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

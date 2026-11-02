@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-checklist-cross-shape",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -53356,6 +53356,238 @@
         },
         "evaluated_at": "2026-11-02T10:12:01Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-checklist-cross-shape": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-checklist-cross-shape",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CHECKLIST_CROSS_SHAPE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-cross-shape-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-cross-shape-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 7,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "11bd0c4b2b631a3f46b8228d88153dd0c20ed215",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+        "approved_review_content_id": "610d37f66bf1bc14a2435fb16f363eeea95fcfa2ad26efe90a7c385c42dac345",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CHECKLIST_CROSS_SHAPE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5a5c244e6ce8a72e75eeed51400169aa2dda5c7a"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checklist-cross-shape-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ffce29cacaccc0cfede8fab0679a623291d736ed"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-checklist-cross-shape-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9892b1772a39bcfd2963ffe67888797b60e6a7fd"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T22:22:46Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "610d37f66bf1bc14a2435fb16f363eeea95fcfa2ad26efe90a7c385c42dac345",
+            "ledger": {
+              "local": {
+                "bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+                "verdict": "APPROVE",
+                "round": 7,
+                "verdict_sha256": "e0eebc06a61dcbe4b6f3c5f88bce5bf53ed9725560f4f780617af91a11e69384",
+                "ledger_entry_sha256": "1d4b8b03a3d83ab33eca63b82ccca36dcd061ee28f387c81d67ef174976dfd0b",
+                "run_ref": "session:local .ai-review/workflow-controller-checklist-cross-shape/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+                "verdict": "APPROVE",
+                "round": 7,
+                "verdict_sha256": "7e2fe1b1a9f52f838090768b814a5c3dcd177ebb5cd41c11f0de262e42dc08ef",
+                "ledger_entry_sha256": "c37c83115fcac44a6cf881b3f592d23ed87fe95dd239d346f5ec124967c97d9b",
+                "run_ref": "codex:20261102T221920Z-025021e8",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T22:22:46Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "610d37f66bf1bc14a2435fb16f363eeea95fcfa2ad26efe90a7c385c42dac345",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-11-02T22:18:57Z",
+          "verdict_sha256": "e0eebc06a61dcbe4b6f3c5f88bce5bf53ed9725560f4f780617af91a11e69384",
+          "run_ref": "session:local .ai-review/workflow-controller-checklist-cross-shape/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+          "verdict": "APPROVE",
+          "round": 7,
+          "completed_at": "2026-11-02T22:21:18Z",
+          "verdict_sha256": "7e2fe1b1a9f52f838090768b814a5c3dcd177ebb5cd41c11f0de262e42dc08ef",
+          "run_ref": "codex:20261102T221920Z-025021e8",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 7,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 24,
+      "last_transition": "2026-11-02T22:22:46Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-02T22:16:34Z",
+        "consumed": {
+          "review_content_id": "160c9b8cd8d93398b960aa4418a7a3fbeb735b10b3cb76410e78e853a7ca3c29",
+          "plan_revision": 6,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "610d37f66bf1bc14a2435fb16f363eeea95fcfa2ad26efe90a7c385c42dac345",
+          "plan_revision": 7
+        },
+        "bound": {
+          "review_content_id": "610d37f66bf1bc14a2435fb16f363eeea95fcfa2ad26efe90a7c385c42dac345",
+          "bundle_id": "8cb2d18c5001b51ec410acd7cd0ed247960a3edb2a95a445e4a9798b02c77093",
+          "plan_revision": 7
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "160c9b8cd8d93398b960aa4418a7a3fbeb735b10b3cb76410e78e853a7ca3c29",
+        "1cf7f7d81e9352124188f58a0f00ebf72c0cac896e16da99c4d960743e481ff6",
+        "61e44e392799352a0ff06a1f4b9f18f3ed8af032bf430fd7c5c5508242f5fcce",
+        "86698e5e4a7190405bafeac81cd804561427cb0dc6ee4d29d97e962fd33c921e",
+        "a2f236d5648ad2cf929dc181d29669190b414faab16cc2f77a772d4a4c28de8b",
+        "dd6371fb5a361d25434b8e0ffb3736a0bcf710da70b584d9523d0d0bf90decd7"
+      ],
+      "optional_findings": {
+        "F-1f94d81d0909": {
+          "digest": "1f94d81d09098ea114a2379e22acd46b2e1e40dd4fec80e04732a2d9bc4ae0b4",
+          "text": "**LMPR-R1-O1** CP1 says `_flows_of_lines` \"now computes all three non-table finders once instead of lazily\", but the tuple literal at `controller/functional_review.py:534-537` already calls `_paragraph_found`, `_heading_found` and `_numbered_found` eagerly before the loop. The sentence describes a change that is not needed; drop it or reword it (\"keeps the three finders' results for the check\").",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "86698e5e4a7190405bafeac81cd804561427cb0dc6ee4d29d97e962fd33c921e",
+              "verdict": "REVISE",
+              "at": "2026-11-02T11:19:57Z"
+            }
+          ]
+        },
+        "F-7d661e0fe6f8": {
+          "digest": "7d661e0fe6f865ad488f124e8d1eeb73799efeaddbbf8d22d9c00c38bb1987ac",
+          "text": "**LMPR-R3-O1** In CP1's \"one refusal per deciding shape\", the entry \"a bold flow beside a numbered flow with the numbered item *before* it\" follows \"heading:\", so it reads as a heading-deciding case. But in that input the bold shape decides, and it repeats the bold entry's \"a numbered item *before* the first bold flow\". Drop it, or move it under \"bold:\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a2f236d5648ad2cf929dc181d29669190b414faab16cc2f77a772d4a4c28de8b",
+              "verdict": "REVISE",
+              "at": "2026-11-02T12:01:49Z"
+            }
+          ]
+        },
+        "F-5b76ebc0554f": {
+          "digest": "5b76ebc0554fc0539d9b97041911a5fc0830a3fafdfe56b59b1825c988a741f0",
+          "text": "**LMPR-R6-O1** CP1 says \"`_flows_of_lines` already computes the other shapes' items and spans, and keeps those results for the check\". That is true of the bold, heading and numbered branch. It is not true of the old-form table branch. That branch (`controller/functional_review.py:474-475`) returns `_table_decides(rows)` before any of `_paragraph_found`, `_heading_found` or `_numbered_found` runs. So the check at \"the table branch of step 2\" needs the three finders moved ahead of it. Say so, so the implementer does not read \"the finders are unchanged\" as \"the order is unchanged\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "160c9b8cd8d93398b960aa4418a7a3fbeb735b10b3cb76410e78e853a7ca3c29",
+              "verdict": "REVISE",
+              "at": "2026-11-02T12:14:13Z"
+            }
+          ]
+        },
+        "F-bdc4b2868013": {
+          "digest": "bdc4b28680136a404f4446880f3d77258ad0614d9321dc00da5abed1e5849c76",
+          "text": "**LMPR-R6-O2** D1 has no position for an item that starts inside the span of a table's holder. An example: `### A. Login` with the steps `1. Open the app` / `2. Sign in` in its prose, then an old-form case table `| 1 | ... |`. The table decides and heading `A` holds the rows, so `A` is accepted. The numbered items start inside `A`'s span, but `A` is not a flow that was read, and they share no line with a row. So they are refused, naming `1` and `2`. That follows the letter of D1 and is not a silent drop. But it treats a numbered list in the holder's prose differently from the rest of that prose, which D1 accepts as FL1's cost. The remedy in the refusal text (\"put each inside a flow of the table shape\") cannot be followed for prose steps. Either state this as intended (the steps are not run) and pin it in CP1, or count an item nested in a holder as accounted for.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "160c9b8cd8d93398b960aa4418a7a3fbeb735b10b3cb76410e78e853a7ca3c29",
+              "verdict": "REVISE",
+              "at": "2026-11-02T12:14:13Z"
+            }
+          ]
+        }
       }
     }
   }

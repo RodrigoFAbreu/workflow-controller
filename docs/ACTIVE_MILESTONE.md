@@ -155,29 +155,29 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-codex-worker-ownership` (H4c2, issue [#263](https://github.com/RodrigoFAbreu/workflow-controller/issues/263)),
-implementation revision 2. Every flow is offline and unit-level (no real Claude, Codex, network, `gh` or `ssh`; the job tests use
-the fake Codex and real test-owned processes) except flow 7, the opt-in live proof, which is operator-run. Run from the product
-clone with `TMPDIR` set to a writable scratch directory, one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's
-sandbox has a read-only `/tmp` and a restricted `PATH`: a flow that runs git or spawns child Controllers (flows 1 to 3) is
-`environment`-limited there and operator-run. No flow writes inside the product clone.
+Item `workflow-controller-codex-worker-usage` (H4d, issue [#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)),
+implementation revision 1. Every flow is offline and unit-level (no real Claude, Codex, network, `gh` or `ssh`; the job tests use
+the fake Codex) except flow 6, the opt-in live proof, which is operator-run. Run from the product clone with `TMPDIR` set to a
+writable scratch directory, one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp`
+and a restricted `PATH`: a job module that creates folders there (flows 1 to 3) is `environment`-limited and operator-run. No flow
+writes inside the product clone.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | `resume` ends, judges and reconciles a Codex record (CP1) | `python3 -B -m unittest tests.test_job_codex_worker_resume` | 25 tests pass: the `codex_worker` block (operator home, credential digest, `lock_inherited: false`) is persisted before the tree is prepared; `resume` never re-attaches to a Codex record, ends the group and every tagged process, settles the credentials and hands the record to the shared `LAUNCHED`/`COMPLETED` rows; under a drifted installation nothing changes. |
-| 2 | `--abandon` and interrupts (CP2) | `python3 -B -m unittest tests.test_job_codex_worker_interrupt` | 5 tests pass: an interrupt before the spawn leaves no process; a child Controller killed with `SIGINT` is reaped by the launcher; one killed with `SIGKILL` leaves an orphan (and a nested own-session descendant) that `resume` ends. The `--abandon` rules are covered in flow 1's module: an `active` worker or live owned process is refused naming `resume`; target root gone names pid, pgid and the by-hand end; `unverifiable` needs the acknowledgement; `inactive` or acknowledged is marked `FAILED` after the credentials are settled. |
-| 3 | Job-layer branch from H4c1 unchanged | `python3 -B -m unittest tests.test_job_codex_worker tests.test_codex_worker_job` | 37 tests pass (25 + 12): the completed, refused, interrupted and faulted paths behave as before. |
-| 4 | Neighbouring modules and containment | `python3 -B -m unittest tests.test_runtime tests.test_codex_worker tests.test_worker_launch tests.test_harness tests.test_package_structure tests.test_write_containment` | All pass: no real Codex worker entry in `CODEX.roles` or `worker_launch.LAUNCHERS`; the write-containment scan accepts the new code. |
-| 5 | Test-hygiene inventory | `python3 -B -m unittest tests.test_fake_claude_contract` | Passes (1 skipped): `LEFTOVER_INVENTORY` accounts for the new `process_fixtures.spawn_tagged_worker` leftovers. About 50 s. |
-| 6 | Live test skipped by default; documents | `python3 -B -m unittest tests.test_codex_worker_ownership_live -v`, then `python3 -B tools/check_docs.py`, then `python3 -B tools/harness_table.py --check` | The live proof's tests that need no model pass; the opt-in one is `skipped` with its reason (variable unset), no process started; both tools exit 0; `docs/guide/harnesses.md`, `workers.md` and `development.md` and the roadmap state what `resume` and `--abandon` do with a Codex record, why it is not re-attached to, and H4c2 done. |
-| 7 | Live proof, operator-run | `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_ownership_live -v` | Needs real `codex`, `bwrap`, a recorded `verify-codex` build and a credential file (one model turn). A child Controller runs a real worker and is killed with `SIGKILL`; `resume` leaves no process of the job's tag and reconciles the record `INTERRUPTED`. Matches `tests/harness_contract/codex/worker_ownership.txt`. |
+| 1 | Admission and accounting of a Codex worker job (CP1) | `python3 -B -m unittest tests.test_job_codex_worker_usage` | 11 tests pass: a Codex launcher is admitted with `usage_gate(route, provider=usage.PROVIDER_CODEX)`; a hold stops it before the spawn; the job's `usage` end block is written from its own Codex home; a never-started job and a run failing after the spawn are accounted correctly; a chain selecting Codex works; the reservation ticker renews; `resume` settles an orphan; a second admission sees the new percent. |
+| 2 | Mid-job usage limit held (CP2) | `python3 -B -m unittest tests.test_job_codex_worker_limit` | 10 tests pass: a window at 100 percent or more gives `stream_diagnosis.usage_limit` with the latest `resets_at` (weekly on a tie); no window showing it, or a breach, stays an ordinary failure; the INTERRUPTED rule, `run`'s wait loop and `step`'s exit 17 apply unchanged; `cli._mid_job_hold` names the record's routed harness provider (Claude when none). |
+| 3 | Job-layer branches unchanged | `python3 -B -m unittest tests.test_job_codex_worker tests.test_codex_worker_job` | 25 + 17 tests pass: the completed, refused, interrupted, faulted and `resume`/`--abandon` paths behave as before. |
+| 4 | Codex worker module | `python3 -B -m unittest tests.test_codex_worker` | 37 tests pass; no real Codex worker entry in `CODEX.roles` or `worker_launch.LAUNCHERS`. |
+| 5 | Neighbours, containment, documents | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_runtime`, then `python3 -B tools/check_docs.py`, then `python3 -B tools/harness_table.py --check` | All pass and both tools exit 0; `docs/guide/harnesses.md`, `workers.md` and `development.md` and the roadmap state the admission, the accounting, the mid-job hold and H4d done. |
+| 6 | Live proof, operator-run | `python3 -B -m unittest tests.test_codex_worker_usage_live -v` (skipped, reason shown, no process), then `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_usage_live -v` | Default: 1 test passes, the opt-in one is `skipped` with its reason. Opt-in (real `codex`, `bwrap`, a credential file, one model turn): admitted on provider `codex` with a token and a reservation; the job finishes with a `usage` block `done` and one ledger entry of provider `codex`. Matches `tests/harness_contract/codex/worker_usage.txt`. |
 
-**Known limitations / out of scope.** Nothing real reaches the branch: no real `LAUNCHERS` key, Codex worker role, setting,
-option, exit code or gate, and `job.CODEX_WORKTREE_PREPARER` is still `None`. A Codex record is never re-attached to; `resume`
-only ends and judges it. Usage windows and limit holds are H4d; review roles H4e; `milestone-implement` on Codex H4f. The change
-is a `chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206;
-`tests/test_codex_tester.py` has a pre-existing shared-tag collision reported for a follow-up).
+**Known limitations / out of scope.** Nothing real reaches the branch: no real `LAUNCHERS` key, Codex worker role, setting, option,
+exit code or gate, and `job.CODEX_WORKTREE_PREPARER` is still `None`. The limit derivation is proven only against the fake (no real
+Codex usage-limit event was ever captured; the safe fallback is an ordinary failure). The fact keeps `rate_limit_type: null`. Review
+roles are H4e (needs the owner decision on the tree); `milestone-implement` on Codex H4f; remaining roles H4g. The change is a
+`chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206;
+`tests/test_codex_tester.py` has a pre-existing shared-tag collision).
 
 ## Next action
 
-Manual functional review of H4c2 (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4d (usage windows and limit holds).
+Manual functional review of H4d (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4e once the owner decides the tree.

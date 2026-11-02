@@ -230,7 +230,7 @@ after the run (a changed guard digest, a nested `.git`, a changed build) turns a
 
 `controller/job.py` (H4c1, [#260](https://github.com/RodrigoFAbreu/workflow-controller/issues/260)) records one such run as a
 job, behind the same seam and for a fixture role only. `job._is_codex_launcher(launcher)` is true for a `CodexLauncher`, and the
-job layer branches on it in three places and nowhere else: `execute_step` skips the usage gate for a single-entry route,
+job layer branches on it in three places and nowhere else: `execute_step` asks the usage gate with the Codex provider (see the next section),
 `_run_codex_worker` replaces the call-and-wait block, and the completion write takes the `worker`, `telemetry` and
 `usage_record` fields from `controller/codex_worker_job.py` (pure helpers: the option mapping, the stream-file text and the usage
 builder). Everything around them is shared with the Claude path, so a Claude record is the record it was. The record carries
@@ -238,7 +238,7 @@ builder). Everything around them is shared with the Claude path, so a Claude rec
 `stop_reason` and `owned_processes_seen` are `None` for Codex; `subtype` is the launcher's), the two stream files holding the
 run's plain text with `worker_streams.format` `text`, `worker_state` `ENDED`, an `ownership_tag` equal to the job id and
 `worker_process`. The `usage_record` is derived from the job's rollouts and flagged `derived` (`unknown` when there is no rollout,
-`usage_record_failed` when the build raises); there is no `usage` block, because the budget is H4d. A Codex job has no deadline
+`usage_record_failed` when the build raises); the `usage` block is described in the next section. A Codex job has no deadline
 unless a timeout is set, as for a Claude worker.
 
 Two things are deliberately undecided. The **tree**: the job runs in a worktree the module seam `job.CODEX_WORKTREE_PREPARER`
@@ -249,6 +249,31 @@ on a legacy target the record ends `FAILED` with `phase_not_in_to_any_of`, and o
 owner decision needed before H4e. **Ownership** is described in the next section. The
 Codex home comes from `job.CODEX_HOME_RESOLVER` (the CLI's own `$CODEX_HOME` rule). The opt-in live proof is
 `tests.test_codex_worker_job_live`; its measured result is `tests/harness_contract/codex/worker_job.txt`.
+
+### A Codex worker on the usage budget
+
+H4d ([#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)) puts the same Codex worker job on the Codex usage
+budget, behind the same seam and for a fixture role only; no setting, option, exit code or gate is new.
+
+- **Admission.** `execute_step` asks the gate with `usage_gate(route, provider="codex")` for a Codex launcher; a Claude launcher
+  keeps the call with the route alone. A hold returns a `UsageHold` of provider `codex` (exit 17, as for any held step) before
+  any record, reservation or process exists. A fallback chain that selects the Codex entry carries that entry's token and is
+  accounted like a single route.
+- **Accounting.** The reservation is bound to the job, renewed while the worker runs, and settled at the end from the readings of
+  the job's own Codex home (`<runtime>/worker/<job>/codex-home`). The record's `usage` block has the keys of a Claude worker's,
+  with `accounting` `done` and one ledger entry of provider `codex`. A job that never started (a refused tree or build) is
+  released with no charge; a run that fails after the spawn is charged as `unknown`; `resume` settles an orphaned Codex record's
+  reservation. The end readings are merged into the shared record, so the next admission sees the percent the worker spent.
+- **A limit reached mid-job.** The launcher adds a `usage_limit` fact to the diagnosis only when Codex's own limit record
+  classified the run and a window reads 100 percent or more; the fact's reset is that window's `resets_at` (the weekly one on a
+  tie). No reset is invented: with no readable window, or with a sandbox breach, the run is an ordinary failure. The existing
+  rule then applies unchanged: a limited job that changed nothing is `INTERRUPTED` and held, one that moved the phase is `FAILED`
+  naming the limit; `run` waits for the Codex reset, repeats the step, emits `usage_paused` naming provider `codex`, and stops
+  at the third limited attempt; `step` exits 17 and waits for nothing. The mid-job hold takes its provider from the record's
+  routed harness (Claude when the record has none).
+- **Not proven live.** A real usage limit was never captured (`stderr_shapes.txt`), so the limit path is proven against the fake
+  Codex only. The opt-in `tests.test_codex_worker_usage_live` runs one real turn under a real gate over a scratch runtime and
+  checks the admission and the finished `usage` block; its measured result is `tests/harness_contract/codex/worker_usage.txt`.
 
 ### A Codex worker on `resume` and `--abandon`
 

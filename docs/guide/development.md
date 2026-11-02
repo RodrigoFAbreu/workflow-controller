@@ -19,6 +19,7 @@ CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_san
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_live -v  # opt-in: one live Codex worker launch through the launcher, one model turn
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_job_live -v  # opt-in: one live Codex worker turn recorded as a job through execute_step, one model turn
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_ownership_live -v  # opt-in: a child Controller running a real Codex worker is killed, then `resume` must leave no process of the job's tag, one model turn
+CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_usage_live -v  # opt-in: one live Codex worker turn under a real usage gate over a scratch runtime, the admission and the `usage` block, one model turn
 CONTROLLER_TEST_OLD_GIT=/path/to/git-2.35 python3 -m unittest tests.test_workflow_contract -k fsmonitor  # opt-in: a Git before 2.36
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```

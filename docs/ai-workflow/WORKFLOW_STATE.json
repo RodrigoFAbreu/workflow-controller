@@ -53367,7 +53367,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-cross-shape-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-cross-shape-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 7,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -53476,7 +53476,120 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "3404b3d52ff96cbb118b65605f833b2cf16c945251eb3b25a3d81661c32ff809",
+        "approved_review_content_id": "22c8922bcdba46cfbe0eec3a42e1e321b6aae49c77f400f484adbce34ab99aa5",
+        "review_content_manifest": [
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "59d3e069f03914c0d0ea952215def134e9fb5145"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checklist-cross-shape-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d19e5e271767bd0ba22ff87a2fe35eb9470d6add"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1bf6c7f5eff8499e325eb9e292dd0998458933a5"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ddc1c8d02b47b480b3926b04e126547c330287f3"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bf7ee39d23ff9b4fcd261c677e20bf35f5078029"
+          },
+          {
+            "path": "tests/test_functional_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d477135a89ef560beb31843470cabc9c7928c0ff"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "16f730979c07317fb9d711dd993eca25ec9d99fe"
+          }
+        ],
+        "reviewed_content_commit": "66f260ff3183a893718db68011ccff9c9a9e14c3",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-02T23:09:21Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "22c8922bcdba46cfbe0eec3a42e1e321b6aae49c77f400f484adbce34ab99aa5",
+            "ledger": {
+              "local": {
+                "bundle_id": "3404b3d52ff96cbb118b65605f833b2cf16c945251eb3b25a3d81661c32ff809",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "fa644b8b3d1fa7a23d01624835de2575f99fd2baad7db8ed47cf0f58e67ee99b",
+                "ledger_entry_sha256": "3cc28356083c8f10daad7bab6d8862caae6126075fa095d093dcc4bbefd54aa4",
+                "run_ref": "session:local .ai-review/workflow-controller-checklist-cross-shape/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "3404b3d52ff96cbb118b65605f833b2cf16c945251eb3b25a3d81661c32ff809",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "bc8eca3d73d13a57eca36b38ba28b6963d04b56b8eff4a6a33f5e8a1eb4cbbf7",
+                "ledger_entry_sha256": "99824b7d58c7f35bec05cdf1d593d2ea262df4f4c6725170355eb44180a261f4",
+                "run_ref": "codex:20261102T230601Z-5b41cb56",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-02T23:09:21Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "610d37f66bf1bc14a2435fb16f363eeea95fcfa2ad26efe90a7c385c42dac345",
@@ -53507,12 +53620,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-11-02T22:52:31Z",
+      "state_revision": 32,
+      "last_transition": "2026-11-02T23:09:21Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -53596,6 +53709,69 @@
               "at": "2026-11-02T12:14:13Z"
             }
           ]
+        },
+        "F-923f1c484833": {
+          "digest": "923f1c4848339063665ae51136ff04f5191a8b3106b6078753f0286a79500f79",
+          "text": "**O1 (correctness, edge).** `_nonflow_regions` matches a heading region with `heading[1].strip().lower().startswith(_REGION_WORDS)`, which is a string-prefix test and not a word test. So `### Test database flows` (and similarly `### Setups`, `### Out of scoped work`) opens a non-flow region. With a bold flow deciding, `**A. One.** go\\n\\n### Test database flows\\n\\n1. f\\n2. g` reads as `[\"A\"]`, and the numbered flows `1` and `2` are dropped without a word: the class of drop FL2 closes. `_heading_found`'s `NEVER_FLOWS` test uses the same prefix rule, so this is consistent with existing behaviour, and no history file triggers it. A word-boundary match (for example `re.match(rf\"(?:{words})\\b\", title, re.I)`) in both places would close it. This is a follow-up issue, not a change to this milestone.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "22c8922bcdba46cfbe0eec3a42e1e321b6aae49c77f400f484adbce34ab99aa5",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T23:05:22Z"
+            }
+          ]
+        },
+        "F-5b07e3f62632": {
+          "digest": "5b07e3f62632be67fb4f9e07ebcd7e24d242ab771f51d534d719f24f03f95c72",
+          "text": "**O2 (tests).** `test_the_historical_checklists_read_as_before` checks `workflow-controller-round-caps.md` and `workflow-controller-codex-reviewer.md` only with `assertTrue(labels(...))`. CP1 says each \"still reading its numbered flows\". Both read `1`..`10` today, so pinning `[str(n) for n in range(1, 11)]` would also catch a change to which flows are read, not only a refusal. The second issue case also asserts `dropped` but not `unrecognised` (CP1 lists both); `unrecognised == [\"C\"]` is a one-line addition.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "22c8922bcdba46cfbe0eec3a42e1e321b6aae49c77f400f484adbce34ab99aa5",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T23:05:22Z"
+            }
+          ]
+        },
+        "F-2f74e2213cb3": {
+          "digest": "2f74e2213cb3168992e2a0f53fb87822be2adf93fa16dcd9a1be8207119735ca",
+          "text": "**O3 (docs).** `docs/guide/automation.md` names only a `**Setup.**` line as a bold non-flow region. The code (and the test with `**Out of scope**`) also opens one at `**Test data.**`, `**Known limitations.**` and `**Out of scope.**`. One added line, \"(or after a `**Setup.**`, `**Test data.**`, `**Known limitations.**` or `**Out of scope.**` line ...)\", would make the guide match the code. The new sentence in that bullet also breaks the paragraph's line wrap (\"... such as `**Flows.**`) are not flows, and `Flows` is not such a region. The evidence then also carries `dropped` ...\" is one overlong line).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "22c8922bcdba46cfbe0eec3a42e1e321b6aae49c77f400f484adbce34ab99aa5",
+              "verdict": "APPROVE",
+              "at": "2026-11-02T23:05:22Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "22c8922bcdba46cfbe0eec3a42e1e321b6aae49c77f400f484adbce34ab99aa5",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3404b3d52ff96cbb118b65605f833b2cf16c945251eb3b25a3d81661c32ff809",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-02T23:05:22Z",
+          "verdict_sha256": "fa644b8b3d1fa7a23d01624835de2575f99fd2baad7db8ed47cf0f58e67ee99b",
+          "run_ref": "session:local .ai-review/workflow-controller-checklist-cross-shape/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3404b3d52ff96cbb118b65605f833b2cf16c945251eb3b25a3d81661c32ff809",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-02T23:07:45Z",
+          "verdict_sha256": "bc8eca3d73d13a57eca36b38ba28b6963d04b56b8eff4a6a33f5e8a1eb4cbbf7",
+          "run_ref": "codex:20261102T230601Z-5b41cb56",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

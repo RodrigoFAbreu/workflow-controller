@@ -2,6 +2,19 @@
 
 ## Status
 
+**In progress.** `workflow-controller-codex-worker-usage` (H4d, issue
+[#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)) admits a Codex worker job against the Codex usage
+budget, accounts it and holds it on its usage limit, for a fixture role. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_USAGE_PLAN.md`. CP1 is complete: `execute_step` admits a Codex launcher with
+`usage_gate(route, provider=usage.PROVIDER_CODEX)` (a Claude launcher keeps the unchanged call), the refusal of a record
+that carries `usage` is gone, `_run_codex_worker` renews the reservation with the same ticker, and `_launch_job` writes the
+`usage` end block from the readings of the job's own Codex home, so the job is accounted as any worker;
+`tests/test_job_codex_worker_usage.py` covers admission, a hold, accounting, a never-started job, a run failing after the
+spawn, a chain selecting Codex, the ticker and `resume` settling an orphan. CP2 (a Codex limit reached mid-job) and CP3 (the
+opt-in live proof, the guides and the roadmap) remain. Nothing real reaches the branch.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-codex-worker-ownership` (H4c2, issue
 [#263](https://github.com/RodrigoFAbreu/workflow-controller/issues/263)) owns, judges and reaps a Codex worker's process on
 `resume` and `--abandon`. The plan is `docs/ai-workflow/CONTROLLER_CODEX_WORKER_OWNERSHIP_PLAN.md`. CP1 is complete:

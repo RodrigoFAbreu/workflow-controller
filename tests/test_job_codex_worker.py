@@ -201,15 +201,22 @@ class CodexHomeTest(unittest.TestCase):
 
 
 class UsageGateTest(JobFixture):
-    def test_a_supplied_usage_gate_is_not_called_and_no_reservation_or_usage_block_exists(self) -> None:
-        gate = mock.Mock(side_effect=AssertionError("the usage gate was called"))
-        record = self.run_step(usage_gate=gate)
-        gate.assert_not_called()
-        self.assertNotIn("usage", record)
+    """H4d (D1): a Codex launcher is admitted on the Codex provider and accounted; the full cases are in
+    ``tests.test_job_codex_worker_usage``."""
+
+    def test_a_supplied_usage_gate_is_called_once_with_the_codex_provider_and_the_job_carries_a_usage_block(self) -> None:
+        gate = mock.Mock(return_value="token-1")
+        with mock.patch.object(job.usage, "bind_job"), \
+                mock.patch.object(job, "_usage_start_block", return_value={"token": "token-1"}), \
+                mock.patch.object(job, "_usage_account", side_effect=lambda _root, record, **_kw: record):
+            record = self.run_step(usage_gate=gate)
+        gate.assert_called_once()
+        self.assertEqual(gate.call_args.kwargs, {"provider": "codex"})
+        self.assertEqual(record["usage"]["token"], "token-1")
+        self.assertEqual(record["usage"]["accounting"], "pending")
         self.assertEqual(record["worker_outcome"], worker.SUCCESS)
 
-    def test_a_chain_selecting_the_codex_entry_under_a_gate_ends_worker_not_started_and_releases_the_reservation(
-            self) -> None:
+    def test_a_chain_selecting_the_codex_entry_under_a_gate_carries_its_token_and_runs(self) -> None:
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT,
                         "fallback": [{"harness": FIXTURE, "model": review.DEFAULT_MODEL,
                                       "effort": review.DEFAULT_EFFORT},
@@ -218,16 +225,12 @@ class UsageGateTest(JobFixture):
         config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
         self.options = routing.RoutingOptions(config=config, config_source="settings")
         gate = mock.Mock(return_value="token-1")
-        completed = []
         with mock.patch.object(job.usage, "bind_job"), \
                 mock.patch.object(job, "_usage_start_block", return_value={"token": "token-1"}), \
-                mock.patch.object(job.usage, "complete", lambda *a, **k: completed.append(a[2:4])), \
-                mock.patch.object(job, "_usage_account") as account:
-            with self.assertRaises(WorkerLaunchError):
-                self.run_step(usage_gate=gate)
-        record = self.assert_not_started("WorkerLaunchError")
-        self.assertEqual(record["usage"], {"token": "token-1"})
-        account.assert_called_once()
+                mock.patch.object(job, "_usage_account", side_effect=lambda _root, record, **_kw: record):
+            record = self.run_step(usage_gate=gate)
+        self.assertEqual(record["usage"]["token"], "token-1")
+        self.assertEqual(record["worker_outcome"], worker.SUCCESS)
 
 
 class OutcomeTest(JobFixture):

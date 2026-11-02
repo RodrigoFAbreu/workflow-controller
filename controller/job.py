@@ -8522,9 +8522,10 @@ def _execute_step_locked(
         # for `resume`. A hold never waits here: the decision and pre-state
         # are this boundary's, and the caller re-enters the whole boundary
         # after a wait.
-        # H4c1 (D7): a Codex launcher takes no reservation -- the budget sees only the Claude provider here.
-        if usage_gate is not None and not _is_codex_launcher(launcher):
-            admitted = usage_gate(route)
+        # H4d (D1): a Codex launcher is admitted on the Codex provider; a Claude launcher keeps the unchanged call.
+        if usage_gate is not None:
+            admitted = (usage_gate(route, provider=usage.PROVIDER_CODEX) if _is_codex_launcher(launcher)
+                        else usage_gate(route))
             if isinstance(admitted, (UsageHold, usage.Hold)):
                 return _as_usage_hold(admitted, preflight_events)
             token = admitted
@@ -8747,7 +8748,7 @@ def _is_codex_launcher(launcher: Any) -> bool:
 def _run_codex_worker(
     managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
     route: routing.ResolvedRoute, timeout: float | None, launcher: Any,
-    worker_not_started: Callable[[ControllerError], None],
+    worker_not_started: Callable[[ControllerError], None], ticker: usage.RenewalTicker | None = None,
 ) -> tuple[worker.WorkerResult, JobRecord, dict]:
     """The call-and-wait block of a Codex worker (H4c1, D2, D4, D8): the tree and Codex home from their seams, the
     launch with the eight options of D4, ``worker_process`` flushed on spawn and the two stream files filled after
@@ -8764,13 +8765,10 @@ def _run_codex_worker(
                           event="worker_spawned", details={"pid": pid, "pgid": pgid})
         spawned["flushed"] = True
         spawned["spawned_at"] = record["updated_at"]
+        if ticker is not None:
+            ticker.start()
 
     try:
-        if record.get("usage") is not None:
-            raise WorkerLaunchError(
-                "a Codex worker takes no usage reservation (the budget is not wired to it yet); the fallback chain "
-                "selected it under a usage gate",
-                evidence={"job_id": job_id, "harness": route.harness})
         operator_home = CODEX_HOME_RESOLVER()
         record = _persist(runtime_root, job_id, {
             **record, "codex_worker": {
@@ -8808,6 +8806,9 @@ def _run_codex_worker(
                 }, event=_final_event(STATUS_FAILED), details={"error": type(exc).__name__})
                 _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
         raise
+    finally:
+        if ticker is not None:
+            ticker.stop()
     return result, record, spawned
 
 
@@ -8979,7 +8980,8 @@ def _launch_job(
     if codex:
         result, record, spawned = _run_codex_worker(
             managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
-            route=route, timeout=resolved_timeout, launcher=launcher, worker_not_started=worker_not_started)
+            route=route, timeout=resolved_timeout, launcher=launcher, worker_not_started=worker_not_started,
+            ticker=ticker)
     else:
         try:
             result = launcher.launch(
@@ -9066,7 +9068,13 @@ def _launch_job(
         # "pending"` ride in the write that reads the stream; every later
         # write spreads the record, so whichever terminal write follows
         # (here or a `resume` reconciler) carries them.
-        record["usage"], first, last = _usage_end_block(usage_block, worker_streams["stdout_path"])
+        if codex:
+            # H4d (D2): the end figures from the job's own Codex home, first readings empty as the tester's.
+            readings = (result.stream_diagnosis or {}).get("readings") or []
+            first, last = {}, {reading["window"]: reading for reading in readings}
+            record["usage"] = _codex_end_block(usage_block, readings)
+        else:
+            record["usage"], first, last = _usage_end_block(usage_block, worker_streams["stdout_path"])
         if usage_end is not None:
             usage_end.update(first=first, last=last)
     record = _persist(runtime, job_id, record, event="completed",

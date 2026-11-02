@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-codex-worker-usage` (H4d, issue
+**Complete.** `workflow-controller-codex-worker-usage` (H4d, issue
 [#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)) admits a Codex worker job against the Codex usage
 budget, accounts it and holds it on its usage limit, for a fixture role. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_USAGE_PLAN.md`. CP1 is complete: `execute_step` admits a Codex launcher with
@@ -15,7 +15,9 @@ classified the run, `codex_worker_job.limit_fact` derives `stream_diagnosis.usag
 100 percent or more, the latest `resets_at`, the weekly window on a tie; none, and so an ordinary failure, when no window
 shows it; none on a breach), so the existing INTERRUPTED rule, `run`'s wait loop and `step`'s exit 17 apply unchanged, and
 `cli._mid_job_hold` names the provider of the record's routed harness (Claude when none); `tests/test_job_codex_worker_limit.py`
-covers it. CP3 is complete: `tests/test_codex_worker_usage_live.py` is the opt-in live proof (one real Codex turn through `job.execute_step` under a real gate over a scratch runtime; skipped by default and on CI, with its reason; the capture `tests/harness_contract/codex/worker_usage.txt` records the measured run: admitted on provider `codex` with a token and a reservation, finished with a `usage` block `done` and one ledger entry of provider `codex`), the harness, worker and development guides state the admission, the accounting and the mid-job hold, and the roadmap marks H4d done (`chore:`, no release; H4e still needs the owner decision on the tree). Nothing real reaches the branch.
+covers it. CP3 is complete: `tests/test_codex_worker_usage_live.py` is the opt-in live proof (one real Codex turn through `job.execute_step` under a real gate over a scratch runtime; skipped by default and on CI, with its reason; the capture `tests/harness_contract/codex/worker_usage.txt` records the measured run: admitted on provider `codex` with a token and a reservation, finished with a `usage` block `done` and one ledger entry of provider `codex`), the harness, worker and development guides state the admission, the accounting and the mid-job hold, and the roadmap marks H4d done (`chore:`, no release; H4e still needs the owner decision on the tree). Nothing real reaches the branch. The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for the next incomplete item on `docs/ROADMAP.md` (H4e still needs the owner decision on the Codex tree and how its commits land, so the owner names the item). The previous item is recorded below.
 
 Previous item, now complete:
 

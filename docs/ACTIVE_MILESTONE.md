@@ -177,29 +177,30 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-codex-worker-usage` (H4d, issue [#266](https://github.com/RodrigoFAbreu/workflow-controller/issues/266)),
-implementation revision 1. Every flow is offline and unit-level (no real Claude, Codex, network, `gh` or `ssh`; the job tests use
-the fake Codex) except flow 6, the opt-in live proof, which is operator-run. Run from the product clone with `TMPDIR` set to a
-writable scratch directory, one module at a time, `python3 -B` and no `PYTHONPATH=.`. The tester's sandbox has a read-only `/tmp`
-and a restricted `PATH`: a job module that creates folders there (flows 1 to 3) is `environment`-limited and operator-run. No flow
-writes inside the product clone.
+Item `workflow-controller-checklist-recogniser` (FL1, issue [#227](https://github.com/RodrigoFAbreu/workflow-controller/issues/227)),
+implementation revision 2. The change is a pure parser (`controller/functional_review.py`) plus the words of one gate text, so every
+flow is offline and unit-level: no network, `gh`, `claude`, `codex` or `ssh`, and no flow writes inside the product clone. Run from
+the product clone with `TMPDIR` set to a writable scratch directory, `python3 -B` and no `PYTHONPATH=.`. Flows 2 to 5 read text with
+`python3 -B -c` and create no folder; the history measurement of D6 needs the full git history and is operator-run if the clone is
+shallow.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Admission and accounting of a Codex worker job (CP1) | `python3 -B -m unittest tests.test_job_codex_worker_usage` | 11 tests pass: a Codex launcher is admitted with `usage_gate(route, provider=usage.PROVIDER_CODEX)`; a hold stops it before the spawn; the job's `usage` end block is written from its own Codex home; a never-started job and a run failing after the spawn are accounted correctly; a chain selecting Codex works; the reservation ticker renews; `resume` settles an orphan; a second admission sees the new percent. |
-| 2 | Mid-job usage limit held (CP2) | `python3 -B -m unittest tests.test_job_codex_worker_limit` | 10 tests pass: a window at 100 percent or more gives `stream_diagnosis.usage_limit` with the latest `resets_at` (weekly on a tie); no window showing it, or a breach, stays an ordinary failure; the INTERRUPTED rule, `run`'s wait loop and `step`'s exit 17 apply unchanged; `cli._mid_job_hold` names the record's routed harness provider (Claude when none). |
-| 3 | Job-layer branches unchanged | `python3 -B -m unittest tests.test_job_codex_worker tests.test_codex_worker_job` | 25 + 17 tests pass: the completed, refused, interrupted, faulted and `resume`/`--abandon` paths behave as before. |
-| 4 | Codex worker module | `python3 -B -m unittest tests.test_codex_worker` | 37 tests pass; no real Codex worker entry in `CODEX.roles` or `worker_launch.LAUNCHERS`. |
-| 5 | Neighbours, containment, documents | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_runtime`, then `python3 -B tools/check_docs.py`, then `python3 -B tools/harness_table.py --check` | All pass and both tools exit 0; `docs/guide/harnesses.md`, `workers.md` and `development.md` and the roadmap state the admission, the accounting, the mid-job hold and H4d done. |
-| 6 | Live proof, operator-run | `python3 -B -m unittest tests.test_codex_worker_usage_live -v` (skipped, reason shown, no process), then `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_usage_live -v` | Default: 1 test passes, the opt-in one is `skipped` with its reason. Opt-in (real `codex`, `bwrap`, a credential file, one model turn): admitted on provider `codex` with a token and a reservation; the job finishes with a `usage` block `done` and one ledger entry of provider `codex`. Matches `tests/harness_contract/codex/worker_usage.txt`. |
+| 1 | Label grammar, completeness and shape choice (CP1) | `python3 -B -m unittest tests.test_functional_review` | All tests pass (80 `test_` functions): the D2 label in the four shapes, a partly recognised shape refused with `shape`, `recognised`, `total`, `unrecognised`, the D7 shape-choice order, and the two Manager checklists and `settings-and-telemetry` as fixtures. |
+| 2 | Manager fixture reads as five flows (R3) | `python3 -B -c "import controller.functional_review as fr; fs=fr.read_flows(open('tests/fixtures/functional_checklists/table_f_labels_cache_miss_message.md').read()); print([(f.flow_id, f.label) for f in fs])"` | Five flows, `flow-1`..`flow-5`, labelled `F1`..`F5`. The `http_read_test_strength` fixture gives five too. |
+| 3 | A partly recognised table is refused (R2) | `python3 -B -c "import controller.functional_review as fr; t='## Functional review checklist\n\n| # | Flow | Expected |\n|---|---|---|\n' + ''.join(f'| {c} | do | ok |\n' for c in ['A','B','C','Flow 4','Flow 5','Flow 6','Flow 7','Flow 8','Flow 9']); fr.read_flows(t)"` | Raises `ChecklistUnrecognised` (the traceback message is the refusal; code `checklist_unrecognised`): the table shape recognised 3 of 9 items and the message names the six `Flow N` first cells and states the accepted label; it does not say "no functional flow can be recognised". |
+| 4 | Words inside a flow are not refused (R2) | `python3 -B -c "import controller.functional_review as fr; t='## Functional review checklist\n\n**1. Run it.**\n\n**Setup.** make a folder.\n**Expected:** it prints ok.\n\n**2. Check it.**\n\n**Expected:** exit 0.\n'; print([(f.flow_id, f.label) for f in fr.read_flows(t)])"` | Two flows, `flow-1` (`1`) and `flow-2` (`2`); `**Setup.**` and `**Expected:**` stay in their flow's text and nothing is refused. |
+| 5 | Older headings checklist keeps every flow (D7, R4) | `python3 -B -c "import controller.functional_review as fr; t=open('docs/milestones/completed/workflow-controller-documentation-reorganisation.md').read(); print([f.label for f in fr.read_flows(t)])"` | Nine flows `A`..`I`, `C` (the read-through) among them; the nested `A1`, `B1`, `D1` rows stay inside their headings. If the file lacks a recognised checklist section, note the error text. |
+| 6 | Gate text for a partial refusal (CP2) | `python3 -B -m unittest tests.test_functional_lifecycle` | Pass: a checklist with one recognised and one unrecognised flow stops at `checklist_unrecognised` and the gate text begins "the functional review checklist is only partly recognised", names the item and does not contain "has no flow"; a checklist with none keeps the "has no flow the Controller can recognise" lead and says "a flow label". |
+| 7 | Neighbours, containment, documents | `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_protocol_job`, then `python3 -B tools/check_docs.py` | All pass and `check_docs.py` exits 0; `docs/guide/automation.md` states the label with its table of examples and the refusal of a partly recognised checklist, `docs/common-problems.md` and `docs/guide/troubleshooting.md` name the new case, and `docs/ROADMAP.md` marks FL1 done. |
 
-**Known limitations / out of scope.** Nothing real reaches the branch: no real `LAUNCHERS` key, Codex worker role, setting, option,
-exit code or gate, and `job.CODEX_WORKTREE_PREPARER` is still `None`. The limit derivation is proven only against the fake (no real
-Codex usage-limit event was ever captured; the safe fallback is an ordinary failure). The fact keeps `rate_limit_type: null`. Review
-roles are H4e (needs the owner decision on the tree); `milestone-implement` on Codex H4f; remaining roles H4g. The change is a
-`chore:` with no release. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206;
-`tests/test_codex_tester.py` has a pre-existing shared-tag collision).
+**Known limitations / out of scope.** No setting, option, exit code, gate or result contract changes; the refusal keeps its code,
+shape list and remedy. An optional, qualified flow header (`**Optional, K. Title.**`) is deliberately neither a flow nor a refusal
+candidate. `settings-and-telemetry` now reads as 29 flows, not 16 (D6, named and pinned by a test; nothing is dropped). A label with
+no closing mark (`**6.1 Title.**`) is neither a flow nor a candidate. The change is a `fix:` patch release (1.27.3). The full suite is
+not a flow (`test_functional_sandbox` has a known CI flake, #206; `tests/test_codex_tester.py` has a pre-existing shared-tag
+collision).
 
 ## Next action
 
-Manual functional review of H4d (the checklist above), then `/accept-milestone`; after it, `/milestone-plan` for H4e once the owner decides the tree.
+Manual functional review of FL1 (the checklist above), then `/accept-milestone`.

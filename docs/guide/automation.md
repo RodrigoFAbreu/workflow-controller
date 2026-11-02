@@ -449,7 +449,15 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    label or heading that is not one), the Controller refuses it instead of testing only the
    recognised part. The stop opens "the functional review checklist is only partly recognised"
    and its evidence carries the `shape`, `recognised` of `total` and the `unrecognised` names;
-   words, sub-labels and prose inside a flow are not refused;
+   words, sub-labels and prose inside a flow are not refused. A flow that **another shape**
+   recognised is refused too, instead of being dropped silently, unless it is accounted for: it
+   starts inside the text of a flow that was read (a numbered list in a bold flow, a case table in
+   a heading flow), or, when a table decided, its heading or bold paragraph holds the rows read.
+   Items under `### Setup`, `### Test data`, `### Known limitations` and `### Out of scope` (or
+   after a `**Setup.**` line, up to the next heading or labelled paragraph) are not flows, and
+   `Flows` is not such a region. The evidence then also carries `dropped`, the `shape` and `label`
+   of each flow that would not run; put each inside a flow of the shape used, or give the section
+   one shape;
 2. builds a **sandbox** under `<runtime root>/functional/<job_id>/`: a `git clone --no-hardlinks`
    of the item's branch at its head, whose `origin` is a scratch bare repository; a `bin/` first on
    `PATH` with a fake `gh`, `claude`, `codex` and `ssh` (each logs its arguments and refuses);

@@ -11,9 +11,12 @@ starts inside a flow that was read, holds a row of the table that decided, or li
 `Setup`, `Test data`, `Known limitations`, `Out of scope`, not `Flows`); otherwise `_dropped` raises `checklist_unrecognised`
 with the evidence `shape`, `recognised`, `total`, `unrecognised` and `dropped`. `CrossShapeTest` pins both cases of the issue
 and the position rule; the refusal tests fail on the base commit. The history measurement (D6, 392 texts, 64 distinct
-sections, 63 read on the base) found no checklist newly refused or read differently. CP2 (gate text, guides, roadmap) is next.
+sections, 63 read on the base) found no checklist newly refused or read differently. CP2 is complete: `gate_text` for `checklist_unrecognised` states that a flow another shape recognised must lie inside a flow
+of the shape used (or hold a table's rows), `tests/test_functional_lifecycle.py` pins the stop for a heading beside a bold flow
+(no job, sandbox or reservation), the automation guide states the rule, the two problem pages name the case and the roadmap
+marks FL2 done (1.27.4).
 
-Next action: `/milestone-implement` for CP2, then the implementation review.
+Next action: `/milestone-implement` again (full verification, then the implementation review bundle).
 
 Previous item, now complete:
 

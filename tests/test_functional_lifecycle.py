@@ -314,6 +314,17 @@ def flow_stops_before_or_without_a_run(judge: Judge, test: unittest.TestCase, *,
     judge.equal((life.launches, tester_runs(life), life.reservations()), ([], [], {}),
                 "partly recognised: no tester job, sandbox or reservation")
 
+    life = new_cycle(test, checklist="### A. One\\ngo\\n\\n**B. Two.** x\\n")
+    life.plan = [("flow-1", "passed", None)]
+    record = life.step(gate=life.usage_gate())
+    said = record["human_gate_pending"]["what_is_required"]
+    judge.equal((record["status"], record["functional"]["gate"]), (job.STATUS_GATE_BLOCKED, "checklist_unrecognised"),
+                "cross-shape: the stop")
+    judge.check(said.startswith("checklist_unrecognised: the functional review checklist is only partly recognised")
+                and "`A` (heading)" in said, "cross-shape: the gate text says so and names the heading")
+    judge.equal((life.launches, tester_runs(life), life.reservations()), ([], [], {}),
+                "cross-shape: no tester job, sandbox or reservation")
+
 
 # ---------------------------------------------------------------------------
 # Scenario 4: the isolation boundary, on the real launch over the fake CLI

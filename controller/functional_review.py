@@ -2120,8 +2120,9 @@ def gate_text(code: str, **facts: Any) -> str:
         return (f"{lead} ({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
                 f"'{SECTION_TITLE}' of docs/ACTIVE_MILESTONE.md must carry its flows as table rows whose first cell is a "
                 "flow label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
-                f"or as a numbered list, and every item of the shape it uses must be a flow; or set `{SETTING_AUTOMATED}` "
-                "false to keep the stop for a person")
+                f"or as a numbered list, and every item of the shape it uses must be a flow, and a flow that another shape "
+                "recognised must lie inside a flow of the shape used (or, for a table, hold its rows); or set "
+                f"`{SETTING_AUTOMATED}` false to keep the stop for a person")
     if code == GATE_TESTER_UNAVAILABLE:
         return (f"the functional tester cannot run here ({detail}): nothing was started and nothing was recorded. "
                 f"Install what is missing, or {MANUAL_REMEDY}")

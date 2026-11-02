@@ -218,10 +218,12 @@ _LABEL = rf"(?:(?:[A-Za-z]\d{{0,2}}|\d{{1,2}}(?:\.\d{{1,2}})*[A-Za-z]?){_QUALIFI
 _LABEL_RE = re.compile(rf"^{_LABEL}$")
 #: The label before the digit-led forms were accepted; a table row it accepts is "old-form" (D7).
 _OLD_LABEL_RE = re.compile(r"^(?:[A-Za-z]|\d{1,2})$")
-_NUMBERED_LABEL_RE = re.compile(rf"^\d{{1,3}}(?:\.\d{{1,2}})*[A-Za-z]?{_QUALIFIER}$")
-#: A marker token: at most 24 letters, digits, ``.`` and ``-``, closed by ``.``, ``)`` or ``:``.
+_NUMBERED_LABEL = rf"\d{{1,3}}(?:\.\d{{1,2}})*[A-Za-z]?{_QUALIFIER}"
+#: A marker token that is not a label: at most 24 letters, digits, ``.`` and ``-``, closed by ``.``,
+#: ``)`` or ``:``. A label is tried first and has no length bound of its own (D2), so the bound only
+#: limits the candidates of D1.
 _TOKEN = r"[A-Za-z0-9.\-]{1,24}"
-_BOLD_RE = re.compile(rf"^\*\*(?P<token>{_TOKEN})[.):](?!\d)")
+_BOLD_RE = re.compile(rf"^\*\*(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
 #: checklist's own non-flow sections; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
@@ -231,10 +233,12 @@ _SECTION_END_RE = re.compile(
     + r")[ \t]*(?:[:.]|\*\*)"
     # or a flow header: one qualifier word, a comma, then the label (``**Optional, K. Title.**``)
     rf"|^\*\*[ \t]*[A-Za-z]+,[ \t]*{_LABEL}[.)][ \t]", re.IGNORECASE)
-_HEADING_MARK_RE = re.compile(rf"^(?P<token>{_TOKEN})[.):](?!\d)")
+_HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")
-_FLOW_LABEL_RE = re.compile(rf"^(?P<label>{_LABEL})(?![A-Za-z0-9])")
-_NUMBERED_RE = re.compile(rf"^(?P<token>{_TOKEN})[.)](?=[ \t]+\S)")
+#: ``Flow <label>``: a complete label, alone or closed by a marker, else the text is read as before.
+_FLOW_LABEL_RE = re.compile(rf"^(?P<label>{_LABEL})(?:[.):]?(?=[ \t]|$))")
+_NUMBERED_RE = re.compile(
+    rf"^(?:(?P<label>{_NUMBERED_LABEL})|(?P<token>{_TOKEN}))[.)](?=[ \t]+\S)")
 _SEPARATOR_RE = re.compile(r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$")
 _LINK_RE = re.compile(r"^(?:[-*][ \t]+)?\[[^\]]*\]\((?P<target>[^)\s]+)\)\.?$")
 
@@ -362,8 +366,8 @@ def _paragraph_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
         match = None if mask[index] else _BOLD_RE.match(line)
         if not match:
             continue
-        token = match.group("token")
-        if not _LABEL_RE.match(token):
+        token = match.group("label") or match.group("token")
+        if not match.group("label"):
             if _is_candidate(token):
                 found.unrecognised.append((index, token))
             continue
@@ -373,7 +377,7 @@ def _paragraph_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
         end = index + 1
         while end < len(lines):
             later = None if mask[end] else _BOLD_RE.match(lines[end])
-            if not mask[end] and ((later and _LABEL_RE.match(later.group("token"))) or _heading(lines[end], False)
+            if not mask[end] and ((later and later.group("label")) or _heading(lines[end], False)
                                   or (lines[end].startswith("**") and not lines[end - 1].strip()
                                       and _SECTION_END_RE.match(lines[end]))):
                 break
@@ -401,8 +405,8 @@ def _heading_found(lines: Sequence[str], mask: Sequence[bool], section_level: in
             marked = _HEADING_MARK_RE.match(title)
             if not marked:
                 continue
-            label = marked.group("token")
-            if not _LABEL_RE.match(label):
+            label = marked.group("label") or marked.group("token")
+            if not marked.group("label"):
                 if _is_candidate(label):
                     found.unrecognised.append((index, label))
                 continue
@@ -423,8 +427,8 @@ def _numbered_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
         match = None if mask[index] else _NUMBERED_RE.match(line)
         if not match:
             continue
-        token = match.group("token")
-        if not _NUMBERED_LABEL_RE.match(token):
+        token = match.group("label") or match.group("token")
+        if not match.group("label"):
             if _is_candidate(token, numbered=True):
                 found.unrecognised.append((index, token))
             continue

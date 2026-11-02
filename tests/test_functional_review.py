@@ -206,6 +206,34 @@ class LabelGrammarTest(unittest.TestCase):
         text = checklist("### Flow 6.1\ndo a\n\n### Flow 6.2\ndo b\n\n### Flow 3\nc\n\n### Flow\nd\n")
         self.assertEqual(labels(text), ["6.1", "6.2", "3", "Flow"])
 
+    def test_a_compact_title_after_the_closing_mark_keeps_its_flow(self) -> None:
+        for title in ("Run", "Run2", "Step.Run"):
+            with self.subTest(title=title):
+                bold = fr.read_flows(checklist(f"**A.{title}.** do A\n\n**B. Other.** do B\n"))
+                self.assertEqual([f.label for f in bold], ["A", "B"])
+                self.assertIn("do A", bold[0].text)
+                heading = fr.read_flows(checklist(f"### A.{title}.\ndo A\n\n### B. Other\ndo B\n"))
+                self.assertEqual([f.label for f in heading], ["A", "B"])
+                self.assertIn("do A", heading[0].text)
+
+    def test_a_label_longer_than_the_candidate_bound_is_a_label_in_every_shape(self) -> None:
+        long = "12.12.12b-abcdefghijklmnop"
+        self.assertGreater(len(long), 24)
+        shapes = (
+            TABLE_HEAD + f"| {long} | do | ok |\n| Z9 | do | ok |\n",
+            f"**{long}. One.** go\n\n**Z9. Two.** go\n",
+            f"### {long}. One\ngo\n\n### Z9. Two\ngo\n",
+            f"{long}. one\n{long}) two\n",
+        )
+        for body in shapes:
+            with self.subTest(body=body[:20]):
+                self.assertEqual(labels(checklist(body))[0], long)
+        self.assertEqual(len(labels(checklist(shapes[3]))), 2)
+
+    def test_flow_headings_that_are_not_a_whole_label_keep_the_old_label(self) -> None:
+        text = checklist("### Flow F1-retry-again\na\n\n### Flow 6.1.123\nb\n\n### Flow 6.1. Title\nc\n")
+        self.assertEqual(labels(text), ["F1-retry-again", "6", "6.1"])
+
     def test_a_label_after_a_flow_header_ends_the_flow(self) -> None:
         text = checklist("**A. One.** go\n\n**Optional, F1. Extra.** later\n\n**B. Two.** go\n")
         flows = fr.read_flows(text)

@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-checklist-cross-shape` (FL2, issue
+**Complete.** `workflow-controller-checklist-cross-shape` (FL2, issue
 [#271](https://github.com/RodrigoFAbreu/workflow-controller/issues/271)) makes the functional checklist recogniser refuse a
 flow that another shape recognised and the deciding shape would drop silently. The plan is
 `docs/ai-workflow/CONTROLLER_CHECKLIST_CROSS_SHAPE_PLAN.md`. CP1 is complete: `_flows_of_lines` keeps what the bold, heading
@@ -16,7 +16,9 @@ of the shape used (or hold a table's rows), `tests/test_functional_lifecycle.py`
 (no job, sandbox or reservation), the automation guide states the rule, the two problem pages name the case and the roadmap
 marks FL2 done (1.27.4).
 
-Next action: manual functional review of FL2 (the checklist below), then `/accept-milestone`.
+The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for CU3c, the next incomplete item on `docs/ROADMAP.md` (then C10h, C10i, C10j and C10k).
 
 Previous item, now complete:
 

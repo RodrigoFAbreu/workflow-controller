@@ -1,0 +1,34 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-checklist-cross-shape",
+ "dispositions": {
+  "F-1f94d81d0909": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 7) and carried into the implementation."
+  },
+  "F-5b76ebc0554f": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 7) and carried into the implementation."
+  },
+  "F-7d661e0fe6f8": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 7) and carried into the implementation."
+  },
+  "F-bdc4b2868013": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 7) and carried into the implementation."
+  },
+  "F-923f1c484833": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/275"
+  },
+  "F-5b07e3f62632": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6591467400"
+  },
+  "F-2f74e2213cb3": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6591467400"
+  }
+ }
+}

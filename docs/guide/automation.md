@@ -454,8 +454,8 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    starts inside the text of a flow that was read (a numbered list in a bold flow, a case table in
    a heading flow), or, when a table decided, its heading or bold paragraph holds the rows read.
    Items under `### Setup`, `### Test data`, `### Known limitations` and `### Out of scope` (or
-   after a `**Setup.**` line, up to the next heading or labelled paragraph) are not flows, and
-   `Flows` is not such a region. The evidence then also carries `dropped`, the `shape` and `label`
+   after a `**Setup.**` line, up to the next heading, labelled paragraph or bold line that opens
+   another section, such as `**Flows.**`) are not flows, and `Flows` is not such a region. The evidence then also carries `dropped`, the `shape` and `label`
    of each flow that would not run; put each inside a flow of the shape used, or give the section
    one shape;
 2. builds a **sandbox** under `<runtime root>/functional/<job_id>/`: a `git clone --no-hardlinks`

@@ -30,7 +30,7 @@ from typing import Any
 
 from controller import (
     claude_build, codex_build, codex_verify, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, notify,
-    observe, protocol_decision, review, review_mode, review_rounds, routing, runtime, settings, target_state,
+    observe, protocol_decision, review, review_mode, review_rounds, route_select, routing, runtime, settings, target_state,
     telemetry, usage, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
@@ -1777,8 +1777,10 @@ def _mid_job_hold(record: dict, fact: dict) -> job.UsageHold:
     """The D6 hold for a job that reached the usage limit having changed
     nothing: waitable until the fact's reset, whatever ``usage.enabled`` says."""
     window = fact.get("window") or "unknown"
+    harness_name = (record.get("worker_route") or {}).get("harness") if isinstance(record.get("worker_route"), dict) else None
+    provider = (route_select.usage_provider(harness_name) if isinstance(harness_name, str) else usage.PROVIDER_CLAUDE)
     return job.UsageHold(
-        provider=usage.PROVIDER_CLAUDE, window=window, percent=100.0, forecast=0.0, resume_at=fact["resets_at"],
+        provider=provider, window=window, percent=100.0, forecast=0.0, resume_at=fact["resets_at"],
         reason=f"job {record.get('job_id')} reached the {window} usage limit mid-job", waitable=True,
         mid_job=True,
     )

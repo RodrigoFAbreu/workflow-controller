@@ -242,7 +242,7 @@ class OutcomeTest(JobFixture):
         self.assertEqual(self.tagged("job1"), [])
         self.assert_no_copy()
 
-    def test_a_limit_record_is_a_failure_with_the_limit_subtype_and_no_usage_limit_fact(self) -> None:
+    def test_a_limit_record_with_no_derivable_window_is_a_failure_with_the_limit_subtype_and_no_usage_limit_fact(self) -> None:
         self.script(verdict="limit", message="partial")
         record = self.run_step()
         self.assertEqual((record["worker_outcome"], record["worker"]["subtype"]), (worker.FAILURE, "usage_limit"))

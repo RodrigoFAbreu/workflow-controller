@@ -96,6 +96,37 @@ class UsageBuilderTest(unittest.TestCase):
             build()
 
 
+def reading(window: str, percent: float, resets_at: float) -> dict:
+    return {"provider": "codex", "window": window, "percent": percent, "resets_at": resets_at, "observed_at": 1.0,
+            "source": "t"}
+
+
+class LimitFactTest(unittest.TestCase):
+    def test_a_window_at_100_percent_gives_the_fact_with_a_null_rate_limit_type(self) -> None:
+        fact = cwj.limit_fact([reading("five_hour", 100.0, 5000), reading("weekly", 40.0, 9000)])
+        self.assertEqual(fact, {"resets_at": 5000, "window": "five_hour", "rate_limit_type": None})
+
+    def test_over_100_percent_counts(self) -> None:
+        self.assertEqual(cwj.limit_fact([reading("weekly", 103.0, 7000)])["window"], "weekly")
+
+    def test_of_several_full_windows_the_latest_reset_wins(self) -> None:
+        fact = cwj.limit_fact([reading("weekly", 100.0, 5000), reading("five_hour", 100.0, 6000)])
+        self.assertEqual((fact["window"], fact["resets_at"]), ("five_hour", 6000))
+
+    def test_on_a_tie_the_weekly_window_wins_in_either_order(self) -> None:
+        both = [reading("five_hour", 100.0, 5000), reading("weekly", 100.0, 5000)]
+        for readings in (both, both[::-1]):
+            self.assertEqual(cwj.limit_fact(readings)["window"], "weekly")
+
+    def test_no_full_window_non_finite_reset_or_no_readings_gives_none(self) -> None:
+        self.assertIsNone(cwj.limit_fact([reading("five_hour", 99.9, 5000)]))
+        self.assertIsNone(cwj.limit_fact([reading("five_hour", 100.0, float("inf"))]))
+        self.assertIsNone(cwj.limit_fact([reading("five_hour", 100.0, float("nan"))]))
+        self.assertIsNone(cwj.limit_fact([{"window": "five_hour", "percent": 100.0}]))
+        self.assertIsNone(cwj.limit_fact([]))
+        self.assertIsNone(cwj.limit_fact(None))
+
+
 class ModuleShapeTest(unittest.TestCase):
     def test_the_module_imports_nothing_from_job_and_writes_nothing(self) -> None:
         source = (REPO_ROOT / "controller" / "codex_worker_job.py").read_text("utf-8")
@@ -103,7 +134,7 @@ class ModuleShapeTest(unittest.TestCase):
         imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
                     for alias in node.names}
         self.assertNotIn("job", imported)
-        self.assertEqual(imported, {"Callable", "Path", "Any", "usage_record", "worker", "annotations"})
+        self.assertEqual(imported, {"Callable", "Iterable", "Mapping", "Path", "Any", "usage", "usage_record", "worker", "annotations"})
         for forbidden in ("open(", ".write", "subprocess", "Popen"):
             self.assertNotIn(forbidden, source)
 

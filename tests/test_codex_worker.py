@@ -287,6 +287,15 @@ class OutcomeTest(LaunchFixture):
         self.script(verdict="limit", message="partial")
         outcome = self.launch()
         self.assertEqual((outcome.outcome, outcome.subtype), (worker.FAILURE, cw.SUBTYPE_LIMIT))
+        self.assertNotIn("usage_limit", outcome.stream_diagnosis)
+
+    def test_a_limit_record_with_a_full_window_carries_the_usage_limit_fact(self) -> None:
+        self.script(verdict="limit", limit_shape="string_full", message="partial")
+        outcome = self.launch()
+        self.assertEqual((outcome.outcome, outcome.subtype), (worker.FAILURE, cw.SUBTYPE_LIMIT))
+        fact = outcome.stream_diagnosis["usage_limit"]
+        self.assertEqual((fact["window"], fact["rate_limit_type"]), ("five_hour", None))
+        self.assertGreater(fact["resets_at"], time.time())
 
     def test_a_non_zero_exit_is_failure_with_the_output_tail(self) -> None:
         self.script(message="partial", exit=3, stderr="boom: transcript tail")

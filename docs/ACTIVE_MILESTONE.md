@@ -10,8 +10,12 @@ budget, accounts it and holds it on its usage limit, for a fixture role. The pla
 that carries `usage` is gone, `_run_codex_worker` renews the reservation with the same ticker, and `_launch_job` writes the
 `usage` end block from the readings of the job's own Codex home, so the job is accounted as any worker;
 `tests/test_job_codex_worker_usage.py` covers admission, a hold, accounting, a never-started job, a run failing after the
-spawn, a chain selecting Codex, the ticker and `resume` settling an orphan. CP2 (a Codex limit reached mid-job) and CP3 (the
-opt-in live proof, the guides and the roadmap) remain. Nothing real reaches the branch.
+spawn, a chain selecting Codex, the ticker and `resume` settling an orphan. CP2 is complete: when Codex's own limit record
+classified the run, `codex_worker_job.limit_fact` derives `stream_diagnosis.usage_limit` from the job's readings (a window at
+100 percent or more, the latest `resets_at`, the weekly window on a tie; none, and so an ordinary failure, when no window
+shows it; none on a breach), so the existing INTERRUPTED rule, `run`'s wait loop and `step`'s exit 17 apply unchanged, and
+`cli._mid_job_hold` names the provider of the record's routed harness (Claude when none); `tests/test_job_codex_worker_limit.py`
+covers it. CP3 (the opt-in live proof, the guides and the roadmap) remains. Nothing real reaches the branch.
 
 Previous item, now complete:
 

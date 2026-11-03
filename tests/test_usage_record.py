@@ -216,17 +216,22 @@ class PriceTableTest(unittest.TestCase):
                     self.assertNotIsInstance(price, bool)
                     self.assertGreaterEqual(price, 0)
 
-    def test_a_codex_cost_from_the_shipped_table_has_no_cache_write_term(self) -> None:
+    def test_a_codex_cost_from_the_shipped_table_prices_every_group(self) -> None:
         usage = {"input_tokens": 1000, "cached_input_tokens": 200, "cache_write_input_tokens": 0,
                  "output_tokens": 50, "reasoning_output_tokens": 0, "total_tokens": 1050}
         table = ur.load()
         record = ur.from_codex_rollouts([{"subagent": False, "usage": usage}], model="gpt-6.1-sol", table=table)
         price = table["models"]["gpt-6.1-sol"]
-        self.assertEqual(price["cache_write"], 0)
+        self.assertEqual(price["cache_write"], 0.0000025)
         self.assertAlmostEqual(record.cost, record.input * price["input"] + record.cache_read * price["cache_read"]
                                + record.output * price["output"], places=12)
         self.assertEqual(record.cost_source, ur.DERIVED)
         self.assertGreater(record.cost, 0)
+
+    def test_a_cache_write_is_priced_at_the_entered_write_rate(self) -> None:
+        table = ur.load()
+        figures = {"input": 0, "cache_read": 0, "cache_write": 1000, "output": 0}
+        self.assertAlmostEqual(ur.cost_of(figures, "gpt-6.1-sol", table), 1000 * 0.0000025, places=12)
 
     def test_an_alias_has_no_price(self) -> None:
         for alias in ("opus", "sonnet", "haiku"):

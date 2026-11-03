@@ -605,8 +605,9 @@ memory, and the page URL and the day are recorded in `source` and `date`. A mode
 the Controller launches by default needs a complete price (a test collects them
 and fails for one that has none); an alias names no fixed model and gets none. The table
 holds one price per group: a model priced by prompt length is entered at its lower tier,
-and Claude's cache write at the five-minute write rate, and `source` says so, because a
-cost derived from the table is then a lower bound for longer prompts and for one-hour
+and a cache write at the provider's shortest-duration write rate (five minutes for
+Claude, 30 minutes for OpenAI), and `source` says so, because a
+cost derived from the table is then a lower bound for longer prompts and for longer-lived
 cache writes (a cost the harness reports is kept as it is). A changed converter,
 or a new version of a harness, is a new converter version. Stored records keep
 the version they were computed under and are never rewritten.

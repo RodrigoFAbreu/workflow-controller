@@ -54,8 +54,8 @@ class UsageRecord:
     each was measured: a Claude worker's is the harness-reported ``duration_ms``
     summed over its ``result`` events; a Codex worker's is the Controller's own
     elapsed monotonic milliseconds around ``run_bounded``; a review's is
-    ``launched_at`` to the terminal write at whole-second resolution (a Claude
-    review uses its summed ``duration_ms`` instead when the stream reports it)."""
+    ``launched_at`` to the terminal write at whole-second resolution, for a Claude
+    review as for a Codex one."""
 
     harness: str
     provider: str

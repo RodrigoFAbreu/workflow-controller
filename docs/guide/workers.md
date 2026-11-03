@@ -815,8 +815,8 @@ total, which is kept out of the token figures. Wall time has a different source 
 `duration_ms` its `result` events report, summed; a Codex worker's is the
 Controller's own elapsed monotonic time around the run, in milliseconds, kept
 even when the run has no result events; a review's is the time from launch to
-the terminal write, in whole seconds (a Claude review uses its summed
-`duration_ms` instead when the stream reports it). A figure the
+the terminal write, in whole seconds, for a Claude review as for a Codex one
+(a review does not use the stream's `duration_ms`). A figure the
 harness does not give is `null` and `unknown`; none is invented. Reasoning tokens
 are `unknown` unless every result reports them, never a partial sum. It is advisory
 like `telemetry`: if building it fails the job is unchanged and the record has a

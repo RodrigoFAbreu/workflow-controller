@@ -54102,7 +54102,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 4,
       "implementation_revision": null,
       "functional_review_round": null,
@@ -54113,7 +54113,7 @@
       "checkpoints": {},
       "current_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
         "approved_review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
@@ -54237,30 +54237,24 @@
           "external": 0
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-11-03T01:50:14Z",
+      "state_revision": 19,
+      "last_transition": "2026-11-03T11:31:58Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "BOUND",
-        "at": "2026-11-03T01:44:31Z",
+        "status": "CONSUMED",
+        "at": "2026-11-03T11:31:58Z",
         "consumed": {
-          "review_content_id": "5f319bc25b8db7f8f33c47264d4f965a3a04ada7f1f82a19ae42b253f033a38e",
-          "plan_revision": 3,
+          "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+          "plan_revision": 4,
           "legacy": false
         },
-        "published": {
-          "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
-          "plan_revision": 4
-        },
-        "bound": {
-          "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
-          "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
-          "plan_revision": 4
-        }
+        "published": null,
+        "bound": null
       },
       "consumed_plan_review_content_ids": [
         "08b9f444c09d0491ddd1ad861796d25c02309808bb650d51777907588a60a34e",
         "1df197ad480db377504d2aedfbd2b16f5ad97737aa3a65732b02886b9ae66220",
+        "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
         "5f319bc25b8db7f8f33c47264d4f965a3a04ada7f1f82a19ae42b253f033a38e"
       ],
       "optional_findings": {
@@ -54376,7 +54370,110 @@
             }
           ]
         }
-      }
+      },
+      "amendment_history": [
+        {
+          "amendment_id": "0",
+          "requested_at": "2026-11-03T11:31:58Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "Haiku 5.5 has two price tiers by prompt length (Anthropic pricing page, read 2026-11-03). Enter the lower tier (prompts up to 100k tokens) in controller/prices.json and say in the source text that a derived cost is a lower bound for longer prompts, so D1 no longer leaves Haiku out and D2's default-model test passes without an exemption.",
+          "superseded_plan_revision": 4,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "POLICY_SATISFIED",
+            "reviewed_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+            "approved_review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_CLEANUP_3C_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "827f8a323d46750667d22730b47e31be0b06cf4e"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "86f1d00c0ab4d1dabded07477690a0fda434e8ae"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "5be34b327bbfd3b2a12c19e2238c46b0d624b6d2"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+            "waived_guarantees": [],
+            "recorded_at": "2026-11-03T01:50:14Z",
+            "policy_evidence": {
+              "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+              "policy_source": "default",
+              "file_digest": null,
+              "adopted_digest": null,
+              "adopted_at": null,
+              "requirements": [
+                {
+                  "id": "gate_reachable",
+                  "met": true,
+                  "detail": "the approval gate is reachable"
+                },
+                {
+                  "id": "verdict_approve_bound",
+                  "met": true,
+                  "detail": "the latest verdict is APPROVE and names the current bundle"
+                },
+                {
+                  "id": "distinct_reviewer_models",
+                  "met": true,
+                  "detail": "families 'anthropic' and 'openai' differ"
+                },
+                {
+                  "id": "review_evidence_audited",
+                  "met": true,
+                  "detail": "both stages carry the audit keys"
+                }
+              ],
+              "inputs": {
+                "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+                "ledger": {
+                  "local": {
+                    "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+                    "verdict": "APPROVE",
+                    "round": 4,
+                    "verdict_sha256": "a3bc00c20df9dea45433d4cca0e728146f4b963d1613bbc551221aa72dc67621",
+                    "ledger_entry_sha256": "263482a8c017f445f0a8c903e2036a3b9626358bbcb3a01be205653ed9b4b10e",
+                    "run_ref": "session:local .ai-review/workflow-controller-cleanup-3c/feedback/REVIEW_FEEDBACK.md",
+                    "reviewer_model": "anthropic/claude-opus-5-5"
+                  },
+                  "manual": {
+                    "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+                    "verdict": "APPROVE",
+                    "round": 4,
+                    "verdict_sha256": "269d8b363f8855033e215661be7aedc18a55f34aaf00ca6a23e78ca978ab8970",
+                    "ledger_entry_sha256": "846295c6094870a04fc50d3fa7c2d31f40aee03eb5daa3bcfd4bc0dbb74ca238",
+                    "run_ref": "codex:20261103T014641Z-77d8fd8f",
+                    "reviewer_model": "openai/gpt-6.1-sol"
+                  }
+                },
+                "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+              },
+              "floor_digest": null,
+              "trust": {
+                "review_verdicts": "orchestrator"
+              },
+              "evaluated_at": "2026-11-03T01:50:14Z",
+              "workflow_release": "2.25.4"
+            }
+          },
+          "checkpoints_snapshot": {},
+          "pre_amendment_approval_commit": "ab524f2bef6fbfa8b9a864e485cec5804f861b38",
+          "resolved_at_plan_revision": null
+        }
+      ],
+      "amendment_base_commit": "ab524f2bef6fbfa8b9a864e485cec5804f861b38"
     }
   }
 }

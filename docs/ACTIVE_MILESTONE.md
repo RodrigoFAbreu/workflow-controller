@@ -2,6 +2,27 @@
 
 ## Status
 
+**Complete.** `workflow-controller-tester-read-denies` (C10h, issue
+[#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)) closes the Claude functional tester's read path to
+credentials, reads a `file://` origin and bounds the tester's summary. The plan is
+`docs/ai-workflow/CONTROLLER_TESTER_READ_DENIES_PLAN.md` (revision 4). CP1 is complete: `review._local_origin_refs` reads a
+`file://` origin as a local path (percent-decoded, the authority dropped as Git does; no path is an `OSError`, an `origin:`
+breach). CP2 is complete: `functional_review.validate_results` cuts a summary to `SUMMARY_LIMIT` (2000) characters plus a
+marker naming the omitted count. CP3 is complete: `functional_review.read_denies` builds the `denyRead` list (the job home's
+`.credentials.json`, `.claude.json` and `backups`, the operator's Claude home and `$HOME/.claude.json`, each with its resolved
+form when that differs), which `tester_settings`, the launch and `claude-build verify` all carry; the layout invariant covers
+both deny lists, `check_functional_settings` requires the exact list, and a runtime root inside the operator's Claude home is
+refused before the sandbox is built (`functional_tester_unavailable`; `BuildNotVerified("host", ...)` for verify). The live
+probe (`CONTROLLER_LIVE_CLAUDE_TESTS=1`, Claude Code 2.1.310, 2026-11-03) passed: no canary or credential reached the shell,
+and the readable job-home entries were `.last-cleanup`, `projects`, `session-env`, `sessions` and `shell-snapshots`. The
+runtime-root credential copies are the remainder (roadmap follow-up 86).
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.6).
+
+Next action: `/milestone-plan` for C10i ([#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)), the next incomplete item in `docs/ROADMAP.md`.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-cleanup-3c` (CU3c, issues
 [#103](https://github.com/RodrigoFAbreu/workflow-controller/issues/103),
 [#104](https://github.com/RodrigoFAbreu/workflow-controller/issues/104) and
@@ -213,29 +234,36 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-cleanup-3c` (CU3c, issues [#103](https://github.com/RodrigoFAbreu/workflow-controller/issues/103),
-[#104](https://github.com/RodrigoFAbreu/workflow-controller/issues/104) and
-[#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108)), implementation revision 3. The change fills the price
-table, tidies the usage record and shows the round caps in force in `settings show`, so every flow is offline: no network, `gh`,
-`claude`, `codex` or `ssh`, and no flow writes inside the product clone. Run from the product clone with `TMPDIR` set to a writable
-scratch directory, `python3 -B` and no `PYTHONPATH=.`. Flows 2 to 5 create their settings files under `T=$(mktemp -d)` and never
-touch the real settings file (`--settings` names it; `--json` is a top-level option and goes before `settings`).
+Item `workflow-controller-tester-read-denies` (C10h, issue [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)),
+implementation revision 2. The change closes the Claude functional tester's read path to credentials, reads a `file://` origin
+and bounds the tester's summary. Every flow runs offline against a scratch repository: no network, no real `gh` (the stand-in
+refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside
+the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; every file is created under
+scratch directories. The live Claude probe (D3) needs the real CLI and the network, so it is an operator-run flow outside the sandbox.
 
-Setup: `export TMPDIR=$(mktemp -d); T=$(mktemp -d)`. The settings file is nested JSON: `{"review":{"round_cap":7}}`.
+Setup: `export TMPDIR=$(mktemp -d); T=$(mktemp -d)`; for flows 1 and 2 build a scratch origin and clone:
+`git init -q $T/o && git -C $T/o -c user.name=a -c user.email=a@b commit -q --allow-empty -m x && git clone -q $T/o $T/c`.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | Price table filled (#103, D1) | `python3 -B -c "import json; t=json.load(open('controller/prices.json')); print(t['version'], t['date'], list(t['models'])); print(t['models']['claude-haiku-5-5'])"` | Prints `2 2026-11-03` and the four models `gpt-6.1-sol`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`; each has the four numeric groups `input`, `cache_read`, `cache_write`, `output` (`gpt-6.1-sol` has `cache_write` 0.0000025 as listed; no alias such as `opus` is present). `source` names both provider pages, the lower-tier (Haiku up to 100K tokens) lower-bound wording and "API list-price equivalent". |
-| 2 | Default-model price test, usage record points (#103 D2, #104 D4-D7) | `python3 -B -m unittest tests.test_usage_record tests.test_usage_record_job` | All pass: every default model has a complete price; partly reported reasoning is `unknown`; a non-mapping rollout is skipped; a retried Codex review counts its rollouts (root once, sub-agent once). |
-| 3 | Round caps in force, defaults (#108 D8) | `python3 -B -m controller --settings $T/none.json settings show` | The file line says `(not created yet)`; the three stored `review.*round_cap` rows are `4 (default)`, `null (default)`, `null (default)`, the `review.round_cap` row ends with `(deprecated: use the local and external caps)`, and after them: `review.local_round_cap in force = 6 (built-in)` and `review.external_round_cap in force = 4 (built-in)`. |
-| 4 | Origins from a file (#108 D8) | `echo '{"review":{"round_cap":7}}' > $T/a.json; python3 -B -m controller --settings $T/a.json settings show \| grep round_cap`; then `echo '{"review":{"local_round_cap":3}}' > $T/b.json` and the same with `b.json`; then `echo '{"review":{"round_cap":4}}' > $T/c.json` and the same with `c.json` | `a.json`: both caps in force `= 7 (deprecated review.round_cap)`, the stored `review.round_cap` row `7 (file)`. `b.json`: local `= 3 (its own setting or option)`, external still `= 4 (built-in)`. `c.json`: both stay `built-in` (6 and 4), because 4 counts as not given. |
-| 5 | JSON keeps its old keys (#108 D8) | `python3 -B -m controller --json --settings $T/b.json settings show \| python3 -B -c "import json,sys; d=json.load(sys.stdin); print(sorted(d)); print(d['round_caps_in_force'])"` | Keys are `exists`, `path`, `round_caps_in_force`, `sha256`, `sources`, `values` (`values` and `sources` as before); `round_caps_in_force` is `{'external': {'cap': 4, 'origin': 'built-in'}, 'local': {'cap': 3, 'origin': 'its own setting or option'}}`. |
-| 6 | Cap stop wording (#108 D9) | `python3 -B -m unittest tests.test_settings tests.test_review_job tests.test_protocol_job tests.test_codex_worker_job tests.test_cli` | All pass: the stop says "review round N has reached the ... round cap of C" (and "local round N" or "external round N" for a split count), not "the ... count N"; the in-force lines equal `_round_caps` for the same inputs. |
-| 7 | Neighbours and documents (D3, D10) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0; the golden check reports no difference (`price_table_version` 2). Read `docs/guide/commands.md` (`settings show`), `docs/guide/runtime.md`, `docs/common-problems.md` ("A run stopped at the review round cap"), `docs/guide/workers.md` and `docs/guide/how-it-works.md` ("The usage record", `wall_ms` per job kind): they describe the in-force lines, "round N", the cost as an API list-price equivalent, and no longer say the table ships empty. `docs/ROADMAP.md` marks CU3c done. |
-| 8 | Price figures against the providers (operator-run, D1) | Open https://developers.openai.com/api/docs/pricing and https://platform.claude.com/docs/en/about-claude/pricing and compare with `controller/prices.json` (per-token = per-million price / 1,000,000) | Each of the four models' input, cache-read, cache-write (Claude: five-minute write; `gpt-6.1-sol`: 0, as OpenAI lists none) and output price matches the page at the lower prompt-length tier. Needs a browser; the sandbox has no network. |
+| 1 | A `file://` origin is read as a local path (D4) | `git -C $T/c remote set-url origin "file://$T/o"; python3 -B -c "from pathlib import Path; from controller import review; print(repr(review._local_origin_refs(Path('$T/c'))))"` | Prints the refs of the scratch origin, e.g. `'refs/heads/main <sha>\n'`, not `None`. Repeat with `file://localhost$T/o`: the same refs (the authority is dropped). |
+| 2 | Unreadable or pathless `file://` is an error; other URLs unchanged (D4) | Same call after `git -C $T/c remote set-url origin file://otherhost`, then after `... https://example.com/x.git` | `file://otherhost`: `OSError` ("names no absolute path"), never `None`. The `https://` origin returns `None`. |
+| 3 | Read deny list (D1) | `python3 -B -c "from pathlib import Path; from controller import functional_review as fr; print(*fr.read_denies(Path('$T/job/claude-home'), Path('$T/op/.claude'), Path('$T/op/.claude.json')), sep='\n')"` | Five lines in this order: the job home's `.credentials.json`, `.claude.json`, `backups`, then the operator's Claude home, then the operator's account file. The job home itself is not listed. When an entry is a link, its resolved form follows it (try `ln -s $T/real $T/op/.claude` first: the target appears after the link). |
+| 4 | Summary bound (D5) | `python3 -B -m unittest tests.test_functional_review.SummaryBoundTest -v` | Five tests pass: 2000 characters kept byte for byte, one more is cut with a marker naming the omitted count (`[... 1 character omitted]`), findings text and evidence record carry the bounded string, the log digest is of the untouched log, a non-string summary is still refused. `python3 -B -c "from controller import functional_review as fr; print(fr.SUMMARY_LIMIT)"` prints `2000`. |
+| 5 | Read denies reach the settings, the double, the invariant and `claude-build verify` (D1-D3) | `python3 -B -m unittest tests.test_functional_enforcement tests.test_functional_sandbox tests.test_claude_build tests.test_functional_review` | All pass (the live probe `test_the_read_denies_hold_on_the_pinned_cli_and_the_shell_still_works` is skipped with its reason without `CONTROLLER_LIVE_CLAUDE_TESTS=1`). They show: the exact `denyRead` list and its resolved forms; an `allowWrite` entry at or below a `denyRead` entry refused (lexically and through a link); the test double refusing a read of a denied path (also through a link) while the clone stays readable; `check_functional_settings` refusing a missing or extra entry; a runtime root inside the operator's Claude home ending before the tester starts as `functional_tester_unavailable`; `claude-build verify` building the same list and reporting such a root as `BuildNotVerified("host", ...)`. |
+| 6 | Docs and neighbours (D6, D7) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0. Read `docs/guide/automation.md` (the read deny, the `file://` case, the summary bound) and `docs/guide/harnesses.md` (which tester each control covers; the Codex tester already restricts reads): they match flows 1 to 5, and both name the runtime-root credential copies as the remainder. `docs/ROADMAP.md` marks C10h done and lists the remainder as a follow-up (86). |
+| 7 | Live read-deny probe (operator-run, D3) | Outside the sandbox, with Claude Code installed and logged in: `CONTROLLER_LIVE_CLAUDE_TESTS=1 python3 -B -m unittest tests.test_functional_enforcement -k read_denies_hold` | Passes: a canary in a denied directory and in a scratch `HOME/.claude.json` never reaches the tool output, a file outside the deny is readable, `pwd` and `git status` succeed in the clone with no shell-snapshot error, and the probe reports no secret-looking readable job-home entry. Recorded run: Claude Code 2.1.310, 2026-11-03. Spends model usage and needs the network. |
 
-**Known limitations / out of scope.** No new setting, option, exit code or gate. `settings show` can only show the `built-in`, file and deprecated origins; the command-line origin exists for a run's own settings and is covered by a unit test, because `--review-*-round-cap` exist only on `step` and `run`. A cost from the table is a lower bound for prompts above the lower tier (Haiku 100K, `gpt-6.1-sol` 272K) and for longer-lived cache writes, and an alias or a model the Controller does not launch by default stays `unknown`. The `review.round_cap` retirement, any consumer of the cost figures (A3) and the release note and release history row (the docs pull request after the 1.27.5 release) are out of scope. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206; `tests/test_codex_tester.py` has a pre-existing shared-tag collision).
+**Known limitations / out of scope.** No new setting, option, exit code or gate. The copies of the Claude credential kept under
+the shared runtime root by other jobs (`<runtime>/reviews/<job>/claude-home/`, `claude-build verify` scratch homes, leftovers
+of killed jobs) stay readable by absolute path: recorded as roadmap follow-up 86. A general read allowlist, other credential
+stores (`~/.ssh`, `~/.config/gh`, the operator's Codex home), a `claude-build verify` probe for `denyRead`, redaction of
+secrets from a summary and a change to the Codex tester's profile are out of scope; no recorded build attests `denyRead`
+enforcement (the release-side probe covers the pinned build). The job home is not denied as a whole: `projects`, `sessions`,
+`session-env`, `.last-cleanup` and `shell-snapshots` remain readable. The full suite is not a flow (`test_functional_sandbox`
+has a known CI flake, #206; `tests/test_codex_tester.py` has a pre-existing shared-tag collision). The release note and release
+history row belong to the docs pull request after the 1.27.6 release.
 
 ## Next action
 
-Manual functional review of CU3c (the checklist above), then `/accept-milestone`.
+Manual functional review of C10h (the checklist above), then `/accept-milestone`.

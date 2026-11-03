@@ -43,6 +43,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.parse
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
@@ -2240,19 +2241,38 @@ def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
         raise _refuse(f"the tester's settings break the layout invariant: {exc}", check="settings") from None
     if [str(sandbox.clone), str(sandbox.clone / ".git")] != filesystem["denyWrite"]:
         raise _refuse("the tester's deny list is not the clone root and its .git", check="settings")
+    if sandbox.read_denies() != filesystem.get("denyRead"):
+        raise _refuse("the tester's read deny list is not the credential and account entries", check="settings")
+
+
+def _file_url_path(url: str) -> Path:
+    """The absolute path a ``file://`` origin names: the part after the scheme,
+    percent-decoded, the authority dropped whatever it is (Git reaches the
+    local repository for ``file://otherhost/<path>`` too). No absolute path
+    after the authority is an :class:`OSError`, never a guess."""
+    rest = urllib.parse.unquote(url[len("file://"):])
+    if "\0" in rest:
+        raise OSError(f"the origin {url} names a path with a NUL byte")
+    slash = rest.find("/")
+    if slash < 0:
+        raise OSError(f"the origin {url} names no absolute path")
+    return Path(rest[slash:])
 
 
 def _local_origin_refs(repo_root: Path) -> str | None:
     """The refs of the real ``origin`` read with a local ``git for-each-ref``
-    **only when it is a local path**; ``None`` for a URL or no origin (the
+    **only when it is a local path or a ``file://`` URL**; ``None`` for another URL or no origin (the
     Controller makes no network call). An unreadable path origin raises
     :class:`OSError`."""
     probe = subprocess.run(["git", "-C", str(repo_root), "--no-optional-locks", "config", "--get", "remote.origin.url"],
                            capture_output=True, stdin=subprocess.DEVNULL, check=False, env=_git_env(repo_root))
     url = probe.stdout.decode("utf-8", "replace").strip() if probe.returncode == 0 else ""
-    if not url or "://" in url or (":" in url and not url.startswith("/")):
+    if url.startswith("file://"):
+        path = _file_url_path(url)
+    elif not url or "://" in url or (":" in url and not url.startswith("/")):
         return None
-    path = (repo_root / url).resolve() if not url.startswith("/") else Path(url)
+    else:
+        path = (repo_root / url).resolve() if not url.startswith("/") else Path(url)
     listing = subprocess.run(["git", "--no-optional-locks", "-C", str(path), "for-each-ref",
                               "--format=%(refname) %(objectname)"], capture_output=True, stdin=subprocess.DEVNULL,
                              check=False, env=_git_env(path))
@@ -2335,8 +2355,17 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
         origin_error = None
     except OSError as exc:
         origin_before, origin_error = None, str(exc)
+    account_file = Path.home() / ".claude.json"  # resolved before the launch replaces HOME for the tester
+    claude_root = Path(os.path.realpath(operator_home))
+    for folder in (Path(runtime_root).resolve(), Path(runtime_root).resolve() / functional_review.SANDBOX_AREA / job_id):
+        if folder == claude_root or claude_root in folder.parents:
+            raise functional_review.unavailable(
+                functional_review.UNAVAILABLE_ENFORCEMENT,
+                f"the runtime root {runtime_root} lies inside the operator's Claude home {operator_home}, "
+                "which the tester may not read")
     sandbox = functional_review.build_sandbox(candidate, runtime_root=runtime_root, job_id=job_id,
-                                              work_item_id=work_item_id)
+                                              work_item_id=work_item_id, operator_home=operator_home,
+                                              account_file=account_file)
     result.update(sandbox=sandbox.base, output_dir=sandbox.out, head=candidate.head,
                   checklist_blob=candidate.checklist_blob, writable=list(sandbox.writable),
                   refused=[{"pattern": item.pattern, "reason": item.reason} for item in sandbox.refused])

@@ -112,6 +112,9 @@ FLOW_ID_PREFIX = "flow-"
 #: ``RESULTS.json`` and a log are read at most this many bytes into memory.
 MAX_RESULTS_BYTES = 1 << 20
 LOG_EXCERPT_CHARS = 2000
+#: A tester's ``summary`` is kept to this many characters where it enters the
+#: Controller; the flow's log file is left as the tester wrote it (D5).
+SUMMARY_LIMIT = 2000
 _CHUNK = 1 << 16
 
 #: The sandbox's stated limits (D3), the one text the tester's prompt and the
@@ -768,9 +771,18 @@ def validate_results(output_dir: Path, flows: Sequence[Flow]) -> list[Entry]:
             digest = sha256_file(log)
         except (OSError, ValueError) as exc:
             raise _invalid(f"{flow_id}: log cannot be read ({exc})", flow_id=flow_id) from None
-        entries.append(Entry(flow_id=flow_id, status=status, summary=summary, reason=reason if status ==
+        entries.append(Entry(flow_id=flow_id, status=status, summary=bounded_summary(summary), reason=reason if status ==
                              STATUS_FAILED else None, log_path=log, log_digest=digest))
     return entries
+
+
+def bounded_summary(summary: str) -> str:
+    """The summary cut to ``SUMMARY_LIMIT`` characters plus a marker naming
+    the omitted count; a summary within the limit is returned unchanged."""
+    if len(summary) <= SUMMARY_LIMIT:
+        return summary
+    omitted = len(summary) - SUMMARY_LIMIT
+    return f"{summary[:SUMMARY_LIMIT]}[... {omitted} character{'' if omitted == 1 else 's'} omitted]"
 
 
 def not_run_summary(cause: str) -> str:
@@ -1094,12 +1106,13 @@ class TesterUnavailable(ControllerError):
 
 
 def assert_writes_not_below_denies(filesystem: Mapping[str, Any]) -> None:
-    """The layout invariant of D1: no ``allowWrite`` entry equals or lies below a
-    ``denyWrite`` entry, so the document means the same whether a build lets a
-    more specific allow win over the deny above it (Claude Code 2.1.303) or
-    lets the deny above win (2.1.304 and later). A ``ValueError``: a document
-    that breaks it is a programming error, never a runtime fallback."""
-    denies = [Path(entry) for entry in filesystem.get("denyWrite", [])]
+    """The layout invariant of D1 and D2: no ``allowWrite`` entry equals or lies
+    below a ``denyWrite`` or a ``denyRead`` entry, so the document means the
+    same whether a build lets a more specific allow win over the deny above it
+    (Claude Code 2.1.303) or lets the deny above win (2.1.304 and later). A
+    ``ValueError``: a document that breaks it is a programming error, never a
+    runtime fallback."""
+    denies = [Path(entry) for key in ("denyWrite", "denyRead") for entry in filesystem.get(key, [])]
     for entry in filesystem.get("allowWrite", []):
         # Lexically and as the file system resolves it: a symlinked parent (or a
         # ``..`` after one) can put an allowance below a denial it does not
@@ -1111,9 +1124,33 @@ def assert_writes_not_below_denies(filesystem: Mapping[str, Any]) -> None:
                     raise ValueError(f"the write allowance {entry} equals or lies below the denied path {blocked}")
 
 
+#: The entries of a job's Claude home that hold a credential or an account identity (D1).
+JOB_HOME_PRIVATE: tuple[str, ...] = (".credentials.json", ".claude.json", "backups")
+
+
+def read_denies(job_claude_home: Path, operator_home: Path, account_file: Path) -> list[str]:
+    """The ``denyRead`` list of D1: the private entries of this job's Claude
+    home, the operator's whole Claude home and the operator's global account
+    file, each followed by its resolved form when that differs. The operator's
+    credential file is named too: when it is a link, its target lies outside the
+    operator's Claude home and the directory entry does not cover it. The job
+    home is not denied as a whole: the tester's shell may need the rest of it."""
+    entries = [Path(job_claude_home) / name for name in JOB_HOME_PRIVATE] + [Path(operator_home), Path(account_file)]
+    out: list[str] = []
+    for entry in entries:
+        out.append(str(entry))
+        resolved = os.path.realpath(entry)
+        if resolved != str(entry):
+            out.append(resolved)
+    credential = os.path.realpath(Path(operator_home) / JOB_HOME_PRIVATE[0])
+    if Path(os.path.realpath(operator_home)) not in Path(credential).parents and credential not in out:
+        out.append(credential)
+    return out
+
+
 def tester_settings(
     *, clone_dir: Path, output_dir: Path, scratch_dirs: Sequence[Path], writable_dir: Path,
-    writable: Sequence[str],
+    writable: Sequence[str], deny_read: Sequence[str],
 ) -> dict[str, Any]:
     """The ``--settings`` document of the tester's launch.
 
@@ -1130,9 +1167,12 @@ def tester_settings(
     directory must be ``output_dir``: with a working directory above the clone,
     the CLI's own working-directory grant outranks the allow and the writable
     locations become unwritable too (pinned release-side by
-    ``test_a_launch_from_above_the_clone_cannot_write_through_a_link_either``)."""
+    ``test_a_launch_from_above_the_clone_cannot_write_through_a_link_either``).
+    ``deny_read`` (from :func:`read_denies`) is the ``denyRead`` list: the
+    places a credential or an account identity lives (D1)."""
     allow = [str(output_dir), *(str(path) for path in scratch_dirs), *(str(writable_dir / name) for name in writable)]
-    filesystem = {"allowWrite": allow, "denyWrite": [str(clone_dir), str(clone_dir / ".git")]}
+    filesystem = {"allowWrite": allow, "denyWrite": [str(clone_dir), str(clone_dir / ".git")],
+                  "denyRead": list(deny_read)}
     assert_writes_not_below_denies(filesystem)
     return {
         "sandbox": {
@@ -1745,6 +1785,8 @@ class Sandbox:
     git_state: dict[str, tuple]
     refs: dict[str, str]
     tmp_dir: Path | None = None  # the short scratch ``TMPDIR`` (see :func:`make_short_tmp`)
+    operator_home: Path | None = None  # the operator's Claude home, denied for reading (D1)
+    account_file: Path | None = None  # the operator's global ``$HOME/.claude.json``, denied for reading (D1)
 
     @property
     def clone(self) -> Path:
@@ -1775,6 +1817,11 @@ class Sandbox:
         return self.tmp_dir if self.tmp_dir is not None else self.base / "tmp"
 
     @property
+    def claude_home(self) -> Path:
+        """This job's private Claude home, ``review.CLAUDE_HOME_NAME`` in the folder."""
+        return self.base / "claude-home"
+
+    @property
     def writable_dir(self) -> Path:
         """The folder of the external writable locations (D2)."""
         return self.base / "writable"
@@ -1799,9 +1846,14 @@ class Sandbox:
         scratch origin, so a push from a copy of the clone reaches nothing real."""
         return [self.home, self.tmp, self.fake_logs, self.origin]
 
+    def read_denies(self) -> list[str]:
+        assert self.operator_home is not None and self.account_file is not None
+        return read_denies(self.claude_home, self.operator_home, self.account_file)
+
     def settings(self) -> dict[str, Any]:
         return tester_settings(clone_dir=self.clone, output_dir=self.out, scratch_dirs=self.scratch_dirs,
-                               writable_dir=self.writable_dir, writable=self.writable)
+                               writable_dir=self.writable_dir, writable=self.writable,
+                               deny_read=self.read_denies())
 
     def environment(self) -> dict[str, str]:
         """The sandbox's part of the tester's environment (D3): a ``PATH`` of
@@ -1992,6 +2044,7 @@ def clone_candidate(candidate: Candidate, *, clone: Path, origin: Path) -> None:
 
 
 def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work_item_id: str,
+                  operator_home: Path, account_file: Path,
                   python: str | None = None, package_parent: Path | None = None) -> Sandbox:
     """Build the sandbox of D3 and verify the fresh clone against the
     manifest: a ``git clone --no-hardlinks`` of the real repository at the
@@ -2019,7 +2072,8 @@ def build_sandbox(candidate: Candidate, *, runtime_root: Path, job_id: str, work
         make_writable_links(clone, base / "writable", writable)
         exclude_writable_links(runtime_root, f"{SANDBOX_AREA}/{job_id}/clone/.git", writable)
         sandbox = Sandbox(runtime_root, job_id, work_item_id, base, candidate, writable, refused,
-                          _git_dir_state(clone / ".git"), refs_of(clone / ".git"), tmp_dir)
+                          _git_dir_state(clone / ".git"), refs_of(clone / ".git"), tmp_dir,
+                          operator_home=Path(operator_home), account_file=Path(account_file))
         write_launchers(runtime_root, f"{SANDBOX_AREA}/{job_id}", sandbox.fake_logs,
                         python=python, package_parent=package_parent)
         runtime.write_bytes(runtime_root, sandbox.rel("settings.json"),

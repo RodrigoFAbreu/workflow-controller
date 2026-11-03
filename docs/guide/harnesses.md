@@ -106,6 +106,12 @@ operator's environment variables, read its own credential copy, push, reach a ho
 real `gh` work. The measured results are in `tests/harness_contract/codex/tester_sandbox.txt`; the live proof is opt-in
 (`CONTROLLER_LIVE_CODEX_TESTS=1`, see [Development](development.md#working-from-a-checkout)) and CI does not run it.
 
+The read deny that protects the Claude tester's credential copy and your Claude home
+(`sandbox.filesystem.denyRead`, see [Automation](automation.md#what-the-controller-automates-and-how-it-stays-safe))
+is for the Claude tester only. The Codex tester does not need it: its profile is restricted-read (`:minimal` plus the named
+roots), so your home and its own credential copy are not readable at all. The bound on a tester's `summary` and the
+`file://` origin check apply to both testers.
+
 Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
 name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). The composed
 configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the

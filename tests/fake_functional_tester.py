@@ -11,7 +11,9 @@ It **emulates the CLI's sandbox** as Claude Code 2.1.304 and later enforce it
 entry is the path or an ancestor of it, and allowed only when it lies in an
 ``allowWrite`` entry that is not itself below a deny; a path in no such entry is
 refused. An allowance below a denial therefore never counts, which is what
-fails the layout that 2.1.303 still accepted.
+fails the layout that 2.1.303 still accepted. A read (the ``read`` action) is
+refused the same way when a ``denyRead`` entry is the path or an ancestor of it
+(D3 of ``workflow-controller-tester-read-denies``), and allowed otherwise.
 That checks the Controller hands the CLI the right settings; the enforcement
 itself is proved on the real CLI in ``tests/test_functional_enforcement.py``.
 ``"emulate_sandbox": false`` turns the emulation off, which is what a sandbox
@@ -81,7 +83,19 @@ class Sandbox:
         filesystem = settings.get("sandbox", {}).get("filesystem", {})
         self.allow = [Path(p) for p in filesystem.get("allowWrite", [])]
         self.deny = [Path(p) for p in filesystem.get("denyWrite", [])]
+        self.deny_read = [Path(p) for p in filesystem.get("denyRead", [])]
         self.emulate = emulate
+
+    def reads(self, path: Path) -> bool:
+        """Whether a read of ``path`` is allowed (D3): the path is resolved
+        through symlinks, then refused when a ``denyRead`` entry (itself
+        resolved) is the path or an ancestor of it. Every other path is
+        readable, as in the CLI's sandbox."""
+        if not self.emulate:
+            return True
+        path = Path(os.path.realpath(Path(os.getcwd()) / path))
+        return not any(path == entry or entry in path.parents
+                       for entry in (Path(os.path.realpath(d)) for d in self.deny_read))
 
     def allows(self, path: Path, *, parent_only: bool = False) -> bool:
         """Whether a write to ``path`` is allowed. The path is resolved through
@@ -180,6 +194,12 @@ def _act(action: dict, ctx: dict) -> None:
                               timeout=60, check=False)
         log.append({"op": op, "argv": action["argv"], "exit": done.returncode,
                     "stderr": done.stderr.decode("utf-8", "replace")[-300:]})
+    elif op == "read":
+        path = Path(action["path"]) if os.path.isabs(action["path"]) else clone / action["path"]
+        if not sandbox.reads(path):
+            log.append({"op": op, "path": str(path), "refused": True})
+            return
+        log.append({"op": op, "path": str(path), "refused": False, "text": path.read_text()[:200]})
     elif op == "session":
         project = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "nested"
         project.mkdir(parents=True, exist_ok=True)

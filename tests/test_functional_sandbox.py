@@ -100,6 +100,7 @@ class Fixture(unittest.TestCase):
         self.home = self.tmp / "operator"
         self.home.mkdir()
         (self.home / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {"accessToken": "t"}}))
+        self.account = self.tmp / "operator-home" / ".claude.json"  # the operator's global account file
         self.tools = self.tmp / "tools"
         self.candidate = fr.capture_candidate(self.repo, self.head, branch="main")
         self.flows = fr.candidate_flows(self.candidate)
@@ -166,7 +167,7 @@ class SandboxBuildTest(Fixture):
     def build(self, candidate: fr.Candidate | None = None) -> fr.Sandbox:
         self.count += 1
         return fr.build_sandbox(candidate or self.candidate, runtime_root=self.runtime, job_id=f"b{self.count}",
-                                work_item_id="item-1")
+                                work_item_id="item-1", operator_home=self.home, account_file=self.account)
 
     def test_the_clone_shares_no_object_file_with_the_real_repository(self) -> None:
         box = self.build()
@@ -266,7 +267,7 @@ class SandboxBuildTest(Fixture):
         repo = self.tmp / "repo2"
         head = make_repo(repo, decoy)
         box = fr.build_sandbox(fr.capture_candidate(repo, head), runtime_root=self.runtime, job_id="decoy",
-                               work_item_id="item-1")
+                               work_item_id="item-1", operator_home=self.home, account_file=self.account)
         done = subprocess.run([str(box.bin_dir / "gh")], cwd=box.clone, capture_output=True, env={"PATH": "/usr/bin:/bin"})
         self.assertEqual(done.returncode, 127, done.stderr)
 
@@ -295,7 +296,7 @@ class SandboxBuildTest(Fixture):
         deep = self.runtime / ("d" * 60) / ("e" * 60) / "state" / "workflow-controller"
         deep.mkdir(parents=True)
         self.assertGreater(len(str(deep / "functional" / "job-id-20260101-000000-abcdef" / "tmp")) + 34, 107)
-        box = fr.build_sandbox(self.candidate, runtime_root=deep, job_id="deep", work_item_id="item-1")
+        box = fr.build_sandbox(self.candidate, runtime_root=deep, job_id="deep", work_item_id="item-1", operator_home=self.home, account_file=self.account)
         longest = max(len(str(box.tmp / f"{kind}-{'0' * 16}.sock")) for kind in ("claude-http", "claude-socks"))
         self.assertLessEqual(longest, fr.SOCKET_PATH_LIMIT)
         self.assertEqual(longest, fr.longest_socket_path(box.tmp))
@@ -371,7 +372,7 @@ class SandboxBuildTest(Fixture):
         head = make_repo(repo, {".gitattributes": "*.txt text eol=crlf\n"})
         with self.assertRaises(fr.TesterUnavailable) as caught:
             fr.build_sandbox(fr.capture_candidate(repo, head), runtime_root=self.runtime, job_id="crlf",
-                             work_item_id="item-1")
+                             work_item_id="item-1", operator_home=self.home, account_file=self.account)
         self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_CLONE_MISMATCH)
         self.assertIn("src/data.txt", str(caught.exception))
         self.assertFalse((self.runtime / "functional" / "crlf").exists())
@@ -387,7 +388,7 @@ class SandboxBuildTest(Fixture):
             head = make_repo(repo, {"win.txt": "a\r\nb\r\n"})
             with self.assertRaises(fr.TesterUnavailable) as caught:
                 fr.build_sandbox(fr.capture_candidate(repo, head), runtime_root=self.runtime, job_id="auto",
-                                 work_item_id="item-1")
+                                 work_item_id="item-1", operator_home=self.home, account_file=self.account)
         self.assertEqual(caught.exception.evidence["cause"], fr.UNAVAILABLE_CLONE_MISMATCH)
 
 
@@ -431,7 +432,7 @@ class BindingTest(Fixture):
 
     def setUp(self) -> None:
         super().setUp()
-        self.box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="bound", work_item_id="item-1")
+        self.box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="bound", work_item_id="item-1", operator_home=self.home, account_file=self.account)
         self.clone = self.box.clone
 
     def test_each_binding_case_is_refused(self) -> None:
@@ -446,7 +447,7 @@ class BindingTest(Fixture):
         for name, change in cases.items():
             with self.subTest(name):
                 box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id=f"case-{name.replace(' ', '-')}",
-                                       work_item_id="item-1")
+                                       work_item_id="item-1", operator_home=self.home, account_file=self.account)
                 self.clone = box.clone
                 change()
                 self.assertTrue(fr.check_bound(box), name)
@@ -478,7 +479,7 @@ class BindingTest(Fixture):
         for name, change in cases.items():
             with self.subTest(name):
                 box = fr.build_sandbox(self.candidate, runtime_root=self.runtime,
-                                       job_id=f"link-{name.replace(' ', '-')}", work_item_id="item-1")
+                                       job_id=f"link-{name.replace(' ', '-')}", work_item_id="item-1", operator_home=self.home, account_file=self.account)
                 self.clone = box.clone
                 change()
                 problems = fr.check_bound(box)
@@ -538,7 +539,7 @@ class BindingTest(Fixture):
         for flag in ("--skip-worktree", "--assume-unchanged"):
             with self.subTest(flag):
                 box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id=f"flag{flag[2:5]}",
-                                       work_item_id="item-1")
+                                       work_item_id="item-1", operator_home=self.home, account_file=self.account)
                 (box.clone / "src/app.py").write_text("print('hidden edit')\n")
                 git(box.clone, "update-index", flag, "src/app.py")
                 self.assertIn("differs: src/app.py", fr.check_bound(box))
@@ -872,6 +873,39 @@ class OriginTest(Fixture):
         result = self.launch({"actions": [results()]})
         self.assertTrue(any(item.startswith("origin:") for item in result["breach"]))
 
+    def test_a_file_origin_is_read_as_a_local_path(self) -> None:
+        expected = review._local_origin_refs(self.repo)
+        git(self.repo, "remote", "set-url", "origin", f"file://{self.origin}")
+        self.assertEqual(review._local_origin_refs(self.repo), expected)
+
+    def test_a_file_origin_path_is_percent_decoded(self) -> None:
+        spaced = self.tmp / "an origin.git"
+        git(self.tmp, "clone", "-q", "--bare", str(self.origin), str(spaced))
+        encoded = str(spaced).replace(" ", "%20").replace(".git", "%2egit")
+        git(self.repo, "remote", "set-url", "origin", f"file://{encoded}")
+        self.assertIn("refs/heads/main", review._local_origin_refs(self.repo))
+
+    def test_a_file_origin_authority_is_dropped(self) -> None:
+        expected = review._local_origin_refs(self.repo)
+        for host in ("localhost", "otherhost"):
+            with self.subTest(host=host):
+                git(self.repo, "remote", "set-url", "origin", f"file://{host}{self.origin}")
+                self.assertEqual(review._local_origin_refs(self.repo), expected)
+
+    def test_a_file_origin_without_a_path_or_unreadable_is_an_error(self) -> None:
+        for url in ("file://otherhost", f"file://{self.tmp}/gone.git", f"file://{self.tmp}/a%00b.git"):
+            with self.subTest(url=url):
+                git(self.repo, "remote", "set-url", "origin", url)
+                with self.assertRaises(OSError):
+                    review._local_origin_refs(self.repo)
+
+    def test_a_ref_added_to_a_file_origin_during_the_run_is_a_breach(self) -> None:
+        git(self.repo, "remote", "set-url", "origin", f"file://{self.origin}")
+        result = self.launch({"emulate_sandbox": False, "actions": [
+            {"op": "shell", "argv": ["git", "push", str(self.origin), "HEAD:refs/heads/evil"]}, results()]})
+        self.assertIn("origin refs", result["breach"])
+        self.settle(result)
+
 
 class ArgvAndSettingsTest(Fixture):
     FLAGS = ("--tools", "Bash", "--allowedTools", "Bash", "--permission-mode", "dontAsk", "--permission-prompts", "none",
@@ -893,7 +927,7 @@ class ArgvAndSettingsTest(Fixture):
                 review.functional_argv(binary=Path("/b/claude"), flags=self.FLAGS, **kwargs)
 
     def test_the_settings_on_disk_must_be_the_ones_the_sandbox_derives(self) -> None:
-        box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="settings", work_item_id="i")
+        box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="settings", work_item_id="i", operator_home=self.home, account_file=self.account)
         review.check_functional_settings(box)
         document = json.loads(box.settings_path.read_text())
         for mutate in (lambda d: d["sandbox"]["filesystem"]["allowWrite"].append("/tmp"),
@@ -906,8 +940,71 @@ class ArgvAndSettingsTest(Fixture):
             with self.assertRaises(review.ReviewLaunchRefusedError):
                 review.check_functional_settings(box)
 
+    def test_the_settings_hold_exactly_the_read_denies_and_a_missing_or_extra_entry_is_refused(self) -> None:
+        box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="reads", work_item_id="i",
+                               operator_home=self.home, account_file=self.account)
+        home = box.base / "claude-home"
+        filesystem = box.settings()["sandbox"]["filesystem"]
+        self.assertEqual(filesystem["denyRead"], [str(home / ".credentials.json"), str(home / ".claude.json"),
+                                                  str(home / "backups"), str(self.home), str(self.account)])
+        self.assertNotIn(str(home), filesystem["denyRead"])
+        review.check_functional_settings(box)
+        document = json.loads(box.settings_path.read_text())
+        for name, mutate in (("a missing entry", lambda d: d["sandbox"]["filesystem"]["denyRead"].pop()),
+                             ("an extra entry", lambda d: d["sandbox"]["filesystem"]["denyRead"].append("/x")),
+                             ("no list", lambda d: d["sandbox"]["filesystem"].pop("denyRead"))):
+            mutated = json.loads(json.dumps(document))
+            mutate(mutated)
+            box.settings_path.write_text(json.dumps(mutated))
+            with self.subTest(name), self.assertRaises(review.ReviewLaunchRefusedError) as caught:
+                review.check_functional_settings(box)
+            self.assertEqual(caught.exception.evidence.get("check"), "settings")
+
+    def test_a_runtime_root_inside_the_operator_claude_home_ends_before_the_tester_starts(self) -> None:
+        inside = self.home / "runtime"
+        inside.mkdir()
+        wrapper = fake.write_binary(self.tools, {"log": str(self.tmp / "inside.log")}, name="claude-inside")
+        with self.assertRaises(fr.TesterUnavailable) as caught:
+            review.launch_functional(
+                candidate=self.candidate, flows=self.flows, runtime_root=inside, job_id="inside", work_item_id="item-1",
+                operator_home=self.home, model=MODEL, effort="medium", timeout=60, binary_name=str(wrapper),
+                probe=lambda: None, inherited_env={})
+        self.assertEqual(caught.exception.evidence.get("cause"), fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertFalse((self.tmp / "inside.log").exists())
+        self.assertFalse((inside / fr.SANDBOX_AREA / "inside").exists())
+
+    def test_a_launch_with_the_test_double_reads_no_credential_and_the_clone_stays_readable(self) -> None:
+        job = f"{self.job_prefix}reads"
+        home = self.runtime / fr.SANDBOX_AREA / job / "claude-home"
+        account = Path.home() / ".claude.json"
+        (self.home / "notes.txt").write_text("canary")
+        result = self.launch({"actions": [
+            {"op": "read", "path": str(home / ".credentials.json")},
+            {"op": "read", "path": str(home / ".claude.json")},
+            {"op": "read", "path": str(home / "backups" / ".claude.json.backup.1")},
+            {"op": "read", "path": str(self.home / "notes.txt")},
+            {"op": "read", "path": str(self.home / ".credentials.json")},
+            {"op": "read", "path": str(account)},
+            {"op": "read", "path": "src/app.py"}]}, job_id=job)
+        self.settle(result)
+        reads = [a for a in self.actions() if a["op"] == "read"]
+        self.assertEqual([a["refused"] for a in reads], [True] * 6 + [False])
+        self.assertIn("hello", reads[-1]["text"])
+        self.assertTrue(all("text" not in a for a in reads[:-1]))
+
+    def test_the_guide_and_the_roadmap_name_the_runtime_root_remainder(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        guide = " ".join((root / "docs/guide/automation.md").read_text().split())
+        roadmap = " ".join((root / "docs/ROADMAP.md").read_text().split())
+        self.assertIn("other Controller jobs keep copies of the same credential under the shared runtime root", guide)
+        self.assertIn("(`reviews/<job>/claude-home/`, a `verify-*` scratch folder, and any copy a killed job left behind)",
+                      guide)
+        self.assertIn("86. The copies of the Claude credential and account identity that other Controller jobs keep",
+                      roadmap)
+        self.assertIn("killed job left behind, which `sweep_retained` never removes", roadmap)
+
     def test_a_writable_root_outside_the_sandbox_or_at_the_candidate_is_refused_even_if_settings_agree(self) -> None:
-        box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="roots", work_item_id="i")
+        box = fr.build_sandbox(self.candidate, runtime_root=self.runtime, job_id="roots", work_item_id="i", operator_home=self.home, account_file=self.account)
         with mock.patch.object(fr.Sandbox, "scratch_dirs", new_callable=mock.PropertyMock,
                                return_value=[Path("/tmp")]):
             box.settings_path.write_text(json.dumps(box.settings()))

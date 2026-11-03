@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-tester-read-denies",
+  "requirements": {
+    "R1": {
+      "description": "The functional tester's settings deny reading the private entries of this job's Claude home (credential file, account identity file and its backups), the operator's Claude home and the operator's global account file, proved by the test double and a release-side live probe on the installed build (#115 point 1)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R2": {
+      "description": "The tester summary is bounded where it enters the Controller (#115 point 1)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "A file:// origin is read as a local path by the origin refs check (#115 point 2)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    }
+  }
+}

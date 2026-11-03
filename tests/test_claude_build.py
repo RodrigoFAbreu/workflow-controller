@@ -423,6 +423,25 @@ class VerifyBuildTests(unittest.TestCase):
         self.assertFalse((self.root / cb.RECORD_NAME).exists())  # verifying records nothing by itself
         self.assertFalse((self.root / cb.SCRATCH_AREA).exists())  # the scratch folder and its area are gone
 
+    def test_the_verified_settings_hold_the_same_read_denies_as_the_launch(self) -> None:
+        with mock.patch.object(fr, "tester_settings", wraps=fr.tester_settings) as built:
+            self.verify(FakeClaude())
+        account = Path.home() / ".claude.json"
+        deny = built.call_args.kwargs["deny_read"]
+        self.assertEqual(deny[-2:], [str(self.home), str(account)])
+        self.assertEqual([Path(entry).name for entry in deny[:3]], [".credentials.json", ".claude.json", "backups"])
+        self.assertEqual(Path(deny[0]).parent.name, "claude-home")
+
+    def test_a_verify_runtime_root_inside_the_operator_claude_home_is_not_verified_and_leaves_nothing(self) -> None:
+        inside = self.home / "runtime"
+        inside.mkdir()
+        fake = FakeClaude()
+        with self.assertRaises(cb.BuildNotVerified) as ctx:
+            cb.verify_build(self.link, runtime_root=inside, operator_home=self.home, run=fake)
+        self.assertEqual(ctx.exception.probe, "host")
+        self.assertEqual(fake.launches, 0)
+        self.assertFalse((inside / cb.SCRATCH_AREA).exists())
+
     def test_the_probes_get_a_short_tmpdir_whatever_the_depth_of_the_runtime_root(self) -> None:
         deep = self.root
         for part in ("a" * 40, "b" * 40, "c" * 40):

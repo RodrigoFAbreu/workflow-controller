@@ -512,6 +512,27 @@ and record the evidence as before, or to set `functional.automated` false, which
 stop at row 38e for the repository so the tester is not launched again. A usage limit is handled
 like any job's.
 
+**What the Claude tester can read.** The sandbox limits writes, and it also denies reads of the places a
+credential or an account identity lives (`sandbox.filesystem.denyRead` in the tester's settings, built by
+`functional_review.read_denies`): the job's own `.credentials.json` (the copy of your login), `.claude.json` and
+`backups` in its private Claude home, your whole Claude home (`CLAUDE_CONFIG_DIR`, else `~/.claude`) and your global
+account file `~/.claude.json`. When your `.credentials.json` is a link to a file outside your Claude home, that
+target is denied too. The rest of the job's home stays readable, because the shell the CLI starts keeps its
+own working files there (`shell-snapshots`) and a deny on the whole home would break every command; what stays
+readable holds no credential. The deny binds the tester's shell, not the Claude process itself. A runtime root that
+lies inside your Claude home is refused as `functional_tester_unavailable`, and `verify-claude` refuses it as a host
+problem, because the deny would cover the tester's own folders. This was measured on the pinned build (Claude Code
+2.1.310) by `tests/test_functional_enforcement.py` with `CONTROLLER_LIVE_CLAUDE_TESTS=1`; the Controller never
+relies on a deny it has not seen work. The remainder: other Controller jobs keep copies of the same credential
+under the shared runtime root (`reviews/<job>/claude-home/`, a `verify-*` scratch folder, and any copy a killed job
+left behind), and the tester can read them by absolute path; so can it read other credential stores such as
+`~/.ssh` or `~/.config/gh` by absolute path. Closing that needs a read allowlist and is recorded in the
+[roadmap](../ROADMAP.md#known-follow-ups-carried-forward) (follow-up 86). The tester's `summary` for a flow is cut at 2000
+characters (a marker states how many were omitted) where it enters the Controller, so the record and the findings file stay
+bounded; the flow's log file is not changed (it is the tester's own log, so it need not hold the omitted text). A `file://` origin of the real repository is read as a local
+path for the before-and-after comparison, the same as a plain path, with the authority part ignored as Git does; a
+`file://` origin that names no path is reported as an `origin` breach, not skipped.
+
 **What the sandbox does not claim.** The Controller binds the candidate it handed over and keeps it
 read-only to the tester, but it cannot bind which copy of the product the tester ran: a copy edited
 under the tester's own scratch `TMPDIR` that passes is not detected (the prompt forbids it, and the

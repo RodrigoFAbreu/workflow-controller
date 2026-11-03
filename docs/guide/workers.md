@@ -811,8 +811,14 @@ time, turns, a quality flag per figure (`reported`, `derived` or `unknown`), the
 cost with its source (an API list-price equivalent when it is derived from
 the price table or is Claude's `total_cost_usd`), the price-table version and currency, the record's own
 `version`, and for a Codex review `subagent_total_tokens`, the sub-agents' summed
-total, which is kept out of the token figures. A figure the
-harness does not give is `null` and `unknown`; none is invented. It is advisory
+total, which is kept out of the token figures. Wall time has a different source per job kind: a Claude worker's is the
+`duration_ms` its `result` events report, summed; a Codex worker's is the
+Controller's own elapsed monotonic time around the run, in milliseconds, kept
+even when the run has no result events; a review's is the time from launch to
+the terminal write, in whole seconds (a Claude review uses its summed
+`duration_ms` instead when the stream reports it). A figure the
+harness does not give is `null` and `unknown`; none is invented. Reasoning tokens
+are `unknown` unless every result reports them, never a partial sum. It is advisory
 like `telemetry`: if building it fails the job is unchanged and the record has a
 `usage_record_failed` key instead. A worker record carries `usage_record` exactly
 when it carries the `telemetry` block, which includes a job reconciled `FAILED`

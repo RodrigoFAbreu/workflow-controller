@@ -97,7 +97,10 @@ model absent from the table (an alias such as `opus`, for example) gives cost
 carries it exactly when it carries `telemetry`, so a job reconciled `FAILED` after
 its result was read still has both, and so does a worker that launched but exited
 without emitting a result (its figures are `null` and `unknown`). A job that
-fails outside the completion path, such as a failure to launch, has neither. A built record
+fails outside the completion path, such as a failure to launch, has neither. Its wall time keeps the source of each job kind: the summed
+`duration_ms` of a Claude worker's results, the Controller's own elapsed
+monotonic time for a Codex worker, and launch-to-finish in whole seconds for a
+review. Reasoning tokens are `unknown` unless every result reports them. A built record
 keeps the table version it was computed under and is never rewritten.
 
 The `--json` output of `resume` prints each job record as stored, so a job

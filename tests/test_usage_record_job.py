@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, identity, job, review, usage_record  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
-from tests import (fixtures, test_cli, test_job, test_review_claude, test_review_job, test_review_mode,  # noqa: E402
+from tests import (fixtures, test_cli, test_job, test_review, test_review_claude, test_review_job, test_review_mode,  # noqa: E402
                    test_review_same_provider)
 from tests.test_job import _telemetry_end_turn  # noqa: E402
 
@@ -116,6 +116,23 @@ class ScanKeepsRolloutFiguresTest(unittest.TestCase):
         self.assertEqual(review.result_reasoning({"usage": {"output_tokens_details": {"thinking_tokens": 7}}}), 7)
         self.assertIsNone(review.result_reasoning({"usage": {}}))
         self.assertIsNone(review.result_reasoning(None))
+
+
+class RetriedCodexReviewRollouts(unittest.TestCase):
+    """CP2 (D7): the real ``launch_review`` retry against the fake Codex leaves the rollouts the record reads."""
+
+    def test_a_retried_review_counts_each_attempts_root_once_and_each_sub_agent_once(self) -> None:
+        launch = test_review.FakeLaunchTest("setUp")
+        launch.setUp()
+        self.addCleanup(launch.doCleanups)
+        out = launch.launch({"exec": {"verdict": "wrong_id_first", "subagent": 4321}}, job="j-retry-usage")
+        rollouts = out["usage_rollouts"]
+        roots = [r for r in rollouts if not r["subagent"]]
+        self.assertEqual(len(roots), 2)  # the first attempt's root and the retry's, each once
+        self.assertEqual(len([r for r in rollouts if r["subagent"]]), 2)  # the fake spawns one per attempt
+        record = usage_record.from_codex_rollouts(rollouts, model="gpt-6.1-sol")
+        self.assertEqual(record.subagent_total_tokens, 2 * 4321)
+        self.assertEqual([r["usage"]["total_tokens"] for r in roots], [10441, 10441])
 
 
 class _UsageDouble(test_review_job.LaunchDouble):

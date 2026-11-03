@@ -50,6 +50,13 @@ PRICES = load()
 
 @dataclasses.dataclass(frozen=True)
 class UsageRecord:
+    """One job's usage. ``wall_ms`` has a different source per job kind, kept as
+    each was measured: a Claude worker's is the harness-reported ``duration_ms``
+    summed over its ``result`` events; a Codex worker's is the Controller's own
+    elapsed monotonic milliseconds around ``run_bounded``; a review's is
+    ``launched_at`` to the terminal write at whole-second resolution (a Claude
+    review uses its summed ``duration_ms`` instead when the stream reports it)."""
+
     harness: str
     provider: str
     model: str | None
@@ -121,16 +128,18 @@ def _sum_present(values: Iterable) -> int | None:
 
 
 def reasoning_tokens(results: list[dict]) -> int | None:
-    """The sum of ``usage.output_tokens_details.thinking_tokens`` over the
-    results that carry it; ``None`` only when none does. An additive,
-    usage-only read: ``worker_stream.session_telemetry`` omits it."""
+    """The sum of ``usage.output_tokens_details.thinking_tokens``; ``None``
+    when any result lacks the figure (or there is none), never the subtotal of
+    those that carry it -- ``worker_stream.session_telemetry``'s rule for a
+    partly missing figure. An additive, usage-only read: it omits this one."""
     present = []
     for event in results:
         usage = event.get("usage") if isinstance(event, dict) else None
         details = usage.get("output_tokens_details") if isinstance(usage, dict) else None
         value = details.get("thinking_tokens") if isinstance(details, dict) else None
-        if _int(value):
-            present.append(value)
+        if not _int(value):
+            return None
+        present.append(value)
     return sum(present) if present else None
 
 
@@ -218,7 +227,9 @@ def from_codex_rollouts(rollouts: Iterable[Mapping], *, model: str | None,
     adapter = harness.ADAPTERS["codex"]
     roots, sub_totals = [], []
     for rollout in rollouts:
-        usage = rollout.get("usage") if isinstance(rollout, Mapping) else None
+        if not isinstance(rollout, Mapping):
+            continue
+        usage = rollout.get("usage")
         if rollout.get("subagent"):
             total = usage.get("total_tokens") if isinstance(usage, dict) else None
             if _int(total):

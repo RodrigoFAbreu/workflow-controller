@@ -86,6 +86,20 @@ class ClaudeConverterTest(unittest.TestCase):
         self.assertEqual(json.dumps(ws.session_telemetry(results), sort_keys=True), before)
         self.assertNotIn("reasoning", json.dumps(ws.session_telemetry(results)["tokens"]))
 
+    def test_partly_reported_reasoning_is_unknown_and_the_other_figures_are_unchanged(self) -> None:
+        results = _results(CONTRACT / "job_2857a730_two_results.jsonl")
+        full = ur.from_claude_results(results)
+        self.assertIsNotNone(full.reasoning)
+        mixed = json.loads(json.dumps(results))
+        del mixed[0]["usage"]["output_tokens_details"]
+        record = ur.from_claude_results(mixed)
+        self.assertIsNone(record.reasoning)
+        self.assertEqual(record.quality["reasoning"], ur.UNKNOWN)
+        self.assertEqual((record.input, record.cache_read, record.cache_write, record.output),
+                         (full.input, full.cache_read, full.cache_write, full.output))
+        self.assertIsNone(ur.reasoning_tokens(mixed))
+        self.assertEqual(ur.reasoning_tokens(results), full.reasoning)
+
     def test_a_stream_with_no_result_invents_nothing(self) -> None:
         record = ur.from_claude_results([])
         self.assertTrue(all(getattr(record, g) is None for g in ur.GROUPS))
@@ -112,6 +126,13 @@ class CodexConverterTest(unittest.TestCase):
         self.assertEqual((record.harness, record.provider), ("codex", "openai"))
         self.assertAlmostEqual(record.cost, 10436 * 1.0 + 5 * 10.0)
         self.assertEqual(record.cost_source, ur.DERIVED)
+
+    def test_a_rollout_that_is_not_a_mapping_is_skipped(self) -> None:
+        good = ur.parse_rollout([json.loads(line) for line in
+                                 (CONTRACT / "codex" / "rollout_excerpt.jsonl").read_text().splitlines()])
+        expected = ur.from_codex_rollouts([good], model="m", table=TABLE)
+        record = ur.from_codex_rollouts([None, "junk", good, 7], model="m", table=TABLE)
+        self.assertEqual(record.to_dict(), expected.to_dict())
 
     def test_a_rollout_without_token_count_gives_all_unknown(self) -> None:
         record = ur.from_codex_rollouts([ur.parse_rollout([{"type": "session_meta", "payload": {"source": "exec"}}])],

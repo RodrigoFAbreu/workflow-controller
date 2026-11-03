@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-3c",
+  "dispositions": {
+    "F-17c44f94962c": {
+      "disposition": "fixed",
+      "note": "The plan's D10 now names docs/common-problems.md and says troubleshooting.md is unchanged; CP1 reworded the two harness-contract notes."
+    },
+    "F-3d38aa0995c7": {
+      "disposition": "fixed",
+      "note": "Plan round 2 revised D9's wording for the split count; the implementation review approved the stop text."
+    },
+    "F-442f3bcb42b6": {
+      "disposition": "fixed",
+      "note": "CP2's Files list now includes docs/guide/how-it-works.md."
+    },
+    "F-600c781389f4": {
+      "disposition": "fixed",
+      "note": "docs/guide/development.md ('Maintaining the price table') now states the lower-tier rule and the lower-bound wording."
+    },
+    "F-655ec6276b9b": {
+      "disposition": "fixed",
+      "note": "The doubled 'and' in D10 is gone from the approved plan."
+    },
+    "F-6df01642a5a8": {
+      "disposition": "dropped",
+      "reason": "The reason given at round 2 stands: a test-only fixture detail that works. A shared fixture helper is test-cleanup for a later clean-up milestone, not worth a post-approval change."
+    },
+    "F-7c81d5158043": {
+      "disposition": "fixed",
+      "note": "cli._round_caps_in_force derives each cap and its origin in one place and _round_caps is built from it; a file round_cap 4 is covered in tests/test_settings.py."
+    },
+    "F-81ddffd67afe": {
+      "disposition": "dropped",
+      "reason": "Same as F-6df01642a5a8: the hand-built FakeLaunchTest works and depends only on its setUp; refactoring a shared fixture is not needed for this milestone."
+    },
+    "F-a0ce384401e5": {
+      "disposition": "fixed",
+      "note": "docs/guide/development.md now says a derived cost is a lower bound for longer prompts and longer-lived cache writes."
+    },
+    "F-b49b71b3e36e": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a generated bundle artifact, not a committed file; the later revision 3 bundle was regenerated and approved. No change to the repository."
+    },
+    "F-d1b79f5dcf4c": {
+      "disposition": "fixed",
+      "note": "CP1's test list names test_the_shipped_table_is_versioned changing to (2, 'USD')."
+    },
+    "F-d3e82c353d2e": {
+      "disposition": "fixed",
+      "note": "The deprecation note follows the source on the same line and tests/test_settings.py asserts it (line 842)."
+    },
+    "F-db01b84099d0": {
+      "disposition": "dropped",
+      "reason": "Same as F-b49b71b3e36e: a generated bundle artifact for a superseded revision; the final bundle was regenerated and approved."
+    },
+    "F-e2bc7f2a0db5": {
+      "disposition": "dropped",
+      "reason": "The assertions still pass and test the same code; their placement is cosmetic and not worth a post-approval code change."
+    }
+  }
+}

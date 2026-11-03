@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented, awaiting implementation review.** `workflow-controller-cleanup-3c` (CU3c, issues
+**Complete.** `workflow-controller-cleanup-3c` (CU3c, issues
 [#103](https://github.com/RodrigoFAbreu/workflow-controller/issues/103),
 [#104](https://github.com/RodrigoFAbreu/workflow-controller/issues/104) and
 [#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108)) fills the price table, tidies the usage record and
@@ -16,7 +16,9 @@ CP3 is complete: `settings show` prints `review.<local|external>_round_cap in fo
 rows (and `round_caps_in_force` with `--json`) from `cli._round_caps_in_force`, the cap stop says "round N" ("local round N"
 or "external round N" for a split count), and the roadmap marks CU3c done.
 
-Next action: the implementation review of CU3c.
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.5).
+
+Next action: `/milestone-plan` for C10h ([#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)), the next incomplete item in `docs/ROADMAP.md`.
 
 Previous item, now complete:
 

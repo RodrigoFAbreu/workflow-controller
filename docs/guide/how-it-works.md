@@ -86,9 +86,14 @@ rollouts of the job. A cost the harness reports (Claude's `total_cost_usd`) is
 kept as it is, with source `reported`. Otherwise the cost is the four priced
 token groups (input, cache-read, cache-write, output) times their prices in
 `controller/prices.json`, never the reasoning count, which is inside output. The
-price table is versioned and ships with no model prices until one is taken from
-a provider's published list; with no reported cost, a model absent from the table
-gives cost `null` and quality `unknown`. A worker record
+price table is versioned and holds the API list prices of the models the Controller
+launches by default (GPT-6.1 Sol, Claude Opus 5.5, Sonnet 5.5 and Haiku 5.5), each
+taken from the provider's published list on the day recorded in the table, so a
+cost derived from it is an API list-price equivalent, not what a subscription
+charges. A model that is priced by prompt length is entered at its lower tier, so
+its derived cost is a lower bound for longer prompts. With no reported cost, a
+model absent from the table (an alias such as `opus`, for example) gives cost
+`null` and quality `unknown`. A worker record
 carries it exactly when it carries `telemetry`, so a job reconciled `FAILED` after
 its result was read still has both, and so does a worker that launched but exited
 without emitting a result (its figures are `null` and `unknown`). A job that

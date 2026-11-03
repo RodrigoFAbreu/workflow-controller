@@ -100,7 +100,8 @@ in order:
 - `jobs: <n> recorded` (or `jobs: none`), then the 10 newest jobs, newest
   first, one per line: id, status, command and work item, then
   `age 12 min` while the job is active, or `wall 1400 s, cost $11.66`
-  once it has ended (the cost only when the job has telemetry figures);
+  once it has ended (the cost only when the job has telemetry figures; it is
+  an API list-price equivalent, not what a subscription charges);
   a protocol-mode job also shows `[reconcile <class>]` once reconciled,
   with the invalid reasons' codes after the class (`reconcile_class` and
   `invalid_reasons` with `--json`);
@@ -148,7 +149,8 @@ It touches nothing else: no target repository and no runtime root.
 ## `telemetry`
 
 `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by GROUPING] [<repo>]`
-sums up what the recorded workers cost: turns, tokens, cost, API time
+sums up what the recorded workers cost: turns, tokens, cost (an API
+list-price equivalent, not what a subscription charges), API time
 and wall time, as totals and per-job means. It reads the job records
 under the runtime root, the way `follow` finds it, and writes nothing.
 What each figure means is in [Telemetry](workers.md#telemetry).

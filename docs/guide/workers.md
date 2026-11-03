@@ -709,7 +709,7 @@ The rendering shows the worker's session, its text, each tool call
 stderr, and each result with turns, cost and duration, interleaved
 with the Controller's job and run events. The job's `COMPLETED` line
 adds the whole session's totals (`; session: cost $11.66, 144 turns,
-...`, or `telemetry unavailable`; see [Telemetry](#telemetry)). After
+...`, the cost an API list-price equivalent, or `telemetry unavailable`; see [Telemetry](#telemetry)). After
 the `follow.heartbeat_seconds` setting (30 s by default) with no new
 event it prints a heartbeat naming the worker's pid and elapsed time. Thinking
 blocks are never rendered, not even as a marker. The Controller requests
@@ -729,7 +729,8 @@ and killed mid-job, and requires identical durable results.
 
 ## Telemetry
 
-Every job that completes records what its worker's session cost, in a
+Every job that completes records what its worker's session cost, as an API
+list-price equivalent (on a subscription it is not what you pay), in a
 `telemetry` block on the job record. The figures come from the worker's
 own stream (`worker.stdout`). Nothing is sent anywhere, and no
 lifecycle decision reads them. `workflow-controller telemetry` sums them
@@ -807,7 +808,8 @@ review job in which an attempt ran (whatever its terminal status), carries a
 harness, provider and model, the input, cache-read, cache-write, output and
 reasoning tokens (input excludes cached tokens, output includes reasoning), wall
 time, turns, a quality flag per figure (`reported`, `derived` or `unknown`), the
-cost with its source, the price-table version and currency, the record's own
+cost with its source (an API list-price equivalent when it is derived from
+the price table or is Claude's `total_cost_usd`), the price-table version and currency, the record's own
 `version`, and for a Codex review `subagent_total_tokens`, the sub-agents' summed
 total, which is kept out of the token figures. A figure the
 harness does not give is `null` and `unknown`; none is invented. It is advisory

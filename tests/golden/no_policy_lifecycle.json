@@ -385,7 +385,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -959,7 +959,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -1366,7 +1366,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -1775,7 +1775,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -2186,7 +2186,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -2606,7 +2606,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -3017,7 +3017,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",
@@ -3733,7 +3733,7 @@
             "input": null,
             "model": null,
             "output": null,
-            "price_table_version": 1,
+            "price_table_version": 2,
             "provider": "anthropic",
             "quality": {
               "cache_read": "unknown",

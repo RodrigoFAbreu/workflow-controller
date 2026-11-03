@@ -599,7 +599,11 @@ The record of the 2.6.0 admission is
 **Maintaining the price table.** `controller/prices.json` holds a `version`, the
 `currency`, the `unit` (price per token, in the table's currency), the `date`,
 the `source` and the prices per model identifier. A price change adds a new table
-`version` with its source and date; it never edits history. A changed converter,
+`version` with its source and date; it never edits history. A price is taken from
+the provider's published API pricing page on the day it is entered, never from
+memory, and the page URL and the day are recorded in `source` and `date`. A model
+the Controller launches by default needs a complete price (a test collects them
+and fails for one that has none); an alias names no fixed model and gets none. A changed converter,
 or a new version of a harness, is a new converter version. Stored records keep
 the version they were computed under and are never rewritten.
 

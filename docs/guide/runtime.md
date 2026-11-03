@@ -373,7 +373,8 @@ of each kind of step. A round the Workflow stated is shown as
 not the same measure as the Workflow's content count, so compare `~` groups
 with `~` groups. A review the Controller ran itself (`plan.review.external`,
 `implementation.review.external`) appears in these groups with its action,
-stage and round. A Claude review keeps the cost and token totals its `result`
+stage and round. A Claude review keeps the cost (an API list-price equivalent,
+not what a subscription charges) and token totals its `result`
 events reported (`review.telemetry`, summed over its at most two invocations,
 since each is a separate session), so it is counted in those groups; a Codex
 review keeps none until its rollout gives them, and shows as "telemetry

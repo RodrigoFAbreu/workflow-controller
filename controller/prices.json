@@ -1,8 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
   "currency": "USD",
   "unit": "price per token, in the table's currency",
-  "date": "2026-10-18",
-  "source": "none yet: no price is entered until it is taken from the provider's published price list; a model absent from the table gives cost null and quality unknown",
-  "models": {}
+  "date": "2026-11-03",
+  "source": "API list prices read on 2026-11-03 from https://developers.openai.com/api/docs/pricing (gpt-6.1-sol, Standard processing, short-context tier: prompts up to 272K tokens) and https://platform.claude.com/docs/en/about-claude/pricing (claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5; cache_write is the five-minute cache write rate, cache_read the cache hit rate). OpenAI lists no cache-write price, so gpt-6.1-sol has cache_write 0. Two models are priced by prompt length and are entered at the lower tier only (gpt-6.1-sol up to 272K tokens, claude-haiku-5-5 up to 100K tokens), so a cost derived from the table is a lower bound for longer prompts. A cost from this table is an API list-price equivalent, not what a subscription charges. A model absent from the table, and an alias such as opus, sonnet or haiku, gives cost null and quality unknown",
+  "models": {
+    "gpt-6.1-sol": {"input": 0.000002, "cache_read": 0.0000001, "cache_write": 0, "output": 0.00001},
+    "claude-opus-5-5": {"input": 0.000004, "cache_read": 0.0000002, "cache_write": 0.000005, "output": 0.00002},
+    "claude-sonnet-5-5": {"input": 0.000002, "cache_read": 0.0000001, "cache_write": 0.0000025, "output": 0.00001},
+    "claude-haiku-5-5": {"input": 0.0000001, "cache_read": 0.00000001, "cache_write": 0.000000125, "output": 0.0000005}
+  }
 }

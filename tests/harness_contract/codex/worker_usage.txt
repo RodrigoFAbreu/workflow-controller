@@ -18,7 +18,8 @@ Result: the test passed through `job.execute_step` and a real `codex exec`:
     (both read from the job's own Codex home), end_window_resets_at 1793589865, weekly_end_resets_at 1793776825
     --- usage_record ---
     harness codex, provider openai, model gpt-6.1-sol, input 10327, output 5, every quality `derived`,
-    cost None / cost_source `unknown` (the price table has no price for the model), wall_ms 3047
+    cost None / cost_source `unknown` (the empty price table this fixture passes has no price for the
+    model), wall_ms 3047
 
 Asserted and held: the gate was asked once with provider `codex` and returned a token; a reservation for that token
 existed at admission; the `usage` block carries the token and `accounting` `done`; the shared record was left with no open

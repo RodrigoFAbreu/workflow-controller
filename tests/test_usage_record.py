@@ -177,8 +177,39 @@ class PriceTableTest(unittest.TestCase):
 
     def test_the_shipped_table_is_versioned(self) -> None:
         table = ur.load()
-        self.assertEqual((table["version"], table["currency"]), (1, "USD"))
+        self.assertEqual((table["version"], table["currency"]), (2, "USD"))
         self.assertIsInstance(table["models"], dict)
+
+    def test_every_default_model_has_a_complete_price(self) -> None:
+        # read from the modules, so a new default model without a price fails here
+        from controller import claude_build, review, routing
+        models = {routing.DEFAULT_MODEL, review.DEFAULT_MODEL, review.CLAUDE_DEFAULT_MODEL, claude_build.PROBE_MODEL,
+                  *(route.model for route in routing.ROLE_ROUTES.values() if route.model is not None)}
+        table = ur.load()["models"]
+        for model in sorted(models):
+            with self.subTest(model=model):
+                self.assertIn(model, table, "add a price to controller/prices.json (docs/guide/development.md)")
+                for group in ("input", "cache_read", "cache_write", "output"):
+                    price = table[model].get(group)
+                    self.assertIsInstance(price, (int, float))
+                    self.assertNotIsInstance(price, bool)
+                    self.assertGreaterEqual(price, 0)
+
+    def test_a_codex_cost_from_the_shipped_table_has_no_cache_write_term(self) -> None:
+        usage = {"input_tokens": 1000, "cached_input_tokens": 200, "cache_write_input_tokens": 0,
+                 "output_tokens": 50, "reasoning_output_tokens": 0, "total_tokens": 1050}
+        table = ur.load()
+        record = ur.from_codex_rollouts([{"subagent": False, "usage": usage}], model="gpt-6.1-sol", table=table)
+        price = table["models"]["gpt-6.1-sol"]
+        self.assertEqual(price["cache_write"], 0)
+        self.assertAlmostEqual(record.cost, record.input * price["input"] + record.cache_read * price["cache_read"]
+                               + record.output * price["output"], places=12)
+        self.assertEqual(record.cost_source, ur.DERIVED)
+        self.assertGreater(record.cost, 0)
+
+    def test_an_alias_has_no_price(self) -> None:
+        for alias in ("opus", "sonnet", "haiku"):
+            self.assertNotIn(alias, ur.load()["models"])
 
     def test_the_table_loads_from_a_copied_package_layout(self) -> None:
         # a copy of the package imported on its own: the default resource path resolves beside the module

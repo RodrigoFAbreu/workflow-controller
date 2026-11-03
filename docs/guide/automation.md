@@ -496,8 +496,10 @@ detail, no repeated run).
 The stops, each with its remedy in the message: `flows_not_runnable` (the `environment_limited`
 case: run those flows by hand and record them, or change the checklist so they run offline),
 `checklist_unrecognised`, `functional_tester_unavailable` (no `claude` binary, the role refused, `bwrap` or `socat`
-missing, no seccomp filter, a `claude` build not yet verified (run `workflow-controller verify-claude`), the fresh clone not matching the manifest, or no
-folder short enough for the tester's `TMPDIR`; each cause with its remedy is in
+missing, no seccomp filter or a `claude` build not yet verified (run `workflow-controller verify-claude`): these host causes are found before
+any usage is reserved, so the stop is one record with no reservation. The causes that need a job or a built sandbox still arise at launch: the fresh
+clone not matching the manifest, no folder short enough for the tester's `TMPDIR`, a runtime root inside your Claude home, and a tree with a
+submodule, an untracked checklist or an existing sandbox folder; each cause with its remedy is in
 [common problems](../common-problems.md#functional_tester_unavailable)), `results_invalid` (the stop text carries a bounded excerpt of the tester's final message,
 which usually names the cause when `RESULTS.json` was not written), `isolation_breach` (a difference in the real repository, its path
 origin or the private Claude home; the sandbox is kept for inspection and nothing is recorded; a
@@ -550,15 +552,20 @@ or the same in a routing entry), run `workflow-controller verify-codex` first (a
 at `functional_tester_unavailable`), and log in to Codex. A Codex route without its binary option also ends there, with
 cause `no_binary`.
 
+The host check runs before the usage admission for a chain of one as well as a longer chain (Claude and Codex alike), so an
+unavailable tester ends at `functional_tester_unavailable` with no reservation taken.
+
 A `functional-tester` chain longer than one is walked **before** the spawn, as a worker's chain is: an entry is skipped
-(cause `launcher_unavailable`) when its binary cannot be resolved, and, for a Codex entry, when its functional options
+(cause `launcher_unavailable`) when the role is refused, its binary cannot be resolved or, for a Claude entry, the static probe
+fails (`bwrap`, `socat`, seccomp or an unverified build), and, for a Codex entry, when its functional options
 carry no Codex home and binary, the Codex home has no `auth.json` (no login) or the Codex build is not the one
 `verify-codex` recorded. A held provider skips its remaining entries (`usage_held`). The first admitted entry is
 chosen and `worker_route.selection` and `telemetry` (`chain_position`, `chain_skipped`) show it. When every entry is
-unavailable the step ends at `functional_tester_unavailable` with the first entry's reason; when every entry is held it
-returns the usage hold. Every other refusal happens after the spawn (a control, a breach, a bridge error): the job ends
+unavailable the step ends at `functional_tester_unavailable` with the first entry's reason (a skipped entry's own text appears only
+then; when a later entry is chosen the record keeps just the cause `launcher_unavailable`); when every entry is held it
+returns the usage hold. Every refusal that needs a job or a sandbox happens at launch (the clone, `TMPDIR`, a breach, a control, a bridge error): the job ends
 there and the next entry is **never** tried, because a started tester is not retried on another entry. A chain of one
-selects nothing. A launched Codex tester's cost is its `usage_record` (built from its rollouts, so the usage budget and
+runs the same host check but selects nothing. A launched Codex tester's cost is its `usage_record` (built from its rollouts, so the usage budget and
 the `usage` command read it as they do for a Codex review) and its `telemetry` block has the route's harness `codex`
 with the token and cost figures shown as unavailable. The first real round (31 October 2026, `gpt-6.1-sol`, effort
 `high`, through `job.execute_step` on a scratch item at row 38e) ran the Codex tester to `findings`: it reported the one

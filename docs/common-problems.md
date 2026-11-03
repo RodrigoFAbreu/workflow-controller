@@ -156,7 +156,9 @@ From Controller 1.18.0, under an automatic acceptance gate, the Controller runs 
 
 ### `functional_tester_unavailable`
 
-The Controller stopped before it launched the tester. The message names the cause:
+The Controller stopped before it launched the tester. The message names the cause. The host causes (the first five
+below) are found before any usage is reserved, so the stop is one record and the usage budget shows no reservation for it;
+the clone, `TMPDIR` and tree causes need a job and a built sandbox, so they arise at launch:
 
 - **No `claude` binary found.** Install `claude` or put it on `PATH`.
 - **The functional-tester role was refused** (for example by the routing file). Fix the role in the routing file.

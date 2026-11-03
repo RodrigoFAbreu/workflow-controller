@@ -2,6 +2,24 @@
 
 ## Status
 
+**Implemented, awaiting implementation review.** `workflow-controller-cleanup-3c` (CU3c, issues
+[#103](https://github.com/RodrigoFAbreu/workflow-controller/issues/103),
+[#104](https://github.com/RodrigoFAbreu/workflow-controller/issues/104) and
+[#108](https://github.com/RodrigoFAbreu/workflow-controller/issues/108)) fills the price table, tidies the usage record and
+shows the round caps in force in `settings show`. The plan is `docs/ai-workflow/CONTROLLER_CLEANUP_3C_PLAN.md` (revision 5).
+CP1 is complete: `controller/prices.json` is version 2 and holds the API list prices of `gpt-6.1-sol`, `claude-opus-5-5`,
+`claude-sonnet-5-5` and `claude-haiku-5-5`, read from the providers' pages on 2026-11-03 (lower prompt-length tier; Claude's
+five-minute cache write; `cache_write` 0 for OpenAI), a test requires a complete price for every default model, and the
+guides label a cost as an API list-price equivalent. CP2 is complete: partly reported reasoning is `unknown`, a rollout that is
+not a mapping is skipped, the `wall_ms` source is documented per job kind, and a retried Codex review is tested end to end.
+CP3 is complete: `settings show` prints `review.<local|external>_round_cap in force = N (<origin>)` after the three stored
+rows (and `round_caps_in_force` with `--json`) from `cli._round_caps_in_force`, the cap stop says "round N" ("local round N"
+or "external round N" for a split count), and the roadmap marks CU3c done.
+
+Next action: the implementation review of CU3c.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-checklist-cross-shape` (FL2, issue
 [#271](https://github.com/RodrigoFAbreu/workflow-controller/issues/271)) makes the functional checklist recogniser refuse a
 flow that another shape recognised and the deciding shape would drop silently. The plan is
@@ -17,8 +35,6 @@ of the shape used (or hold a table's rows), `tests/test_functional_lifecycle.py`
 marks FL2 done (1.27.4).
 
 The milestone is implemented, functionally reviewed and accepted by policy.
-
-Next action: `/milestone-plan` for CU3c, the next incomplete item on `docs/ROADMAP.md` (then C10h, C10i, C10j and C10k).
 
 Previous item, now complete:
 

@@ -118,7 +118,7 @@ class ScanKeepsRolloutFiguresTest(unittest.TestCase):
         self.assertIsNone(review.result_reasoning(None))
 
 
-class RetriedCodexReviewRollouts(unittest.TestCase):
+class RetriedCodexReviewRolloutsTest(unittest.TestCase):
     """CP2 (D7): the real ``launch_review`` retry against the fake Codex leaves the rollouts the record reads."""
 
     def test_a_retried_review_counts_each_attempts_root_once_and_each_sub_agent_once(self) -> None:

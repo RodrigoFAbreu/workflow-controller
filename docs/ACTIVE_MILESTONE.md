@@ -2,6 +2,25 @@
 
 ## Status
 
+**Implemented, in review.** `workflow-controller-tester-read-denies` (C10h, issue
+[#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)) closes the Claude functional tester's read path to
+credentials, reads a `file://` origin and bounds the tester's summary. The plan is
+`docs/ai-workflow/CONTROLLER_TESTER_READ_DENIES_PLAN.md` (revision 4). CP1 is complete: `review._local_origin_refs` reads a
+`file://` origin as a local path (percent-decoded, the authority dropped as Git does; no path is an `OSError`, an `origin:`
+breach). CP2 is complete: `functional_review.validate_results` cuts a summary to `SUMMARY_LIMIT` (2000) characters plus a
+marker naming the omitted count. CP3 is complete: `functional_review.read_denies` builds the `denyRead` list (the job home's
+`.credentials.json`, `.claude.json` and `backups`, the operator's Claude home and `$HOME/.claude.json`, each with its resolved
+form when that differs), which `tester_settings`, the launch and `claude-build verify` all carry; the layout invariant covers
+both deny lists, `check_functional_settings` requires the exact list, and a runtime root inside the operator's Claude home is
+refused before the sandbox is built (`functional_tester_unavailable`; `BuildNotVerified("host", ...)` for verify). The live
+probe (`CONTROLLER_LIVE_CLAUDE_TESTS=1`, Claude Code 2.1.310, 2026-11-03) passed: no canary or credential reached the shell,
+and the readable job-home entries were `.last-cleanup`, `projects`, `session-env`, `sessions` and `shell-snapshots`. The
+runtime-root credential copies are the remainder (roadmap follow-up 86).
+
+Next action: the implementation review, then the functional review and acceptance.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-cleanup-3c` (CU3c, issues
 [#103](https://github.com/RodrigoFAbreu/workflow-controller/issues/103),
 [#104](https://github.com/RodrigoFAbreu/workflow-controller/issues/104) and

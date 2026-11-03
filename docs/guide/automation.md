@@ -528,7 +528,7 @@ left behind), and the tester can read them by absolute path; so can it read othe
 `~/.ssh` or `~/.config/gh` by absolute path. Closing that needs a read allowlist and is recorded in the
 [roadmap](../ROADMAP.md#known-follow-ups-carried-forward) (follow-up 86). The tester's `summary` for a flow is cut at 2000
 characters (a marker states how many were omitted) where it enters the Controller, so the record and the findings file stay
-bounded; the whole text remains in the flow's log file. A `file://` origin of the real repository is read as a local
+bounded; the flow's log file is not changed (it is the tester's own log, so it need not hold the omitted text). A `file://` origin of the real repository is read as a local
 path for the before-and-after comparison, the same as a plain path, with the authority part ignored as Git does; a
 `file://` origin that names no path is reported as an `origin` breach, not skipped.
 

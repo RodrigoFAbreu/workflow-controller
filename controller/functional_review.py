@@ -113,7 +113,7 @@ FLOW_ID_PREFIX = "flow-"
 MAX_RESULTS_BYTES = 1 << 20
 LOG_EXCERPT_CHARS = 2000
 #: A tester's ``summary`` is kept to this many characters where it enters the
-#: Controller; the whole text stays in the log (D5).
+#: Controller; the flow's log file is left as the tester wrote it (D5).
 SUMMARY_LIMIT = 2000
 _CHUNK = 1 << 16
 
@@ -781,7 +781,8 @@ def bounded_summary(summary: str) -> str:
     the omitted count; a summary within the limit is returned unchanged."""
     if len(summary) <= SUMMARY_LIMIT:
         return summary
-    return f"{summary[:SUMMARY_LIMIT]}[... {len(summary) - SUMMARY_LIMIT} characters omitted; see the log]"
+    omitted = len(summary) - SUMMARY_LIMIT
+    return f"{summary[:SUMMARY_LIMIT]}[... {omitted} character{'' if omitted == 1 else 's'} omitted]"
 
 
 def not_run_summary(cause: str) -> str:

@@ -834,7 +834,7 @@ class SummaryBoundTest(ValidatorTest):
         summary = "a" * (fr.SUMMARY_LIMIT + 1)
         bounded = self.entry(summary).summary
         self.assertTrue(bounded.startswith("a" * fr.SUMMARY_LIMIT))
-        self.assertEqual(bounded[fr.SUMMARY_LIMIT:], "[... 1 characters omitted; see the log]")
+        self.assertEqual(bounded[fr.SUMMARY_LIMIT:], "[... 1 character omitted]")
         long = self.entry("b" * (fr.SUMMARY_LIMIT + 4000)).summary
         self.assertIn("4000 characters omitted", long)
         self.assertLess(len(long), fr.SUMMARY_LIMIT + 100)

@@ -55939,12 +55939,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-precheck-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-precheck-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 2,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "4a91b261bb953b6aac97d0fe03b997066ad45bae",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "851d9c4db23254c1cbed5d838df2cd569309d6e3",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -56083,8 +56083,8 @@
           "external": 0
         }
       },
-      "state_revision": 13,
-      "last_transition": "2026-11-03T23:04:04Z",
+      "state_revision": 14,
+      "last_transition": "2026-11-03T23:29:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

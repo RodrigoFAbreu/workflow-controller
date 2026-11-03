@@ -817,6 +817,48 @@ class NotRunTest(unittest.TestCase):
 EVIDENCE_POINTER = "#/$defs/inputs/properties/functional_evidence"
 
 
+class SummaryBoundTest(ValidatorTest):
+    """D5: a tester's summary is bounded where it enters the Controller."""
+
+    def entry(self, summary: str, **extra) -> fr.Entry:
+        write(self.out / "flow-1.log", "log of flow-1\n")
+        self.results([{"flow_id": "flow-1", "status": "failed", "reason": "defect", "summary": summary,
+                       "log": "flow-1.log", **extra}])
+        return fr.validate_results(self.out, FLOWS)[0]
+
+    def test_a_summary_at_the_limit_is_kept_byte_for_byte(self) -> None:
+        summary = "é" * fr.SUMMARY_LIMIT
+        self.assertEqual(self.entry(summary).summary, summary)
+
+    def test_one_character_over_is_cut_with_a_marker_naming_the_omitted_count(self) -> None:
+        summary = "a" * (fr.SUMMARY_LIMIT + 1)
+        bounded = self.entry(summary).summary
+        self.assertTrue(bounded.startswith("a" * fr.SUMMARY_LIMIT))
+        self.assertEqual(bounded[fr.SUMMARY_LIMIT:], "[... 1 characters omitted; see the log]")
+        long = self.entry("b" * (fr.SUMMARY_LIMIT + 4000)).summary
+        self.assertIn("4000 characters omitted", long)
+        self.assertLess(len(long), fr.SUMMARY_LIMIT + 100)
+
+    def test_the_findings_text_and_the_evidence_record_carry_the_bounded_string(self) -> None:
+        entry = self.entry("secret " * 1000)
+        self.assertEqual(len(entry.summary.split("[...")[0]), fr.SUMMARY_LIMIT)
+        document = fr.evidence_input(entry, head=HEAD, ran_at="2026-10-19T12:00:00Z", job_id=JOB,
+                                     version="1.17.0", checklist_blob=BLOB)
+        self.assertEqual(document["summary"]["text"], entry.summary)
+        text = fr.findings_text([entry], FLOWS, head=HEAD, checklist_blob=BLOB, job_id=JOB)
+        self.assertIn(f"Tester summary: {entry.summary}", text)
+        self.assertNotIn("secret " * 1000, text)
+
+    def test_the_log_digest_is_the_digest_of_the_untouched_log(self) -> None:
+        entry = self.entry("c" * (fr.SUMMARY_LIMIT * 3))
+        self.assertEqual(entry.log_digest, fr.sha256_bytes(b"log of flow-1\n"))
+
+    def test_a_non_string_summary_is_still_refused(self) -> None:
+        write(self.out / "flow-1.log", "x\n")
+        self.results([{"flow_id": "flow-1", "status": "passed", "summary": ["x" * 5000], "log": "flow-1.log"}])
+        self.assertIn("summary is not a string", self.refused().message)
+
+
 class EvidenceInputTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

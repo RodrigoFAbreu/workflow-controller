@@ -112,6 +112,9 @@ FLOW_ID_PREFIX = "flow-"
 #: ``RESULTS.json`` and a log are read at most this many bytes into memory.
 MAX_RESULTS_BYTES = 1 << 20
 LOG_EXCERPT_CHARS = 2000
+#: A tester's ``summary`` is kept to this many characters where it enters the
+#: Controller; the whole text stays in the log (D5).
+SUMMARY_LIMIT = 2000
 _CHUNK = 1 << 16
 
 #: The sandbox's stated limits (D3), the one text the tester's prompt and the
@@ -768,9 +771,17 @@ def validate_results(output_dir: Path, flows: Sequence[Flow]) -> list[Entry]:
             digest = sha256_file(log)
         except (OSError, ValueError) as exc:
             raise _invalid(f"{flow_id}: log cannot be read ({exc})", flow_id=flow_id) from None
-        entries.append(Entry(flow_id=flow_id, status=status, summary=summary, reason=reason if status ==
+        entries.append(Entry(flow_id=flow_id, status=status, summary=bounded_summary(summary), reason=reason if status ==
                              STATUS_FAILED else None, log_path=log, log_digest=digest))
     return entries
+
+
+def bounded_summary(summary: str) -> str:
+    """The summary cut to ``SUMMARY_LIMIT`` characters plus a marker naming
+    the omitted count; a summary within the limit is returned unchanged."""
+    if len(summary) <= SUMMARY_LIMIT:
+        return summary
+    return f"{summary[:SUMMARY_LIMIT]}[... {len(summary) - SUMMARY_LIMIT} characters omitted; see the log]"
 
 
 def not_run_summary(cause: str) -> str:

@@ -54102,8 +54102,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 4,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "744fb7458e95d4a49e5a73e864f6e9687581513d",
@@ -54111,24 +54111,24 @@
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": null,
       "checkpoints": {},
-      "current_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+      "current_bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
-        "approved_review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+        "reviewed_bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
+        "approved_review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_CLEANUP_3C_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "827f8a323d46750667d22730b47e31be0b06cf4e"
+            "blob": "e34cf885cfb714e1f3dae13fe5fdf803003a198f"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "86f1d00c0ab4d1dabded07477690a0fda434e8ae"
+            "blob": "dff47aa88ace4dc14d26257fd55a53ae3d6c1522"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
@@ -54141,7 +54141,7 @@
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-03T01:50:14Z",
+        "recorded_at": "2026-11-03T11:38:57Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -54171,24 +54171,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+            "review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
             "ledger": {
               "local": {
-                "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+                "bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
                 "verdict": "APPROVE",
-                "round": 4,
-                "verdict_sha256": "a3bc00c20df9dea45433d4cca0e728146f4b963d1613bbc551221aa72dc67621",
-                "ledger_entry_sha256": "263482a8c017f445f0a8c903e2036a3b9626358bbcb3a01be205653ed9b4b10e",
+                "round": 5,
+                "verdict_sha256": "2839eadba576929d499a48f99edfc14068aa8c688ba0760ab366927cc9249d01",
+                "ledger_entry_sha256": "c3195909872c9637b38333d111b6bf75bd0dce9eb34f60453191cd38b665a7b4",
                 "run_ref": "session:local .ai-review/workflow-controller-cleanup-3c/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+                "bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
                 "verdict": "APPROVE",
-                "round": 4,
-                "verdict_sha256": "269d8b363f8855033e215661be7aedc18a55f34aaf00ca6a23e78ca978ab8970",
-                "ledger_entry_sha256": "846295c6094870a04fc50d3fa7c2d31f40aee03eb5daa3bcfd4bc0dbb74ca238",
-                "run_ref": "codex:20261103T014641Z-77d8fd8f",
+                "round": 5,
+                "verdict_sha256": "a76bdf4ddafc83bdaac6e2dc180b6160b1b5107a2ec529edac470d94dd5c0833",
+                "ledger_entry_sha256": "8951489c339e6901b783f941b18b1b62ff8e2d6923c3483c2e4d9296f5942e12",
+                "run_ref": "codex:20261103T113519Z-4b74917d",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -54198,30 +54198,30 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-03T01:50:14Z",
+          "evaluated_at": "2026-11-03T11:38:57Z",
           "workflow_release": "2.25.4"
         }
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+        "review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+          "bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-11-03T01:46:16Z",
-          "verdict_sha256": "a3bc00c20df9dea45433d4cca0e728146f4b963d1613bbc551221aa72dc67621",
+          "round": 5,
+          "completed_at": "2026-11-03T11:34:58Z",
+          "verdict_sha256": "2839eadba576929d499a48f99edfc14068aa8c688ba0760ab366927cc9249d01",
           "run_ref": "session:local .ai-review/workflow-controller-cleanup-3c/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+          "bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-11-03T01:48:29Z",
-          "verdict_sha256": "269d8b363f8855033e215661be7aedc18a55f34aaf00ca6a23e78ca978ab8970",
-          "run_ref": "codex:20261103T014641Z-77d8fd8f",
+          "round": 5,
+          "completed_at": "2026-11-03T11:36:58Z",
+          "verdict_sha256": "a76bdf4ddafc83bdaac6e2dc180b6160b1b5107a2ec529edac470d94dd5c0833",
+          "run_ref": "codex:20261103T113519Z-4b74917d",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },
@@ -54229,27 +54229,34 @@
       "blocking_decisions": [],
       "review_round_counts": {
         "plan": {
-          "local": 4,
-          "external": 2
+          "local": 5,
+          "external": 3
         },
         "implementation": {
           "local": 0,
           "external": 0
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-03T11:31:58Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-03T11:38:57Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "CONSUMED",
-        "at": "2026-11-03T11:31:58Z",
+        "status": "BOUND",
+        "at": "2026-11-03T11:33:35Z",
         "consumed": {
           "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
           "plan_revision": 4,
           "legacy": false
         },
-        "published": null,
-        "bound": null
+        "published": {
+          "review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
+          "bundle_id": "4eebbbd170d5c2b59019b6cf73487c6143a39b06246885dfb1101e265cb2ba9d",
+          "plan_revision": 5
+        }
       },
       "consumed_plan_review_content_ids": [
         "08b9f444c09d0491ddd1ad861796d25c02309808bb650d51777907588a60a34e",
@@ -54369,6 +54376,20 @@
               "at": "2026-11-03T01:41:22Z"
             }
           ]
+        },
+        "F-600c781389f4": {
+          "digest": "600c781389f4372e362008ea129df9178c48385abd036757327a5ec9f7c81fce",
+          "text": "**O1. Record the tier rule where the next maintainer reads it.** D1's prompt-length tier rule (enter the lower tier, say in `source` that the cost is a lower bound for longer prompts) lives only in the plan and in `prices.json`'s `source` text. CP1 already adds rules to `docs/guide/development.md` (\"Maintaining the price table\"); naming the tier rule there too would let a later price update (a new version 3) follow the same rule without reading this plan.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T11:34:58Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -54470,7 +54491,13 @@
           },
           "checkpoints_snapshot": {},
           "pre_amendment_approval_commit": "ab524f2bef6fbfa8b9a864e485cec5804f861b38",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 5,
+          "reconciliation_outcome": {
+            "CP1": "needs_revalidation",
+            "CP2": "retained",
+            "CP3": "retained"
+          },
+          "resolved_review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd"
         }
       ],
       "amendment_base_commit": "ab524f2bef6fbfa8b9a864e485cec5804f861b38"

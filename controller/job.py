@@ -7767,8 +7767,8 @@ def _run_functional(
     config_source: str, route_options: routing.RoutingOptions, functional: Mapping,
 ) -> "JobRecord | UsageHold":
     """Run the tester for the row-38e gate ``decision`` (D1-D7) instead of recording it ``GATE_BLOCKED``:
-    the stops that come before a run (the checklist, ``unchanged``, the round bound), the usage admission, the
-    sandbox and the tester, then validate, record each flow, and write the findings."""
+    the stops that come before a run (the checklist, ``unchanged``, the round bound, the host's availability), the
+    usage admission, the sandbox and the tester, then validate, record each flow, and write the findings."""
     info = decision.protocol
     root = managed_repo.root
     digests = _admitted_digests(managed_repo)

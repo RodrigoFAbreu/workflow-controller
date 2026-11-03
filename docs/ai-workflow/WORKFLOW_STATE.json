@@ -55079,7 +55079,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-tester-read-denies-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-tester-read-denies-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -55223,12 +55223,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 22,
-      "last_transition": "2026-11-03T18:37:10Z",
+      "state_revision": 24,
+      "last_transition": "2026-11-03T18:46:37Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -55379,7 +55379,90 @@
               "at": "2026-11-03T17:36:04Z"
             }
           ]
+        },
+        "F-66a2a25fe0f9": {
+          "digest": "66a2a25fe0f9bef35621603eed156bd1d7edf98b922f2be1839f2cf3ed7b5868",
+          "text": "**O1. The launch reads the operator's account file from `Path.home()` inside `launch_functional`** (`controller/review.py:2356`; `verify_build` does the same, `controller/claude_build.py:558`). This matches D1 (\"resolved from the Controller process's own home\"), but the launch-level test `test_a_launch_with_the_test_double_reads_no_credential_and_the_clone_stays_readable` therefore names the real `~/.claude.json` of whoever runs the suite. The double refuses before reading, so nothing leaks, but an `account_file` keyword defaulting to `Path.home() / \".claude.json\"` would keep the launch tests hermetic (the plan-review round 4 O1 suggested the same).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T18:41:32Z"
+            }
+          ]
+        },
+        "F-829effbbd220": {
+          "digest": "829effbbd220992150abfec2a049dc9629478cd2632fdbb7f314d3fece710c3d",
+          "text": "**O2. The measured `shell-snapshots` entry is not in the recorded harness contract.** The live probe found `shell-snapshots` readable in the job home; D1 relied on `tests/harness_contract/claude/state_entries.txt` and `CLAUDE_STATE_ENTRIES` (`controller/review.py`) recording no such entry. The guide now names it and says what stays readable holds no credential, but the probe checks only entry names, not the snapshot's content. Recording the entry in the contract (and in `CLAUDE_STATE_ENTRIES` if the Controller should account for it) would keep the contract the source of truth, in a follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T18:41:32Z"
+            }
+          ]
+        },
+        "F-7e432be73288": {
+          "digest": "7e432be73288105c0920ff37a8adfadf5e523101e387763641042fd2e6cfb474",
+          "text": "**O3. A `TMPDIR` inside the operator's Claude home still ends in a plain `ValueError`.** The launch's pre-`build_sandbox` refusal (`controller/review.py:2357`) checks the runtime root and the sandbox folder, but the short scratch `TMPDIR` (`make_short_tmp`) is also an `allowWrite` entry; if it lies below the operator home, `tester_settings`' invariant raises and `build_sandbox` re-raises a `ValueError`, not a `TesterUnavailable`. Contrived (it needs `TMPDIR` under `~/.claude`), and it fails closed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T18:41:32Z"
+            }
+          ]
+        },
+        "F-f0adec8e4666": {
+          "digest": "f0adec8e4666c3ff2102cd3aaa8e3a5b7cddbec6021bc3b6b8e229ce32927bc4",
+          "text": "**O4. `file://./repo` is read as `/repo`.** `_file_url_path` (`controller/review.py:2248`) takes everything from the first `/` after the scheme, so a relative `file://` form is read at the wrong absolute path. An absent path fails closed as an `origin:` breach; a present one is a wrong-repository read. Git origins of this form are rare; a comment or a refusal of an authority that starts with `.` would settle it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T18:41:32Z"
+            }
+          ]
+        },
+        "F-acfc1b5d5f30": {
+          "digest": "acfc1b5d5f30dddfb589866c434a7164466d9c6cb0a633c6cd0f5a04037d3e9d",
+          "text": "`controller/review.py:2253` decodes `%00` into a NUL. A read-only reproduction through `_local_origin_refs` raised `ValueError: embedded null byte`, bypassing the callers’ `OSError` handling and the intended `origin:` breach reporting.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+              "verdict": "REVISE",
+              "at": "2026-11-03T18:46:37Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "548b04738dd5b60b0243b73993ac9e955350eefefcff419995259d903c675f3a",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-03T18:41:32Z",
+          "verdict_sha256": "1cf944c8c78c6610425113ab196aad88f81e9d22d85d568597b039c3966eaab0",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-tester-read-denies/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

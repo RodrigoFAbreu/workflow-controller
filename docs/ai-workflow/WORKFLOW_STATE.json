@@ -54102,7 +54102,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -54246,12 +54246,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 34,
-      "last_transition": "2026-11-03T14:41:17Z",
+      "state_revision": 36,
+      "last_transition": "2026-11-03T14:58:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -54417,6 +54417,62 @@
               "at": "2026-11-03T14:11:00Z"
             }
           ]
+        },
+        "F-db01b84099d0": {
+          "digest": "db01b84099d0994da82bf91d3dd27efa5a89f42e722c632837176b1593cc7505",
+          "text": "**O1. `TEST_RESULTS.md` still describes implementation revision 1** (head `91e9761`, 5492 tests). The revision 2 run (5494 tests) appears only in `IMPLEMENTATION_SUMMARY.md`. Regenerate or extend `TEST_RESULTS.md` for each revision so the bundle's test artifact matches the reviewed head.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "fc59895cf4976ef57fbd84d370ac4dd70ae72eb0e91cd428ce51cb2827fec7c8",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T14:54:33Z"
+            }
+          ]
+        },
+        "F-e2bc7f2a0db5": {
+          "digest": "e2bc7f2a0db55e0786341394a03f32052bdd2167627b0fca609fd2b677a0ac30",
+          "text": "**O2. The `result_reasoning` assertions moved into the new test.** In `tests/test_usage_record_job.py`, the three `review.result_reasoning(...)` checks now sit at the end of `test_an_attempt_with_a_result_but_no_reasoning_makes_the_sum_unknown`, which they are unrelated to. Return them to the summing test or give them a test of their own.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "fc59895cf4976ef57fbd84d370ac4dd70ae72eb0e91cd428ce51cb2827fec7c8",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T14:54:33Z"
+            }
+          ]
+        },
+        "F-6df01642a5a8": {
+          "digest": "6df01642a5a8a2f93d918e8255eab35ac5536fc7fd2b16ad6963e478e80b292a",
+          "text": "**O3. The round 1 O1 fixture finding is carried over, not applied** (`RetriedCodexReviewRolloutsTest` builds `test_review.FakeLaunchTest` by hand). The reason given is acceptable. Record it as a follow-up issue if the owner wants it tracked.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "fc59895cf4976ef57fbd84d370ac4dd70ae72eb0e91cd428ce51cb2827fec7c8",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T14:54:33Z"
+            }
+          ]
+        },
+        "F-b49b71b3e36e": {
+          "digest": "b49b71b3e36eb0c79cc5e157351dc35e8dd44a2ad84973a71873fa45302e1295",
+          "text": "**O1 — Test evidence is stale.** The bundle’s `TEST_RESULTS.md` describes revision 1 and 5,492 tests, while the revision 2 summary reports 5,494. Update the test artifact to identify the reviewed revision consistently.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "fc59895cf4976ef57fbd84d370ac4dd70ae72eb0e91cd428ce51cb2827fec7c8",
+              "verdict": "REVISE",
+              "at": "2026-11-03T14:58:00Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -54527,7 +54583,20 @@
           "resolved_review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd"
         }
       ],
-      "amendment_base_commit": "ab524f2bef6fbfa8b9a864e485cec5804f861b38"
+      "amendment_base_commit": "ab524f2bef6fbfa8b9a864e485cec5804f861b38",
+      "implementation_review_stages": {
+        "review_content_id": "fc59895cf4976ef57fbd84d370ac4dd70ae72eb0e91cd428ce51cb2827fec7c8",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "a68de496c4cf3e98520eddb63c031c0bacbc385c718e66ef2662e4d3a1028bf2",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-03T14:54:33Z",
+          "verdict_sha256": "8c57f08905a075fdaa619ed71d38d6943f136b86b56678df44e1c0285d2032b4",
+          "run_ref": "session:local .ai-review/workflow-controller-cleanup-3c/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

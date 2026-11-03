@@ -54102,7 +54102,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -54246,12 +54246,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 32,
-      "last_transition": "2026-11-03T13:55:10Z",
+      "state_revision": 33,
+      "last_transition": "2026-11-03T14:11:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -54401,6 +54401,20 @@
               "review_content_id": "14f53be6304fb6ad4af3705ecc8b56d47c5c540e1e00b891b37167924eb70cdd",
               "verdict": "APPROVE",
               "at": "2026-11-03T11:34:58Z"
+            }
+          ]
+        },
+        "F-81ddffd67afe": {
+          "digest": "81ddffd67afe7e3cc9fbb3f64ebae90c0bdb4205cf539582ee811bed70e84f3b",
+          "text": "**O1. The D7 test builds a foreign TestCase by hand.** `RetriedCodexReviewRolloutsTest` creates `test_review.FakeLaunchTest(\"setUp\")`, calls `setUp()` itself and registers `doCleanups`. It works, but it depends on `FakeLaunchTest`'s internals (the method name, and the fact that `setUp` holds all the fixture). Consider moving the fake-launch fixture into a small helper or mixin in `tests/test_review.py` that both classes use.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "5662c6be5f7b5cad853bf45c5938c993cb2c664f95ad93e2260a37aa7786f106",
+              "verdict": "REVISE",
+              "at": "2026-11-03T14:11:00Z"
             }
           ]
         }

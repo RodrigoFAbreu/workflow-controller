@@ -687,7 +687,7 @@ if __name__ == "__main__":
 
 import io  # noqa: E402
 
-from controller import functional_review, review, usage  # noqa: E402
+from controller import functional_review, review, routing, usage  # noqa: E402
 from controller import runtime as controller_runtime  # noqa: E402
 from tests import test_protocol_lifecycle as lifecycle  # noqa: E402
 
@@ -777,14 +777,17 @@ class TesterLifecycle(lifecycle.GateLifecycle):
         kwargs["out"].update(result)
         return result
 
-    def step(self, *, gate=None, functional="default") -> dict:
+    def step(self, *, gate=None, functional="default", real_selection=False) -> dict:
+        """``real_selection`` keeps ``review.claude_selection_error`` real (C10i), so a test can fake the static probe."""
         self.rows.append(protocol.next_action(self.root, lifecycle.WID).raw["row"])
 
         def launch(task, *, cwd, **kwargs):
             self.effect(task)
             return lifecycle._result(self.report)
 
-        with mock.patch.object(worker, "launch", launch), mock.patch.object(review, "launch_functional", self.fake_tester):
+        with mock.patch.object(worker, "launch", launch), mock.patch.object(review, "launch_functional", self.fake_tester), \
+                mock.patch.object(review, "claude_selection_error",
+                                  review.claude_selection_error if real_selection else lambda *a, **k: None):
             return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime, usage_gate=gate,
                                     functional=self.functional if functional == "default" else functional)
 
@@ -1055,9 +1058,67 @@ class TheFaultStopsTest(_TesterCase):
                 self.assertIn(f"cause {cause}", record["human_gate_pending"]["what_is_required"])
                 self.assertEqual(life.evidence(), {})
                 self.assertEqual(life.reservations(), {})  # released: nothing started
+                self.assertTrue(record["functional"]["not_started"])  # passed the selection, refused at the launch
                 self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
                 # NF3 D1/D1a: the record now carries the code, and the functional block still routes it.
                 self.assertEqual(record["protocol_gate"]["code"], "functional_tester_unavailable")
+
+    def test_a_host_without_bwrap_stops_before_any_reservation_with_one_record(self) -> None:
+        """C10i D3: the probe's own refusal carries no cause; the stop names ``enforcement`` and the usage gate is
+        never called, so the history holds no reservation and the record holds no started job."""
+        real = functional_review.static_probe
+        life = self.life()
+
+        def called(*args, **kwargs):
+            self.fail("the usage gate was called for a tester the host cannot run")
+
+        def no_bwrap(**kwargs):
+            real(**{**kwargs, "which": lambda name: None if name == "bwrap" else f"/usr/bin/{name}"})
+
+        with mock.patch.object(review, "resolve_binary", lambda name: Path("/bin/true")), \
+                mock.patch.object(functional_review, "static_probe", no_bwrap):
+            record = life.step(gate=called, real_selection=True)
+        self.assertEqual(self.gate_of(record), "functional_tester_unavailable")
+        block = record["functional"]
+        self.assertEqual(block["cause"], functional_review.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("bwrap", block["detail"])
+        for key in ("launched", "not_started"):
+            self.assertNotIn(key, block)
+        self.assertNotIn("usage", record)
+        self.assertNotIn(record["status"], (job.STATUS_PLANNED, job.STATUS_LAUNCHED))
+        self.assertEqual((life.launches, life.reservations()), ([], {}))
+        self.assertEqual(usage.load_record(life.runtime).get("reservations"), {})
+        self.assertEqual(life.tester_records(), [])
+        self.assertEqual(life.job_records()[-1]["job_id"], record["job_id"])
+        self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["review_wait"])
+
+    def test_a_chain_whose_every_entry_fails_the_probe_ends_at_the_stop_with_a_cause(self) -> None:
+        real = functional_review.static_probe
+        life = self.life()
+
+        def no_bwrap(**kwargs):
+            real(**{**kwargs, "which": lambda name: None if name == "bwrap" else f"/usr/bin/{name}"})
+
+        options = routing.RoutingOptions(config=routing.validate_routing_mapping(
+            {"default": {"model": "claude-sonnet-5-5"},
+             "roles": {"functional-tester": {"harness": "claude-code", "model": "claude-sonnet-5-5", "effort": "high",
+                                             "fallback": [{"harness": "claude-code", "model": "claude-opus-5-5",
+                                                           "effort": "high"}]}}},
+            path="t", where="", require_schema_version=False, unknown=routing.UNKNOWN_IGNORE)[0])
+
+        def called(*args, **kwargs):
+            self.fail("the usage gate was called for a tester the host cannot run")
+
+        with mock.patch.object(review, "resolve_binary", lambda name: Path("/bin/true")), \
+                mock.patch.object(functional_review, "static_probe", no_bwrap), \
+                mock.patch.object(review, "launch_functional", life.fake_tester):
+            life.rows.append(protocol.next_action(life.root, lifecycle.WID).raw["row"])
+            record = job.execute_step(life.inspect(), identity=IDENTITY, runtime=life.runtime, usage_gate=called,
+                                      routing=options, functional=life.functional)
+        self.assertEqual(self.gate_of(record), "functional_tester_unavailable")
+        self.assertEqual(record["functional"]["cause"], functional_review.UNAVAILABLE_ENFORCEMENT)
+        self.assertEqual(len(record["functional"]["selection"]), 2)
+        self.assertEqual((life.launches, life.reservations()), ([], {}))
 
     def test_a_breach_records_nothing_and_keeps_the_sandbox(self) -> None:
         life = self.life()

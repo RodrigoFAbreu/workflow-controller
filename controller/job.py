@@ -7746,8 +7746,9 @@ def _functional_launch(route_harness: str, functional: Mapping) -> SimpleNamespa
 
 
 def _tester_probe(functional: Mapping, runtime_root: Path) -> Callable[[routing.ResolvedRoute], BaseException | None]:
-    """The selection-time causes of a tester chain entry (C10g-3c2 D2, D3): what can be decided before anything
-    is started. Every cause after the spawn ends the job at its gate and the next entry is never tried."""
+    """The selection-time causes of a tester entry (C10g-3c2 D2, D3; C10i D2): what the host can decide before
+    anything is admitted, recorded or started, for a chain and for a chain of one. Every cause after the spawn
+    ends the job at its gate and the next entry is never tried."""
     def probe(entry: routing.ResolvedRoute) -> BaseException | None:
         try:
             launch = _functional_launch(entry.harness, functional)
@@ -7755,11 +7756,7 @@ def _tester_probe(functional: Mapping, runtime_root: Path) -> Callable[[routing.
             return exc
         if launch.provider == usage.PROVIDER_CODEX:
             return codex_tester.selection_error(launch.operator_home, launch.binary, runtime_root)
-        try:
-            review.resolve_binary(launch.binary)
-        except ReviewLaunchRefusedError as exc:
-            return functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc))
-        return None
+        return review.claude_selection_error(launch.binary, runtime_root)
     return probe
 
 
@@ -7802,6 +7799,10 @@ def _run_functional(
             chosen = _functional_launch(route.harness, functional)
         except functional_review.TesterUnavailable as exc:
             return unavailable_record(exc)
+        # C10i: the host's causes are found before a reservation is taken, so the stop holds no headroom.
+        unavailable = _tester_probe(functional, runtime_root)(route)
+        if isinstance(unavailable, functional_review.TesterUnavailable):
+            return unavailable_record(unavailable)
         if usage_gate is not None:
             admitted = usage_gate(route, provider=chosen.provider)
             if isinstance(admitted, (UsageHold, usage.Hold)):

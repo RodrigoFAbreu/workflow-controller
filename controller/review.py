@@ -2291,6 +2291,49 @@ def _sessions_in(home: Path) -> list[str]:
         return []
 
 
+def _claude_tester_checks(binary_name: str, runtime_root: Path, probe: Callable[[], None] | None = None) -> Path:
+    """The refusals of the Claude tester that need no job and no sandbox, in the order the launch makes them: the
+    role, the binary, the real path it will run, and the static probe (``probe`` is the seam, else the checks of
+    :func:`functional_review.static_probe` with the recorded digests of ``claude-build``). Returns the resolved
+    real path. Every refusal is a :class:`functional_review.TesterUnavailable` carrying a ``cause``: the probe's
+    own refusals carry none, so they are re-raised as ``enforcement`` with the message and evidence kept."""
+    try:
+        harness_registry.for_role("claude-code", harness_registry.FUNCTIONAL_TESTER)
+    except ControllerError as exc:
+        raise functional_review.unavailable(functional_review.UNAVAILABLE_ROLE_REFUSED, str(exc)) from exc
+    try:
+        binary = resolve_binary(binary_name)
+    except ReviewLaunchRefusedError as exc:
+        raise functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc)) from exc
+    # One resolved real path is probed, admitted by digest and executed (#114): a symlink
+    # re-pointed after this point cannot make the launch run another build.
+    binary = Path(os.path.realpath(binary))
+    if probe is None:
+        recorded, record_note = claude_build.recorded_digests(runtime_root)
+        probe = lambda: functional_review.static_probe(  # noqa: E731
+            claude=str(binary), recorded=recorded, record_note=record_note)
+    try:
+        probe()
+    except functional_review.TesterUnavailable as exc:
+        if "cause" in exc.evidence:
+            raise
+        raise functional_review.unavailable(
+            functional_review.UNAVAILABLE_ENFORCEMENT, exc.message, **exc.evidence) from exc
+    return binary
+
+
+def claude_selection_error(binary_name: str, runtime_root: Path) -> "functional_review.TesterUnavailable | None":
+    """The reason the Claude tester cannot be launched on this host before anything is admitted or started
+    (C10i D1), or ``None``: the refused role, the unresolved binary or the static probe. The same checks
+    :func:`launch_functional` makes first, through the same helper; the launch still makes them itself, so a host
+    that changes between the selection and the launch ends at the gate."""
+    try:
+        _claude_tester_checks(binary_name, runtime_root)
+    except functional_review.TesterUnavailable as exc:
+        return exc
+    return None
+
+
 def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequence["functional_review.Flow"],
                       runtime_root: Path, job_id: str, work_item_id: str, operator_home: Path, model: str,
                       effort: str, timeout: float, binary_name: str = "claude", system_dir: Path | None = None,
@@ -2325,22 +2368,7 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
     result.update({"outcome": "failed", "breach": [], "unbound": [], "fake_calls": {}, "output_dir": None,
                    "sandbox": None, "keep": False, "credentials": None, "detail": None, "readings": [],
                    "first_readings": []})
-    try:
-        harness_registry.for_role("claude-code", harness_registry.FUNCTIONAL_TESTER)
-    except ControllerError as exc:
-        raise functional_review.unavailable(functional_review.UNAVAILABLE_ROLE_REFUSED, str(exc)) from exc
-    try:
-        binary = resolve_binary(binary_name)
-    except ReviewLaunchRefusedError as exc:
-        raise functional_review.unavailable(functional_review.UNAVAILABLE_NO_BINARY, str(exc)) from exc
-    # One resolved real path is probed, admitted by digest and executed (#114): a symlink
-    # re-pointed after this point cannot make the launch run another build.
-    binary = Path(os.path.realpath(binary))
-    if probe is None:
-        recorded, record_note = claude_build.recorded_digests(runtime_root)
-        probe = lambda: functional_review.static_probe(  # noqa: E731
-            claude=str(binary), recorded=recorded, record_note=record_note)
-    probe()
+    binary = _claude_tester_checks(binary_name, runtime_root, probe)
     functional_review.sweep_kept(runtime_root, work_item_id)
     layout = JobLayout(runtime_root, job_id, area=functional_review.SANDBOX_AREA)
     system_dir = system_dir or CLAUDE_SYSTEM_LAYER_DIR

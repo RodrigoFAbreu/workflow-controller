@@ -872,6 +872,39 @@ class OriginTest(Fixture):
         result = self.launch({"actions": [results()]})
         self.assertTrue(any(item.startswith("origin:") for item in result["breach"]))
 
+    def test_a_file_origin_is_read_as_a_local_path(self) -> None:
+        expected = review._local_origin_refs(self.repo)
+        git(self.repo, "remote", "set-url", "origin", f"file://{self.origin}")
+        self.assertEqual(review._local_origin_refs(self.repo), expected)
+
+    def test_a_file_origin_path_is_percent_decoded(self) -> None:
+        spaced = self.tmp / "an origin.git"
+        git(self.tmp, "clone", "-q", "--bare", str(self.origin), str(spaced))
+        encoded = str(spaced).replace(" ", "%20").replace(".git", "%2egit")
+        git(self.repo, "remote", "set-url", "origin", f"file://{encoded}")
+        self.assertIn("refs/heads/main", review._local_origin_refs(self.repo))
+
+    def test_a_file_origin_authority_is_dropped(self) -> None:
+        expected = review._local_origin_refs(self.repo)
+        for host in ("localhost", "otherhost"):
+            with self.subTest(host=host):
+                git(self.repo, "remote", "set-url", "origin", f"file://{host}{self.origin}")
+                self.assertEqual(review._local_origin_refs(self.repo), expected)
+
+    def test_a_file_origin_without_a_path_or_unreadable_is_an_error(self) -> None:
+        for url in ("file://otherhost", f"file://{self.tmp}/gone.git"):
+            with self.subTest(url=url):
+                git(self.repo, "remote", "set-url", "origin", url)
+                with self.assertRaises(OSError):
+                    review._local_origin_refs(self.repo)
+
+    def test_a_ref_added_to_a_file_origin_during_the_run_is_a_breach(self) -> None:
+        git(self.repo, "remote", "set-url", "origin", f"file://{self.origin}")
+        result = self.launch({"emulate_sandbox": False, "actions": [
+            {"op": "shell", "argv": ["git", "push", str(self.origin), "HEAD:refs/heads/evil"]}, results()]})
+        self.assertIn("origin refs", result["breach"])
+        self.settle(result)
+
 
 class ArgvAndSettingsTest(Fixture):
     FLAGS = ("--tools", "Bash", "--allowedTools", "Bash", "--permission-mode", "dontAsk", "--permission-prompts", "none",

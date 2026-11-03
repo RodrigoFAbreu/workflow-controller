@@ -839,9 +839,84 @@ class SplitRoundCapRowsTest(_TempSettings):
         self.assertEqual(code, 0)
         self.assertIn("review.local_round_cap = 8 (file)\n", out)
         self.assertIn("review.external_round_cap = null (default)\n", out)
-        self.assertIn("review.round_cap = 4 (default)\n", out)
+        self.assertIn("review.round_cap = 4 (default) (deprecated: use the local and external caps)\n", out)
         deprecated = settings._table()["review.round_cap"]
         self.assertEqual(deprecated.cli_flag, "run/step --review-round-cap")
+
+
+class RoundCapsInForceTest(_TempSettings):
+    """workflow-controller-cleanup-3c D8 (#108): ``settings show`` prints the
+    round caps a run uses and where each comes from."""
+
+    def show(self, data: dict | None) -> tuple[str, dict]:
+        if data is not None:
+            _write(self.path, data)
+        code, out, _err = _main(["--settings", str(self.path), "settings", "show"])
+        self.assertEqual(code, 0)
+        code, jout, _err = _main(["--settings", str(self.path), "--json", "settings", "show"])
+        self.assertEqual(code, 0)
+        return out, json.loads(jout)
+
+    def test_no_file_shows_the_built_in_caps(self) -> None:
+        out, shown = self.show(None)
+        self.assertIn("review.local_round_cap in force = 6 (built-in)\n", out)
+        self.assertIn("review.external_round_cap in force = 4 (built-in)\n", out)
+        self.assertEqual(shown["round_caps_in_force"], {"local": {"cap": 6, "origin": "built-in"},
+                                                        "external": {"cap": 4, "origin": "built-in"}})
+
+    def test_the_in_force_lines_follow_the_three_stored_rows(self) -> None:
+        out, _shown = self.show({"review": {"round_cap": 7}})
+        lines = out.splitlines()
+        rows = [i for i, line in enumerate(lines) if line.startswith("review.") and "round_cap =" in line]
+        forced = [i for i, line in enumerate(lines) if " in force = " in line]
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(min(forced) > max(rows), out)
+
+    def test_the_deprecated_cap_sets_both_with_its_origin(self) -> None:
+        out, shown = self.show({"review": {"round_cap": 7}})
+        self.assertIn("review.local_round_cap in force = 7 (deprecated review.round_cap)\n", out)
+        self.assertIn("review.external_round_cap in force = 7 (deprecated review.round_cap)\n", out)
+        self.assertIn("(file) (deprecated: use the local and external caps)\n", out)
+        self.assertEqual(shown["round_caps_in_force"]["local"], {"cap": 7, "origin": "deprecated review.round_cap"})
+
+    def test_one_own_cap_changes_only_that_cap(self) -> None:
+        out, _shown = self.show({"review": {"local_round_cap": 3}})
+        self.assertIn("review.local_round_cap in force = 3 (its own setting or option)\n", out)
+        self.assertIn("review.external_round_cap in force = 4 (built-in)\n", out)
+
+    def test_a_file_cap_of_the_default_four_counts_as_not_given(self) -> None:
+        out, _shown = self.show({"review": {"round_cap": 4}})
+        self.assertIn("review.local_round_cap in force = 6 (built-in)\n", out)
+        self.assertIn("review.external_round_cap in force = 4 (built-in)\n", out)
+
+    def test_json_keeps_values_and_sources_and_adds_the_key(self) -> None:
+        _out, shown = self.show({"review": {"local_round_cap": 3}})
+        effective = settings.resolve(settings.load(self.path))
+        self.assertEqual(shown["values"], dict(effective.values))
+        self.assertEqual(shown["sources"], dict(effective.sources))
+        self.assertIn("round_caps_in_force", shown)
+
+    def test_a_cli_source_reports_its_origin(self) -> None:
+        loaded = settings.load(self.path)
+        own = settings.resolve(loaded, cli={"review.external_round_cap": 9})
+        self.assertEqual(cli._round_caps_in_force(own)["external"], {"cap": 9, "origin": "its own setting or option"})
+        self.assertEqual(cli._round_caps_in_force(own)["local"], {"cap": 6, "origin": "built-in"})
+        deprecated = settings.resolve(loaded, cli={"review.round_cap": 4})
+        self.assertEqual(cli._round_caps_in_force(deprecated)["local"],
+                         {"cap": 4, "origin": "deprecated review.round_cap"})
+
+    def test_the_caps_a_run_uses_equal_the_lines_shown(self) -> None:
+        for data in (None, {"review": {"round_cap": 7}}, {"review": {"round_cap": 4}},
+                     {"review": {"local_round_cap": 3, "external_round_cap": 2}}):
+            with self.subTest(data=data):
+                if data is not None:
+                    _write(self.path, data)
+                elif self.path.exists():
+                    self.path.unlink()
+                effective = settings.resolve(settings.load(self.path))
+                in_force = cli._round_caps_in_force(effective)
+                caps = cli._round_caps(effective)
+                self.assertEqual((caps.local, caps.external), (in_force["local"]["cap"], in_force["external"]["cap"]))
 
 
 class FunctionalRowsTest(_TempSettings):

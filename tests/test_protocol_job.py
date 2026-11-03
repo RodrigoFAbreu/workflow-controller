@@ -420,6 +420,8 @@ class ReviewCapGateTest(unittest.TestCase):
     def test_the_text_names_the_three_options_in_order_and_that_the_cap_is_per_command(self) -> None:
         target = _Target(self)
         _code, text = self._gate(target, "plan.apply_review", {"review_round": {"plan": 4}})
+        self.assertIn("plan review round 4 has reached the external round cap of 4", text)
+        self.assertNotIn("count 4", text)
         self.assertIn("round 4 (given by the Workflow; the Workflow gave no split counts, so this single number is checked against the external cap)", text)
         self.assertIn("reached the external round cap of 4 (review.external_round_cap)", text)
         self.assertNotIn("counted from the Controller's job records", text)
@@ -446,10 +448,10 @@ class ReviewCapGateTest(unittest.TestCase):
         local = self._split("plan.apply_review", 6, 1)
         self.assertEqual(local[0], protocol_decision.REVIEW_ROUND_CAP_REACHED)
         self.assertIn("local round 6 and external round 1 (given by the Workflow as split counts)", local[1])
-        self.assertIn("the local count 6 has reached the local round cap of 6 (review.local_round_cap)", local[1])
+        self.assertIn("plan review local round 6 has reached the local round cap of 6 (review.local_round_cap)", local[1])
         self.assertIn("--review-local-round-cap N", local[1])
         external = self._split("plan.apply_review", 2, 4)
-        self.assertIn("the external count 4 has reached the external round cap of 4 (review.external_round_cap)",
+        self.assertIn("plan review external round 4 has reached the external round cap of 4 (review.external_round_cap)",
                       external[1])
         self.assertIn("--review-external-round-cap N", external[1])
         self.assertIsNone(self._split("plan.apply_review", 5, 3))

@@ -330,7 +330,11 @@ the shared record holds is in
 [`usage`](commands.md#usage).
 
 The `review.local_round_cap` and `review.external_round_cap` rows are the
-two review round caps (unset means the built-in 6 and 4). A protocol run counts
+two review round caps (unset means the built-in 6 and 4).
+[`settings show`](commands.md#settings) prints the caps in force after these
+rows, with where each comes from (its own setting or option, the deprecated
+`review.round_cap`, or the built-in value), so a stored `null` is not read as
+no cap. A protocol run counts
 the review rounds of the plan stage and of the implementation stage
 separately. With Workflow 2.15.0 and later (protocol 1.5) the Workflow gives
 each stage a local and an external round count, and the caps apply to them

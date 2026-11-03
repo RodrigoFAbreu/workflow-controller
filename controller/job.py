@@ -6380,7 +6380,7 @@ def _review_cap_gate(runtime_root: Path, managed_repo: Any, work_item: Any, deci
         return _cap_gate(managed_repo, work_item, decision, stage, fired, caps, advisories,
                          f"local round {split.local} and external round {split.external} "
                          "(given by the Workflow as split counts)",
-                         split.local if fired == review_rounds.CAP_LOCAL else split.external)
+                         split.local if fired == review_rounds.CAP_LOCAL else split.external, split=True)
     round_number, source = review_rounds.current_round(
         snapshot, stage, _stored_job_records(runtime_root),
         target_repo=str(managed_repo.root), work_item_id=work_item.work_item_id)
@@ -6416,20 +6416,23 @@ def external_review_cap_gate(managed_repo: Any, work_item: Any, decision: Decisi
         return None
     return _cap_gate(managed_repo, work_item, decision, stage, review_rounds.CAP_EXTERNAL, caps, advisories,
                      f"local round {split.local} and external round {split.external} "
-                     "(given by the Workflow as split counts)", split.external)
+                     "(given by the Workflow as split counts)", split.external, split=True)
 
 
 def _cap_gate(managed_repo: Any, work_item: Any, decision: Decision, stage: str, fired: str,
-              caps: review_rounds.RoundCaps, advisories: tuple[str, ...], where: str, count: int) -> Decision:
+              caps: review_rounds.RoundCaps, advisories: tuple[str, ...], where: str, count: int,
+              split: bool = False) -> Decision:
     """The ``review_round_cap_reached`` gate (D5): the stage, which cap fired,
-    the count and the cap, and the three ways on."""
+    the round and the cap, and the three ways on. ``split`` names the fired
+    cap's round beside the cap (the ``where`` text names both rounds)."""
     info = decision.protocol
     cap = caps.local if fired == review_rounds.CAP_LOCAL else caps.external
     setting = f"review.{fired}_round_cap"
     option = f"--review-{fired}-round-cap"
+    round_of = f"{fired} round {count}" if split else f"round {count}"
     return protocol_decision.gate_for(
         managed_repo, work_item, decision, protocol_decision.REVIEW_ROUND_CAP_REACHED,
-        f"{work_item.work_item_id} is at {stage} review {where}; the {fired} count {count} has reached the "
+        f"{work_item.work_item_id} is at {stage} review {where}; {stage} review {round_of} has reached the "
         f"{fired} round cap of {cap} ({setting}), so {info.action_id} is not launched. The Controller never "
         f"accepts at the cap itself; you can (1) raise the cap and re-run (`{option} N`, or the {setting} "
         f"setting; the cap applies to one command, so the next plain run stops again at the next capped "

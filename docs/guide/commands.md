@@ -137,9 +137,17 @@ It touches nothing else: no target repository and no runtime root.
 - `settings show` prints the file's path, then each setting as
   `<key> = <value> (<source>)`, where the source is `cli`, `file` or
   `default`. Flags given on the same command line count as `cli`, for
-  example `workflow-controller --timeout 3600 settings show`. With
-  `--json` it prints `path`, `exists`, `sha256`, `values` and `sources`.
-  It writes nothing.
+  example `workflow-controller --timeout 3600 settings show`. After the
+  three `review.*round_cap` rows it prints one line per review round cap a
+  run uses, for example `review.local_round_cap in force = 6 (built-in)`,
+  with the origin `built-in`, `its own setting or option` or `deprecated
+  review.round_cap` (the stored rows are unchanged: an unset cap stays
+  `null (default)`, and the deprecated row carries a note). `settings show`
+  can only show the origins a settings file and the built-in defaults give;
+  a cap given as a `run` or `step` option is not an option of `settings
+  show`. With `--json` it prints `path`, `exists`, `sha256`, `values`,
+  `sources` and `round_caps_in_force` (`{"local": {"cap": N, "origin": ...},
+  "external": {...}}`). It writes nothing.
 - `settings path` prints the path in use (with `--json`, as `{"path":
   ...}`). It writes nothing, and the file need not exist.
 - `settings clean` fills the file, then removes the keys this release

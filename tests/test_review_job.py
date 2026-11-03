@@ -242,7 +242,7 @@ class ExternalCapTest(_ReviewCase):
     def assert_capped(self, record: dict) -> None:
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
         self.assertTrue(record["human_gate_pending"]["what_is_required"].startswith("review_round_cap_reached: "))
-        self.assertIn("the external count 4 has reached the external round cap of 4",
+        self.assertIn("external round 4 has reached the external round cap of 4",
                       record["human_gate_pending"]["what_is_required"])
         self.assertEqual(self.double.calls, [])
         self.assertEqual(self.records(), [], "no review job record")

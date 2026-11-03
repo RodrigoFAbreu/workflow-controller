@@ -516,7 +516,8 @@ like any job's.
 credential or an account identity lives (`sandbox.filesystem.denyRead` in the tester's settings, built by
 `functional_review.read_denies`): the job's own `.credentials.json` (the copy of your login), `.claude.json` and
 `backups` in its private Claude home, your whole Claude home (`CLAUDE_CONFIG_DIR`, else `~/.claude`) and your global
-account file `~/.claude.json`. The rest of the job's home stays readable, because the shell the CLI starts keeps its
+account file `~/.claude.json`. When your `.credentials.json` is a link to a file outside your Claude home, that
+target is denied too. The rest of the job's home stays readable, because the shell the CLI starts keeps its
 own working files there (`shell-snapshots`) and a deny on the whole home would break every command; what stays
 readable holds no credential. The deny binds the tester's shell, not the Claude process itself. A runtime root that
 lies inside your Claude home is refused as `functional_tester_unavailable`, and `verify-claude` refuses it as a host

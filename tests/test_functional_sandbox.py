@@ -893,7 +893,7 @@ class OriginTest(Fixture):
                 self.assertEqual(review._local_origin_refs(self.repo), expected)
 
     def test_a_file_origin_without_a_path_or_unreadable_is_an_error(self) -> None:
-        for url in ("file://otherhost", f"file://{self.tmp}/gone.git"):
+        for url in ("file://otherhost", f"file://{self.tmp}/gone.git", f"file://{self.tmp}/a%00b.git"):
             with self.subTest(url=url):
                 git(self.repo, "remote", "set-url", "origin", url)
                 with self.assertRaises(OSError):

@@ -152,6 +152,19 @@ class SettingsTests(unittest.TestCase):
                 str(root / "job/claude-home/backups"), str(root / ".claude"), str(root / "dotfiles/claude"),
                 str(root / "account.json")])
 
+    def test_a_credential_file_linked_outside_the_operator_home_is_denied_by_its_target(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(os.path.realpath(raw))
+            (root / ".claude").mkdir()
+            (root / "secrets").mkdir()
+            (root / "secrets" / "token.json").write_text("{}")
+            (root / ".claude" / ".credentials.json").symlink_to(root / "secrets" / "token.json")
+            (root / "account.json").write_text("{}")
+            denies = fr.read_denies(root / "job" / "claude-home", root / ".claude", root / "account.json")
+            self.assertIn(str(root / "secrets" / "token.json"), denies)
+            self.assertEqual(denies[-1], str(root / "secrets" / "token.json"))
+            fr.assert_writes_not_below_denies({"allowWrite": [str(root / "out")], "denyRead": denies})
+
     def test_an_allowance_equal_to_or_below_a_read_denial_is_refused_lexically_and_through_a_link(self) -> None:
         with self.assertRaises(ValueError):
             fr.assert_writes_not_below_denies({"allowWrite": ["/o/.claude/x"], "denyRead": ["/o/.claude"]})

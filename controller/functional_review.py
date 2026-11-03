@@ -1131,8 +1131,10 @@ JOB_HOME_PRIVATE: tuple[str, ...] = (".credentials.json", ".claude.json", "backu
 def read_denies(job_claude_home: Path, operator_home: Path, account_file: Path) -> list[str]:
     """The ``denyRead`` list of D1: the private entries of this job's Claude
     home, the operator's whole Claude home and the operator's global account
-    file, each followed by its resolved form when that differs. The job home is
-    not denied as a whole: the tester's shell may need the rest of it."""
+    file, each followed by its resolved form when that differs. The operator's
+    credential file is named too: when it is a link, its target lies outside the
+    operator's Claude home and the directory entry does not cover it. The job
+    home is not denied as a whole: the tester's shell may need the rest of it."""
     entries = [Path(job_claude_home) / name for name in JOB_HOME_PRIVATE] + [Path(operator_home), Path(account_file)]
     out: list[str] = []
     for entry in entries:
@@ -1140,6 +1142,9 @@ def read_denies(job_claude_home: Path, operator_home: Path, account_file: Path) 
         resolved = os.path.realpath(entry)
         if resolved != str(entry):
             out.append(resolved)
+    credential = os.path.realpath(Path(operator_home) / JOB_HOME_PRIVATE[0])
+    if Path(os.path.realpath(operator_home)) not in Path(credential).parents and credential not in out:
+        out.append(credential)
     return out
 
 

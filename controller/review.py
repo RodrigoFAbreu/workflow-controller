@@ -2251,6 +2251,8 @@ def _file_url_path(url: str) -> Path:
     local repository for ``file://otherhost/<path>`` too). No absolute path
     after the authority is an :class:`OSError`, never a guess."""
     rest = urllib.parse.unquote(url[len("file://"):])
+    if "\0" in rest:
+        raise OSError(f"the origin {url} names a path with a NUL byte")
     slash = rest.find("/")
     if slash < 0:
         raise OSError(f"the origin {url} names no absolute path")

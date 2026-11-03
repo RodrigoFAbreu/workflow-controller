@@ -36,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import claude_build as cb  # noqa: E402
+from tests import fixtures  # noqa: E402
 from controller import functional_review as fr  # noqa: E402
 
 CLAUDE = shutil.which("claude")
@@ -66,7 +67,8 @@ class SettingsTests(unittest.TestCase):
         base = Path("/work")
         return fr.tester_settings(
             clone_dir=base / "clone", output_dir=base / "out", scratch_dirs=[base / "home", base / "tmp"],
-            writable_dir=base / "writable", writable=["build", ".venv"])
+            writable_dir=base / "writable", writable=["build", ".venv"],
+            deny_read=fr.read_denies(base / "claude-home", Path("/operator/.claude"), Path("/operator/.claude.json")))
 
     def test_the_sandbox_is_required_closed_and_without_an_unsandboxed_retry(self) -> None:
         sandbox = self.build()["sandbox"]
@@ -94,7 +96,7 @@ class SettingsTests(unittest.TestCase):
         fr.assert_writes_not_below_denies({"allowWrite": ["/w"], "denyWrite": ["/w/clone"]})
         with self.assertRaises(ValueError):
             fr.tester_settings(clone_dir=Path("/w/clone"), output_dir=Path("/w/out"), scratch_dirs=[],
-                               writable_dir=Path("/w/clone/writable"), writable=["build"])
+                               writable_dir=Path("/w/clone/writable"), writable=["build"], deny_read=[])
 
     def test_an_allowance_that_resolves_below_a_denial_through_a_link_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -125,6 +127,45 @@ class SettingsTests(unittest.TestCase):
     def test_the_settings_document_is_plain_json(self) -> None:
         json.dumps(self.build())
 
+    def test_the_read_deny_list_names_the_credential_entries_the_operator_home_and_the_account_file(self) -> None:
+        self.assertEqual(
+            self.build()["sandbox"]["filesystem"]["denyRead"],
+            ["/work/claude-home/.credentials.json", "/work/claude-home/.claude.json", "/work/claude-home/backups",
+             "/operator/.claude", "/operator/.claude.json"])
+
+    def test_the_job_home_as_a_whole_is_not_denied_and_the_write_lists_are_unchanged(self) -> None:
+        filesystem = self.build()["sandbox"]["filesystem"]
+        self.assertNotIn("/work/claude-home", filesystem["denyRead"])
+        self.assertEqual(filesystem["denyWrite"], ["/work/clone", "/work/clone/.git"])
+        self.assertEqual(filesystem["allowWrite"],
+                         ["/work/out", "/work/home", "/work/tmp", "/work/writable/build", "/work/writable/.venv"])
+
+    def test_a_link_among_the_read_denies_adds_its_resolved_form_and_a_plain_path_adds_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(os.path.realpath(raw))
+            (root / "dotfiles" / "claude").mkdir(parents=True)
+            (root / ".claude").symlink_to(root / "dotfiles" / "claude")
+            (root / "account.json").write_text("{}")
+            denies = fr.read_denies(root / "job" / "claude-home", root / ".claude", root / "account.json")
+            self.assertEqual(denies, [
+                str(root / "job/claude-home/.credentials.json"), str(root / "job/claude-home/.claude.json"),
+                str(root / "job/claude-home/backups"), str(root / ".claude"), str(root / "dotfiles/claude"),
+                str(root / "account.json")])
+
+    def test_an_allowance_equal_to_or_below_a_read_denial_is_refused_lexically_and_through_a_link(self) -> None:
+        with self.assertRaises(ValueError):
+            fr.assert_writes_not_below_denies({"allowWrite": ["/o/.claude/x"], "denyRead": ["/o/.claude"]})
+        with self.assertRaises(ValueError):
+            fr.assert_writes_not_below_denies({"allowWrite": ["/o/.claude"], "denyRead": ["/o/.claude"]})
+        fr.assert_writes_not_below_denies({"allowWrite": ["/o/other"], "denyRead": ["/o/.claude"]})
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(os.path.realpath(raw))
+            (root / "claude").mkdir()
+            (root / "alias").symlink_to(root / "claude")
+            with self.assertRaises(ValueError):
+                fr.assert_writes_not_below_denies({"allowWrite": [str(root / "alias" / "x")],
+                                                   "denyRead": [str(root / "claude")]})
+
     def test_the_flags_grant_the_shell_alone_and_answer_no_prompt(self) -> None:
         flags = fr.tester_flags(Path("/s/settings.json"))
         self.assertEqual(flags[flags.index("--tools") + 1], "Bash")
@@ -148,7 +189,8 @@ class FakeSandboxEmulationTests(unittest.TestCase):
         self.dirs = sandbox_dirs(self.tmp)
         self.settings = fr.tester_settings(
             clone_dir=self.dirs["clone"], output_dir=self.dirs["out"], scratch_dirs=[self.dirs["home"], self.dirs["tmp"]],
-            writable_dir=self.tmp / "writable", writable=["build"])
+            writable_dir=self.tmp / "writable", writable=["build"],
+            deny_read=fr.read_denies(self.tmp / "claude-home", self.tmp / "operator", self.tmp / "account.json"))
 
     def sandbox(self, settings: dict | None = None):
         return self.fake.Sandbox(settings or self.settings, True)
@@ -179,6 +221,32 @@ class FakeSandboxEmulationTests(unittest.TestCase):
         (clone / "build").mkdir()
         self.assertFalse(self.sandbox(old).allows(clone / "build" / "out.o"))
         self.assertTrue(self.sandbox(old).allows(self.dirs["out"] / "x"))
+
+    def test_a_read_of_a_denied_path_is_refused_through_a_link_too_and_other_reads_are_allowed(self) -> None:
+        home = self.tmp / "job-home"
+        home.mkdir()
+        for name in (".credentials.json", ".claude.json", ".last-cleanup"):
+            (home / name).write_text("canary")
+        (home / "backups").mkdir()
+        (home / "backups" / ".claude.json.backup.1").write_text("canary")
+        operator = self.tmp / "operator"
+        operator.mkdir()
+        (operator / "settings.json").write_text("canary")
+        account = self.tmp / "operator.claude.json"
+        account.write_text("canary")
+        (self.tmp / "alias").symlink_to(home)
+        settings = fr.tester_settings(
+            clone_dir=self.dirs["clone"], output_dir=self.dirs["out"], scratch_dirs=[self.dirs["home"]],
+            writable_dir=self.tmp / "writable", writable=["build"],
+            deny_read=fr.read_denies(home, operator, account))
+        box = self.sandbox(settings)
+        for denied in (home / ".credentials.json", home / ".claude.json", home / "backups" / ".claude.json.backup.1",
+                       operator / "settings.json", operator, account, self.tmp / "alias" / ".credentials.json"):
+            with self.subTest(denied=str(denied)):
+                self.assertFalse(box.reads(denied))
+        for allowed in (self.dirs["clone"] / TRACKED, home / ".last-cleanup", self.tmp / "alias" / ".last-cleanup"):
+            with self.subTest(allowed=str(allowed)):
+                self.assertTrue(box.reads(allowed))
 
     def test_a_denial_below_an_allowance_still_refuses(self) -> None:
         settings = {"sandbox": {"filesystem": {"allowWrite": [str(self.tmp)], "denyWrite": [str(self.tmp / "clone")]}}}
@@ -396,7 +464,8 @@ class JudgeTests(unittest.TestCase):
             self.assertTrue((home / ".config" / "probe").exists())
 
 
-def run_claude(prompt: str, *, cwd: Path, settings: dict, env_path: str | None = None) -> tuple[dict, list[dict]]:
+def run_claude(prompt: str, *, cwd: Path, settings: dict, env_path: str | None = None,
+               env_extra: dict[str, str] | None = None) -> tuple[dict, list[dict]]:
     """One tester-shaped launch of the real CLI: the closed flags of
     :func:`fr.tester_flags`, the working directory the output folder. Returns
     the final ``result`` event and every event."""
@@ -414,6 +483,7 @@ def run_claude(prompt: str, *, cwd: Path, settings: dict, env_path: str | None =
     Path(env["HOME"]).mkdir(exist_ok=True)
     if env_path is not None:
         env["PATH"] = env_path
+    env.update(env_extra or {})
     done = subprocess.run(command, input=prompt.encode(), capture_output=True, cwd=cwd, env=env, timeout=300,
                           check=False)
     events = []
@@ -426,6 +496,18 @@ def run_claude(prompt: str, *, cwd: Path, settings: dict, env_path: str | None =
     if not results:
         raise AssertionError(f"no result event; stderr: {done.stderr.decode('utf-8', 'replace')[:500]}")
     return results[-1], events
+
+
+def tool_output(events: list[dict]) -> str:
+    """The text of every tool result the run produced: what the shell printed, not what the model said of it."""
+    out: list[str] = []
+    for event in events:
+        content = (event.get("message") or {}).get("content") if event.get("type") == "user" else None
+        for block in content if isinstance(content, list) else []:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                body = block.get("content")
+                out.append(body if isinstance(body, str) else json.dumps(body))
+    return "\n".join(out)
 
 
 def result_text(result: dict) -> str:
@@ -458,7 +540,8 @@ class LiveEnforcementTests(unittest.TestCase):
         self.settings = fr.tester_settings(
             clone_dir=self.dirs["clone"], output_dir=self.dirs["out"],
             scratch_dirs=[self.dirs["home"], self.dirs["tmp"]], writable_dir=self.base / "writable",
-            writable=["build"])
+            writable=["build"],
+            deny_read=fr.read_denies(self.base / "claude-home", self.base / "operator", self.base / "account.json"))
         self.marker = f"wfr-cp2-{uuid.uuid4().hex}"
         self.host_paths = [Path("/tmp") / self.marker, Path("/var/tmp") / self.marker, Path("/dev/shm") / self.marker]
         for path in self.host_paths:
@@ -515,6 +598,76 @@ class LiveEnforcementTests(unittest.TestCase):
                                cwd=self.base, settings=self.settings)
         self._skip_without_a_model(result)
         self.assertEqual(target.read_bytes(), ORIGINAL)
+
+    def test_the_read_denies_hold_on_the_pinned_cli_and_the_shell_still_works(self) -> None:
+        """Release-side (D3 of ``workflow-controller-tester-read-denies``): the shell the real CLI runs under
+        ``denyRead`` cannot read a canary in a denied folder, in a scratch ``HOME/.claude.json`` named as the
+        operator's account file, or in the private entries of a scratch Claude home, yet reads a file outside the
+        deny and a sibling entry of that home, runs ``pwd`` and ``git status`` in the clone with no shell-snapshot
+        error, and the entries of ``$CLAUDE_CONFIG_DIR`` it can read include no credential or account file."""
+        canary = f"canary-{uuid.uuid4().hex}"
+        operator = self.base / "operator-claude"
+        operator.mkdir()
+        (operator / "credentials-original.json").write_text(canary)
+        account = self.base / "operator-home" / ".claude.json"  # a scratch stand-in for the real $HOME/.claude.json
+        account.parent.mkdir()
+        account.write_text(canary)
+        config = self.base / "job-claude-home"
+        (config / "backups").mkdir(parents=True)
+        for name in (".claude.json", "backups/.claude.json.backup.1"):
+            (config / name).write_text(json.dumps({"canary": canary}))
+        # The job home holds a copy of the operator's login, as the Controller's launch does, so the CLI can run.
+        login = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / ".credentials.json"
+        if not login.is_file() and not any(name in os.environ for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")):
+            self.skipTest("no Claude login to copy into the scratch job home")
+        if login.is_file():
+            (config / ".credentials.json").write_bytes(login.read_bytes())
+            (config / ".credentials.json").chmod(0o600)
+        (config / ".last-cleanup").write_text("1700000000000")
+        outside = self.base / "readable.txt"
+        outside.write_text("readable-ok")
+        fixtures.git_init(self.dirs["clone"])
+        settings = fr.tester_settings(
+            clone_dir=self.dirs["clone"], output_dir=self.dirs["out"],
+            scratch_dirs=[self.dirs["home"], self.dirs["tmp"]], writable_dir=self.base / "writable",
+            writable=["build"], deny_read=fr.read_denies(config, operator, account))
+        script = (
+            f"cd {self.dirs['clone']} && pwd && git status --short; echo GIT_EXIT=$?; "
+            f"for f in {operator}/credentials-original.json {account} {config}/.credentials.json "
+            f"{config}/.claude.json {config}/backups/.claude.json.backup.1 {outside} {config}/.last-cleanup; do "
+            "printf 'READ %s: ' \"$f\"; cat \"$f\" 2>&1 | head -c 200; echo; done; "
+            "for e in \"$CLAUDE_CONFIG_DIR\"/* \"$CLAUDE_CONFIG_DIR\"/.[!.]*; do [ -e \"$e\" ] || continue; "
+            "if [ -d \"$e\" ]; then [ -n \"$(ls -A \"$e\" 2>/dev/null)\" ] && echo \"ENTRY $(basename \"$e\") readable\"; "
+            "else head -c 1 \"$e\" >/dev/null 2>&1 && echo \"ENTRY $(basename \"$e\") readable\"; fi; done; echo DONE")
+        result, events = run_claude(
+            f"Run exactly this with the Bash tool, once, and report that it finished: {script}",
+            cwd=self.dirs["out"], settings=settings, env_extra={"CLAUDE_CONFIG_DIR": str(config)})
+        self._skip_without_a_model(result)
+        printed = tool_output(events)
+        self.assertIn("DONE", printed, f"the shell did not run the script: {printed[:300]}")
+        self.assertNotIn(canary, printed, "a denied file was read")
+        if (config / ".credentials.json").is_file():
+            token = json.loads((config / ".credentials.json").read_text()).get("claudeAiOauth", {}).get("accessToken")
+            if token:
+                self.assertNotIn(token, printed, "the job's credential was read")
+        self.assertIn("readable-ok", printed, "a file outside the deny is no longer readable")
+        self.assertIn(str(self.dirs["clone"]), printed)
+        self.assertIn("GIT_EXIT=0", printed)
+        errors = "\n".join(line for line in printed.splitlines() if not line.startswith("ENTRY ")).lower()
+        self.assertNotIn("snapshot", errors, "the shell reported a snapshot error")
+        readable = {line.split()[1] for line in printed.splitlines() if line.startswith("ENTRY ")}
+        self.assertEqual(readable & {".credentials.json", ".claude.json", "backups"}, set(),
+                         f"readable job-home entries: {sorted(readable)}")
+        written = config / ".claude.json"
+        if written.exists():  # the account the CLI itself recorded must not have reached the shell's output either
+            try:
+                email = json.loads(written.read_text()).get("oauthAccount", {}).get("emailAddress")
+            except ValueError:
+                email = None
+            if email:
+                self.assertNotIn(email, printed)
+        print(f"read-deny probe: readable job-home entries {sorted(readable)}")
+
 
 if __name__ == "__main__":
     unittest.main()

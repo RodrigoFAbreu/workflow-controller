@@ -2241,6 +2241,8 @@ def check_functional_settings(sandbox: "functional_review.Sandbox") -> None:
         raise _refuse(f"the tester's settings break the layout invariant: {exc}", check="settings") from None
     if [str(sandbox.clone), str(sandbox.clone / ".git")] != filesystem["denyWrite"]:
         raise _refuse("the tester's deny list is not the clone root and its .git", check="settings")
+    if sandbox.read_denies() != filesystem.get("denyRead"):
+        raise _refuse("the tester's read deny list is not the credential and account entries", check="settings")
 
 
 def _file_url_path(url: str) -> Path:
@@ -2351,8 +2353,17 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
         origin_error = None
     except OSError as exc:
         origin_before, origin_error = None, str(exc)
+    account_file = Path.home() / ".claude.json"  # resolved before the launch replaces HOME for the tester
+    claude_root = Path(os.path.realpath(operator_home))
+    for folder in (Path(runtime_root).resolve(), Path(runtime_root).resolve() / functional_review.SANDBOX_AREA / job_id):
+        if folder == claude_root or claude_root in folder.parents:
+            raise functional_review.unavailable(
+                functional_review.UNAVAILABLE_ENFORCEMENT,
+                f"the runtime root {runtime_root} lies inside the operator's Claude home {operator_home}, "
+                "which the tester may not read")
     sandbox = functional_review.build_sandbox(candidate, runtime_root=runtime_root, job_id=job_id,
-                                              work_item_id=work_item_id)
+                                              work_item_id=work_item_id, operator_home=operator_home,
+                                              account_file=account_file)
     result.update(sandbox=sandbox.base, output_dir=sandbox.out, head=candidate.head,
                   checklist_blob=candidate.checklist_blob, writable=list(sandbox.writable),
                   refused=[{"pattern": item.pattern, "reason": item.reason} for item in sandbox.refused])

@@ -317,7 +317,7 @@ class _Run:
     launches. Built and torn down by :func:`verify_build`."""
 
     def __init__(self, real: str, digest: str, *, runtime_root: Path, run: Callable[..., Any], model: str,
-                 effort: str, timeout: int) -> None:
+                 effort: str, timeout: int, operator_home: Path, account_file: Path) -> None:
         # review imports this module at load, so the import is deferred to first use.
         review = importlib.import_module("controller.review")
 
@@ -337,7 +337,8 @@ class _Run:
         try:
             self.settings = fr.tester_settings(
                 clone_dir=self.clone, output_dir=self.out, scratch_dirs=[self.layout.home, self.tmp],
-                writable_dir=self.writable_dir, writable=["build"])
+                writable_dir=self.writable_dir, writable=["build"],
+                deny_read=fr.read_denies(self.layout.claude_home, operator_home, account_file))
             self.sock_dir = short_tmp("wcv-", "the host listener")  # a Unix socket path is limited to 107 bytes
         except BaseException:
             # construction failed before `verify_build` could clean up: release the TMPDIR just allocated.
@@ -553,9 +554,10 @@ def verify_build(binary: str | os.PathLike, *, runtime_root: Path, operator_home
     except (OSError, subprocess.SubprocessError, IndexError):
         pass
     try:
-        state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout)
-    except fr.TesterUnavailable as exc:
-        raise BuildNotVerified("host", exc.message) from exc
+        state = _Run(real, digest, runtime_root=runtime_root, run=run, model=model, effort=effort, timeout=timeout,
+                     operator_home=Path(operator_home), account_file=Path.home() / ".claude.json")
+    except (fr.TesterUnavailable, ValueError) as exc:
+        raise BuildNotVerified("host", getattr(exc, "message", None) or str(exc)) from exc
     except OSError as exc:  # a refusal like any other setup failure, never a traceback (exit 20)
         raise BuildNotVerified("host", f"the run could not be set up: {exc}") from exc
     try:

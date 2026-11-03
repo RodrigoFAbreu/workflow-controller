@@ -55079,7 +55079,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-tester-read-denies-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-tester-read-denies-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -55192,7 +55192,144 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "f6240e51571dbfc8110bfdcf841740be626426a4bc3840ab6269eb1a970ae817",
+        "approved_review_content_id": "89dcf878e5d93d6aaab793795f171a51530cd328d5c4a20af5ee64767ab887e1",
+        "review_content_manifest": [
+          {
+            "path": "controller/claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "086e6a10a876afbc19736bfd28b4b8cac62c7f2a"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5dc66bed03f5d0f8615e2ab5427859eb70a09d0c"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ebbcc7b112c5537792ad76f3940aa089b93f04b5"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-tester-read-denies-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8108d3099a4a719551dfa1a3ba6bb05767027cee"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a7bc730622f9fc5b73b5462f40d914a3686ad10c"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2449fca5fbc674814b9315092dbea98888cbec29"
+          },
+          {
+            "path": "tests/fake_functional_tester.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "82f30968f4c46d24d9979d04ce9abe3b270ec3dc"
+          },
+          {
+            "path": "tests/test_claude_build.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ba165f9cd2c0e5fe56baef8448b390258ed03709"
+          },
+          {
+            "path": "tests/test_functional_enforcement.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8268735ac24d4966f93796fd2ea31058eafbba79"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ba28f69aaaf740c60364fdfaf2ef2e5e1cc35844"
+          },
+          {
+            "path": "tests/test_functional_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a982677bdf811e51c906632a87d189721ff6400f"
+          }
+        ],
+        "reviewed_content_commit": "6b851903913214f2462b189338e4f363852a8d0e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-03T19:40:57Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "89dcf878e5d93d6aaab793795f171a51530cd328d5c4a20af5ee64767ab887e1",
+            "ledger": {
+              "local": {
+                "bundle_id": "f6240e51571dbfc8110bfdcf841740be626426a4bc3840ab6269eb1a970ae817",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "10d1e4c12ed6a17579441394efe7a8a1c89595ddc334fadf4ff2539beb62a500",
+                "ledger_entry_sha256": "5111ea33287a358be6a0aaf00b6fdf7500c93f187d9281077f318e9148ce3ab8",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-tester-read-denies/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "f6240e51571dbfc8110bfdcf841740be626426a4bc3840ab6269eb1a970ae817",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "8a23848abca3f49e7340c344e7df8ba0e3f98d9ffd83b8694cec41cb4680d7e9",
+                "ledger_entry_sha256": "793cf7a69c52685ed5953d91c8032e78e36c5ca7a7e2f00fd7be7aa77095db9c",
+                "run_ref": "codex:20261103T193718Z-49b0d3b1",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-03T19:40:57Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "6d0284aeaf6a7d41047f9de576dc7226286e47bf99cfa7727ed6d81846509d84",
@@ -55223,12 +55360,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 25,
-      "last_transition": "2026-11-03T19:03:29Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-03T19:40:57Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -55449,20 +55586,70 @@
               "at": "2026-11-03T18:46:37Z"
             }
           ]
+        },
+        "F-e60f50614335": {
+          "digest": "e60f50614335246d1a99b705903777681fac6be83547d0fea49fadb7ff4e8fcd",
+          "text": "**O1. A linked `.claude.json` or `backups` in the operator's Claude home is still covered only by its link.** The I1 fix (`controller/functional_review.py:1145`) adds the resolved target of the operator's `.credentials.json` only. When `CLAUDE_CONFIG_DIR` is set, the operator home's own `.claude.json` holds the `oauthAccount` identity and the MCP server definitions that D1 calls private. If that file is a link into a dotfiles tree, its target is not in `denyRead`. Checked: `read_denies(job, op, acct)` with `op/.claude.json -> dot/c.json` returns the five plain entries and no `dot/c.json`. It is the same class as I1 but for identity, not the token, and the layout is rare. Applying the same rule to every `JOB_HOME_PRIVATE` name of the operator home would close it, with the guide sentence widened to match.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "89dcf878e5d93d6aaab793795f171a51530cd328d5c4a20af5ee64767ab887e1",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T19:36:34Z"
+            }
+          ]
+        },
+        "F-2b9042262e6d": {
+          "digest": "2b9042262e6d5422ce5318e257ffeca9b8f34cc9de70579dd51c0a62416d5593",
+          "text": "**O2. `TEST_RESULTS.md` still describes revision 1.** Its header and full-suite line name implementation revision 1, head `bf6d5ef` and 5524 tests. The revision 2 run (5525 tests, PASS) appears only in `IMPLEMENTATION_SUMMARY.md`. Refreshing the file at post-fix generation would keep the evidence file current. This review reran the suite at `5a12e5c`: `tools/run_tests.py` PASS, 5525 tests in 8 shards, exact coverage. `tools/check_docs.py` exited 0.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "89dcf878e5d93d6aaab793795f171a51530cd328d5c4a20af5ee64767ab887e1",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T19:36:34Z"
+            }
+          ]
+        },
+        "F-7d2c8f6ff75f": {
+          "digest": "7d2c8f6ff75fb59c68e5b7fae61e703465e2e4c9bbf9422dd54e72ebc15b0f22",
+          "text": "**O3. `test_the_verified_settings_hold_the_same_read_denies_as_the_launch` depends on the host's `~/.claude.json`.** It asserts `deny[-2:] == [operator home, Path.home() / \".claude.json\"]`. On a host where `~/.claude.json` is a link, `read_denies` appends its resolved form and the test fails. The `account_file` keyword suggested in round 1 (O1) would make this test hermetic too.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "89dcf878e5d93d6aaab793795f171a51530cd328d5c4a20af5ee64767ab887e1",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T19:36:34Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "952ee2d29cade4ccb79d6ee7d3a0f55b9a28cba8754db1afb5b2f4bff528f471",
+        "review_content_id": "89dcf878e5d93d6aaab793795f171a51530cd328d5c4a20af5ee64767ab887e1",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "548b04738dd5b60b0243b73993ac9e955350eefefcff419995259d903c675f3a",
+          "bundle_id": "f6240e51571dbfc8110bfdcf841740be626426a4bc3840ab6269eb1a970ae817",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-03T18:41:32Z",
-          "verdict_sha256": "1cf944c8c78c6610425113ab196aad88f81e9d22d85d568597b039c3966eaab0",
+          "round": 2,
+          "completed_at": "2026-11-03T19:36:34Z",
+          "verdict_sha256": "10d1e4c12ed6a17579441394efe7a8a1c89595ddc334fadf4ff2539beb62a500",
           "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-tester-read-denies/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "f6240e51571dbfc8110bfdcf841740be626426a4bc3840ab6269eb1a970ae817",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-03T19:39:22Z",
+          "verdict_sha256": "8a23848abca3f49e7340c344e7df8ba0e3f98d9ffd83b8694cec41cb4680d7e9",
+          "run_ref": "codex:20261103T193718Z-49b0d3b1",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

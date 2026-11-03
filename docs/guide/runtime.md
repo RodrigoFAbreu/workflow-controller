@@ -330,7 +330,11 @@ the shared record holds is in
 [`usage`](commands.md#usage).
 
 The `review.local_round_cap` and `review.external_round_cap` rows are the
-two review round caps (unset means the built-in 6 and 4). A protocol run counts
+two review round caps (unset means the built-in 6 and 4).
+[`settings show`](commands.md#settings) prints the caps in force after these
+rows, with where each comes from (its own setting or option, the deprecated
+`review.round_cap`, or the built-in value), so a stored `null` is not read as
+no cap. A protocol run counts
 the review rounds of the plan stage and of the implementation stage
 separately. With Workflow 2.15.0 and later (protocol 1.5) the Workflow gives
 each stage a local and an external round count, and the caps apply to them
@@ -373,7 +377,8 @@ of each kind of step. A round the Workflow stated is shown as
 not the same measure as the Workflow's content count, so compare `~` groups
 with `~` groups. A review the Controller ran itself (`plan.review.external`,
 `implementation.review.external`) appears in these groups with its action,
-stage and round. A Claude review keeps the cost and token totals its `result`
+stage and round. A Claude review keeps the cost (an API list-price equivalent,
+not what a subscription charges) and token totals its `result`
 events reported (`review.telemetry`, summed over its at most two invocations,
 since each is a separate session), so it is counted in those groups; a Codex
 review keeps none until its rollout gives them, and shows as "telemetry

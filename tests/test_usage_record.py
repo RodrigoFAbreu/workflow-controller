@@ -86,6 +86,20 @@ class ClaudeConverterTest(unittest.TestCase):
         self.assertEqual(json.dumps(ws.session_telemetry(results), sort_keys=True), before)
         self.assertNotIn("reasoning", json.dumps(ws.session_telemetry(results)["tokens"]))
 
+    def test_partly_reported_reasoning_is_unknown_and_the_other_figures_are_unchanged(self) -> None:
+        results = _results(CONTRACT / "job_2857a730_two_results.jsonl")
+        full = ur.from_claude_results(results)
+        self.assertIsNotNone(full.reasoning)
+        mixed = json.loads(json.dumps(results))
+        del mixed[0]["usage"]["output_tokens_details"]
+        record = ur.from_claude_results(mixed)
+        self.assertIsNone(record.reasoning)
+        self.assertEqual(record.quality["reasoning"], ur.UNKNOWN)
+        self.assertEqual((record.input, record.cache_read, record.cache_write, record.output),
+                         (full.input, full.cache_read, full.cache_write, full.output))
+        self.assertIsNone(ur.reasoning_tokens(mixed))
+        self.assertEqual(ur.reasoning_tokens(results), full.reasoning)
+
     def test_a_stream_with_no_result_invents_nothing(self) -> None:
         record = ur.from_claude_results([])
         self.assertTrue(all(getattr(record, g) is None for g in ur.GROUPS))
@@ -112,6 +126,13 @@ class CodexConverterTest(unittest.TestCase):
         self.assertEqual((record.harness, record.provider), ("codex", "openai"))
         self.assertAlmostEqual(record.cost, 10436 * 1.0 + 5 * 10.0)
         self.assertEqual(record.cost_source, ur.DERIVED)
+
+    def test_a_rollout_that_is_not_a_mapping_is_skipped(self) -> None:
+        good = ur.parse_rollout([json.loads(line) for line in
+                                 (CONTRACT / "codex" / "rollout_excerpt.jsonl").read_text().splitlines()])
+        expected = ur.from_codex_rollouts([good], model="m", table=TABLE)
+        record = ur.from_codex_rollouts([None, "junk", good, 7], model="m", table=TABLE)
+        self.assertEqual(record.to_dict(), expected.to_dict())
 
     def test_a_rollout_without_token_count_gives_all_unknown(self) -> None:
         record = ur.from_codex_rollouts([ur.parse_rollout([{"type": "session_meta", "payload": {"source": "exec"}}])],
@@ -177,8 +198,44 @@ class PriceTableTest(unittest.TestCase):
 
     def test_the_shipped_table_is_versioned(self) -> None:
         table = ur.load()
-        self.assertEqual((table["version"], table["currency"]), (1, "USD"))
+        self.assertEqual((table["version"], table["currency"]), (2, "USD"))
         self.assertIsInstance(table["models"], dict)
+
+    def test_every_default_model_has_a_complete_price(self) -> None:
+        # read from the modules, so a new default model without a price fails here
+        from controller import claude_build, review, routing
+        models = {routing.DEFAULT_MODEL, review.DEFAULT_MODEL, review.CLAUDE_DEFAULT_MODEL, claude_build.PROBE_MODEL,
+                  *(route.model for route in routing.ROLE_ROUTES.values() if route.model is not None)}
+        table = ur.load()["models"]
+        for model in sorted(models):
+            with self.subTest(model=model):
+                self.assertIn(model, table, "add a price to controller/prices.json (docs/guide/development.md)")
+                for group in ("input", "cache_read", "cache_write", "output"):
+                    price = table[model].get(group)
+                    self.assertIsInstance(price, (int, float))
+                    self.assertNotIsInstance(price, bool)
+                    self.assertGreaterEqual(price, 0)
+
+    def test_a_codex_cost_from_the_shipped_table_prices_every_group(self) -> None:
+        usage = {"input_tokens": 1000, "cached_input_tokens": 200, "cache_write_input_tokens": 0,
+                 "output_tokens": 50, "reasoning_output_tokens": 0, "total_tokens": 1050}
+        table = ur.load()
+        record = ur.from_codex_rollouts([{"subagent": False, "usage": usage}], model="gpt-6.1-sol", table=table)
+        price = table["models"]["gpt-6.1-sol"]
+        self.assertEqual(price["cache_write"], 0.0000025)
+        self.assertAlmostEqual(record.cost, record.input * price["input"] + record.cache_read * price["cache_read"]
+                               + record.output * price["output"], places=12)
+        self.assertEqual(record.cost_source, ur.DERIVED)
+        self.assertGreater(record.cost, 0)
+
+    def test_a_cache_write_is_priced_at_the_entered_write_rate(self) -> None:
+        table = ur.load()
+        figures = {"input": 0, "cache_read": 0, "cache_write": 1000, "output": 0}
+        self.assertAlmostEqual(ur.cost_of(figures, "gpt-6.1-sol", table), 1000 * 0.0000025, places=12)
+
+    def test_an_alias_has_no_price(self) -> None:
+        for alias in ("opus", "sonnet", "haiku"):
+            self.assertNotIn(alias, ur.load()["models"])
 
     def test_the_table_loads_from_a_copied_package_layout(self) -> None:
         # a copy of the package imported on its own: the default resource path resolves beside the module

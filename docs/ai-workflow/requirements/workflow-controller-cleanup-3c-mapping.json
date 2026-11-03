@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cleanup-3c",
+  "requirements": {
+    "R1": {
+      "description": "controller/prices.json holds API list prices (version 2, source URLs and date) for every model launched by default, and a test fails when a default model has no complete price; cost figures are labelled API list-price equivalent (#103)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The usage record marks partly reported reasoning unknown, guards both rollout reads, documents the wall_ms source per job kind, and a retried Codex review is tested end to end (#104)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "settings show prints the round caps in force and their origin (and --json round_caps_in_force), marks the deprecated row, and the cap stop says round N instead of the external count (#108)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

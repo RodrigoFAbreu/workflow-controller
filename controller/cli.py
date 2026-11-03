@@ -2665,16 +2665,35 @@ def _apply_settings(args: argparse.Namespace, *, write: bool,
     return effective
 
 
-def _round_caps(effective: settings.EffectiveSettings) -> review_rounds.RoundCaps:
-    """The local and external review round caps in force
-    (workflow-controller-round-caps D3): each cap's own setting or option,
-    else the deprecated ``review.round_cap`` when it is set away from its
-    default 4 or given on the command line, else the built-in 6 and 4."""
+#: The origins of a round cap in force (``settings show``, #108).
+CAP_ORIGIN_BUILT_IN = "built-in"
+CAP_ORIGIN_OWN = "its own setting or option"
+CAP_ORIGIN_DEPRECATED = "deprecated review.round_cap"
+
+
+def _round_caps_in_force(effective: settings.EffectiveSettings) -> dict[str, dict[str, Any]]:
+    """The local and external review round caps in force with where each comes
+    from (workflow-controller-round-caps D3; cleanup-3c D8): each cap's own
+    setting or option, else the deprecated ``review.round_cap`` when it is set
+    away from its default 4 or given on the command line, else the built-in 6
+    and 4. The one place the ``deprecated_given`` rule is derived, so a cap
+    and its origin cannot differ."""
     deprecated = effective["review.round_cap"]
-    return review_rounds.effective_caps(
-        effective["review.local_round_cap"], effective["review.external_round_cap"], deprecated,
-        deprecated_given=effective.sources["review.round_cap"] == settings.SOURCE_CLI
-        or deprecated != review_rounds.DEFAULT_REVIEW_ROUND_CAP)
+    deprecated_given = (effective.sources["review.round_cap"] == settings.SOURCE_CLI
+                        or deprecated != review_rounds.DEFAULT_REVIEW_ROUND_CAP)
+    own_local, own_external = effective["review.local_round_cap"], effective["review.external_round_cap"]
+    caps = review_rounds.effective_caps(own_local, own_external, deprecated, deprecated_given=deprecated_given)
+    fallback = CAP_ORIGIN_DEPRECATED if deprecated_given else CAP_ORIGIN_BUILT_IN
+    return {
+        "local": {"cap": caps.local, "origin": CAP_ORIGIN_OWN if own_local is not None else fallback},
+        "external": {"cap": caps.external, "origin": CAP_ORIGIN_OWN if own_external is not None else fallback},
+    }
+
+
+def _round_caps(effective: settings.EffectiveSettings) -> review_rounds.RoundCaps:
+    """The local and external review round caps in force, without their origins."""
+    in_force = _round_caps_in_force(effective)
+    return review_rounds.RoundCaps(in_force["local"]["cap"], in_force["external"]["cap"])
 
 
 def _effective(args: argparse.Namespace) -> settings.EffectiveSettings:
@@ -2717,15 +2736,21 @@ def cmd_settings(args: argparse.Namespace) -> int:
     cli_values, cli_routing = _settings_cli_overrides(args)
     loaded = settings.load(path)
     effective = settings.resolve(loaded, cli=cli_values, cli_routing=cli_routing)
+    in_force = _round_caps_in_force(effective)
     if args.json:
         print(json.dumps({
             "path": str(path), "exists": loaded.exists, "sha256": loaded.sha256,
             "values": dict(effective.values), "sources": dict(effective.sources),
+            "round_caps_in_force": in_force,
         }, indent=2, sort_keys=True))
         return EXIT_OK
     print(f"settings file: {path}" + ("" if loaded.exists else " (not created yet)"))
     for key in effective.values:
-        print(f"{key} = {json.dumps(effective.values[key], sort_keys=True)} ({effective.sources[key]})")
+        note = " (deprecated: use the local and external caps)" if key == "review.round_cap" else ""
+        print(f"{key} = {json.dumps(effective.values[key], sort_keys=True)} ({effective.sources[key]}){note}")
+        if key == "review.external_round_cap":
+            for which in ("local", "external"):
+                print(f"review.{which}_round_cap in force = {in_force[which]['cap']} ({in_force[which]['origin']})")
     return EXIT_OK
 
 

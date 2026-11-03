@@ -91,7 +91,11 @@ class UsageBuilderTest(unittest.TestCase):
         cwj.usage_builder(make_result(rollouts=[{"bad": 1}]), ROUTE)
 
     def test_a_builder_that_raises_propagates_unchanged(self) -> None:
-        build = cwj.usage_builder(make_result(rollouts=[object()]), ROUTE)
+        class Broken(dict):  # a Mapping whose read fails: a non-Mapping rollout is skipped, not an error (CU3c D6)
+            def get(self, key, default=None):
+                raise AttributeError(key)
+
+        build = cwj.usage_builder(make_result(rollouts=[Broken()]), ROUTE)
         with self.assertRaises(AttributeError):
             build()
 

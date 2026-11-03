@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import cli, identity, job, review, usage_record  # noqa: E402
 from controller.errors import ReviewLaunchRefusedError  # noqa: E402
-from tests import (fixtures, test_cli, test_job, test_review_claude, test_review_job, test_review_mode,  # noqa: E402
+from tests import (fixtures, test_cli, test_job, test_review, test_review_claude, test_review_job, test_review_mode,  # noqa: E402
                    test_review_same_provider)
 from tests.test_job import _telemetry_end_turn  # noqa: E402
 
@@ -107,15 +107,44 @@ class ScanKeepsRolloutFiguresTest(unittest.TestCase):
 
     def test_a_claude_attempts_reasoning_is_summed_across_attempts(self) -> None:
         result: dict = {}
-        review._add_reasoning(result, None)
+        review._add_reasoning(result, None, ran=False)
         self.assertNotIn("usage_reasoning", result)
-        review._add_reasoning(result, 211)
-        review._add_reasoning(result, None)
-        review._add_reasoning(result, 100)
+        review._add_reasoning(result, 211, ran=True)
+        review._add_reasoning(result, None, ran=False)  # an attempt with no result adds nothing
+        review._add_reasoning(result, 100, ran=True)
         self.assertEqual(result["usage_reasoning"], 311)
+        self.assertNotIn("usage_reasoning_unknown", result)
+
+    def test_an_attempt_with_a_result_but_no_reasoning_makes_the_sum_unknown(self) -> None:
+        for order in ((3, None), (None, 3), (3, None, 5)):
+            result: dict = {}
+            for figure in order:
+                review._add_reasoning(result, figure, ran=True)
+            self.assertNotIn("usage_reasoning", result, order)
+            self.assertTrue(result["usage_reasoning_unknown"], order)
+        built = usage_record.from_claude_block(
+            ClaudeReviewRecordTest.TELEMETRY, reasoning=result.get("usage_reasoning"), model="claude-opus-5-5", wall_ms=1)
+        self.assertEqual((built.reasoning, built.quality["reasoning"]), (None, "unknown"))
         self.assertEqual(review.result_reasoning({"usage": {"output_tokens_details": {"thinking_tokens": 7}}}), 7)
         self.assertIsNone(review.result_reasoning({"usage": {}}))
         self.assertIsNone(review.result_reasoning(None))
+
+
+class RetriedCodexReviewRolloutsTest(unittest.TestCase):
+    """CP2 (D7): the real ``launch_review`` retry against the fake Codex leaves the rollouts the record reads."""
+
+    def test_a_retried_review_counts_each_attempts_root_once_and_each_sub_agent_once(self) -> None:
+        launch = test_review.FakeLaunchTest("setUp")
+        launch.setUp()
+        self.addCleanup(launch.doCleanups)
+        out = launch.launch({"exec": {"verdict": "wrong_id_first", "subagent": 4321}}, job="j-retry-usage")
+        rollouts = out["usage_rollouts"]
+        roots = [r for r in rollouts if not r["subagent"]]
+        self.assertEqual(len(roots), 2)  # the first attempt's root and the retry's, each once
+        self.assertEqual(len([r for r in rollouts if r["subagent"]]), 2)  # the fake spawns one per attempt
+        record = usage_record.from_codex_rollouts(rollouts, model="gpt-6.1-sol")
+        self.assertEqual(record.subagent_total_tokens, 2 * 4321)
+        self.assertEqual([r["usage"]["total_tokens"] for r in roots], [10441, 10441])
 
 
 class _UsageDouble(test_review_job.LaunchDouble):

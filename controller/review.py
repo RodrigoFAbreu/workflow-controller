@@ -1956,13 +1956,13 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
                 paid = getattr(exc, "figures", None)  # a refused run's reported cost and tokens are kept
                 if paid is not None:
                     result["telemetry"] = add_figures(result.get("telemetry"), paid)
-                _add_reasoning(result, getattr(exc, "reasoning", None))
+                _add_reasoning(result, getattr(exc, "reasoning", None), ran=paid is not None)
                 raise
             run, scan = made.run, made
             result["subagents"] = made.subagents
             if made.figures is not None:
                 result["telemetry"] = add_figures(result.get("telemetry"), made.figures)
-            _add_reasoning(result, made.reasoning)
+            _add_reasoning(result, made.reasoning, ran=made.figures is not None)
             if made.readings is not None:
                 # the latest reading of each window wins; a retry that read none keeps the first run's
                 merged = {r["window"]: r for r in result.get("stream_readings") or []}
@@ -2024,16 +2024,22 @@ def launch_review(*, worktree: Path, runtime_root: Path, job_id: str, harness_na
     return result
 
 
-def _add_reasoning(result: dict, reasoning: "int | UsageReadingFailed | None") -> None:
+def _add_reasoning(result: dict, reasoning: "int | UsageReadingFailed | None", *, ran: bool) -> None:
     """A Claude review's reasoning tokens, summed over its attempts under ``usage_reasoning`` (not copied
-    into the job record's ``review`` block); an attempt that reports none adds nothing. A reading that
-    failed, or a sum that raises, is kept as ``usage_reasoning_failed`` for the job record's
-    ``usage_record_failed`` (D9) and never raised."""
+    into the job record's ``review`` block). An attempt with no result (``ran`` false) adds nothing, as
+    ``add_figures`` skips it; an attempt with a result that reports no reasoning makes the sum unknown for
+    good (``usage_reasoning_unknown``, no partial sum), as ``usage_record.reasoning_tokens`` does across
+    results. A reading that failed, or a sum that raises, is kept as ``usage_reasoning_failed`` for the job
+    record's ``usage_record_failed`` (D9) and never raised."""
     try:
         if isinstance(reasoning, UsageReadingFailed):
             result.setdefault("usage_reasoning_failed", reasoning.text)
         elif isinstance(reasoning, int):
             result["usage_reasoning"] = result.get("usage_reasoning", 0) + reasoning
+        elif ran:
+            result["usage_reasoning_unknown"] = True
+        if result.get("usage_reasoning_unknown"):
+            result.pop("usage_reasoning", None)
     except Exception as exc:  # noqa: BLE001 -- the failure boundary: usage-only data never fails the review
         result.setdefault("usage_reasoning_failed", f"{type(exc).__name__}: {exc}")
 
@@ -2364,11 +2370,11 @@ def launch_functional(*, candidate: "functional_review.Candidate", flows: Sequen
             paid = getattr(exc, "figures", None)  # a refused run's reported cost and tokens are kept
             if paid is not None:
                 result["telemetry"] = add_figures(result.get("telemetry"), paid)
-            _add_reasoning(result, getattr(exc, "reasoning", None))
+            _add_reasoning(result, getattr(exc, "reasoning", None), ran=paid is not None)
             raise
         if made.figures is not None:
             result["telemetry"] = add_figures(result.get("telemetry"), made.figures)
-        _add_reasoning(result, made.reasoning)
+        _add_reasoning(result, made.reasoning, ran=made.figures is not None)
         if made.readings is not None:
             result["stream_readings"] = list(made.readings)
         for reading in made.first_readings or []:

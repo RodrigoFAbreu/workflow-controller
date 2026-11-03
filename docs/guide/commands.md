@@ -100,7 +100,8 @@ in order:
 - `jobs: <n> recorded` (or `jobs: none`), then the 10 newest jobs, newest
   first, one per line: id, status, command and work item, then
   `age 12 min` while the job is active, or `wall 1400 s, cost $11.66`
-  once it has ended (the cost only when the job has telemetry figures);
+  once it has ended (the cost only when the job has telemetry figures; it is
+  an API list-price equivalent, not what a subscription charges);
   a protocol-mode job also shows `[reconcile <class>]` once reconciled,
   with the invalid reasons' codes after the class (`reconcile_class` and
   `invalid_reasons` with `--json`);
@@ -136,9 +137,17 @@ It touches nothing else: no target repository and no runtime root.
 - `settings show` prints the file's path, then each setting as
   `<key> = <value> (<source>)`, where the source is `cli`, `file` or
   `default`. Flags given on the same command line count as `cli`, for
-  example `workflow-controller --timeout 3600 settings show`. With
-  `--json` it prints `path`, `exists`, `sha256`, `values` and `sources`.
-  It writes nothing.
+  example `workflow-controller --timeout 3600 settings show`. After the
+  three `review.*round_cap` rows it prints one line per review round cap a
+  run uses, for example `review.local_round_cap in force = 6 (built-in)`,
+  with the origin `built-in`, `its own setting or option` or `deprecated
+  review.round_cap` (the stored rows are unchanged: an unset cap stays
+  `null (default)`, and the deprecated row carries a note). `settings show`
+  can only show the origins a settings file and the built-in defaults give;
+  a cap given as a `run` or `step` option is not an option of `settings
+  show`. With `--json` it prints `path`, `exists`, `sha256`, `values`,
+  `sources` and `round_caps_in_force` (`{"local": {"cap": N, "origin": ...},
+  "external": {...}}`). It writes nothing.
 - `settings path` prints the path in use (with `--json`, as `{"path":
   ...}`). It writes nothing, and the file need not exist.
 - `settings clean` fills the file, then removes the keys this release
@@ -148,7 +157,8 @@ It touches nothing else: no target repository and no runtime root.
 ## `telemetry`
 
 `workflow-controller telemetry [--run RUN_ID] [--since ISO] [--by GROUPING] [<repo>]`
-sums up what the recorded workers cost: turns, tokens, cost, API time
+sums up what the recorded workers cost: turns, tokens, cost (an API
+list-price equivalent, not what a subscription charges), API time
 and wall time, as totals and per-job means. It reads the job records
 under the runtime root, the way `follow` finds it, and writes nothing.
 What each figure means is in [Telemetry](workers.md#telemetry).

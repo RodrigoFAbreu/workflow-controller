@@ -107,12 +107,24 @@ class ScanKeepsRolloutFiguresTest(unittest.TestCase):
 
     def test_a_claude_attempts_reasoning_is_summed_across_attempts(self) -> None:
         result: dict = {}
-        review._add_reasoning(result, None)
+        review._add_reasoning(result, None, ran=False)
         self.assertNotIn("usage_reasoning", result)
-        review._add_reasoning(result, 211)
-        review._add_reasoning(result, None)
-        review._add_reasoning(result, 100)
+        review._add_reasoning(result, 211, ran=True)
+        review._add_reasoning(result, None, ran=False)  # an attempt with no result adds nothing
+        review._add_reasoning(result, 100, ran=True)
         self.assertEqual(result["usage_reasoning"], 311)
+        self.assertNotIn("usage_reasoning_unknown", result)
+
+    def test_an_attempt_with_a_result_but_no_reasoning_makes_the_sum_unknown(self) -> None:
+        for order in ((3, None), (None, 3), (3, None, 5)):
+            result: dict = {}
+            for figure in order:
+                review._add_reasoning(result, figure, ran=True)
+            self.assertNotIn("usage_reasoning", result, order)
+            self.assertTrue(result["usage_reasoning_unknown"], order)
+        built = usage_record.from_claude_block(
+            ClaudeReviewRecordTest.TELEMETRY, reasoning=result.get("usage_reasoning"), model="claude-opus-5-5", wall_ms=1)
+        self.assertEqual((built.reasoning, built.quality["reasoning"]), (None, "unknown"))
         self.assertEqual(review.result_reasoning({"usage": {"output_tokens_details": {"thinking_tokens": 7}}}), 7)
         self.assertIsNone(review.result_reasoning({"usage": {}}))
         self.assertIsNone(review.result_reasoning(None))

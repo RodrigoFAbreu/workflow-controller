@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented, in review.** `workflow-controller-tester-read-denies` (C10h, issue
+**Complete.** `workflow-controller-tester-read-denies` (C10h, issue
 [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)) closes the Claude functional tester's read path to
 credentials, reads a `file://` origin and bounds the tester's summary. The plan is
 `docs/ai-workflow/CONTROLLER_TESTER_READ_DENIES_PLAN.md` (revision 4). CP1 is complete: `review._local_origin_refs` reads a
@@ -17,7 +17,9 @@ probe (`CONTROLLER_LIVE_CLAUDE_TESTS=1`, Claude Code 2.1.310, 2026-11-03) passed
 and the readable job-home entries were `.last-cleanup`, `projects`, `session-env`, `sessions` and `shell-snapshots`. The
 runtime-root credential copies are the remainder (roadmap follow-up 86).
 
-Next action: the implementation review, then the functional review and acceptance.
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.6).
+
+Next action: `/milestone-plan` for C10i ([#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)), the next incomplete item in `docs/ROADMAP.md`.
 
 Previous item, now complete:
 

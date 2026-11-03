@@ -1,0 +1,74 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-tester-read-denies",
+ "dispositions": {
+  "F-2ba8959f6aed": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-2ecedf054832": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-4b7f8cf411c0": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-6004af8924e5": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-6fcbdbbb2b10": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-7503cfcadebc": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-8fb4ebe4d75a": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-cbb39d45be2a": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-d7a471dbce3e": {
+   "disposition": "fixed",
+   "note": "Applied in a later plan revision (the plan was approved at revision 4) and carried into the implementation."
+  },
+  "F-acfc1b5d5f30": {
+   "disposition": "fixed",
+   "note": "Fixed in 6b85190 (C10h review round 1): a NUL in a file origin is an OSError, so the callers report an origin breach."
+  },
+  "F-e60f50614335": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/280"
+  },
+  "F-f0adec8e4666": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/280"
+  },
+  "F-7e432be73288": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/280"
+  },
+  "F-2b9042262e6d": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6614389113"
+  },
+  "F-66a2a25fe0f9": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6614389113"
+  },
+  "F-7d2c8f6ff75f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6614389113"
+  },
+  "F-829effbbd220": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6614389113"
+  }
+ }
+}

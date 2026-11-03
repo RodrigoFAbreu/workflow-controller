@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-sandbox-precheck",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -55928,6 +55928,219 @@
         },
         "evaluated_at": "2026-11-03T20:14:26Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-sandbox-precheck": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-sandbox-precheck",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_SANDBOX_PRECHECK_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-precheck-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-precheck-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "4a91b261bb953b6aac97d0fe03b997066ad45bae",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+        "approved_review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_SANDBOX_PRECHECK_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8ebc169d357cd82df16ec1240b8ee1917d1f639"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-sandbox-precheck-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "35f2bffad716b42af5e8c17adbe12efa22fa229b"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-sandbox-precheck-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "297a860441d2edf62e2d57668d687eae81661028"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-03T21:29:06Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+            "ledger": {
+              "local": {
+                "bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "7760ad86e45dac90640b51a6876fd804f90aa83bc784f316a23636d6d3fb75fb",
+                "ledger_entry_sha256": "92f983b431d31e443055a7dd805126528646737c30acc54114170827b329e1fc",
+                "run_ref": "session:local .ai-review/workflow-controller-sandbox-precheck/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "c55b91cbe2c3398ccf35cfad7a42cb9ba6c44224c03e8ae8b05bdee03312ac5d",
+                "ledger_entry_sha256": "c4dd23d017360f250058236649653d23dda95e741b2e388f2461e4ecc762a654",
+                "run_ref": "codex:20261103T212603Z-c2ceefb1",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-03T21:29:06Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-03T21:25:43Z",
+          "verdict_sha256": "7760ad86e45dac90640b51a6876fd804f90aa83bc784f316a23636d6d3fb75fb",
+          "run_ref": "session:local .ai-review/workflow-controller-sandbox-precheck/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-03T21:27:39Z",
+          "verdict_sha256": "c55b91cbe2c3398ccf35cfad7a42cb9ba6c44224c03e8ae8b05bdee03312ac5d",
+          "run_ref": "codex:20261103T212603Z-c2ceefb1",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-03T21:29:06Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-03T21:21:20Z",
+        "consumed": {
+          "review_content_id": "931f5eaee2e464495e64257ecebe110464f54c48b89229bceea17f31ad058661",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+          "bundle_id": "571c26d502a37b1ab8a27eaba53cc7ca17c43091f2733f865ed3aebb8b40b819",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "931f5eaee2e464495e64257ecebe110464f54c48b89229bceea17f31ad058661"
+      ],
+      "optional_findings": {
+        "F-b78f085caf19": {
+          "digest": "b78f085caf19e37fe55a0036d28bc232f19e219f6f34b4e1bd11034641628a0e",
+          "text": "**O1. The seam paragraph misses the Claude-route tests in `tests/test_functional_codex_route.py`.** It says that file \"routes to Codex\" and names only `codex_tester.selection_error`. Three of its tests pass `route=routing.NO_OVERRIDES` (`:123`, `:140`, `:220`), so they reach the real `claude_selection_error`, and with the binary `claude` they stop at the gate instead of finishing. They also need `review.claude_selection_error` stubbed. The stub cannot go in `CodexLifecycle.step` unconditionally, because `tests/test_functional_select.py` shares that step and must keep the real probe. The file is declared in CP1, the failure explains itself and CP1's Done-when catches it, so this does not hold the plan.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T21:25:43Z"
+            }
+          ]
+        },
+        "F-002fa94afb87": {
+          "digest": "002fa94afb87e6d6f656509c6fdd476a9986e3ff09361735d580ff13bc6a4909",
+          "text": "**O2. `docs/guide/commands.md:240` is left slightly less true.** It says \"Only the Codex tester launch reads the record\". After D2 every Codex route also reads it through `codex_tester.selection_error`, before admission, not only a chain. The sentence means \"not the reviewer\", so the point stands, but CP2 could reword it. That would mean adding the page to CP2's **Files:**.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T21:25:43Z"
+            }
+          ]
+        },
+        "F-217548434687": {
+          "digest": "21754843468772b40b7ac8f54673e1f809ad87fef48f2bd512a232b10d2ee94d",
+          "text": "**O1. Clarify the Claude test seam in CP1.** `tests/test_functional_codex_route.py:123`, `:140` and `:220` exercise Claude through `routing.NO_OVERRIDES`; those tests also need `review.claude_selection_error` stubbed. Keep that stub scoped so `tests/test_functional_select.py`, which shares `CodexLifecycle.step`, continues exercising the real selection helper. CP1 already declares both files and requires the suite to pass, so this detail does not hold approval.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T21:27:39Z"
+            }
+          ]
+        }
       }
     }
   }

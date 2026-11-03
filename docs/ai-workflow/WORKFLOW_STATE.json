@@ -55079,12 +55079,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-tester-read-denies-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-tester-read-denies-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "8afb0f42f71093bfc2f2d40bdcd68a4de9a3cfa6",
-      "reviewed_implementation_head": "bf6d5efd4cec85632bf2e38ba62b6c29ce1d314f",
+      "reviewed_implementation_head": "6b851903913214f2462b189338e4f363852a8d0e",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
@@ -55227,8 +55227,8 @@
           "external": 1
         }
       },
-      "state_revision": 24,
-      "last_transition": "2026-11-03T18:46:37Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-03T19:03:29Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

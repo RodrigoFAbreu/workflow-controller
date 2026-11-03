@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-cleanup-3c",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -54091,6 +54091,291 @@
         },
         "evaluated_at": "2026-11-02T23:49:58Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-cleanup-3c": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-cleanup-3c",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CLEANUP_3C_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "744fb7458e95d4a49e5a73e864f6e9687581513d",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+        "approved_review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CLEANUP_3C_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "827f8a323d46750667d22730b47e31be0b06cf4e"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cleanup-3c-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "86f1d00c0ab4d1dabded07477690a0fda434e8ae"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-cleanup-3c-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5be34b327bbfd3b2a12c19e2238c46b0d624b6d2"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-03T01:50:14Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+            "ledger": {
+              "local": {
+                "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "a3bc00c20df9dea45433d4cca0e728146f4b963d1613bbc551221aa72dc67621",
+                "ledger_entry_sha256": "263482a8c017f445f0a8c903e2036a3b9626358bbcb3a01be205653ed9b4b10e",
+                "run_ref": "session:local .ai-review/workflow-controller-cleanup-3c/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "269d8b363f8855033e215661be7aedc18a55f34aaf00ca6a23e78ca978ab8970",
+                "ledger_entry_sha256": "846295c6094870a04fc50d3fa7c2d31f40aee03eb5daa3bcfd4bc0dbb74ca238",
+                "run_ref": "codex:20261103T014641Z-77d8fd8f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-03T01:50:14Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-03T01:46:16Z",
+          "verdict_sha256": "a3bc00c20df9dea45433d4cca0e728146f4b963d1613bbc551221aa72dc67621",
+          "run_ref": "session:local .ai-review/workflow-controller-cleanup-3c/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-03T01:48:29Z",
+          "verdict_sha256": "269d8b363f8855033e215661be7aedc18a55f34aaf00ca6a23e78ca978ab8970",
+          "run_ref": "codex:20261103T014641Z-77d8fd8f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-11-03T01:50:14Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-03T01:44:31Z",
+        "consumed": {
+          "review_content_id": "5f319bc25b8db7f8f33c47264d4f965a3a04ada7f1f82a19ae42b253f033a38e",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "5263244ca9249d47e8df1372c754f21b7a56417ac445b9bc4e0102394126f482",
+          "bundle_id": "44169407ef57a2a45f4afa41bca0420bc0b94f455bf42d218d8444089cc139f0",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "08b9f444c09d0491ddd1ad861796d25c02309808bb650d51777907588a60a34e",
+        "1df197ad480db377504d2aedfbd2b16f5ad97737aa3a65732b02886b9ae66220",
+        "5f319bc25b8db7f8f33c47264d4f965a3a04ada7f1f82a19ae42b253f033a38e"
+      ],
+      "optional_findings": {
+        "F-7c81d5158043": {
+          "digest": "7c81d51580431090aec5ed4178d7b2516634fa703d2733b9d3b691fa81a41449",
+          "text": "**O1. D8's origin is not computed by `_round_caps`.** `cli._round_caps` returns only `RoundCaps(local, external)` (`review_rounds.effective_caps`), so each in-force line's origin would need a second derivation of `deprecated_given` (a CLI source, or a value away from the default 4; a file `review.round_cap: 4` counts as not given, so the origin is `built-in`). The value cannot differ from what runs use, but the origin can. Consider having one function return each cap with its origin and building `_round_caps` from it. Also add a test for a file `review.round_cap: 4`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "08b9f444c09d0491ddd1ad861796d25c02309808bb650d51777907588a60a34e",
+              "verdict": "REVISE",
+              "at": "2026-11-03T01:18:24Z"
+            }
+          ]
+        },
+        "F-17c44f94962c": {
+          "digest": "17c44f94962c511caecdc684c5ada431869646c47aef95c93b2cb4cd071bf1c7",
+          "text": "**O2. D10 names the wrong page for the stop text, and two contract notes would go stale.** `docs/guide/troubleshooting.md` does not quote the cap stop. The account is in `docs/common-problems.md` (\"A run stopped at the review round cap\": \"the count and the cap\"), which CP3 does not list. Separately, `tests/harness_contract/codex/worker_job.txt:18` and `tests/harness_contract/codex/worker_usage.txt:21` explain `cost None` by \"the price table has no price for the model\", which is no longer true after CP1.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "08b9f444c09d0491ddd1ad861796d25c02309808bb650d51777907588a60a34e",
+              "verdict": "REVISE",
+              "at": "2026-11-03T01:18:24Z"
+            }
+          ]
+        },
+        "F-3d38aa0995c7": {
+          "digest": "3d38aa0995c77715750b0624e729b0bfb4a549cce393035ff49d42b58e0d5776",
+          "text": "**O3. D9's \"round N\" is ambiguous at a split count.** At the split gates `count` is the external (or local) count, while `where` already says \"local round L and external round E\". The text \"{stage} review round N\" would then name only one of the two without saying which. Consider \"{stage} review {fired} round N has reached the {fired} round cap of C\" for the split case.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "08b9f444c09d0491ddd1ad861796d25c02309808bb650d51777907588a60a34e",
+              "verdict": "REVISE",
+              "at": "2026-11-03T01:18:24Z"
+            }
+          ]
+        },
+        "F-442f3bcb42b6": {
+          "digest": "442f3bcb42b6894e7f89eb1d38f68c208b11d4921dfe14626d3bad8dd30c8808",
+          "text": "**O1. CP2 edits `docs/guide/how-it-works.md` but does not declare it.** D5 says `docs/guide/workers.md` and `docs/guide/how-it-works.md` name the `wall_ms` source per kind, and CP2 delivers D5, but CP2's **Files:** lists only `docs/guide/workers.md`. The path is classified (CP1 declares it), so no gate refuses it. Consider adding it to CP2's **Files:** so that each checkpoint lists every file it writes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "1df197ad480db377504d2aedfbd2b16f5ad97737aa3a65732b02886b9ae66220",
+              "verdict": "REVISE",
+              "at": "2026-11-03T01:38:33Z"
+            }
+          ]
+        },
+        "F-d1b79f5dcf4c": {
+          "digest": "d1b79f5dcf4c4a40bdcac26ee5491cfec4222a814d7962aaea99d79a15f5b2d6",
+          "text": "**O2. An existing test pins the shipped table's version at 1.** `tests/test_usage_record.py:178-180` (`test_the_shipped_table_is_versioned`) asserts `(table[\"version\"], table[\"currency\"]) == (1, \"USD\")`. Checked on the scratch copy: it is the only failure outside the goldens when the table is filled. CP1 owns the file, so this is a reminder: consider naming the change to 2 in CP1's test list.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "1df197ad480db377504d2aedfbd2b16f5ad97737aa3a65732b02886b9ae66220",
+              "verdict": "REVISE",
+              "at": "2026-11-03T01:38:33Z"
+            }
+          ]
+        },
+        "F-655ec6276b9b": {
+          "digest": "655ec6276b9b5ec119aafe98cb766ee5d5ccb3ec403b81eaa9e6d2990084aff3",
+          "text": "**O3. Typo in D10.** \"`docs/guide/runtime.md` (the settings table and the round caps) and and `docs/common-problems.md`\" has \"and\" twice.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "1df197ad480db377504d2aedfbd2b16f5ad97737aa3a65732b02886b9ae66220",
+              "verdict": "REVISE",
+              "at": "2026-11-03T01:38:33Z"
+            }
+          ]
+        },
+        "F-d3e82c353d2e": {
+          "digest": "d3e82c353d2ed95d978b9dc580a58d58b5eb670c0fa429a9adc875707f18e2af",
+          "text": "**O1. D8 says the stored rows are unchanged, but the deprecated row changes, and an existing assertion pins it.** D8 says \"The stored rows are unchanged\" and then gives the `review.round_cap` row the suffix `(deprecated: use the local and external caps)`. `tests/test_settings.py:842` (`test_settings_show_prints_both_and_the_deprecation`) asserts `\"review.round_cap = 4 (default)\\n\"`, which fails if the suffix follows the source on the same line. CP3 owns the file, so no gate blocks this. Consider saying where the note goes (on the same line after the source, or on its own line) and naming this assertion in CP3's list of existing assertions to update, as CP3 already does for the stop text.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5f319bc25b8db7f8f33c47264d4f965a3a04ada7f1f82a19ae42b253f033a38e",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T01:41:22Z"
+            }
+          ]
+        },
+        "F-a0ce384401e5": {
+          "digest": "a0ce384401e568dd4bc8a1dc8c57aefdcba94a5d95edd17d21ae5aea121c6736",
+          "text": "**O2. The single cache-write price under-costs a one-hour cache write.** D1 enters Claude's five-minute write rate. A Claude Code session can write its prompt cache with a one-hour TTL, which the provider prices higher. This matters only for a Claude record with no reported `total_cost_usd`, because a reported cost is kept as it is. A second tier is out of scope. Consider having the `source` text, or the development guide's \"Maintaining the price table\", say that a derived Claude cost is a lower bound when one-hour cache writes occur.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5f319bc25b8db7f8f33c47264d4f965a3a04ada7f1f82a19ae42b253f033a38e",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T01:41:22Z"
+            }
+          ]
+        }
       }
     }
   }

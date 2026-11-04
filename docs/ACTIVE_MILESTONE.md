@@ -2,6 +2,23 @@
 
 ## Status
 
+**Complete.** `workflow-controller-sandbox-precheck` (C10i, issue
+[#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)) checks the functional tester's availability before
+usage is reserved. The plan is `docs/ai-workflow/CONTROLLER_SANDBOX_PRECHECK_PLAN.md` (revision 2). CP1 is complete:
+`review.claude_selection_error` returns the refusal a launch would raise for the host causes that need no job and no sandbox
+(the refused role, the unresolved binary and the static probe, each with a `cause`), `launch_functional` shares its helper so the
+selection and the launch cannot drift apart, `_tester_probe` uses it for a Claude entry and `_run_functional` runs the probe
+for a one-entry chain before the usage gate, so a host that cannot run the tester ends at the one `GATE_BLOCKED` record with no
+reservation taken, and a Claude entry that fails the probe is skipped in a chain. CP2 is complete: `docs/common-problems.md`
+and `docs/guide/automation.md` say the host causes are found before any usage is reserved and name the causes that remain
+launch-time, and the roadmap marks C10i done (1.27.7).
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.7).
+
+Next action: `/milestone-plan` for C10j ([#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)), the next incomplete item in `docs/ROADMAP.md`.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-tester-read-denies` (C10h, issue
 [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)) closes the Claude functional tester's read path to
 credentials, reads a `file://` origin and bounds the tester's summary. The plan is

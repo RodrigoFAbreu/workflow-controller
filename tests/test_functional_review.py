@@ -889,6 +889,175 @@ class CommittedChecklistsTest(unittest.TestCase):
         self._from_git("eeeb4fa", "table_rows_eeeb4fa.md")
 
 
+class BoldFlowHeaderTest(unittest.TestCase):
+    """FL3 (#288): ``**Flow K: Title.**`` starts a bold flow, and a bold ``Flow`` line no shape reads is refused
+    unless a flow, a table row or a non-flow region holds it."""
+
+    def labels(self, body: str) -> list[str]:
+        return [flow.label for flow in fr.read_flows(checklist(body))]
+
+    def test_the_issue_table_nine_bold_flows_alone(self) -> None:
+        body = "\n\n".join(f"**Flow {k}: title.**\nrun it" for k in range(1, 10))
+        self.assertEqual(self.labels(body), [str(k) for k in range(1, 10)])
+
+    def test_nine_bold_flows_next_to_a_heading_flow_name_the_heading(self) -> None:
+        body = "\n\n".join(f"**Flow {k}: title.**\nrun it" for k in range(1, 10))
+        evidence = refusal(checklist(body + "\n\n### Flow 10 (user, outside the sandbox)\nrun it"))
+        self.assertEqual((evidence["shape"], evidence["recognised"]), ("bold", 9))
+        self.assertEqual(evidence["dropped"], [{"shape": "heading", "label": "10"}])
+
+    def test_every_spelling_starts_a_flow(self) -> None:
+        for header in ("**Flow 1: title.**", "**Flow 1. title.**", "**Flow 1) title**", "**Flow 1 - title.**",
+                       "**Flow 1 \u2013 title.**", "**Flow 1 \u2014 title.**", "**Flow 1**", "**FLOW 1: x**",
+                       "**flow 1: x**", "**Optional, Flow 1: x**", "**Then, Flow 1. x**", "**Flow, 1. y**"):
+            with self.subTest(header=header):
+                self.assertEqual(self.labels(f"{header}\nrun it"), ["1"])
+
+    def test_headings_still_read(self) -> None:
+        self.assertEqual(self.labels("### Flow 1: one\nx\n\n### Flow 2: two\ny"), ["1", "2"])
+
+    def test_a_qualified_flow_header_ends_the_flow_above(self) -> None:
+        flows = fr.read_flows(checklist("**Flow 1: a**\nx\n\n**Optional, Flow 2: b**\ny"))
+        self.assertEqual([f.label for f in flows], ["1", "2"])
+        self.assertNotIn("Optional", flows[0].text)
+
+    def test_a_dash_or_closing_bold_needs_the_flow_word(self) -> None:
+        # ``**A - x**`` reads as before: nothing, so the section is refused with no flow
+        refusal(checklist("**A - x**\ny"))
+        self.assertEqual(self.labels("**A. one**\n\n**B - x**\ntext"), ["A"])
+
+    def test_text_after_the_closing_bold_is_not_a_header(self) -> None:
+        evidence = refusal(checklist("**Flow 1**: y\n\n### Flow 2\nx"))
+        self.assertEqual(evidence["unread"], [{"line": 5, "text": "**Flow 1**: y"}])
+
+    def test_an_unread_bold_flow_line_is_refused_with_its_file_line(self) -> None:
+        for line in ("**Flow: title**", "**Flow 1 title**", "**Flow one.**"):
+            with self.subTest(line=line):
+                evidence = refusal(checklist(f"**A. one**\nx\n\n### B. two\n\n{line}\nz"))
+                self.assertEqual(evidence["unread"], [{"line": 10, "text": line}])
+
+    def test_an_unread_bold_flow_line_inside_a_flow_a_fence_or_a_region_is_held(self) -> None:
+        self.assertEqual(self.labels("**A. one**\nsee **Flow chart**\n**Flow chart** is below\n"), ["A"])
+        self.assertEqual(self.labels("**A. one**\nx\n\n```\n**Flow: y**\n```\n"), ["A"])
+        self.assertEqual(self.labels("### Setup\n**Flow: x**\n\n**A. one**\nx"), ["A"])
+
+    def test_an_overlong_label_is_refused(self) -> None:
+        for body in ("**Flow 123: x**\n\n### Flow 1\nx", "**Flow 1: a**\nx\n\n**Flow 123: x**\ny"):
+            with self.subTest(body=body):
+                refusal(checklist(body))
+
+    def test_an_f_label_table_and_an_unread_line(self) -> None:
+        table = TABLE_HEAD + "| F1 | a | b |\n| F2 | a | b |\n"
+        for line in ("**Flow: y**", "**Flow 123: y**"):
+            with self.subTest(line=line, where="below"):
+                self.assertEqual(refusal(checklist(table + "\n" + line))["unread"][0]["text"], line)
+            with self.subTest(line=line, where="above"):
+                self.assertEqual(self.labels(line + "\n\n" + table), ["F1", "F2"])
+
+    def test_an_old_form_table_and_an_unread_line(self) -> None:
+        table = TABLE_HEAD + "| A | a | b |\n"
+        self.assertEqual(refusal(checklist(table + "\n**Flow: y**"))["unread"][0]["text"], "**Flow: y**")
+        self.assertEqual(self.labels("**Flow: cases**\n\n" + table), ["A"])
+
+    def test_the_line_directly_above_a_table_holds_its_rows_and_no_other(self) -> None:
+        table = TABLE_HEAD + "| A | a | b |\n"
+        for first, second in (("**Flow 1 one**", "**Flow 2 two**"), ("**Flow: first**", "**Flow: second**")):
+            with self.subTest(first=first):
+                evidence = refusal(checklist(f"{first}\nprose\n\n{second}\nprose\n\n{table}"))
+                self.assertEqual(evidence["unread"][0]["text"], first)
+
+    def test_an_unread_line_alone_names_the_line_in_the_no_flow_refusal(self) -> None:
+        evidence = refusal(checklist("**Flow: x**"))
+        self.assertEqual(evidence["unread"], [{"line": 5, "text": "**Flow: x**"}])
+        self.assertIn("none of the four shapes finds a flow", evidence["reason"])
+        self.assertIn("line 5", evidence["reason"])
+        self.assertNotIn("decided 0", evidence["reason"])
+
+    def test_a_region_a_bold_line_opens_ends_at_the_next_bold_flow_line(self) -> None:
+        for body in ("**Setup.**\ninstall\n**Flow: the login**\nsteps\n\n**Flow 2: logout**\nx",
+                     "**Setup.** do x\n**Flow 1 first**\n**A. second**\nx"):
+            with self.subTest(body=body):
+                refusal(checklist(body))
+        self.assertEqual(self.labels("### Setup\n**Flow: x**\n\n**A. one**\nx"), ["A"])
+
+    def test_the_names_are_capped_at_eight(self) -> None:
+        body = "**A. one**\nx\n\n### B. two\n\n" + "\n\n".join(f"**Flow: n{k}**\nz" for k in range(10))
+        evidence = refusal(checklist(body))
+        self.assertEqual(len(evidence["unread"]), 10)
+        self.assertIn("and 2 more", evidence["reason"])
+
+    def test_the_line_numbers_are_the_files_in_a_linked_checklist(self) -> None:
+        doc = "# Active\n\n## Functional review checklist\n\n[list](list.md)\n"
+        linked = "intro\n\n**A. one**\nx\n\n### B. two\n\n**Flow: y**\nz\n"
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(doc, read_file=lambda path: linked)
+        self.assertEqual(caught.exception.evidence["unread"], [{"line": 8, "text": "**Flow: y**"}])
+
+    def test_the_shapes_and_the_stop_name_the_spelling(self) -> None:
+        self.assertTrue(any("**Flow K: Title.**" in shape for shape in fr.FLOW_SHAPES))
+        text = fr.gate_text(fr.GATE_CHECKLIST_UNRECOGNISED, detail="x")
+        self.assertIn("`**Flow K: ...`", text)
+        self.assertIn("bold `**Flow` line no shape reads", text)
+
+    #: The label list each immutable checked-in checklist read as before FL3 (D4), frozen when the test was written.
+    FROZEN = {
+        "docs/milestones/completed/workflow-controller-adapters-1.md": "1,2,3,4,5,6,7,8,9",
+        "docs/milestones/completed/workflow-controller-adaptive-test-sharding.md": "A,B,C,D,E,F,G,H,I,J,K,M,N,L1,L2,L3,L4",
+        "docs/milestones/completed/workflow-controller-auto-merge-release-wait.md": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q",
+        "docs/milestones/completed/workflow-controller-automated-functional-review.md": "A,B,C,D,E,F,G,H,I",
+        "docs/milestones/completed/workflow-controller-automated-lifecycle-scenarios.md": "1,2,3,4,5,6,7,8,9,10,11",
+        "docs/milestones/completed/workflow-controller-automatic-lifecycle-orchestration.md": "1,2,3,4,1,2,3,4,5,6,7,8,9,10",
+        "docs/milestones/completed/workflow-controller-child-process-reaping.md": "A,B,C,D,E,F,G,H",
+        "docs/milestones/completed/workflow-controller-ci-reliability.md": "A,B,C,D,E,F,G,H,I,J",
+        "docs/milestones/completed/workflow-controller-cleanup-1.md": "1,2,3,4,5,6,7,8,9,10",
+        "docs/milestones/completed/workflow-controller-cleanup-2.md": "1,2,3,4,5,6,7,8,9,10",
+        "docs/milestones/completed/workflow-controller-codex-reviewer.md": "1,2,3,4,5,6,7,8,9,10",
+        "docs/milestones/completed/workflow-controller-documentation-reorganisation.md": "A,B,C,D,E,F,G,H,I",
+        "docs/milestones/completed/workflow-controller-gate-policy.md": "1,2,3,4,5,6,7,8,9",
+        "docs/milestones/completed/workflow-controller-gen1-correctness-hardening.md": "1,2,1,2,3,4,5,6",
+        "docs/milestones/completed/workflow-controller-generation-1.md": "1,2,3,1,2,3,4,5,6",
+        "docs/milestones/completed/workflow-controller-installed-release-test-agnostic.md": "1,2,3,4,5,6",
+        "docs/milestones/completed/workflow-controller-orchestration-protocol-v1.md": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q",
+        "docs/milestones/completed/workflow-controller-pr-defect-loop.md": "1,2,3,4,5,6,7,8,9,10,11,12",
+        "docs/milestones/completed/workflow-controller-protocol-2-2-compatibility.md": "1,2,1,2,3,4,5,6",
+        "docs/milestones/completed/workflow-controller-release-runtime-observability.md": "1,2,3,1,2,3,4,5,6,7,8,9",
+        "docs/milestones/completed/workflow-controller-review-convergence.md": "1,2,3,4,5,6,7,8,9,10,11",
+        "docs/milestones/completed/workflow-controller-review-modes.md": "1,2,3,4,5,6,7,8,9,10,11",
+        "docs/milestones/completed/workflow-controller-round-caps.md": "1,2,3,4,5,6,7,8,9,10",
+        "docs/milestones/completed/workflow-controller-settings-and-telemetry.md": "A,B,B1,B2,B3,B4,B5,B6,C,D,E,F,G,H,I,J,K,K1,K2,K3,K4,K5,L,L1,L2,M,N,O,P",
+        "docs/milestones/completed/workflow-controller-signalhub-notifications.md": "1,2,3,4,5,6,7,8,9",
+        "docs/milestones/completed/workflow-controller-squash-merge-tag-versioning.md": "A,B,C,D,E,F,G,H,I,J,K",
+        "docs/milestones/completed/workflow-controller-test-leftover-lifetime.md": "F1,F2,F3,F4,F5,F6,F7",
+        "docs/milestones/completed/workflow-controller-trunk-branch-pr-release-orchestration.md": "1,2,3,1,2,3,4,5,6,7,8,9,10",
+        "docs/milestones/completed/workflow-controller-usage-budget.md": "1,2,3,4,5,6,7,8,9",
+        "docs/milestones/completed/workflow-controller-usage-limit-mid-job.md": "1,2,3,4,5,6,7,7b,8,9",
+        "docs/milestones/completed/workflow-controller-worker-execution-hardening.md": "1,2,3,4,1,2,3,4,5,6,7,8",
+        "docs/milestones/completed/workflow-controller-worker-lifecycle-ownership.md": "1,2,3,1,2,3,4,1,2,3,4,5,6,1,2,3,4,5,1,2,3,4,1,2,3,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,5,1,2,3,4,1,2,3,4,5,6",
+        "docs/milestones/completed/workflow-controller-workflow-2-6-integration.md": "A,B,C,D,E,F,G,H,I,J",
+        "docs/milestones/completed/workflow-controller-workflow-2-9-0-move.md": "1,2,3,4,5,6,7",
+        "tests/fixtures/functional_checklists/bold_labelled_454ffe7.md": "A,B,C,D,E,F,G,H,I,J,K",
+        "tests/fixtures/functional_checklists/table_f_labels_cache_miss_message.md": "F1,F2,F3,F4,F5",
+        "tests/fixtures/functional_checklists/table_f_labels_http_read_test_strength.md": "F1,F2,F3,F4,F5",
+        "tests/fixtures/functional_checklists/table_rows_eeeb4fa.md": "A,B,C,D,E,F,G,H,I,J",
+    }
+
+    def test_history_reads_as_before(self) -> None:
+        listed = 0
+        for name, expected in self.FROZEN.items():
+            path = REPO_ROOT / name
+            if not path.is_file():  # a retention item (CL1) may remove one
+                continue
+            listed += 1
+            with self.subTest(file=name):
+                text = path.read_text(encoding="utf-8")
+                try:
+                    got = ",".join(flow.label for flow in fr.read_flows(text))
+                except fr.ChecklistUnrecognised:
+                    got = "REFUSED"
+                self.assertEqual(got, expected)
+        self.assertGreater(listed, 0)
+
+
 def write(path: Path, data: str | bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(data, str):

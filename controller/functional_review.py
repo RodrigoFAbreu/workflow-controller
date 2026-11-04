@@ -204,7 +204,7 @@ EVIDENCE_NAMES = 8
 NEVER_FLOWS = ("setup", "flows", "test data", "known limitations")
 FLOW_SHAPES = (
     "table rows whose first cell is a flow label (`| A | do | expect |`, `| F1 | ... |`)",
-    "bold labelled paragraphs (`**A. The title.**`, `**Optional, K. Title.**`)",
+    "bold labelled paragraphs (`**A. The title.**`, `**Optional, K. Title.**`, `**Flow K: Title.**`)",
     "headings below the section's own that start with a label or `Flow`",
     "a top-level numbered list",
 )
@@ -233,8 +233,13 @@ QUALIFIERS = ("Optional", "Required", "Extra", "Additional", "Conditional")
 #: header that starts a flow and the line that ends the flow before it.
 _QUALIFIER_PREFIX = (rf"(?:[A-Za-z]+(?:[ \t]+[A-Za-z]+)?[ \t]*,[ \t]*"
                      rf"|(?ai:{'|'.join(QUALIFIERS)})[ \t]+)")
+#: The word ``Flow`` before a bold flow label (``**Flow K: Title.**``), in any case, followed by blanks (D1). It is one
+#: optional group shared by every bold spelling below; the markers only it allows (a dash set off by spaces, or a
+#: closing ``**`` that ends the line) are tried through ``(?(flow)...)``, so ``**A - x**`` reads as it always did.
+_FLOW_WORD = r"(?P<flow>(?ai:Flow)[ \t]+)?"
+_BOLD_MARKER = r"(?:[.):](?!\d)|(?(flow)(?:[ \t]+[-\u2013\u2014][ \t]+|\*\*[ \t]*$)|(?!)))"
 _BOLD_RE = re.compile(
-    rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
+    rf"^\*\*(?:{_QUALIFIER_PREFIX})?{_FLOW_WORD}(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN})){_BOLD_MARKER}")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
 #: checklist's own non-flow sections or is a flow header; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
@@ -244,8 +249,11 @@ _SECTION_END_RE = re.compile(
     + r")[ \t]*(?:[:.]|\*\*)"
     # or a flow header, qualified or not (``**Optional, K. Title.**``), spelled as ``_BOLD_RE`` spells it: a line that
     # ended a flow without starting one would be read by no flow
-    rf"|^\*\*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)")
-_BOLD_LABELLED_RE = re.compile(rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?P<label>{_LABEL})[.):](?!\d)")
+    rf"|^\*\*(?:{_QUALIFIER_PREFIX})?{_FLOW_WORD}{_LABEL}{_BOLD_MARKER}")
+_BOLD_LABELLED_RE = re.compile(
+    rf"^\*\*(?:{_QUALIFIER_PREFIX})?{_FLOW_WORD}(?P<label>{_LABEL}){_BOLD_MARKER}")
+#: A line that begins ``**Flow`` (any case, a word boundary after it): a flow header or a flow-looking line (D2).
+_BOLD_FLOW_RE = re.compile(r"^\*\*[ \t]*Flow\b", re.IGNORECASE)
 _HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")
 #: ``Flow <label>``: a complete label, alone or closed by a marker, else the text is read as before.
@@ -402,6 +410,37 @@ def _paragraph_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
     return found
 
 
+#: The shape name of a bold ``Flow`` line no shape reads; it is accounted for and never decides (D2).
+UNREAD_FLOW_SHAPE = "bold Flow line"
+UNREAD_FLOW_NAME_CHARS = 40
+
+
+def _flow_word_found(lines: Sequence[str], mask: Sequence[bool]) -> _Found:
+    """The bold ``Flow`` lines no shape reads (FL3, D2): outside a fence, a line that begins ``**Flow`` and that the
+    bold shape does not read as a flow header. Each is an item whose label is the start of the line and whose span
+    is a bold flow's (to the next heading, labelled bold line or other such line, a blank line not ending it). The
+    result never decides: it is passed to ``_unaccounted`` only."""
+    found = _Found()
+    for index, line in enumerate(lines):
+        if mask[index] or not _BOLD_FLOW_RE.match(line):
+            continue
+        match = _BOLD_RE.match(line)
+        if match and match.group("label"):
+            continue
+        end = index + 1
+        while end < len(lines):
+            later = None if mask[end] else _BOLD_RE.match(lines[end])
+            if not mask[end] and ((later and later.group("label")) or _heading(lines[end], False)
+                                  or _BOLD_FLOW_RE.match(lines[end])
+                                  or (lines[end].startswith("**") and not lines[end - 1].strip()
+                                      and _SECTION_END_RE.match(lines[end]))):
+                break
+            end += 1
+        found.items.append((line.strip()[:UNREAD_FLOW_NAME_CHARS], "\n".join(lines[index:end]).rstrip()))
+        found.spans.append((index, end))
+    return found
+
+
 def _heading_found(lines: Sequence[str], mask: Sequence[bool], section_level: int) -> _Found:
     found = _Found()
     for index, line in enumerate(lines):
@@ -490,7 +529,8 @@ _FLOWS_BOLD_RE = re.compile(r"^\*\*[ \t]*flows\b", re.IGNORECASE)
 def _nonflow_regions(lines: Sequence[str], mask: Sequence[bool], section_level: int) -> list[tuple[int, int]]:
     """The line spans the checklist marks as not holding flows (D2): a heading below the section's own that starts
     with one of the region words, up to the next heading of the same or a higher level, and a bold line that opens
-    one, up to the next heading, labelled bold paragraph, section-opening bold line or ``Flows`` bold line."""
+    one, up to the next heading, labelled bold paragraph, section-opening bold line, ``Flows`` bold line or bold
+    ``Flow`` line, read or not (FL3)."""
     regions: list[tuple[int, int]] = []
     for index, line in enumerate(lines):
         heading = _heading(line, mask[index])
@@ -504,7 +544,8 @@ def _nonflow_regions(lines: Sequence[str], mask: Sequence[bool], section_level: 
             end = next((later for later in range(index + 1, len(lines))
                         if not mask[later] and (_heading(lines[later], False) or _BOLD_LABELLED_RE.match(lines[later])
                                                 or _SECTION_END_RE.match(lines[later])
-                                                or _FLOWS_BOLD_RE.match(lines[later]))), len(lines))
+                                                or _FLOWS_BOLD_RE.match(lines[later])
+                                                or _BOLD_FLOW_RE.match(lines[later]))), len(lines))
             regions.append((index, end))
     return regions
 
@@ -539,6 +580,39 @@ def _dropped(deciding: str, read: int, dropped: Sequence[tuple[int, str, str]]) 
         f"section one shape",
         shape=deciding, recognised=read, total=read + len(named), unrecognised=[label for _, _, label in dropped][:20],
         dropped=[{"shape": shape, "label": label} for _, shape, label in dropped][:20])
+
+
+def _unread_flow_text(items: Sequence[tuple[int, str]]) -> str:
+    """The lines a refusal names, by file line: the first eight."""
+    shown = ", ".join(f"line {number} `{name}`" for number, name in items[:EVIDENCE_NAMES])
+    more = f", and {len(items) - EVIDENCE_NAMES} more" if len(items) > EVIDENCE_NAMES else ""
+    return shown + more
+
+
+UNREAD_FLOW_FIX = ("Write each as `**Flow K: Title.**` (or a heading `### Flow K: Title`), or put the line inside "
+                   "the flow it belongs to")
+
+
+def _unread_flow_refusal(deciding: str, read: int, dropped: Sequence[tuple[int, str, str]],
+                         first_line: int) -> ChecklistUnrecognised:
+    """The refusal of a bold ``Flow`` line no shape reads and no flow holds (FL3, D2): it names the first eight by
+    file line, so the tester never silently skips a flow the author wrote."""
+    items = [(start + first_line, label) for start, _, label in dropped]
+    return _unrecognised(
+        f"{len(items)} line(s) begin `**Flow` and no shape reads them as a flow header; none starts inside a flow or "
+        f"holds a row of a table that decided, so the tester would never run them: {_unread_flow_text(items)}. "
+        f"{UNREAD_FLOW_FIX}",
+        shape=deciding, recognised=read, total=read + len(items),
+        unread=[{"line": number, "text": name} for number, name in items][:20])
+
+
+def _refuse_dropped(deciding: str, read: int, dropped: Sequence[tuple[int, str, str]],
+                    first_line: int) -> ChecklistUnrecognised:
+    """The refusal of what ``_unaccounted`` returned: the unread bold ``Flow`` lines first, else FL2's."""
+    unread = [item for item in dropped if item[1] == UNREAD_FLOW_SHAPE]
+    if unread:
+        return _unread_flow_refusal(deciding, read, unread, first_line)
+    return _dropped(deciding, read, dropped)
 
 
 #: A ``**Flows...**`` bold line with no text after its closing ``**`` (the usual lone ``**Flows:**`` introducer) (D2).
@@ -592,14 +666,16 @@ def _flows_of_lines(lines: Sequence[str], section_level: int, first_line: int = 
         ("bold", _paragraph_found(lines, mask)), ("heading", _heading_found(lines, mask, section_level)),
         ("numbered", _numbered_found(lines, mask)),
     )
+    # accounting only: a bold ``Flow`` line no shape reads never decides (FL3)
+    accounted = found_by + ((UNREAD_FLOW_SHAPE, _flow_word_found(lines, mask)),)
     regions = _nonflow_regions(lines, mask, section_level)
     if any(_OLD_LABEL_RE.match(row.label) for row in recognised):
         flows = _table_decides(rows)
         proven = {row.table for row in rows if row.recognised}
         read = [row.line for row in recognised if row.table in proven]
-        dropped = _unaccounted("table", [(line, line + 1) for line in read], read, found_by, regions)
+        dropped = _unaccounted("table", [(line, line + 1) for line in read], read, accounted, regions)
         if dropped:
-            raise _dropped("table", len(flows), dropped)
+            raise _refuse_dropped("table", len(flows), dropped, first_line)
         return flows
     for shape, found in found_by:
         if not found.items:
@@ -609,15 +685,32 @@ def _flows_of_lines(lines: Sequence[str], section_level: int, first_line: int = 
         bad = sorted(found.unrecognised + loose)
         if bad:
             raise _partly_recognised(shape, len(found.items), bad)
-        dropped = _unaccounted(shape, found.spans, [], found_by, regions)
+        dropped = _unaccounted(shape, found.spans, [], accounted, regions)
         if dropped:
-            raise _dropped(shape, len(found.items), dropped)
+            raise _refuse_dropped(shape, len(found.items), dropped, first_line)
         if shape == "bold":
             interior = _interior(found, lines, mask)
             if interior:
                 raise _interior_refusal(found, lines, interior, first_line)
         return found.items
-    return _table_decides(rows)
+    flows = _table_decides(rows)
+    if flows:
+        proven = {row.table for row in rows if row.recognised}
+        read = [row.line for row in recognised if row.table in proven]
+        dropped = _unaccounted("table", [(line, line + 1) for line in read], read, accounted, regions)
+        if dropped:
+            raise _refuse_dropped("table", len(flows), dropped, first_line)
+    return flows
+
+
+def _unread_flow_lines(lines: Sequence[str], section_level: int, first_line: int) -> list[tuple[int, str]]:
+    """The bold ``Flow`` lines no shape reads and no non-flow region holds, as (file line, text), for the refusal
+    that finds no flow at all (FL3)."""
+    mask = _fence_mask(lines)
+    regions = _nonflow_regions(lines, mask, section_level)
+    found = _flow_word_found(lines, mask)
+    return [(start + first_line, label) for (label, _), (start, _) in zip(found.items, found.spans)
+            if not any(first <= start < last for first, last in regions)]
 
 
 def _table_first_cells(lines: Sequence[str]) -> list[str]:
@@ -724,12 +817,16 @@ def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = Non
     flows = _numbered(_flows_of_lines(lines, level, first_line))
     if not flows:
         cells = _table_first_cells(lines)
+        unread = _unread_flow_lines(lines, level, first_line)
+        named = (f"; {len(unread)} line(s) begin `**Flow` and no shape reads them: {_unread_flow_text(unread)}. "
+                 f"{UNREAD_FLOW_FIX}" if unread else "")
+        evidence = {"unread": [{"line": number, "text": name} for number, name in unread][:20]} if unread else {}
         if cells:
             shown = ", ".join(f"`{cell}`" for cell in cells[:EVIDENCE_NAMES])
             raise _unrecognised(
                 f"none of the four shapes finds a flow; no table row has a flow label as its first cell "
-                f"(first cells: {shown}). {LABEL_RULE}", first_cells=cells[:EVIDENCE_NAMES])
-        raise _unrecognised("none of the four shapes finds a flow")
+                f"(first cells: {shown}). {LABEL_RULE}{named}", first_cells=cells[:EVIDENCE_NAMES], **evidence)
+        raise _unrecognised(f"none of the four shapes finds a flow{named}", **evidence)
     return flows
 
 
@@ -2254,9 +2351,10 @@ def gate_text(code: str, **facts: Any) -> str:
                 else "the functional review checklist has no flow the Controller can recognise")
         return (f"{lead} ({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
                 f"'{SECTION_TITLE}' of docs/ACTIVE_MILESTONE.md must carry its flows as table rows whose first cell is a "
-                "flow label, as bold labelled paragraphs (`**A. ...`), as headings that start with a label or `Flow`, "
+                "flow label, as bold labelled paragraphs (`**A. ...`, `**Flow K: ...`), as headings that start with a label or `Flow`, "
                 f"or as a numbered list, and every item of the shape it uses must be a flow, and a flow that another shape "
-                "recognised must lie inside a flow of the shape used (or, for a table, hold its rows); or set "
+                "recognised, or a bold `**Flow` line no shape reads, must lie inside a flow of the shape used (or, for a "
+                "table, hold its rows); or set "
                 f"`{SETTING_AUTOMATED}` false to keep the stop for a person")
     if code == GATE_TESTER_UNAVAILABLE:
         return (f"the functional tester cannot run here ({detail}): nothing was started and nothing was recorded. "

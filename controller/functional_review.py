@@ -204,7 +204,7 @@ EVIDENCE_NAMES = 8
 NEVER_FLOWS = ("setup", "flows", "test data", "known limitations")
 FLOW_SHAPES = (
     "table rows whose first cell is a flow label (`| A | do | expect |`, `| F1 | ... |`)",
-    "bold labelled paragraphs (`**A. The title.**`)",
+    "bold labelled paragraphs (`**A. The title.**`, `**Optional, K. Title.**`)",
     "headings below the section's own that start with a label or `Flow`",
     "a top-level numbered list",
 )
@@ -226,17 +226,26 @@ _NUMBERED_LABEL = rf"\d{{1,3}}(?:\.\d{{1,2}})*[A-Za-z]?{_QUALIFIER}"
 #: ``)`` or ``:``. A label is tried first and has no length bound of its own (D2), so the bound only
 #: limits the candidates of D1.
 _TOKEN = r"[A-Za-z0-9.\-]{1,24}"
-_BOLD_RE = re.compile(rf"^\*\*(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
+#: The qualifiers a flow header may carry without a comma (``**Optional K. Title.**``), matched in any case (D1).
+QUALIFIERS = ("Optional", "Required", "Extra", "Additional", "Conditional")
+#: A qualifier before a flow label (D1): one or two words of letters and a comma (``Optional, ``, ``Then, ``), or one
+#: word of ``QUALIFIERS`` with no comma. The one definition of what a qualified flow header is, shared by the
+#: header that starts a flow and the line that ends the flow before it.
+_QUALIFIER_PREFIX = (rf"(?:[A-Za-z]+(?:[ \t]+[A-Za-z]+)?[ \t]*,[ \t]*"
+                     rf"|(?ai:{'|'.join(QUALIFIERS)})[ \t]+)")
+_BOLD_RE = re.compile(
+    rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
-#: checklist's own non-flow sections; any other label (``Expected``, ``Verify``,
+#: checklist's own non-flow sections or is a flow header; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
 _SECTION_END_RE = re.compile(
-    r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
+    r"^\*\*[ \t]*(?ai:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
     # the section word is the whole bold label (``**Setup**``, ``**Out of scope.**``), not a sentence prefix
     + r")[ \t]*(?:[:.]|\*\*)"
-    # or a flow header: one qualifier word, a comma, then the label (``**Optional, K. Title.**``)
-    rf"|^\*\*[ \t]*[A-Za-z]+,[ \t]*{_LABEL}[.)][ \t]", re.IGNORECASE)
-_BOLD_LABELLED_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):](?!\d)")
+    # or a flow header, qualified or not (``**Optional, K. Title.**``), spelled as ``_BOLD_RE`` spells it: a line that
+    # ended a flow without starting one would be read by no flow
+    rf"|^\*\*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)")
+_BOLD_LABELLED_RE = re.compile(rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?P<label>{_LABEL})[.):](?!\d)")
 _HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")
 #: ``Flow <label>``: a complete label, alone or closed by a marker, else the text is read as before.
@@ -260,10 +269,12 @@ class Flow:
 @dataclasses.dataclass(frozen=True)
 class Section:
     """The checklist section: its heading ``level`` (0 for a linked file,
-    whose every heading is below it) and its body lines."""
+    whose every heading is below it), its body lines and the line of the file
+    the first of them is on (``first_line``, 1-based)."""
 
     level: int
     lines: tuple[str, ...]
+    first_line: int = 1
 
 
 def _fence_mask(lines: Sequence[str]) -> list[bool]:
@@ -310,7 +321,7 @@ def checklist_section(text: str) -> Section | None:
         if found and found[0] <= level:
             end = index
             break
-    return Section(level=level, lines=tuple(lines[start + 1:end]))
+    return Section(level=level, lines=tuple(lines[start + 1:end]), first_line=start + 2)
 
 
 @dataclasses.dataclass
@@ -530,7 +541,43 @@ def _dropped(deciding: str, read: int, dropped: Sequence[tuple[int, str, str]]) 
         dropped=[{"shape": shape, "label": label} for _, shape, label in dropped][:20])
 
 
-def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str, str]]:
+#: A ``**Flows...**`` bold line with no text after its closing ``**`` (the usual lone ``**Flows:**`` introducer) (D2).
+_FLOWS_INTRODUCER_RE = re.compile(r"^\*\*[ \t]*flows\b[^*]*\*\*[ \t]*[:.]?[ \t]*$", re.IGNORECASE)
+INTERIOR_NAME_CHARS = 60
+
+
+def _interior(found: _Found, lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[int, str, str]]:
+    """The lines the bold shape leaves in no flow (D2): in the gap from the end of one flow to the start of the
+    next, any line but a blank one, a heading, or a lone ``**Flows...**`` introducer. Returns (line, before,
+    after) in line order; text before the first flow and after the last one is not between two flows."""
+    left: list[tuple[int, str, str]] = []
+    for ((_, end), (start, _)), ((before, _), (after, _)) in zip(
+            zip(found.spans, found.spans[1:]), zip(found.items, found.items[1:])):
+        for index in range(end, start):
+            line = lines[index]
+            if (not line.strip() or _heading(line, mask[index])
+                    or (not mask[index] and _FLOWS_INTRODUCER_RE.match(line))):
+                continue
+            left.append((index, before, after))
+    return left
+
+
+def _interior_refusal(found: _Found, lines: Sequence[str], left: Sequence[tuple[int, str, str]],
+                      first_line: int) -> ChecklistUnrecognised:
+    """The refusal of text between two flows that no flow holds (D2); ``first_line`` is the line of the file the
+    first of ``lines`` is on, so the numbers are the file's own."""
+    index, before, after = left[0]
+    first = lines[index].strip()[:INTERIOR_NAME_CHARS]
+    return _unrecognised(
+        f"the bold shape read {len(found.items)} flow(s), and {len(left)} line(s) between two of them belong to no "
+        f"flow, so the tester would never see them: the first is line {index + first_line} {first!r}, after flow `{before}` "
+        f"and before flow `{after}`. Put the text inside the flow it belongs to, or move the section to the end of "
+        f"the checklist",
+        shape="bold", recognised=len(found.items), total=len(found.items),
+        interior=[{"line": number + first_line, "before": a, "after": b} for number, a, b in left][:20])
+
+
+def _flows_of_lines(lines: Sequence[str], section_level: int, first_line: int = 1) -> list[tuple[str, str]]:
     """D7's four steps, in order. The table shape decides when any row is
     old-form, or when no other shape found a flow; otherwise the first of the
     bold, heading and numbered shapes that found one decides, and a table row
@@ -565,6 +612,10 @@ def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str,
         dropped = _unaccounted(shape, found.spans, [], found_by, regions)
         if dropped:
             raise _dropped(shape, len(found.items), dropped)
+        if shape == "bold":
+            interior = _interior(found, lines, mask)
+            if interior:
+                raise _interior_refusal(found, lines, interior, first_line)
         return found.items
     return _table_decides(rows)
 
@@ -576,9 +627,11 @@ def _table_first_cells(lines: Sequence[str]) -> list[str]:
 
 
 def _linked_path(body: Sequence[str]) -> str | None:
-    """The repository path a section whose only content is one link names,
-    or ``None`` when the section is anything else or the link leaves the
-    repository."""
+    """The path a section whose only content is one link names, relative to the
+    checklist's own folder, or ``None`` when the section is anything else or the
+    target cannot be a repository path. A target that normalises to ``../...`` is
+    kept: the reader joins it to the checklist's folder and decides whether the
+    result is inside the repository (D3)."""
     content = [line.strip() for line in body if line.strip()]
     if len(content) != 1:
         return None
@@ -589,7 +642,7 @@ def _linked_path(body: Sequence[str]) -> str | None:
     if not target or "://" in target or target.startswith(("/", "~", "mailto:")) or "\0" in target:
         return None
     normal = posixpath.normpath(target)
-    if normal in (".", "..") or normal.startswith("../") or "\\" in normal:
+    if normal in (".", "..") or "\\" in normal:
         return None
     return normal
 
@@ -623,24 +676,52 @@ def _partly_recognised(shape: str, recognised: int, bad: Sequence[tuple[int, str
         shape=shape, recognised=recognised, total=total, unrecognised=names[:20])
 
 
+NEAR_MISS_HEADINGS = 5
+
+
+def _missing_section(text: str) -> ChecklistUnrecognised:
+    """The refusal of a document with no checklist section (D5): it names the heading to write and lists up to
+    five headings that look like it (``functional`` and ``checklist``, or ``review`` and ``checklist``)."""
+    lines = text.split("\n")
+    mask = _fence_mask(lines)
+    near: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        found = _heading(line, mask[index])
+        if not found:
+            continue
+        words = found[1].lower()
+        if "checklist" in words and ("functional" in words or "review" in words):
+            near.append((index + 1, found[1].strip()))
+    reason = f"the section is missing: write a heading named exactly '{SECTION_TITLE}' (any heading level, any case)"
+    if near:
+        shown = ", ".join(f"line {number} {name!r}" for number, name in near[:NEAR_MISS_HEADINGS])
+        reason += f"; headings that are not that heading: {shown}"
+    return _unrecognised(reason, near_headings=[{"line": n, "heading": h} for n, h in near[:NEAR_MISS_HEADINGS]])
+
+
 def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = None) -> list[Flow]:
     """The checklist flows of ``text`` (``docs/ACTIVE_MILESTONE.md``), numbered
     ``flow-1``, ``flow-2`` in the order the checklist lists them. The first of
     the four rules of D4 that finds a flow decides, applied to the section
     only. A section whose only content is a link to a repository file is read
     from that file by the same rules: ``read_file(path)`` returns its text, or
-    ``None`` when it does not exist. Raises :class:`ChecklistUnrecognised`."""
+    ``None`` when it does not exist. ``read_file(path)`` takes ``path`` relative
+    to the checklist's own folder and returns ``None`` too for a result outside
+    the repository: the containment is the reader's, decided after the join (D3).
+    Raises :class:`ChecklistUnrecognised`."""
     section = checklist_section(text)
     if section is None:
-        raise _unrecognised("the section is missing")
-    lines, level = section.lines, section.level
+        raise _missing_section(text)
+    lines, level, first_line = section.lines, section.level, section.first_line
     link = _linked_path(lines)
     if link is not None:
         content = read_file(link) if read_file is not None else None
         if content is None:
-            raise _unrecognised(f"the linked file {link!r} cannot be read", link=link)
-        lines, level = tuple(content.split("\n")), 0
-    flows = _numbered(_flows_of_lines(lines, level))
+            raise _unrecognised(
+                f"the linked file {link!r} cannot be read: a link resolves from the checklist's own folder and must "
+                f"name a tracked file inside the repository", link=link)
+        lines, level, first_line = tuple(content.split("\n")), 0, 1
+    flows = _numbered(_flows_of_lines(lines, level, first_line))
     if not flows:
         cells = _table_first_cells(lines)
         if cells:

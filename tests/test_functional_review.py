@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -240,8 +241,9 @@ class LabelGrammarTest(unittest.TestCase):
     def test_a_label_after_a_flow_header_ends_the_flow(self) -> None:
         text = checklist("**A. One.** go\n\n**Optional, F1. Extra.** later\n\n**B. Two.** go\n")
         flows = fr.read_flows(text)
-        self.assertEqual([f.label for f in flows], ["A", "B"])
+        self.assertEqual([f.label for f in flows], ["A", "F1", "B"])
         self.assertNotIn("Optional", flows[0].text)
+        self.assertTrue(flows[1].text.startswith("**Optional, F1."))
 
     def test_the_manager_checklists_read_as_five_flows(self) -> None:
         for name in ("table_f_labels_cache_miss_message.md", "table_f_labels_http_read_test_strength.md"):
@@ -260,6 +262,150 @@ class LabelGrammarTest(unittest.TestCase):
         self.assertEqual(evidence["first_cells"], ["6 `step`", "1 (optional)"])
         self.assertIn("6 `step`", evidence["reason"])
         self.assertNotIn("recognised", {key for key in evidence if key == "recognised"})
+
+
+class FlowEndsTest(unittest.TestCase):
+    """D1, D2: a qualified flow header starts a flow, and text the bold shape would leave in no flow is refused."""
+
+    def interior(self, body: str) -> dict:
+        evidence = refusal(checklist(body))
+        self.assertIn("interior", evidence)
+        return evidence
+
+    def test_a_section_line_between_two_flows_is_refused(self) -> None:
+        for line in ("**Setup** for this flow: make a directory.", "**Setup: none needed.**", "**Known limitations**",
+                     "**Out of scope.** later", "**Test data.**"):
+            with self.subTest(line=line):
+                evidence = self.interior(f"**A. One.** go\n\n{line}\n\n**B. Two.** go")
+                self.assertEqual((evidence["shape"], evidence["recognised"]), ("bold", 2))
+                self.assertEqual(evidence["interior"], [{"line": 7, "before": "A", "after": "B"}])
+                self.assertIn("line 7 ", evidence["reason"])
+                self.assertIn("only partly recognised", self.message(f"**A. One.** go\n\n{line}\n\n**B. Two.** go"))
+                self.assertIn(line[:30], evidence["reason"])
+
+    def test_the_reported_line_is_the_line_of_the_file_that_holds_the_section(self) -> None:
+        body = "**A. One.** go\n\n**Setup: run A again with --force before B.**\n\n**B. Two.** go"
+        text = "# Active\n\nintro\n\nmore\n\n## Functional review checklist\n\n" + body + "\n"
+        evidence = refusal(text)
+        self.assertEqual(text.split("\n")[evidence["interior"][0]["line"] - 1], body.split("\n")[2])
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist("[c](c.md)"), read_file=lambda path: "\n" + body)
+        self.assertEqual(caught.exception.evidence["interior"][0]["line"], 4)
+
+    def test_a_fenced_block_after_a_lone_heading_between_two_flows_is_refused(self) -> None:
+        evidence = self.interior("**A. One.** go\n\n### Notes\n\n```\nsetup\n```\n\n**B. Two.** go")
+        self.assertEqual(evidence["interior"][0]["before"], "A")
+
+    def test_a_flows_line_with_words_inside_the_bold_stays_unread_between_two_flows(self) -> None:
+        text = "**A. One.** go\n\n**Flows: run A again with --force before B.**\n\n**B. Two.** go"
+        flows = fr.read_flows(checklist(text))
+        self.assertEqual([flow.label for flow in flows], ["A", "B"])
+        for flow in flows:
+            self.assertNotIn("--force", flow.text)
+
+    def test_a_case_folding_character_in_a_label_or_qualifier_does_not_end_a_flow(self) -> None:
+        # U+212A (Kelvin sign) and U+017F (long s) fold to ASCII letters under a Unicode ignore-case match
+        for header in ("**Optional \u212a. Extra.** run regression", "**Optional, \u212a. Extra.** run regression",
+                       "**\u212a. Extra.** run regression", "**Optional \u017f. Extra.** run regression",
+                       "**\u212anown limitations**", "**\u017fetup**"):
+            for tail in ("\n\n**B. Two.** go", ""):
+                with self.subTest(header=header, tail=tail):
+                    text = f"**A. One.** go\n\n{header}\nverify exit 0{tail}"
+                    flows = fr.read_flows(checklist(text))
+                    self.assertIn("verify exit 0", flows[0].text)
+                    self.assertEqual(flows[0].label, "A")
+
+    def message(self, body: str) -> str:
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist(body))
+        return caught.exception.message
+
+    def test_the_same_lines_before_the_first_and_after_the_last_flow_are_read(self) -> None:
+        text = ("**Setup** for this flow: make a directory.\n\n**A. One.** go\n\n**B. Two.** go\n\n"
+                "**Setup: none needed.**\n\n**Known limitations**\nnotes\n")
+        self.assertEqual(labels(checklist(text)), ["A", "B"])
+
+    def test_text_under_a_heading_or_a_flows_line_between_two_flows_is_refused(self) -> None:
+        for body in ("### Setup\nmake it", "### Notes for A\nsee A", "**Flows:** run it again with x",
+                     "### Notes\n\n**Flows:** run it again with x", "### Notes\n\nsee A"):
+            with self.subTest(body=body):
+                evidence = self.interior(f"**A. One.** go\n\n{body}\n\n**B. Two.** go")
+                self.assertEqual(evidence["interior"][0]["before"], "A")
+                self.assertEqual(evidence["interior"][0]["after"], "B")
+
+    def test_a_lone_heading_or_a_lone_flows_line_between_two_flows_is_read(self) -> None:
+        for body in ("### Notes", "**Flows:**", "**Flows and expected results**", "### Notes\n\n**Flows:**"):
+            with self.subTest(body=body):
+                self.assertEqual(labels(checklist(f"**A. One.** go\n\n{body}\n\n**B. Two.** go")), ["A", "B"])
+
+    def test_the_evidence_holds_twenty_lines_at_most(self) -> None:
+        body = "**A. One.** go\n\n### Notes\n" + "".join(f"line {n}\n" for n in range(30)) + "\n**B. Two.** go"
+        evidence = self.interior(body)
+        self.assertEqual(len(evidence["interior"]), 20)
+        self.assertIn("30 line(s)", evidence["reason"])
+        self.assertIn("'line 0'", evidence["reason"])
+
+    def test_the_named_line_is_cut_at_sixty_characters(self) -> None:
+        evidence = self.interior("**A. One.** go\n\n### Notes\n" + "x" * 90 + "\n\n**B. Two.** go")
+        self.assertIn("'" + "x" * 60 + "'", evidence["reason"])
+        self.assertNotIn("x" * 61, evidence["reason"])
+
+    def test_a_qualified_header_starts_a_flow_and_ends_the_one_before(self) -> None:
+        headers = {
+            "**Then, 2. Run it again.** go": "2",
+            "**Optional K. Title.** go": "K",
+            "**Optional K.** Title": "K",
+            "**Optional, K.** Title": "K",
+            "**Optional K: Title.** go": "K",
+            "**Optional extra, K. Title.** go": "K",
+            "**optional K. Title.** go": "K",
+            "**Required K) Title.** go": "K",
+            "**CONDITIONAL K. Title.** go": "K",
+        }
+        for header, label in headers.items():
+            with self.subTest(header=header):
+                flows = fr.read_flows(checklist(f"**A. One.** go\n\n{header}\n\n**B. Two.** go"))
+                self.assertEqual([f.label for f in flows], ["A", label, "B"])
+                self.assertNotIn(header[:12], flows[0].text)
+                self.assertTrue(flows[1].text.startswith(header), flows[1].text)
+                self.assertNotIn("**B.", flows[1].text)
+
+    def test_a_qualified_header_directly_after_a_flow_line_ends_it_too(self) -> None:
+        flows = fr.read_flows(checklist("**A. One.** go\n**Optional K. Title.** go\n**B. Two.** go"))
+        self.assertEqual([f.label for f in flows], ["A", "K", "B"])
+
+    def test_a_header_with_more_words_stays_in_its_flow(self) -> None:
+        for line in ("**Optional extra K. Title.**", "**If it fails, a. Retry it.**",
+                     "**Check step 2. It prints the version.**", "**Verify exit code 0. Output is empty.**",
+                     "**Optional.** later"):
+            with self.subTest(line=line):
+                flows = fr.read_flows(checklist(f"**A. One.** go\n\n{line} more\n\n**B. Two.** go"))
+                self.assertEqual([f.label for f in flows], ["A", "B"])
+                self.assertIn(line, flows[0].text)
+
+    def test_a_header_spelled_with_a_space_after_the_stars_stays_in_its_flow(self) -> None:
+        """It starts no flow, so it must not end one: after the last flow it would be read by nothing."""
+        for line in ("** K. Title.** x", "** Then, K. Title.** x", "** Optional K. Title.** x"):
+            for after in ("", "\n\n**B. Two.** go"):
+                with self.subTest(line=line, after=after):
+                    flows = fr.read_flows(checklist(f"**A. One.** go\n\n{line}{after}"))
+                    self.assertIn(line, flows[0].text)
+
+    def test_a_qualified_header_with_a_bad_label_is_partly_recognised(self) -> None:
+        evidence = refusal(checklist("**A. One.** go\n\n**Optional, 123. Title.** x\n\n**B. Two.** go"))
+        self.assertEqual((evidence["shape"], evidence["recognised"], evidence["unrecognised"]), ("bold", 2, ["123"]))
+        self.assertNotIn("interior", evidence)
+
+    def test_a_qualified_bold_line_beside_another_shape_is_refused(self) -> None:
+        for body in ("### A. One\nrun\n\n**Then, 2. Run it again.**\n\n### B. Two\nrun",
+                     "1. a\n2. b\n\n**Optional, K. Extra.** y",
+                     TABLE_HEAD + "| A | do | ok |\n| B | do | ok |\n\n**Optional, K. Extra.** y"):
+            with self.subTest(body=body[:30]):
+                evidence = refusal(checklist(body))
+                self.assertIn("dropped", evidence)
+
+    def test_a_plain_bold_line_in_a_heading_flow_stays_flow_text(self) -> None:
+        self.assertEqual(labels(checklist("### A. One\nrun\n\n**Expected.** ok\n\n### B. Two\nrun")), ["A", "B"])
 
 
 class CompletenessTest(unittest.TestCase):
@@ -312,12 +458,14 @@ class CompletenessTest(unittest.TestCase):
         self.check(refusal(checklist("**A. One.** go\n\n**Step1.** x\n")), "bold", 1, ["Step1"])
         self.assertEqual(labels(checklist("**A. One.** go\n\n**S1:** x\n")), ["A", "S1"])
         optional = checklist("**A. One.** go\n\n**Optional, K. Title.** extra\n\n**B. Two.** go\n")
-        self.assertEqual(labels(optional), ["A", "B"])
+        self.assertEqual(labels(optional), ["A", "K", "B"])
 
     def test_what_is_not_refused(self) -> None:
-        bold = checklist("**A. One.** go\n\n**Expected:** x\n\n**Verify.** y\n\n**Setup.** z\n\n"
+        bold = checklist("**A. One.** go\n\n**Expected:** x\n\n**Verify.** y\n\n"
                          "| case | want |\n| --- | --- |\n| a b | c |\n\nStep 3. is prose\n\n**B. Two.** go\n")
         self.assertEqual(labels(bold), ["A", "B"])
+        # a section after the last flow is not between two flows (D2)
+        self.assertEqual(labels(checklist("**A. One.** go\n\n**Setup.** z\n\nprose\n")), ["A"])
         empty_row = checklist(TABLE_HEAD + "| A | do | ok |\n| | | |\n| B | do | ok |\n")
         self.assertEqual(labels(empty_row), ["A", "B"])
         heading = checklist("### A. One\ngo\n\n### Environment, not defects\nnotes\n")
@@ -472,10 +620,13 @@ class CrossShapeTest(unittest.TestCase):
             with self.subTest(region=region):
                 self.assertEqual(labels(checklist(f"{region}\n\n1. a\n2. b\n\n**A. One.** go")), ["A"])
         for opener in ("**Setup.**", "**Out of scope**"):
-            for end in ("### Next", "**B. flow.** x", "**Test data.**", "**Flows.**"):
+            for end in ("### Next", "**Test data.**", "**Flows.**"):
                 with self.subTest(opener=opener, end=end):
                     text = checklist(f"**A. One.** go\n\n{opener}\n\n1. a\n2. b\n\n{end}\n")
                     self.assertEqual(labels(text)[0], "A")
+            # between two flows the section's text is read by no flow, so it is refused (D2)
+            with self.subTest(opener=opener, end="flow"):
+                refusal(checklist(f"**A. One.** go\n\n{opener}\n\n1. a\n2. b\n\n**B. flow.** x\n"))
         pr_defect = checklist("### Setup\n\n1. a\n2. b\n3. c\n\n" + self.OLD)
         self.assertEqual(labels(pr_defect), ["1", "2"])
         outside = refusal(checklist("1. a\n2. b\n\n" + self.OLD))
@@ -511,7 +662,7 @@ class CrossShapeTest(unittest.TestCase):
                 with self.subTest(name=name):
                     self.assertTrue(labels(path.read_text(encoding="utf-8")))
         self.assertEqual(labels((FIXTURES / "bold_labelled_454ffe7.md").read_text(encoding="utf-8")),
-                         list("ABCDEFGHIJ"))
+                         list("ABCDEFGHIJK"))
 
 
 class DroppedRowsTest(unittest.TestCase):
@@ -560,15 +711,118 @@ class LinkedChecklistTest(unittest.TestCase):
         flows = fr.read_flows(checklist("[c](c.md)"), read_file=read)
         self.assertEqual([f.label for f in flows], ["A", "B"])
 
-    def test_a_link_that_leaves_the_repository_or_is_missing_finds_no_flow(self) -> None:
+    def joining_reader(self, files: dict[str, str], folder: str = "docs"):
+        """A reader that joins the link to the checklist's folder and refuses a result outside the repository, as
+        ``candidate_flows.read_file`` does."""
+        asked: list[str] = []
+
+        def read(link: str) -> str | None:
+            asked.append(link)
+            joined = posixpath.normpath(posixpath.join(folder, link))
+            if posixpath.isabs(joined) or joined == ".." or joined.startswith("../"):
+                return None
+            return files.get(joined)
+
+        read.asked = asked  # type: ignore[attr-defined]
+        return read
+
+    def test_a_link_that_cannot_be_a_repository_path_is_refused_without_asking_the_reader(self) -> None:
         read = self.reader({"c.md": "**A. one.** x\n"})
-        for target in ("../outside.md", "/etc/passwd", "https://example.com/c.md", "~/c.md", "a/../../c.md",
-                       "missing.md", "#anchor"):
+        for target in ("/etc/passwd", "https://example.com/c.md", "~/c.md", "#anchor"):
             with self.subTest(target=target), self.assertRaises(fr.ChecklistUnrecognised):
                 fr.read_flows(checklist(f"[x]({target})"), read_file=read)
-        self.assertEqual(read.asked, ["missing.md"])
+        self.assertEqual(read.asked, [])
         with self.assertRaises(fr.ChecklistUnrecognised):
             fr.read_flows(checklist("[x](c.md)"))  # no reader: nothing can be read
+
+    def test_a_missing_link_is_refused_with_the_containment_wording(self) -> None:
+        read = self.reader({"c.md": "**A. one.** x\n"})
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist("[x](missing.md)"), read_file=read)
+        self.assertEqual(read.asked, ["missing.md"])
+        self.assertIn("resolves from the checklist's own folder", str(caught.exception))
+        self.assertIn("inside the repository", str(caught.exception))
+
+    def test_a_link_one_folder_up_is_followed_when_the_join_stays_inside_the_repository(self) -> None:
+        read = self.joining_reader({"tests/checklist.md": "**A. one.** x\n\n**B. two.** y\n",
+                                    "c.md": "**A. one.** x\n\n**B. two.** y\n"})
+        for target, asked in (("../tests/checklist.md", "../tests/checklist.md"), ("a/../../c.md", "../c.md")):
+            with self.subTest(target=target):
+                flows = fr.read_flows(checklist(f"[x]({target})"), read_file=read)
+                self.assertEqual([f.label for f in flows], ["A", "B"])
+                self.assertEqual(read.asked[-1], asked)
+
+    def test_a_link_that_leaves_the_repository_is_refused_after_the_join(self) -> None:
+        read = self.joining_reader({"c.md": "**A. one.** x\n"})
+        for target in ("../../outside.md", "a/../../../c.md"):
+            with self.subTest(target=target), self.assertRaises(fr.ChecklistUnrecognised) as caught:
+                fr.read_flows(checklist(f"[x]({target})"), read_file=read)
+            self.assertIn("inside the repository", str(caught.exception))
+            self.assertEqual(caught.exception.evidence["link"], posixpath.normpath(target))
+
+    def real_candidate(self, tmp: str, target: str) -> fr.Candidate:
+        """A committed repository whose ``docs/ACTIVE_MILESTONE.md`` links ``target``, with a file of flows beside the
+        repository that a link must never reach."""
+        flows = "**A. one.** x\n\n**B. two.** y\n"
+        repo = Path(tmp) / "repo"
+        (repo / "docs").mkdir(parents=True)
+        (repo / "tests").mkdir()
+        (repo / "docs" / "ACTIVE_MILESTONE.md").write_text(checklist(f"[c]({target})"), encoding="utf-8")
+        (repo / "tests" / "checklist.md").write_text(flows, encoding="utf-8")
+        (repo / "c.md").write_text(flows, encoding="utf-8")
+        (Path(tmp) / "outside.md").write_text(flows, encoding="utf-8")
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+               "GIT_COMMITTER_EMAIL": "t@t"}
+        for argv in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "x"]):
+            subprocess.run(["git", "-C", str(repo), *argv], check=True, env=env, capture_output=True)
+        head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True,
+                              text=True).stdout.strip()
+        return fr.capture_candidate(repo, head)
+
+    def test_candidate_flows_follows_a_link_that_stays_inside_a_real_tree(self) -> None:
+        for target in ("../tests/checklist.md", "a/../../c.md"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                flows = fr.candidate_flows(self.real_candidate(tmp, target))
+                self.assertEqual([f.label for f in flows], ["A", "B"])
+
+    def test_candidate_flows_refuses_a_link_that_leaves_a_real_tree(self) -> None:
+        for target in ("../../outside.md", "a/../../../outside.md", "../.."):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                candidate = self.real_candidate(tmp, target)
+                with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+                    fr.candidate_flows(candidate)
+                self.assertIn("inside the repository", str(caught.exception))
+                self.assertNotIn("recognised", caught.exception.evidence)
+
+    def test_candidate_flows_refuses_a_link_to_a_folder_of_the_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+                fr.candidate_flows(self.real_candidate(tmp, "../tests"))
+            self.assertIn("a tracked file", str(caught.exception))
+
+
+class MissingSectionTest(unittest.TestCase):
+    def refusal(self, text: str) -> fr.ChecklistUnrecognised:
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(text)
+        return caught.exception
+
+    def test_the_reason_names_the_heading_to_write_and_lists_near_misses_with_lines(self) -> None:
+        text = ("# Active\n\n## Functional-review checklist (round 2)\n\n**A. one.** x\n\n"
+                "### Review checklist\n\n## Unrelated functional notes\n\n## Checklist\n")
+        error = self.refusal(text)
+        self.assertIn("'Functional review checklist'", str(error))
+        self.assertEqual(error.evidence["near_headings"], [
+            {"line": 3, "heading": "Functional-review checklist (round 2)"}, {"line": 7, "heading": "Review checklist"}])
+        self.assertIn("line 3", str(error))
+        self.assertNotIn("Unrelated", str(error))
+        self.assertNotIn("'Checklist'", str(error))
+
+    def test_a_fenced_heading_is_not_listed_and_the_list_is_bounded(self) -> None:
+        fenced = self.refusal("```\n## Functional checklist\n```\n")
+        self.assertEqual(fenced.evidence["near_headings"], [])
+        many = self.refusal("\n".join(f"## Review checklist {n}" for n in range(9)))
+        self.assertEqual(len(many.evidence["near_headings"]), fr.NEAR_MISS_HEADINGS)
 
 
 class CommittedChecklistsTest(unittest.TestCase):
@@ -576,16 +830,20 @@ class CommittedChecklistsTest(unittest.TestCase):
     vendored verbatim, so the test never depends on history."""
 
     EXPECTED = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+    #: The bold fixture ends with ``**Optional, K. ...**``, which is a flow (D1); the table fixture stays A to J.
+    BOLD_EXPECTED = EXPECTED + ["K"]
 
     def numbered(self, name: str) -> list[fr.Flow]:
         return fr.read_flows((FIXTURES / name).read_text(encoding="utf-8"))
 
     def test_bold_labelled_paragraphs_a_to_j(self) -> None:
         flows = self.numbered("bold_labelled_454ffe7.md")
-        self.assertEqual([f.label for f in flows], self.EXPECTED)
-        self.assertEqual([f.flow_id for f in flows], [f"flow-{n}" for n in range(1, 11)])
+        self.assertEqual([f.label for f in flows], self.BOLD_EXPECTED)
+        self.assertEqual([f.flow_id for f in flows], [f"flow-{n}" for n in range(1, 12)])
         for flow in flows:
-            self.assertTrue(flow.text.startswith(f"**{flow.label}."), flow.text[:20])
+            if flow.label != "K":
+                self.assertTrue(flow.text.startswith(f"**{flow.label}."), flow.text[:20])
+        self.assertTrue(flows[-1].text.startswith("**Optional, K."), flows[-1].text[:20])
         for word in ("Setup", "Flows", "Test data", "Known limitations"):
             self.assertFalse(any(flow.text.startswith(f"**{word}") for flow in flows))
 
@@ -596,7 +854,7 @@ class CommittedChecklistsTest(unittest.TestCase):
                      "In the repository itself (the pre-cutover"):
             self.assertIn(case, text)
         self.assertNotIn("Optional, K.", flows["J"].text)
-        self.assertNotIn("Known limitations", flows["J"].text)
+        self.assertNotIn("Known limitations", flows["K"].text)
 
     def test_a_bold_expectation_paragraph_is_never_dropped(self) -> None:
         text = ("## Functional review checklist\n\n**A. Local version.** Run it.\n\n"

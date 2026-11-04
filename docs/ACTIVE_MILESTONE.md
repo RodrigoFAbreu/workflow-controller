@@ -2,6 +2,21 @@
 
 ## Status
 
+**Complete.** `workflow-controller-checklist-flow-ends` (C10j, issue
+[#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)) closes the gaps in how the functional checklist
+recogniser finds where a flow ends. The plan is `docs/ai-workflow/CONTROLLER_CHECKLIST_FLOW_ENDS_PLAN.md` (revision 2). CP1 is
+complete: a qualified flow header (`**Optional K. Title.**`, `**Then, 2. Run it again.**`) starts a flow and ends the one before
+it, and text in a gap between two flows is refused instead of being read by no flow. CP2 is complete: a link above the
+checklist's folder (`../tests/checklist.md`) is followed when the joined path stays inside the repository, and the
+missing-section refusal lists the near-miss headings. CP3 is complete: `docs/guide/automation.md` and `docs/common-problems.md`
+say what the recogniser reads and refuses, and the roadmap marks C10j done (1.27.8).
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.8).
+
+Next action: `/milestone-plan` for C10k (the `remove_tree` point of [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)), the next incomplete item in `docs/ROADMAP.md`.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-sandbox-precheck` (C10i, issue
 [#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)) checks the functional tester's availability before
 usage is reserved. The plan is `docs/ai-workflow/CONTROLLER_SANDBOX_PRECHECK_PLAN.md` (revision 2). CP1 is complete:
@@ -251,34 +266,35 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-sandbox-precheck` (C10i, issue [#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)),
-implementation revision 1. The change finds the host causes of `functional_tester_unavailable` (the role, the binary, the static
-probe) before the usage budget is asked for a reservation, for a chain of one and a longer chain, Claude and Codex alike.
-Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the
-sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone with
-`python3 -B` and no `PYTHONPATH=.`; the flows are unit tests and a read of the documentation, so they write only to the scratch
-`TMPDIR`. The host's own `bwrap`, `socat` and `claude` are not needed: the tests replace the probe and the binary lookup.
+Item `workflow-controller-checklist-flow-ends` (C10j, issue [#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)),
+implementation revision 3. The change makes the functional-checklist recogniser (`controller/functional_review.py`) read or
+refuse what it used to drop: a qualified flow header (`**Optional, K. Title.**`, `**Optional K. Title.**`) starts a flow, text
+between two flows of the bold shape is refused instead of read by no flow, a link one folder up (`../tests/checklist.md`) is
+followed when it stays inside the repository, and a missing section names the heading to write. Every flow runs offline: no
+network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
+system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
+`PYTHONPATH=.`; the flows are unit tests and a read of the documentation, so they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | The selection returns the cause a launch would raise (D1) | `python3 -B -m unittest tests.test_functional_sandbox.SelectionErrorTest -v` | Six tests pass: an admitted host gives `None`; a missing binary gives `no_binary`; a refused role gives `role_refused`; a host without `bwrap` and a build not in the verified list give `enforcement`, and `launch_functional` raises the same cause for the same refusal; a refusal that already carries a cause passes through unchanged. |
-| 2 | A host without `bwrap` stops before any reservation (D2, D3) | `python3 -B -m unittest tests.test_protocol_job.TheFaultStopsTest.test_a_host_without_bwrap_stops_before_any_reservation_with_one_record -v` | Passes: the stop is `functional_tester_unavailable` with cause `enforcement`; the usage gate is never called (it fails the test if called) and the real usage store has an empty reservation history; one `GATE_BLOCKED` record with no `functional.launched`, `functional.not_started` or `usage` block and the single stop event. |
-| 3 | A chain whose every entry fails ends at the stop with a cause (D2) | `python3 -B -m unittest tests.test_protocol_job.TheFaultStopsTest.test_a_chain_whose_every_entry_fails_the_probe_ends_at_the_stop_with_a_cause -v` | Passes: the step ends at `functional_tester_unavailable` with the first entry's reason and `functional.cause` set, not a `KeyError`. |
-| 4 | A Claude entry that fails the probe is skipped in a chain (D2) | `python3 -B -m unittest tests.test_functional_select -k probe -v` | Both pass: the failing Claude entry is skipped with cause `launcher_unavailable` and the next entry is chosen; the probe's own text reaches the operator only when every entry fails. |
-| 5 | A Codex route with an unverified build stops before any reservation (D2, D3) | `python3 -B -m unittest tests.test_functional_codex_route -k unverified -v` | Passes: the stop is `functional_tester_unavailable`, the usage gate is never called, one record. |
-| 6 | The harness rule still pins the digest readers (D1) | `python3 -B -m unittest tests.test_harness tests.test_functional_lifecycle -v` | All pass: only `controller/review.py` reads the recorded digests and calls the static probe, and `job.py` reaches them through `claude_selection_error`. |
-| 7 | Docs and neighbours (D4) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0. Read `docs/common-problems.md` (`functional_tester_unavailable`: the first five causes are found before usage is reserved, the rest arise at launch) and `docs/guide/automation.md` (the stop list, and the chain paragraph: a Claude entry is skipped for the role and the probe, a chain of one runs the same host check but selects nothing). They match flows 1 to 6. `docs/ROADMAP.md` marks C10i done and follow-up 67 resolved. |
+| 1 | A qualified header starts a flow and ends the one before (D1) | `python3 -B -m unittest tests.test_functional_review.FlowEndsTest -k qualified -k header -v` | All pass: `**Optional, K. Title.**`, `**Then, 2. Run it again.**` and `**Optional K. Title.**` each start a flow and end the previous one, also directly after a flow line; `**Optional extra K. Title.**` and a space after the stars stay in the flow above; a qualified line with a bad label is partly recognised; beside another shape it is refused. |
+| 2 | Text between two flows is refused, not dropped (D2) | `python3 -B -m unittest tests.test_functional_review.FlowEndsTest -v` | All 17 pass: a `**Setup** for this flow: ...` or `**Setup: none needed.**` line between two flows ends at `checklist_unrecognised` naming the line (cut at 60 characters), the flow before and the flow after, with at most twenty lines of evidence; a lone heading or lone `**Flows:**` line is still read, text under them is refused; the same lines before the first or after the last flow are read; a case-folding character in a label or qualifier does not end a flow. |
+| 3 | A link one folder up is followed inside the repository (D3) | `python3 -B -m unittest tests.test_functional_review.LinkedChecklistTest -v` | All pass: `../tests/checklist.md` from `docs/` is read, over a real tree through `candidate_flows` as well; `../../outside.md` and `a/../../../c.md` leave the repository and are refused with the containment wording; an absolute path, URL, `~`, backslash or NUL is refused without asking the reader; a link to a folder is refused. |
+| 4 | A missing section names the heading it needs (D5) | `python3 -B -m unittest tests.test_functional_review.MissingSectionTest -v` | Both pass: the reason names `Functional review checklist` (any level, any case) and lists up to five near-miss headings with line numbers; a fenced `#` line is not listed. |
+| 5 | Real checklists are read as before (D4) | `python3 -B -m unittest tests.test_functional_review.CommittedChecklistsTest -v` | Passes: the committed checklist sections of the repository are read, none refused or read differently except through D1 and D2. |
+| 6 | The whole recogniser suite and the neighbours | `python3 -B -m unittest tests.test_functional_review -v` | 128 tests, all OK. |
+| 7 | Docs and neighbours (D6) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0. Read `docs/guide/automation.md` (the qualified header and its exclusions, the gap refusal, the link rule and the missing-section wording, around line 457) and `docs/common-problems.md` (the `checklist_unrecognised` line); they match flows 1 to 5. `docs/ROADMAP.md` marks C10j done (1.27.8) and follow-up 71 done. |
 
-**Known limitations / out of scope.** No new setting, option, exit code or gate. The causes that need a job or a sandbox (the
-clone not matching the manifest, no folder short enough for `TMPDIR`, a runtime root inside the operator's Claude home, a
-submodule, an untracked checklist, an existing sandbox folder) still arise at launch. A probe that passes at selection and fails
-at launch still ends at the gate with `not_started`. A skipped chain entry's own reason is not shown when a later entry is chosen.
-No real-host run is part of this checklist: the probe is replaced in the tests. The full suite is not a flow
-(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main). The release note and release
-history row belong to the docs pull request after the 1.27.7 release.
+**Known limitations / out of scope.** No new setting, option, exit code or gate. `optional` is not modelled: the tester runs an
+optional flow like any other, so one that cannot run in the sandbox can now stop a round that used to pass over it. The heading
+match is unchanged (exact `Functional review checklist`; only the refusal's message improved). A link that points outside the
+repository is still refused. Text before the first flow and after the last is read as before. No real-host run is part of this
+checklist. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on
+main). The release note and release history row belong to the docs pull request after the 1.27.8 release.
+
 
 ## Next action
 
-Manual functional review of C10i (the checklist above), then `/accept-milestone`.
+Manual functional review of C10j (the checklist above), then `/accept-milestone`.

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-checklist-flow-ends",
+  "requirements": {
+    "R1": {
+      "description": "A qualified flow header (comma form of one or two words, or a closed-list word without a comma, matched in any case, with the plain bold marker) starts a flow and ends the one before it (#116)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Text in the gap between two flows of the bold shape is refused instead of dropped; before the first and after the last flow it is read as before",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "A link starting with ../ is followed when the join with the checklist's folder stays inside the repository; the missing-section refusal names the exact heading and near misses",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The guides and the roadmap describe the new rules and mark C10j done",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

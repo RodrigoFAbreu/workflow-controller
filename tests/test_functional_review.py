@@ -278,9 +278,27 @@ class FlowEndsTest(unittest.TestCase):
             with self.subTest(line=line):
                 evidence = self.interior(f"**A. One.** go\n\n{line}\n\n**B. Two.** go")
                 self.assertEqual((evidence["shape"], evidence["recognised"]), ("bold", 2))
-                self.assertEqual(evidence["interior"], [{"line": 4, "before": "A", "after": "B"}])
+                self.assertEqual(evidence["interior"], [{"line": 7, "before": "A", "after": "B"}])
+                self.assertIn("line 7 ", evidence["reason"])
                 self.assertIn("only partly recognised", self.message(f"**A. One.** go\n\n{line}\n\n**B. Two.** go"))
                 self.assertIn(line[:30], evidence["reason"])
+
+    def test_the_reported_line_is_the_line_of_the_file_that_holds_the_section(self) -> None:
+        body = "**A. One.** go\n\n**Setup: run A again with --force before B.**\n\n**B. Two.** go"
+        text = "# Active\n\nintro\n\nmore\n\n## Functional review checklist\n\n" + body + "\n"
+        evidence = refusal(text)
+        self.assertEqual(text.split("\n")[evidence["interior"][0]["line"] - 1], body.split("\n")[2])
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist("[c](c.md)"), read_file=lambda path: "\n" + body)
+        self.assertEqual(caught.exception.evidence["interior"][0]["line"], 4)
+
+    def test_a_fenced_block_after_a_lone_heading_between_two_flows_is_refused(self) -> None:
+        evidence = self.interior("**A. One.** go\n\n### Notes\n\n```\nsetup\n```\n\n**B. Two.** go")
+        self.assertEqual(evidence["interior"][0]["before"], "A")
+
+    def test_a_flows_line_with_words_inside_the_bold_stays_unread_between_two_flows(self) -> None:
+        text = "**A. One.** go\n\n**Flows: run A again with --force before B.**\n\n**B. Two.** go"
+        self.assertEqual(labels(checklist(text)), ["A", "B"])
 
     def message(self, body: str) -> str:
         with self.assertRaises(fr.ChecklistUnrecognised) as caught:

@@ -269,10 +269,12 @@ class Flow:
 @dataclasses.dataclass(frozen=True)
 class Section:
     """The checklist section: its heading ``level`` (0 for a linked file,
-    whose every heading is below it) and its body lines."""
+    whose every heading is below it), its body lines and the line of the file
+    the first of them is on (``first_line``, 1-based)."""
 
     level: int
     lines: tuple[str, ...]
+    first_line: int = 1
 
 
 def _fence_mask(lines: Sequence[str]) -> list[bool]:
@@ -319,7 +321,7 @@ def checklist_section(text: str) -> Section | None:
         if found and found[0] <= level:
             end = index
             break
-    return Section(level=level, lines=tuple(lines[start + 1:end]))
+    return Section(level=level, lines=tuple(lines[start + 1:end]), first_line=start + 2)
 
 
 @dataclasses.dataclass
@@ -560,21 +562,22 @@ def _interior(found: _Found, lines: Sequence[str], mask: Sequence[bool]) -> list
     return left
 
 
-def _interior_refusal(found: _Found, lines: Sequence[str],
-                      left: Sequence[tuple[int, str, str]]) -> ChecklistUnrecognised:
-    """The refusal of text between two flows that no flow holds (D2)."""
+def _interior_refusal(found: _Found, lines: Sequence[str], left: Sequence[tuple[int, str, str]],
+                      first_line: int) -> ChecklistUnrecognised:
+    """The refusal of text between two flows that no flow holds (D2); ``first_line`` is the line of the file the
+    first of ``lines`` is on, so the numbers are the file's own."""
     index, before, after = left[0]
     first = lines[index].strip()[:INTERIOR_NAME_CHARS]
     return _unrecognised(
         f"the bold shape read {len(found.items)} flow(s), and {len(left)} line(s) between two of them belong to no "
-        f"flow, so the tester would never see them: the first is line {index + 1} {first!r}, after flow `{before}` "
+        f"flow, so the tester would never see them: the first is line {index + first_line} {first!r}, after flow `{before}` "
         f"and before flow `{after}`. Put the text inside the flow it belongs to, or move the section to the end of "
         f"the checklist",
         shape="bold", recognised=len(found.items), total=len(found.items),
-        interior=[{"line": number + 1, "before": a, "after": b} for number, a, b in left][:20])
+        interior=[{"line": number + first_line, "before": a, "after": b} for number, a, b in left][:20])
 
 
-def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str, str]]:
+def _flows_of_lines(lines: Sequence[str], section_level: int, first_line: int = 1) -> list[tuple[str, str]]:
     """D7's four steps, in order. The table shape decides when any row is
     old-form, or when no other shape found a flow; otherwise the first of the
     bold, heading and numbered shapes that found one decides, and a table row
@@ -612,7 +615,7 @@ def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str,
         if shape == "bold":
             interior = _interior(found, lines, mask)
             if interior:
-                raise _interior_refusal(found, lines, interior)
+                raise _interior_refusal(found, lines, interior, first_line)
         return found.items
     return _table_decides(rows)
 
@@ -709,7 +712,7 @@ def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = Non
     section = checklist_section(text)
     if section is None:
         raise _missing_section(text)
-    lines, level = section.lines, section.level
+    lines, level, first_line = section.lines, section.level, section.first_line
     link = _linked_path(lines)
     if link is not None:
         content = read_file(link) if read_file is not None else None
@@ -717,8 +720,8 @@ def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = Non
             raise _unrecognised(
                 f"the linked file {link!r} cannot be read: a link resolves from the checklist's own folder and must "
                 f"name a tracked file inside the repository", link=link)
-        lines, level = tuple(content.split("\n")), 0
-    flows = _numbered(_flows_of_lines(lines, level))
+        lines, level, first_line = tuple(content.split("\n")), 0, 1
+    flows = _numbered(_flows_of_lines(lines, level, first_line))
     if not flows:
         cells = _table_first_cells(lines)
         if cells:

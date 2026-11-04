@@ -466,15 +466,19 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    before it. The tester runs an optional flow as it runs any other, so one that cannot run in the
    sandbox can stop a round that used to pass over it. Any other spelling
    (`**Optional extra K. Title.**`, `**Optional: K. Title.**`) is not a header and stays in the flow
-   above. A qualified line in a checklist whose flows are headings, a table or a numbered list makes
-   the bold shape decide and is refused as a flow of another shape.
+   above. A qualified line in a checklist whose flows are headings or a numbered list makes
+   the bold shape decide and is refused as a flow of another shape; beside a table the table
+   decides when a row has an old-form label, and otherwise the refusal names the rows the bold
+   shape did not recognise.
 
    Between two flows of the bold shape, every line that belongs to no flow is refused (a
    `**Setup** for this flow: ...` or `**Setup: none needed.**` line, text under a heading or after
    `**Flows:** run it again`), naming the first such line, the flow before it and the flow after it
    (the evidence carries `interior`). Put the text inside the flow it belongs to, or move the
-   section to the end. A heading line (its own words are not read) and a lone `**Flows:**` line may
-   stay between two flows; text before the first flow and after the last one is read as before.
+   section to the end. A heading line (its own words are not read) and a line that is only a
+   bold `**Flows...**` (its words, such as `**Flows: run A again first.**`, are not read either)
+   may stay between two flows; put an instruction in a flow, not in such a line. Text before the
+   first flow and after the last one is read as before.
 
    A section whose only content is a link to another file is followed. The link resolves from the
    checklist's own folder, so `../tests/checklist.md` in `docs/ACTIVE_MILESTONE.md` names

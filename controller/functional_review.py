@@ -623,9 +623,11 @@ def _table_first_cells(lines: Sequence[str]) -> list[str]:
 
 
 def _linked_path(body: Sequence[str]) -> str | None:
-    """The repository path a section whose only content is one link names,
-    or ``None`` when the section is anything else or the link leaves the
-    repository."""
+    """The path a section whose only content is one link names, relative to the
+    checklist's own folder, or ``None`` when the section is anything else or the
+    target cannot be a repository path. A target that normalises to ``../...`` is
+    kept: the reader joins it to the checklist's folder and decides whether the
+    result is inside the repository (D3)."""
     content = [line.strip() for line in body if line.strip()]
     if len(content) != 1:
         return None
@@ -636,7 +638,7 @@ def _linked_path(body: Sequence[str]) -> str | None:
     if not target or "://" in target or target.startswith(("/", "~", "mailto:")) or "\0" in target:
         return None
     normal = posixpath.normpath(target)
-    if normal in (".", "..") or normal.startswith("../") or "\\" in normal:
+    if normal in (".", "..") or "\\" in normal:
         return None
     return normal
 
@@ -670,22 +672,50 @@ def _partly_recognised(shape: str, recognised: int, bad: Sequence[tuple[int, str
         shape=shape, recognised=recognised, total=total, unrecognised=names[:20])
 
 
+NEAR_MISS_HEADINGS = 5
+
+
+def _missing_section(text: str) -> ChecklistUnrecognised:
+    """The refusal of a document with no checklist section (D5): it names the heading to write and lists up to
+    five headings that look like it (``functional`` and ``checklist``, or ``review`` and ``checklist``)."""
+    lines = text.split("\n")
+    mask = _fence_mask(lines)
+    near: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        found = _heading(line, mask[index])
+        if not found:
+            continue
+        words = found[1].lower()
+        if "checklist" in words and ("functional" in words or "review" in words):
+            near.append((index + 1, found[1].strip()))
+    reason = f"the section is missing: write a heading named exactly '{SECTION_TITLE}' (any heading level, any case)"
+    if near:
+        shown = ", ".join(f"line {number} {name!r}" for number, name in near[:NEAR_MISS_HEADINGS])
+        reason += f"; headings that are not that heading: {shown}"
+    return _unrecognised(reason, near_headings=[{"line": n, "heading": h} for n, h in near[:NEAR_MISS_HEADINGS]])
+
+
 def read_flows(text: str, *, read_file: Callable[[str], str | None] | None = None) -> list[Flow]:
     """The checklist flows of ``text`` (``docs/ACTIVE_MILESTONE.md``), numbered
     ``flow-1``, ``flow-2`` in the order the checklist lists them. The first of
     the four rules of D4 that finds a flow decides, applied to the section
     only. A section whose only content is a link to a repository file is read
     from that file by the same rules: ``read_file(path)`` returns its text, or
-    ``None`` when it does not exist. Raises :class:`ChecklistUnrecognised`."""
+    ``None`` when it does not exist. ``read_file(path)`` takes ``path`` relative
+    to the checklist's own folder and returns ``None`` too for a result outside
+    the repository: the containment is the reader's, decided after the join (D3).
+    Raises :class:`ChecklistUnrecognised`."""
     section = checklist_section(text)
     if section is None:
-        raise _unrecognised("the section is missing")
+        raise _missing_section(text)
     lines, level = section.lines, section.level
     link = _linked_path(lines)
     if link is not None:
         content = read_file(link) if read_file is not None else None
         if content is None:
-            raise _unrecognised(f"the linked file {link!r} cannot be read", link=link)
+            raise _unrecognised(
+                f"the linked file {link!r} cannot be read: a link resolves from the checklist's own folder and must "
+                f"name a tracked file inside the repository", link=link)
         lines, level = tuple(content.split("\n")), 0
     flows = _numbered(_flows_of_lines(lines, level))
     if not flows:

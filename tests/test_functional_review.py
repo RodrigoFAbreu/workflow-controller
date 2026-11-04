@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -669,15 +670,94 @@ class LinkedChecklistTest(unittest.TestCase):
         flows = fr.read_flows(checklist("[c](c.md)"), read_file=read)
         self.assertEqual([f.label for f in flows], ["A", "B"])
 
-    def test_a_link_that_leaves_the_repository_or_is_missing_finds_no_flow(self) -> None:
+    def joining_reader(self, files: dict[str, str], folder: str = "docs"):
+        """A reader that joins the link to the checklist's folder and refuses a result outside the repository, as
+        ``candidate_flows.read_file`` does."""
+        asked: list[str] = []
+
+        def read(link: str) -> str | None:
+            asked.append(link)
+            joined = posixpath.normpath(posixpath.join(folder, link))
+            if posixpath.isabs(joined) or joined == ".." or joined.startswith("../"):
+                return None
+            return files.get(joined)
+
+        read.asked = asked  # type: ignore[attr-defined]
+        return read
+
+    def test_a_link_that_cannot_be_a_repository_path_is_refused_without_asking_the_reader(self) -> None:
         read = self.reader({"c.md": "**A. one.** x\n"})
-        for target in ("../outside.md", "/etc/passwd", "https://example.com/c.md", "~/c.md", "a/../../c.md",
-                       "missing.md", "#anchor"):
+        for target in ("/etc/passwd", "https://example.com/c.md", "~/c.md", "#anchor"):
             with self.subTest(target=target), self.assertRaises(fr.ChecklistUnrecognised):
                 fr.read_flows(checklist(f"[x]({target})"), read_file=read)
-        self.assertEqual(read.asked, ["missing.md"])
+        self.assertEqual(read.asked, [])
         with self.assertRaises(fr.ChecklistUnrecognised):
             fr.read_flows(checklist("[x](c.md)"))  # no reader: nothing can be read
+
+    def test_a_missing_link_is_refused_with_the_containment_wording(self) -> None:
+        read = self.reader({"c.md": "**A. one.** x\n"})
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(checklist("[x](missing.md)"), read_file=read)
+        self.assertEqual(read.asked, ["missing.md"])
+        self.assertIn("resolves from the checklist's own folder", str(caught.exception))
+        self.assertIn("inside the repository", str(caught.exception))
+
+    def test_a_link_one_folder_up_is_followed_when_the_join_stays_inside_the_repository(self) -> None:
+        read = self.joining_reader({"tests/checklist.md": "**A. one.** x\n\n**B. two.** y\n",
+                                    "c.md": "**A. one.** x\n\n**B. two.** y\n"})
+        for target, asked in (("../tests/checklist.md", "../tests/checklist.md"), ("a/../../c.md", "../c.md")):
+            with self.subTest(target=target):
+                flows = fr.read_flows(checklist(f"[x]({target})"), read_file=read)
+                self.assertEqual([f.label for f in flows], ["A", "B"])
+                self.assertEqual(read.asked[-1], asked)
+
+    def test_a_link_that_leaves_the_repository_is_refused_after_the_join(self) -> None:
+        read = self.joining_reader({"c.md": "**A. one.** x\n"})
+        for target in ("../../outside.md", "a/../../../c.md"):
+            with self.subTest(target=target), self.assertRaises(fr.ChecklistUnrecognised) as caught:
+                fr.read_flows(checklist(f"[x]({target})"), read_file=read)
+            self.assertIn("inside the repository", str(caught.exception))
+            self.assertEqual(caught.exception.evidence["link"], posixpath.normpath(target))
+
+    def test_candidate_flows_follows_a_link_one_folder_up_over_a_real_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            (repo / "docs").mkdir(parents=True)
+            (repo / "tests").mkdir()
+            (repo / "docs" / "ACTIVE_MILESTONE.md").write_text(checklist("[c](../tests/checklist.md)"), encoding="utf-8")
+            (repo / "tests" / "checklist.md").write_text("**A. one.** x\n\n**B. two.** y\n", encoding="utf-8")
+            env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                   "GIT_COMMITTER_EMAIL": "t@t"}
+            for argv in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "x"]):
+                subprocess.run(["git", "-C", str(repo), *argv], check=True, env=env, capture_output=True)
+            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True,
+                                  text=True).stdout.strip()
+            flows = fr.candidate_flows(fr.capture_candidate(repo, head))
+            self.assertEqual([f.label for f in flows], ["A", "B"])
+
+
+class MissingSectionTest(unittest.TestCase):
+    def refusal(self, text: str) -> fr.ChecklistUnrecognised:
+        with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+            fr.read_flows(text)
+        return caught.exception
+
+    def test_the_reason_names_the_heading_to_write_and_lists_near_misses_with_lines(self) -> None:
+        text = ("# Active\n\n## Functional-review checklist (round 2)\n\n**A. one.** x\n\n"
+                "### Review checklist\n\n## Unrelated functional notes\n\n## Checklist\n")
+        error = self.refusal(text)
+        self.assertIn("'Functional review checklist'", str(error))
+        self.assertEqual(error.evidence["near_headings"], [
+            {"line": 3, "heading": "Functional-review checklist (round 2)"}, {"line": 7, "heading": "Review checklist"}])
+        self.assertIn("line 3", str(error))
+        self.assertNotIn("Unrelated", str(error))
+        self.assertNotIn("'Checklist'", str(error))
+
+    def test_a_fenced_heading_is_not_listed_and_the_list_is_bounded(self) -> None:
+        fenced = self.refusal("```\n## Functional checklist\n```\n")
+        self.assertEqual(fenced.evidence["near_headings"], [])
+        many = self.refusal("\n".join(f"## Review checklist {n}" for n in range(9)))
+        self.assertEqual(len(many.evidence["near_headings"]), fr.NEAR_MISS_HEADINGS)
 
 
 class CommittedChecklistsTest(unittest.TestCase):

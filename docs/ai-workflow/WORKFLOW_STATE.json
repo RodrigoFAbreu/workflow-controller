@@ -56622,7 +56622,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-flow-ends-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-flow-ends-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -56735,7 +56735,114 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "41e4a21e6d1f6039c1a8ff8130a3fd3ea217fe5f8c2d1b5e1373478e33a68766",
+        "approved_review_content_id": "1698368794332f5c4ec2c17e28b1f0cb44d554f774ebafbd6a6d74726567632d",
+        "review_content_manifest": [
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "64e9c2713f402be73c618f62a4d5bc22c76e1096"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-checklist-flow-ends-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d0968f2cc8e79870775d4079e3bb95e9f33a19bd"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "491f1146118fb6bb218780c603c74fe90885a9bc"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7903336499007ef94f2db3414887d58f1ed0d698"
+          },
+          {
+            "path": "docs/guide/troubleshooting.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2a3e6ee44846735b0fa6efa3a43d27dba6155c80"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1b05614a197a5ca8be51d03fc0895b6f7eadb923"
+          }
+        ],
+        "reviewed_content_commit": "93d5ddf360a15f05c94149e9606d38a78e60246d",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-04T16:26:16Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "1698368794332f5c4ec2c17e28b1f0cb44d554f774ebafbd6a6d74726567632d",
+            "ledger": {
+              "local": {
+                "bundle_id": "41e4a21e6d1f6039c1a8ff8130a3fd3ea217fe5f8c2d1b5e1373478e33a68766",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "14fb43d425bea024cb7143597d1e02b60c0aca0fd64478314629da320692ba5d",
+                "ledger_entry_sha256": "b9ce17b4ac9dd462c09f128463c5bc6091f9bbd71abe6b8286e31ce247a71191",
+                "run_ref": "session:local .ai-review/workflow-controller-checklist-flow-ends/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "41e4a21e6d1f6039c1a8ff8130a3fd3ea217fe5f8c2d1b5e1373478e33a68766",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "a8ed30709e4801ababcf779fb34019efc5bc68582b96ba959b6431770ad9d7f0",
+                "ledger_entry_sha256": "5caf6d59414b2f0b3d74275a47beb15d752401d62c4427d81096236ea7328aa4",
+                "run_ref": "codex:20261104T162249Z-648cd3b4",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-04T16:26:16Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "1f3cb2740700690cde4b6f455dc9fe8f6fcaac078f7121bb003d0c7e16d37dde",
@@ -56766,12 +56873,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-11-04T15:59:21Z",
+      "state_revision": 24,
+      "last_transition": "2026-11-04T16:26:16Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -57074,20 +57181,56 @@
               "at": "2026-11-04T14:51:29Z"
             }
           ]
+        },
+        "F-ef82e7377062": {
+          "digest": "ef82e7377062d78497d5cae0ada237d72bfa6fe621b09b741a39e93b4e8a730f",
+          "text": "**O1. `_FLOWS_INTRODUCER_RE` keeps the global `re.IGNORECASE` that round 2's I1 removed from `_SECTION_END_RE`** (`controller/functional_review.py:545`). `**A. One.** go`, a blank line, `### Notes`, `**Flowſ: run A again with --force first**`, a blank line, `**B. Two.** go` reads flows `A` and `B`, with no refusal, and `--force` is in neither; without the heading the same line stays in A, as it should. The outcome equals the documented one for `**Flows: ...**` (words inside that bold line are not read), so it needs a deliberately odd spelling and is not a new way to lose a line a person wrote normally. `(?ai:...)` on the word would close it. `_REGION_OPEN_RE` and `_FLOWS_BOLD_RE` carry the same flag from the base commit and are not changed by this item.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1698368794332f5c4ec2c17e28b1f0cb44d554f774ebafbd6a6d74726567632d",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T16:22:25Z"
+            }
+          ]
+        },
+        "F-6b81e70e08f3": {
+          "digest": "6b81e70e08f3c9349d034d33d7289bae096c9bbe723f336faff5aae87caf37ce",
+          "text": "**O2. No test pins the `a` flag on the closed-list qualifier** (`_QUALIFIER_PREFIX`). `test_a_case_folding_character_in_a_label_or_qualifier_does_not_end_a_flow` has no folding character in the qualifier word itself. In a scratch copy, changing that group to `(?i:...)` still passes all of the test's subjects, while `**Optıonal K. x** y` (U+0131) then becomes flow `K` instead of staying in A. Both regexes share the prefix, so the mutant loses no text; a subtest with U+0131 would pin the grammar D1 states.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "1698368794332f5c4ec2c17e28b1f0cb44d554f774ebafbd6a6d74726567632d",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T16:22:25Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+        "review_content_id": "1698368794332f5c4ec2c17e28b1f0cb44d554f774ebafbd6a6d74726567632d",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "a022657150a62fb0be22a36c12d08e2f5d41283f779a6ce183845c9c77da1a0f",
+          "bundle_id": "41e4a21e6d1f6039c1a8ff8130a3fd3ea217fe5f8c2d1b5e1373478e33a68766",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-04T14:47:51Z",
-          "verdict_sha256": "fffeed3a137ccfd2be687d05f05bd74bdfe668965c7b9630cfaeb7de23327e23",
+          "round": 3,
+          "completed_at": "2026-11-04T16:22:25Z",
+          "verdict_sha256": "14fb43d425bea024cb7143597d1e02b60c0aca0fd64478314629da320692ba5d",
           "run_ref": "session:local .ai-review/workflow-controller-checklist-flow-ends/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "41e4a21e6d1f6039c1a8ff8130a3fd3ea217fe5f8c2d1b5e1373478e33a68766",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-04T16:24:56Z",
+          "verdict_sha256": "a8ed30709e4801ababcf779fb34019efc5bc68582b96ba959b6431770ad9d7f0",
+          "run_ref": "codex:20261104T162249Z-648cd3b4",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

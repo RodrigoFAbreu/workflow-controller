@@ -204,7 +204,7 @@ EVIDENCE_NAMES = 8
 NEVER_FLOWS = ("setup", "flows", "test data", "known limitations")
 FLOW_SHAPES = (
     "table rows whose first cell is a flow label (`| A | do | expect |`, `| F1 | ... |`)",
-    "bold labelled paragraphs (`**A. The title.**`)",
+    "bold labelled paragraphs (`**A. The title.**`, `**Optional, K. Title.**`)",
     "headings below the section's own that start with a label or `Flow`",
     "a top-level numbered list",
 )
@@ -226,17 +226,25 @@ _NUMBERED_LABEL = rf"\d{{1,3}}(?:\.\d{{1,2}})*[A-Za-z]?{_QUALIFIER}"
 #: ``)`` or ``:``. A label is tried first and has no length bound of its own (D2), so the bound only
 #: limits the candidates of D1.
 _TOKEN = r"[A-Za-z0-9.\-]{1,24}"
-_BOLD_RE = re.compile(rf"^\*\*(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
+#: The qualifiers a flow header may carry without a comma (``**Optional K. Title.**``), matched in any case (D1).
+QUALIFIERS = ("Optional", "Required", "Extra", "Additional", "Conditional")
+#: A qualifier before a flow label (D1): one or two words of letters and a comma (``Optional, ``, ``Then, ``), or one
+#: word of ``QUALIFIERS`` with no comma. The one definition of what a qualified flow header is, shared by the
+#: header that starts a flow and the line that ends the flow before it.
+_QUALIFIER_PREFIX = (rf"(?:[A-Za-z]+(?:[ \t]+[A-Za-z]+)?[ \t]*,[ \t]*"
+                     rf"|(?i:{'|'.join(QUALIFIERS)})[ \t]+)")
+_BOLD_RE = re.compile(
+    rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
-#: checklist's own non-flow sections; any other label (``Expected``, ``Verify``,
+#: checklist's own non-flow sections or is a flow header; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
 _SECTION_END_RE = re.compile(
     r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
     # the section word is the whole bold label (``**Setup**``, ``**Out of scope.**``), not a sentence prefix
     + r")[ \t]*(?:[:.]|\*\*)"
-    # or a flow header: one qualifier word, a comma, then the label (``**Optional, K. Title.**``)
-    rf"|^\*\*[ \t]*[A-Za-z]+,[ \t]*{_LABEL}[.)][ \t]", re.IGNORECASE)
-_BOLD_LABELLED_RE = re.compile(rf"^\*\*(?P<label>{_LABEL})[.):](?!\d)")
+    # or a flow header, qualified or not (``**Optional, K. Title.**``)
+    rf"|^\*\*[ \t]*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)", re.IGNORECASE)
+_BOLD_LABELLED_RE = re.compile(rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?P<label>{_LABEL})[.):](?!\d)")
 _HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")
 #: ``Flow <label>``: a complete label, alone or closed by a marker, else the text is read as before.
@@ -530,6 +538,41 @@ def _dropped(deciding: str, read: int, dropped: Sequence[tuple[int, str, str]]) 
         dropped=[{"shape": shape, "label": label} for _, shape, label in dropped][:20])
 
 
+#: A ``**Flows...**`` bold line with no text after its closing ``**`` (the usual lone ``**Flows:**`` introducer) (D2).
+_FLOWS_INTRODUCER_RE = re.compile(r"^\*\*[ \t]*flows\b[^*]*\*\*[ \t]*[:.]?[ \t]*$", re.IGNORECASE)
+INTERIOR_NAME_CHARS = 60
+
+
+def _interior(found: _Found, lines: Sequence[str], mask: Sequence[bool]) -> list[tuple[int, str, str]]:
+    """The lines the bold shape leaves in no flow (D2): in the gap from the end of one flow to the start of the
+    next, any line but a blank one, a heading, or a lone ``**Flows...**`` introducer. Returns (line, before,
+    after) in line order; text before the first flow and after the last one is not between two flows."""
+    left: list[tuple[int, str, str]] = []
+    for ((_, end), (start, _)), ((before, _), (after, _)) in zip(
+            zip(found.spans, found.spans[1:]), zip(found.items, found.items[1:])):
+        for index in range(end, start):
+            line = lines[index]
+            if (not line.strip() or _heading(line, mask[index])
+                    or (not mask[index] and _FLOWS_INTRODUCER_RE.match(line))):
+                continue
+            left.append((index, before, after))
+    return left
+
+
+def _interior_refusal(found: _Found, lines: Sequence[str],
+                      left: Sequence[tuple[int, str, str]]) -> ChecklistUnrecognised:
+    """The refusal of text between two flows that no flow holds (D2)."""
+    index, before, after = left[0]
+    first = lines[index].strip()[:INTERIOR_NAME_CHARS]
+    return _unrecognised(
+        f"the bold shape read {len(found.items)} flow(s), and {len(left)} line(s) between two of them belong to no "
+        f"flow, so the tester would never see them: the first is line {index + 1} {first!r}, after flow `{before}` "
+        f"and before flow `{after}`. Put the text inside the flow it belongs to, or move the section to the end of "
+        f"the checklist",
+        shape="bold", recognised=len(found.items), total=len(found.items),
+        interior=[{"line": number + 1, "before": a, "after": b} for number, a, b in left][:20])
+
+
 def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str, str]]:
     """D7's four steps, in order. The table shape decides when any row is
     old-form, or when no other shape found a flow; otherwise the first of the
@@ -565,6 +608,10 @@ def _flows_of_lines(lines: Sequence[str], section_level: int) -> list[tuple[str,
         dropped = _unaccounted(shape, found.spans, [], found_by, regions)
         if dropped:
             raise _dropped(shape, len(found.items), dropped)
+        if shape == "bold":
+            interior = _interior(found, lines, mask)
+            if interior:
+                raise _interior_refusal(found, lines, interior)
         return found.items
     return _table_decides(rows)
 

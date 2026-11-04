@@ -12,7 +12,7 @@ linked-`.agents` refusal with its cause and remedy.
 
 The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.9).
 
-Next action: `/milestone-plan` for CL1a ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), the retention rule for finished work-item files), the next incomplete item in `docs/ROADMAP.md`.
+Next action: `/milestone-plan` for FL3 ([#288](https://github.com/RodrigoFAbreu/workflow-controller/issues/288), the bold `Flow N` header drop in the checklist reader), then CL1a ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), the retention rule for finished work-item files), the next incomplete item in `docs/ROADMAP.md`.
 
 Previous item, now complete:
 

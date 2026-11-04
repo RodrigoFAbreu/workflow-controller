@@ -56622,12 +56622,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-flow-ends-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-flow-ends-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 2,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "886cfa7e3aa6f218c2a045f02331a5c61ccabee9",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "652afda80bcc0ac1765f7ce8b887bf4a68852722",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
@@ -56770,8 +56770,8 @@
           "external": 0
         }
       },
-      "state_revision": 15,
-      "last_transition": "2026-11-04T03:29:56Z",
+      "state_revision": 16,
+      "last_transition": "2026-11-04T13:55:34Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

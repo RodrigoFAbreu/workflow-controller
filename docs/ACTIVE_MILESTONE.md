@@ -7,7 +7,8 @@
 symbolic link. The plan is `docs/ai-workflow/CONTROLLER_REMOVE_TREE_LINKS_PLAN.md` (revision 2). CP1 is complete: the removal
 walks the components above the last one and raises `RuntimeContainmentError` for a link or a `..` among them before anything is
 removed; a Codex review of a worktree whose `.agents` is a link now fails at `build_copy` (record `FAILED`, `outcome: error`,
-`not_started`). CP2 (the roadmap and `docs/common-problems.md`) is next.
+`not_started`). CP2 is complete: the roadmap marks C10k and follow-up 84 done, and `docs/common-problems.md` names the
+linked-`.agents` refusal with its cause and remedy.
 
 Previous item, now complete:
 

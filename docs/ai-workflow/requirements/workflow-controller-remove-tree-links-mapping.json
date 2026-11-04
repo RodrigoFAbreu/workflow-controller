@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-remove-tree-links",
+  "requirements": {
+    "R1": {
+      "description": "remove_tree refuses (RuntimeContainmentError, nothing removed) a path whose parent chain below the root holds a symbolic link or a .. component, while a link as the last component is still unlinked alone; every caller's path is read and the one built from data is pinned by a test",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The roadmap marks C10k and follow-up 84 done",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

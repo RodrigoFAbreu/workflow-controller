@@ -25,6 +25,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -36,9 +37,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from controller import cli, handoff, job, protocol, review, settings, usage, worker  # noqa: E402
 from controller.anchor import OWNERSHIP_VAR  # noqa: E402
 from controller.errors import (  # noqa: E402
-    JobAbandonRefusedError, PendingJobReconciliationError, ReviewLaunchRefusedError, WorkflowProtocolRefusedError,
+    JobAbandonRefusedError, PendingJobReconciliationError, ReviewLaunchRefusedError, RuntimeContainmentError,
+    WorkflowProtocolRefusedError,
 )
-from tests import fake_codex, process_fixtures  # noqa: E402
+from tests import fake_codex, fixtures, process_fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
 from tests.test_protocol_lifecycle import _APPROVE_PLAN, WID, Lifecycle  # noqa: E402
 
@@ -208,6 +210,61 @@ class GateSelectionTest(unittest.TestCase):
         self.assertIsNone(job._external_review_stage(self.decision(disposition="human_gate")))
         self.assertIsNone(job._external_review_stage(self.decision(action_id="plan.approve")))
         self.assertIsNone(job._external_review_stage(SimpleNamespace(protocol=None)))
+
+
+def link_agents(worktree: Path) -> Path:
+    """Make ``worktree/.agents`` a relative link to a real folder in the worktree holding the stripped entries."""
+    real = worktree / "agents-real"
+    for name in ("skills", "plugins"):
+        (real / name).mkdir(parents=True)
+        (real / name / "f.txt").write_text(name)
+    os.symlink("agents-real", worktree / ".agents")
+    return real
+
+
+class LinkedAgentsCopyTest(unittest.TestCase):
+    """A worktree whose ``.agents`` is a link cannot be copied for a Codex review (#140, D4)."""
+
+    def test_build_copy_refuses_a_linked_agents_for_both_stripped_entries(self) -> None:
+        with tempfile.TemporaryDirectory(dir=process_fixtures.build_dir()) as raw:
+            repo = Path(raw) / "repo"
+            fixtures.git_init(repo)
+            (repo / "tracked.txt").write_text("v1\n")
+            fixtures.commit_all(repo, "init")
+            real = link_agents(repo)
+            runtime_root = repo / ".controller" / "runtime"
+            runtime_root.mkdir(parents=True)
+            for entry in (".agents/skills", ".agents/plugins"):
+                with self.subTest(entry=entry):
+                    with self.assertRaises(RuntimeContainmentError) as caught:
+                        review.build_copy(repo, runtime_root, "jobx", strip=(entry,))
+                    self.assertIn("is a symbolic link", caught.exception.message)
+                    self.assertTrue(caught.exception.evidence["path"].endswith(entry))
+                    self.assertTrue(caught.exception.evidence["link"].endswith("/tree/.agents"))
+                    review.settle_job_dir(runtime_root, "jobx")
+            self.assertEqual((real / "skills" / "f.txt").read_text(), "skills")
+            self.assertEqual((real / "plugins" / "f.txt").read_text(), "plugins")
+
+
+class LinkedAgentsJobTest(_ReviewCase):
+    def test_a_linked_agents_ends_the_review_record_failed_with_outcome_error(self) -> None:
+        real = self.life.root / "agents-real"
+
+        class CopyDouble(LaunchDouble):
+            def __call__(inner, **kw):
+                inner.calls.append(kw)
+                link_agents(kw["worktree"])
+                return review.build_copy(kw["worktree"], kw["runtime_root"], kw["job_id"])
+
+        with self.assertRaises(RuntimeContainmentError):
+            self.step(CopyDouble(self, self.life), usage_gate=self.gate())
+        [record] = self.records()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["review"]["outcome"], "error")
+        self.assertTrue(record["review"]["not_started"])
+        self.assertEqual(self.shared()["reservations"], {})
+        self.assertEqual((real / "skills" / "f.txt").read_text(), "skills")
+        self.assertEqual((real / "plugins" / "f.txt").read_text(), "plugins")
 
 
 class UnconfiguredAndRefusalTest(_ReviewCase):

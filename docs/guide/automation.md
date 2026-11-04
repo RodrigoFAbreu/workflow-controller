@@ -464,10 +464,10 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    `Extra`, `Additional` and `Conditional` (any case) with no comma (`**Optional K. Title.**`). It
    starts a flow like `**K. Title.**` does, with the label after the qualifier, and ends the flow
    before it. The tester runs an optional flow as it runs any other, so one that cannot run in the
-   sandbox can stop a round that used to pass over it. Any other spelling (`**Optional extra K.
-   Title.**`, `**Optional: K. Title.**`) is not a header and stays in the flow above. A qualified
-   line in a checklist whose flows are headings, a table or a numbered list makes the bold shape
-   decide and is refused as a flow of another shape.
+   sandbox can stop a round that used to pass over it. Any other spelling
+   (`**Optional extra K. Title.**`, `**Optional: K. Title.**`) is not a header and stays in the flow
+   above. A qualified line in a checklist whose flows are headings, a table or a numbered list makes
+   the bold shape decide and is refused as a flow of another shape.
 
    Between two flows of the bold shape, every line that belongs to no flow is refused (a
    `**Setup** for this flow: ...` or `**Setup: none needed.**` line, text under a heading or after

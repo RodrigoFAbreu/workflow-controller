@@ -242,8 +242,9 @@ _SECTION_END_RE = re.compile(
     r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
     # the section word is the whole bold label (``**Setup**``, ``**Out of scope.**``), not a sentence prefix
     + r")[ \t]*(?:[:.]|\*\*)"
-    # or a flow header, qualified or not (``**Optional, K. Title.**``)
-    rf"|^\*\*[ \t]*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)", re.IGNORECASE)
+    # or a flow header, qualified or not (``**Optional, K. Title.**``), spelled as ``_BOLD_RE`` spells it: a line that
+    # ended a flow without starting one would be read by no flow
+    rf"|^\*\*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)", re.IGNORECASE)
 _BOLD_LABELLED_RE = re.compile(rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?P<label>{_LABEL})[.):](?!\d)")
 _HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")

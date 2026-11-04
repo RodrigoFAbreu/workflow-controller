@@ -293,8 +293,8 @@ class FlowEndsTest(unittest.TestCase):
         self.assertEqual(labels(checklist(text)), ["A", "B"])
 
     def test_text_under_a_heading_or_a_flows_line_between_two_flows_is_refused(self) -> None:
-        for body in ("### Setup\nmake it", "### Notes for A\nsee A", "### Notes\n\n**Flows:** run it again with x",
-                     "### Notes\n\nsee A"):
+        for body in ("### Setup\nmake it", "### Notes for A\nsee A", "**Flows:** run it again with x",
+                     "### Notes\n\n**Flows:** run it again with x", "### Notes\n\nsee A"):
             with self.subTest(body=body):
                 evidence = self.interior(f"**A. One.** go\n\n{body}\n\n**B. Two.** go")
                 self.assertEqual(evidence["interior"][0]["before"], "A")
@@ -349,6 +349,14 @@ class FlowEndsTest(unittest.TestCase):
                 flows = fr.read_flows(checklist(f"**A. One.** go\n\n{line} more\n\n**B. Two.** go"))
                 self.assertEqual([f.label for f in flows], ["A", "B"])
                 self.assertIn(line, flows[0].text)
+
+    def test_a_header_spelled_with_a_space_after_the_stars_stays_in_its_flow(self) -> None:
+        """It starts no flow, so it must not end one: after the last flow it would be read by nothing."""
+        for line in ("** K. Title.** x", "** Then, K. Title.** x", "** Optional K. Title.** x"):
+            for after in ("", "\n\n**B. Two.** go"):
+                with self.subTest(line=line, after=after):
+                    flows = fr.read_flows(checklist(f"**A. One.** go\n\n{line}{after}"))
+                    self.assertIn(line, flows[0].text)
 
     def test_a_qualified_header_with_a_bad_label_is_partly_recognised(self) -> None:
         evidence = refusal(checklist("**A. One.** go\n\n**Optional, 123. Title.** x\n\n**B. Two.** go"))
@@ -719,21 +727,45 @@ class LinkedChecklistTest(unittest.TestCase):
             self.assertIn("inside the repository", str(caught.exception))
             self.assertEqual(caught.exception.evidence["link"], posixpath.normpath(target))
 
-    def test_candidate_flows_follows_a_link_one_folder_up_over_a_real_tree(self) -> None:
+    def real_candidate(self, tmp: str, target: str) -> fr.Candidate:
+        """A committed repository whose ``docs/ACTIVE_MILESTONE.md`` links ``target``, with a file of flows beside the
+        repository that a link must never reach."""
+        flows = "**A. one.** x\n\n**B. two.** y\n"
+        repo = Path(tmp) / "repo"
+        (repo / "docs").mkdir(parents=True)
+        (repo / "tests").mkdir()
+        (repo / "docs" / "ACTIVE_MILESTONE.md").write_text(checklist(f"[c]({target})"), encoding="utf-8")
+        (repo / "tests" / "checklist.md").write_text(flows, encoding="utf-8")
+        (repo / "c.md").write_text(flows, encoding="utf-8")
+        (Path(tmp) / "outside.md").write_text(flows, encoding="utf-8")
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+               "GIT_COMMITTER_EMAIL": "t@t"}
+        for argv in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "x"]):
+            subprocess.run(["git", "-C", str(repo), *argv], check=True, env=env, capture_output=True)
+        head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True,
+                              text=True).stdout.strip()
+        return fr.capture_candidate(repo, head)
+
+    def test_candidate_flows_follows_a_link_that_stays_inside_a_real_tree(self) -> None:
+        for target in ("../tests/checklist.md", "a/../../c.md"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                flows = fr.candidate_flows(self.real_candidate(tmp, target))
+                self.assertEqual([f.label for f in flows], ["A", "B"])
+
+    def test_candidate_flows_refuses_a_link_that_leaves_a_real_tree(self) -> None:
+        for target in ("../../outside.md", "a/../../../outside.md", "../.."):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                candidate = self.real_candidate(tmp, target)
+                with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+                    fr.candidate_flows(candidate)
+                self.assertIn("inside the repository", str(caught.exception))
+                self.assertNotIn("recognised", caught.exception.evidence)
+
+    def test_candidate_flows_refuses_a_link_to_a_folder_of_the_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp) / "repo"
-            (repo / "docs").mkdir(parents=True)
-            (repo / "tests").mkdir()
-            (repo / "docs" / "ACTIVE_MILESTONE.md").write_text(checklist("[c](../tests/checklist.md)"), encoding="utf-8")
-            (repo / "tests" / "checklist.md").write_text("**A. one.** x\n\n**B. two.** y\n", encoding="utf-8")
-            env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-                   "GIT_COMMITTER_EMAIL": "t@t"}
-            for argv in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "x"]):
-                subprocess.run(["git", "-C", str(repo), *argv], check=True, env=env, capture_output=True)
-            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True,
-                                  text=True).stdout.strip()
-            flows = fr.candidate_flows(fr.capture_candidate(repo, head))
-            self.assertEqual([f.label for f in flows], ["A", "B"])
+            with self.assertRaises(fr.ChecklistUnrecognised) as caught:
+                fr.candidate_flows(self.real_candidate(tmp, "../tests"))
+            self.assertIn("a tracked file", str(caught.exception))
 
 
 class MissingSectionTest(unittest.TestCase):

@@ -417,7 +417,7 @@ disposition and action beside it.
   `isolation_breach`, `tested_bytes_unbound`, `recording_refused`, `functional_rounds_exhausted`
   or `functional_unchanged`; `checklist_unrecognised` also covers a checklist of which only some
   items were recognised, or in which a flow of another shape lies outside the flows read (its message names the others: fix their labels or give the section one shape; the rule is in the
-  [automation guide](automation.md#protocol-mode-workflow-27-and-later)); each message names its remedy, and the kept sandbox of a breach or an
+  [automation guide](automation.md#protocol-mode-workflow-27-and-later)), a checklist with text between two flows that no flow holds, and a link that leaves the repository; each message names its remedy, and the kept sandbox of a breach or an
   unbound clone is under `<runtime root>/functional/<job_id>/` until the next functional run
   starts (see "The automated functional review" in the
   [automation guide](automation.md#protocol-mode-workflow-27-and-later)). The pull request stops it ends in (`pr_checks_pending`,

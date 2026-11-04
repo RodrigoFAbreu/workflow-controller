@@ -276,35 +276,33 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-checklist-flow-ends` (C10j, issue [#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)),
-implementation revision 3. The change makes the functional-checklist recogniser (`controller/functional_review.py`) read or
-refuse what it used to drop: a qualified flow header (`**Optional, K. Title.**`, `**Optional K. Title.**`) starts a flow, text
-between two flows of the bold shape is refused instead of read by no flow, a link one folder up (`../tests/checklist.md`) is
-followed when it stays inside the repository, and a missing section names the heading to write. Every flow runs offline: no
-network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
-system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
+Item `workflow-controller-remove-tree-links` (C10k, issue [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)),
+implementation revision 1. The change makes `runtime.remove_tree` (`controller/runtime.py`) refuse a path below a symbolic link:
+before it removes anything it walks the components above the last one and raises `RuntimeContainmentError` for a link or a `..`
+among them. A link as the last component is still unlinked and its destination kept. The one production path that changes is a
+Codex review of a worktree whose `.agents` is a link, which now fails at `build_copy`. Every flow runs offline: no network, no
+real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system
+directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
 `PYTHONPATH=.`; the flows are unit tests and a read of the documentation, so they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | A qualified header starts a flow and ends the one before (D1) | `python3 -B -m unittest tests.test_functional_review.FlowEndsTest -k qualified -k header -v` | All pass: `**Optional, K. Title.**`, `**Then, 2. Run it again.**` and `**Optional K. Title.**` each start a flow and end the previous one, also directly after a flow line; `**Optional extra K. Title.**` and a space after the stars stay in the flow above; a qualified line with a bad label is partly recognised; beside another shape it is refused. |
-| 2 | Text between two flows is refused, not dropped (D2) | `python3 -B -m unittest tests.test_functional_review.FlowEndsTest -v` | All 17 pass: a `**Setup** for this flow: ...` or `**Setup: none needed.**` line between two flows ends at `checklist_unrecognised` naming the line (cut at 60 characters), the flow before and the flow after, with at most twenty lines of evidence; a lone heading or lone `**Flows:**` line is still read, text under them is refused; the same lines before the first or after the last flow are read; a case-folding character in a label or qualifier does not end a flow. |
-| 3 | A link one folder up is followed inside the repository (D3) | `python3 -B -m unittest tests.test_functional_review.LinkedChecklistTest -v` | All pass: `../tests/checklist.md` from `docs/` is read, over a real tree through `candidate_flows` as well; `../../outside.md` and `a/../../../c.md` leave the repository and are refused with the containment wording; an absolute path, URL, `~`, backslash or NUL is refused without asking the reader; a link to a folder is refused. |
-| 4 | A missing section names the heading it needs (D5) | `python3 -B -m unittest tests.test_functional_review.MissingSectionTest -v` | Both pass: the reason names `Functional review checklist` (any level, any case) and lists up to five near-miss headings with line numbers; a fenced `#` line is not listed. |
-| 5 | Real checklists are read as before (D4) | `python3 -B -m unittest tests.test_functional_review.CommittedChecklistsTest -v` | Passes: the committed checklist sections of the repository are read, none refused or read differently except through D1 and D2. |
-| 6 | The whole recogniser suite and the neighbours | `python3 -B -m unittest tests.test_functional_review -v` | 128 tests, all OK. |
-| 7 | Docs and neighbours (D6) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0. Read `docs/guide/automation.md` (the qualified header and its exclusions, the gap refusal, the link rule and the missing-section wording, around line 457) and `docs/common-problems.md` (the `checklist_unrecognised` line); they match flows 1 to 5. `docs/ROADMAP.md` marks C10j done (1.27.8) and follow-up 71 done. |
+| 1 | A path below a link is refused and the destination kept (D1) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -k below_a_link -k two_levels -k dangling -v` | All pass: `remove_tree(sandbox, "clone/build/artifacts")` with `clone/build` a link to `writable/build` raises `RuntimeContainmentError` naming the link, and every file in the destination is still there; a link two levels up and a dangling link above the last component are refused too. |
+| 2 | A link as the last component is unlinked, not followed (D1) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -k last_component -v` | Both pass: a link in last position is unlinked and its destination kept; one that leads outside the root is refused by containment and stays. |
+| 3 | `..`, missing components and absolute paths (D1, D2) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -k dotdot -k missing -k absolute -v` | All pass: a `..` component is refused; a path through a missing component is a no-op; an absolute path inside the root is removed, one outside is refused. |
+| 4 | Behaviour that must not change (D2, D3) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -v` | All 12 pass, including `keep`, a read-only subtree, a root reached through a link, a root that is a link with `.` and `""` (unlinked, destination kept), and a plain root cleared and removed for `.`. |
+| 5 | A linked `.agents` fails a Codex review cleanly (D4) | `python3 -B -m unittest tests.test_review_job.LinkedAgentsCopyTest tests.test_review_job.LinkedAgentsJobTest -v` | Both pass: `build_copy` refuses both `.agents/skills` and `.agents/plugins` when `.agents` is a link; the job record ends `FAILED` with `outcome: error`, `not_started` true, and the link's destination untouched. |
+| 6 | Neighbours still pass | `python3 -B -m unittest tests.test_runtime tests.test_review_job -v` | All OK. |
+| 7 | Docs | `python3 -B tools/check_docs.py` | Exit 0. Read `docs/common-problems.md` (under "A review the Controller ran did not finish"): the `refusing to remove ... is a symbolic link` entry gives the cause (a linked `.agents`) and the remedy. `docs/ROADMAP.md` marks C10k and follow-up 84 done (1.27.9). |
 
-**Known limitations / out of scope.** No new setting, option, exit code or gate. `optional` is not modelled: the tester runs an
-optional flow like any other, so one that cannot run in the sandbox can now stop a round that used to pass over it. The heading
-match is unchanged (exact `Functional review checklist`; only the refusal's message improved). A link that points outside the
-repository is still refused. Text before the first flow and after the last is read as before. No real-host run is part of this
-checklist. The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on
-main). The release note and release history row belong to the docs pull request after the 1.27.8 release.
+**Known limitations / out of scope.** No new setting, option, exit code or gate. A Codex review of a worktree whose `.agents` is a
+relative link inside the worktree worked before and now fails by design (D4). A race between the walk and the removal is not
+addressed. `copy_tree`, `write_private_bytes` and `_assert_contained` are unchanged. No real-host run is part of this checklist.
+The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
 
 
 ## Next action
 
-Manual functional review of C10j (the checklist above), then `/accept-milestone`.
+Manual functional review of C10k (the checklist above), then `/accept-milestone`.

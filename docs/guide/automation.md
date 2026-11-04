@@ -457,7 +457,32 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    after a `**Setup.**` line, up to the next heading, labelled paragraph or bold line that opens
    another section, such as `**Flows.**`) are not flows, and `Flows` is not such a region. The evidence then also carries `dropped`, the `shape` and `label`
    of each flow that would not run; put each inside a flow of the shape used, or give the section
-   one shape;
+   one shape.
+
+   A bold flow header may carry a **qualifier**: one or two words of letters and a comma
+   (`**Optional, K. Title.**`, `**Then, 2. Run it again.**`), or one of `Optional`, `Required`,
+   `Extra`, `Additional` and `Conditional` (any case) with no comma (`**Optional K. Title.**`). It
+   starts a flow like `**K. Title.**` does, with the label after the qualifier, and ends the flow
+   before it. The tester runs an optional flow as it runs any other, so one that cannot run in the
+   sandbox can stop a round that used to pass over it. Any other spelling (`**Optional extra K.
+   Title.**`, `**Optional: K. Title.**`) is not a header and stays in the flow above. A qualified
+   line in a checklist whose flows are headings, a table or a numbered list makes the bold shape
+   decide and is refused as a flow of another shape.
+
+   Between two flows of the bold shape, every line that belongs to no flow is refused (a
+   `**Setup** for this flow: ...` or `**Setup: none needed.**` line, text under a heading or after
+   `**Flows:** run it again`), naming the first such line, the flow before it and the flow after it
+   (the evidence carries `interior`). Put the text inside the flow it belongs to, or move the
+   section to the end. A heading line (its own words are not read) and a lone `**Flows:**` line may
+   stay between two flows; text before the first flow and after the last one is read as before.
+
+   A section whose only content is a link to another file is followed. The link resolves from the
+   checklist's own folder, so `../tests/checklist.md` in `docs/ACTIVE_MILESTONE.md` names
+   `tests/checklist.md`; a link that leaves the repository, is absolute, a URL, `~`-relative or
+   not a tracked file ends at `checklist_unrecognised`. When the section is missing, the refusal
+   names the heading to write (`Functional review checklist`, at any heading level and in any case;
+   the match is exact) and lists up to five headings that contain `checklist` with `functional` or
+   `review`, with their line numbers;
 2. builds a **sandbox** under `<runtime root>/functional/<job_id>/`: a `git clone --no-hardlinks`
    of the item's branch at its head, whose `origin` is a scratch bare repository; a `bin/` first on
    `PATH` with a fake `gh`, `claude`, `codex` and `ssh` (each logs its arguments and refuses);

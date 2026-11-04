@@ -1,0 +1,12 @@
+{
+  "dispositions": {
+    "F-17af4951bb0e": {"disposition": "fixed"},
+    "F-5c6d63f3473d": {"disposition": "fixed"},
+    "F-5cb702776314": {"disposition": "fixed"},
+    "F-6f1f71d9f869": {"disposition": "fixed"},
+    "F-714f7765529a": {"disposition": "fixed"},
+    "F-cc5c942afa09": {"disposition": "fixed"}
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-remove-tree-links"
+}

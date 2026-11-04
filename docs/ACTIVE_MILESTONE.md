@@ -2,13 +2,17 @@
 
 ## Status
 
-**In progress.** `workflow-controller-remove-tree-links` (C10k, issue
+**Complete.** `workflow-controller-remove-tree-links` (C10k, issue
 [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)) makes `runtime.remove_tree` refuse a path below a
 symbolic link. The plan is `docs/ai-workflow/CONTROLLER_REMOVE_TREE_LINKS_PLAN.md` (revision 2). CP1 is complete: the removal
 walks the components above the last one and raises `RuntimeContainmentError` for a link or a `..` among them before anything is
 removed; a Codex review of a worktree whose `.agents` is a link now fails at `build_copy` (record `FAILED`, `outcome: error`,
 `not_started`). CP2 is complete: the roadmap marks C10k and follow-up 84 done, and `docs/common-problems.md` names the
 linked-`.agents` refusal with its cause and remedy.
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.9).
+
+Next action: `/milestone-plan` for CL1a ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), the retention rule for finished work-item files), the next incomplete item in `docs/ROADMAP.md`.
 
 Previous item, now complete:
 
@@ -305,4 +309,4 @@ The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #2
 
 ## Next action
 
-Manual functional review of C10k (the checklist above), then `/accept-milestone`.
+`/milestone-plan` for CL1a ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130)), the next incomplete item in `docs/ROADMAP.md`.

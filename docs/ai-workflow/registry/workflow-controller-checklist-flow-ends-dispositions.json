@@ -1,0 +1,94 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-checklist-flow-ends",
+ "dispositions": {
+  "F-091bf1136ac9": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-3042e6bc93c6": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-3ebf1576d95f": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-557c1db3c000": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-6b4f27ddf100": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-8622620d50a1": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-9c0b7c9536e1": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-a04439256275": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-b720d969a79f": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-d625f32a0471": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-d86280071d28": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-d8c9c6454843": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-d9e17b1c7eda": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 2): applied, or stated there as a recorded risk or an exclusion, and carried into the implementation."
+  },
+  "F-fef3d2ccaef6": {
+   "disposition": "fixed",
+   "note": "Fixed in 93d5ddf (C10j round 2, O1): the test now asserts the introducer's words are absent from every returned flow's text."
+  },
+  "F-226de5e1fb95": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/285"
+  },
+  "F-ef82e7377062": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/285"
+  },
+  "F-54b43721b510": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/285"
+  },
+  "F-16dcf64bccd8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/285"
+  },
+  "F-1cfe3bafe698": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6636720835"
+  },
+  "F-8e53bf52342e": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6636720835"
+  },
+  "F-6b81e70e08f3": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6636720835"
+  },
+  "F-0e3f68fab8c2": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6636720835"
+  }
+ }
+}

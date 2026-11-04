@@ -2,6 +2,21 @@
 
 ## Status
 
+**Complete.** `workflow-controller-checklist-flow-ends` (C10j, issue
+[#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)) closes the gaps in how the functional checklist
+recogniser finds where a flow ends. The plan is `docs/ai-workflow/CONTROLLER_CHECKLIST_FLOW_ENDS_PLAN.md` (revision 2). CP1 is
+complete: a qualified flow header (`**Optional K. Title.**`, `**Then, 2. Run it again.**`) starts a flow and ends the one before
+it, and text in a gap between two flows is refused instead of being read by no flow. CP2 is complete: a link above the
+checklist's folder (`../tests/checklist.md`) is followed when the joined path stays inside the repository, and the
+missing-section refusal lists the near-miss headings. CP3 is complete: `docs/guide/automation.md` and `docs/common-problems.md`
+say what the recogniser reads and refuses, and the roadmap marks C10j done (1.27.8).
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.8).
+
+Next action: `/milestone-plan` for C10k (the `remove_tree` point of [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)), the next incomplete item in `docs/ROADMAP.md`.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-sandbox-precheck` (C10i, issue
 [#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)) checks the functional tester's availability before
 usage is reserved. The plan is `docs/ai-workflow/CONTROLLER_SANDBOX_PRECHECK_PLAN.md` (revision 2). CP1 is complete:

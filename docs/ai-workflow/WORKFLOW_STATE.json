@@ -56622,7 +56622,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-flow-ends-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-flow-ends-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -56766,12 +56766,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-11-04T13:55:34Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-04T14:20:41Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -56974,6 +56974,34 @@
               "review_content_id": "1f3cb2740700690cde4b6f455dc9fe8f6fcaac078f7121bb003d0c7e16d37dde",
               "verdict": "APPROVE",
               "at": "2026-11-04T02:08:26Z"
+            }
+          ]
+        },
+        "F-54b43721b510": {
+          "digest": "54b43721b510901fd3a7aa7e9fab3424a0d6a9b1165fecc7881538d49bb3f0f4",
+          "text": "**O1.** `_FLOWS_INTRODUCER_RE` could allow only the word with its marker (`**Flows**`, `**Flows:**`, `**Flows.**`) plus the descriptive forms the history holds (`**Flows and expected results**`, `**Flows (each from the repository root).**`), so that `**Flows: text**` and `**Flows. text**` are refused as `**Setup: text**` is. That closes the last way a flow can end and leave its text unread between two flows. The history has no `**Flows: text**` line (replay below), so no real checklist would be refused. It narrows what D2 states, so it needs a plan decision or a follow-up issue.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f1bd0f7e0847c4fee2476d056ad6d8dd2d17eca7b538e2feb7dd25a1ad7a91f0",
+              "verdict": "REVISE",
+              "at": "2026-11-04T14:20:41Z"
+            }
+          ]
+        },
+        "F-1cfe3bafe698": {
+          "digest": "1cfe3bafe69892d80c0d7e8d54095acda31c40fa78e8446da9fcca364841f0d5",
+          "text": "**O2.** The guide's \"A qualified line in a checklist whose flows are headings, a table or a numbered list makes the bold shape decide and is refused as a flow of another shape\" is not exact for tables. Beside an old-form table the table decides (`shape: table`, `dropped: K`). Beside a widened-label table (`| F1 | ...`) the refusal is the partly-recognised one, \"the bold shape recognised 1 of 3 items; not recognised: F1, F2\", followed by the label rule, although `F1` and `F2` are valid labels. Every case is refused, so nothing is lost; the wording misdirects the remedy in the widened-label case. That message comes from the existing `loose` path.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f1bd0f7e0847c4fee2476d056ad6d8dd2d17eca7b538e2feb7dd25a1ad7a91f0",
+              "verdict": "REVISE",
+              "at": "2026-11-04T14:20:41Z"
             }
           ]
         }

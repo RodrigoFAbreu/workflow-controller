@@ -232,19 +232,19 @@ QUALIFIERS = ("Optional", "Required", "Extra", "Additional", "Conditional")
 #: word of ``QUALIFIERS`` with no comma. The one definition of what a qualified flow header is, shared by the
 #: header that starts a flow and the line that ends the flow before it.
 _QUALIFIER_PREFIX = (rf"(?:[A-Za-z]+(?:[ \t]+[A-Za-z]+)?[ \t]*,[ \t]*"
-                     rf"|(?i:{'|'.join(QUALIFIERS)})[ \t]+)")
+                     rf"|(?ai:{'|'.join(QUALIFIERS)})[ \t]+)")
 _BOLD_RE = re.compile(
     rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
 #: checklist's own non-flow sections or is a flow header; any other label (``Expected``, ``Verify``,
 #: ``Check``...) belongs to the flow, so nothing is dropped silently.
 _SECTION_END_RE = re.compile(
-    r"^\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
+    r"^\*\*[ \t]*(?ai:" + "|".join(re.escape(word) for word in (*NEVER_FLOWS, "out of scope"))
     # the section word is the whole bold label (``**Setup**``, ``**Out of scope.**``), not a sentence prefix
     + r")[ \t]*(?:[:.]|\*\*)"
     # or a flow header, qualified or not (``**Optional, K. Title.**``), spelled as ``_BOLD_RE`` spells it: a line that
     # ended a flow without starting one would be read by no flow
-    rf"|^\*\*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)", re.IGNORECASE)
+    rf"|^\*\*(?:{_QUALIFIER_PREFIX})?{_LABEL}[.):](?!\d)")
 _BOLD_LABELLED_RE = re.compile(rf"^\*\*(?:{_QUALIFIER_PREFIX})?(?P<label>{_LABEL})[.):](?!\d)")
 _HEADING_MARK_RE = re.compile(rf"^(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN}))[.):](?!\d)")
 _HEADING_FLOW_RE = re.compile(r"^Flow\b[ \t]*")

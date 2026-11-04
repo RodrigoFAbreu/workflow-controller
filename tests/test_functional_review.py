@@ -298,7 +298,22 @@ class FlowEndsTest(unittest.TestCase):
 
     def test_a_flows_line_with_words_inside_the_bold_stays_unread_between_two_flows(self) -> None:
         text = "**A. One.** go\n\n**Flows: run A again with --force before B.**\n\n**B. Two.** go"
-        self.assertEqual(labels(checklist(text)), ["A", "B"])
+        flows = fr.read_flows(checklist(text))
+        self.assertEqual([flow.label for flow in flows], ["A", "B"])
+        for flow in flows:
+            self.assertNotIn("--force", flow.text)
+
+    def test_a_case_folding_character_in_a_label_or_qualifier_does_not_end_a_flow(self) -> None:
+        # U+212A (Kelvin sign) and U+017F (long s) fold to ASCII letters under a Unicode ignore-case match
+        for header in ("**Optional \u212a. Extra.** run regression", "**Optional, \u212a. Extra.** run regression",
+                       "**\u212a. Extra.** run regression", "**Optional \u017f. Extra.** run regression",
+                       "**\u212anown limitations**", "**\u017fetup**"):
+            for tail in ("\n\n**B. Two.** go", ""):
+                with self.subTest(header=header, tail=tail):
+                    text = f"**A. One.** go\n\n{header}\nverify exit 0{tail}"
+                    flows = fr.read_flows(checklist(text))
+                    self.assertIn("verify exit 0", flows[0].text)
+                    self.assertEqual(flows[0].label, "A")
 
     def message(self, body: str) -> str:
         with self.assertRaises(fr.ChecklistUnrecognised) as caught:

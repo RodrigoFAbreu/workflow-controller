@@ -156,7 +156,9 @@ From Controller 1.18.0, under an automatic acceptance gate, the Controller runs 
 
 ### `functional_tester_unavailable`
 
-The Controller stopped before it launched the tester. The message names the cause:
+The Controller stopped before it launched the tester. The message names the cause. The host causes (the first five
+below) are found before any usage is reserved, so the stop is one record and the usage budget shows no reservation for it;
+the others arise at launch, because they need a job or a built sandbox:
 
 - **No `claude` binary found.** Install `claude` or put it on `PATH`.
 - **The functional-tester role was refused** (for example by the routing file). Fix the role in the routing file.
@@ -175,6 +177,8 @@ The Controller stopped before it launched the tester. The message names the caus
   the step again; if it repeats, look at the repository for files that change on checkout.
 - **No folder is short enough for the tester's `TMPDIR`.** Claude's bridge sockets need a path of at most 107 bytes.
   Set `XDG_RUNTIME_DIR` to a short path, or make `/tmp` usable.
+- **The runtime root lies inside your Claude home.** The tester's read deny on that home would cover its own folders.
+  Move the runtime root out of it.
 - **The tree cannot be tested here**: it holds a submodule, the checklist is not tracked at the head, or the sandbox
   folder already exists.
 

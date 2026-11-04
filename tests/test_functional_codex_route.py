@@ -7,6 +7,7 @@ what the launch receives, the pre-launch stop of D3, and ``_reconcile_functional
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import unittest
 from pathlib import Path
@@ -14,7 +15,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import codex_tester, functional_review, job, review, routing, telemetry, usage, worker  # noqa: E402
+from controller import codex_build, codex_tester, functional_review, job, review, routing, telemetry, usage, worker  # noqa: E402
 from tests.test_protocol_job import IDENTITY, TesterLifecycle  # noqa: E402
 from tests import test_protocol_job  # noqa: E402
 
@@ -49,7 +50,9 @@ class CodexLifecycle(TesterLifecycle):
             entries["claude-code"]["operator_home"] = str(td / "claude-home")
             entries["codex"]["operator_home"] = str(self.codex_home)
 
-    def step(self, *, gate=None, functional="default", route=CODEX_ROUTE) -> dict:
+    def step(self, *, gate=None, functional="default", route=CODEX_ROUTE, real_selection=False) -> dict:
+        """``real_selection`` keeps the host-dependent selection probes (C10i): the Claude one is then ``static_probe``'s
+        to fake, the Codex one reads the binary, the login and the build record."""
         self.rows.append(test_protocol_job.protocol.next_action(self.root, test_protocol_job.lifecycle.WID).raw["row"])
         inner = gate
 
@@ -65,9 +68,13 @@ class CodexLifecycle(TesterLifecycle):
             self.claude_launches.append(kwargs)
             return self.fake_tester(**kwargs)
 
-        with mock.patch.object(worker, "launch", launch), \
-                mock.patch.object(codex_tester, "launch_codex_functional", self.fake_tester), \
-                mock.patch.object(review, "launch_functional", claude):
+        selection = [] if real_selection else [mock.patch.object(review, "claude_selection_error", lambda *a, **k: None),
+                                               mock.patch.object(codex_tester, "selection_error", lambda *a, **k: None)]
+        with contextlib.ExitStack() as stack:
+            for patch in [mock.patch.object(worker, "launch", launch),
+                          mock.patch.object(codex_tester, "launch_codex_functional", self.fake_tester),
+                          mock.patch.object(review, "launch_functional", claude), *selection]:
+                stack.enter_context(patch)
             return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime, routing=route,
                                     usage_gate=counted if inner is not None else None,
                                     functional=self.functional if functional == "default" else functional)
@@ -104,6 +111,24 @@ class CodexRouteTest(_Case):
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(record["functional"]["gate"], functional_review.GATE_TESTER_UNAVAILABLE)
         self.assertTrue(record["functional"]["not_started"])
+
+    def test_a_codex_route_with_an_unverified_build_stops_before_any_reservation(self) -> None:
+        """C10i D2: a one-entry Codex route asks ``codex_tester.selection_error`` before the usage gate."""
+        life = self.life()
+        called: list[str] = []
+        build = mock.Mock(ok=False, reason="no record", digest="d")
+        with mock.patch.object(review, "resolve_binary", lambda name: Path("/bin") / name), \
+                mock.patch.object(codex_build, "is_verified", return_value=build):
+            record = life.step(gate=lambda route, provider: called.append(provider), real_selection=True)
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        block = record["functional"]
+        self.assertEqual((block["gate"], block["cause"]),
+                         (functional_review.GATE_TESTER_UNAVAILABLE, functional_review.UNAVAILABLE_ENFORCEMENT))
+        self.assertIn("not verified", block["detail"])
+        for key in ("launched", "not_started"):
+            self.assertNotIn(key, block)
+        self.assertNotIn("usage", record)
+        self.assertEqual((called, life.launches, life.tester_records(), life.reservations()), ([], [], [], {}))
 
     def test_options_without_the_codex_entry_end_before_any_usage_or_record(self) -> None:
         life = self.life(with_entry=False)

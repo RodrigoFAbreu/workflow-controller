@@ -857,6 +857,69 @@ class UnavailableTest(Fixture):
         self.assertFalse(self.tmp.joinpath(f"{self.job_prefix}1.log").exists(), "the tester was started")
 
 
+class SelectionErrorTest(Fixture):
+    """``review.claude_selection_error`` (C10i D1): the causes a launch would raise before it builds anything, found
+    without a job, through the helper the launch shares."""
+
+    def probe(self, **overrides):
+        real = fr.static_probe  # the probe's own exception, never ``fr.unavailable(...)`` (which carries a cause)
+        ok = mock.Mock(returncode=0, stderr=b"")
+        return lambda **kwargs: real(**{"which": lambda name: f"/usr/bin/{name}", "run": lambda *a, **k: ok,
+                                        "is_native": lambda path: True, **kwargs, **overrides})
+
+    def binary(self) -> str:
+        return str(fake.write_binary(self.tools, {"actions": []}, name="claude-sel"))
+
+    def launch_raw(self, binary: str) -> None:
+        review.launch_functional(
+            candidate=self.candidate, flows=self.flows, runtime_root=self.runtime, job_id="sel", work_item_id="i",
+            operator_home=self.home, model=MODEL, effort="medium", timeout=5, binary_name=binary, inherited_env={})
+
+    def test_an_admitted_host_has_no_error(self) -> None:
+        with mock.patch.object(fr, "static_probe", self.probe()):
+            self.assertIsNone(review.claude_selection_error(self.binary(), self.runtime))
+
+    def test_a_missing_binary_is_no_binary(self) -> None:
+        error = review.claude_selection_error(str(self.tmp / "missing" / "claude"), self.runtime)
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_NO_BINARY)
+
+    def test_a_refused_role_is_role_refused(self) -> None:
+        with mock.patch.object(review.harness_registry, "for_role", side_effect=HarnessRoleError("no", evidence={})):
+            error = review.claude_selection_error(self.binary(), self.runtime)
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ROLE_REFUSED)
+
+    def test_a_host_without_bwrap_is_enforcement_and_the_launch_gives_the_same_cause(self) -> None:
+        binary = self.binary()
+        with mock.patch.object(fr, "static_probe", self.probe(which=lambda name: None if name == "bwrap" else "/x")):
+            error = review.claude_selection_error(binary, self.runtime)
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                self.launch_raw(binary)
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertEqual(error.evidence["missing"], ["bwrap"])
+        self.assertIn("bwrap", error.message)
+        self.assertEqual((caught.exception.evidence, caught.exception.message), (error.evidence, error.message))
+        self.assertFalse((self.runtime / "functional").exists())
+
+    def test_a_build_that_is_not_verified_is_enforcement_and_the_launch_gives_the_same_cause(self) -> None:
+        binary = self.binary()
+        with mock.patch.object(fr, "static_probe", self.probe(is_native=lambda path: False)):
+            error = review.claude_selection_error(binary, self.runtime)
+            with self.assertRaises(fr.TesterUnavailable) as caught:
+                self.launch_raw(binary)
+        self.assertEqual(error.evidence["cause"], fr.UNAVAILABLE_ENFORCEMENT)
+        self.assertIn("verify-claude", error.message)
+        self.assertEqual(caught.exception.evidence, error.evidence)
+
+    def test_a_refusal_that_carries_a_cause_passes_through_unchanged(self) -> None:
+        refusal = fr.unavailable(fr.UNAVAILABLE_CLONE_MISMATCH, "kept", detail=1)
+
+        def probe(**kwargs) -> None:
+            raise refusal
+
+        with mock.patch.object(fr, "static_probe", probe):
+            self.assertIs(review.claude_selection_error(self.binary(), self.runtime), refusal)
+
+
 class OriginTest(Fixture):
     def test_a_path_origins_refs_are_read_and_a_url_origin_is_never_read(self) -> None:
         refs = review._local_origin_refs(self.repo)

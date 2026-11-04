@@ -2,6 +2,23 @@
 
 ## Status
 
+**Complete.** `workflow-controller-sandbox-precheck` (C10i, issue
+[#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)) checks the functional tester's availability before
+usage is reserved. The plan is `docs/ai-workflow/CONTROLLER_SANDBOX_PRECHECK_PLAN.md` (revision 2). CP1 is complete:
+`review.claude_selection_error` returns the refusal a launch would raise for the host causes that need no job and no sandbox
+(the refused role, the unresolved binary and the static probe, each with a `cause`), `launch_functional` shares its helper so the
+selection and the launch cannot drift apart, `_tester_probe` uses it for a Claude entry and `_run_functional` runs the probe
+for a one-entry chain before the usage gate, so a host that cannot run the tester ends at the one `GATE_BLOCKED` record with no
+reservation taken, and a Claude entry that fails the probe is skipped in a chain. CP2 is complete: `docs/common-problems.md`
+and `docs/guide/automation.md` say the host causes are found before any usage is reserved and name the causes that remain
+launch-time, and the roadmap marks C10i done (1.27.7).
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.7).
+
+Next action: `/milestone-plan` for C10j ([#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)), the next incomplete item in `docs/ROADMAP.md`.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-tester-read-denies` (C10h, issue
 [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)) closes the Claude functional tester's read path to
 credentials, reads a `file://` origin and bounds the tester's summary. The plan is
@@ -234,36 +251,34 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-tester-read-denies` (C10h, issue [#115](https://github.com/RodrigoFAbreu/workflow-controller/issues/115)),
-implementation revision 2. The change closes the Claude functional tester's read path to credentials, reads a `file://` origin
-and bounds the tester's summary. Every flow runs offline against a scratch repository: no network, no real `gh` (the stand-in
-refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside
-the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; every file is created under
-scratch directories. The live Claude probe (D3) needs the real CLI and the network, so it is an operator-run flow outside the sandbox.
+Item `workflow-controller-sandbox-precheck` (C10i, issue [#112](https://github.com/RodrigoFAbreu/workflow-controller/issues/112)),
+implementation revision 1. The change finds the host causes of `functional_tester_unavailable` (the role, the binary, the static
+probe) before the usage budget is asked for a reservation, for a chain of one and a longer chain, Claude and Codex alike.
+Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the
+sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone with
+`python3 -B` and no `PYTHONPATH=.`; the flows are unit tests and a read of the documentation, so they write only to the scratch
+`TMPDIR`. The host's own `bwrap`, `socat` and `claude` are not needed: the tests replace the probe and the binary lookup.
 
-Setup: `export TMPDIR=$(mktemp -d); T=$(mktemp -d)`; for flows 1 and 2 build a scratch origin and clone:
-`git init -q $T/o && git -C $T/o -c user.name=a -c user.email=a@b commit -q --allow-empty -m x && git clone -q $T/o $T/c`.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
 | # | Flow | Command | Expected |
 |---|---|---|---|
-| 1 | A `file://` origin is read as a local path (D4) | `git -C $T/c remote set-url origin "file://$T/o"; python3 -B -c "from pathlib import Path; from controller import review; print(repr(review._local_origin_refs(Path('$T/c'))))"` | Prints the refs of the scratch origin, e.g. `'refs/heads/main <sha>\n'`, not `None`. Repeat with `file://localhost$T/o`: the same refs (the authority is dropped). |
-| 2 | Unreadable or pathless `file://` is an error; other URLs unchanged (D4) | Same call after `git -C $T/c remote set-url origin file://otherhost`, then after `... https://example.com/x.git` | `file://otherhost`: `OSError` ("names no absolute path"), never `None`. The `https://` origin returns `None`. |
-| 3 | Read deny list (D1) | `python3 -B -c "from pathlib import Path; from controller import functional_review as fr; print(*fr.read_denies(Path('$T/job/claude-home'), Path('$T/op/.claude'), Path('$T/op/.claude.json')), sep='\n')"` | Five lines in this order: the job home's `.credentials.json`, `.claude.json`, `backups`, then the operator's Claude home, then the operator's account file. The job home itself is not listed. When an entry is a link, its resolved form follows it (try `ln -s $T/real $T/op/.claude` first: the target appears after the link). |
-| 4 | Summary bound (D5) | `python3 -B -m unittest tests.test_functional_review.SummaryBoundTest -v` | Five tests pass: 2000 characters kept byte for byte, one more is cut with a marker naming the omitted count (`[... 1 character omitted]`), findings text and evidence record carry the bounded string, the log digest is of the untouched log, a non-string summary is still refused. `python3 -B -c "from controller import functional_review as fr; print(fr.SUMMARY_LIMIT)"` prints `2000`. |
-| 5 | Read denies reach the settings, the double, the invariant and `claude-build verify` (D1-D3) | `python3 -B -m unittest tests.test_functional_enforcement tests.test_functional_sandbox tests.test_claude_build tests.test_functional_review` | All pass (the live probe `test_the_read_denies_hold_on_the_pinned_cli_and_the_shell_still_works` is skipped with its reason without `CONTROLLER_LIVE_CLAUDE_TESTS=1`). They show: the exact `denyRead` list and its resolved forms; an `allowWrite` entry at or below a `denyRead` entry refused (lexically and through a link); the test double refusing a read of a denied path (also through a link) while the clone stays readable; `check_functional_settings` refusing a missing or extra entry; a runtime root inside the operator's Claude home ending before the tester starts as `functional_tester_unavailable`; `claude-build verify` building the same list and reporting such a root as `BuildNotVerified("host", ...)`. |
-| 6 | Docs and neighbours (D6, D7) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0. Read `docs/guide/automation.md` (the read deny, the `file://` case, the summary bound) and `docs/guide/harnesses.md` (which tester each control covers; the Codex tester already restricts reads): they match flows 1 to 5, and both name the runtime-root credential copies as the remainder. `docs/ROADMAP.md` marks C10h done and lists the remainder as a follow-up (86). |
-| 7 | Live read-deny probe (operator-run, D3) | Outside the sandbox, with Claude Code installed and logged in: `CONTROLLER_LIVE_CLAUDE_TESTS=1 python3 -B -m unittest tests.test_functional_enforcement -k read_denies_hold` | Passes: a canary in a denied directory and in a scratch `HOME/.claude.json` never reaches the tool output, a file outside the deny is readable, `pwd` and `git status` succeed in the clone with no shell-snapshot error, and the probe reports no secret-looking readable job-home entry. Recorded run: Claude Code 2.1.310, 2026-11-03. Spends model usage and needs the network. |
+| 1 | The selection returns the cause a launch would raise (D1) | `python3 -B -m unittest tests.test_functional_sandbox.SelectionErrorTest -v` | Six tests pass: an admitted host gives `None`; a missing binary gives `no_binary`; a refused role gives `role_refused`; a host without `bwrap` and a build not in the verified list give `enforcement`, and `launch_functional` raises the same cause for the same refusal; a refusal that already carries a cause passes through unchanged. |
+| 2 | A host without `bwrap` stops before any reservation (D2, D3) | `python3 -B -m unittest tests.test_protocol_job.TheFaultStopsTest.test_a_host_without_bwrap_stops_before_any_reservation_with_one_record -v` | Passes: the stop is `functional_tester_unavailable` with cause `enforcement`; the usage gate is never called (it fails the test if called) and the real usage store has an empty reservation history; one `GATE_BLOCKED` record with no `functional.launched`, `functional.not_started` or `usage` block and the single stop event. |
+| 3 | A chain whose every entry fails ends at the stop with a cause (D2) | `python3 -B -m unittest tests.test_protocol_job.TheFaultStopsTest.test_a_chain_whose_every_entry_fails_the_probe_ends_at_the_stop_with_a_cause -v` | Passes: the step ends at `functional_tester_unavailable` with the first entry's reason and `functional.cause` set, not a `KeyError`. |
+| 4 | A Claude entry that fails the probe is skipped in a chain (D2) | `python3 -B -m unittest tests.test_functional_select -k probe -v` | Both pass: the failing Claude entry is skipped with cause `launcher_unavailable` and the next entry is chosen; the probe's own text reaches the operator only when every entry fails. |
+| 5 | A Codex route with an unverified build stops before any reservation (D2, D3) | `python3 -B -m unittest tests.test_functional_codex_route -k unverified -v` | Passes: the stop is `functional_tester_unavailable`, the usage gate is never called, one record. |
+| 6 | The harness rule still pins the digest readers (D1) | `python3 -B -m unittest tests.test_harness tests.test_functional_lifecycle -v` | All pass: only `controller/review.py` reads the recorded digests and calls the static probe, and `job.py` reaches them through `claude_selection_error`. |
+| 7 | Docs and neighbours (D4) | `python3 -B tools/check_docs.py`, then `python3 -B tests/golden/generate_no_policy_lifecycle.py --check` (always pass `--check`) | Both exit 0. Read `docs/common-problems.md` (`functional_tester_unavailable`: the first five causes are found before usage is reserved, the rest arise at launch) and `docs/guide/automation.md` (the stop list, and the chain paragraph: a Claude entry is skipped for the role and the probe, a chain of one runs the same host check but selects nothing). They match flows 1 to 6. `docs/ROADMAP.md` marks C10i done and follow-up 67 resolved. |
 
-**Known limitations / out of scope.** No new setting, option, exit code or gate. The copies of the Claude credential kept under
-the shared runtime root by other jobs (`<runtime>/reviews/<job>/claude-home/`, `claude-build verify` scratch homes, leftovers
-of killed jobs) stay readable by absolute path: recorded as roadmap follow-up 86. A general read allowlist, other credential
-stores (`~/.ssh`, `~/.config/gh`, the operator's Codex home), a `claude-build verify` probe for `denyRead`, redaction of
-secrets from a summary and a change to the Codex tester's profile are out of scope; no recorded build attests `denyRead`
-enforcement (the release-side probe covers the pinned build). The job home is not denied as a whole: `projects`, `sessions`,
-`session-env`, `.last-cleanup` and `shell-snapshots` remain readable. The full suite is not a flow (`test_functional_sandbox`
-has a known CI flake, #206; `tests/test_codex_tester.py` has a pre-existing shared-tag collision). The release note and release
-history row belong to the docs pull request after the 1.27.6 release.
+**Known limitations / out of scope.** No new setting, option, exit code or gate. The causes that need a job or a sandbox (the
+clone not matching the manifest, no folder short enough for `TMPDIR`, a runtime root inside the operator's Claude home, a
+submodule, an untracked checklist, an existing sandbox folder) still arise at launch. A probe that passes at selection and fails
+at launch still ends at the gate with `not_started`. A skipped chain entry's own reason is not shown when a later entry is chosen.
+No real-host run is part of this checklist: the probe is replaced in the tests. The full suite is not a flow
+(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main). The release note and release
+history row belong to the docs pull request after the 1.27.7 release.
 
 ## Next action
 
-Manual functional review of C10h (the checklist above), then `/accept-milestone`.
+Manual functional review of C10i (the checklist above), then `/accept-milestone`.

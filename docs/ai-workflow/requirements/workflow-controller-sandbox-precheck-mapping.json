@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-sandbox-precheck",
+  "requirements": {
+    "R1": {
+      "description": "The static availability causes (role, binary, bwrap/socat, seccomp, build identity) are decided before usage is reserved or a job record is written (#112)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A chain entry and a Codex route use the same selection-time probe; a failing Claude entry is skipped in a chain",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The guides and the roadmap describe the earlier check and mark C10i done",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

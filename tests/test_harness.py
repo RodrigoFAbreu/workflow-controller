@@ -99,8 +99,9 @@ class BuildVerificationTest(unittest.TestCase):
                 self.assertNotIn("build_verification", path.read_text())
 
     def test_the_command_admits_the_functional_tester_launch_only(self) -> None:
-        # The statement in the declaration and the guides: only launch_functional
-        # reads the recorded digests or runs the identity check.
+        # The statement in the declaration and the guides: only the tester's own checks (the helper
+        # launch_functional and claude_selection_error share, C10i) read the recorded digests or run the identity
+        # check; the job reaches them only through claude_selection_error.
         digest_readers, probe_callers = set(), set()
         for path in sorted((ROOT / "controller").glob("*.py")):
             if path.name in ("claude_build.py", "functional_review.py"):
@@ -114,8 +115,8 @@ class BuildVerificationTest(unittest.TestCase):
                         digest_readers.add((path.name, fn.name))
                     if isinstance(node, ast.Attribute) and node.attr in ("identity_check", "static_probe"):
                         probe_callers.add((path.name, fn.name))
-        self.assertEqual(digest_readers, {("review.py", "launch_functional")})
-        self.assertEqual(probe_callers, {("review.py", "launch_functional")})
+        self.assertEqual(digest_readers, {("review.py", "_claude_tester_checks")})
+        self.assertEqual(probe_callers, {("review.py", "_claude_tester_checks")})
 
 
 class LookupTest(unittest.TestCase):

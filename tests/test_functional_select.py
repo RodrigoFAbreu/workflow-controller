@@ -40,6 +40,7 @@ def chain_options(first: str = "claude-code", second: str = "codex", third: str 
 class _Case(unittest.TestCase):
     verified = True
     missing: frozenset = frozenset()
+    probe_error: functional_review.TesterUnavailable | None = None  # what the Claude static probe refuses with
 
     def life(self, **kwargs) -> CodexLifecycle:
         life = CodexLifecycle(self, **kwargs)
@@ -55,9 +56,14 @@ class _Case(unittest.TestCase):
     def step(self, life: CodexLifecycle, route, *, gate="recorded") -> dict:
         admitted = life.usage_gate() if gate == "recorded" else gate
         build = mock.Mock(ok=self.verified, reason="no record", digest="d")
+        def static_probe(**kwargs) -> None:
+            if self.probe_error is not None:
+                raise self.probe_error
+
         with mock.patch.object(review, "resolve_binary", self.resolve), \
+                mock.patch.object(functional_review, "static_probe", static_probe), \
                 mock.patch.object(codex_build, "is_verified", return_value=build):
-            return life.step(gate=admitted, route=route)
+            return life.step(gate=admitted, route=route, real_selection=True)
 
 
 class SelectionTest(_Case):
@@ -175,6 +181,29 @@ class SelectionTest(_Case):
         self.assertEqual(record["functional"]["harness"], "codex")
         self.assertEqual([s["cause"] for s in record["worker_route"]["selection"]["skipped"]],
                          ["usage_held", "usage_held"])
+
+    def test_a_claude_entry_that_fails_the_probe_is_skipped_and_the_next_is_chosen(self) -> None:
+        life = self.life()
+        self.probe_error = functional_review.TesterUnavailable("the sandbox needs bwrap on PATH, which is not installed",
+                                                               evidence={"missing": ["bwrap"]})
+        record = self.step(life, chain_options("claude-code", "codex"))
+        self.assertEqual(record["functional"]["harness"], "codex")
+        self.assertEqual(record["worker_route"]["selection"]["skipped"],
+                         [{"position": 0, "harness": "claude-code", "cause": "launcher_unavailable"}])
+        self.assertEqual(life.claude_launches, [])
+
+    def test_a_probe_text_reaches_the_operator_only_when_every_entry_fails(self) -> None:
+        life = self.life()
+        self.probe_error = functional_review.TesterUnavailable("the sandbox needs bwrap on PATH, which is not installed",
+                                                               evidence={"missing": ["bwrap"]})
+        self.missing = frozenset({"codex-bin"})
+        record = self.step(life, chain_options("claude-code", "codex"))
+        block = record["functional"]
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual((block["gate"], block["cause"]), (functional_review.GATE_TESTER_UNAVAILABLE, "enforcement"))
+        self.assertIn("bwrap", block["detail"])
+        self.assertEqual([s["harness"] for s in block["selection"]], ["claude-code", "codex"])
+        self.assertEqual((life.launches, life.reservations()), ([], {}))
 
     def test_every_entry_unavailable_is_one_gate_record_and_nothing_else(self) -> None:
         life = self.life()

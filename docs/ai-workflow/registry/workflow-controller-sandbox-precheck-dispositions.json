@@ -1,0 +1,34 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-sandbox-precheck",
+ "dispositions": {
+  "F-217548434687": {
+   "disposition": "fixed",
+   "note": "Applied in the implementation: tests/test_functional_codex_route.py stubs review.claude_selection_error for the Claude-route tests, scoped to that file's lifecycle helper."
+  },
+  "F-b78f085caf19": {
+   "disposition": "fixed",
+   "note": "Applied in the implementation: tests/test_functional_codex_route.py stubs review.claude_selection_error for the Claude-route tests, scoped to that file's lifecycle helper."
+  },
+  "F-002fa94afb87": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6619163762"
+  },
+  "F-31563dd38da9": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6619163762"
+  },
+  "F-cee5a2e04496": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6619163762"
+  },
+  "F-d09276450517": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6619163762"
+  },
+  "F-dfa0d3b4a1ff": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6619163762"
+  }
+ }
+}

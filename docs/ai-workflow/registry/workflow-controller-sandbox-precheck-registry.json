@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-sandbox-precheck",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The availability probe runs before usage is reserved",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The documentation and the roadmap",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

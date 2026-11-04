@@ -477,15 +477,49 @@ def copy_tree(root: Path, src: Path, dst_rel: str | os.PathLike, *, skip) -> Pat
 def remove_tree(root: Path, rel_path: str | os.PathLike, *, keep: tuple[str, ...] = ()) -> None:
     """Remove ``<root>/<rel_path>`` (a file, a link, or a directory with its
     whole subtree), containment-checked and never following a symbolic link.
-    ``keep`` names top-level children of a directory that stay (the review
-    job's retained ``sessions/``); the directory itself then stays too. A path
-    that is already gone is not an error. Directory modes are made writable on
-    the way down, so a read-only subtree does not stop the removal."""
-    target = root / rel_path
-    _assert_contained(root, target)
-    parent = target.parent.resolve()
-    target = parent / target.name
-    _assert_contained(root, target)
+    A symbolic link among the components above the last one (below ``root``)
+    is refused with ``RuntimeContainmentError`` before anything is removed, as
+    is a ``..`` component; the last component may itself be a link, which is
+    unlinked and its destination kept. ``keep`` names top-level children of a
+    directory that stay (the review job's retained ``sessions/``); the
+    directory itself then stays too. A path that is already gone is not an
+    error. Directory modes are made writable on the way down, so a read-only
+    subtree does not stop the removal."""
+    root = Path(root)
+    rel = Path(rel_path)
+    if rel.is_absolute():
+        try:
+            rel = rel.relative_to(root)
+        except ValueError:
+            raise RuntimeContainmentError(
+                f"refusing to remove {rel_path} -- it is outside the permitted root {root}",
+                evidence={"path": str(rel_path), "root": str(root)},
+            ) from None
+    parts = [p for p in rel.parts if p not in ("", ".")]
+    if ".." in parts:
+        raise RuntimeContainmentError(
+            f"refusing to remove {root / rel_path} -- it has a '..' component",
+            evidence={"path": str(root / rel_path), "root": str(root)},
+        )
+    resolved_root = root.resolve()
+    if not parts:
+        target = root.parent.resolve() / root.name
+        _assert_contained(root, target)
+    else:
+        walked = resolved_root
+        for part in parts[:-1]:
+            walked = walked / part
+            try:
+                is_link = stat.S_ISLNK(os.lstat(walked).st_mode)
+            except FileNotFoundError:
+                return
+            if is_link:
+                raise RuntimeContainmentError(
+                    f"refusing to remove {root / rel_path} -- {walked} is a symbolic link",
+                    evidence={"path": str(root / rel_path), "root": str(root), "link": str(walked)},
+                )
+        target = walked / parts[-1]
+        _assert_contained(root, target)
 
     def clear(path: Path, top: bool) -> None:
         try:

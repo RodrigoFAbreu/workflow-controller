@@ -2,6 +2,15 @@
 
 ## Status
 
+**In progress.** `workflow-controller-remove-tree-links` (C10k, issue
+[#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)) makes `runtime.remove_tree` refuse a path below a
+symbolic link. The plan is `docs/ai-workflow/CONTROLLER_REMOVE_TREE_LINKS_PLAN.md` (revision 2). CP1 is complete: the removal
+walks the components above the last one and raises `RuntimeContainmentError` for a link or a `..` among them before anything is
+removed; a Codex review of a worktree whose `.agents` is a link now fails at `build_copy` (record `FAILED`, `outcome: error`,
+`not_started`). CP2 (the roadmap and `docs/common-problems.md`) is next.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-checklist-flow-ends` (C10j, issue
 [#116](https://github.com/RodrigoFAbreu/workflow-controller/issues/116)) closes the gaps in how the functional checklist
 recogniser finds where a flow ends. The plan is `docs/ai-workflow/CONTROLLER_CHECKLIST_FLOW_ENDS_PLAN.md` (revision 2). CP1 is

@@ -156,6 +156,107 @@ class WriteJsonTest(unittest.TestCase):
             self.assertIsNone(runtime.read_json(Path(td) / "nope.json"))
 
 
+class RemoveTreeTest(unittest.TestCase):
+    """``remove_tree`` never follows a link: a link above the last component is refused (#140)."""
+
+    def setUp(self) -> None:
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.base = Path(self._td.name).resolve()
+        self.sandbox = self.base / "sandbox"
+        self.dest = self.sandbox / "writable" / "build"
+        (self.dest / "artifacts").mkdir(parents=True)
+        (self.dest / "artifacts" / "keep.txt").write_text("destination")
+        (self.sandbox / "clone").mkdir(parents=True)
+        os.symlink(self.dest, self.sandbox / "clone" / "build")
+
+    def destination_intact(self) -> None:
+        self.assertEqual((self.dest / "artifacts" / "keep.txt").read_text(), "destination")
+
+    def test_a_path_below_a_link_is_refused_and_the_destination_kept(self) -> None:
+        with self.assertRaises(RuntimeContainmentError):
+            runtime.remove_tree(self.sandbox, "clone/build/artifacts")
+        self.destination_intact()
+        self.assertTrue((self.sandbox / "clone" / "build").is_symlink())
+
+    def test_a_link_two_levels_up_is_refused(self) -> None:
+        with self.assertRaises(RuntimeContainmentError):
+            runtime.remove_tree(self.sandbox, "clone/build/artifacts/keep.txt")
+        self.destination_intact()
+
+    def test_a_dangling_link_above_the_last_component_is_refused(self) -> None:
+        os.symlink(self.base / "nowhere", self.sandbox / "dangling")
+        with self.assertRaises(RuntimeContainmentError):
+            runtime.remove_tree(self.sandbox, "dangling/x")
+
+    def test_a_link_as_the_last_component_is_unlinked_and_its_destination_kept(self) -> None:
+        inside = self.sandbox / "real"
+        (inside / "f").mkdir(parents=True)
+        os.symlink(inside, self.sandbox / "clone" / "alias")
+        runtime.remove_tree(self.sandbox, "clone/alias")
+        self.assertFalse(os.path.lexists(self.sandbox / "clone" / "alias"))
+        self.assertTrue((inside / "f").is_dir())
+
+    def test_a_dotdot_component_is_refused(self) -> None:
+        (self.sandbox / "a").mkdir()
+        (self.sandbox / "b").mkdir()
+        with self.assertRaises(RuntimeContainmentError):
+            runtime.remove_tree(self.sandbox, "a/../b")
+        self.assertTrue((self.sandbox / "b").is_dir())
+
+    def test_a_path_through_a_missing_component_is_a_no_op(self) -> None:
+        runtime.remove_tree(self.sandbox, "missing/deeper/leaf")
+        runtime.remove_tree(self.sandbox, "clone/absent")
+
+    def test_keep_and_a_read_only_subtree_still_work(self) -> None:
+        top = self.sandbox / "job"
+        (top / "sessions").mkdir(parents=True)
+        (top / "sessions" / "s.json").write_text("{}")
+        (top / "ro" / "inner").mkdir(parents=True)
+        (top / "ro" / "inner" / "f").write_text("x")
+        os.chmod(top / "ro" / "inner", 0o500)
+        os.chmod(top / "ro", 0o500)
+        runtime.remove_tree(self.sandbox, "job", keep=("sessions",))
+        self.assertEqual(sorted(p.name for p in top.iterdir()), ["sessions"])
+
+    def test_a_plain_path_below_a_root_reached_through_a_link_is_removed(self) -> None:
+        via = self.base / "via"
+        os.symlink(self.sandbox, via)
+        (self.sandbox / "plain" / "x").mkdir(parents=True)
+        runtime.remove_tree(via, "plain/x")
+        self.assertFalse((self.sandbox / "plain" / "x").exists())
+        self.assertTrue((self.sandbox / "plain").is_dir())
+
+    def test_a_root_that_is_a_link_is_unlinked_for_dot_and_empty(self) -> None:
+        for rel in (".", ""):
+            with self.subTest(rel=rel):
+                holder = self.base / f"holder{len(rel)}"
+                holder.mkdir()
+                link = holder / "root"
+                os.symlink(self.dest, link)
+                runtime.remove_tree(link, rel)
+                self.assertFalse(os.path.lexists(link))
+                self.destination_intact()
+
+    def test_a_plain_root_is_cleared_and_removed_for_dot(self) -> None:
+        plain = self.base / "plainroot"
+        (plain / "sub").mkdir(parents=True)
+        (plain / "sub" / "f").write_text("x")
+        runtime.remove_tree(plain, ".")
+        self.assertFalse(plain.exists())
+
+    def test_an_absolute_path_inside_the_root_is_removed_and_one_outside_refused(self) -> None:
+        (self.sandbox / "inside" / "x").mkdir(parents=True)
+        runtime.remove_tree(self.sandbox, self.sandbox / "inside" / "x")
+        self.assertFalse((self.sandbox / "inside" / "x").exists())
+        outside = self.base / "outside"
+        outside.mkdir()
+        (outside / "f").write_text("x")
+        with self.assertRaises(RuntimeContainmentError):
+            runtime.remove_tree(self.sandbox, outside)
+        self.assertTrue((outside / "f").is_file())
+
+
 class FillLogFileTest(unittest.TestCase):
     def test_it_fills_an_existing_log_file_and_keeps_its_mode(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -235,9 +235,12 @@ class LinkedAgentsCopyTest(unittest.TestCase):
             runtime_root = repo / ".controller" / "runtime"
             runtime_root.mkdir(parents=True)
             for entry in (".agents/skills", ".agents/plugins"):
-                with self.subTest(entry=entry), mock.patch.object(review, "STRIPPED_COPY_PATHS", (entry,)):
-                    with self.assertRaises(RuntimeContainmentError):
-                        review.build_copy(repo, runtime_root, "jobx")
+                with self.subTest(entry=entry):
+                    with self.assertRaises(RuntimeContainmentError) as caught:
+                        review.build_copy(repo, runtime_root, "jobx", strip=(entry,))
+                    self.assertIn("is a symbolic link", caught.exception.message)
+                    self.assertTrue(caught.exception.evidence["path"].endswith(entry))
+                    self.assertTrue(caught.exception.evidence["link"].endswith("/tree/.agents"))
                     review.settle_job_dir(runtime_root, "jobx")
             self.assertEqual((real / "skills" / "f.txt").read_text(), "skills")
             self.assertEqual((real / "plugins" / "f.txt").read_text(), "plugins")

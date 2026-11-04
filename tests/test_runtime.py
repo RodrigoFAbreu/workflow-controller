@@ -174,8 +174,13 @@ class RemoveTreeTest(unittest.TestCase):
         self.assertEqual((self.dest / "artifacts" / "keep.txt").read_text(), "destination")
 
     def test_a_path_below_a_link_is_refused_and_the_destination_kept(self) -> None:
-        with self.assertRaises(RuntimeContainmentError):
+        with self.assertRaises(RuntimeContainmentError) as caught:
             runtime.remove_tree(self.sandbox, "clone/build/artifacts")
+        self.assertEqual(caught.exception.evidence, {
+            "path": str(self.sandbox / "clone" / "build" / "artifacts"),
+            "root": str(self.sandbox),
+            "link": str(self.sandbox / "clone" / "build"),
+        })
         self.destination_intact()
         self.assertTrue((self.sandbox / "clone" / "build").is_symlink())
 
@@ -185,7 +190,7 @@ class RemoveTreeTest(unittest.TestCase):
         self.destination_intact()
 
     def test_a_dangling_link_above_the_last_component_is_refused(self) -> None:
-        os.symlink(self.base / "nowhere", self.sandbox / "dangling")
+        os.symlink(self.sandbox / "nowhere", self.sandbox / "dangling")
         with self.assertRaises(RuntimeContainmentError):
             runtime.remove_tree(self.sandbox, "dangling/x")
 

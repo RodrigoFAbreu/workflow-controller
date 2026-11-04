@@ -56622,7 +56622,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-checklist-flow-ends-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-checklist-flow-ends-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -56766,12 +56766,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-11-04T14:34:13Z",
+      "state_revision": 20,
+      "last_transition": "2026-11-04T14:51:29Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -57004,7 +57004,90 @@
               "at": "2026-11-04T14:20:41Z"
             }
           ]
+        },
+        "F-226de5e1fb95": {
+          "digest": "226de5e1fb9588039f3fa3776cae4bc12ae61e740e57efff79cbb3444292890b",
+          "text": "**O1.** `_FLOWS_INTRODUCER_RE` ends in `[ \\t]*$`, which does not accept the `\\r` a CRLF file leaves on each line, so a lone `**Flows:**` between two flows is refused in a CRLF document (\"line 7 '**Flows:**' ... belong to no flow\", probe), while a lone heading there is read and the guide says the line may stay. The refusal fails closed and D4 shows no such checklist in the history. Allowing `\\r` in the trailing class, with one subtest, would close it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T14:47:51Z"
+            }
+          ]
+        },
+        "F-16dcf64bccd8": {
+          "digest": "16dcf64bccd83541a16441a1a561ea5bdc6c83e38eb25aefebbfacf646d04a01",
+          "text": "**O2.** The gap refusal for a linked checklist gives the line of the linked file but names neither that file nor the link (`link` is not in its evidence), and `gate_text` goes on to speak of `docs/ACTIVE_MILESTONE.md`. An operator could look at the wrong file; the quoted line text makes the real place findable. Adding `link` to the evidence and the file name to the reason would close it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T14:47:51Z"
+            }
+          ]
+        },
+        "F-8e53bf52342e": {
+          "digest": "8e53bf52342ec030408b0dc7f045f2ff34baafc99c92f71c68198336c033570c",
+          "text": "**O3.** The guide sentence fixed for round 1's O2 (\"beside a table the table decides when a row has an old-form label, and otherwise the refusal names the rows the bold shape did not recognise\") does not hold when the qualified line comes above a widened-label table: `**Optional, K. Extra.** y` followed by `| F1 | ... |` rows reads one flow `K` with the rows in its text and no refusal (probe). No row is lost from the tester's view; that is the existing nesting rule for a plain `**K. x**` too. The sentence could say \"a table below the line nests in that flow\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T14:47:51Z"
+            }
+          ]
+        },
+        "F-0e3f68fab8c2": {
+          "digest": "0e3f68fab8c2828895090d5f367af0c80b6de1b5206db77704dac8ba605f2026",
+          "text": "**O4.** The bundle's own records lag revision 2: `TEST_RESULTS.md` is still headed revision 1 at `652afda`, and line 5 of `IMPLEMENTATION_SUMMARY.md` still names `652afda` as the content head. The result at `e4a4c50` appears only in the summary's round 1 section, which is correct (this review reproduced it). A reader of `TEST_RESULTS.md` alone would not see that the suite ran at the reviewed head.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T14:47:51Z"
+            }
+          ]
+        },
+        "F-fef3d2ccaef6": {
+          "digest": "fef3d2ccaef6b7a4a1f5bf5505d96a8fb6693f5893103b10741e1d1060192e3a",
+          "text": "**O1.** `tests/test_functional_review.py:299` claims to verify that words inside a `**Flows...**` introducer stay unread, but asserts only flow labels. It would also pass if those words entered A’s text. Assert their absence from every returned flow’s text.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+              "verdict": "REVISE",
+              "at": "2026-11-04T14:51:29Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "a8c15d2cd4bfd041e8c77c46ed357e775ee9e29a2e0436d41300de5170ee6007",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "a022657150a62fb0be22a36c12d08e2f5d41283f779a6ce183845c9c77da1a0f",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-04T14:47:51Z",
+          "verdict_sha256": "fffeed3a137ccfd2be687d05f05bd74bdfe668965c7b9630cfaeb7de23327e23",
+          "run_ref": "session:local .ai-review/workflow-controller-checklist-flow-ends/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

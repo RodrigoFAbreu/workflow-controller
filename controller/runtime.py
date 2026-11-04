@@ -480,11 +480,13 @@ def remove_tree(root: Path, rel_path: str | os.PathLike, *, keep: tuple[str, ...
     A symbolic link among the components above the last one (below ``root``)
     is refused with ``RuntimeContainmentError`` before anything is removed, as
     is a ``..`` component; the last component may itself be a link, which is
-    unlinked and its destination kept. ``keep`` names top-level children of a
-    directory that stay (the review job's retained ``sessions/``); the
-    directory itself then stays too. A path that is already gone is not an
-    error. Directory modes are made writable on the way down, so a read-only
-    subtree does not stop the removal."""
+    unlinked and its destination kept, unless the link leads outside ``root``
+    (refused by the containment check, the link staying). An absolute
+    ``rel_path`` is compared with ``root`` as given. ``keep`` names top-level
+    children of a directory that stay (the review job's retained
+    ``sessions/``); the directory itself then stays too. A path that is already
+    gone is not an error. Directory modes are made writable on the way down, so
+    a read-only subtree does not stop the removal."""
     root = Path(root)
     rel = Path(rel_path)
     if rel.is_absolute():

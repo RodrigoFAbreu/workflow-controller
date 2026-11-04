@@ -202,6 +202,17 @@ class RemoveTreeTest(unittest.TestCase):
         self.assertFalse(os.path.lexists(self.sandbox / "clone" / "alias"))
         self.assertTrue((inside / "f").is_dir())
 
+    def test_a_link_as_the_last_component_that_leaves_the_root_is_refused_and_kept(self) -> None:
+        outside = self.base / "outside"
+        outside.mkdir()
+        (outside / "f").write_text("x")
+        link = self.sandbox / "clone" / "away"
+        os.symlink(outside, link)
+        with self.assertRaises(RuntimeContainmentError):
+            runtime.remove_tree(self.sandbox, "clone/away")
+        self.assertTrue(link.is_symlink())
+        self.assertEqual((outside / "f").read_text(), "x")
+
     def test_a_dotdot_component_is_refused(self) -> None:
         (self.sandbox / "a").mkdir()
         (self.sandbox / "b").mkdir()

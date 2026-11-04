@@ -55939,7 +55939,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-sandbox-precheck-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-sandbox-precheck-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -56048,7 +56048,144 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "7b9a5114b9f108572e3bca5409144ab4e01a1f7709901d147c9c6248f5ac984b",
+        "approved_review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+        "review_content_manifest": [
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a13316a3d966c2251158eb9e987d9ee612b60252"
+          },
+          {
+            "path": "controller/review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f49c365387e5d604d0ee24b80a23ceb195f29754"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-sandbox-precheck-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fab077f7f7b174be3cc49adf8e97c8d16bcc621c"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ad95cd870cc91dbb9d99848123b7398a8af1b1b2"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e0962416f7be3400e1e48999eaed847a01015ba"
+          },
+          {
+            "path": "tests/test_functional_codex_route.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "00f83ac44266683bc9e27c92cf91ab34b2aea92b"
+          },
+          {
+            "path": "tests/test_functional_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1c25e3e352801109cd742c3f57a6e7e891961ac7"
+          },
+          {
+            "path": "tests/test_functional_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "578e1df79b73623f4bed1ed0a55b3e8f531d30d6"
+          },
+          {
+            "path": "tests/test_functional_select.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9a58db49ce408abdf4884cb8e7d3bfbe4db02d22"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c9a606bce9005bc08bb7e6adaf81e4d17158e790"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ff948d5aa1bda9cd32d98461dcdaf078567c18e7"
+          }
+        ],
+        "reviewed_content_commit": "851d9c4db23254c1cbed5d838df2cd569309d6e3",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-04T00:01:06Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+            "ledger": {
+              "local": {
+                "bundle_id": "7b9a5114b9f108572e3bca5409144ab4e01a1f7709901d147c9c6248f5ac984b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "ff6822c8984be6d0afd8871e51a6ca8ea4132c9aba6c0fbc0756c576f8fd9a23",
+                "ledger_entry_sha256": "f4a9d45d819a9957797b036157fb5727d84822485640812efc36dc154d8c13ad",
+                "run_ref": "session:local .ai-review/workflow-controller-sandbox-precheck/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "7b9a5114b9f108572e3bca5409144ab4e01a1f7709901d147c9c6248f5ac984b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "757109e2f284050b4fcfbe0dc339f9000817c9ae003d39a31f909ba4e8d256aa",
+                "ledger_entry_sha256": "316e8d5498a86e7be0cbc01b21b7623c2bac3a22e731a933601f49edae307abd",
+                "run_ref": "codex:20261103T235604Z-89b7b1bd",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-04T00:01:06Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "a826161168f57964421ab160611a6598ba82fd17f50cb53e41982a6c326aab5e",
@@ -56079,12 +56216,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-11-03T23:29:23Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-04T00:01:06Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -56149,6 +56286,83 @@
               "at": "2026-11-03T21:27:39Z"
             }
           ]
+        },
+        "F-31563dd38da9": {
+          "digest": "31563dd38da929e75860db5dfbff5c3558b6f21402bd17e6e9cc651c271566a3",
+          "text": "**O1. A launch-time stop still records no `functional.cause`.** The selection stop writes `functional.cause` (`controller/job.py:7794`); the launch handler (`controller/job.py:7964-7966`) writes only `detail`, so one refusal (a host that changes after the selection) gives a record with no `cause` field. The cause is the same on the exception, which is what D1 and D3 specify, and the path predates this change, so nothing here is wrong against the plan; a reader of the job record just cannot rely on the field.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T23:55:36Z"
+            }
+          ]
+        },
+        "F-cee5a2e04496": {
+          "digest": "cee5a2e04496e722f63a4035a20468cba615757999cccbdfa6182de4a3527ca6",
+          "text": "**O2. The launch half of \"passes at selection, fails at launch\" is pinned only with a fake.** `test_each_cause_of_an_unavailable_tester_is_a_review_wait_with_nothing_recorded` (`tests/test_protocol_job.py`) has a fake tester raise a refusal that already carries a `cause`, so no job-level test takes the real probe's cause-less exception through the real `launch_functional`. `SelectionErrorTest` covers the wrapping at the `review` level, and a scratch test of the whole path (selection passes, the real launch's `static_probe` lacks `bwrap`) ended at `functional_tester_unavailable` with `not_started: true` and no reservation left, so this is a coverage gap and not a defect.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T23:55:36Z"
+            }
+          ]
+        },
+        "F-d09276450517": {
+          "digest": "d0927645051783f98fa46813ae7b392239e9a5371ee2e8ca895c2a776f997227",
+          "text": "**O3. `docs/guide/runtime.md:704` lists fewer skip causes than the code has.** It says the chain skips an entry \"whose binary, Codex login or verified build is missing\"; a Claude entry is now also skipped for a refused role, `bwrap`, `socat` or seccomp. The sentence links to the automation guide, which is complete, and D4 did not name this page.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T23:55:36Z"
+            }
+          ]
+        },
+        "F-dfa0d3b4a1ff": {
+          "digest": "dfa0d3b4a1ff47af1695c47c1b42c2630a83a262739380c404f31b45ff759a0c",
+          "text": "**O4. `docs/guide/automation.md:559` reads as if a refused role skips any entry.** `codex_tester.selection_error` does not check the role; only `launch_codex_functional` does (`controller/codex_tester.py:208`). No routing accepted today reaches this for a Codex entry, so it affects only the wording: \"for a Claude entry\" could cover the role as well as the static probe.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+              "verdict": "APPROVE",
+              "at": "2026-11-03T23:55:36Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "523acba735d012b082226a2251c04bf10f76f5f360bfd16bd973e85f71f38e85",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7b9a5114b9f108572e3bca5409144ab4e01a1f7709901d147c9c6248f5ac984b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-03T23:55:36Z",
+          "verdict_sha256": "ff6822c8984be6d0afd8871e51a6ca8ea4132c9aba6c0fbc0756c576f8fd9a23",
+          "run_ref": "session:local .ai-review/workflow-controller-sandbox-precheck/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7b9a5114b9f108572e3bca5409144ab4e01a1f7709901d147c9c6248f5ac984b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-03T23:58:33Z",
+          "verdict_sha256": "757109e2f284050b4fcfbe0dc339f9000817c9ae003d39a31f909ba4e8d256aa",
+          "run_ref": "codex:20261103T235604Z-89b7b1bd",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

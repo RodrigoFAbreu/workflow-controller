@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-bold-flow-headers",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -58173,6 +58173,318 @@
         },
         "evaluated_at": "2026-11-04T20:19:25Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-bold-flow-headers": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-bold-flow-headers",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_BOLD_FLOW_HEADERS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-bold-flow-headers-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "c4915fe7b633155e08ee42894e0b4b1cd7dc9bcb",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+        "approved_review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_BOLD_FLOW_HEADERS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e20e6871b15513cee2e3e2a16ed27e7fe7e84049"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "db30cb5e01c89f5a70ff807daec2005e0be5e989"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-bold-flow-headers-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "695cdf5c7cfb0c54cb0ea54bb774160362b5a4ea"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-04T23:25:18Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+            "ledger": {
+              "local": {
+                "bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "32efd2f1b2a92f375c6e0fcaeb7ecc1ee42f40b407acae8f887121acdaba2fd4",
+                "ledger_entry_sha256": "4dca34567f5e3443cf4dcfa25c999dc31f75f74b81f53a385b30502ced1d7e06",
+                "run_ref": "session:local .ai-review/workflow-controller-bold-flow-headers/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "55ebdeb64cd5d4a4c290e4097b2d4511ebb4977380f44a5bb08962296783c99a",
+                "ledger_entry_sha256": "5e515ff0dba02e4f108539bd75852e5a9ee16d4474477f30bdfb0575ef432945",
+                "run_ref": "codex:20261104T232201Z-101aa43a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-04T23:25:18Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-04T23:21:40Z",
+          "verdict_sha256": "32efd2f1b2a92f375c6e0fcaeb7ecc1ee42f40b407acae8f887121acdaba2fd4",
+          "run_ref": "session:local .ai-review/workflow-controller-bold-flow-headers/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-04T23:24:01Z",
+          "verdict_sha256": "55ebdeb64cd5d4a4c290e4097b2d4511ebb4977380f44a5bb08962296783c99a",
+          "run_ref": "codex:20261104T232201Z-101aa43a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-11-04T23:25:18Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-04T23:16:34Z",
+        "consumed": {
+          "review_content_id": "75e8bda8716197381c1640daf9bff330329be757c8e3aeb5c6ee867f75010f0e",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+          "bundle_id": "aec48c9e05e77dc75d449cb18753f9e2fb2f209d304a0ed49f4df9dba40b0565",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0d2112ce0ca040edef4f16ff0e2d7bd17e279079d2a0af065a1732305ff7a06f",
+        "75e8bda8716197381c1640daf9bff330329be757c8e3aeb5c6ee867f75010f0e"
+      ],
+      "optional_findings": {
+        "F-74ceb97eac0d": {
+          "digest": "74ceb97eac0ddb66f839cf05207ca0c459452a7da2accaaf29e5520e56503cfb",
+          "text": "**O1. #288's guard for other bold label words is neither done nor declared out of scope.** The issue's proposed guard also names a `**<word> <label>:**` form, and the plan closes #288 while covering only the word `Flow`. `**Step 1: x**` next to a recognised flow is still dropped, and so is `**Flow1: x**`, which the word boundary excludes (measured beside `### Flow 1`: reads `['1']`). The roadmap row asks only for `Flow`, so the narrower scope is defensible, but Out of scope should say so and a follow-up issue should record it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0d2112ce0ca040edef4f16ff0e2d7bd17e279079d2a0af065a1732305ff7a06f",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:07:55Z"
+            }
+          ]
+        },
+        "F-eaf1affe2e81": {
+          "digest": "eaf1affe2e81a3814501fcd5fada85fb91eee3d99749b54d4c4e70980b2029a4",
+          "text": "**O2. D4's stated basis is narrower than D1 and D2.** \"The new spelling changes a line only if it begins `**Flow`\" is false for D1's qualified form (`**Optional, Flow 2: x**`), and the `git grep` is case-sensitive and spaces-only while D1 and D2 take any case and blanks. The conclusion still holds: a wider search over all checked-in markdown finds the same four lines and no qualified line.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0d2112ce0ca040edef4f16ff0e2d7bd17e279079d2a0af065a1732305ff7a06f",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:07:55Z"
+            }
+          ]
+        },
+        "F-5c8db2684feb": {
+          "digest": "5c8db2684febe8b78d81a3521cdd9bf33a680dba19cece4a2f5199d2f14d3fc0",
+          "text": "**O3. CP2 and the refusal text need more than the additions listed.** `docs/guide/automation.md`'s \"Text before the first flow and after the last one is read as before\" becomes false for a bold `Flow` line before the first flow, and its label table's \"`Flow 4` ... no\" row needs a note so it does not contradict the new spelling. `FLOW_SHAPES`, which every refusal prints, still shows only `**A. The title.**`, so a refused author is not told the new spelling unless the shape's text changes too (the tests at `tests/test_functional_review.py:168` and `:447` iterate over the constant, so they do not pin its wording).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0d2112ce0ca040edef4f16ff0e2d7bd17e279079d2a0af065a1732305ff7a06f",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:07:55Z"
+            }
+          ]
+        },
+        "F-4399319162cc": {
+          "digest": "4399319162cc7913c936f604c178e52386d3544ee2309d64ed0a905b2d1d2919",
+          "text": "**O4. Two pointers in the plan do not match `docs/ROADMAP.md`.** The header says the next item is CL1a, but the roadmap's \"Next, in order\" has FL3 then A2a, A2b and A2c. CP2 closes \"the Manager-lane follow-up\", but the FL3 row and the rest of the roadmap name no such follow-up: either name it or drop the clause.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0d2112ce0ca040edef4f16ff0e2d7bd17e279079d2a0af065a1732305ff7a06f",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:07:55Z"
+            }
+          ]
+        },
+        "F-30fa25140691": {
+          "digest": "30fa2514069129e2f8bb2a85e7422f5810eda9bb0c90b598f03f968e1e1dd820",
+          "text": "**O1. A qualified near-miss of D1's spelling is still dropped silently.** D1 reads `**Optional, Flow 2: x**`, but D2's refusal covers only a line that begins `**` and `Flow`, so `**Optional, Flow 9 y**` and `**Optional Flow: y**` before `### Flow 1` read `['1']` (measured). Out of scope names `Flow` after other words but not this. Either widen D2's pattern to the qualifier D1 accepts or name the case in Out of scope and in the follow-up issue.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "75e8bda8716197381c1640daf9bff330329be757c8e3aeb5c6ee867f75010f0e",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:15:16Z"
+            }
+          ]
+        },
+        "F-7fd013a5c3fc": {
+          "digest": "7fd013a5c3fc24e066ad7d9fcd2f1c421e52bf42e5ac9dfb653adf5642f86642",
+          "text": "**O2. Two wordings in the plan say the opposite of, or less than, what is meant.** D2 says the line must \"hold no deciding row of a table\" to be accounted for, and the mapping's R2 says a \"deciding table row\" holds the line; the rule and D2's own example are that the line holds a deciding row. Also, CP1's \"F-label table beside `**Flow: y**` is refused\" holds only with the table first: `**Flow: y**` above the table reads `['F1']` under D2's span (measured for that line and for `**Flow 123: y**`). State the order in the test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "75e8bda8716197381c1640daf9bff330329be757c8e3aeb5c6ee867f75010f0e",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:15:16Z"
+            }
+          ]
+        },
+        "F-5dba1a2b3a93": {
+          "digest": "5dba1a2b3a93956640d0dbaa8eedb8c1151cb45aef5a821404f513a5bafa737d",
+          "text": "**O3. The checklist stop's own text does not name the new spelling or refusal.** `controller/functional_review.py:2257` lists the shapes separately from `FLOW_SHAPES`, as bold `**A. ...` and headings that start with a label or `Flow`, so it reads as if `Flow` belongs to headings only. CP1 updates only `FLOW_SHAPES`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "75e8bda8716197381c1640daf9bff330329be757c8e3aeb5c6ee867f75010f0e",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:15:16Z"
+            }
+          ]
+        },
+        "F-a1257d747fb1": {
+          "digest": "a1257d747fb1a440a7badd3c4bf0e4a66f248a9e00b650b1309e2cd55f54a02c",
+          "text": "**O4. The header's next-item pointer skips two items.** It says A2a, A2b and A2c, then CL1a; the roadmap's \"Next, in order\" has C10d-a and C10d-b (not marked done) between them.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "75e8bda8716197381c1640daf9bff330329be757c8e3aeb5c6ee867f75010f0e",
+              "verdict": "REVISE",
+              "at": "2026-11-04T23:15:16Z"
+            }
+          ]
+        },
+        "F-c3e3ea3fde9f": {
+          "digest": "c3e3ea3fde9fa1cf74c6f5edc4678e3e692b206817c01d308088e5b8e6f90f50",
+          "text": "**O1. A near-miss line below a read flow stays in that flow's text, so a checklist refused today reads one flow.** `**Flow 1: a**`, steps, `**Flow 2 b**`, steps, `**Flow 3 c**`, steps is refused at the base (no flow found) and reads `['1']` under D1 and D2 (measured with a prototype). The tester does see the text, since it is part of flow 1, and D2 and CP1 decide this on purpose (a line inside a flow's text is held), so nothing is lost, but one result then stands for three intended flows. Record it in the follow-up issue the plan already files at acceptance.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T23:21:40Z"
+            }
+          ]
+        },
+        "F-734f142b3e93": {
+          "digest": "734f142b3e93e8d50046ce05e956d1470558258a91135e37291266a1612a3381",
+          "text": "**O2. D2's holding clause still lets one unread line and its steps above a table go unrun.** `**Flow: login**`, `steps`, `more steps`, a blank line and a table with row `A` reads `['A']` at the base and under the plan (measured), and the tester never sees the login text, because only the row is read. It is not a regression, and a labelled line has the same rule (`**Flow 1: x**` above the same table reads `['A']`). Holding only across blank lines would close it while keeping `**Flow: cases**`, a blank line, row `A`. Record it in the same follow-up issue.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
+              "verdict": "APPROVE",
+              "at": "2026-11-04T23:21:40Z"
+            }
+          ]
+        }
       }
     }
   }

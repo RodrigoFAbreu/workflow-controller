@@ -1,0 +1,476 @@
+# The backlog of this repository (docs/ai-workflow/BACKLOG_FILE.md describes the format).
+# Until an item has a detail page, its description and decisions are its row in docs/roadmap-archive.md.
+version: 1
+items:
+  - id: workflow-controller-c1
+    title: "Squash merges, with the release version derived from a Conventional Commit pull request title"
+    status: done
+    order: 1
+  - id: workflow-controller-c1b
+    title: Reap every child process
+    status: done
+    order: 2
+  - id: workflow-controller-c2
+    title: CI reliability
+    status: done
+    order: 3
+  - id: workflow-controller-c3
+    title: "Settings file v1, the 1.4 cleanup patches, telemetry v0"
+    status: done
+    order: 4
+  - id: workflow-controller-c4
+    title: Auto-merge after acceptance
+    status: done
+    order: 5
+    depends_on: [workflow-controller-c1, workflow-controller-c1b, workflow-controller-c2]
+  - id: workflow-controller-c9
+    title: The Controller on Orchestration Protocol v1
+    status: done
+    order: 6
+  - id: workflow-controller-c9b
+    title: Protocol 1.1 and 1.2
+    status: done
+    order: 7
+  - id: workflow-controller-c9c
+    title: Move this repository to the latest compatible Workflow
+    status: done
+    order: 8
+    depends_on: [workflow-controller-c9b]
+  - id: workflow-controller-c9d
+    title: The installed-release test made version-agnostic
+    status: done
+    order: 9
+    depends_on: [workflow-controller-c9c]
+  - id: workflow-controller-d1
+    title: Documentation
+    status: done
+    order: 10
+  - id: workflow-controller-c8
+    title: Usage budget
+    status: done
+    order: 11
+    depends_on: [workflow-controller-c3]
+  - id: workflow-controller-c8b
+    title: A usage limit reached mid-job
+    status: done
+    order: 12
+    depends_on: [workflow-controller-c8]
+  - id: workflow-controller-c5
+    title: SignalHub notifications
+    status: done
+    order: 13
+    depends_on: [workflow-controller-c3, workflow-controller-c8]
+  - id: workflow-controller-c6
+    title: Automated lifecycle scenarios
+    status: done
+    order: 14
+  - id: workflow-controller-c7
+    title: A review-only harness seam with a Codex reviewer
+    status: done
+    order: 15
+    depends_on: [workflow-controller-c8]
+  - id: workflow-controller-c13
+    title: Review convergence
+    status: done
+    order: 16
+    depends_on: [workflow-controller-c7]
+  - id: workflow-controller-c14
+    title: Review modes
+    status: done
+    order: 17
+    depends_on: [workflow-controller-c13]
+  - id: workflow-controller-cu1
+    title: "Clean-up: work through the open issues labelled `review-follow-up`"
+    status: done
+    order: 18
+    depends_on: [workflow-controller-c14]
+  - id: workflow-controller-c10a
+    title: Gate-policy validations
+    status: done
+    order: 19
+    depends_on: [workflow-controller-c6]
+  - id: workflow-controller-c10b
+    title: The pull request defect loop
+    status: done
+    order: 20
+    depends_on: [workflow-controller-c10a]
+  - id: workflow-controller-cu2
+    title: "Clean-up: the open `review-follow-up` and small `bug` issues gathered since CU1, in one milestone: #78, #79, #82-#87, #91"
+    status: done
+    order: 21
+    depends_on: [workflow-controller-c10b]
+  - id: workflow-controller-a1
+    title: Harness and git-host adapters
+    status: done
+    order: 22
+    depends_on: [workflow-controller-cu2]
+  - id: workflow-controller-c13b
+    title: "Two review round caps per stage, local and external"
+    status: done
+    order: 23
+    depends_on: [workflow-controller-c13, workflow-controller-a1]
+  - id: workflow-controller-c10c
+    title: The automated functional review
+    status: done
+    order: 24
+    depends_on: [workflow-controller-c10b]
+  - id: workflow-controller-c2b
+    title: CI time and flakiness
+    status: done
+    order: 25
+  - id: workflow-controller-c10e
+    title: "A command that verifies a new `claude` build for the functional tester"
+    status: done
+    order: 26
+    depends_on: [workflow-controller-c10c]
+  - id: workflow-controller-c10f
+    title: The sandbox layout for Claude Code 2.1.304 and later
+    status: done
+    order: 27
+    depends_on: [workflow-controller-c10e]
+  - id: workflow-controller-c10g-1
+    title: "The functional tester on Codex without a per-release version block, step 1"
+    status: done
+    order: 28
+    depends_on: [workflow-controller-c10f]
+  - id: workflow-controller-c10g-2a
+    title: The Codex build digest
+    status: done
+    order: 29
+    depends_on: [workflow-controller-c10g-1]
+  - id: workflow-controller-c10g-2b
+    title: "`verify-codex`, the command and its probes, with verify-on-first-use cached by the build's digest"
+    status: done
+    order: 30
+    depends_on: [workflow-controller-c10g-2a]
+  - id: workflow-controller-c10g-3a
+    title: "The tester's composed-configuration check"
+    status: done
+    order: 31
+    depends_on: [workflow-controller-c10g-2a, workflow-controller-c10g-2b]
+  - id: workflow-controller-c10g-3b
+    title: The sandbox bridge
+    status: done
+    order: 32
+    depends_on: [workflow-controller-c10g-3a]
+  - id: workflow-controller-c10g-3b2a
+    title: "The Codex tester's run"
+    status: done
+    order: 33
+    depends_on: [workflow-controller-c10g-3b]
+  - id: workflow-controller-c10g-3b2b
+    title: "The Codex tester's surroundings"
+    status: done
+    order: 34
+    depends_on: [workflow-controller-c10g-3b2a]
+  - id: workflow-controller-c10g-3c1
+    title: "The Codex tester chosen through H1's per-role routing, so there is no separate tester-harness setting"
+    status: done
+    order: 35
+    depends_on: [workflow-controller-c10g-3b2b, workflow-controller-h1, workflow-controller-h9b]
+  - id: workflow-controller-c10g-3c2
+    title: "The Codex tester's fallback to the other harness along H9's chain before the spawn and its selection-time causes, the telemetry dimensions and Codex usage readings for a functional job, and one"
+    status: done
+    order: 36
+    depends_on: [workflow-controller-c10g-3c1]
+  - id: workflow-controller-h1
+    title: Routing names a harness
+    status: done
+    order: 37
+    depends_on: [workflow-controller-a1]
+  - id: workflow-controller-h6
+    title: "A role-by-harness table in the documentation, generated from the adapter registry with a check that it is current"
+    status: done
+    order: 38
+    depends_on: [workflow-controller-a1]
+  - id: workflow-controller-h7
+    title: Build verification declared by the adapter
+    status: done
+    order: 39
+    depends_on: [workflow-controller-c10e, workflow-controller-h1]
+  - id: workflow-controller-h8
+    title: Supported models per harness
+    status: done
+    order: 40
+    depends_on: [workflow-controller-h1]
+  - id: workflow-controller-h9a
+    title: "The chain of a fallback per role, the shape only"
+    status: done
+    order: 41
+    depends_on: [workflow-controller-h1, workflow-controller-h3]
+  - id: workflow-controller-h9b
+    title: The selection
+    status: done
+    order: 42
+    depends_on: [workflow-controller-h9a]
+  - id: workflow-controller-h10
+    title: "The independence rule, read as the Workflow's `distinct_reviewer_models` pair"
+    status: done
+    order: 43
+    depends_on: [workflow-controller-h1]
+  - id: workflow-controller-h11
+    title: The harness in telemetry
+    status: done
+    order: 44
+    depends_on: [workflow-controller-h1]
+  - id: workflow-controller-h2
+    title: Claude as an external reviewer without lowering the policy
+    status: done
+    order: 45
+    depends_on: [workflow-controller-h1]
+  - id: workflow-controller-h3
+    title: The worker launch behind the adapter
+    status: done
+    order: 46
+    depends_on: [workflow-controller-h1]
+  - id: workflow-controller-h4a
+    title: "Codex worker, step 1"
+    status: done
+    order: 47
+    depends_on: [workflow-controller-h3]
+  - id: workflow-controller-h4b1
+    title: "Codex worker, step 2a"
+    status: done
+    order: 48
+    depends_on: [workflow-controller-h4a, workflow-controller-c10g-2b]
+  - id: workflow-controller-h4b2
+    title: "Codex worker, step 2b"
+    status: done
+    order: 49
+    depends_on: [workflow-controller-h4b1]
+  - id: workflow-controller-h4c1
+    title: "Codex worker, step 3a"
+    status: done
+    order: 50
+    depends_on: [workflow-controller-h4b2]
+  - id: workflow-controller-h4c2
+    title: "Codex worker, step 3b"
+    status: done
+    order: 51
+    depends_on: [workflow-controller-h4c1]
+  - id: workflow-controller-h4d
+    title: "Codex worker, step 4"
+    status: done
+    order: 52
+    depends_on: [workflow-controller-h4c1]
+  - id: workflow-controller-cu3a
+    title: "Clean-up, part 1"
+    status: done
+    order: 53
+    depends_on: [workflow-controller-c10f]
+  - id: workflow-controller-cu3b
+    title: "Clean-up, part 2"
+    status: done
+    order: 54
+    depends_on: [workflow-controller-cu3a]
+  - id: workflow-controller-nf1
+    title: "Notifications: review and functional-review waits are info events, not user_gate"
+    status: done
+    order: 55
+    depends_on: [workflow-controller-cu3b]
+  - id: workflow-controller-rb1
+    title: A configurable external-reviewer brief
+    status: done
+    order: 56
+    depends_on: [workflow-controller-nf1]
+  - id: workflow-controller-rb2
+    title: A round-aware external-review prompt
+    status: done
+    order: 57
+    depends_on: [workflow-controller-rb1]
+  - id: workflow-controller-nf2
+    title: "Notifications: a spent checks_pending wait is an info event, not lane_blocked"
+    status: done
+    order: 58
+    depends_on: [workflow-controller-nf1]
+  - id: workflow-controller-tk1
+    title: The user-only command scan catches a name followed by punctuation or behind =
+    status: done
+    order: 59
+    depends_on: [workflow-controller-h4a]
+  - id: workflow-controller-nf3
+    title: "Notifications: user_gate only for a stop that needs a person"
+    status: done
+    order: 60
+    depends_on: [workflow-controller-nf2]
+  - id: workflow-controller-rb3
+    title: The Controller-run Codex review accepts the installed codex-cli again
+    status: done
+    order: 61
+    depends_on: [workflow-controller-rb2]
+  - id: workflow-controller-sc1
+    title: Scenario tests no longer error on a machine whose sandbox probe passes
+    status: done
+    order: 62
+  - id: workflow-controller-fl1
+    title: The functional checklist recogniser accepts the label forms real checklists use
+    status: done
+    order: 63
+    depends_on: [workflow-controller-nf3]
+  - id: workflow-controller-fl2
+    title: The functional checklist reader refuses a flow another shape recognised outside every flow
+    status: done
+    order: 64
+    depends_on: [workflow-controller-fl1]
+  - id: workflow-controller-fl3
+    title: The checklist reader reads bold Flow K headers as flows
+    status: done
+    order: 65
+    depends_on: [workflow-controller-fl2]
+  - id: workflow-controller-cu3c
+    title: "Clean-up, part 3"
+    status: done
+    order: 66
+    depends_on: [workflow-controller-cu3b]
+  - id: workflow-controller-c10h
+    title: "The Claude functional tester's sandbox denies reads of its credential copy, its account files and your Claude home, a `file://` origin is checked and the tester's summary is bounded"
+    status: done
+    order: 67
+    depends_on: [workflow-controller-c10f]
+  - id: workflow-controller-c10i
+    title: Check sandbox availability before reserving usage and marking the tester job launched
+    status: done
+    order: 68
+    depends_on: [workflow-controller-c10f]
+  - id: workflow-controller-c10j
+    title: Functional checklist parsing
+    status: done
+    order: 69
+    depends_on: [workflow-controller-c10f]
+  - id: workflow-controller-c10k
+    title: "`runtime.remove_tree` refuses a path whose parent chain holds a symbolic link"
+    status: done
+    order: 70
+    depends_on: [workflow-controller-c10f]
+  - id: workflow-controller-c12a
+    title: Test leftovers end with their test
+    status: done
+    order: 71
+  - id: workflow-controller-a2a
+    title: "The backlog, declare-first"
+    status: in-progress
+    order: 72
+    depends_on: [workflow-controller-a1]
+  - id: workflow-controller-a2b
+    title: The prose migration
+    status: next
+    order: 73
+    depends_on: [workflow-controller-a2a]
+  - id: workflow-controller-h4e
+    title: "Codex worker, step 5"
+    status: next
+    order: 74
+    depends_on: [workflow-controller-h4c2, workflow-controller-h4d, workflow-controller-h1]
+  - id: workflow-controller-h4f
+    title: "Codex worker, step 6"
+    status: next
+    order: 75
+    depends_on: [workflow-controller-h4e]
+  - id: workflow-controller-h4g
+    title: "Codex worker, step 7"
+    status: next
+    order: 76
+    depends_on: [workflow-controller-h4f]
+  - id: workflow-controller-c10d-a
+    title: "The post-acceptance defect loop at the merge flow's `checks_failing` stop"
+    status: next
+    order: 77
+    depends_on: [workflow-controller-c10c]
+  - id: workflow-controller-c10d-b
+    title: "The same report at a `CHANGES_REQUESTED` decision"
+    status: next
+    order: 78
+    depends_on: [workflow-controller-c10d-a]
+  - id: workflow-controller-cl1a
+    title: Retention of finished work-item files
+    status: next
+    order: 79
+  - id: workflow-controller-cl1b
+    title: "A `verify` check that warns and then fails above a limit"
+    status: next
+    order: 80
+    depends_on: [workflow-controller-cl1a]
+  - id: workflow-controller-cl1c
+    title: A safe prune command
+    status: next
+    order: 81
+    depends_on: [workflow-controller-cl1b]
+  - id: workflow-controller-cl1d
+    title: A notification
+    status: next
+    order: 82
+    depends_on: [workflow-controller-cl1b]
+  - id: workflow-controller-cl1e
+    title: "An opt-in automatic cleanup after acceptance, off by default"
+    status: next
+    order: 83
+    depends_on: [workflow-controller-cl1c]
+  - id: workflow-controller-c12b
+    title: "Self-recovery, part 1"
+    status: next
+    order: 84
+    depends_on: [workflow-controller-c10d-a, workflow-controller-c10d-b]
+  - id: workflow-controller-c12c
+    title: "Self-recovery, part 2"
+    status: next
+    order: 85
+    depends_on: [workflow-controller-c12b]
+  - id: workflow-controller-c12d
+    title: "Self-recovery, part 3"
+    status: next
+    order: 86
+    depends_on: [workflow-controller-c12c]
+  - id: workflow-controller-c8c
+    title: Per-repository caps and per-lane budget files
+    status: next
+    order: 87
+    depends_on: [workflow-controller-c8]
+  - id: workflow-controller-c11
+    title: The kanban runner
+    status: idea
+    order: 88
+    depends_on:
+      - workflow-controller-c8
+      - workflow-controller-c10d-a
+      - workflow-controller-c10d-b
+      - workflow-controller-c12b
+      - workflow-controller-c12c
+      - workflow-controller-c12d
+  - id: workflow-controller-a3
+    title: "Backlog refinement, the measurement part"
+    status: idea
+    order: 89
+    depends_on: [workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b]
+  - id: workflow-controller-a4
+    title: The tracker interface
+    status: idea
+    order: 90
+    depends_on: [workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11]
+  - id: workflow-controller-o1
+    title: Escalation record
+    status: idea
+    order: 91
+  - id: workflow-controller-o2
+    title: Answer channel
+    status: idea
+    order: 92
+  - id: workflow-controller-o3
+    title: The decider
+    status: idea
+    order: 93
+  - id: workflow-controller-o4
+    title: Roadmap intake and progress reports
+    status: idea
+    order: 94
+  - id: workflow-controller-o5
+    title: "Upgrades: install the Controller's own new releases safely"
+    status: idea
+    order: 95
+  - id: workflow-controller-o6
+    title: Many repositories
+    status: idea
+    order: 96
+  - id: workflow-controller-o7
+    title: The control room
+    status: idea
+    order: 97

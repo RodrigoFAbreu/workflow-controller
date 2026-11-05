@@ -2,6 +2,15 @@
 
 ## Status
 
+**In progress.** `workflow-controller-a2a` (A2a, issue
+[#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)) declares the backlog file and replaces the roadmap page
+with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md` (revision 3). CP1 is complete:
+`docs/backlog.yaml` lists the 97 items of the roadmap's Controller and orchestrator tables (71 done, A2a in progress, the rest
+next or idea), and `tests/test_backlog.py` pins the file against the roadmap rows and the Workflow's selection rule. CP2 (the
+`backlog` declaration and the generated page) and CP3 (the pages) follow.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-bold-flow-headers` (FL3, issue
 [#288](https://github.com/RodrigoFAbreu/workflow-controller/issues/288)) makes the functional checklist reader read a bold
 `**Flow K: Title.**` header as a flow and refuse a bold `Flow ...` line that no shape reads, instead of dropping it next to a

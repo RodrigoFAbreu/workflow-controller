@@ -94,10 +94,10 @@
 | 88 | The kanban runner `workflow-controller-c11` | Idea | - | workflow-controller-c8, workflow-controller-c10d-a, workflow-controller-c10d-b, workflow-controller-c12b, workflow-controller-c12c, workflow-controller-c12d |
 | 89 | Backlog refinement, the measurement part `workflow-controller-a3` | Idea | - | workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b |
 | 90 | The tracker interface `workflow-controller-a4` | Idea | - | workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11 |
-| 91 | Escalation record `workflow-controller-o1` | Idea | - | - |
-| 92 | Answer channel `workflow-controller-o2` | Idea | - | - |
-| 93 | The decider `workflow-controller-o3` | Idea | - | - |
-| 94 | Roadmap intake and progress reports `workflow-controller-o4` | Idea | - | - |
-| 95 | Upgrades: install the Controller's own new releases safely `workflow-controller-o5` | Idea | - | - |
-| 96 | Many repositories `workflow-controller-o6` | Idea | - | - |
-| 97 | The control room `workflow-controller-o7` | Idea | - | - |
+| 91 | Escalation record `workflow-controller-o1` | Idea | - | workflow-controller-c11 |
+| 92 | Answer channel `workflow-controller-o2` | Idea | - | workflow-controller-o1 |
+| 93 | The decider `workflow-controller-o3` | Idea | - | workflow-controller-o1, workflow-controller-o2 |
+| 94 | Roadmap intake and progress reports `workflow-controller-o4` | Idea | - | workflow-controller-o3 |
+| 95 | Upgrades: install the Controller's own new releases safely `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
+| 96 | Many repositories `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
+| 97 | The control room `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |

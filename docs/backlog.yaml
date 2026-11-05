@@ -450,27 +450,34 @@ items:
     title: Escalation record
     status: idea
     order: 91
+    depends_on: [workflow-controller-c11]
   - id: workflow-controller-o2
     title: Answer channel
     status: idea
     order: 92
+    depends_on: [workflow-controller-o1]
   - id: workflow-controller-o3
     title: The decider
     status: idea
     order: 93
+    depends_on: [workflow-controller-o1, workflow-controller-o2]
   - id: workflow-controller-o4
     title: Roadmap intake and progress reports
     status: idea
     order: 94
+    depends_on: [workflow-controller-o3]
   - id: workflow-controller-o5
     title: "Upgrades: install the Controller's own new releases safely"
     status: idea
     order: 95
+    depends_on: [workflow-controller-o3]
   - id: workflow-controller-o6
     title: Many repositories
     status: idea
     order: 96
+    depends_on: [workflow-controller-o5]
   - id: workflow-controller-o7
     title: The control room
     status: idea
     order: 97
+    depends_on: [workflow-controller-o2, workflow-controller-o6]

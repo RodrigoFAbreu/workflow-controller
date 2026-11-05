@@ -9,7 +9,9 @@ with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLA
 next or idea), and `tests/test_backlog.py` pins the file against the roadmap rows and the Workflow's selection rule. CP2 is
 complete: `WORKFLOW_CONFIG.json` declares the backlog, the old roadmap is kept byte for byte in `docs/roadmap-archive.md`
 under a frozen banner, `docs/ROADMAP.md` is the generated page, the six inbound links and the follow-up 86 test point at the
-archive, and `tests/test_backlog.py` fails on a stale page. CP3 (the pages) follows.
+archive, and `tests/test_backlog.py` fails on a stale page. CP3 is complete: `docs/guide/development.md` explains the backlog,
+`docs/README.md` lists the archive, and `docs/guide/milestone-branches.md` sends a split-off remainder to the backlog file.
+The implementation is in review.
 
 Previous item, now complete:
 

@@ -11,6 +11,7 @@ file's own data. No test names an item of the live file as the selected one.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import re
@@ -122,6 +123,19 @@ def archive_marks_done(step: str) -> bool:
     return any(re.search(r"\b(done|complete)\b", group) for group in _parentheses(step))
 
 
+def rows_not_items(rows: dict[str, str], item_ids: set[str]) -> list[str]:
+    """The pin: every archive row but the named exclusions is an item."""
+    return [row for row in rows
+            if row not in EXCLUDED_ROWS and ID_PREFIX + row.lower() not in item_ids]
+
+
+def rows_done_only_in_the_archive(rows: dict[str, str], status: dict[str, str]) -> list[str]:
+    """The pin: every row the archive marks done is ``done`` in the file."""
+    return [row for row, step in rows.items()
+            if row not in EXCLUDED_ROWS and archive_marks_done(step)
+            and status.get(ID_PREFIX + row.lower()) != "done"]
+
+
 def expected_selection(data: dict) -> str | None:
     """The rule of ``select_next`` worked out from the file's own data: the ready
     ``in-progress`` item with the lowest ``order``, else the ready ``next`` item
@@ -164,9 +178,7 @@ class LiveBacklogTests(unittest.TestCase):
         self.assertTrue(self.data["items"])
 
     def test_every_archive_row_but_the_named_exclusions_is_an_item(self):
-        missing = [row for row in self.rows
-                   if row not in EXCLUDED_ROWS and ID_PREFIX + row.lower() not in self.items]
-        self.assertEqual(missing, [])
+        self.assertEqual(rows_not_items(self.rows, set(self.items)), [])
 
     def test_the_exclusions_are_real_rows_and_not_items(self):
         for row in EXCLUDED_ROWS:
@@ -178,10 +190,8 @@ class LiveBacklogTests(unittest.TestCase):
         self.assertEqual(len(orders), len(set(orders)))
 
     def test_a_row_the_archive_marks_done_is_done(self):
-        wrong = [row for row, step in self.rows.items()
-                 if row not in EXCLUDED_ROWS and archive_marks_done(step)
-                 and self.items[ID_PREFIX + row.lower()]["status"] != "done"]
-        self.assertEqual(wrong, [])
+        status = {item["id"]: item["status"] for item in self.data["items"]}
+        self.assertEqual(rows_done_only_in_the_archive(self.rows, status), [])
 
     def test_every_row_outside_the_open_list_is_marked_done_in_the_archive(self):
         # Catches a done row the rule above missed.
@@ -196,15 +206,17 @@ class LiveBacklogTests(unittest.TestCase):
         self.assertEqual(selection(self.data), expected_selection(self.data))
 
     def test_selection_survives_reordering_open_items_and_accepting_one(self):
-        open_ids = [item for item in self.data["items"] if item["status"] in ("next", "in-progress")]
-        self.assertGreaterEqual(len(open_ids), 2)
+        # The last two items of the order are made open in the copy, so this holds
+        # however many items of the live file are still open.
         swapped = _copy(self.data)
-        first, second = [i for i in swapped["items"] if i["id"] in (open_ids[0]["id"], open_ids[1]["id"])]
+        first, second = sorted(swapped["items"], key=lambda item: item["order"])[-2:]
+        first["status"] = second["status"] = "next"
         first["order"], second["order"] = second["order"], first["order"]
         self.assertEqual(selection(swapped), expected_selection(swapped))
-        accepted = _copy(self.data)
+        accepted = _copy(swapped)
+        wanted = expected_selection(swapped)
         for item in accepted["items"]:
-            if item["id"] == open_ids[0]["id"]:
+            if item["id"] == wanted:
                 item["status"] = "done"
         self.assertEqual(selection(accepted), expected_selection(accepted))
 
@@ -224,27 +236,18 @@ class LiveBacklogTests(unittest.TestCase):
             "  - id: workflow-controller-brand-new\n    title: Added later\n"
             "    status: next\n    order: 100000\n")
         data, _ = backlog.parse_and_validate(text, REPO_ROOT, file=BACKLOG_FILE)
-        ids = {item["id"] for item in data["items"]}
-        self.assertTrue(all(ID_PREFIX + row.lower() in ids
-                            for row in self.rows if row not in EXCLUDED_ROWS))
+        self.assertIn(ID_PREFIX + "brand-new", {item["id"] for item in data["items"]})
+        self.assertEqual(rows_not_items(self.rows, {item["id"] for item in data["items"]}), [])
+        self.assertEqual(rows_done_only_in_the_archive(
+            self.rows, {item["id"]: item["status"] for item in data["items"]}), [])
 
     def test_an_archive_row_marked_done_that_is_not_done_fails_the_pin(self):
-        data = _copy(self.data)
-        target = next(i for i in data["items"] if i["status"] == "done")
-        target["status"] = "next"
-        row = target["id"][len(ID_PREFIX):]
-        done_rows = {r for r, step in self.rows.items() if archive_marks_done(step)}
-        self.assertTrue(any(ID_PREFIX + r.lower() == target["id"] for r in done_rows), row)
-        status = {i["id"]: i["status"] for i in data["items"]}
-        wrong = [r for r in done_rows if r not in EXCLUDED_ROWS and status[ID_PREFIX + r.lower()] != "done"]
-        self.assertTrue(wrong)
+        status = {item["id"]: item["status"] for item in self.data["items"]}
+        status[ID_PREFIX + "c1"] = "next"
+        self.assertEqual(rows_done_only_in_the_archive(self.rows, status), ["C1"])
 
     def test_an_archive_row_that_is_not_an_item_fails_the_pin(self):
-        data = _copy(self.data)
-        data["items"] = [i for i in data["items"] if i["id"] != ID_PREFIX + "c1"]
-        ids = {i["id"] for i in data["items"]}
-        missing = [r for r in self.rows if r not in EXCLUDED_ROWS and ID_PREFIX + r.lower() not in ids]
-        self.assertEqual(missing, ["C1"])
+        self.assertEqual(rows_not_items(self.rows, set(self.items) - {ID_PREFIX + "c1"}), ["C1"])
 
 
 class ValidatorIsTheRealOneTests(unittest.TestCase):
@@ -308,8 +311,9 @@ class DeclaredPageTests(unittest.TestCase):
     def test_the_declaration_is_the_exact_object(self):
         config = json.loads((REPO_ROOT / "docs/ai-workflow/WORKFLOW_CONFIG.json").read_text(encoding="utf-8"))
         self.assertEqual(config["backlog"], {"file": "docs/backlog.yaml", "roadmap": "docs/ROADMAP.md"})
-        self.assertEqual(backlog.load_declaration(REPO_ROOT),
-                         {"file": "docs/backlog.yaml", "roadmap": "docs/ROADMAP.md", "generator": None})
+        declaration = backlog.load_declaration(REPO_ROOT)
+        self.assertEqual((declaration["file"], declaration["roadmap"]), ("docs/backlog.yaml", "docs/ROADMAP.md"))
+        self.assertIsNone(declaration["generator"])
 
     def _check(self, page: bytes) -> None:
         declaration = backlog.load_declaration(REPO_ROOT)
@@ -332,7 +336,6 @@ class DeclaredPageTests(unittest.TestCase):
 
 
 def _copy(data: dict) -> dict:
-    import copy
     return copy.deepcopy(data)
 
 

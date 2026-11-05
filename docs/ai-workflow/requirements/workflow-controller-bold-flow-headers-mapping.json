@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-bold-flow-headers",
+  "requirements": {
+    "R1": {
+      "description": "A bold flow header may begin with the word Flow (colon, dot, parenthesis, spaced dash or closing bold after the label), shared by the header, the flow-end and the region-end spellings; other bold spellings read as before",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A bold Flow line no shape reads is refused with its line unless a flow, a row of the deciding table (held by the line directly above it) or a non-flow region holds it; a bold-opened region ends at a bold Flow line; checked-in checklists read as before (measured by a test)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "automation.md, common-problems.md and the roadmap describe the Flow spelling and the refusal; FL3 is marked done",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

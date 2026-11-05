@@ -59861,7 +59861,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-a2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-a2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -59974,7 +59974,156 @@
           "workflow_release": "2.25.6"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "9acb4d8f204a558e9a2fe69a0d6470ed416fef6d8e1c6f93393a1c491bf8e1db",
+        "approved_review_content_id": "045da5ce4939289e80801059f49acdfb879c8d861d91aeb59647d598e8354015",
+        "review_content_manifest": [
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3713adb46b3a77f738f5191996660e7f38082e26"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-a2b-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6b718a8bfa3ab7caf2dfeaca3f26f77b362623b3"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "14e3d838f7d0400a58c25436e50b4dabee76a5b9"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f5d0665d39d0d8c724adb4fe5a82bf480fec1fc6"
+          },
+          {
+            "path": "docs/planning-rules.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "02d021a0272c9d9011a01460182374229353571e"
+          },
+          {
+            "path": "docs/releases/1.4.1.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e8baa94700282545ae8f401a49ba9c6fd5409f6"
+          },
+          {
+            "path": "docs/releases/1.4.2.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fe522aeda9fa01432d0d5db39e16e27566de892a"
+          },
+          {
+            "path": "docs/releases/1.5.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b2b7ab1688ac0d615c33456e719704de70370b4e"
+          },
+          {
+            "path": "docs/releases/1.6.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b3a0700e2e2df86f5b1de72dc7dfd7b90eb285e"
+          },
+          {
+            "path": "docs/releases/1.7.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fadd957a0c2eca072d99227219ba34328adee7b6"
+          },
+          {
+            "path": "tests/test_backlog.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bc9047871422dee518e3d7e2ae2e2727d56bb83a"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d49928086b88d53d732ecf1b4398e6ea14fd8668"
+          },
+          {
+            "path": "tools/check_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "269f7b54be447bb7bec5b6975fc8af410a3ea29c"
+          }
+        ],
+        "reviewed_content_commit": "e5675d911e0c0fb58cbef0a894f3e40b3483d439",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T17:38:53Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "045da5ce4939289e80801059f49acdfb879c8d861d91aeb59647d598e8354015",
+            "ledger": {
+              "local": {
+                "bundle_id": "9acb4d8f204a558e9a2fe69a0d6470ed416fef6d8e1c6f93393a1c491bf8e1db",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "5b9f122b7ce0f27d15e7dafcad881217e346d7a228881ab2c4ac74df022a2636",
+                "ledger_entry_sha256": "27500b4cab9f2b8a081698243e9374fa76897c5b7983bf46c54c1ca6bb5f698b",
+                "run_ref": "session:local .ai-review/workflow-controller-a2b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "9acb4d8f204a558e9a2fe69a0d6470ed416fef6d8e1c6f93393a1c491bf8e1db",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "b36e6910587744ac687594ca353c74ec46944d01d3a901357130bf79189fd0ca",
+                "ledger_entry_sha256": "7b2f12398488ad5345edae39b9d37fa3201db464e486646999458e817cdecbe2",
+                "run_ref": "codex:20261105T173413Z-58554d50",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T17:38:53Z",
+          "workflow_release": "2.25.6"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
@@ -60005,12 +60154,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-05T17:15:44Z",
+      "state_revision": 22,
+      "last_transition": "2026-11-05T17:38:53Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -60202,6 +60351,55 @@
               "at": "2026-11-05T15:56:53Z"
             }
           ]
+        },
+        "F-c6becc9721d6": {
+          "digest": "c6becc9721d68c08b9a116e0c3b892de7a7159e0b24404efe7390c95135dbd36",
+          "text": "**O1.** The CL1a to CL1e pages describe retention as all still to do, though the installed Workflow 2.25.6 already ships a retention engine: `scripts/workflow_retention.py` (`report`, `archive`, `remove`, `prune`, workflow-2.20.0 to 2.24.0) and the commands `/archive-finished-item` and `/prune-archives`, all in `.workflow-manager/installation.json`'s `managed` set. They refer to a `docs/RETENTION.md` this repository does not have. #130, workflow#84 and workflow-manager#90 are still open, so the items may well stand, but a planner of CL1c (\"A safe prune command\") learns none of this from the page, and D4's first question asks whether the description is complete. One sentence under \"Planning notes\" would do it; the moved row stays as it is.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "045da5ce4939289e80801059f49acdfb879c8d861d91aeb59647d598e8354015",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T17:33:37Z"
+            }
+          ]
+        },
+        "F-ecc9da3a1f86": {
+          "digest": "ecc9da3a1f869389f30a8557002c536d910e5202fa552dcdcda0303f7744fa6c",
+          "text": "**O2.** The D4 table in `IMPLEMENTATION_SUMMARY.md` says \"No issue in the row\" for A3, but A3's row names #103 and #104 (\"planned before it\"). The D4 question was therefore not answered for those two issues. Both were closed as completed on 2026-11-03, so no guidance is lost and the page's text is correct. A planner reading \"planned before it\" has no sign that they are done; a line in A3's \"Planning notes\" would say so.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "045da5ce4939289e80801059f49acdfb879c8d861d91aeb59647d598e8354015",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T17:33:37Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "045da5ce4939289e80801059f49acdfb879c8d861d91aeb59647d598e8354015",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "9acb4d8f204a558e9a2fe69a0d6470ed416fef6d8e1c6f93393a1c491bf8e1db",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-05T17:33:37Z",
+          "verdict_sha256": "5b9f122b7ce0f27d15e7dafcad881217e346d7a228881ab2c4ac74df022a2636",
+          "run_ref": "session:local .ai-review/workflow-controller-a2b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "9acb4d8f204a558e9a2fe69a0d6470ed416fef6d8e1c6f93393a1c491bf8e1db",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-05T17:37:28Z",
+          "verdict_sha256": "b36e6910587744ac687594ca353c74ec46944d01d3a901357130bf79189fd0ca",
+          "run_ref": "codex:20261105T173413Z-58554d50",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

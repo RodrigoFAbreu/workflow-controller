@@ -472,13 +472,14 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    shape did not recognise.
 
    A bold flow header may also start with the word `Flow` (any case), then a label: `**Flow K: Title.**`,
-   `**Flow K. Title.**`, `**Flow K - Title.**` (a hyphen, en dash or em dash), `**Flow K) Title**` and
+   `**Flow K. Title.**`, `**Flow K - Title.**` (a hyphen, en dash or em dash, set off by spaces), `**Flow K) Title**` and
    `**Flow K**` alone, with `K` a label as in the table above (`**Flow 1: Log in.**` is flow `1`). It
    starts a flow and ends the one above, as `**K. Title.**` does. A bold `Flow` line that no shape reads
    is refused with its line, instead of being dropped next to a recognised flow, unless a flow holds it:
    `**Flow: Title**` (no label), `**Flow 1 Title**` (no mark after the label), `**Flow 1**: Title`
-   (text after the closing bold) and `**Flow 123: Title**` (a label of three digits, refused as partly
-   recognised) are refused, and the evidence names each line. Such a line inside a flow's own text, inside
+   (text after the closing bold) and `**Flow 123: Title**` (a label of three digits) are refused, and the
+   evidence names the line. Next to a bold flow, a line such as `**Flow 123: Title**` is refused as partly
+   recognised, and the evidence names the label (`123`) rather than the line. Such a line inside a flow's own text, inside
    a code fence, or in a region that is not a flow (below a `### Setup`, `### Test data`,
    `### Known limitations` or `### Out of scope` heading) is not refused; a region that a bold line opened
    (`**Setup.**`) ends at the next bold `Flow` line. Write the line as `**Flow K: Title.**` or as a heading

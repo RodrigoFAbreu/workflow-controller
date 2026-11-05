@@ -280,31 +280,65 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-remove-tree-links` (C10k, issue [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)),
-implementation revision 1. The change makes `runtime.remove_tree` (`controller/runtime.py`) refuse a path below a symbolic link:
-before it removes anything it walks the components above the last one and raises `RuntimeContainmentError` for a link or a `..`
-among them. A link as the last component is still unlinked and its destination kept. The one production path that changes is a
-Codex review of a worktree whose `.agents` is a link, which now fails at `build_copy`. Every flow runs offline: no network, no
-real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system
-directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
-`PYTHONPATH=.`; the flows are unit tests and a read of the documentation, so they write only to the scratch `TMPDIR`.
+Item `workflow-controller-bold-flow-headers` (FL3, issue [#288](https://github.com/RodrigoFAbreu/workflow-controller/issues/288)),
+implementation revision 3. The change makes the checklist reader (`controller/functional_review.py`, `read_flows`) read
+`**Flow K: Title.**` style bold headers (also `**Flow K. Title.**`, `**Flow K) Title.**`, `**Flow K - Title.**` and `**Flow K**`, with
+an optional qualifier such as `**Optional, Flow 2: x**`) as flows, and refuse a bold `Flow` line that no shape reads (and no flow,
+table row or non-flow region holds) instead of dropping it. Every flow runs offline: no network, no real `gh` (the stand-in refuses
+and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the
+read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; the flows are unit tests, one
+read-only probe and a read of the documentation, so they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-| # | Flow | Command | Expected |
-|---|---|---|---|
-| 1 | A path below a link is refused and the destination kept (D1) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -k below_a_link -k two_levels -k dangling -v` | All pass: `remove_tree(sandbox, "clone/build/artifacts")` with `clone/build` a link to `writable/build` raises `RuntimeContainmentError` naming the link, and every file in the destination is still there; a link two levels up and a dangling link above the last component are refused too. |
-| 2 | A link as the last component is unlinked, not followed (D1) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -k last_component -v` | Both pass: a link in last position is unlinked and its destination kept; one that leads outside the root is refused by containment and stays. |
-| 3 | `..`, missing components and absolute paths (D1, D2) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -k dotdot -k missing -k absolute -v` | All pass: a `..` component is refused; a path through a missing component is a no-op; an absolute path inside the root is removed, one outside is refused. |
-| 4 | Behaviour that must not change (D2, D3) | `python3 -B -m unittest tests.test_runtime.RemoveTreeTest -v` | All 12 pass, including `keep`, a read-only subtree, a root reached through a link, a root that is a link with `.` and `""` (unlinked, destination kept), and a plain root cleared and removed for `.`. |
-| 5 | A linked `.agents` fails a Codex review cleanly (D4) | `python3 -B -m unittest tests.test_review_job.LinkedAgentsCopyTest tests.test_review_job.LinkedAgentsJobTest -v` | Both pass: `build_copy` refuses both `.agents/skills` and `.agents/plugins` when `.agents` is a link; the job record ends `FAILED` with `outcome: error`, `not_started` true, and the link's destination untouched. |
-| 6 | Neighbours still pass | `python3 -B -m unittest tests.test_runtime tests.test_review_job -v` | All OK. |
-| 7 | Docs | `python3 -B tools/check_docs.py` | Exit 0. Read `docs/common-problems.md` (under "A review the Controller ran did not finish"): the `refusing to remove ... is a symbolic link` entry gives the cause (a linked `.agents`) and the remedy. `docs/ROADMAP.md` marks C10k and follow-up 84 done (1.27.9). |
+**Flow 1: The issue's reproduction reads (D1).**
+Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_the_issue_table_nine_bold_flows_alone tests.test_functional_review.BoldFlowHeaderTest.test_every_spelling_starts_a_flow tests.test_functional_review.BoldFlowHeaderTest.test_every_spelling_reads_in_a_crlf_file -v`.
+Expected: all pass; nine `**Flow K: ...**` lines are nine flows, and each of the five spellings (colon, full stop, parenthesis,
+spaced dash, closing bold) starts a flow, in LF and CRLF files.
 
-**Known limitations / out of scope.** No new setting, option, exit code or gate. A Codex review of a worktree whose `.agents` is a
-relative link inside the worktree worked before and now fails by design (D4). A race between the walk and the removal is not
-addressed. `copy_tree`, `write_private_bytes` and `_assert_contained` are unchanged. No real-host run is part of this checklist.
-The full suite is not a flow (`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
+**Flow 2: Mixed spellings are refused, naming the odd flow (D3).**
+Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_nine_bold_flows_next_to_a_heading_flow_name_the_heading -v`.
+Expected: passes; the refusal is `ChecklistUnrecognised` naming flow `10` (heading) and saying to give the section one shape.
+
+**Flow 3: Other readings are unchanged (D1).**
+Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_headings_still_read tests.test_functional_review.BoldFlowHeaderTest.test_a_qualified_flow_header_ends_the_flow_above tests.test_functional_review.BoldFlowHeaderTest.test_a_dash_or_closing_bold_needs_the_flow_word tests.test_functional_review.BoldFlowHeaderTest.test_text_after_the_closing_bold_is_not_a_header tests.test_functional_review.BoldFlowHeaderTest.test_an_overlong_label_is_refused -v`.
+Expected: all pass; headings read as before, a qualified header ends the flow above, a dash or closing bold needs the word `Flow`,
+`**Flow 1**: text` is not a header, and a three-digit label is refused.
+
+**Flow 4: An unread bold `Flow` line is refused unless held (D2).**
+Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_is_refused_with_its_file_line tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_inside_a_flow_a_fence_or_a_region_is_held tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_under_a_non_flow_heading_is_not_named tests.test_functional_review.BoldFlowHeaderTest.test_a_region_a_bold_line_opens_ends_at_the_next_bold_flow_line tests.test_functional_review.BoldFlowHeaderTest.test_blanks_after_the_opening_bold_of_an_unread_flow_line_are_named -v`.
+Expected: all pass; the refusal names the line by file line; a line inside a flow, a code fence or a non-flow region is held and
+not named.
+
+**Flow 5: Tables, naming and caps (D2).**
+Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_an_f_label_table_and_an_unread_line tests.test_functional_review.BoldFlowHeaderTest.test_an_old_form_table_and_an_unread_line tests.test_functional_review.BoldFlowHeaderTest.test_the_line_directly_above_a_table_holds_its_rows_and_no_other tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_line_alone_names_the_line_in_the_no_flow_refusal tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_line_beside_a_table_with_no_flow_label_names_the_line_and_the_cells tests.test_functional_review.BoldFlowHeaderTest.test_the_names_are_capped_at_eight tests.test_functional_review.BoldFlowHeaderTest.test_the_line_numbers_are_the_files_in_a_linked_checklist tests.test_functional_review.BoldFlowHeaderTest.test_the_shapes_and_the_stop_name_the_spelling -v`.
+Expected: all pass.
+
+**Flow 6: History reads as before (D4).**
+Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_history_reads_as_before tests.test_checklist_corrections -v`.
+Expected: all pass; the checked-in completed-milestone checklists and fixtures read or refuse exactly as at the base commit.
+
+**Flow 7: A read-only probe of the reader (D1, D3).**
+Run `python3 -B - <<'EOF'` with the body below (it imports from the product clone and writes nothing):
+`import sys; sys.path.insert(0,'.'); from controller import functional_review as f`
+`t="## Functional review checklist\n\n**Flow 1: a.**\n\nx\n\n**Flow 2: b.**\n\ny\n"; print([x.label for x in f.read_flows(t)])`
+`try: f.read_flows(t+"\n### Flow 10 (user)\n\nz\n")` / `except Exception as e: print(type(e).__name__, str(e)[:200])`.
+Expected: `['1', '2']`, then `ChecklistUnrecognised` whose text says the bold shape decided 2 flows and names `10` (heading).
+
+**Flow 8: The whole file and the neighbours.**
+Run `python3 -B -m unittest tests.test_functional_review tests.test_checklist_corrections -v`.
+Expected: all OK.
+
+**Flow 9: Documentation (D5).**
+Run `python3 -B tools/check_docs.py`. Expected: exit 0. Read `docs/guide/automation.md` (the recogniser paragraphs: the `Flow`
+spellings, the refused `**Flow 1**: title` example, which regions hold an unread bold `Flow` line), `docs/common-problems.md`
+(row 38e, `checklist_unrecognised`: cause and remedy for the bold `Flow` line) and `docs/ROADMAP.md` (FL3 marked done, 1.27.10).
+
+**Known limitations / out of scope.** No new setting, option, exit code or gate. Two shapes in one checklist are not merged
+(Flow 2 refuses it). `**Optional extra Flow 1.**` stays in the flow above; a qualified near-miss such as `**Optional, Flow 9 y**`
+is dropped as before; `**Flow1: x**` and other bold label words (`**Step 1: x**`) are not guarded (follow-up issue at acceptance).
+A `**Flow K**` line with trailing text is not a header. No real-host run is part of this checklist. The full suite is not a flow
+(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
 
 
 ## Next action

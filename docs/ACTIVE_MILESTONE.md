@@ -2,6 +2,16 @@
 
 ## Status
 
+**In progress.** `workflow-controller-a2b` (A2b, issue
+[#298](https://github.com/RodrigoFAbreu/workflow-controller/issues/298)) moves the roadmap prose to item pages and the rules to a
+live page. The plan is `docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md` (revision 3). CP1 is complete: the 72 done
+items have a page `docs/items/<id>.md` holding their archive row verbatim (less the status marker and the link rewrite), each
+named by a `detail` line in `docs/backlog.yaml`; `tools/check_docs.py` link-checks `docs/items/`, and `tests/test_backlog.py`
+pins that every `detail` resolves to a regular file. CP2 (the open items' pages and the titles) and CP3 (the rules page, the
+links and the two repairs) follow.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-a2a` (A2a, issue
 [#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)) declares the backlog file and replaces the roadmap page
 with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md` (revision 3). CP1 is complete:

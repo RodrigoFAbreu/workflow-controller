@@ -263,9 +263,9 @@ python3 -m unittest tests.test_docs
 What it checks:
 
 - **Links and anchors.** Every relative Markdown link and `#anchor` in
-  `README.md`, `docs/*.md`, `docs/guide/`, `docs/adr/` and
-  `docs/releases/` must reach an existing file and, for a Markdown file, a
-  heading, using GitHub's anchor rule (lowercase, inline-code text kept,
+  `README.md`, `docs/*.md`, `docs/guide/`, `docs/adr/`,
+  `docs/releases/` and `docs/items/` (the backlog's item pages) must reach an
+  existing file and, for a Markdown file, a heading, using GitHub's anchor rule (lowercase, inline-code text kept,
   letters, digits, underscores and hyphens preserved, a repeated heading
   numbered `-1`, `-2`, ...). `docs/ROADMAP.md` (generated),
   `docs/roadmap-archive.md` (a frozen historical record) and

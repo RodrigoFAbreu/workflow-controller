@@ -202,6 +202,12 @@ class LiveBacklogTests(unittest.TestCase):
         for row in OPEN_ROWS:
             self.assertIn(row, self.rows)
 
+    def test_every_detail_resolves_to_a_regular_file(self):
+        for item in self.data["items"]:
+            if "detail" in item:
+                path = REPO_ROOT / item["detail"]
+                self.assertTrue(path.is_file() and not path.is_symlink(), item["id"])
+
     def test_selection_equals_the_rule_worked_out_from_the_data(self):
         self.assertEqual(selection(self.data), expected_selection(self.data))
 

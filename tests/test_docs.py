@@ -139,6 +139,12 @@ class LinkRuleTest(TreeTestCase):
         self.assertTrue(any(p.startswith("docs/adr/0001.md") for p in problems))
         self.assertTrue(any(p.startswith("docs/releases/1.0.0.md") for p in problems))
 
+    def test_a_dead_link_on_an_item_page_is_flagged(self) -> None:
+        self.tree.write("docs/items/x.md", "# X\n\n[old](../guide/removed.md#x)\n")
+        problems = self.tree.check()
+        self.assertEqual(len(problems), 1)
+        self.assertTrue(problems[0].startswith("docs/items/x.md"))
+
     def test_the_stub_keeps_the_historical_links_valid(self) -> None:
         self.tree.write("docs/guide/installation.md",
                         "# Installation\n\n## Supported Workflow releases\n\n## Upgrade\n\n"

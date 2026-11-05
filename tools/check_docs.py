@@ -103,7 +103,7 @@ ADR_EXIT_TABLE = "docs/adr/0001-controller-generation-1-architecture.md"
 #: Pages the link check skips: Workflow commands rewrite the first two, the
 #: rest are historical records.
 LINK_EXCLUDED = ("docs/ROADMAP.md", "docs/ACTIVE_MILESTONE.md", "docs/roadmap-archive.md")
-LINK_GLOBS = ("README.md", "docs/*.md", "docs/guide/*.md", "docs/adr/*.md", "docs/releases/*.md")
+LINK_GLOBS = ("README.md", "docs/*.md", "docs/guide/*.md", "docs/adr/*.md", "docs/releases/*.md", "docs/items/*.md")
 
 #: External hosts allowed besides github.com repository links, seeded from
 #: the hosts present when the checks were added.

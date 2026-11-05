@@ -23100,5 +23100,159 @@ class GeneratedDeclarationsBacklogClassificationTest(unittest.TestCase):
             self.assertEqual(stage_check(declarations, "docs/items/a.md"), "excluded")
 
 
+# ---------------------------------------------------------------------------
+# W39 (`unclassified-path-message`): T4, T6, T7, T8. The fingerprint-side
+# texts (T1 to T3, T5, T9) are in workflow_fingerprint_generalization_test.py.
+# ---------------------------------------------------------------------------
+
+_UPM_PROTOCOL = 'See REVIEW_PROTOCOL.md, "Repairing an artifact declaration after an approval".'
+_UPM_INTERVAL_ROUTE = (
+    "A provenance interval may contain only excluded paths: exclude it in implementation_stage "
+    "only if it is repository territory (a change to the declaration stales the technical "
+    "approval, never widen an exclusion to avoid a re-review); for a deliverable the content "
+    "needs a new implementation round, not a declaration entry. " + _UPM_PROTOCOL
+)
+_UPM_IMPL_ROUTE = (
+    "Add the path to implementation_stage of that file, as a path or a directory prefix: "
+    "protected for a deliverable, excluded for repository territory. The edit needs no plan "
+    "amendment (the plan-stage id does not change); before the technical approval re-run the "
+    "command that refused, after it the edit goes through mark_technical_approval_stale and a "
+    "post-fix round. " + _UPM_PROTOCOL
+)
+
+
+def _upm_impl_text(path: str, item: str) -> str:
+    return (
+        f"{path} is not classified by the implementation stage of the artifact declaration of "
+        f"work item {item}, docs/ai-workflow/registry/{item}-artifacts.json. "
+    )
+
+
+def gate_case(ws, name):
+    """The shared setup of T7 and T8 (and of flow 7 of the plan): runs the named
+    production caller on a scratch item with an undeclared path and lets the
+    refusal propagate. Returns `None` when it does not refuse. Uses only its
+    `ws` argument for the production calls and names the scripts already had."""
+    if name == "technical_approval_gate_status":
+        with _harness.ScratchRepo() as repo:
+            _cp4_external_item(repo, "2.1")
+            (repo.root / "other").mkdir()
+            (repo.root / "other/mystery.txt").write_text("x\n")
+            ws.technical_approval_gate_status(repo.root, _harness.read_state(repo), _CP4_WI)
+        return None
+    if name == "promote_legacy_work_item":
+        case = TestLegacyPromotion("test_promotion_activates_and_transitions_version_and_phase")
+        with ScratchRepo() as repo:
+            state, _ = case._import(repo)
+            _write_and_commit(repo, "other/mystery.txt", "x\n", "add an undeclared path")
+            ws.promote_legacy_work_item(
+                state, repo.root, work_item_id="milestone-8",
+                required_active_milestone_substring="accepted and closed",
+                artifacts_path=case.ARTIFACTS_REL, now="t2",
+            )
+        return None
+    raise ValueError(f"unknown gate case {name!r}")
+
+
+class TestUnclassifiedPathMessageCallers(unittest.TestCase):
+    WI = "wi-upm"
+
+    def test_t4_interval_catch_appends_the_interval_form(self):
+        with ScratchRepo() as repo:
+            _write_test_artifacts_declaration(repo, self.WI)
+            _seed_base_provenance_state(repo, self.WI)
+            p = repo.commit("protected fix", filename="src/Foo.kt")
+            state = _provenance_state(self.WI, reviewed_implementation_head=p, implementation_revision=1)
+            _commit_state_only(repo, self.WI, state, "record gen", trailers=_record_trailers(self.WI, 1))
+            added = _write_and_commit(repo, "other/mystery.txt", "???\n", "add unclassified")
+            _run(["git", "rm", "-q", "other/mystery.txt"], cwd=repo.root)
+            _run(["git", "commit", "-q", "-m", "remove unclassified"], cwd=repo.root)
+            work_item = state | {"work_item_id": self.WI, "work_item_type": "process"}
+            with self.assertRaises(ws.ProtectedPathInProvenanceIntervalError) as ctx:
+                ws.verify_implementation_provenance_recovery(
+                    repo.root, work_item, base_commit=repo.base, head=repo.head(),
+                )
+            text = str(ctx.exception)
+            self.assertEqual(
+                text,
+                f"{added} in the provenance interval touches 'other/mystery.txt', classified "
+                f"'unclassified', not excluded: "
+                + _upm_impl_text("other/mystery.txt", self.WI) + _UPM_INTERVAL_ROUTE,
+            )
+            self.assertNotIn("the plan stage", text)
+            self.assertNotIn("/milestone-plan", text)
+            self.assertNotIn("protected for a deliverable", text)
+            self.assertIn("needs a new implementation round", text)
+
+    def test_t6_the_plan_route_is_pinned_to_the_phase_sets(self):
+        text = fingerprint.unclassified_path_message("p", "demo-item", stage="plan")
+        match = _re.search(r"At ([A-Za-z_, ]+?), whether or not an amendment is open: edit the file and run "
+                          r"/milestone-plan demo-item again\.", text)
+        self.assertIsNotNone(match)
+        listed = set(_re.split(r", | or ", match.group(1)))
+        self.assertEqual(listed, set(ws.PLAN_REVIEW_NON_READY_PHASES | ws.PLAN_REVIEW_READY_PHASES))
+        for phase in sorted(listed):
+            with self.subTest(phase=phase):
+                ws.assert_plan_review_entry_phase(
+                    {"governing_workflow_version": "2.2", "phase": phase, "plan_approval": {"status": "CURRENT"}},
+                    "demo-item", command="/milestone-plan")
+        match = _re.search(r"At ([A-Z_]+(?: or [A-Z_]+)?) the plan is approved and the edit needs a new plan "
+                          r"revision: the user runs /request-plan-amendment demo-item, then "
+                          r"/milestone-plan demo-item, plan review and the plan approval "
+                          r"\(/approve-review plan, or /satisfy-gate when the plan gate is automatic\); "
+                          r"at any other phase neither command is admitted, so tell the user\.", text)
+        self.assertIsNotNone(match)
+        self.assertEqual(set(match.group(1).split(" or ")), set(ws._AMENDMENT_REQUEST_ALLOWED_PHASES))
+        # the user runs it; it is never offered bare, and /apply-plan-review is never named
+        self.assertNotIn("/apply-plan-review", text)
+        self.assertEqual(text.count("/request-plan-amendment"), 1)
+        self.assertIn("the user runs /request-plan-amendment demo-item, then", text)
+        self.assertNotRegex(text, r"/satisfy-gate(?! when the plan gate is automatic)")
+        # the order of the command file: request, plan, review, approval
+        self.assertLess(text.index("/request-plan-amendment"), text.index("/milestone-plan demo-item, plan review"))
+        command_file = Path(__file__).resolve().parent.parent / ".claude" / "commands" / "request-plan-amendment.md"
+        words = " ".join(command_file.read_text(encoding="utf-8").split())
+        resume = words.index("the very next `/milestone-plan [work-item-id]` invocation resumes it")
+        self.assertLess(resume, words.index("review protocol and `/approve-review plan` gate run", resume))
+        # at any other phase both guards refuse a two-stage item
+        for phase in ("AWAITING_FUNCTIONAL_REVIEW", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "MILESTONE_COMPLETE"):
+            with self.subTest(other_phase=phase):
+                item = {"governing_workflow_version": "2.2", "phase": phase}
+                with self.assertRaises(ws.PlanReviewPhaseNotPlanStageError):
+                    ws.assert_plan_review_entry_phase(item, "demo-item", command="/milestone-plan")
+                with ScratchRepo() as repo:
+                    state, _ = TestRequestPlanAmendment._state_with_approved_plan(
+                        repo, work_item_id="demo-item", phase=phase)
+                    state["work_items"]["demo-item"]["governing_workflow_version"] = "2.2"
+                    with self.assertRaises(ws.WrongPhaseForAmendmentRequestError):
+                        _request_plan_amendment_holding_lifecycle_lock(
+                            state, "demo-item", "reason", repo_root=repo.root, now="2026-01-01T00:00:00Z")
+
+    def test_t5_the_coverage_refusal_text_is_byte_identical(self):
+        """Its two catches replace the classifiers' text with their own, so the new
+        message must not reach this refusal. The whole text, written out."""
+        case = TestAssertPlanArtifactDeclarationCoverage("test_the_stage_wording_the_checkpoint_and_the_next_step")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case._write(plan=case._plan("**Files:** `plan_only.py`", "**Files:** `impl_only.py`", "**Files:** `neither.py`"))
+        case._declare(plan_protected=["plan_only.py"], impl_protected=["impl_only.py"])
+        self.assertEqual(
+            case._refusal(),
+            "wi plan revision 2: CP1: plan_only.py (unclassified at the implementation stage); "
+            "CP2: impl_only.py (unclassified at the plan stage); CP3: neither.py (unclassified at both stages) -- "
+            + ws.PLAN_DECLARATION_NEXT_STEP,
+        )
+
+    def test_t7_technical_gate_status_names_the_item(self):
+        with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+            gate_case(ws, "technical_approval_gate_status")
+        self.assertEqual(str(ctx.exception), _upm_impl_text("other/mystery.txt", _CP4_WI) + _UPM_IMPL_ROUTE)
+
+    def test_t8_legacy_promotion_names_the_item(self):
+        with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+            gate_case(ws, "promote_legacy_work_item")
+        self.assertEqual(str(ctx.exception), _upm_impl_text("other/mystery.txt", "milestone-8") + _UPM_IMPL_ROUTE)
+
+
 if __name__ == "__main__":
     unittest.main()

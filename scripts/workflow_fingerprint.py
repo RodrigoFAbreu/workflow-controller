@@ -204,6 +204,7 @@ additions, all previously recorded as forward-looking obligations:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -229,7 +230,94 @@ sys.dont_write_bytecode = True
 class UnclassifiedPathError(Exception):
     """Raised when a changed or untracked path is neither protected nor
     excluded — fails closed per PROTO-R7-001's requirement that this
-    actually be reachable, not merely defined."""
+    actually be reachable, not merely defined.
+
+    `str()` is the message `unclassified_path_message` builds (the path, the
+    artifact-declaration file that must list it, the sanctioned route);
+    `path` and `stage` (`"plan"` or `"implementation"`) are kept so a caller
+    that knows the work item can re-raise the same class with its name in
+    the text (`naming_work_item`)."""
+
+    def __init__(self, message, path=None, stage=None):
+        super().__init__(message)
+        self.path = path
+        self.stage = stage
+
+
+_UNCLASSIFIED_PROTOCOL_SEE = 'See REVIEW_PROTOCOL.md, "Repairing an artifact declaration after an approval".'
+
+
+def unclassified_path_message(
+    path: str, work_item_id: str | None = None, stage: str = "plan", interval: bool = False,
+) -> str:
+    """The text of an `UnclassifiedPathError` (W39): names the path, the
+    artifact-declaration file that must list it and the sanctioned route that
+    adds it, for the one stage that refused. With no `work_item_id` the file
+    is named by the placeholder `<work_item_id>` and the text says the item is
+    not known where the path was classified. `interval=True` (only the
+    provenance-interval catch, `stage="implementation"`) replaces the route by
+    the interval form: that check accepts only excluded paths."""
+    known = work_item_id is not None
+    item = work_item_id if known else "<work_item_id>"
+    declaration = f"docs/ai-workflow/registry/{item}-artifacts.json"
+    if known:
+        head = (
+            f"{path} is not classified by the {stage} stage of the artifact declaration of "
+            f"work item {item}, {declaration}. "
+        )
+    else:
+        head = (
+            f"{path} is not classified by the {stage} stage of the artifact declaration of the "
+            f"work item being worked, {declaration} (the work item is not known where this path "
+            f"was classified, so <work_item_id> stands for its id). "
+        )
+    if interval:
+        return head + (
+            "A provenance interval may contain only excluded paths: exclude it in "
+            "implementation_stage only if it is repository territory (a change to the declaration "
+            "stales the technical approval, never widen an exclusion to avoid a re-review); for a "
+            "deliverable the content needs a new implementation round, not a declaration entry. "
+            + _UNCLASSIFIED_PROTOCOL_SEE
+        )
+    if stage == "implementation":
+        return head + (
+            "Add the path to implementation_stage of that file, as a path or a directory prefix: "
+            "protected for a deliverable, excluded for repository territory. The edit needs no plan "
+            "amendment (the plan-stage id does not change); before the technical approval re-run "
+            "the command that refused, after it the edit goes through mark_technical_approval_stale "
+            "and a post-fix round. " + _UNCLASSIFIED_PROTOCOL_SEE
+        )
+    arg = f" {item}" if known else ""
+    return head + (
+        "Add the path to plan_stage of that file as excluded, an exact path in excluded_paths or a "
+        "directory prefix in excluded_prefixes (it is protected only if it is one of the plan's own "
+        "documents; a deliverable is excluded here and protected at the implementation stage). "
+        "At PLANNING, REVISING_PLAN, AMENDING_PLAN, AWAITING_LOCAL_PLAN_REVIEW, "
+        "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW or AWAITING_PLAN_APPROVAL, whether or not an "
+        f"amendment is open: edit the file and run /milestone-plan{arg} again. "
+        "At IMPLEMENTING or SELF_REVIEWING_IMPLEMENTATION the plan is approved and the edit needs a "
+        f"new plan revision: the user runs /request-plan-amendment{arg}, then /milestone-plan{arg}, "
+        "plan review and the plan approval (/approve-review plan, or /satisfy-gate when the plan "
+        "gate is automatic); at any other phase neither command is admitted, so tell the user. "
+        + _UNCLASSIFIED_PROTOCOL_SEE
+    )
+
+
+@contextlib.contextmanager
+def naming_work_item(work_item_id: str):
+    """Re-raise an `UnclassifiedPathError` that carries a path with the
+    known-item text for `work_item_id` (same class, `from None`); every other
+    exception, and an `UnclassifiedPathError` without a path, passes through
+    unchanged. Wraps only the calls that classify paths for a known item."""
+    try:
+        yield
+    except UnclassifiedPathError as exc:
+        if exc.path is None:
+            raise
+        raise UnclassifiedPathError(
+            unclassified_path_message(exc.path, work_item_id, stage=exc.stage or "plan"),
+            exc.path, exc.stage,
+        ) from None
 
 
 class UnsupportedPathTypeError(Exception):
@@ -1457,7 +1545,7 @@ def classify_path(
         return "excluded"
     if path in TOOLING_AMBIENT_EXCLUDED_PATHS:
         return "excluded"
-    raise UnclassifiedPathError(path)
+    raise UnclassifiedPathError(unclassified_path_message(path, stage="plan"), path, "plan")
 
 
 def assert_all_changed_paths_classified_worktree(
@@ -1598,10 +1686,11 @@ def compute_review_content_id_plan_stage(
     validate_work_item_id(work_item_id)
     validate_work_item_type(work_item_type)
     base_full = resolve_base(repo_root, base)
-    assert_all_changed_paths_classified_worktree(
-        repo_root, base_full, protected, excluded_paths, excluded_prefixes
-    )
-    manifest = compute_review_content_manifest_plan_stage_worktree(repo_root, protected)
+    with naming_work_item(work_item_id):
+        assert_all_changed_paths_classified_worktree(
+            repo_root, base_full, protected, excluded_paths, excluded_prefixes
+        )
+        manifest = compute_review_content_manifest_plan_stage_worktree(repo_root, protected)
     projection = {
         "stage": "plan",
         "work_item_type": work_item_type,
@@ -1645,10 +1734,11 @@ def compute_review_content_id_plan_stage_at_commit(
     validate_work_item_id(work_item_id)
     validate_work_item_type(work_item_type)
     base_full = resolve_base(repo_root, base)
-    assert_all_changed_paths_classified_commit(
-        repo_root, base_full, commit, protected, excluded_paths, excluded_prefixes
-    )
-    manifest = compute_review_content_manifest_plan_stage_commit(repo_root, commit, protected)
+    with naming_work_item(work_item_id):
+        assert_all_changed_paths_classified_commit(
+            repo_root, base_full, commit, protected, excluded_paths, excluded_prefixes
+        )
+        manifest = compute_review_content_manifest_plan_stage_commit(repo_root, commit, protected)
     projection = {
         "stage": "plan",
         "work_item_type": work_item_type,
@@ -1843,7 +1933,8 @@ def classify_path_implementation_stage(
         return "excluded"
     if path in TOOLING_AMBIENT_EXCLUDED_PATHS:
         return "excluded"
-    raise UnclassifiedPathError(path)
+    raise UnclassifiedPathError(
+        unclassified_path_message(path, stage="implementation"), path, "implementation")
 
 
 def _implementation_stage_protected_changed_paths(
@@ -1948,9 +2039,10 @@ def compute_review_content_id_implementation_stage(
     validate_work_item_id(work_item_id)
     validate_work_item_type(work_item_type)
     base_full = resolve_base(repo_root, base)
-    manifest = compute_review_content_manifest_implementation_stage_worktree(
-        repo_root, base_full, protected_paths, protected_prefixes, excluded_paths, excluded_prefixes
-    )
+    with naming_work_item(work_item_id):
+        manifest = compute_review_content_manifest_implementation_stage_worktree(
+            repo_root, base_full, protected_paths, protected_prefixes, excluded_paths, excluded_prefixes
+        )
     projection = {
         "stage": "implementation",
         "work_item_type": work_item_type,
@@ -1990,9 +2082,11 @@ def compute_review_content_id_implementation_stage_at_commit(
     validate_work_item_type(work_item_type)
     base_full = resolve_base(repo_root, base)
     commit_full = resolve_base(repo_root, commit)
-    manifest = compute_review_content_manifest_implementation_stage_commit(
-        repo_root, base_full, commit_full, protected_paths, protected_prefixes, excluded_paths, excluded_prefixes
-    )
+    with naming_work_item(work_item_id):
+        manifest = compute_review_content_manifest_implementation_stage_commit(
+            repo_root, base_full, commit_full, protected_paths, protected_prefixes, excluded_paths,
+            excluded_prefixes,
+        )
     projection = {
         "stage": "implementation",
         "work_item_type": work_item_type,

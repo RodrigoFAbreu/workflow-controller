@@ -12,7 +12,10 @@ and raises :class:`~controller.errors.GitOperationError` carrying the argv,
 exit code and stderr.
 
 What it never does (I2): force anything, ``reset``, rebase, amend, delete a
-ref, or move a tag. A push is a plain refspec push -- for a branch only
+ref, or move a tag. The one stated exception is :func:`landing_delete_ref`
+(``workflow-controller-h4e``, D4), which deletes only a ref under
+``refs/controller/landing/``, the Controller's own private namespace for a
+Codex worker's landing, never anything the operator or the Workflow owns. A push is a plain refspec push -- for a branch only
 after a local fast-forward check against the freshly fetched remote ref, for
 a tag only when the remote does not have it. A rejected push is re-read and
 reported, never retried.
@@ -774,6 +777,144 @@ def checkout_branch_at(repo_root: Path, branch: str, base: str, *, runner: Runne
     repository the Controller has just made, never on a target repository."""
     _git(repo_root, ["-c", "core.hooksPath=/dev/null", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
                      "checkout", "-q", "-B", branch, base, "--"], runner)
+
+
+# ---------------------------------------------------------------------------
+# The Codex worker's landing (H4e, D4): every write runs no hook and no automatic maintenance.
+# ---------------------------------------------------------------------------
+
+#: The events whose config hooks the landing switches off (``hook.<event>.enabled=false``); finalised by CP2's
+#: measurement against the installed Git. ``managed_hooks_configured`` fails closed for an event this list misses.
+LANDING_HOOK_EVENTS = ("reference-transaction", "post-index-change", "post-merge", "pre-merge-commit",
+                       "post-checkout", "post-commit", "post-rewrite", "pre-auto-gc")
+
+#: The one hardened option set of the landing's fetch, merge and ref delete (and its status reads): file hooks, an
+#: fsmonitor program, automatic gc and maintenance and every listed config hook are off.
+LANDING_CONFIG = (
+    "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
+    *(arg for event in LANDING_HOOK_EVENTS for arg in ("-c", f"hook.{event}.enabled=false")),
+)
+
+#: What the landing's fetch adds: a crafted object or a non-file transport is refused by Git itself.
+LANDING_FETCH_CONFIG = ("-c", "fetch.fsckObjects=true", "-c", "transfer.fsckObjects=true",
+                        "-c", "protocol.allow=never", "-c", "protocol.file.allow=always")
+
+LANDING_REF_PREFIX = "refs/controller/landing/"
+_LANDING_JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_LANDING_BRANCH_CHARS = re.compile(r"^[^\s~^:?*\[\\]+$")
+
+
+def _landing_ref(job_id: str) -> str:
+    if not _LANDING_JOB_ID.match(job_id) or ".." in job_id or job_id.endswith((".lock", ".")):
+        raise GitOperationError(f"refusing landing ref for job id {job_id!r}", evidence={"job_id": job_id})
+    return LANDING_REF_PREFIX + job_id
+
+
+def check_landing_refspec(refspec: str) -> None:
+    """Only ``refs/heads/<name>:refs/controller/landing/<id>``: no ``+``, no wildcard, no other source or destination."""
+    src, sep, dst = refspec.partition(":")
+    name = src[len("refs/heads/"):]
+    ok = (sep == ":" and not refspec.startswith("+") and "*" not in refspec and src.startswith("refs/heads/")
+          and bool(name) and _LANDING_BRANCH_CHARS.match(name) is not None and ".." not in name
+          and dst.startswith(LANDING_REF_PREFIX) and _LANDING_JOB_ID.match(dst[len(LANDING_REF_PREFIX):]) is not None
+          and ":" not in dst)
+    if not ok:
+        raise GitOperationError(
+            f"refusing landing refspec {refspec!r}: only refs/heads/<name>:{LANDING_REF_PREFIX}<job id> is allowed",
+            evidence={"refspec": refspec})
+
+
+def _landing_git(repo_root: Path, args: Sequence[str], runner: Runner | None, *, fetch: bool = False) -> str:
+    """The one private runner of the landing's writes: ``git -C <root>`` with :data:`LANDING_CONFIG`."""
+    options = (*LANDING_CONFIG, *(LANDING_FETCH_CONFIG if fetch else ()))
+    argv = ["git", "-C", str(repo_root), *options, *args]
+    try:
+        result = (runner or _DEFAULT_RUNNER)(argv)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise _failure(f"git {args[0]} could not run: {exc}", argv) from None
+    if result.returncode != 0:
+        raise _failure(f"git {args[0]} failed (exit {result.returncode}): {_text(result.stderr).strip()}",
+                       argv, result)
+    return _text(result.stdout)
+
+
+def landing_fetch(repo_root: Path, path: Path | str, branch: str, job_id: str, *,
+                  runner: Runner | None = None) -> None:
+    """Fetch the clone's ``refs/heads/<branch>`` into ``refs/controller/landing/<job id>`` of ``repo_root``."""
+    refspec = f"refs/heads/{branch}:{_landing_ref(job_id)}"
+    check_landing_refspec(refspec)
+    _landing_git(repo_root, ["fetch", "--no-tags", "--no-write-fetch-head", "--", str(path), refspec], runner,
+                 fetch=True)
+
+
+def landing_merge(repo_root: Path, sha: str, *, runner: Runner | None = None) -> None:
+    """``git merge --ff-only --no-overwrite-ignore <sha>``: Git refuses (exit 1) when the range adds a path that is an
+    ignored file of this repository."""
+    if not re.fullmatch(r"[0-9a-f]{40,64}", sha):
+        raise GitOperationError(f"refusing to merge {sha!r}: not a full commit id", evidence={"commit": sha})
+    _landing_git(repo_root, ["merge", "--ff-only", "--no-overwrite-ignore", "--no-edit", sha], runner)
+
+
+def landing_delete_ref(repo_root: Path, job_id: str, *, runner: Runner | None = None) -> None:
+    """Delete ``refs/controller/landing/<job id>``: the stated, narrow exception to "never deletes a ref"."""
+    _landing_ref(job_id)
+    _landing_git(repo_root, ["update-ref", "-d", f"refs/controller/landing/{job_id}"], runner)
+
+
+#: Reads of the Codex worker's clone, where the worker could have written ``.git/objects/info/commit-graph`` (excluded
+#: from the guard), so the range checks read parents from the objects (H4e, D3, O1 of round 4).
+NO_COMMIT_GRAPH = ("-c", "core.commitGraph=false")
+
+
+def clone_refs(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
+    """Every ref of ``repo_root`` (``for-each-ref``), full names, sorted."""
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "for-each-ref", "--format=%(refname)"], runner, quiet=True)
+    return sorted(line for line in out.splitlines() if line)
+
+
+def head_symref(repo_root: Path, *, runner: Runner | None = None) -> str | None:
+    """The ref ``HEAD`` is a symbolic ref to, or ``None`` for a detached ``HEAD``."""
+    out = _probe(repo_root, ["symbolic-ref", "-q", "HEAD"], runner, quiet=True)
+    return None if out is None else _single_line(out, "git symbolic-ref HEAD")
+
+
+def strict_descendant(repo_root: Path, base: str, tip: str, *, runner: Runner | None = None) -> bool:
+    """Whether ``base`` is an ancestor of ``tip`` and not ``tip`` itself, read with the commit graph off."""
+    if base == tip:
+        return False
+    argv, result = _run(repo_root, [*NO_COMMIT_GRAPH, "merge-base", "--is-ancestor", base, tip], runner, quiet=True)
+    if result.returncode in (0, 1) and not result.stderr:
+        return result.returncode == 0
+    raise _failure(f"cannot decide whether {base} is an ancestor of {tip}", argv, result)
+
+
+def range_commits(repo_root: Path, base: str, tip: str, limit: int, *,
+                  runner: Runner | None = None) -> list[tuple[str, list[str]]]:
+    """``(commit, parents)`` for ``base..tip``, oldest first, at most ``limit`` commits, read with the commit graph
+    off."""
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "rev-list", "--parents", "--reverse", f"--max-count={limit}",
+                           "--end-of-options", f"{base}..{tip}"], runner, quiet=True)
+    commits = []
+    for line in out.splitlines():
+        fields = line.split()
+        if fields:
+            commits.append((fields[0], fields[1:]))
+    return commits
+
+
+def commit_touches_submodule(repo_root: Path, commit: str, parent: str, *, runner: Runner | None = None) -> bool:
+    """Whether ``commit``'s own diff against ``parent`` has a ``.gitmodules`` change or a gitlink (mode 160000)."""
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-textconv",
+                           "--no-ext-diff", parent, commit, "--"], runner, quiet=True)
+    fields = out.split("\0")
+    # ``-z --raw``: ``:<old mode> <new mode> <old sha> <new sha> <status>`` NUL ``<path>`` NUL ...
+    i = 0
+    while i + 1 < len(fields) and fields[i].startswith(":"):
+        meta, path = fields[i].split(), fields[i + 1]
+        if "160000" in meta[:2] or path == ".gitmodules" or path.endswith("/.gitmodules"):
+            return True
+        i += 2
+    return False
 
 
 def push_branch(repo_root: Path, remote: str, branch: str, *, runner: Runner | None = None) -> str:

@@ -10,8 +10,13 @@ its commits fast-forward behind the H3 seam, for a fixture role. The plan is
 at the commit the Controller captured, refused with a named `CodexTreeError.cause` unless the managed branch is clean and
 unmoved), `gitrepo` gains `untracked_files`, `checkout_branch_at`, `config_probe` and the `no_optional_locks` reads, and
 `job._run_codex_worker` passes `pre_state["target_head"]` to the preparer seam, persists the `clone` block before the
-launch and removes the tree when the worker never ran. CP2 to CP4 (the landing, landing at job end and `resume`, the live
-proof and the guides) remain.
+launch and removes the tree when the worker never ran. CP2 is complete: `controller/codex_worker_landing.py` has `land`
+(D3, D4: the checks in order, each refusal naming a `cause`, then a hardened fetch into `refs/controller/landing/<job id>` and
+`merge --ff-only --no-overwrite-ignore`), `verify_move` (the one post-move check) and `decide`/`recover` (D7's deciding half,
+which only reads); `gitrepo` gains `LANDING_CONFIG`, `landing_fetch`, `landing_merge`, `landing_delete_ref` (the one stated
+exception to "never deletes a ref", admitted by exactly one spelling in `tests/test_no_rewrite_invariants.py`) and the clone
+reads with the commit graph off. Nothing calls it yet. CP3 and CP4 (landing at job end, the status, the cleanup and `resume`,
+then the live proof and the guides) remain.
 
 Previous item, now complete:
 

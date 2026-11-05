@@ -949,9 +949,17 @@ class BoldFlowHeaderTest(unittest.TestCase):
         self.assertEqual(self.labels("### Setup\n**Flow: x**\n\n**A. one**\nx"), ["A"])
 
     def test_an_overlong_label_is_refused(self) -> None:
-        for body in ("**Flow 123: x**\n\n### Flow 1\nx", "**Flow 1: a**\nx\n\n**Flow 123: x**\ny"):
+        """Beside a bold flow the label is named, wherever the line sits; otherwise the line is."""
+        for body in (
+            "**A. one**\nx\n\n**Flow 123: x**\ny",
+            "**Flow 1: a**\nx\n\n**Flow 123: x**\ny",
+            "**A. one**\n**Flow 123: x**\nx",
+            "### Setup\n**Flow 123: x**\n\n**A. one**\nx",
+        ):
             with self.subTest(body=body):
-                refusal(checklist(body))
+                self.assertEqual(refusal(checklist(body))["unrecognised"], ["123"])
+        evidence = refusal(checklist("**Flow 123: x**\n\n### Flow 1\nx"))
+        self.assertEqual([item["text"] for item in evidence["unread"]], ["**Flow 123: x**"])
 
     def test_an_f_label_table_and_an_unread_line(self) -> None:
         table = TABLE_HEAD + "| F1 | a | b |\n| F2 | a | b |\n"

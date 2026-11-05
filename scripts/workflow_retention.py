@@ -124,6 +124,9 @@ def _load_state(repo_root: Path) -> dict:
     except FileNotFoundError:
         raise RetentionError("state_missing", f"{STATE_PATH} does not exist in {repo_root}",
                              "run it in a Workflow repository, or pass --repo-root") from None
+    except UnicodeDecodeError as exc:
+        raise RetentionError("state_invalid", f"{STATE_PATH} is not valid UTF-8 (byte {exc.start})",
+                             "repair the state file") from None
     except OSError as exc:
         raise RetentionError("state_invalid", f"{STATE_PATH} cannot be read: {exc}",
                              "repair the state file") from None
@@ -153,14 +156,21 @@ def _tracked_counts(repo_root: Path) -> dict[str, int]:
     """Paths under `.ai-review/<id>/` that Git tracks, per id (one call)."""
     try:
         result = subprocess.run(["git", "ls-files", "-z", "--", ".ai-review"], cwd=repo_root,
-                                capture_output=True, text=True)
+                                capture_output=True)
     except OSError as exc:
         raise RetentionError("repository_unknown", f"git could not run: {exc}", "install Git") from None
     if result.returncode != 0:
-        raise RetentionError("repository_unknown", f"git ls-files failed: {result.stderr.strip()}",
+        raise RetentionError("repository_unknown",
+                             f"git ls-files failed: {result.stderr.decode('utf-8', errors='replace').strip()}",
                              "run it inside a Git repository, or pass --repo-root")
+    try:
+        listing = result.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RetentionError("repository_unknown", "git ls-files printed a path under .ai-review that is not "
+                             "valid UTF-8", "rename or untrack that path (git ls-files -z -- .ai-review lists "
+                             "them), then run it again") from None
     counts: dict[str, int] = {}
-    for path in result.stdout.split("\0"):
+    for path in listing.split("\0"):
         parts = path.split("/")
         if len(parts) >= 3 and parts[0] == ".ai-review":
             counts[parts[1]] = counts.get(parts[1], 0) + 1
@@ -203,6 +213,26 @@ def _open_review_root(repo_root: Path, errors: dict[str, str]) -> int | None:
         return None
 
 
+def _can_fail_walk(name: str, dirfd: int) -> bool:
+    """Whether `os.fwalk` can still report `name` (a sub-directory it listed)
+    to `onerror`: a real directory, an entry that cannot be examined, or a
+    symlink whose open fails the way the walk opens it. A symlink that opens
+    is dropped silently by the walk."""
+    try:
+        info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+    except OSError:
+        return True
+    if stat.S_ISDIR(info.st_mode):
+        return True
+    if not stat.S_ISLNK(info.st_mode):
+        return False
+    try:
+        os.close(os.open(name, os.O_RDONLY | os.O_NONBLOCK, dir_fd=dirfd))
+    except OSError:
+        return True
+    return False
+
+
 def _review_folder(ai_fd: int | None, repo_root: Path, item_id: str, tracked: dict[str, int],
                    errors: dict[str, str]) -> dict:
     """Reads only through the `.ai-review` descriptor, so a link in an ancestor
@@ -219,18 +249,33 @@ def _review_folder(ai_fd: int | None, repo_root: Path, item_id: str, tracked: di
                 _unreadable(errors, folder, exc)
                 complete = False
     if present:
-        here = item_id
+        # The walk reports a failed sub-directory by its base name only, so
+        # `pending` mirrors its pre-order, as (path, name) pairs, to find the
+        # parent of the one that failed.
+        pending: list[tuple[str, str]] = []
 
         def walk_failed(exc: OSError) -> None:
             nonlocal complete
             name = exc.filename if isinstance(exc.filename, str) else None
-            where = folder if name is None else repo_root / ".ai-review" / here / name
+            where = folder
+            if name is not None:
+                for index in range(len(pending) - 1, -1, -1):
+                    if pending[index][1] == name:
+                        where = repo_root / ".ai-review" / pending[index][0]
+                        del pending[index:]
+                        break
             _unreadable(errors, where, exc)
             complete = False
 
-        for directory, _, names, dirfd in os.fwalk(item_id, dir_fd=ai_fd, follow_symlinks=False,
-                                                    onerror=walk_failed):
-            here = directory
+        for directory, dirs, names, dirfd in os.fwalk(item_id, dir_fd=ai_fd, follow_symlinks=False,
+                                                       onerror=walk_failed):
+            for index, (path, _) in enumerate(pending):
+                if path == directory:
+                    del pending[index:]
+                    break
+            for sub in reversed(dirs):
+                if _can_fail_walk(sub, dirfd):
+                    pending.append((os.path.join(directory, sub), sub))
             for name in names:
                 try:
                     info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
@@ -529,14 +574,31 @@ def _record(path: str, kind: str, info: os.stat_result, target: str | None = Non
             "ctime_ns": info.st_ctime_ns, "target": target, "sha256": digest}
 
 
+def _readlink_at(name: str, dirfd: int, shown: str, *, fail=_refuse) -> str:
+    """`os.readlink` where a read error is a coded refusal, never a traceback:
+    `folder_changed` when the entry vanished or is no longer a link, else
+    `unreadable`. `fail` builds the refusal (`_remove_tree` keeps its count)."""
+    try:
+        return os.readlink(name, dir_fd=dirfd)
+    except OSError as exc:
+        why = exc.strerror or str(exc)
+        if exc.errno in (errno.ENOENT, errno.EINVAL):
+            raise fail("folder_changed", f"{shown} changed while it was read ({why})",
+                       "run it again when nothing writes to the review folder") from None
+        raise fail("unreadable", f"{shown} cannot be read ({why})",
+                   "grant read access to the review folder, then run it again; the engine does not act from a "
+                   "partial view") from None
+
+
 def _scan(ai_fd: int, item_id: str) -> list[dict]:
     """The stat-only walk: one record per entry, root included (path '')."""
     records = []
     for rel, dirfd, dir_info, others in _walk_folder(ai_fd, item_id):
         records.append(_record(rel, "dir", dir_info))
         for name, info, kind in others:
-            target = os.readlink(name, dir_fd=dirfd) if kind == "symlink" else None
-            records.append(_record(f"{rel}/{name}" if rel else name, kind, info, target))
+            shown = f"{rel}/{name}" if rel else name
+            target = _readlink_at(name, dirfd, shown) if kind == "symlink" else None
+            records.append(_record(shown, kind, info, target))
     return records
 
 
@@ -605,7 +667,7 @@ def _pack(ai_fd: int, item_id: str, tar: tarfile.TarFile) -> list[dict]:
             shown = f"{rel}/{entry}" if rel else entry
             member = f"{item_id}/{shown}"
             if kind == "symlink":
-                target = os.readlink(entry, dir_fd=dirfd)
+                target = _readlink_at(entry, dirfd, shown)
                 tar.addfile(_tarinfo(member, kind, info, target))
                 records.append(_record(shown, kind, info, target))
                 continue
@@ -1319,7 +1381,7 @@ def _hash_folder(dir_fd: int, item_id: str) -> list[dict]:
         for name, info, kind in others:
             shown = f"{rel}/{name}" if rel else name
             if kind == "symlink":
-                records.append(_record(shown, kind, info, os.readlink(name, dir_fd=dirfd)))
+                records.append(_record(shown, kind, info, _readlink_at(name, dirfd, shown)))
                 continue
             fd = _open_file(name, dirfd, shown)
             try:
@@ -1407,6 +1469,10 @@ def _remove_tree(removing_fd: int, item_id: str, records: list[dict], *, place: 
     and is kept. Returns the number of entries deleted."""
     known = {r["path"]: r for r in records}
     deleted = 0
+
+    def fail(code: str, message: str, _step: str) -> RetentionError:
+        return _stopped(code, message, deleted, place, item_id)
+
     for dirpath, dirnames, filenames, dirfd in os.fwalk(item_id, topdown=False, dir_fd=removing_fd,
                                                          follow_symlinks=False):
         rel = dirpath[len(item_id) + 1:]
@@ -1432,7 +1498,7 @@ def _remove_tree(removing_fd: int, item_id: str, records: list[dict], *, place: 
             kind = _kind_of(info.st_mode)
             expected = known.get(shown)
             if kind is None or expected is None or _comparable(_record(shown, kind, info, expected["target"])) \
-                    != _comparable(expected) or (kind == "symlink" and os.readlink(name, dir_fd=dirfd)
+                    != _comparable(expected) or (kind == "symlink" and _readlink_at(name, dirfd, shown, fail=fail)
                                                  != expected["target"]):
                 raise _stopped("folder_changed", f"{shown} is not the entry that was verified", deleted, place,
                                item_id)
@@ -1971,9 +2037,21 @@ def render_text(report: dict) -> str:
         if archive["present"]:
             state = f"archive {_size(archive['bytes'])}, {archive['age_days']} days old" \
                     + (", prunable" if archive["prunable"] else "")
+        elif not archive.get("readable", True):
+            state = "archive unreadable"
         else:
             state = "no archive"
-        shown = f"{_size(folder['bytes'])} in {folder['files']} files" if folder["present"] else "no review folder"
+        complete = folder.get("complete", True)
+        if folder["present"] and complete:
+            shown = f"{_size(folder['bytes'])} in {folder['files']} files"
+        elif folder["present"]:
+            shown = f"at least {_size(folder['bytes'])} in {folder['files']} files (partly unreadable)"
+        elif not complete:
+            shown = "review folder unreadable"
+        elif record["work_item_id"] in report.get("removing", ()):
+            shown = "review folder in .removing"
+        else:
+            shown = "no review folder"
         lines.append(f"  {record['work_item_id']}: {shown}; {state}")
         if folder["tracked_files"]:
             lines.append(f"    {folder['tracked_files']} tracked file(s) under .ai-review/{record['work_item_id']}/")

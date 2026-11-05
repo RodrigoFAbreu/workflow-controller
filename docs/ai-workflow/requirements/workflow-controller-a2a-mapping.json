@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-a2a",
+  "requirements": {
+    "R1": {
+      "description": "docs/backlog.yaml holds one validated item per Controller-lane and orchestrator-series roadmap row, with unique orders, done items marked, A2a in progress and A2b the next ready item; a test pins it",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The backlog is declared in WORKFLOW_CONFIG.json, the old roadmap moves unchanged to docs/roadmap-archive.md, docs/ROADMAP.md is the generated page, and inbound links point to the archive",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "A test fails when the generated page is stale, so the existing CI test jobs carry the check",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The development guide, the documentation map and the sizing paragraph describe the backlog and the generated roadmap",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

@@ -2,6 +2,23 @@
 
 ## Status
 
+**Complete.** `workflow-controller-a2a` (A2a, issue
+[#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)) declares the backlog file and replaces the roadmap page
+with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md` (revision 3). CP1 is complete:
+`docs/backlog.yaml` lists the 97 items of the roadmap's Controller and orchestrator tables (71 done, A2a in progress, the rest
+next or idea), and `tests/test_backlog.py` pins the file against the roadmap rows and the Workflow's selection rule. CP2 is
+complete: `WORKFLOW_CONFIG.json` declares the backlog, the old roadmap is kept byte for byte in `docs/roadmap-archive.md`
+under a frozen banner, `docs/ROADMAP.md` is the generated page, the six inbound links and the follow-up 86 test point at the
+archive, and `tests/test_backlog.py` fails on a stale page. CP3 is complete: `docs/guide/development.md` explains the backlog,
+`docs/README.md` lists the archive, and `docs/guide/milestone-branches.md` sends a split-off remainder to the backlog file.
+
+The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for A2b ("The prose migration"), the next item `python3 scripts/workflow_backlog.py next` returns.
+
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-bold-flow-headers` (FL3, issue
 [#288](https://github.com/RodrigoFAbreu/workflow-controller/issues/288)) makes the functional checklist reader read a bold
 `**Flow K: Title.**` header as a flow and refuse a bold `Flow ...` line that no shape reads, instead of dropping it next to a
@@ -293,65 +310,61 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-bold-flow-headers` (FL3, issue [#288](https://github.com/RodrigoFAbreu/workflow-controller/issues/288)),
-implementation revision 3. The change makes the checklist reader (`controller/functional_review.py`, `read_flows`) read
-`**Flow K: Title.**` style bold headers (also `**Flow K. Title.**`, `**Flow K) Title.**`, `**Flow K - Title.**` and `**Flow K**`, with
-an optional qualifier such as `**Optional, Flow 2: x**`) as flows, and refuse a bold `Flow` line that no shape reads (and no flow,
-table row or non-flow region holds) instead of dropping it. Every flow runs offline: no network, no real `gh` (the stand-in refuses
-and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the
-read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; the flows are unit tests, one
-read-only probe and a read of the documentation, so they write only to the scratch `TMPDIR`.
+Item `workflow-controller-a2a` (A2a, issue [#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)),
+implementation revision 1. The change declares the backlog (`docs/backlog.yaml`, `WORKFLOW_CONFIG.json` `backlog` key), keeps the
+old roadmap unchanged in `docs/roadmap-archive.md`, makes `docs/ROADMAP.md` the generated page, and adds `tests/test_backlog.py`
+and the documentation. No file under `controller/` changes. Every flow runs offline: no network, no real `gh` (the stand-in
+refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside
+the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; the flows are read-only commands
+and unit tests, so they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**1. The issue's reproduction reads (D1).**
-Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_the_issue_table_nine_bold_flows_alone tests.test_functional_review.BoldFlowHeaderTest.test_every_spelling_starts_a_flow tests.test_functional_review.BoldFlowHeaderTest.test_every_spelling_reads_in_a_crlf_file -v`.
-Expected: all pass; nine `**Flow K: ...**` lines are nine flows, and each of the five spellings (colon, full stop, parenthesis,
-spaced dash, closing bold) starts a flow, in LF and CRLF files.
+**1. The backlog validates and the page is fresh.**
+Run `python3 -B scripts/workflow_backlog.py check`.
+Expected: exit 0 and `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}`.
 
-**2. Mixed spellings are refused, naming the odd flow (D3).**
-Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_nine_bold_flows_next_to_a_heading_flow_name_the_heading -v`.
-Expected: passes; the refusal is `ChecklistUnrecognised` naming flow `10` (heading) and saying to give the section one shape.
+**2. Selection names A2a.**
+Run `python3 -B scripts/workflow_backlog.py next`.
+Expected: exit 0; `declared: true` and the item is `workflow-controller-a2a`, status `in-progress`, with no warnings.
 
-**3. Other readings are unchanged (D1).**
-Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_headings_still_read tests.test_functional_review.BoldFlowHeaderTest.test_a_qualified_flow_header_ends_the_flow_above tests.test_functional_review.BoldFlowHeaderTest.test_a_dash_or_closing_bold_needs_the_flow_word tests.test_functional_review.BoldFlowHeaderTest.test_text_after_the_closing_bold_is_not_a_header tests.test_functional_review.BoldFlowHeaderTest.test_an_overlong_label_is_refused -v`.
-Expected: all pass; headings read as before, a qualified header ends the flow above, a dash or closing bold needs the word `Flow`,
-`**Flow 1**: text` is not a header, and a three-digit label is refused.
+**3. The declaration is exactly D1's.**
+Run `python3 -B -c "import json;print(json.load(open('docs/ai-workflow/WORKFLOW_CONFIG.json'))['backlog'])"`.
+Expected: `{'file': 'docs/backlog.yaml', 'roadmap': 'docs/ROADMAP.md'}` with no `generator` key.
 
-**4. An unread bold `Flow` line is refused unless held (D2).**
-Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_is_refused_with_its_file_line tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_inside_a_flow_a_fence_or_a_region_is_held tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_under_a_non_flow_heading_is_not_named tests.test_functional_review.BoldFlowHeaderTest.test_a_region_a_bold_line_opens_ends_at_the_next_bold_flow_line tests.test_functional_review.BoldFlowHeaderTest.test_blanks_after_the_opening_bold_of_an_unread_flow_line_are_named -v`.
-Expected: all pass; the refusal names the line by file line; a line inside a flow, a code fence or a non-flow region is held and
-not named.
+**4. The backlog tests.**
+Run `python3 -B -m unittest tests.test_backlog -v`.
+Expected: all 21 pass (the file validates, every roadmap row is an item, `order` is unique, done rows are done, selection
+by the computed expectation, the stale-page check fails on a changed byte).
 
-**5. Tables, naming and caps (D2).**
-Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_an_f_label_table_and_an_unread_line tests.test_functional_review.BoldFlowHeaderTest.test_an_old_form_table_and_an_unread_line tests.test_functional_review.BoldFlowHeaderTest.test_the_line_directly_above_a_table_holds_its_rows_and_no_other tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_line_alone_names_the_line_in_the_no_flow_refusal tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_line_beside_a_table_with_no_flow_label_names_the_line_and_the_cells tests.test_functional_review.BoldFlowHeaderTest.test_the_names_are_capped_at_eight tests.test_functional_review.BoldFlowHeaderTest.test_the_line_numbers_are_the_files_in_a_linked_checklist tests.test_functional_review.BoldFlowHeaderTest.test_the_shapes_and_the_stop_name_the_spelling -v`.
-Expected: all pass.
+**5. The archive and the generated page.**
+Run `head -c 400 docs/roadmap-archive.md; echo; head -12 docs/ROADMAP.md | cut -c1-140`, then
+`git diff da2cb2b HEAD --stat -- docs/roadmap-archive.md docs/ROADMAP.md`.
+Expected: the archive starts with a `> **Frozen.**` banner naming `ROADMAP.md` and `backlog.yaml`, then the old title; the roadmap
+begins `# Roadmap`, a "Generated from docs/backlog.yaml ... Do not edit by hand" comment and an Order/Item/Status/Size/Depends on
+table; the archive holds the old page's text (2281 added lines) unchanged apart from the banner.
 
-**6. History reads as before (D4).**
-Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_history_reads_as_before tests.test_checklist_corrections -v`.
-Expected: all pass; the checked-in completed-milestone checklists and fixtures read or refuse exactly as at the base commit.
+**6. The repointed sandbox test and the neighbours.**
+Run `python3 -B -m unittest tests.test_functional_sandbox.ArgvAndSettingsTest.test_the_guide_and_the_roadmap_archive_name_the_runtime_root_remainder -v`.
+Expected: passes, reading `docs/roadmap-archive.md`.
 
-**7. A read-only probe of the reader (D1, D3).**
-Run `python3 -B - <<'EOF'` with the body below (it imports from the product clone and writes nothing):
-`import sys; sys.path.insert(0,'.'); from controller import functional_review as f`
-`t="## Functional review checklist\n\n**Flow 1: a.**\n\nx\n\n**Flow 2: b.**\n\ny\n"; print([x.label for x in f.read_flows(t)])`
-`try: f.read_flows(t+"\n### Flow 10 (user)\n\nz\n")` / `except Exception as e: print(type(e).__name__, str(e)[:200])`.
-Expected: `['1', '2']`, then `ChecklistUnrecognised` whose text says the bold shape decided 2 flows and names `10` (heading).
+**7. Documentation and links (D8).**
+Run `python3 -B tools/check_docs.py; echo rc=$?`. Expected: `rc=0`. Read the "The backlog and the roadmap page" section of
+`docs/guide/development.md` (where the file is, how to add or reorder an item, that acceptance sets `done` and regenerates the
+page, that the roadmap is never edited by hand, and that the link check skips the archive), the archive line in `docs/README.md`,
+and the sizing paragraph of `docs/guide/milestone-branches.md` (a split-off remainder becomes a backlog item). Check that the links in
+`docs/releases/1.18.0.md`, `1.19.0.md`, `1.19.1.md`, `1.27.6.md` and `docs/guide/automation.md` point into `roadmap-archive.md`.
 
-**8. The whole file and the neighbours.**
-Run `python3 -B -m unittest tests.test_functional_review tests.test_checklist_corrections -v`.
-Expected: all OK.
+**8. A stale page is caught.**
+In a scratch copy only (`cp -r . "$TMPDIR/copy"`, then work inside it, never the product clone): change one character of
+`docs/ROADMAP.md`, run `python3 -B scripts/workflow_backlog.py check`, then `python3 -B scripts/workflow_backlog.py generate --replace`
+and `check` again.
+Expected: the first `check` exits non-zero naming the first differing line; after `generate --replace` the second exits 0.
 
-**9. Documentation (D5).**
-Run `python3 -B tools/check_docs.py`. Expected: exit 0. Read `docs/guide/automation.md` (the recogniser paragraphs: the `Flow`
-spellings, the refused `**Flow 1**: title` example, which regions hold an unread bold `Flow` line), `docs/common-problems.md`
-(row 38e, `checklist_unrecognised`: cause and remedy for the bold `Flow` line) and `docs/ROADMAP.md` (FL3 marked done, 1.27.10).
-
-**Known limitations / out of scope.** No new setting, option, exit code or gate. Two shapes in one checklist are not merged
-(Flow 2 refuses it). `**Optional extra Flow 1.**` stays in the flow above; a qualified near-miss such as `**Optional, Flow 9 y**`
-is dropped as before; `**Flow1: x**` and other bold label words (`**Step 1: x**`) are not guarded (follow-up issue at acceptance).
-A `**Flow K**` line with trailing text is not a header. No real-host run is part of this checklist. The full suite is not a flow
-(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
+**Known limitations / out of scope.** The prose migration to `docs/items/` pages and the `detail` field (A2b); a declared
+generator; the Manager and Workflow lane rows; `release` on done items; a CI workflow step (the page check is a test). The order
+of H4e to H4g and of C8c is an owner-editable value (plan "Open points"). The full suite is not a flow (`test_functional_sandbox`
+has a known CI flake, #206; the Git 2.56 trailer tests fail on main). No real-host run is part of this checklist.
 
 
 ## Next action

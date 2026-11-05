@@ -478,13 +478,18 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    is refused with its line, instead of being dropped next to a recognised flow, unless a flow holds it:
    `**Flow: Title**` (no label), `**Flow 1 Title**` (no mark after the label), `**Flow 1**: Title`
    (text after the closing bold) and `**Flow 123: Title**` (a label of three digits) are refused, and the
-   evidence names the line. Next to a bold flow, a line such as `**Flow 123: Title**` is refused as partly
-   recognised, and the evidence names the label (`123`) rather than the line. Such a line inside a flow's own text, inside
+   evidence names the line. Such a line is not refused when it is inside a flow's own text, inside
    a code fence, or in a region that is not a flow (below a `### Setup`, `### Test data`,
-   `### Known limitations` or `### Out of scope` heading) is not refused; a region that a bold line opened
+   `### Known limitations` or `### Out of scope` heading); a region that a bold line opened
    (`**Setup.**`) ends at the next bold `Flow` line. Write the line as `**Flow K: Title.**` or as a heading
    `### Flow K: Title`, or put it inside the flow it belongs to. A line that starts `**Optional extra Flow 1.**`
    is not a header, as before.
+
+   The exception is `**Flow 123: Title**` when the bold shape decides (a bold flow such as
+   `**A. one**` is in the checklist). The reader then reads it as a header with a label it does not
+   accept and refuses it as partly recognised, wherever it sits outside a code fence, including inside a
+   flow or under `### Setup`; the evidence names the label (`123`) rather than the line, and moving the
+   line does not help. Write a label of one or two digits, or put the line in a code fence.
 
    Between two flows of the bold shape, every line that belongs to no flow is refused (a
    `**Setup** for this flow: ...` or `**Setup: none needed.**` line, text under a heading or after

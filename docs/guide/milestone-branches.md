@@ -164,7 +164,7 @@ Size a plan by what reviewers must check, not only by scope. A plan that combine
 a trust or security record and a launch path is split before implementation, so each part can be released alone; the
 rest becomes an item in `docs/backlog.yaml` (the roadmap page is generated from it). Optional review findings are recorded and triaged at acceptance (fixed,
 dropped with a reason, or a follow-up issue) and never start another review round. When more than 8
-`review-follow-up` issues are open, a clean-up milestone is the next item.
+`review-follow-up` issues are open, a clean-up milestone is the next item. The full rules are on [Planning rules](../planning-rules.md).
 
 ## Squash merges and the pull request title
 

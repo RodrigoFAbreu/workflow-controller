@@ -83,9 +83,12 @@ milestone's notes reach the release is in
 - [Roadmap](ROADMAP.md): what is done and what comes next. The page is
   generated from `backlog.yaml` (see [The backlog and the roadmap
   page](guide/development.md#the-backlog-and-the-roadmap-page)); do not edit it by hand.
+  Each row links the item's description, a page under `items/`.
 - [Roadmap archive](roadmap-archive.md): the hand-written roadmap as it stood
   before the backlog file, with the reasoning behind each item, kept unchanged
   as a historical record.
+- [Planning rules](planning-rules.md): the order and sizing rules a planner applies (the clean-up limit,
+  the sizing rule, what is deferred), the orchestrator and hosted-platform directions, and the roadmap principles.
 
 ## Design decisions
 

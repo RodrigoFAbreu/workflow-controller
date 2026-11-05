@@ -23,3 +23,11 @@ The Manager and Workflow lane rows (other repositories), a declared generator, a
 ## Complexity
 
 Medium. If the plan exceeds 5 checkpoints, split as: CP1 the script and the done items' pages, CP2 the open items' pages and titles, CP3 the rules page, links and the two repairs.
+
+## Roadmap row (moved verbatim)
+
+Complexity: medium. The prose migration: the roadmap's row prose moves to docs/items/<id>.md pages named by each item's detail field, and the rows' decisions are kept (nothing is deleted); the generated page and its CI check come from A2a
+
+Needs: A2a
+
+Section: Adapters and backlog (above)

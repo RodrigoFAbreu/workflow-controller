@@ -2,6 +2,22 @@
 
 ## Status
 
+**Complete.** `workflow-controller-a2b` (A2b, issue
+[#298](https://github.com/RodrigoFAbreu/workflow-controller/issues/298)) moves the roadmap prose to item pages and the rules to a
+live page. The plan is `docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md` (revision 3). CP1 is complete: the 72 done
+items have a page `docs/items/<id>.md` holding their archive row verbatim (less the status marker and the link rewrite), each
+named by a `detail` line in `docs/backlog.yaml`; `tools/check_docs.py` link-checks `docs/items/`, and `tests/test_backlog.py`
+pins that every `detail` resolves to a regular file. CP2 is complete: the 25 open items and ideas have a page too (97 pages in
+all, each row's text found in its page), CL1a to CL1e and C12b to C12d carry a "Planning notes" section taken from issues
+#130 and #27 and the archive's follow-ups 8, 9 and 14, the one dangling title (C10g-3c2) is a complete phrase, and the comment on
+line 2 of `docs/backlog.yaml` is reworded. CP3 is complete: `docs/planning-rules.md` holds the archive's rules text (the clean-up limit and sizing rule, the deferred directions, 11.11, 11.12 and the principles) unchanged, the archive's banner and `docs/README.md` link it, `docs/guide/development.md` and `docs/guide/milestone-branches.md` point at it, the five release notes (1.4.1 to 1.7.0) link the archive section, and the selection test in `tests/test_backlog.py` builds its two-ready-item case in a copy. The self-review corrected the C10g-3c2 page's heading to the completed title, linked the rules from each open item's page, kept the CL1d and CL1e notes to what issue #130 says, made the rules page say its numbered list is frozen, and added the item pages to `docs/guide/development.md` and `docs/README.md`.
+
+The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for H4e (Codex worker, step 5), the item `python3 scripts/workflow_backlog.py next` returns.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-a2a` (A2a, issue
 [#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)) declares the backlog file and replaces the roadmap page
 with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md` (revision 3). CP1 is complete:
@@ -310,61 +326,63 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-a2a` (A2a, issue [#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)),
-implementation revision 1. The change declares the backlog (`docs/backlog.yaml`, `WORKFLOW_CONFIG.json` `backlog` key), keeps the
-old roadmap unchanged in `docs/roadmap-archive.md`, makes `docs/ROADMAP.md` the generated page, and adds `tests/test_backlog.py`
-and the documentation. No file under `controller/` changes. Every flow runs offline: no network, no real `gh` (the stand-in
-refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside
-the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; the flows are read-only commands
-and unit tests, so they write only to the scratch `TMPDIR`.
+Item `workflow-controller-a2b` (A2b, issue [#298](https://github.com/RodrigoFAbreu/workflow-controller/issues/298)),
+implementation revision 1. The change moves the roadmap prose to 97 item pages (`docs/items/<id>.md`), names each in a `detail`
+line of `docs/backlog.yaml`, adds the rules page `docs/planning-rules.md`, completes the dangling titles, repoints the references
+and five release notes, and edits `tests/test_backlog.py`, `tests/test_docs.py` and `tools/check_docs.py`. No file under
+`controller/` changes. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or
+`ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the
+product clone with `python3 -B` and no `PYTHONPATH=.`; the flows are read-only commands and unit tests, so they write only to the
+scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**1. The backlog validates and the page is fresh.**
-Run `python3 -B scripts/workflow_backlog.py check`.
-Expected: exit 0 and `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}`.
+**Flow 1: The backlog validates and the page is fresh.**
+Run `python3 -B scripts/workflow_backlog.py check; echo rc=$?`.
+Expected: `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}` and `rc=0`.
 
-**2. Selection names A2a.**
+**Flow 2: Selection is unchanged.**
 Run `python3 -B scripts/workflow_backlog.py next`.
-Expected: exit 0; `declared: true` and the item is `workflow-controller-a2a`, status `in-progress`, with no warnings.
+Expected: exit 0; the item is `workflow-controller-a2b` with `detail` `docs/items/workflow-controller-a2b.md`, and `warnings` is empty.
 
-**3. The declaration is exactly D1's.**
-Run `python3 -B -c "import json;print(json.load(open('docs/ai-workflow/WORKFLOW_CONFIG.json'))['backlog'])"`.
-Expected: `{'file': 'docs/backlog.yaml', 'roadmap': 'docs/ROADMAP.md'}` with no `generator` key.
+**Flow 3: Every item has a page.**
+Run `ls docs/items | wc -l; grep -c 'detail:' docs/backlog.yaml; grep -c '^  - id:' docs/backlog.yaml`.
+Expected: `97`, `97`, `97`.
 
-**4. The backlog tests.**
-Run `python3 -B -m unittest tests.test_backlog -v`.
-Expected: all 21 pass (the file validates, every roadmap row is an item, `order` is unique, done rows are done, selection
-by the computed expectation, the stale-page check fails on a changed byte).
+**Flow 4: The backlog and docs tests.**
+Run `python3 -B -m unittest tests.test_backlog tests.test_docs 2>&1 | tail -3`.
+Expected: `Ran 82 tests` and `OK` (22 backlog tests, including that every `detail` resolves to a regular file, and 60 docs tests,
+including the dead link on an item page).
 
-**5. The archive and the generated page.**
-Run `head -c 400 docs/roadmap-archive.md; echo; head -12 docs/ROADMAP.md | cut -c1-140`, then
-`git diff da2cb2b HEAD --stat -- docs/roadmap-archive.md docs/ROADMAP.md`.
-Expected: the archive starts with a `> **Frozen.**` banner naming `ROADMAP.md` and `backlog.yaml`, then the old title; the roadmap
-begins `# Roadmap`, a "Generated from docs/backlog.yaml ... Do not edit by hand" comment and an Order/Item/Status/Size/Depends on
-table; the archive holds the old page's text (2281 added lines) unchanged apart from the banner.
+**Flow 5: Documentation and links.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`.
+Expected: `rc=0`, with `docs/items/*.md` now link-checked.
 
-**6. The repointed sandbox test and the neighbours.**
-Run `python3 -B -m unittest tests.test_functional_sandbox.ArgvAndSettingsTest.test_the_guide_and_the_roadmap_archive_name_the_runtime_root_remainder -v`.
-Expected: passes, reading `docs/roadmap-archive.md`.
+**Flow 6: A finished item's page.**
+Run `sed -n 1,20p docs/items/workflow-controller-a2a.md | cut -c1-200`.
+Expected: a heading, `Item id:`, a "Roadmap row (moved verbatim)" section with the row's text, `Needs:` and `Section:` lines; no
+status marker; a link to the archive reads `../roadmap-archive.md#...`.
 
-**7. Documentation and links (D8).**
-Run `python3 -B tools/check_docs.py; echo rc=$?`. Expected: `rc=0`. Read the "The backlog and the roadmap page" section of
-`docs/guide/development.md` (where the file is, how to add or reorder an item, that acceptance sets `done` and regenerates the
-page, that the roadmap is never edited by hand, and that the link check skips the archive), the archive line in `docs/README.md`,
-and the sizing paragraph of `docs/guide/milestone-branches.md` (a split-off remainder becomes a backlog item). Check that the links in
-`docs/releases/1.18.0.md`, `1.19.0.md`, `1.19.1.md`, `1.27.6.md` and `docs/guide/automation.md` point into `roadmap-archive.md`.
+**Flow 7: An open item's page and the completed title.**
+Read `docs/items/workflow-controller-cl1a.md` and `docs/items/workflow-controller-c10g-3c2.md`.
+Expected: CL1a has a "Planning notes" section from issue #130 and links the rules page; the C10g-3c2 heading is a complete phrase
+(ending "... that proves it") and `grep -n 'c10g-3c2' -A2 docs/backlog.yaml | head` shows the same complete title.
 
-**8. A stale page is caught.**
-In a scratch copy only (`cp -r . "$TMPDIR/copy"`, then work inside it, never the product clone): change one character of
-`docs/ROADMAP.md`, run `python3 -B scripts/workflow_backlog.py check`, then `python3 -B scripts/workflow_backlog.py generate --replace`
-and `check` again.
-Expected: the first `check` exits non-zero naming the first differing line; after `generate --replace` the second exits 0.
+**Flow 8: The rules page and its links.**
+Read `docs/planning-rules.md` (headings: next in order and the sizing rules, the deferred directions, 11.11, 11.12, the principles),
+the banner at the top of `docs/roadmap-archive.md`, the line in `docs/README.md`, and the pointers in `docs/guide/development.md`
+and `docs/guide/milestone-branches.md`. Then run `grep -n 'roadmap-archive' docs/releases/1.4.1.md docs/releases/1.4.2.md docs/releases/1.5.0.md docs/releases/1.6.0.md docs/releases/1.7.0.md`.
+Expected: the rules text matches the archive's unchanged; the archive banner and README name the rules page; each of the five
+notes links `../roadmap-archive.md#1112-release-notes-follow-the-milestone`.
 
-**Known limitations / out of scope.** The prose migration to `docs/items/` pages and the `detail` field (A2b); a declared
-generator; the Manager and Workflow lane rows; `release` on done items; a CI workflow step (the page check is a test). The order
-of H4e to H4g and of C8c is an owner-editable value (plan "Open points"). The full suite is not a flow (`test_functional_sandbox`
-has a known CI flake, #206; the Git 2.56 trailer tests fail on main). No real-host run is part of this checklist.
+**Flow 9: The selection test is independent of live statuses.**
+Run `python3 -B -m unittest tests.test_backlog -v 2>&1 | grep -i select`.
+Expected: the selection tests pass; the two-ready-item case is built in a copy, not read from the live backlog.
+
+**Known limitations / out of scope.** The Manager and Workflow lane rows (they stay in the archive); a declared generator; a
+tracker; any Workflow script change; retiring `docs/roadmap-archive.md` (kept frozen and linked, plan "Open points"); the name
+of `docs/planning-rules.md` (a rename is one move and a link edit). The full suite is not a flow (`test_functional_sandbox` has a
+known CI flake, #206; the Git 2.56 trailer tests fail on main). No real-host run is part of this checklist.
 
 
 ## Next action

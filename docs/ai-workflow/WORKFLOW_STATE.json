@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-a2b",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -59850,6 +59850,346 @@
         },
         "evaluated_at": "2026-11-05T13:57:33Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-a2b": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-a2b",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-a2b-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-a2b-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "2fd1c9d8eb1faf1cb5056e8bb12422223eddfcf8",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+        "approved_review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0cd9e54a4e218d17d9ee17dbe9fbb0eef7f0d655"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-a2b-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "685751dbf89abb9fe0d489ec634bbbd5bb120340"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-a2b-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57311e5cf9feefa1f542313a753563fdf149619b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T15:59:02Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+            "ledger": {
+              "local": {
+                "bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "1a2bd0b3236b123e8b4d7be312224c59a48ea9b44dbe75c1e41c9f7600cfebbf",
+                "ledger_entry_sha256": "7d6d0c02525acd90f12253a4591eb54d72a9a3113a628b4f93a4748b28291001",
+                "run_ref": "session:local .ai-review/workflow-controller-a2b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "5b8ae8bf20a78aad89e92c451210b3e9cdda02d68f7cc03ab7e1ae5016778041",
+                "ledger_entry_sha256": "7463a773799dd70b5b1399cdb9316b58522cc02bea8658a3df44fc6d1cb6933a",
+                "run_ref": "codex:20261105T155418Z-a0cb498e",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T15:59:02Z",
+          "workflow_release": "2.25.6"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-05T15:53:56Z",
+          "verdict_sha256": "1a2bd0b3236b123e8b4d7be312224c59a48ea9b44dbe75c1e41c9f7600cfebbf",
+          "run_ref": "session:local .ai-review/workflow-controller-a2b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-05T15:56:53Z",
+          "verdict_sha256": "5b8ae8bf20a78aad89e92c451210b3e9cdda02d68f7cc03ab7e1ae5016778041",
+          "run_ref": "codex:20261105T155418Z-a0cb498e",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-11-05T15:59:02Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-05T15:48:33Z",
+        "consumed": {
+          "review_content_id": "80e4fd0b58aaace0ea108c671e641358696bd52aaeffd22ddd0e62920660e4a4",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+          "bundle_id": "f9ff533bfb95124ded6de585ab827615ec4176d475343bdeb299a24dc7c46fe0",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "80e4fd0b58aaace0ea108c671e641358696bd52aaeffd22ddd0e62920660e4a4",
+        "f3c01534ebe19912ce9dfc8b72fa7497fbb229f632852c7d826318e7ce6274be"
+      ],
+      "optional_findings": {
+        "F-adaef3fd635c": {
+          "digest": "adaef3fd635c6f65cb88bba8f7e7fcd2b9ec290a82ee43903b90650821a5a551",
+          "text": "**O1.** D2 pairs a row with its item \"through the step id in the row's backticked id\", but the first cell of a row is a plain id (`| C1 |`), not backticked. A trial pairing on the plain cell matches all 97 items and leaves only A2c and A5 over in the two tables; the wording can say so and name those two exclusions, as `tests/test_backlog.py` does.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f3c01534ebe19912ce9dfc8b72fa7497fbb229f632852c7d826318e7ce6274be",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:39:09Z"
+            }
+          ]
+        },
+        "F-aa01121ed5bd": {
+          "digest": "aa01121ed5bd51fae9ff072386e08240e1458515529f6b6e6585815352ae59de",
+          "text": "**O2.** D7 fixes C10g-3c2's title \"from its archive row\", but the row's completed phrase (\"... and one operator-run functional round on Codex (`CONTROLLER_LIVE_CODEX_TESTS=1`) that proves it\") is well over the validator's 200 characters (the current title is already 193). The fix has to shorten the title, so D7 could say a fixed title may be condensed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f3c01534ebe19912ce9dfc8b72fa7497fbb229f632852c7d826318e7ce6274be",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:39:09Z"
+            }
+          ]
+        },
+        "F-e975e31c7b36": {
+          "digest": "e975e31c7b36d6d6d885c9de96e6bec4014a7128e50ffdffccc5301e3221e88c",
+          "text": "**O3.** Moving \"Next, in order\" unchanged to a live page gives planners a second order that already disagrees with the backlog (its first items are done). The item asks for it unchanged, so it stays, but one line above it saying the order is `docs/backlog.yaml` would stop a planner following it. That line sits outside the moved text, like the \"Planning notes\" of D4.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "f3c01534ebe19912ce9dfc8b72fa7497fbb229f632852c7d826318e7ce6274be",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:39:09Z"
+            }
+          ]
+        },
+        "F-7bb414ba0712": {
+          "digest": "7bb414ba071276de50879abb19ae0b72350674d811ef4057938a1e530bd0a59f",
+          "text": "**O1.** Nothing in the plan updates `docs/guide/development.md`'s \"Links and anchors\" list (\"`README.md`, `docs/*.md`, `docs/guide/`, `docs/adr/` and `docs/releases/`\"), which is false once CP1 adds `docs/items/*.md` to `LINK_GLOBS`, or the comment on line 2 of `docs/backlog.yaml` (\"Until an item has a detail page, its description and decisions are its row in docs/roadmap-archive.md\"), which stops applying to any item once every row has a page (a trial finds no row whose Step text is its title alone). CP3 already lists the guide and CP1 the file, so a clause in each is enough.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "80e4fd0b58aaace0ea108c671e641358696bd52aaeffd22ddd0e62920660e4a4",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:46:28Z"
+            }
+          ]
+        },
+        "F-6d158fd8930e": {
+          "digest": "6d158fd8930e98f2a398c1aa428da1e2dba5bf70871ab5ee5e16e82a18cb3e5c",
+          "text": "**O2.** D5 rewrites \"a link to a section that did not move\", while D10 rewrites every target starting with `#`. The one anchor in the moved text, `#1111-the-orchestrator-a-person-only-for-escalation` in part (a), targets a section that did move, so D5 keeps it local and D10 sends it to the archive. Both resolve in a trial, but they yield different bytes, and the containment check is written for D10's. One sentence choosing a rule would settle it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "80e4fd0b58aaace0ea108c671e641358696bd52aaeffd22ddd0e62920660e4a4",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:46:28Z"
+            }
+          ]
+        },
+        "F-8f83b8a4ba0b": {
+          "digest": "8f83b8a4ba0bea2d1def23c353755d0f52fb7c86fd0ce9b739ce63094ab7bd8b",
+          "text": "**O3.** D5's \"nothing else moves\" leaves out the `**Deferred**` paragraph at the end of `## At a glance` in the archive (concurrency, other forges, hot-reloadable routing, assurance tiers). It is direction a planner needs, and the item's scope names \"the direction sections\". If leaving it behind is intended, the \"Open points\" section could say so.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "80e4fd0b58aaace0ea108c671e641358696bd52aaeffd22ddd0e62920660e4a4",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:46:28Z"
+            }
+          ]
+        },
+        "F-038b6159e97c": {
+          "digest": "038b6159e97cfef893a5e0e471475ada19e4026148202a2ef562921469d9499e",
+          "text": "**O4.** D9 classifies `docs/planning-rules.md` and `docs/roadmap-archive.md` as excluded at the implementation stage, with a reason that speaks of plan-stage content. Acceptance edits neither file (unlike `docs/backlog.yaml` and `docs/items/`, which the Workflow's classification requires to be excluded), so an edit to the rules page after technical approval would not stale it, and that page's \"unchanged\" text is the deliverable. Protecting `docs/planning-rules.md` at that stage would bind it and cost nothing later.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "80e4fd0b58aaace0ea108c671e641358696bd52aaeffd22ddd0e62920660e4a4",
+              "verdict": "REVISE",
+              "at": "2026-11-05T15:46:28Z"
+            }
+          ]
+        },
+        "F-6a429ab0c65a": {
+          "digest": "6a429ab0c65ae10e00c5ea63bee90d7a5a065458a9114bf26ca8198053a06230",
+          "text": "**O1.** D3's check \"fails if any removed string is longer than a word plus one separator\", but D3's own rule removes ` (complete)` on 11 rows (C1, C1b, C2, C3, C4, C9, C9b, C9c, C9d, D1, C8), which is a word, its parentheses and a space. A check written as stated fails on rows the rule handles correctly. A trial applying the rule produced 71 removals, of which only these 11 exceed the bound. One clause would settle it: the bound also allows the emptied parenthesis with its one leading space, and `**Done** `.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T15:53:56Z"
+            }
+          ]
+        },
+        "F-5d80d5df6790": {
+          "digest": "5d80d5df679010046a3825e508092822ce4fb1fd3ca7d7bb499f9f718e58333c",
+          "text": "**O2.** D4's second question reads \"stated or linked from the rules page\", which appears to mean linked to it, and CP2 answers it before CP3 creates `docs/planning-rules.md`. CP1 has already added `docs/items/*.md` to `LINK_GLOBS`, so a CP2 page that links `../planning-rules.md` fails `python3 tools/check_docs.py` until CP3 (a trial reports \"points at a missing file\"), and so does the real-tree test in `tests/test_docs.py`. CP2's Done when does not run that check and CP3's does, so the delivered state is clean. To keep every checkpoint green, either add those links in CP3 and list `docs/items/` in its Files, or expect the check to be red between the two and say so in the CP2 report.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T15:53:56Z"
+            }
+          ]
+        },
+        "F-021ca41904f5": {
+          "digest": "021ca41904f5ed7fdb82001aba352b5ee498efedb4a3028cb0ea4df29a73a10c",
+          "text": "**O3.** The verbatim rule leaves references that no longer resolve where the text lands. The rules page holds four lines saying \"the table below\" or \"the epic below\" with no table under them, and 4 item pages say \"(above)\" or \"(below)\", for example A2a's `Section: Adapters and backlog (above)`. D1 rightly forbids rewording them. D5's new line could also say that the tables are now `docs/ROADMAP.md`, and that a section named on an item page is in the archive or on the rules page.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T15:53:56Z"
+            }
+          ]
+        },
+        "F-9962a719bf2f": {
+          "digest": "9962a719bf2fcd5a68d345b7d9f730b95fdb109f1b1e06ef5411fa8f561d9924",
+          "text": "**O1.** D3’s final length guard permits only “a word plus one separator,” although its removal rules also permit ` (complete)` and `**Done** `. Explicitly allow those forms so the guard accepts the intended output.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T15:56:53Z"
+            }
+          ]
+        },
+        "F-a8dfec450491": {
+          "digest": "a8dfec450491bce4b0371ae23cc65a560432116aca90937a31b9494c268b8836",
+          "text": "**O2.** Mapping requirement R4 omits `../` from the archive target while describing it as relative to `docs/releases/`. Copy D8’s correct target, `../roadmap-archive.md#1112-release-notes-follow-the-milestone`, into R4.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a745607c0f7ef35c714782566c830b788057a5a37b9a4b5246eae081a1cc3976",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T15:56:53Z"
+            }
+          ]
+        }
       }
     }
   }

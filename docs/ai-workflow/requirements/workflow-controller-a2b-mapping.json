@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-a2b",
+  "requirements": {
+    "R1": {
+      "description": "Every done item whose archive row has prose beyond its title has one docs/items page holding the row text verbatim and a detail line, and a test pins that every detail resolves, and a test pins that docs/items stays in the docs link check",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The open items pages are checked by hand against completeness, the applicable rules and the issue guidance, and every dangling title is fixed and the roadmap regenerated",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The archive rules and direction sections live unchanged on docs/planning-rules.md linked from the documentation map, and every reference to the roadmap rule is repointed",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Release notes 1.4.1 to 1.7.0 link to the archive section roadmap-archive.md#1112-release-notes-follow-the-milestone (relative to docs/releases/) and the selection test, built in a copy independent of live statuses, fails for a mutant that ignores order",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

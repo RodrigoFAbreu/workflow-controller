@@ -80,7 +80,11 @@ milestone's notes reach the release is in
 
 ## Direction
 
-- [Roadmap](ROADMAP.md): what is done, what comes next, and why.
+- [Roadmap](ROADMAP.md): what is done, what comes next, and why. The page is
+  generated from `backlog.yaml` (see [The backlog and the roadmap
+  page](guide/development.md#the-backlog-and-the-roadmap-page)); do not edit it by hand.
+- [Roadmap archive](roadmap-archive.md): the hand-written roadmap as it stood
+  before the backlog file, kept unchanged as a historical record.
 
 ## Design decisions
 

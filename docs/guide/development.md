@@ -267,7 +267,8 @@ What it checks:
   `docs/releases/` must reach an existing file and, for a Markdown file, a
   heading, using GitHub's anchor rule (lowercase, inline-code text kept,
   letters, digits, underscores and hyphens preserved, a repeated heading
-  numbered `-1`, `-2`, ...). `docs/ROADMAP.md` and
+  numbered `-1`, `-2`, ...). `docs/ROADMAP.md` (generated),
+  `docs/roadmap-archive.md` (a frozen historical record) and
   `docs/ACTIVE_MILESTONE.md` are skipped, and so are the Workflow's own
   records under `docs/ai-workflow/` and `docs/milestones/`. A link to
   github.com must name one of the three repositories
@@ -307,6 +308,27 @@ registered at `ACTIVE_THROUGH + 1`, and `ACTIVE_THROUGH` is raised when the
 page lands (the way the harness page was added). The per-page numbers already
 in the file are historical. When a release changes a page,
 update its "Last checked with" line by hand; the check only asserts the line is there and has that shape.
+
+## The backlog and the roadmap page
+
+The list of planned work is `docs/backlog.yaml`, declared by the `backlog` key
+in `docs/ai-workflow/WORKFLOW_CONFIG.json`. `docs/ROADMAP.md` is **generated**
+from it by `scripts/workflow_backlog.py`; never edit the page by hand. The
+roadmap as it stood before the backlog file is kept unchanged in
+`docs/roadmap-archive.md`.
+
+- To add, reorder or re-describe an item, edit `docs/backlog.yaml`, then run
+  `python3 scripts/workflow_backlog.py generate` and commit both files.
+- `python3 scripts/workflow_backlog.py check` validates the file;
+  `python3 scripts/workflow_backlog.py next` names the item `/milestone-plan`
+  would take (read-only).
+- Acceptance marks the item `done` and regenerates the page inside the
+  acceptance commit.
+- `tests/test_backlog.py` pins the file against the archive and checks that the
+  page equals what `generate` would write, byte for byte.
+
+The file's accepted form and every command are in
+[the backlog file](../ai-workflow/BACKLOG_FILE.md).
 
 ## Lifecycle scenarios
 

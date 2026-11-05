@@ -356,6 +356,7 @@ items:
     status: next
     order: 73
     depends_on: [workflow-controller-a2a]
+    detail: docs/items/workflow-controller-a2b.md
   - id: workflow-controller-h4e
     title: "Codex worker, step 5"
     status: next

@@ -58184,7 +58184,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-bold-flow-headers-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -58324,12 +58324,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-05T01:11:28Z",
+      "state_revision": 21,
+      "last_transition": "2026-11-05T01:45:16Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -58535,7 +58535,62 @@
               "at": "2026-11-05T00:57:01Z"
             }
           ]
+        },
+        "F-81069def39cc": {
+          "digest": "81069def39cce4cbe62486ad2403d6dce475932a346ee13bec459145fd9e5ac7",
+          "text": "**O1. The guide's \"Such a line inside a flow's own text ... is not refused\" now follows the `**Flow 123: Title**` sentence, and for that line it is not true beside a bold flow.** The I1 fix put \"Next to a bold flow, a line such as `**Flow 123: Title**` is refused as partly recognised\" directly before \"Such a line inside a flow's own text, inside a code fence, or in a region that is not a flow ... is not refused\". Measured at `1f5bb58`: `**A. one**`, `x`, a blank line, `**Flow 123: x**`, `y` is refused with `unrecognised: ['123']`, although the line is inside `A`'s text; the base read `['A']`. The behaviour is what D1 says and the refusal names the label, so an author loses nothing silently; only the sentence's antecedent misleads. Moving the sentence up, or saying \"Any other such line\", settles it (`docs/guide/automation.md`).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "22b7b757b39055b3ab9a46258092377ef99fdbcbf033b3e354f9dbe7887097e5",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T01:42:41Z"
+            }
+          ]
+        },
+        "F-12fc2122e7b7": {
+          "digest": "12fc2122e7b7d0a0f4d1bd15d826bd9a6c9a664476d6275055b419347cf13ecf",
+          "text": "**O2. `TEST_RESULTS.md` and the head of `IMPLEMENTATION_SUMMARY.md` still describe revision 1.** `TEST_RESULTS.md` is headed \"implementation revision 1\", head `093929d`, 5595 tests and 148 narrow tests; `IMPLEMENTATION_SUMMARY.md` is headed `implementation_revision: 2` but says \"Content head `093929d`\". The actual content head is `1b8cc97`, which `MANIFEST.md` records, and the round 2 numbers appear only in the summary's last section. Nothing there is false as labelled, and the numbers it gives for round 2 hold (see Verification performed), but the external reviewer reads these files next and they would be clearer refreshed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "22b7b757b39055b3ab9a46258092377ef99fdbcbf033b3e354f9dbe7887097e5",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T01:42:41Z"
+            }
+          ]
+        },
+        "F-ca7eeecd5e37": {
+          "digest": "ca7eeecd5e379a1d7fccbd2c9fd1e114b6b9b198d611c53b61b94cbf59bd296c",
+          "text": "**O3. `test_an_overlong_label_is_refused` pins only that a refusal happens, not the evidence the guide now describes.** The guide states two outcomes for `**Flow 123: Title**`: beside a bold flow the evidence names the label, otherwise it names the line. The test asserts neither for this spelling, so a change of which refusal fires would pass it. Asserting `unrecognised == ['123']` and `unread` in its two subtests would pin the sentence I1 corrected.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "22b7b757b39055b3ab9a46258092377ef99fdbcbf033b3e354f9dbe7887097e5",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T01:42:41Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "22b7b757b39055b3ab9a46258092377ef99fdbcbf033b3e354f9dbe7887097e5",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "a78ddcb91bff20d68bd8f395f3db5f5b3631818fc42448f81bc1646429b5b562",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-05T01:42:41Z",
+          "verdict_sha256": "0a9fb1d5e4e347fc83bd37da833b481dd6921efb2b0796d4879f0459bd0805c7",
+          "run_ref": "session:local .ai-review/workflow-controller-bold-flow-headers/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

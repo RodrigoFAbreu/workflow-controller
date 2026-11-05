@@ -913,6 +913,13 @@ class BoldFlowHeaderTest(unittest.TestCase):
             with self.subTest(header=header):
                 self.assertEqual(self.labels(f"{header}\nrun it"), ["1"])
 
+    def test_every_spelling_reads_in_a_crlf_file(self) -> None:
+        # ``read_flows`` splits on ``\n``, so each line of a CRLF file keeps its ``\r``; the line-ending ``**`` too
+        for header in ("**Flow 1: x**", "**Flow 1 - x**", "**Flow 1**", "**Flow 1**  "):
+            with self.subTest(header=header):
+                text = checklist(f"{header}\nrun it\n\n**Flow 2: y**\nz").replace("\n", "\r\n")
+                self.assertEqual([flow.label for flow in fr.read_flows(text)], ["1", "2"])
+
     def test_headings_still_read(self) -> None:
         self.assertEqual(self.labels("### Flow 1: one\nx\n\n### Flow 2: two\ny"), ["1", "2"])
 
@@ -931,7 +938,7 @@ class BoldFlowHeaderTest(unittest.TestCase):
         self.assertEqual(evidence["unread"], [{"line": 5, "text": "**Flow 1**: y"}])
 
     def test_an_unread_bold_flow_line_is_refused_with_its_file_line(self) -> None:
-        for line in ("**Flow: title**", "**Flow 1 title**", "**Flow one.**"):
+        for line in ("**Flow: title**", "**Flow 1 title**", "**Flow one.**", "**flow: x**", "**FLOW: x**"):
             with self.subTest(line=line):
                 evidence = refusal(checklist(f"**A. one**\nx\n\n### B. two\n\n{line}\nz"))
                 self.assertEqual(evidence["unread"], [{"line": 10, "text": line}])

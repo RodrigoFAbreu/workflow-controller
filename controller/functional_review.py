@@ -237,7 +237,7 @@ _QUALIFIER_PREFIX = (rf"(?:[A-Za-z]+(?:[ \t]+[A-Za-z]+)?[ \t]*,[ \t]*"
 #: optional group shared by every bold spelling below; the markers only it allows (a dash set off by spaces, or a
 #: closing ``**`` that ends the line) are tried through ``(?(flow)...)``, so ``**A - x**`` reads as it always did.
 _FLOW_WORD = r"(?P<flow>(?ai:Flow)[ \t]+)?"
-_BOLD_MARKER = r"(?:[.):](?!\d)|(?(flow)(?:[ \t]+[-\u2013\u2014][ \t]+|\*\*[ \t]*$)|(?!)))"
+_BOLD_MARKER = r"(?:[.):](?!\d)|(?(flow)(?:[ \t]+[-\u2013\u2014][ \t]+|\*\*[ \t\r]*$)|(?!)))"
 _BOLD_RE = re.compile(
     rf"^\*\*(?:{_QUALIFIER_PREFIX})?{_FLOW_WORD}(?:(?P<label>{_LABEL})|(?P<token>{_TOKEN})){_BOLD_MARKER}")
 #: A bold paragraph after a blank line ends a flow only when it opens one of the
@@ -2351,11 +2351,11 @@ def gate_text(code: str, **facts: Any) -> str:
                 else "the functional review checklist has no flow the Controller can recognise")
         return (f"{lead} ({detail or 'no flow found'}): no tester was started and nothing was recorded. The section "
                 f"'{SECTION_TITLE}' of docs/ACTIVE_MILESTONE.md must carry its flows as table rows whose first cell is a "
-                "flow label, as bold labelled paragraphs (`**A. ...`, `**Flow K: ...`), as headings that start with a label or `Flow`, "
+                "flow label, as bold labelled paragraphs (`**A. ...`, `**Flow K: ...`), as headings that start with a "
+                "label or `Flow`, "
                 f"or as a numbered list, and every item of the shape it uses must be a flow, and a flow that another shape "
                 "recognised, or a bold `**Flow` line no shape reads, must lie inside a flow of the shape used (or, for a "
-                "table, hold its rows); or set "
-                f"`{SETTING_AUTOMATED}` false to keep the stop for a person")
+                f"table, hold its rows); or set `{SETTING_AUTOMATED}` false to keep the stop for a person")
     if code == GATE_TESTER_UNAVAILABLE:
         return (f"the functional tester cannot run here ({detail}): nothing was started and nothing was recorded. "
                 f"Install what is missing, or {MANUAL_REMEDY}")

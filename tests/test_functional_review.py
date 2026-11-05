@@ -980,6 +980,21 @@ class BoldFlowHeaderTest(unittest.TestCase):
         self.assertIn("line 5", evidence["reason"])
         self.assertNotIn("decided 0", evidence["reason"])
 
+    def test_an_unread_line_beside_a_table_with_no_flow_label_names_the_line_and_the_cells(self) -> None:
+        table = TABLE_HEAD + "| zz | a | b |\n"
+        evidence = refusal(checklist(table + "\n**Flow: x**"))
+        self.assertEqual([item["text"] for item in evidence["unread"]], ["**Flow: x**"])
+        self.assertEqual(evidence["first_cells"], ["zz"])
+        self.assertIn("line", evidence["reason"])
+
+    def test_an_unread_bold_flow_line_under_a_non_flow_heading_is_not_named(self) -> None:
+        evidence = refusal(checklist("### Setup\n**Flow: x**\n\n### Test data\n**Flow: y**"))
+        self.assertNotIn("unread", evidence)
+
+    def test_blanks_after_the_opening_bold_of_an_unread_flow_line_are_named(self) -> None:
+        evidence = refusal(checklist("** Flow: x**"))
+        self.assertEqual([item["text"] for item in evidence["unread"]], ["** Flow: x**"])
+
     def test_a_region_a_bold_line_opens_ends_at_the_next_bold_flow_line(self) -> None:
         for body in ("**Setup.**\ninstall\n**Flow: the login**\nsteps\n\n**Flow 2: logout**\nx",
                      "**Setup.** do x\n**Flow 1 first**\n**A. second**\nx"):

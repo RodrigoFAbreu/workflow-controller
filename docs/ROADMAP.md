@@ -76,7 +76,7 @@
 | 70 | [\`runtime.remove_tree\` refuses a path whose parent chain holds a symbolic link](items/workflow-controller-c10k.md) `workflow-controller-c10k` | Done | - | workflow-controller-c10f |
 | 71 | [Test leftovers end with their test](items/workflow-controller-c12a.md) `workflow-controller-c12a` | Done | - | - |
 | 72 | [The backlog, declare-first](items/workflow-controller-a2a.md) `workflow-controller-a2a` | Done | - | workflow-controller-a1 |
-| 73 | [The prose migration](items/workflow-controller-a2b.md) `workflow-controller-a2b` | Next | - | workflow-controller-a2a |
+| 73 | [The prose migration](items/workflow-controller-a2b.md) `workflow-controller-a2b` | Done | - | workflow-controller-a2a |
 | 74 | [Codex worker, step 5](items/workflow-controller-h4e.md) `workflow-controller-h4e` | Next | - | workflow-controller-h4c2, workflow-controller-h4d, workflow-controller-h1 |
 | 75 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Next | - | workflow-controller-h4e |
 | 76 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |

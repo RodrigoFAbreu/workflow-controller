@@ -425,7 +425,7 @@ items:
     detail: docs/items/workflow-controller-a2a.md
   - id: workflow-controller-a2b
     title: The prose migration
-    status: next
+    status: done
     order: 73
     depends_on: [workflow-controller-a2a]
     detail: docs/items/workflow-controller-a2b.md

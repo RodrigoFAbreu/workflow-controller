@@ -107,7 +107,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_tester, codex_worker, codex_worker_job, codex_worker_sandbox, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_tester, codex_worker, codex_worker_job, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -8727,10 +8727,11 @@ def _supervisor_lock(runtime_root: Path, job_id: str, *, record: Mapping | None 
         os.close(fd)
 
 
-#: The tree a Codex worker runs in (H4c1, D5): ``(managed_repo, layout) -> Path``, the layout's worktree prepared.
-#: ``None`` by default -- how the tree is made and how its commits return to the managed repository is an owner
-#: decision (needed before H4e), so with no preparer the branch refuses before the launch.
-CODEX_WORKTREE_PREPARER: Callable[[Any, codex_worker_sandbox.WorkerLayout], Path] | None = None
+#: The tree a Codex worker runs in (H4c1, D5; H4e, D1): ``(managed_repo, layout, base) -> Prepared``, the layout's
+#: worktree prepared as a private clone of the managed branch at ``base``, the commit the Controller captured before the
+#: job. ``None`` by default -- no real role routes a Codex worker until H4e2, so with no preparer the branch refuses
+#: before the launch. ``codex_worker_tree.prepare`` is the real preparer.
+CODEX_WORKTREE_PREPARER: Callable[[Any, codex_worker_sandbox.WorkerLayout, str], codex_worker_tree.Prepared] | None = None
 
 #: ``worker_streams.format`` of a Codex job: its stdout is plain text, not stream-json.
 CODEX_STREAM_FORMAT = "text"
@@ -8755,6 +8756,7 @@ def _run_codex_worker(
     managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
     route: routing.ResolvedRoute, timeout: float | None, launcher: Any,
     worker_not_started: Callable[[ControllerError], None], ticker: usage.RenewalTicker | None = None,
+    base: str | None = None,
 ) -> tuple[worker.WorkerResult, JobRecord, dict]:
     """The call-and-wait block of a Codex worker (H4c1, D2, D4, D8): the tree and Codex home from their seams, the
     launch with the eight options of D4, ``worker_process`` flushed on spawn and the two stream files filled after
@@ -8788,7 +8790,11 @@ def _run_codex_worker(
                 "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to the "
                 "managed repository is not decided yet",
                 evidence={"job_id": job_id, "harness": route.harness})
-        cwd = Path(preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id)))
+        prepared = preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id), base)
+        record = _persist(runtime_root, job_id, {
+            **record, "codex_worker": {**record["codex_worker"], "clone": prepared.to_dict()},
+            "updated_at": _now()}, event="codex_worker_clone")
+        cwd = Path(prepared.path)
         options = codex_worker_job.launch_options(
             runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, cwd=cwd, timeout=timeout,
             on_spawn=on_spawn, route=route)
@@ -8799,6 +8805,10 @@ def _run_codex_worker(
     except KeyboardInterrupt:
         raise
     except Exception as exc:
+        if "worker_process" not in spawned:
+            # The worker never ran (H4e, D7): nothing of it is worth keeping, and no record names the clone.
+            with contextlib.suppress(RuntimeContainmentError, OSError):
+                runtime.remove_tree(runtime_root, codex_worker_sandbox.WorkerLayout(runtime_root, job_id).rel("tree"))
         if isinstance(exc, ControllerError) and "worker_process" not in spawned:
             worker_not_started(exc)
         else:
@@ -8987,7 +8997,7 @@ def _launch_job(
         result, record, spawned = _run_codex_worker(
             managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
             route=route, timeout=resolved_timeout, launcher=launcher, worker_not_started=worker_not_started,
-            ticker=ticker)
+            ticker=ticker, base=pre_state["target_head"])
     else:
         try:
             result = launcher.launch(

@@ -93,6 +93,53 @@ class ReadTest(_Case):
         (self.clone / "README.md").write_text("changed\n")
         self.assertEqual(gitrepo.tracked_changes(self.clone), [" M README.md"])
 
+    def test_untracked_files_lists_an_untracked_file_and_not_an_ignored_one(self) -> None:
+        (self.clone / ".gitignore").write_text("ign/\n")
+        commit_all(self.clone, "ignore")
+        (self.clone / "ign").mkdir()
+        (self.clone / "ign" / "state").write_text("s\n")
+        self.assertEqual(gitrepo.untracked_files(self.clone), [])
+        (self.clone / "new file.txt").write_text("x\n")
+        self.assertEqual(gitrepo.untracked_files(self.clone), ["new file.txt"])
+        self.assertEqual(gitrepo.untracked_files(self.clone, no_optional_locks=True), ["new file.txt"])
+
+    def test_a_quiet_read_passes_the_fsmonitor_override_and_no_optional_locks(self) -> None:
+        spy = _Spy()
+        gitrepo.tracked_changes(self.clone, runner=spy, no_optional_locks=True)
+        gitrepo.untracked_files(self.clone, runner=spy, no_optional_locks=True)
+        gitrepo.head_state(self.clone, runner=spy, no_optional_locks=True)
+        gitrepo.ref_commit(self.clone, "HEAD", runner=spy, no_optional_locks=True)
+        for argv in spy.calls:
+            self.assertEqual(argv[3:5], ["-c", "core.fsmonitor=false"], argv)
+        spy = _Spy()
+        gitrepo.tracked_changes(self.clone, runner=spy)
+        self.assertNotIn("core.fsmonitor=false", spy.calls[0])
+
+    def test_a_quiet_read_does_not_fire_post_index_change_on_a_stale_index(self) -> None:
+        marker = self.tmp / "fired"
+        hook = self.clone / ".git" / "hooks" / "post-index-change"
+        hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+        hook.chmod(0o755)
+        (self.clone / "README.md").touch()  # a stale index entry: the stat data differs, the content does not
+        gitrepo.tracked_changes(self.clone, no_optional_locks=True)
+        self.assertFalse(marker.exists())
+
+    def test_checkout_branch_at_moves_the_branch_to_the_commit_without_running_a_hook(self) -> None:
+        marker = self.tmp / "fired"
+        hook = self.clone / ".git" / "hooks" / "post-checkout"
+        hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+        hook.chmod(0o755)
+        first = self.commit("a.txt", "a\n")
+        gitrepo.checkout_branch_at(self.clone, "work", self.base)
+        self.assertEqual(gitrepo.head_state(self.clone), gitrepo.HeadState("work", self.base))
+        self.assertEqual(gitrepo.ref_commit(self.clone, "refs/heads/main"), first)
+        self.assertFalse(marker.exists())
+
+    def test_config_probe_reads_a_key_and_is_none_for_no_match(self) -> None:
+        self.assertIsNone(gitrepo.config_probe(self.clone, ["--get-regexp", r"^hook\."]))
+        run(["git", "config", "hook.x.event", "post-merge"], cwd=self.clone)
+        self.assertEqual(gitrepo.config_probe(self.clone, ["--get-regexp", r"^hook\."]), "hook.x.event post-merge\n")
+
     def test_show_distinguishes_absent_from_failure(self) -> None:
         self.assertEqual(gitrepo.show(self.clone, "HEAD", "README.md"), b"fixture\n")
         self.assertIsNone(gitrepo.show(self.clone, "HEAD", "missing.txt"))

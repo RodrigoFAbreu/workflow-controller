@@ -31,6 +31,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from controller import (  # noqa: E402
     codex_build, codex_worker as cw, command_files, harness, job, review, routing, usage, worker, worker_launch,
 )
+from tests import process_fixtures  # noqa: E402
 from tests.test_codex_worker_sandbox import make_clone  # noqa: E402
 from tests.test_codex_worker_sandbox_live import operator_codex_home  # noqa: E402
 from tests.test_job import FAKE_IDENTITY, _build_target  # noqa: E402
@@ -116,9 +117,9 @@ class LiveUsageTest(unittest.TestCase):
             admitted.append({"provider": provider, "token": admission.token, "reservation": held.get(admission.token)})
             return admission.token
 
-        def prepare(managed_repo, layout) -> Path:
+        def prepare(managed_repo, layout, base):
             make_clone(layout.worktree)
-            return layout.worktree
+            return process_fixtures.prepared_clone(layout.worktree)
 
         with mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}), \
                 mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, FIXTURE: LiveLauncher(commands)}), \

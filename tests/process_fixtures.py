@@ -469,6 +469,21 @@ LEFTOVER_INVENTORY = (
 )
 
 
+def prepared_clone(worktree: "str | os.PathLike"):
+    """The ``Prepared`` the preparer seam returns (``job.CODEX_WORKTREE_PREPARER``, H4e) for a clone a test made at
+    ``worktree`` (one root commit, unrelated to any managed repository): its branch, its tip as ``base`` and the
+    digest of its ``.git``. Only the job-record tests use it; the real preparer is ``codex_worker_tree.prepare``."""
+    from controller import codex_worker_sandbox, codex_worker_tree
+    worktree = Path(worktree)
+
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(worktree), *args], capture_output=True, text=True, check=True).stdout.strip()
+
+    return codex_worker_tree.Prepared(
+        path=worktree, branch=git("symbolic-ref", "--short", "HEAD"), base=git("rev-parse", "HEAD"),
+        guard=codex_worker_sandbox.guard_digest(worktree))
+
+
 def wait_until(predicate, *, timeout: float = 15.0, interval: float = 0.02) -> bool:
     """Poll ``predicate`` until it is true or ``timeout`` elapses (bounded)."""
     deadline = time.monotonic() + timeout

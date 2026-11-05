@@ -94,7 +94,7 @@ class BeforeTheSpawnTest(JobFixture):
         return record
 
     def test_an_interrupt_in_the_tree_preparer_leaves_the_block_and_resume_ends_it_interrupted(self) -> None:
-        def prepare(managed, layout):
+        def prepare(managed, layout, base):
             raise KeyboardInterrupt
 
         record = self.interrupt(CODEX_WORKTREE_PREPARER=prepare)

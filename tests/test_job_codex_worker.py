@@ -21,12 +21,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import (  # noqa: E402
-    cli, codex_worker as cw, codex_worker_job, codex_worker_sandbox as ws, harness, job, protocol_decision, review,
+    cli, codex_worker as cw, codex_worker_job, codex_worker_sandbox as ws, codex_worker_tree, harness, job, protocol_decision, review,
     routing, usage_record, worker, worker_launch,
 )
 from controller.decision import phase_from_wire  # noqa: E402
 from controller.errors import WorkerLaunchError  # noqa: E402
 from tests import test_codex_worker as cwtest  # noqa: E402
+from tests import process_fixtures  # noqa: E402
 from tests.test_codex_worker_sandbox import make_clone  # noqa: E402
 from tests.test_job import FAKE_IDENTITY, _build_target  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
@@ -83,10 +84,10 @@ class JobFixture(cwtest.LaunchFixture):
         self.ids += 1
         return f"job{self.ids}"
 
-    def prepare(self, managed_repo, layout) -> Path:
+    def prepare(self, managed_repo, layout, base):
         if not layout.worktree.exists():
             make_clone(layout.worktree)
-        return layout.worktree
+        return process_fixtures.prepared_clone(layout.worktree)
 
     def routing_options(self) -> routing.RoutingOptions:
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
@@ -308,6 +309,44 @@ class RefusalTest(JobFixture):
         with self.assertRaises(Exception) as ctx:
             self.run_step()
         self.assert_not_started(type(ctx.exception).__name__)
+
+    def test_a_preparer_refusal_ends_worker_not_started_with_no_spawn_and_names_the_cause(self) -> None:
+        def refuse(managed_repo, layout, base):
+            raise codex_worker_tree.CodexTreeError("managed_tree_not_clean", "the managed tree has changes")
+
+        with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", refuse), self.assertRaises(codex_worker_tree.CodexTreeError):
+            self.run_step()
+        record = self.assert_not_started("CodexTreeError")
+        self.assertEqual(record["reconciliation_evidence"]["evidence"]["cause"], "managed_tree_not_clean")
+        self.assertEqual(self.launcher.calls, [])
+
+    def test_the_preparer_is_given_the_base_the_controller_captured(self) -> None:
+        seen = {}
+
+        def prepare(managed_repo, layout, base):
+            seen["base"] = base
+            return self.prepare(managed_repo, layout, base)
+
+        with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", prepare):
+            record = self.run_step()
+        self.assertEqual(seen["base"], record["pre_state"]["target_head"])
+        self.assertEqual(record["codex_worker"]["clone"]["path"], str(ws.WorkerLayout(self.runtime, record["job_id"]).worktree))
+
+    def test_a_launcher_refusal_after_the_preparer_ran_removes_the_tree(self) -> None:
+        self.recorded = True  # nothing recorded in the build record: the build gate refuses after the tree exists
+        made = []
+
+        def prepare(managed_repo, layout, base):
+            prepared = self.prepare(managed_repo, layout, base)
+            made.append(prepared.path)
+            return prepared
+
+        with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", prepare), self.assertRaises(Exception):
+            job.execute_step(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime, routing=self.options,
+                             timeout=30)
+        self.assert_not_started("ReviewLaunchRefusedError")
+        (path,) = made
+        self.assertFalse(path.exists())
 
     def test_the_missing_tree_seam_is_a_worker_launch_error_and_no_process_starts(self) -> None:
         with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", None), self.assertRaises(WorkerLaunchError):

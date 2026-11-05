@@ -99,7 +99,7 @@ class RecordTest(OrphanFixture):
     def test_the_block_is_persisted_before_the_tree_is_prepared_and_validates(self) -> None:
         seen = {}
 
-        def prepare(managed, layout):
+        def prepare(managed, layout, base):
             seen["record"] = self.only_record()
             raise KeyboardInterrupt
 
@@ -113,6 +113,19 @@ class RecordTest(OrphanFixture):
         record = self.only_record()
         self.assertEqual((record["status"], record["worker_state"]["state"]), (job.STATUS_LAUNCHED, worker.STARTING))
         self.assertTrue(job.validate_record(record, managed_repo=self.managed, identity=FAKE_IDENTITY).valid)
+
+    def test_the_clone_block_is_in_the_record_before_the_spawn_and_validates_whatever_its_shape(self) -> None:
+        record = self.orphan()  # spawn is False here: the launch fake raises before ``on_spawn``
+        self.assertNotIn("worker_process", record)
+        clone = record["codex_worker"]["clone"]
+        layout = self.layout_of(record)
+        self.assertEqual(clone["path"], str(layout.worktree))
+        self.assertEqual(set(clone), {"path", "branch", "base", "guard"})
+        self.assertTrue(job.validate_record(record, managed_repo=self.managed, identity=FAKE_IDENTITY).valid)
+        for malformed in ("garbage", {"path": 3}, {}, None):
+            block = {**record["codex_worker"], "clone": malformed}
+            self.assertTrue(job.validate_record({**record, "codex_worker": block}, managed_repo=self.managed,
+                                                identity=FAKE_IDENTITY).valid, malformed)
 
     def test_a_run_through_the_launcher_carries_the_block_and_the_same_operator_home(self) -> None:
         record = self.run_step()

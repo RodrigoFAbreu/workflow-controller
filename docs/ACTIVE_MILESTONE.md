@@ -2,6 +2,19 @@
 
 ## Status
 
+**In progress.** `workflow-controller-h4e` (H4e, issue
+[#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) prepares a private clone for a Codex worker and lands
+its commits fast-forward behind the H3 seam, for a fixture role. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md` (revision 8). CP1 is complete: `controller/codex_worker_tree.py` has
+`prepare` (D1, D2: a separate clone with no remote, no alternates and no hooks, the fixed `Codex worker` author, checked out
+at the commit the Controller captured, refused with a named `CodexTreeError.cause` unless the managed branch is clean and
+unmoved), `gitrepo` gains `untracked_files`, `checkout_branch_at`, `config_probe` and the `no_optional_locks` reads, and
+`job._run_codex_worker` passes `pre_state["target_head"]` to the preparer seam, persists the `clone` block before the
+launch and removes the tree when the worker never ran. CP2 to CP4 (the landing, landing at job end and `resume`, the live
+proof and the guides) remain.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-a2b` (A2b, issue
 [#298](https://github.com/RodrigoFAbreu/workflow-controller/issues/298)) moves the roadmap prose to item pages and the rules to a
 live page. The plan is `docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md` (revision 3). CP1 is complete: the 72 done

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-h4e",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -60719,6 +60719,631 @@
         },
         "evaluated_at": "2026-11-05T18:19:22Z",
         "workflow_release": "2.25.6"
+      }
+    },
+    "workflow-controller-h4e": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4e",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 8,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "af82b315e6fca74aa96b07185bb85f8093af6f5a",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+        "approved_review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5f90f2fd93d502f0e7080cbf707ab679caff2dd8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fb9e9ed92094231cbe339ae9df4350b31a06d816"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7170756ff9c8e92aa7cb943fb56de566cfb1f85e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T21:59:11Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+            "ledger": {
+              "local": {
+                "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "b9088267bc12fd00ee65ccdc8e20684326adc66bca3df142d10c6b36a8d898a6",
+                "ledger_entry_sha256": "ac03cb116d2683b09120dc3065ffe81ebf94eb2656d9134f70d2f087589b1ace",
+                "run_ref": "session:local .ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "178cda7aea088b5cb99375f4d5e9f978361e5968a91af8b453d511c5712e2823",
+                "ledger_entry_sha256": "fd21b74011084c06bd1aefcabbdc0a20f9f44aa9a6e333d0aea1f8f1af52bf8c",
+                "run_ref": "codex:20261105T215309Z-956bcc8b",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T21:59:11Z",
+          "workflow_release": "2.25.7"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-05T21:52:45Z",
+          "verdict_sha256": "b9088267bc12fd00ee65ccdc8e20684326adc66bca3df142d10c6b36a8d898a6",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-05T21:56:19Z",
+          "verdict_sha256": "178cda7aea088b5cb99375f4d5e9f978361e5968a91af8b453d511c5712e2823",
+          "run_ref": "codex:20261105T215309Z-956bcc8b",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 8,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 27,
+      "last_transition": "2026-11-05T21:59:11Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-05T21:47:48Z",
+        "consumed": {
+          "review_content_id": "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+          "plan_revision": 7,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+          "plan_revision": 8
+        },
+        "bound": {
+          "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+          "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+          "plan_revision": 8
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+        "63f6e87e5747d05db1089c636662206d5338a6dc3f1342218f0d2c91bf3845bc",
+        "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+        "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+        "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+        "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+        "f50724e6b90a2ca669987e47f96755a832f596a6c407c88de861b4d17e9e8c67"
+      ],
+      "optional_findings": {
+        "F-8b5ca667ec74": {
+          "digest": "8b5ca667ec7447a5a7518f7437dc0b4eb581500bb9de66aadddac916eca2db39",
+          "text": "**O1. Use `--no-local` for the clone, so it holds only the managed branch's objects.** Measured: with D1's `--no-hardlinks --single-branch`, a commit that exists only on another branch of the managed repository is readable in the clone, because a local-path clone copies the object store; with `--no-local` it is absent. It would also stop a managed repository's alternates being carried into the clone, which from Git's documented behaviour would otherwise contradict D1's \"no alternates\" and fail the guard (not measured). The clone is also smaller and cheaper. The cost is that `upload-pack` runs in the managed repository, so its config needs the same review as D4's.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-e4092e0d3a9a": {
+          "digest": "e4092e0d3a9aa8bfab412d088f5780925452c1e6579bc08ade257503a458305e",
+          "text": "**O2. State where a committed symlink stands.** The item page's safety review asks that the landing cannot be tricked by a symlink. The plan covers symlinks under the clone's `.git` only. A tracked symlink (mode 120000) pointing outside the repository lands under D5's content-neutral rule. That may be the right answer, but it should be stated as the decision, and pinned with a test or a named refusal.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-42d6b722c66f": {
+          "digest": "42d6b722c66f3be4f34e3fe4c9b31979bc1344fce9033887687da2311e321a2e",
+          "text": "**O3. Make D3 (6) a per-commit check.** \"No `.gitmodules` change and no gitlink entry in the range's diff\" reads as a diff of `base` against `tip`, which misses a gitlink added and removed inside the range, although D3 (5) already walks each commit. Saying \"in any commit of the range\" removes the ambiguity.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-1bf0932e8eef": {
+          "digest": "1bf0932e8eefec3c46113c5dd86d0f36b3fa9eb58691832ec45744fa84fa1156",
+          "text": "**O4. Say what D4's merge does with the managed repository's filters.** D1 proves nothing runs in the clone, but a worker-committed `.gitattributes` can select a `filter.<name>.smudge` program from the managed repository's local config during D4's merge (from Git's documented behaviour, not measured). The program is the operator's, not the worker's, so R3 may hold, but the plan says nothing about it. The same goes for running the merge under the scrubbed `HOME`, which drops the operator's global `filter.*` and `core.autocrlf` and could write different bytes from a normal checkout. D1's phrase \"`-c filter.*` unset by the scrubbed environment\" also misdescribes the mechanism: the clone's config has no filter keys, and nothing is unset.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-684e6d167494": {
+          "digest": "684e6d16749452f9d1e24903ab6594f3d352f79e6003b200d99c072452dd50e5",
+          "text": "**O1. Find a configured hook through includes.** D3 (3) says the managed repository's \"local config\". Measured: with a free-name hook in a file reached by `include.path`, `git config --local --get-regexp '^hook\\.'` returns nothing, while the same query without `--local`, or with `--includes`, finds it; and that hook fired on `git -c core.hooksPath=/dev/null update-ref`. Name the query in D3 (under the scrubbed environment, plain `--get-regexp` reads the repository's config and its includes) and add this case to CP2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-d2984a087491": {
+          "digest": "d2984a0874913f516af1b9309cde7d7522220add16814bbdebf8a37dd3c42f2d",
+          "text": "**O2. Check `managed_hooks_configured` in `prepare` as well.** It can only fail, as D3 places it, after a whole worker run has been paid for. The same check before the clone saves that run; D3 (3) would stay as the recheck.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-97c2ae198b63": {
+          "digest": "97c2ae198b63bea040abf4dd7d513f6c7101bf9c4836014f3c1dde48548e1e18",
+          "text": "**O3. Classify both shapes of the `--no-overwrite-ignore` refusal.** Measured, both exit 1: an ignored file gives `The following untracked working tree files would be overwritten by merge`, and an ignored directory that the range replaces with a file gives `Updating the following directories would lose untracked files in them`. CP2 tests only the first, so an implementation that matches that text would report the second as `fast_forward_failed`. Telling them apart by exit code (1 against 128 for the ref failure of B2) or adding a second test both work.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-eb2cb5ba5c16": {
+          "digest": "eb2cb5ba5c16171994edd17d1576d42469f38dfd2c176bdba29054629a7b478e",
+          "text": "**O4. State what a range that edits `.gitignore` does.** Measured: a commit removing `ign/` from `.gitignore` lands, then the managed `ign/state` is untracked, so D4's post-move check gives `landing_unverified` with `moved: true`. Defined and safe, but it is the one way an otherwise clean commit reaches that outcome, and the plan's text only describes filters. Say so in D4 and add a CP2 test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-55a2bbce6d12": {
+          "digest": "55a2bbce6d12252f75c32a1b592833607dda917a859a6add911f49e0ca355657",
+          "text": "**O5. Say that the scrubbed environment changes what counts as untracked.** Measured: a file ignored only through the operator's `~/.config/git/ignore` is listed by `git ls-files --others --exclude-standard` under a scrubbed `HOME` and not under the operator's. D2 would then refuse `managed_tree_not_clean` while the operator's own `git status` is clean. Failing closed is fine; the `docs/common-problems.md` entry for that cause should name this.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-930ded4f368b": {
+          "digest": "930ded4f368b6926eca5e0e5a8e41241bc325aa989e560694703e59d08893753",
+          "text": "**O6. Check the `rm -r` the guide will tell the operator to run.** Git's object files are read-only, so `rm -r` of a kept clone on a terminal prompts for each one (from `rm`'s documented behaviour, not measured). `rm -rf` of the exact path in the record may be the better wording.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-bce8d62ef358": {
+          "digest": "bce8d62ef3583d7048ed75fe90ab16464c9589b99dc1cfefe058100ef15cd2e0",
+          "text": "**O1. Correct the stated reason for `managed_hooks_configured`.** The Open decisions section says a free-name hook \"cannot be switched off by an event key\". Measured with a control: `hook.free.event=post-merge` fired on `merge --ff-only` under `core.hooksPath=/dev/null` alone, and did not fire with `-c hook.post-merge.enabled=false` added. `git-config(1)` documents `hook.<event>.enabled`. So D4's keys do cover free names for the listed events. The refusal is still defensible, because it fails closed and covers an event the list misses, but the reason should be corrected, and CP2's measurement could decide whether the refusal is still needed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-6865c5954b76": {
+          "digest": "6865c5954b76563caa2434645030668f72e17eb259d42cfd939fe6cc39eb884f",
+          "text": "**O2. CP2's \"config hook of each event name\" test would pass for the wrong reason.** Measured: with `hook.post-merge.event` and `hook.post-merge.command` set, `git update-ref` under the hardened options dies with exit 128 (`hook friendly-name 'post-merge' collides with a known event name`), so the hook \"does not fire\" only because Git refused to run. With `.command` alone there is no event and nothing to fire. Test a free friendly name with an `event` key instead. The same config would make `resume`'s `landing_delete_ref` fail, so say that this reaches `ref_left`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-6e85bbfac9f5": {
+          "digest": "6e85bbfac9f5bfa1e6f92d9cc76796fb36ab36f1c62930342837dc4706be3b94",
+          "text": "**O3. The scan cannot read the ref as D4 describes it.** `_argv_nodes` (`tests/test_no_rewrite_invariants.py:66`) maps a non-constant element to `None`, so `[\"update-ref\", \"-d\", f\"refs/controller/landing/{job_id}\"]` scans as `[\"update-ref\", \"-d\", None]`. \"With a ref starting `refs/controller/landing/`\" therefore needs the scan to read the f-string's leading constant. A variable holding the ref must stay refused. CP2's test should use this real shape.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-4ace9bea3f5c": {
+          "digest": "4ace9bea3f5c829bbc0c465abeebfff89087a2b47dec7792716d16532e9856ae",
+          "text": "**O4. `core.fsmonitor` in the managed repository runs under the hardened reads.** Measured: a managed `core.fsmonitor` program fired on `git status` with `GIT_OPTIONAL_LOCKS=0`, and did not fire with `-c core.fsmonitor=false`. It is operator configuration the worker cannot set, the same class as D4's filters, so it is not a safety hole. Either add `core.fsmonitor=false` to the reads and to `LANDING_CONFIG`, or state it next to the filter decision.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-32ad833f5010": {
+          "digest": "32ad833f5010955f687f4fc8cc887be8f46d85851bb941eb54224198b35c271b",
+          "text": "**O5. D7's window (a) can mislabel a dirty tree.** With no intent block the merge never ran, so a dirty tree at `resume` is not the merge's doing (for example the operator's own edits since the crash), yet it is recorded `merge_left_tree_dirty`. Use that cause only when the intent block exists; otherwise record `landing_interrupted` with the dirty paths.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-9bbf035ac57d": {
+          "digest": "9bbf035ac57d927ccdd4088b98849f3abc10be3207ded0abb956db1af9672fa0",
+          "text": "**O6. Name a stale `index.lock` in the recovery text.** From Git's documented behaviour, not measured: a merge killed by the Controller's git timeout can leave `.git/index.lock`, and `git restore` then fails until the operator removes it. The `merge_left_tree_dirty` entry in `docs/common-problems.md` should say so. The recovery itself holds: measured after a held-lock failure, `git restore --staged --worktree .` cleared the modified, added and deleted entries, and a later `merge --ff-only` succeeded.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-09e16bbf1a43": {
+          "digest": "09e16bbf1a43d06dd1241b9c1f29aa06409fdd2f9a5e1d45d28395da0a9867e0",
+          "text": "**O7. Two small text corrections.** CP1 says \"the five listed Codex job test files\" but lists six. CP4 lists `docs/backlog.yaml` and `docs/ROADMAP.md` for a status change \"at acceptance\", which `/accept-milestone` makes itself through `workflow_backlog.py accept`, so CP4 need not touch those two files unless it edits them for another reason.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-e3c5952417b3": {
+          "digest": "e3c5952417b34a84ea7e8ebdb6b2707433b547e5309bc7e1f05c90115ca05fca",
+          "text": "**O1. A forged commit-graph hides a merge commit from D3's check (5).** `GUARD_EXCLUDED_ROOTS` leaves all of `.git/objects` out of the guard, so `.git/objects/info/commit-graph` is writable by the worker and unseen by check (1). `gitrepo.commit_parents` is `rev-list --parents`, which reads parents from the graph. Measured: a commit made with `commit-tree` whose second parent is already in the managed branch's history; after zeroing that parent in the graph's `CDAT` chunk, `commit_parents` gave one parent for every commit in the range and `rev-list --merges --count` gave 0, while `cat-file` showed two parents. D4's fetch with `fsckObjects`, the `checked_tip` comparison and `merge --ff-only` all succeeded, and the managed branch then held a true merge commit. The effect is bounded: where the hidden parent was not already in the managed repository, the fetch failed (`did not receive expected object`), and `diff-tree` still reported a gitlink when I forged the root tree in the graph, so this is a false \"linear\" and not a content bypass. Running checks (4) to (6) with `-c core.commitGraph=false` gave the true answer (measured: `--merges --count` 1), and a test could pin it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-61a53dd345b0": {
+          "digest": "61a53dd345b0993bb3ab923335d7805f25653736a9a388b0320e77a3350f9a29",
+          "text": "**O2. The wording of `recover` disagrees with itself.** CP2 calls it \"reads only\" and tests it \"reading refs only\", and D7 opens with \"reads refs and the tree and nothing else\", while windows (a) and (b) delete the landing ref. CP2's test as written cannot pass over those windows. Window (c) does not say the ref is deleted, although R5 says no ending leaves one. Window (c) is also defined by \"the intent's `tip`\", which does not exist when there is no intent block, so a record with no intent and a moved branch needs saying. CP2 calls the module pure and CP3 owns the writes, so it would also help to say which part returns a decision and which part persists it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-478ad0fe1b41": {
+          "digest": "478ad0fe1b410b1fcc5ea9ce1a56f380ce886c35e5a4bb4d130dcc73399742dd",
+          "text": "**O3. Two kills leave a tree that no record names.** \"Removed at the end of `_launch_job`\" reads as after the terminal write. A kill between them leaves a terminal record, which `resume` reports and never reconciles, and a tree nothing removes, since there is no retention. `_reconcile_review` settles the job directory before its terminal write, and doing the same here closes this, because window (d) repeats the removal. The second is a kill between `prepare` returning and the `clone` block being persisted: `resume` ends the record `INTERRUPTED`, and the record names no clone. The path can be derived from the job id, so D7 could say so.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-141fe4814305": {
+          "digest": "141fe4814305a8e5608a4803f9938a8383b60b9813de72c2fbbebfb0a2558de1",
+          "text": "**O4. R6 and the mapping still say \"the guides, the backlog and the roadmap state the facts in place\", while CP4 now says `docs/backlog.yaml` and `docs/ROADMAP.md` are not edited here.** This is left over from applying O7 of round 3. Reword R6 in the plan and the mapping so the two agree.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-bd753fb3e224": {
+          "digest": "bd753fb3e2244cc6d7ee721e10ed54fe074ab99240bac1eea41787a77f0004b5",
+          "text": "**O5. `--abandon`'s stated write set becomes false.** `docs/guide/workers.md:571` says \"`--abandon` launches nothing and writes only the Controller's own runtime\", and the docstring of `abandon` (`controller/job.py:4765`) says the same. Under D7 it can also delete `refs/controller/landing/<job id>` in the managed repository. CP4 should name that sentence, and CP3 the docstring.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-ea59b732ac25": {
+          "digest": "ea59b732ac251e74beb05631e0ffa76b31a44c893b9ed8473c9b8f493377d8bb",
+          "text": "**O1. D7 moved the tree removal before the terminal write without saying what a failed removal does.** `runtime.remove_tree` can raise (`RuntimeContainmentError`, `OSError`), and D7 gives a rule for a failed ref delete (`ref_left`) but none for this. On the live path a landed job would leave `_launch_job` with an exception and a `COMPLETED` record, and on `resume --abandon` the applying part would raise, which stops the ending that I1 of round 4 says must not stop. A stated rule closes it: a failed removal is recorded (`tree_left`, with the reason and the path), the record ends as it would have, and the guide's `rm -rf` applies. The precedent, `_reconcile_review`, does not guard its `settle_job_dir`, so this is tidiness, not a known failure.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "f50724e6b90a2ca669987e47f96755a832f596a6c407c88de861b4d17e9e8c67",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:33:28Z"
+            }
+          ]
+        },
+        "F-0f509813a7df": {
+          "digest": "0f509813a7df8abcd8ed8ec69ec7f6d931db56d0aaa11f0948a98f80fda9710c",
+          "text": "**O2. Two small wordings in D7.** \"In windows (b) and (d), the removal of the tree\" is unqualified, while window (b) keeps the tree when `verify_move` fails; the closing sentence has it right. And the helper is defined \"for a record with a `clone` block\" while a malformed block is `landing_unreadable`, so a `COMPLETED` Codex record with no `clone` block at all is not stated; \"malformed\" could say it includes a missing block. CP2 and CP3 could also say where the applying part lives: CP2 describes `recover` in `codex_worker_landing` with a part CP3 owns, and CP3's **Files:** paragraph lists `controller/job.py` but not that module, so it has to live in `job.py`, and the declaration gate would stop anything else.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "f50724e6b90a2ca669987e47f96755a832f596a6c407c88de861b4d17e9e8c67",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:33:28Z"
+            }
+          ]
+        },
+        "F-fdcd021c5fbb": {
+          "digest": "fdcd021c5fbbc45a29240a5a11e978aa15df8099efdc3c0c16cc60e0477f76db",
+          "text": "**O1. The mapping's R2 is stale against the plan's R2.** Compared mechanically, R1 and R3 to R6 are byte-identical and R2 differs: `docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json` lacks round 5's clause (\"a merge that failed with the branch at `checked_tip` goes through `verify_move` and one with the branch at neither commit is `landing_unverified` with `moved` true\") and the parenthesis on `landing_unverified`. I found nothing that compares them, so no gate stops it, but the mapping is protected content and should say the same.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "63f6e87e5747d05db1089c636662206d5338a6dc3f1342218f0d2c91bf3845bc",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:44:15Z"
+            }
+          ]
+        },
+        "F-25697213b902": {
+          "digest": "25697213b90285a139fa4245f1986d08e48a72a77d01b9b91789783718a76b3a",
+          "text": "**O2. `ref_commit` does not raise on an unreadable branch, so `decide` reaches window (c), not `landing_unreadable`.** Measured: with a garbage branch ref, `gitrepo.ref_commit` returns `None` (`head_state` raises `GitOperationError`). D7's `decide` catches exceptions, so if it reads the branch through `ref_commit`, `None` looks like \"the branch at neither commit\" and the record says `landing_unverified` with `moved: true` over a branch nobody could read. Both end `FAILED` with the clone kept, so nothing unsafe follows; only the recorded reason is off. D4's \"when that read also fails\" has the same shape after a merge, where `moved: true` is right. A short statement that `None` from `ref_commit` counts as unreadable in `decide`, or a test pinning the chosen answer, closes it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "63f6e87e5747d05db1089c636662206d5338a6dc3f1342218f0d2c91bf3845bc",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:44:15Z"
+            }
+          ]
+        },
+        "F-87f817b987df": {
+          "digest": "87f817b987df22e5fef4b0aa7d7dc7f8e9ac5d6e993c95de941e46dde8a853b2",
+          "text": "**O1. CP4's live test has no route to an inventory row.** `check_inventory` (`tests/test_fake_claude_contract.py:1541`) fails on a test module that starts a process with no row in `LEFTOVER_INVENTORY`, which lives in `tests/process_fixtures.py`. CP1 to CP3 list that file and CP4 does not, although `tests/test_codex_worker_clone_live.py` is the module most likely to need a row: the existing live modules that start a process have one. Either add the file to CP4's Files, or say the live test starts no process itself and reads Git through the `fixtures` helpers.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+              "verdict": "REVISE",
+              "at": "2026-11-05T21:45:30Z"
+            }
+          ]
+        },
+        "F-2f9f1a8ca412": {
+          "digest": "2f9f1a8ca4129a50c9897a7ae916b33b289e54fa545dbd58d79a6834d84304db",
+          "text": "**O2. The existing missing-root guidance has the same fault, outside this item.** `controller/job.py:4874` says of a Codex record whose root is gone that the operator ends the worker by hand and then runs `--abandon`, and `_invalid_record_clearing_command` names `--abandon` for `target_repo_unresolvable`. Neither is reachable through the CLI (I1). This is existing behaviour and need not change here; a follow-up issue can decide whether `--abandon` should tolerate a missing root.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+              "verdict": "REVISE",
+              "at": "2026-11-05T21:45:30Z"
+            }
+          ]
+        },
+        "F-f9c521718cc6": {
+          "digest": "f9c521718cc638d16697dd3545b358385a7942cf51d1eaa8601bcd6b01838821",
+          "text": "**O1. D7 names the wrong route to `landing_unreadable`.** D7 says that through the command `landing_unreadable` \"is reached for an unreadable Workflow state (the Manager's `verify` and `status` exit 0 over a garbage `WORKFLOW_STATE.json`, so `--abandon` reaches `job.abandon`)\". Reaching `job.abandon` is right, but `decide` reads only refs and the tree, and Git reads both over a garbage `WORKFLOW_STATE.json` (measured: `git status` exits 0 and reports ` M docs/ai-workflow/WORKFLOW_STATE.json`, and `rev-parse` of the branch exits 0). So that record takes the ordinary windows, not `landing_unreadable`. With an intent block and the branch at `base`, the file reads as dirty and the cause is `merge_left_tree_dirty`, which names the merge for an edit it did not make; that fails closed and repairs nothing. No test depends on the sentence, but CP4 puts \"the `landing_unreadable` ending of D7\" in `docs/guide/workers.md`, so the sentence should be corrected there: through the command, `landing_unreadable` is reached for a garbage `.git/index` and a malformed block.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:52:45Z"
+            }
+          ]
+        },
+        "F-bb41626fd512": {
+          "digest": "bb41626fd512fa80340b7b421ea5bf8531cd68e1a10c81ddad8a21df9d0b8f50",
+          "text": "**O2. CP3 and CP4 do not always say which level they mean.** CP3 says `resume --abandon` over a record whose managed root is missing \"ends `FAILED`\", and later says that `resume --abandon` with the managed root removed exits 20 through `cli.main`. Both hold, because the first is a call of `job.abandon` (D7), but only the later sentences are labelled. CP4's `docs/common-problems.md` sentence gives `GitDirectoryUnresolvableError` as the `job`-level refusal for \"`.git` or the managed root\" removed; for a missing root the `job` level does not refuse that way (`resume` raises `StaleJobRecordError` and `job.abandon` ends the record, as D7 says). An operator page needs only the command's refusal, so the `job`-level clause can be dropped there and the CP3 tests labelled.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:52:45Z"
+            }
+          ]
+        },
+        "F-c9bf5281292b": {
+          "digest": "c9bf5281292b807a4de7328b58dd9f70f27cce92018b48d3582a5efa8b9e2829",
+          "text": "**O3. CP3's restore-then-abandon test does need a Manager and a matching generation.** The plan's \"needs no Manager\" is scoped to the refusal, but the restored run passes `_inspect_target`, so it needs `fixtures.write_stub_workflow_manager`. A record written by the fixtures' `FAKE_IDENTITY` (generation 7) is refused as newer through the real CLI (measured), so it needs the running generation, as `tests/test_lifecycle_orchestration.py`'s `cli` helper arranges. An unpinned in-process `cli.main` also re-executes the process (`controller/cli.py:189`, measured: it ended a probe), so the test goes through that helper's route or a subprocess.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:52:45Z"
+            }
+          ]
+        },
+        "F-844ea4a3f22b": {
+          "digest": "844ea4a3f22b8d2bed0c9a07adb08fdbad2b956322a1bfd883ed76006747ca09",
+          "text": "D7 incorrectly names unreadable Workflow state as a route to `landing_unreadable` through `--abandon`. Reaching `job.abandon` does not make the proposed recovery helper’s refs/tree reads fail; the record follows its ordinary recovery window. Use a corrupt `.git/index` or malformed clone/landing block as the examples before copying this explanation into CP4’s guides.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:56:19Z"
+            }
+          ]
+        }
       }
     }
   }

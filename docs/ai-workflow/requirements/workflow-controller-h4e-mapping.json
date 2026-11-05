@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e",
+  "requirements": {
+    "R1": {
+      "description": "A Codex worker runs in a private clone of the managed repository: its own `.git`, no remote, no hooks, only the managed branch's objects, a fixed author so a plain commit succeeds, checked out on the managed branch at the commit the Controller recorded, made only from a clean, unmoved, attached managed branch whose repository does not contain the Controller's runtime root, with the clone recorded before the launch (#303)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The Controller, never the worker, lands the clone's commits by a fast-forward, and only when the launcher recorded no breach, the clone's `.git` is unchanged but for commits, it holds no other ref, the managed branch and tree are untouched since the base, the range is a linear strict descendant within the commit bound that touches no submodule in any commit, the fetched commit is the one examined and the move overwrites no ignored managed file and the runtime root lies outside the managed tree, so a landing adds no file to the Controller's own state (the range checks read with the commit graph off); the branch and the tree are both checked after a merge that did not succeed, a moved tree under an unmoved branch is its own refusal with the dirty paths, and a refused landing's ref delete is the one stated exception to the no-ref-delete scan; a merge that failed with the branch at `checked_tip` goes through `verify_move` and one with the branch at neither commit is `landing_unverified` with `moved` true; each refusal has a named cause and, except `landing_unverified` (a moved or unprovably unmoved branch) and `merge_left_tree_dirty`, leaves the managed repository exactly as it was; an unexpected Git failure is a named refusal (#303)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The fetch, the move and the ref delete each run nothing of the worker's and no hook or automatic maintenance of the managed repository, through one hardened option set, and the landing judges the integrity of the move while the Workflow judges content, so no approval check is weakened (#303)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "After a landing the existing verification and the protocol's `reconcile` see the progress; a job that landed nothing keeps its `no_progress` / `phase_not_in_to_any_of`; a refused landing, including a run the launcher judged a breach, ends the job `FAILED` `CodexLandingRefused` with the clone kept and named (#303)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The clone is removed through `runtime.remove_tree` at job end on every path except where its commits are unlanded and may matter (a refusal, an exception after the spawn), nothing leaks outside the runtime root, the crash windows of the landing each end with a defined result, through the same post-move check as the live path, and no leftover landing ref on every ending of a `COMPLETED` Codex record (an undrifted `resume`, a drifted one and `resume --abandon`), an unreadable managed repository or malformed block never stopping the abandon and drift endings, a final `refused` block and `FAILED` are one write, `resume` never fetches or merges, and removes a clone only where its commits have landed or there were none (#303)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R6": {
+      "description": "Nothing real reaches the branch and the Claude worker, tester and reviewer are unchanged with their tests; the live proof is recorded and the guides and the item pages state the facts in place, naming only operator commands that exist; the backlog and the roadmap are not edited here, `/accept-milestone` changes the status (#303)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    }
+  }
+}

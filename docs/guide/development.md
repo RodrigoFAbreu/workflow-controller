@@ -315,7 +315,8 @@ The list of planned work is `docs/backlog.yaml`, declared by the `backlog` key
 in `docs/ai-workflow/WORKFLOW_CONFIG.json`. `docs/ROADMAP.md` is **generated**
 from it by `scripts/workflow_backlog.py`; never edit the page by hand. The
 roadmap as it stood before the backlog file is kept unchanged in
-`docs/roadmap-archive.md`.
+`docs/roadmap-archive.md`. The rules a planner applies to the list (the clean-up limit, the sizing
+rule, what is deferred, the principles) are on [Planning rules](../planning-rules.md).
 
 - To add, reorder or re-describe an item, edit `docs/backlog.yaml`, then run
   `python3 scripts/workflow_backlog.py generate` and commit both files.

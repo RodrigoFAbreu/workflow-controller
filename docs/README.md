@@ -86,6 +86,8 @@ milestone's notes reach the release is in
 - [Roadmap archive](roadmap-archive.md): the hand-written roadmap as it stood
   before the backlog file, with the reasoning behind each item, kept unchanged
   as a historical record.
+- [Planning rules](planning-rules.md): the order and sizing rules a planner applies (the clean-up limit,
+  the sizing rule, what is deferred), the orchestrator and hosted-platform directions, and the roadmap principles.
 
 ## Design decisions
 

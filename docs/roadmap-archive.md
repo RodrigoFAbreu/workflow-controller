@@ -1,4 +1,4 @@
-> **Frozen.** This is the roadmap as it stood before the backlog file replaced it; it is kept unchanged as a historical record. The live roadmap is [ROADMAP.md](ROADMAP.md), generated from [backlog.yaml](backlog.yaml).
+> **Frozen.** This is the roadmap as it stood before the backlog file replaced it; it is kept unchanged as a historical record. The live roadmap is [ROADMAP.md](ROADMAP.md), generated from [backlog.yaml](backlog.yaml). The planning rules it holds (the clean-up limit, the sizing rule, the direction sections and the principles) now live in [planning-rules.md](planning-rules.md).
 
 # Workflow Controller Roadmap
 

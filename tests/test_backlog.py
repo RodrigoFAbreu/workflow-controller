@@ -212,18 +212,30 @@ class LiveBacklogTests(unittest.TestCase):
         self.assertEqual(selection(self.data), expected_selection(self.data))
 
     def test_selection_survives_reordering_open_items_and_accepting_one(self):
-        # The last two items of the order are made open in the copy, so this holds
-        # however many items of the live file are still open.
-        swapped = _copy(self.data)
-        first, second = sorted(swapped["items"], key=lambda item: item["order"])[-2:]
-        first["status"] = second["status"] = "next"
-        first["order"], second["order"] = second["order"], first["order"]
-        self.assertEqual(selection(swapped), expected_selection(swapped))
-        accepted = _copy(swapped)
-        wanted = expected_selection(swapped)
+        # Built in a copy that does not depend on the live statuses: every item is
+        # done but two, which are ready `next` items with distinct orders, so the
+        # lower order must win, a swap of the orders must change the answer, and
+        # accepting the selected one leaves the other.
+        base = _copy(self.data)
+        low, high = sorted(base["items"], key=lambda item: item["order"])[:2]
+        for item in base["items"]:
+            item["status"] = "done"
+        for item in (low, high):
+            item["status"] = "next"
+            item["depends_on"] = []
+        self.assertLess(low["order"], high["order"])
+        self.assertEqual(selection(base), low["id"])
+        self.assertEqual(expected_selection(base), low["id"])
+        swapped = _copy(base)
+        by_id = {item["id"]: item for item in swapped["items"]}
+        by_id[low["id"]]["order"], by_id[high["id"]]["order"] = high["order"], low["order"]
+        self.assertEqual(selection(swapped), high["id"])
+        self.assertEqual(expected_selection(swapped), high["id"])
+        accepted = _copy(base)
         for item in accepted["items"]:
-            if item["id"] == wanted:
+            if item["id"] == expected_selection(base):
                 item["status"] = "done"
+        self.assertEqual(selection(accepted), high["id"])
         self.assertEqual(selection(accepted), expected_selection(accepted))
 
     def test_nothing_ready_is_the_refusal_not_an_error(self):

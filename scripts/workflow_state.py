@@ -14239,7 +14239,8 @@ def technical_approval_gate_status(repo_root: Path, state: dict, work_item_id: s
     pinned = is_technical_review_block_pinned(work_item, bundle_id)
     classification = fingerprint.load_implementation_stage_classification(
         repo_root, fingerprint.artifacts_path_for_work_item(work_item_id))
-    dirty = any_protected_path_dirty(repo_root, *classification)
+    with fingerprint.naming_work_item(work_item_id):
+        dirty = any_protected_path_dirty(repo_root, *classification)
     head_matches = implementation_provenance_interval_reachable(repo_root, work_item, base_commit)
     current_review_content_id = approval_review_content_id(
         repo_root, stage="implementation", base_commit=base_commit,
@@ -15827,7 +15828,9 @@ def _classify_generation_record_interval(
                 # never named in the refusal the way a protected path's is.
                 raise ProtectedPathInProvenanceIntervalError(
                     f"{commit} in the provenance interval touches {path!r}, classified "
-                    f"'unclassified', not excluded"
+                    f"'unclassified', not excluded: "
+                    + fingerprint.unclassified_path_message(
+                        path, work_item_id, stage="implementation", interval=True)
                 ) from None
             if classification != "excluded":
                 raise ProtectedPathInProvenanceIntervalError(
@@ -18859,10 +18862,12 @@ def promote_legacy_work_item(
     protected_paths, protected_prefixes, excluded_paths, excluded_prefixes = (
         fingerprint.load_implementation_stage_classification(repo_root, artifacts_path)
     )
-    if any_protected_path_changed_since(
-        repo_root, technical_approval["reviewed_content_commit"], "HEAD",
-        protected_paths, protected_prefixes, excluded_paths, excluded_prefixes,
-    ):
+    with fingerprint.naming_work_item(work_item_id):
+        changed_since_review = any_protected_path_changed_since(
+            repo_root, technical_approval["reviewed_content_commit"], "HEAD",
+            protected_paths, protected_prefixes, excluded_paths, excluded_prefixes,
+        )
+    if changed_since_review:
         raise LegacyAdoptionStaleApprovalError(
             f"{work_item_id!r}'s legacy technical_approval is no longer current -- a "
             f"protected implementation-stage path changed since {technical_approval['reviewed_content_commit']!r}; "

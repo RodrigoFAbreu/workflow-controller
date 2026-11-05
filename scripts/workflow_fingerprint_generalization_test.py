@@ -3553,5 +3553,189 @@ class TestChangesSinceReviewSections(unittest.TestCase):
             self.assertIn("newly protected edit", manual)
 
 
+# ---------------------------------------------------------------------------
+# W39 (`unclassified-path-message`): an unclassified path is refused with a
+# message that names the path, the declaration file and the sanctioned route.
+# The expected texts are written out in full on purpose: a drift in either
+# the builder or the test must show as a failure.
+# ---------------------------------------------------------------------------
+
+_UPM_REVIEW_PROTOCOL = 'See REVIEW_PROTOCOL.md, "Repairing an artifact declaration after an approval".'
+_UPM_IMPL_ROUTE = (
+    "Add the path to implementation_stage of that file, as a path or a directory prefix: "
+    "protected for a deliverable, excluded for repository territory. The edit needs no plan "
+    "amendment (the plan-stage id does not change); before the technical approval re-run the "
+    "command that refused, after it the edit goes through mark_technical_approval_stale and a "
+    "post-fix round. " + _UPM_REVIEW_PROTOCOL
+)
+
+
+def _upm_plan_route(item: str = "") -> str:
+    """`item` is ` <id>` for the known form, empty for the unknown form."""
+    return (
+        "Add the path to plan_stage of that file as excluded, an exact path in excluded_paths or "
+        "a directory prefix in excluded_prefixes (it is protected only if it is one of the plan's "
+        "own documents; a deliverable is excluded here and protected at the implementation stage). "
+        "At PLANNING, REVISING_PLAN, AMENDING_PLAN, AWAITING_LOCAL_PLAN_REVIEW, "
+        "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW or AWAITING_PLAN_APPROVAL, whether or not an "
+        f"amendment is open: edit the file and run /milestone-plan{item} again. "
+        "At IMPLEMENTING or SELF_REVIEWING_IMPLEMENTATION the plan is approved and the edit needs "
+        f"a new plan revision: the user runs /request-plan-amendment{item}, then "
+        f"/milestone-plan{item}, plan review and the plan approval (/approve-review plan, or "
+        "/satisfy-gate when the plan gate is automatic); at any other phase neither command is "
+        "admitted, so tell the user. " + _UPM_REVIEW_PROTOCOL
+    )
+
+
+def _upm_known(path: str, item: str, stage: str) -> str:
+    route = _upm_plan_route(f" {item}") if stage == "plan" else _UPM_IMPL_ROUTE
+    return (
+        f"{path} is not classified by the {stage} stage of the artifact declaration of work item "
+        f"{item}, docs/ai-workflow/registry/{item}-artifacts.json. {route}"
+    )
+
+
+def _upm_unknown(path: str, stage: str) -> str:
+    route = _upm_plan_route() if stage == "plan" else _UPM_IMPL_ROUTE
+    return (
+        f"{path} is not classified by the {stage} stage of the artifact declaration of the work "
+        "item being worked, docs/ai-workflow/registry/<work_item_id>-artifacts.json (the work "
+        "item is not known where this path was classified, so <work_item_id> stands for its id). "
+        f"{route}"
+    )
+
+
+_UPM_PATH = "other/mystery.txt"
+_UPM_PLAN_SETS = (frozenset({"src/a.txt"}), {}, {})
+_UPM_IMPL_SETS = ({}, {"src/": "p"}, {}, {})
+
+
+class TestUnclassifiedPathMessage(unittest.TestCase):
+    def _scratch(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+
+        def git(*args):
+            return subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+
+        git("init", "-q")
+        (root / "src").mkdir()
+        (root / "src/a.txt").write_text("a\n")
+        git("add", "-A")
+        git("commit", "-qm", "base")
+        base = git("rev-parse", "HEAD")
+        (root / "other").mkdir()
+        (root / _UPM_PATH).write_text("x\n")
+        return root, base, git
+
+    def test_t1_plan_classifier_unknown_item_text(self):
+        with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+            fingerprint.classify_path(_UPM_PATH, *_UPM_PLAN_SETS)
+        exc = ctx.exception
+        self.assertEqual(str(exc), _upm_unknown(_UPM_PATH, "plan"))
+        self.assertEqual((exc.path, exc.stage), (_UPM_PATH, "plan"))
+        self.assertEqual(len(exc.args), 1)
+        self.assertIs(type(exc).__mro__[1], Exception)
+
+    def test_t2_implementation_classifier_unknown_item_text(self):
+        with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+            fingerprint.classify_path_implementation_stage(_UPM_PATH, *_UPM_IMPL_SETS)
+        exc = ctx.exception
+        self.assertEqual(str(exc), _upm_unknown(_UPM_PATH, "implementation"))
+        self.assertEqual((exc.path, exc.stage), (_UPM_PATH, "implementation"))
+        self.assertEqual(len(exc.args), 1)
+
+    def test_t3_each_entry_point_names_the_item(self):
+        root, base, git = self._scratch()
+        plan = _upm_known(_UPM_PATH, "demo-item", "plan")
+        impl = _upm_known(_UPM_PATH, "demo-item", "implementation")
+        worktree_cases = {
+            "plan_stage": (plan, lambda: fingerprint.compute_review_content_id_plan_stage(
+                root, base, "process", "demo-item", 1, *_UPM_PLAN_SETS)),
+            "implementation_stage": (impl, lambda: fingerprint.compute_review_content_id_implementation_stage(
+                root, base, "process", "demo-item", *_UPM_IMPL_SETS)),
+        }
+        for name, (expected, call) in worktree_cases.items():
+            with self.subTest(entry_point=name):
+                with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+                    call()
+                self.assertEqual(str(ctx.exception), expected)
+        git("add", "-A")
+        git("commit", "-qm", "c")
+        commit_cases = {
+            "plan_stage_at_commit": (plan, lambda: fingerprint.compute_review_content_id_plan_stage_at_commit(
+                root, base, "HEAD", "process", "demo-item", 1, *_UPM_PLAN_SETS)),
+            "implementation_stage_at_commit": (
+                impl, lambda: fingerprint.compute_review_content_id_implementation_stage_at_commit(
+                    root, base, "HEAD", "process", "demo-item", *_UPM_IMPL_SETS)),
+        }
+        for name, (expected, call) in commit_cases.items():
+            with self.subTest(entry_point=name):
+                with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+                    call()
+                self.assertEqual(str(ctx.exception), expected)
+
+    def test_t5_nothing_changes_where_nothing_is_refused(self):
+        self.assertEqual(fingerprint.classify_path("src/a.txt", *_UPM_PLAN_SETS), "protected")
+        self.assertEqual(
+            fingerprint.classify_path_implementation_stage("src/a.txt", *_UPM_IMPL_SETS), "protected")
+        self.assertEqual(
+            fingerprint.classify_path(".workflow-manager/installation.json", *_UPM_PLAN_SETS), "excluded")
+        self.assertIs(fingerprint.UnclassifiedPathError.__bases__[0], Exception)
+        # a plain error raised inside an entry point passes through untouched
+        marker = ValueError("not an unclassified path")
+        with mock.patch.object(fingerprint, "resolve_base", side_effect=marker):
+            with self.assertRaises(ValueError) as ctx:
+                fingerprint.compute_review_content_id_plan_stage(
+                    Path("."), "base", "process", "demo-item", 1, *_UPM_PLAN_SETS)
+        self.assertIs(ctx.exception, marker)
+        # the plan-declaration coverage refusal keeps its own text
+        self.assertEqual(
+            ws.PLAN_DECLARATION_NEXT_STEP,
+            "add each path, or its directory prefix, to `plan_stage` and/or `implementation_stage` of "
+            "`docs/ai-workflow/registry/<id>-artifacts.json` (protected for a deliverable, excluded for "
+            "repository territory); a bare file name is a root-level path, so write every path in full "
+            "from the repository root; when the span is not a path (a dotted identifier, a function name, "
+            "a flag), drop its backticks or move it out of the Files paragraph; then run the command again",
+        )
+
+    def test_t5_naming_work_item_lets_other_errors_through(self):
+        marker = ValueError("x")
+        with self.assertRaises(ValueError) as ctx:
+            with fingerprint.naming_work_item("demo-item"):
+                raise marker
+        self.assertIs(ctx.exception, marker)
+        # an unclassified error without a path (a bare construction) is also left as it was
+        bare = fingerprint.UnclassifiedPathError("just a message")
+        with self.assertRaises(fingerprint.UnclassifiedPathError) as ctx:
+            with fingerprint.naming_work_item("demo-item"):
+                raise bare
+        self.assertIs(ctx.exception, bare)
+
+    def test_t9_the_declaration_advice_is_true_as_run(self):
+        plan = fingerprint.unclassified_path_message(_UPM_PATH, "demo-item", stage="plan")
+        impl = fingerprint.unclassified_path_message(_UPM_PATH, "demo-item", stage="implementation")
+        self.assertNotIn("protected for a deliverable", plan)
+        self.assertIn("a deliverable is excluded here and protected at the implementation stage", plan)
+        self.assertIn("an exact path in excluded_paths or a directory prefix in excluded_prefixes", plan)
+        self.assertIn("protected for a deliverable, excluded for repository territory", impl)
+        self.assertIn("as a path or a directory prefix", impl)
+        deliverable = "payload/scripts/new_tool.py"
+        # plan stage: a deliverable as an exact excluded path, and under an excluded prefix
+        self.assertEqual(fingerprint.classify_path(
+            deliverable, frozenset(), {deliverable: "d"}, {}), "excluded")
+        self.assertEqual(fingerprint.classify_path(
+            deliverable, frozenset(), {}, {"payload/": "d"}), "excluded")
+        # implementation stage: protected as a path or a prefix, excluded as a path or a prefix
+        classify = fingerprint.classify_path_implementation_stage
+        self.assertEqual(classify(deliverable, {deliverable: "d"}, {}, {}, {}), "protected")
+        self.assertEqual(classify(deliverable, {}, {"payload/": "d"}, {}, {}), "protected")
+        self.assertEqual(classify(deliverable, {}, {}, {deliverable: "t"}, {}), "excluded")
+        self.assertEqual(classify(deliverable, {}, {}, {}, {"payload/": "t"}), "excluded")
+
+
 if __name__ == "__main__":
     unittest.main()

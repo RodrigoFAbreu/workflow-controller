@@ -1,6 +1,6 @@
 # Planning rules
 
-> The order of the work is `docs/backlog.yaml`; the generated [roadmap](ROADMAP.md) lists it. The text below is moved unchanged from the frozen [roadmap archive](roadmap-archive.md), where the list it refers to is kept as a historical record.
+> The order of the work is `docs/backlog.yaml`; the generated [roadmap](ROADMAP.md) lists it. The numbered "Next, in order" list below is a frozen record, not the current order. The text below is moved unchanged from the frozen [roadmap archive](roadmap-archive.md), and "the table below" in it means the tables kept there.
 
 ## Next, in order and the sizing rules
 

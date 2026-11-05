@@ -265,7 +265,8 @@ What it checks:
 - **Links and anchors.** Every relative Markdown link and `#anchor` in
   `README.md`, `docs/*.md`, `docs/guide/`, `docs/adr/`,
   `docs/releases/` and `docs/items/` (the backlog's item pages) must reach an
-  existing file and, for a Markdown file, a heading, using GitHub's anchor rule (lowercase, inline-code text kept,
+  existing file and, for a Markdown file, a heading, using GitHub's anchor
+  rule (lowercase, inline-code text kept,
   letters, digits, underscores and hyphens preserved, a repeated heading
   numbered `-1`, `-2`, ...). `docs/ROADMAP.md` (generated),
   `docs/roadmap-archive.md` (a frozen historical record) and
@@ -315,11 +316,16 @@ The list of planned work is `docs/backlog.yaml`, declared by the `backlog` key
 in `docs/ai-workflow/WORKFLOW_CONFIG.json`. `docs/ROADMAP.md` is **generated**
 from it by `scripts/workflow_backlog.py`; never edit the page by hand. The
 roadmap as it stood before the backlog file is kept unchanged in
-`docs/roadmap-archive.md`. The rules a planner applies to the list (the clean-up limit, the sizing
-rule, what is deferred, the principles) are on [Planning rules](../planning-rules.md).
+`docs/roadmap-archive.md`. The rules a planner applies to the list (the
+clean-up limit, the sizing rule, what is deferred, the principles) are on
+[Planning rules](../planning-rules.md).
 
-- To add, reorder or re-describe an item, edit `docs/backlog.yaml`, then run
+- To add, reorder or retitle an item, edit `docs/backlog.yaml`, then run
   `python3 scripts/workflow_backlog.py generate` and commit both files.
+- An item's description and decisions are on its page `docs/items/<id>.md`,
+  named by the item's `detail` line; `/milestone-plan` reads that page as the
+  milestone's description. An item with no `detail` line is described by its
+  title alone. A page holds no status: status lives only in the backlog file.
 - `python3 scripts/workflow_backlog.py check` validates the file;
   `python3 scripts/workflow_backlog.py next` names the item `/milestone-plan`
   would take (read-only).

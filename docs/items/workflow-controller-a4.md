@@ -9,3 +9,7 @@ Complexity: not yet sized; split before it is planned. The tracker interface: th
 Needs: A2, C11
 
 Section: Adapters and backlog (above)
+
+## Planning notes
+
+The rules that apply to this item (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

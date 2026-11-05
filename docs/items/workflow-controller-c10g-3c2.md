@@ -1,4 +1,4 @@
-# C10g-3c2: The Codex tester's fallback to the other harness along H9's chain before the spawn and its selection-time causes, the telemetry dimensions and Codex usage readings for a functional job, and one
+# C10g-3c2: The Codex tester's fallback to the other harness along H9's chain, its telemetry and usage readings, and one live functional round on Codex that proves it
 
 Item id: `workflow-controller-c10g-3c2`.
 

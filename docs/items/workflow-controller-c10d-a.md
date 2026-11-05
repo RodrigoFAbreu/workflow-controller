@@ -9,3 +9,7 @@ Complexity: medium. The post-acceptance defect loop at the merge flow's `checks_
 Needs: C10c
 
 Section: [1.9](../roadmap-archive.md#19-pr-review-defect-loop-and-merge-readiness-identity)
+
+## Planning notes
+
+The rules that apply to this item (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

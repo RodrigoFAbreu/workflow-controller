@@ -7,8 +7,10 @@
 live page. The plan is `docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md` (revision 3). CP1 is complete: the 72 done
 items have a page `docs/items/<id>.md` holding their archive row verbatim (less the status marker and the link rewrite), each
 named by a `detail` line in `docs/backlog.yaml`; `tools/check_docs.py` link-checks `docs/items/`, and `tests/test_backlog.py`
-pins that every `detail` resolves to a regular file. CP2 (the open items' pages and the titles) and CP3 (the rules page, the
-links and the two repairs) follow.
+pins that every `detail` resolves to a regular file. CP2 is complete: the 25 open items and ideas have a page too (97 pages in
+all, each row's text found in its page), CL1a to CL1e and C12b to C12d carry a "Planning notes" section taken from issues
+#130 and #27 and the archive's follow-ups 8, 9 and 14, the one dangling title (C10g-3c2) is a complete phrase, and the comment on
+line 2 of `docs/backlog.yaml` is reworded. CP3 (the rules page, the links and the two repairs) follows.
 
 Previous item, now complete:
 

@@ -75,7 +75,7 @@
 | 69 | Functional checklist parsing `workflow-controller-c10j` | Done | - | workflow-controller-c10f |
 | 70 | \`runtime.remove_tree\` refuses a path whose parent chain holds a symbolic link `workflow-controller-c10k` | Done | - | workflow-controller-c10f |
 | 71 | Test leftovers end with their test `workflow-controller-c12a` | Done | - | - |
-| 72 | The backlog, declare-first `workflow-controller-a2a` | In progress | - | workflow-controller-a1 |
+| 72 | The backlog, declare-first `workflow-controller-a2a` | Done | - | workflow-controller-a1 |
 | 73 | The prose migration `workflow-controller-a2b` | Next | - | workflow-controller-a2a |
 | 74 | Codex worker, step 5 `workflow-controller-h4e` | Next | - | workflow-controller-h4c2, workflow-controller-h4d, workflow-controller-h1 |
 | 75 | Codex worker, step 6 `workflow-controller-h4f` | Next | - | workflow-controller-h4e |

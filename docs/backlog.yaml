@@ -348,7 +348,7 @@ items:
     order: 71
   - id: workflow-controller-a2a
     title: "The backlog, declare-first"
-    status: in-progress
+    status: done
     order: 72
     depends_on: [workflow-controller-a1]
   - id: workflow-controller-a2b

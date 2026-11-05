@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-a2a` (A2a, issue
+**Complete.** `workflow-controller-a2a` (A2a, issue
 [#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)) declares the backlog file and replaces the roadmap page
 with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md` (revision 3). CP1 is complete:
 `docs/backlog.yaml` lists the 97 items of the roadmap's Controller and orchestrator tables (71 done, A2a in progress, the rest
@@ -11,7 +11,11 @@ complete: `WORKFLOW_CONFIG.json` declares the backlog, the old roadmap is kept b
 under a frozen banner, `docs/ROADMAP.md` is the generated page, the six inbound links and the follow-up 86 test point at the
 archive, and `tests/test_backlog.py` fails on a stale page. CP3 is complete: `docs/guide/development.md` explains the backlog,
 `docs/README.md` lists the archive, and `docs/guide/milestone-branches.md` sends a split-off remainder to the backlog file.
-The implementation is in review.
+
+The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for A2b ("The prose migration"), the next item `python3 scripts/workflow_backlog.py next` returns.
+
 
 Previous item, now complete:
 

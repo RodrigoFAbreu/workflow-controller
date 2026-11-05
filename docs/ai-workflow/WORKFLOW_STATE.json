@@ -58184,7 +58184,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-bold-flow-headers-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -58324,12 +58324,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 17,
-      "last_transition": "2026-11-05T00:34:17Z",
+      "state_revision": 18,
+      "last_transition": "2026-11-05T00:57:01Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -58491,6 +58491,48 @@
               "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
               "verdict": "APPROVE",
               "at": "2026-11-04T23:21:40Z"
+            }
+          ]
+        },
+        "F-771ae7a1e73d": {
+          "digest": "771ae7a1e73dba5c3c12384399f04a1c040a2f15376c92d20ff8275080ef3067",
+          "text": "**O1. The follow-up issue the plan records could also name two more silent drops of the same class.** Both read the same at the base, and neither is a regression. A line with leading blanks, ` **Flow 1: x**` beside `### A. b`, reads `['A']`, because `_BOLD_RE` and `_BOLD_FLOW_RE` anchor at `**`; D2 says \"begins `**`\", so this conforms. `**Optional, Flow 123: x**` beside `### Flow 1` reads `['1']`, because the bold shape has no item, so its unrecognised token is ignored, and `_BOLD_FLOW_RE` does not match a qualified line; this is the plan's qualified near-miss with a spelling its examples do not show.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edf12446b49f12662ba14ae690e400e091ab8edd0b54cac4a0aec7e9775bb2d3",
+              "verdict": "REVISE",
+              "at": "2026-11-05T00:57:01Z"
+            }
+          ]
+        },
+        "F-fe245dccdffd": {
+          "digest": "fe245dccdffd5c97f377613e5eba16ab3a1165ad6b476e5fed90181df2c209f4",
+          "text": "**O2. The guide does not say the dash must be set off by blanks.** `**Flow K - Title.**` \"(a hyphen, en dash or em dash)\" leaves out D1's \"set off by spaces\". `**Flow 1 -x**` is refused, and `**Flow 1-title**` reads as flow `1-title` (`IMPLEMENTATION_SUMMARY.md` discloses the second). A few words would tell an author which spelling starts a flow.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edf12446b49f12662ba14ae690e400e091ab8edd0b54cac4a0aec7e9775bb2d3",
+              "verdict": "REVISE",
+              "at": "2026-11-05T00:57:01Z"
+            }
+          ]
+        },
+        "F-3e9c27f2c214": {
+          "digest": "3e9c27f2c214b08fc59e782ed4fe62d4360ac2281a249c9d5c75516dd8cef0ff",
+          "text": "**O3. Three behaviours work but no test pins them; a mutation of each left all 148 tests of `tests.test_functional_review` passing.** The unread line in the \"first cells\" branch of `read_flows`'s no-flow refusal (the same gap the external plan review named under Missing tests); the region filter in `_unread_flow_lines` (`### Setup`, `**Flow: x**` must not name the line); and the optional blanks of `_BOLD_FLOW_RE` (`** Flow: x**`, which D2 names). I probed all three by hand and each behaves as the plan says.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edf12446b49f12662ba14ae690e400e091ab8edd0b54cac4a0aec7e9775bb2d3",
+              "verdict": "REVISE",
+              "at": "2026-11-05T00:57:01Z"
             }
           ]
         }

@@ -59057,7 +59057,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-a2a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-a2a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -59170,7 +59170,156 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "0d7a7a1dd05bdf86e35231988a9a69701fc70de878e235570429e9a85aabb5eb",
+        "approved_review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+        "review_content_manifest": [
+          {
+            "path": "docs/README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c4bcf5db9c0bc387832fdb89393c6d71412acda3"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-a2a-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9e8f32d8c60867312bf54eb70ee45738b106c039"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "07473b130b65a9df06f4a5828b43ce04b3a23e30"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "124abb1c27afaefdd37cb0197efe3cacca381c79"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "639b676162eb4da64693043e306140922955e541"
+          },
+          {
+            "path": "docs/releases/1.18.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2e59a93baa872b351b35f3e0c03f6ed978370368"
+          },
+          {
+            "path": "docs/releases/1.19.0.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c22f48119713db902964eca75b6c77b4b854e78b"
+          },
+          {
+            "path": "docs/releases/1.19.1.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c320942ad39f115c18c9ebcf67c14483f8a4312c"
+          },
+          {
+            "path": "docs/releases/1.27.6.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0482f21d1f5d9f88895630401a6daef36778d34f"
+          },
+          {
+            "path": "docs/roadmap-archive.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2120124e2a55b7daaeb456a74d978acedf6c11e3"
+          },
+          {
+            "path": "tests/test_backlog.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0c09b10ccd0a1667f86b23910d5caf4a9becb3e1"
+          },
+          {
+            "path": "tests/test_functional_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "38d2c9e8fc4cf7e060045172bb44c5159135702c"
+          },
+          {
+            "path": "tools/check_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "05e4a6f8ec61b5183985a38c2dd62698052db1a8"
+          }
+        ],
+        "reviewed_content_commit": "facf46b51e681837cde794fb3e08f79cc0b65016",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T13:30:23Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+            "ledger": {
+              "local": {
+                "bundle_id": "0d7a7a1dd05bdf86e35231988a9a69701fc70de878e235570429e9a85aabb5eb",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "e7af5c81b6b0e4eed67afb86f4239229cebf6900a1b64c4c57f2877352394d66",
+                "ledger_entry_sha256": "13ce776bc3a6d787969fcf3d1eb80975cdc2a3d6a3bad090a238092468015b9b",
+                "run_ref": "session:local .ai-review/workflow-controller-a2a/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "0d7a7a1dd05bdf86e35231988a9a69701fc70de878e235570429e9a85aabb5eb",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "06439bf88f3539c8cb57bc4e7bc8adb971504838dd7a5ef1de3a30cd3aea9fa9",
+                "ledger_entry_sha256": "62b779115fb796a14e322705e046b3ac7e7551b7346adf8ffb90d63454bcf825",
+                "run_ref": "codex:20261105T132612Z-e36e52e2",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T13:30:23Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
@@ -59201,12 +59350,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-05T13:10:05Z",
+      "state_revision": 22,
+      "last_transition": "2026-11-05T13:30:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -59342,6 +59491,97 @@
               "at": "2026-11-05T10:22:18Z"
             }
           ]
+        },
+        "F-96889bc0b742": {
+          "digest": "96889bc0b7423307430eb15108ecc5065d98351f70508685324eedab5f4dc1e6",
+          "text": "**O1. C10g-3c2's title stops mid-phrase.** `docs/backlog.yaml:172` ends \"... for a functional job, and one\", because the row's first clause was cut to fit 200 characters; the next words are \"operator-run functional round on Codex\". The generated page shows the same text at `docs/ROADMAP.md:42`. The item is `done` and nothing reads the title, so this is cosmetic. Ending the title at \"for a functional job\" and running `generate` fixes both, and neither path is protected.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T13:25:50Z"
+            }
+          ]
+        },
+        "F-2b88a7e288ff": {
+          "digest": "2b88a7e288ffcdfcc363d5a7faf0ea9c609f21e60ad68f1cbfd1a9733fd9919b",
+          "text": "**O2. The reorder pin swaps two items that cannot affect the selection.** `test_selection_survives_reordering_open_items_and_accepting_one` (`tests/test_backlog.py:208`) swaps the last two items by `order`, while an earlier open item (A2a today) is the one selected, so the swap changes no answer. A mutant of `select_next` that ignores `order` and takes file position passes all 21 tests, because the live file and the inline fixture both list items in `order` sequence. The test does what D5's words ask and the selector is the Workflow's own code, so nothing delivered is wrong. To exercise the name, put two ready `next` items out of file order in the inline fixture and assert the lower `order` wins.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T13:25:50Z"
+            }
+          ]
+        },
+        "F-6051687c2563": {
+          "digest": "6051687c25630aecb89badca4726a18e93b2512ad47ccb3883696a78be2e4ff4",
+          "text": "**O3. Five release notes name a section the page no longer has.** `docs/releases/1.4.1.md`, `1.4.2.md`, `1.5.0.md`, `1.6.0.md` and `1.7.0.md` say 'see \"Release notes follow the milestone\" in `docs/ROADMAP.md`'; that section is now only in `docs/roadmap-archive.md:1684`. They are plain text like the ADR mentions under \"Left as it is\", but the summary names only the ADRs. A2b retires the archive and should settle both groups together.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T13:25:50Z"
+            }
+          ]
+        },
+        "F-fb919680efe2": {
+          "digest": "fb919680efe2cdb82edb1cb65947af2842a25a333e99ddc5f96864d268fcc575",
+          "text": "`docs/backlog.yaml:172`: C10g-3c2’s title ends mid-phrase with “and one”, which also appears on the generated roadmap. Shorten it at a complete phrase and regenerate.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T13:29:05Z"
+            }
+          ]
+        },
+        "F-14b046041449": {
+          "digest": "14b046041449f386763f7c6fec047c36540492ebffea53eb030e034c91b4a30e",
+          "text": "Release notes `1.4.1.md`, `1.4.2.md`, `1.5.0.md`, `1.6.0.md`, and `1.7.0.md` still direct readers to “Release notes follow the milestone” in `docs/ROADMAP.md`. That section now resides in the archive; update these references alongside the deferred ADR references.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T13:29:05Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "aba6cb5a2874b608f4b599ac621b43b01b4818b6de7dcb2e250ff9189c28500d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0d7a7a1dd05bdf86e35231988a9a69701fc70de878e235570429e9a85aabb5eb",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-05T13:25:50Z",
+          "verdict_sha256": "e7af5c81b6b0e4eed67afb86f4239229cebf6900a1b64c4c57f2877352394d66",
+          "run_ref": "session:local .ai-review/workflow-controller-a2a/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0d7a7a1dd05bdf86e35231988a9a69701fc70de878e235570429e9a85aabb5eb",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-05T13:29:05Z",
+          "verdict_sha256": "06439bf88f3539c8cb57bc4e7bc8adb971504838dd7a5ef1de3a30cd3aea9fa9",
+          "run_ref": "codex:20261105T132612Z-e36e52e2",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

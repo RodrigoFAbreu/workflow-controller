@@ -58184,12 +58184,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-bold-flow-headers-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 3,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "c4915fe7b633155e08ee42894e0b4b1cd7dc9bcb",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "093929d8041d28792d79811a45642d8f9b724003",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
@@ -58328,8 +58328,8 @@
           "external": 0
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-11-05T00:14:05Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-05T00:34:17Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

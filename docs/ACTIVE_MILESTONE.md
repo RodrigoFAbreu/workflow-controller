@@ -11,7 +11,7 @@ recognised flow. The plan is `docs/ai-workflow/CONTROLLER_BOLD_FLOW_HEADERS_PLAN
 
 The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.10).
 
-Next action: `/milestone-plan` for CL1a ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), the retention rule for finished work-item files), the next incomplete item in `docs/ROADMAP.md`.
+Next action: `/milestone-plan` for A2a ([#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294), declare the backlog file and replace the roadmap page with the generated one), then A2b, the next incomplete item in `docs/ROADMAP.md`.
 
 Previous item, now complete:
 

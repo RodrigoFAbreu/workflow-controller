@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-a2a",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -59046,6 +59046,290 @@
         },
         "evaluated_at": "2026-11-05T06:04:44Z",
         "workflow_release": "2.25.4"
+      }
+    },
+    "workflow-controller-a2a": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-a2a",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-a2a-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-a2a-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "da2cb2bccd5b5b393d92ac1495d405c6d3b5a2f7",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+        "approved_review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8387d327b3163910f6cdb0f80c4c9167a53e4e6a"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-a2a-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c691713deb6cd0c73b2d58080d30e4de57233f65"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-a2a-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "577b2eb6a78b256c6bb64c755456aa50c84dea04"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T10:23:32Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+            "ledger": {
+              "local": {
+                "bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "f130e00496edeade9f36dc2e660ec330eb619c132e78ee41f88a2ee39d25731d",
+                "ledger_entry_sha256": "5c3356e33e78fe1594d163faed9080f8276eef2fd66242c1a03ed3d486c95d10",
+                "run_ref": "session:local .ai-review/workflow-controller-a2a/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "4826866fb3e4b7944171b7dea196777d51a0544dd920e8ffa6848bdcf9a42572",
+                "ledger_entry_sha256": "34abad22c1d18d3c44615e56d871631f382ef60ce056baa3038aac7f6301efe0",
+                "run_ref": "codex:20261105T101923Z-e531ea79",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T10:23:32Z",
+          "workflow_release": "2.25.4"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-05T10:19:04Z",
+          "verdict_sha256": "f130e00496edeade9f36dc2e660ec330eb619c132e78ee41f88a2ee39d25731d",
+          "run_ref": "session:local .ai-review/workflow-controller-a2a/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-05T10:22:18Z",
+          "verdict_sha256": "4826866fb3e4b7944171b7dea196777d51a0544dd920e8ffa6848bdcf9a42572",
+          "run_ref": "codex:20261105T101923Z-e531ea79",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-11-05T10:23:32Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-05T10:11:37Z",
+        "consumed": {
+          "review_content_id": "030fb69f9c86375732e01f7c38b3e074d5d1f6191e6f14c0bfdfcf6f219fed70",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+          "bundle_id": "0c47fb19d500f44f462893e3a812218204ce214cd21ce8d3ca938dccd31c8dc8",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "030fb69f9c86375732e01f7c38b3e074d5d1f6191e6f14c0bfdfcf6f219fed70",
+        "5ac1abaa92841287085eb9262ee90b2629c01bbcb22ffbbdc496e78bbefc3dff"
+      ],
+      "optional_findings": {
+        "F-cea79673a929": {
+          "digest": "cea79673a9292546138295bd8b4036e429842b34908873bf95138fb5073898b8",
+          "text": "**O1. D3's dependency rule silently drops real dependencies on group ids.** The `Needs` cells of open rows name `C10` and `C12` (C11), `C10` (C12b), `A2` (A3, A4) and `CU3` (CL1a). None is a row, so D3 leaves them out as \"text that is not an item\", although each means items in the file (C10d-a/b, C12b-d, A2a/b). Order hides this today, but a promoted C11 would not wait for C12. Either expand a group id to its open members or list these under \"Open points\", since the archive that keeps them is retired by A2b.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "5ac1abaa92841287085eb9262ee90b2629c01bbcb22ffbbdc496e78bbefc3dff",
+              "verdict": "REVISE",
+              "at": "2026-11-05T10:04:28Z"
+            }
+          ]
+        },
+        "F-91f08181d561": {
+          "digest": "91f08181d561c788c02628d8cff0d79849017a4c5a95df45f9cf6ac0ddf585fb",
+          "text": "**O2. C8c's place is decided but not listed as open.** D4 calls its sequence \"the roadmap's own 'Next, in order' list\", yet C8c is not on that list, and D4 says the order is \"listed under 'Open points'\", which names only H4e to H4g. Add C8c there.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "5ac1abaa92841287085eb9262ee90b2629c01bbcb22ffbbdc496e78bbefc3dff",
+              "verdict": "REVISE",
+              "at": "2026-11-05T10:04:28Z"
+            }
+          ]
+        },
+        "F-a71cd4ab2638": {
+          "digest": "a71cd4ab2638cca977a4c263debe4b336ff65b82913b7cb881df1963ece42ce9",
+          "text": "**O3. D4's claim about existing work item ids is not accurate.** It says the `workflow-controller-<step>` form \"matches the repository's existing work item ids\". Of the 83 work items in the state file, only this one has that form (`workflow-controller-claude-build-verify` is C10e, `workflow-controller-cleanup-3c` is CU3c). The ids work, as nothing reads a `done` item's id as a live work item, but a done item's id is not its work item id, which BACKLOG_FILE.md's schema says it is. Say so in D4.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "5ac1abaa92841287085eb9262ee90b2629c01bbcb22ffbbdc496e78bbefc3dff",
+              "verdict": "REVISE",
+              "at": "2026-11-05T10:04:28Z"
+            }
+          ]
+        },
+        "F-8385418e2a75": {
+          "digest": "8385418e2a7532c97939894feecfeb7a28c42dd917122a11a5905fa415c80d11",
+          "text": "**O4. D8 says \"five links\" but CP2 changes six.** The files are `docs/releases/1.18.0.md`, `1.19.0.md`, `1.19.1.md`, `1.27.6.md`, `docs/guide/automation.md` and the sweep page. `tools/check_docs.py` scans five of them; the sweep page is under `docs/milestones/`, which it skips. CP2's list is right; the count is not.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "5ac1abaa92841287085eb9262ee90b2629c01bbcb22ffbbdc496e78bbefc3dff",
+              "verdict": "REVISE",
+              "at": "2026-11-05T10:04:28Z"
+            }
+          ]
+        },
+        "F-04e090d02f1c": {
+          "digest": "04e090d02f1c80c8acab6bd04d6be813f20c1e04e956e10221f61aa1e1a7c28a",
+          "text": "**O5. CP3 does not name the sentence in `docs/guide/development.md` that goes stale.** Lines 270-271 list the pages the link check skips as `docs/ROADMAP.md` and `docs/ACTIVE_MILESTONE.md`. CP2 adds the archive to `LINK_EXCLUDED`, so that sentence needs the archive added.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "5ac1abaa92841287085eb9262ee90b2629c01bbcb22ffbbdc496e78bbefc3dff",
+              "verdict": "REVISE",
+              "at": "2026-11-05T10:04:28Z"
+            }
+          ]
+        },
+        "F-c28f4db52777": {
+          "digest": "c28f4db5277751490511e3f2612b28668dbfaf1cba661ce92c1e00201b656bf1",
+          "text": "**O1. CP2's \"Done when\" has no carve-out for the Git 2.56 trailer tests, though CP3's has.** CP2 says \"the full suite is green\"; CP3 says \"green but for the known Git 2.56 trailer tests\". This machine runs `git version 2.56.0`. Use CP3's wording in both, so CP2 is not read as unmet or as hiding a real failure.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "030fb69f9c86375732e01f7c38b3e074d5d1f6191e6f14c0bfdfcf6f219fed70",
+              "verdict": "REVISE",
+              "at": "2026-11-05T10:10:06Z"
+            }
+          ]
+        },
+        "F-081b083208b8": {
+          "digest": "081b083208b8d3b1e10753943e5ed8f428a3329e0509a99e22a339857ecbfdcd",
+          "text": "**O1. Nothing in the backlog file or the generated page tells a planner that the archive holds an item's description.** Once the backlog is declared, `/milestone-plan` is told not to read `docs/ROADMAP.md` and to use `item.title` alone when an item has no `detail` (`.claude/commands/milestone-plan.md:199-206`). D4 cuts the title to the row's first clause, so in the replay A2b's whole brief is its short title, and an item reordered ahead of A2b, which \"Open points\" invites, loses more: H4e's title is \"Codex worker, step 5\", while its `Needs` cell carries an owner decision on the separate clone and fast-forward landing. The archive is findable through `docs/README.md`, so this is a gap and not a defect. Fix: one comment line at the top of `docs/backlog.yaml` saying that, until an item has a `detail` page, its description and decisions are its row in `docs/roadmap-archive.md` (comment lines are allowed and `accept` keeps them), and the same sentence in the `docs/guide/development.md` section CP3 adds.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T10:19:04Z"
+            }
+          ]
+        },
+        "F-e59df8364352": {
+          "digest": "e59df836435235d54ac13f459c0090f1838c2e116a738aef0751265ffe55e10b",
+          "text": "**O1. Point planners to the archived descriptions.** D4 omits `detail` and shortens titles; the installed `/milestone-plan` uses the title alone when `detail` is absent. Add a backlog comment and a development-guide sentence explaining that full descriptions and decisions remain in `docs/roadmap-archive.md` until A2b.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "d1983794083698c7e18729698843ec477e4e1ffc7b15b970208f5eca033b2203",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T10:22:18Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -58184,7 +58184,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-bold-flow-headers-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -58293,7 +58293,108 @@
           "workflow_release": "2.25.4"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "7d70c235d2f0d176dad5fa455caaf65b2b2a5c66b106005f6ab003eb534636bb",
+        "approved_review_content_id": "e27d3da9cd0ab586370fdd5c1be171da6594015ba112a04f4bf483179a1e49f5",
+        "review_content_manifest": [
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8ea35316be4fda3d674445083083d7b8d4bdfe91"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-bold-flow-headers-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f11781f1a6dcc3b15ac68eac55a2c87bbe682ee0"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c593d594d9d84706da5e0d38748ec5f4f1c158e1"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d77684619ebef9a464da900344ecd98b87975ac5"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9a6491270418282125167e175d1091bc871f97e2"
+          }
+        ],
+        "reviewed_content_commit": "3431fb725ee82483c7c3c747e7b39190aedebba7",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T04:34:18Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e27d3da9cd0ab586370fdd5c1be171da6594015ba112a04f4bf483179a1e49f5",
+            "ledger": {
+              "local": {
+                "bundle_id": "7d70c235d2f0d176dad5fa455caaf65b2b2a5c66b106005f6ab003eb534636bb",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "c08b3619a6b921f87ed17001101eafcb095f7dc985e4376cefdf5e75a3a2a640",
+                "ledger_entry_sha256": "ca578c4e6f430123ef00f4f7e80e73f9febc7cb3d529b3aa9c9bf6d745902491",
+                "run_ref": "session:local .ai-review/workflow-controller-bold-flow-headers/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "7d70c235d2f0d176dad5fa455caaf65b2b2a5c66b106005f6ab003eb534636bb",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "158fd7cac10cbd7260496d2f3838fb9d3dfa9a24606529c3c6491df3ed44d742",
+                "ledger_entry_sha256": "b611ecc38a1c9c1a3745943cbc54fbce61f4946ed2a4db4796ec55849ed963ad",
+                "run_ref": "codex:20261105T043034Z-6402c609",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T04:34:18Z",
+          "workflow_release": "2.25.4"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "076e4dd51afbf34ffafa0ff03ca5de468ebf96f3c72a330e77b61947d2137793",
@@ -58324,12 +58425,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 22,
-      "last_transition": "2026-11-05T02:01:52Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-05T04:34:18Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -58577,20 +58678,56 @@
               "at": "2026-11-05T01:42:41Z"
             }
           ]
+        },
+        "F-a48379e856f2": {
+          "digest": "a48379e856f2b7b6b707305514d1ebdadaa53834f07ce7c802b60f79629d7e48",
+          "text": "**O1. The fence case of `test_an_unread_bold_flow_line_inside_a_flow_a_fence_or_a_region_is_held` does not exercise the fence.** Its body `**A. one**\\nx\\n\\n```\\n**Flow: y**\\n```\\n` puts the fence inside flow `A`'s span, so `A` holds the line either way: removing `mask[index] or` from `_flow_word_found` in a copy leaves all of `tests.test_functional_review` passing. The code is right (measured: ```` ```\\n**Flow: y**\\n```\\n\\n**A. one**\\nx ```` reads `['A']`, the `**Flow 123: y**` form too), and the mutation fails safe (a refusal, not a drop), but the plan names this case and the guide offers a code fence as the remedy for `**Flow 123: Title**`. A subtest with the fence above the first flow, for both lines, would pin it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "e27d3da9cd0ab586370fdd5c1be171da6594015ba112a04f4bf483179a1e49f5",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T04:30:02Z"
+            }
+          ]
+        },
+        "F-a44beb0d5c9c": {
+          "digest": "a44beb0d5c9c6e6437cc9bcf7412a2788691490c507fb598c3f93da70166d8f8",
+          "text": "**O2. `test_a_dash_or_closing_bold_needs_the_flow_word` pins the dash only, and nothing pins the blanks around the dash.** Moving the closing-`**` alternative outside `(?(flow)...)` leaves the module passing, and so does making the blank after the dash optional. Both behaviours are right today (`**A**\\nx` is refused, `**A. one**\\n\\n**B**\\ny` reads `['A']`, `**Flow 1 -x**` beside `### Flow 2` is refused naming the line). Adding those three bodies would make the test match its name and D1's \"only when the `Flow` word is present\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "e27d3da9cd0ab586370fdd5c1be171da6594015ba112a04f4bf483179a1e49f5",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T04:30:02Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "22b7b757b39055b3ab9a46258092377ef99fdbcbf033b3e354f9dbe7887097e5",
+        "review_content_id": "e27d3da9cd0ab586370fdd5c1be171da6594015ba112a04f4bf483179a1e49f5",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "a78ddcb91bff20d68bd8f395f3db5f5b3631818fc42448f81bc1646429b5b562",
+          "bundle_id": "7d70c235d2f0d176dad5fa455caaf65b2b2a5c66b106005f6ab003eb534636bb",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-05T01:42:41Z",
-          "verdict_sha256": "0a9fb1d5e4e347fc83bd37da833b481dd6921efb2b0796d4879f0459bd0805c7",
+          "round": 3,
+          "completed_at": "2026-11-05T04:30:02Z",
+          "verdict_sha256": "c08b3619a6b921f87ed17001101eafcb095f7dc985e4376cefdf5e75a3a2a640",
           "run_ref": "session:local .ai-review/workflow-controller-bold-flow-headers/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7d70c235d2f0d176dad5fa455caaf65b2b2a5c66b106005f6ab003eb534636bb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-05T04:32:50Z",
+          "verdict_sha256": "158fd7cac10cbd7260496d2f3838fb9d3dfa9a24606529c3c6491df3ed44d742",
+          "run_ref": "codex:20261105T043034Z-6402c609",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

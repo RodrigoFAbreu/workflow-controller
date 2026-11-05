@@ -441,7 +441,7 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    | `A`, `7` | yes |
    | `F1`, `3a`, `6.1` | yes |
    | `6b-split` | yes |
-   | `Flow 4`, `long`, `123` | no (a word, or a number of three digits) |
+   | `Flow 4`, `long`, `123` | no (a word, or a number of three digits); but a bold header may start with the word `Flow` before a label, see below |
 
    A checklist with no flow stops at `checklist_unrecognised` before any job, sandbox or usage
    reservation exists. So does a **partly recognised** checklist: when the shape that finds flows
@@ -471,6 +471,20 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    decides when a row has an old-form label, and otherwise the refusal names the rows the bold
    shape did not recognise.
 
+   A bold flow header may also start with the word `Flow` (any case), then a label: `**Flow K: Title.**`,
+   `**Flow K. Title.**`, `**Flow K - Title.**` (a hyphen, en dash or em dash), `**Flow K) Title**` and
+   `**Flow K**` alone, with `K` a label as in the table above (`**Flow 1: Log in.**` is flow `1`). It
+   starts a flow and ends the one above, as `**K. Title.**` does. A bold `Flow` line that no shape reads
+   is refused with its line, instead of being dropped next to a recognised flow, unless a flow holds it:
+   `**Flow: Title**` (no label), `**Flow 1 Title**` (no mark after the label), `**Flow 1**: Title`
+   (text after the closing bold) and `**Flow 123: Title**` (a label of three digits, refused as partly
+   recognised) are refused, and the evidence names each line. Such a line inside a flow's own text, inside
+   a code fence, or in a region that is not a flow (below a `### Setup`, `### Test data`,
+   `### Known limitations` or `### Out of scope` heading) is not refused; a region that a bold line opened
+   (`**Setup.**`) ends at the next bold `Flow` line. Write the line as `**Flow K: Title.**` or as a heading
+   `### Flow K: Title`, or put it inside the flow it belongs to. A line that starts `**Optional extra Flow 1.**`
+   is not a header, as before.
+
    Between two flows of the bold shape, every line that belongs to no flow is refused (a
    `**Setup** for this flow: ...` or `**Setup: none needed.**` line, text under a heading or after
    `**Flows:** run it again`), naming the first such line, the flow before it and the flow after it
@@ -478,7 +492,8 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    section to the end. A heading line (its own words are not read) and a line that is only a
    bold `**Flows...**` (its words, such as `**Flows: run A again first.**`, are not read either)
    may stay between two flows; put an instruction in a flow, not in such a line. Text before the
-   first flow and after the last one is read as before.
+   first flow and after the last one is read as before, except for a bold `Flow` line no shape reads, which
+   is refused.
 
    A section whose only content is a link to another file is followed. The link resolves from the
    checklist's own folder, so `../tests/checklist.md` in `docs/ACTIVE_MILESTONE.md` names

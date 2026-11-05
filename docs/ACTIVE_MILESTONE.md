@@ -2,6 +2,19 @@
 
 ## Status
 
+**Complete.** `workflow-controller-bold-flow-headers` (FL3, issue
+[#288](https://github.com/RodrigoFAbreu/workflow-controller/issues/288)) makes the functional checklist reader read a bold
+`**Flow K: Title.**` header as a flow and refuse a bold `Flow ...` line that no shape reads, instead of dropping it next to a
+recognised flow. The plan is `docs/ai-workflow/CONTROLLER_BOLD_FLOW_HEADERS_PLAN.md` (revision 3). The reader change is in
+`controller/functional_review.py`, with tests in `tests/test_functional_review.py`; `docs/guide/automation.md` and
+`docs/common-problems.md` say what is read and refused.
+
+The milestone is implemented, functionally reviewed and accepted by policy (release 1.27.10).
+
+Next action: `/milestone-plan` for CL1a ([#130](https://github.com/RodrigoFAbreu/workflow-controller/issues/130), the retention rule for finished work-item files), the next incomplete item in `docs/ROADMAP.md`.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-remove-tree-links` (C10k, issue
 [#140](https://github.com/RodrigoFAbreu/workflow-controller/issues/140)) makes `runtime.remove_tree` refuse a path below a
 symbolic link. The plan is `docs/ai-workflow/CONTROLLER_REMOVE_TREE_LINKS_PLAN.md` (revision 2). CP1 is complete: the removal

@@ -1,0 +1,78 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-bold-flow-headers",
+ "dispositions": {
+  "F-30fa25140691": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-4399319162cc": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-5c8db2684feb": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-5dba1a2b3a93": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-734f142b3e93": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/292"
+  },
+  "F-74ceb97eac0d": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/292"
+  },
+  "F-7fd013a5c3fc": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-a1257d747fb1": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-c3e3ea3fde9f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/292"
+  },
+  "F-eaf1affe2e81": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 3): applied, or stated there as an exclusion, and carried into the implementation."
+  },
+  "F-fe245dccdffd": {
+   "disposition": "fixed",
+   "note": "Fixed in e36f216 (FL3 round 1): the guide says the dash is set off by spaces and how a three-digit Flow label is refused."
+  },
+  "F-3e9c27f2c214": {
+   "disposition": "fixed",
+   "note": "Fixed in 1b8cc97 (FL3 round 1): tests pin the first-cells refusal, the non-flow region filter and the blanks after the opening bold."
+  },
+  "F-81069def39cc": {
+   "disposition": "fixed",
+   "note": "Fixed in 15709d1 (FL3 round 2): the unread-line exemption is limited to unread lines and a three-digit Flow label beside a bold flow is refused wherever it sits."
+  },
+  "F-ca7eeecd5e37": {
+   "disposition": "fixed",
+   "note": "Fixed in 06e7472 (FL3 round 2): the test pins the evidence of the three-digit Flow label refusal in both shapes."
+  },
+  "F-771ae7a1e73d": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/292"
+  },
+  "F-12fc2122e7b7": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6651030120"
+  },
+  "F-a44beb0d5c9c": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6651030120"
+  },
+  "F-a48379e856f2": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6651030120"
+  }
+ }
+}

@@ -291,45 +291,45 @@ read-only probe and a read of the documentation, so they write only to the scrat
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The issue's reproduction reads (D1).**
+**1. The issue's reproduction reads (D1).**
 Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_the_issue_table_nine_bold_flows_alone tests.test_functional_review.BoldFlowHeaderTest.test_every_spelling_starts_a_flow tests.test_functional_review.BoldFlowHeaderTest.test_every_spelling_reads_in_a_crlf_file -v`.
 Expected: all pass; nine `**Flow K: ...**` lines are nine flows, and each of the five spellings (colon, full stop, parenthesis,
 spaced dash, closing bold) starts a flow, in LF and CRLF files.
 
-**Flow 2: Mixed spellings are refused, naming the odd flow (D3).**
+**2. Mixed spellings are refused, naming the odd flow (D3).**
 Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_nine_bold_flows_next_to_a_heading_flow_name_the_heading -v`.
 Expected: passes; the refusal is `ChecklistUnrecognised` naming flow `10` (heading) and saying to give the section one shape.
 
-**Flow 3: Other readings are unchanged (D1).**
+**3. Other readings are unchanged (D1).**
 Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_headings_still_read tests.test_functional_review.BoldFlowHeaderTest.test_a_qualified_flow_header_ends_the_flow_above tests.test_functional_review.BoldFlowHeaderTest.test_a_dash_or_closing_bold_needs_the_flow_word tests.test_functional_review.BoldFlowHeaderTest.test_text_after_the_closing_bold_is_not_a_header tests.test_functional_review.BoldFlowHeaderTest.test_an_overlong_label_is_refused -v`.
 Expected: all pass; headings read as before, a qualified header ends the flow above, a dash or closing bold needs the word `Flow`,
 `**Flow 1**: text` is not a header, and a three-digit label is refused.
 
-**Flow 4: An unread bold `Flow` line is refused unless held (D2).**
+**4. An unread bold `Flow` line is refused unless held (D2).**
 Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_is_refused_with_its_file_line tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_inside_a_flow_a_fence_or_a_region_is_held tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_bold_flow_line_under_a_non_flow_heading_is_not_named tests.test_functional_review.BoldFlowHeaderTest.test_a_region_a_bold_line_opens_ends_at_the_next_bold_flow_line tests.test_functional_review.BoldFlowHeaderTest.test_blanks_after_the_opening_bold_of_an_unread_flow_line_are_named -v`.
 Expected: all pass; the refusal names the line by file line; a line inside a flow, a code fence or a non-flow region is held and
 not named.
 
-**Flow 5: Tables, naming and caps (D2).**
+**5. Tables, naming and caps (D2).**
 Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_an_f_label_table_and_an_unread_line tests.test_functional_review.BoldFlowHeaderTest.test_an_old_form_table_and_an_unread_line tests.test_functional_review.BoldFlowHeaderTest.test_the_line_directly_above_a_table_holds_its_rows_and_no_other tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_line_alone_names_the_line_in_the_no_flow_refusal tests.test_functional_review.BoldFlowHeaderTest.test_an_unread_line_beside_a_table_with_no_flow_label_names_the_line_and_the_cells tests.test_functional_review.BoldFlowHeaderTest.test_the_names_are_capped_at_eight tests.test_functional_review.BoldFlowHeaderTest.test_the_line_numbers_are_the_files_in_a_linked_checklist tests.test_functional_review.BoldFlowHeaderTest.test_the_shapes_and_the_stop_name_the_spelling -v`.
 Expected: all pass.
 
-**Flow 6: History reads as before (D4).**
+**6. History reads as before (D4).**
 Run `python3 -B -m unittest tests.test_functional_review.BoldFlowHeaderTest.test_history_reads_as_before tests.test_checklist_corrections -v`.
 Expected: all pass; the checked-in completed-milestone checklists and fixtures read or refuse exactly as at the base commit.
 
-**Flow 7: A read-only probe of the reader (D1, D3).**
+**7. A read-only probe of the reader (D1, D3).**
 Run `python3 -B - <<'EOF'` with the body below (it imports from the product clone and writes nothing):
 `import sys; sys.path.insert(0,'.'); from controller import functional_review as f`
 `t="## Functional review checklist\n\n**Flow 1: a.**\n\nx\n\n**Flow 2: b.**\n\ny\n"; print([x.label for x in f.read_flows(t)])`
 `try: f.read_flows(t+"\n### Flow 10 (user)\n\nz\n")` / `except Exception as e: print(type(e).__name__, str(e)[:200])`.
 Expected: `['1', '2']`, then `ChecklistUnrecognised` whose text says the bold shape decided 2 flows and names `10` (heading).
 
-**Flow 8: The whole file and the neighbours.**
+**8. The whole file and the neighbours.**
 Run `python3 -B -m unittest tests.test_functional_review tests.test_checklist_corrections -v`.
 Expected: all OK.
 
-**Flow 9: Documentation (D5).**
+**9. Documentation (D5).**
 Run `python3 -B tools/check_docs.py`. Expected: exit 0. Read `docs/guide/automation.md` (the recogniser paragraphs: the `Flow`
 spellings, the refused `**Flow 1**: title` example, which regions hold an unread bold `Flow` line), `docs/common-problems.md`
 (row 38e, `checklist_unrecognised`: cause and remedy for the bold `Flow` line) and `docs/ROADMAP.md` (FL3 marked done, 1.27.10).

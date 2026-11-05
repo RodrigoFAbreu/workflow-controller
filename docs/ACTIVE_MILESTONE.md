@@ -6,8 +6,10 @@
 [#294](https://github.com/RodrigoFAbreu/workflow-controller/issues/294)) declares the backlog file and replaces the roadmap page
 with the generated one. The plan is `docs/ai-workflow/CONTROLLER_A2A_BACKLOG_PLAN.md` (revision 3). CP1 is complete:
 `docs/backlog.yaml` lists the 97 items of the roadmap's Controller and orchestrator tables (71 done, A2a in progress, the rest
-next or idea), and `tests/test_backlog.py` pins the file against the roadmap rows and the Workflow's selection rule. CP2 (the
-`backlog` declaration and the generated page) and CP3 (the pages) follow.
+next or idea), and `tests/test_backlog.py` pins the file against the roadmap rows and the Workflow's selection rule. CP2 is
+complete: `WORKFLOW_CONFIG.json` declares the backlog, the old roadmap is kept byte for byte in `docs/roadmap-archive.md`
+under a frozen banner, `docs/ROADMAP.md` is the generated page, the six inbound links and the follow-up 86 test point at the
+archive, and `tests/test_backlog.py` fails on a stale page. CP3 (the pages) follows.
 
 Previous item, now complete:
 

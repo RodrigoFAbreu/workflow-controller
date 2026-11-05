@@ -12,16 +12,18 @@ file's own data. No test names an item of the live file as the selected one.
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# The page the item rows are read from: the hand-written roadmap until it is
-# replaced, then the archive that keeps its text.
-ARCHIVE_PAGE = "docs/ROADMAP.md"
+# The page the item rows are read from: the archive that keeps the old
+# hand-written roadmap text.
+ARCHIVE_PAGE = "docs/roadmap-archive.md"
 BACKLOG_FILE = "docs/backlog.yaml"
 ID_PREFIX = "workflow-controller-"
 
@@ -297,6 +299,36 @@ class InlineFixtureTests(unittest.TestCase):
         data = self._data(FIXTURE.replace("status: next", "status: done").replace(
             "status: in-progress", "status: done"))
         self.assertIsNone(selection(data))
+
+
+class DeclaredPageTests(unittest.TestCase):
+    """D1 and D6: the declaration is the exact object, and the page is the
+    one `generate` writes -- the check the Workflow's `check` command runs."""
+
+    def test_the_declaration_is_the_exact_object(self):
+        config = json.loads((REPO_ROOT / "docs/ai-workflow/WORKFLOW_CONFIG.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["backlog"], {"file": "docs/backlog.yaml", "roadmap": "docs/ROADMAP.md"})
+        self.assertEqual(backlog.load_declaration(REPO_ROOT),
+                         {"file": "docs/backlog.yaml", "roadmap": "docs/ROADMAP.md", "generator": None})
+
+    def _check(self, page: bytes) -> None:
+        declaration = backlog.load_declaration(REPO_ROOT)
+        raw, data, _ = _live()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs").mkdir()
+            (root / "docs/ROADMAP.md").write_bytes(page)
+            backlog.check_page(root, declaration, data, raw)
+
+    def test_the_page_equals_what_generate_would_write(self):
+        self._check((REPO_ROOT / "docs/ROADMAP.md").read_bytes())
+
+    def test_a_page_with_one_byte_changed_is_stale(self):
+        page = bytearray((REPO_ROOT / "docs/ROADMAP.md").read_bytes())
+        page[-3] ^= 0x01
+        with self.assertRaises(backlog.BacklogError) as ctx:
+            self._check(bytes(page))
+        self.assertEqual(ctx.exception.code, "roadmap_stale")
 
 
 def _copy(data: dict) -> dict:

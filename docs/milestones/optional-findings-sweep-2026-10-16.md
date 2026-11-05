@@ -21,7 +21,7 @@ settings-and-telemetry, C4 auto-merge-release-wait, C5 signalhub-notifications, 
 automated-lifecycle-scenarios, C7 codex-reviewer, C8 usage-budget, C8b usage-limit-mid-job, C9
 orchestration-protocol-v1, C9b protocol-warn-status, C9c workflow-2-9-0-move, C9d
 installed-release-test-agnostic, C12a test-leftover-lifetime, D1 documentation-reorganisation.
-"FU n" is item n of the roadmap's [known follow-ups](../ROADMAP.md#known-follow-ups-carried-forward).
+"FU n" is item n of the roadmap's [known follow-ups](../roadmap-archive.md#known-follow-ups-carried-forward).
 "MT" is a Missing-tests entry.
 
 ## Result

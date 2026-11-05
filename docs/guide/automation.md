@@ -579,7 +579,7 @@ relies on a deny it has not seen work. The remainder: other Controller jobs keep
 under the shared runtime root (`reviews/<job>/claude-home/`, a `verify-*` scratch folder, and any copy a killed job
 left behind), and the tester can read them by absolute path; so can it read other credential stores such as
 `~/.ssh` or `~/.config/gh` by absolute path. Closing that needs a read allowlist and is recorded in the
-[roadmap](../ROADMAP.md#known-follow-ups-carried-forward) (follow-up 86). The tester's `summary` for a flow is cut at 2000
+[roadmap](../roadmap-archive.md#known-follow-ups-carried-forward) (follow-up 86). The tester's `summary` for a flow is cut at 2000
 characters (a marker states how many were omitted) where it enters the Controller, so the record and the findings file stay
 bounded; the flow's log file is not changed (it is the tester's own log, so it need not hold the omitted text). A `file://` origin of the real repository is read as a local
 path for the before-and-after comparison, the same as a plain path, with the authority part ignored as Git does; a

@@ -1055,10 +1055,10 @@ class ArgvAndSettingsTest(Fixture):
         self.assertIn("hello", reads[-1]["text"])
         self.assertTrue(all("text" not in a for a in reads[:-1]))
 
-    def test_the_guide_and_the_roadmap_name_the_runtime_root_remainder(self) -> None:
+    def test_the_guide_and_the_roadmap_archive_name_the_runtime_root_remainder(self) -> None:
         root = Path(__file__).resolve().parent.parent
         guide = " ".join((root / "docs/guide/automation.md").read_text().split())
-        roadmap = " ".join((root / "docs/ROADMAP.md").read_text().split())
+        roadmap = " ".join((root / "docs/roadmap-archive.md").read_text().split())
         self.assertIn("other Controller jobs keep copies of the same credential under the shared runtime root", guide)
         self.assertIn("(`reviews/<job>/claude-home/`, a `verify-*` scratch folder, and any copy a killed job left behind)",
                       guide)

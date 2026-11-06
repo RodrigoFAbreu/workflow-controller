@@ -254,7 +254,9 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   launch `job1` kill each other's fakes, which shows as `did not run`
   refusals and `-9` exits. `FakeLaunchTest` in `tests.test_review` and
   `tests.test_review_claude` adds the pid through `jid`, and the Codex worker
-  landing fixtures build theirs with `per_test_job_id`. Check a new test of
+  landing fixtures build theirs with `per_test_job_id`. A tag set by hand
+  does the same: the detached-descendant test in `RunnerTest` adds the pid to
+  its own. Check a new test of
   this kind with `taskset -c 0,1` and two or three copies started together.
 
 ## Documentation checks

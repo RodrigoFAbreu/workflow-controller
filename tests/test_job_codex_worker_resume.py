@@ -522,6 +522,7 @@ class KilledLandingFixture(LandingFixture):
         self.assertEqual(block["moved"], None if cause == "landing_unreadable" else moved)
         self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
         self.assertTrue(self.clone_kept())
+        self.assert_only_tree_and_sessions()
         self.assertEqual(self.refs(), "")
         return block
 
@@ -657,6 +658,7 @@ class LaunchedLandingTest(KilledLandingFixture):
     def test_a_launched_record_whose_worker_committed_does_not_land_and_names_the_clone(self) -> None:
         def launch(task, **options):
             self.after(Path(options["cwd"]))
+            self.populate_job_dir()
             raise KeyboardInterrupt
 
         with mock.patch.object(cw, "launch_codex_worker", launch), self.assertRaises(KeyboardInterrupt):
@@ -667,6 +669,7 @@ class LaunchedLandingTest(KilledLandingFixture):
         self.assertEqual(resumed["reconciliation_evidence"]["clone"], resumed["codex_worker"]["clone"]["path"])
         self.assertEqual(self.branch_tip(), self.base)
         self.assertTrue(self.clone_kept())
+        self.assert_only_tree_and_sessions()
         self.assertNotIn("landing", resumed["codex_worker"])
 
 

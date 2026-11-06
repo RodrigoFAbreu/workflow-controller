@@ -101,6 +101,21 @@ class LandingFixture(JobFixture):
                       if "codex-home/sessions" not in str(p.relative_to(base)) and p.relative_to(base) != Path("codex-home")
                       and not p.is_dir())
 
+    def populate_job_dir(self, job_id: str = "job1") -> None:
+        """Fill the job directory as the real launcher does: every directory and file it leaves beside the tree."""
+        base = self.job_dir(job_id)
+        for name in ("bin", "home", "scratch", "tmp", "codex-home/sessions"):
+            (base / name).mkdir(parents=True, exist_ok=True)
+        for name in ("last-message.md", "codex-home/config.toml", "codex-home/installation_id",
+                     "codex-home/models_cache.json", "codex-home/state_5.sqlite", "codex-home/sessions/rollout.jsonl"):
+            (base / name).write_text("x\n")
+
+    def assert_only_tree_and_sessions(self, job_id: str = "job1") -> None:
+        """What a kept clone leaves (D7): ``tree`` and ``codex-home/sessions`` alone."""
+        base = self.job_dir(job_id)
+        self.assertEqual(sorted(p.name for p in base.iterdir()), ["codex-home", "tree"])
+        self.assertEqual(sorted(p.name for p in (base / "codex-home").iterdir()), ["sessions"])
+
     def clone_kept(self, job_id: str = "job1") -> bool:
         return (self.job_dir(job_id) / "tree" / ".git").is_dir()
 
@@ -322,6 +337,7 @@ class DirectoryTest(LandingFixture):
 
     def test_an_exception_after_the_spawn_keeps_the_tree_and_names_it_in_the_record(self) -> None:
         def fake(task, **options):
+            self.populate_job_dir()
             options["on_spawn"](__import__("os").getpid(), __import__("os").getpgid(0))
             raise OSError("lost")
 
@@ -332,7 +348,9 @@ class DirectoryTest(LandingFixture):
         self.assertEqual(record["status"], job.STATUS_FAILED)
         self.assertEqual(record["reconciliation_evidence"]["code"], "OSError")
         self.assertTrue(self.clone_kept())
+        self.assert_only_tree_and_sessions()
         self.assertEqual(record["codex_worker"]["clone"]["path"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(record["reconciliation_evidence"]["clone"], record["codex_worker"]["clone"]["path"])
 
 
 class ProtocolLandingTest(unittest.TestCase):

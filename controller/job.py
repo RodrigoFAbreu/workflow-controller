@@ -3255,6 +3255,9 @@ def _reconcile_codex_worker(record: JobRecord, *, managed_repo: Any, runtime_roo
                             details=_reconciled_details(failed))
         return _reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime_root)
     reconciled = _reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    # The clone of an ended `LAUNCHED` record is kept as `tree` and the sessions alone (D7); the credentials were
+    # settled above, so the copy-back has run.
+    _settle_codex_worker_dir(runtime_root, record["job_id"], keep_tree=True)
     if reconciled.get("status") == STATUS_INTERRUPTED:
         # The clone is kept and named (H4e, D7): a worker that committed before the Controller was lost landed
         # nothing. A kill between `prepare` and the `clone` block leaves no record of it; the path follows from
@@ -8920,6 +8923,10 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
         if left is not None:
             block["tree_left"] = {"reason": left, "path": recovery.clone}
             block["clone_kept"] = True
+    else:
+        # A kept clone keeps `tree` and the sessions alone (D7), as the live refusal does; the credentials were
+        # settled by the caller before this call, so the copy-back has already run.
+        _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
     codex_block = record.get("codex_worker") if isinstance(record.get("codex_worker"), Mapping) else {}
     return {**record, "codex_worker": {**codex_block, "landing": block}}, recovery
 
@@ -8988,6 +8995,11 @@ def _run_codex_worker(
         if "worker_process" not in spawned:
             # The worker never ran (H4e, D7): nothing of it is worth keeping, and no record names the clone.
             _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+        else:
+            # It ran: the clone may hold commits, so `tree` alone is kept (credentials first, so the copy-back
+            # runs) and the record names it.
+            _settle_codex_credentials(record, runtime_root)
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
         if isinstance(exc, ControllerError) and "worker_process" not in spawned:
             worker_not_started(exc)
         else:
@@ -8996,7 +9008,10 @@ def _run_codex_worker(
                     **record,
                     "status": STATUS_FAILED,
                     "transition_verified": False,
-                    "reconciliation_evidence": {"code": type(exc).__name__, "message": str(exc)},
+                    "reconciliation_evidence": {
+                        "code": type(exc).__name__, "message": str(exc),
+                        **({"clone": clone} if "worker_process" in spawned
+                           and (clone := _codex_clone_path(record, runtime_root)) is not None else {})},
                     "updated_at": _now(),
                 }, event=_final_event(STATUS_FAILED), details={"error": type(exc).__name__})
                 _run_job_ended(run_id, job_id, STATUS_FAILED, failed)

@@ -304,7 +304,7 @@ option, exit code or gate is new, and nothing real reaches the branch.
 - **Cleanup.** The clone is removed through `runtime.remove_tree` before the job's terminal write on `landed`, `nothing`, an
   ordinary worker failure, a launcher refusal before the spawn and a `clone_failed`; the sessions the usage gate reads are kept.
   It is kept, and named in the record, after a refused landing and after an exception once the worker was spawned. A kept
-  clone is removed by the operator: `rm -rf` of the exact path in `reconciliation_evidence.clone`. There is no `runtime`
+  clone is removed by the operator: `rm -rf` of the exact path in `reconciliation_evidence.clone` (a record ended by a drifted `resume` or by `--abandon` before any landing recovery carries it in `codex_worker.clone.path` only). There is no `runtime`
   command and no retention or pruning ([Workers](workers.md#observing-workers)).
 - **Crash windows.** `resume` never fetches or merges. Over a `COMPLETED` Codex record it reads the refs and the tree and
   finishes the landing's bookkeeping: killed before the fetch or after it and before the merge, the leftover landing ref is

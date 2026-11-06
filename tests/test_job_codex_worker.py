@@ -387,7 +387,8 @@ class UnexpectedPathsTest(JobFixture):
             self.run_step()
         record = self.only_record()
         self.assertEqual(record["status"], job.STATUS_FAILED)
-        self.assertEqual(record["reconciliation_evidence"], {"code": "RuntimeError", "message": "boom"})
+        self.assertEqual(record["reconciliation_evidence"], {
+            "code": "RuntimeError", "message": "boom", "clone": record["codex_worker"]["clone"]["path"]})
         self.assertIn("worker_process", record)
 
     def test_a_controller_error_after_the_spawn_is_failed_not_worker_not_started(self) -> None:

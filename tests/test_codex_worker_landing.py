@@ -395,6 +395,75 @@ class FetchAndMergeRefusalTest(Fixture):
         self.assertUnchanged(before)
         self.assertEqual(self.intents, [commit])
 
+    def test_a_base_object_overlaid_in_the_clone_cannot_hide_a_gitlink_addition(self) -> None:
+        """I1 of the external round: the worker overwrites the loose object of the base's root tree under its own id
+        with a tree that already holds a gitlink, then commits a child whose tree holds that gitlink and an ordinary
+        change. Git does not verify an object's id on those reads, so in the clone the child's diff shows no gitlink;
+        the managed repository, which holds the authentic base tree, shows it."""
+        import zlib
+
+        def run(*args: str, stdin: str | None = None) -> str:
+            return subprocess.run(["git", "-C", str(self.clone), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                                  input=stdin, capture_output=True, text=True, check=True).stdout.strip()
+
+        src, ignore = run("rev-parse", f"{self.base}:src.txt"), run("rev-parse", f"{self.base}:.gitignore")
+        two = run("hash-object", "-w", "--stdin", stdin="two\n")
+        link = f"160000 commit {self.base}\tsub\n"
+        forged_tree = run("mktree", "--missing", stdin=f"100644 blob {ignore}\t.gitignore\n100644 blob {src}\tsrc.txt\n{link}")
+        child_tree = run("mktree", "--missing", stdin=f"100644 blob {ignore}\t.gitignore\n100644 blob {two}\tsrc.txt\n{link}")
+        forged = subprocess.run(["git", "-C", str(self.clone), "cat-file", "tree", forged_tree], capture_output=True,
+                                check=True).stdout
+        base_tree = run("rev-parse", f"{self.base}^{{tree}}")
+        # The clone arrives as a pack and Git prefers packed objects, so the worker first explodes the pack to loose
+        # objects, then replaces the base tree's.
+        for pack in sorted((self.clone / ".git" / "objects" / "pack").glob("*.pack")):
+            data = pack.read_bytes()
+            for sibling in pack.parent.glob(pack.stem + ".*"):
+                sibling.unlink()
+            subprocess.run(["git", "-C", str(self.clone), "unpack-objects", "-q"], input=data, check=True)
+        loose = self.clone / ".git" / "objects" / base_tree[:2] / base_tree[2:]
+        loose.parent.mkdir(parents=True, exist_ok=True)
+        loose.unlink(missing_ok=True)
+        loose.write_bytes(zlib.compress(b"tree %d\0" % len(forged) + forged))
+        child = run("commit-tree", child_tree, "-p", self.base, "-m", "child")
+        git(self.clone, "update-ref", f"refs/heads/{BRANCH}", child)
+        # Premise: the clone-side check no longer sees the gitlink.
+        self.assertFalse(gitrepo.commit_touches_submodule(self.clone, child, self.base))
+        before = self.snapshot()
+        result = self.land()
+        self.assertRefused(result, "submodule")
+        self.assertUnchanged(before)
+        self.assertTrue(self.clone.exists())
+        self.assertEqual(self.intents, [child])
+
+    def test_the_fetch_leaves_an_existing_submodule_alone_whatever_the_recursion_config(self) -> None:
+        """I2 of the external round: a submodule the base already holds, ``fetch.recurseSubmodules=true`` in the
+        managed repository and an upstream that advanced after the clone. The stack still lands, and the submodule's
+        refs are what they were."""
+        upstream = self.tmp / "upstream"
+        fixtures.git_init(upstream, f"--initial-branch={BRANCH}")
+        (upstream / "u.txt").write_text("u\n")
+        git(upstream, "add", "u.txt")
+        git(upstream, "commit", "-q", "-m", "u1")
+        git(self.root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(upstream), "sub")
+        git(self.root, "commit", "-q", "-m", "a submodule")
+        base = out(self.root, "rev-parse", "HEAD")
+        prepared = tree.prepare(self.managed, ws.WorkerLayout(self.runtime, "job2"), base)
+        self.clone = prepared.path
+        tip = self.commit("work.txt")
+        (upstream / "u.txt").write_text("u2\n")
+        git(upstream, "commit", "-q", "-am", "u2")
+        git(self.root, "config", "fetch.recurseSubmodules", "true")
+        git(self.root, "config", "submodule.recurse", "true")
+        sub = self.root / "sub"
+        refs_before = out(sub, "for-each-ref")
+        head_before = out(sub, "rev-parse", "HEAD")
+        result = self.land(prepared=prepared)
+        self.assertEqual((result.outcome, result.cause, result.tip), ("landed", None, tip), result.message)
+        self.assertEqual(out(sub, "for-each-ref"), refs_before)
+        self.assertEqual(out(sub, "rev-parse", "HEAD"), head_before)
+        self.assertEqual(out(self.root, "status", "--porcelain", "--untracked-files=all"), "")
+
     def test_a_planted_pack_objects_hook_is_refused_at_the_guard_before_any_fetch(self) -> None:
         self.commit()
         git(self.clone, "config", "--local", "uploadpack.packObjectsHook", f"touch {self.marker('pack')};")

@@ -278,6 +278,11 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
             if fetched != tip:
                 raise _refuse("tip_moved", f"the clone's branch moved between the checks and the fetch: {tip} was "
                               f"checked, {fetched} was fetched", evidence={"checked": tip, "fetched": fetched})
+            # I1 of the external round: the clone's object store is the worker's, and Git reads do not verify an
+            # object's id, so the clone-side checks above can be steered (a base object overlaid under its own
+            # name). The managed repository holds the authentic base and the fetch verified every object it took
+            # (``fsckObjects``), so the range is judged again here, where its ids are what they say.
+            state["commits"] = _check_range(managed_root, base, tip, read)
             state["merging"] = True
             try:
                 gitrepo.landing_merge(managed_root, tip, runner=read)

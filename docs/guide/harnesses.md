@@ -284,7 +284,10 @@ option, exit code or gate is new, and nothing real reaches the branch.
   with `merge --ff-only --no-overwrite-ignore` (`would_overwrite_ignored`, `fast_forward_failed`, `merge_left_tree_dirty`,
   `landing_unverified`, `landing_error`). Every write in the managed repository goes through one hardened option set
   (`gitrepo.LANDING_CONFIG`: no hook, no fsmonitor, no automatic maintenance), and the range checks read with the commit graph
-  off. A clone whose branch is the base lands `nothing`, a success. The check after the move wants the branch at the tip, `HEAD`
+  off. The clone's object store is the worker's and Git does not verify an object's id on those reads, so the range is checked
+  twice: in the clone before the fetch, and again in the managed repository after it, where the base is authentic and the fetch
+  verified every object it took. The fetch passes `--no-recurse-submodules`, so a submodule the base already holds is never
+  fetched into or updated, whatever the managed repository's `fetch.recurseSubmodules`. A clone whose branch is the base lands `nothing`, a success. The check after the move wants the branch at the tip, `HEAD`
   on it and a clean tree, so a range that removes a path from `.gitignore` lands and then ends `landing_unverified` with `moved`
   true: the files it stops ignoring are untracked. The hook suppression was measured against Git 2.56. A Git without `hook.*`
   keys ignores them harmlessly, and `core.hooksPath` then turns off the file hooks.

@@ -843,8 +843,8 @@ def landing_fetch(repo_root: Path, path: Path | str, branch: str, job_id: str, *
     """Fetch the clone's ``refs/heads/<branch>`` into ``refs/controller/landing/<job id>`` of ``repo_root``."""
     refspec = f"refs/heads/{branch}:{_landing_ref(job_id)}"
     check_landing_refspec(refspec)
-    _landing_git(repo_root, ["fetch", "--no-tags", "--no-write-fetch-head", "--", str(path), refspec], runner,
-                 fetch=True)
+    _landing_git(repo_root, ["fetch", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", "--",
+                             str(path), refspec], runner, fetch=True)
 
 
 def landing_merge(repo_root: Path, sha: str, *, runner: Runner | None = None) -> None:

@@ -60730,7 +60730,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -60878,12 +60878,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 36,
-      "last_transition": "2026-11-06T01:02:53Z",
+      "state_revision": 38,
+      "last_transition": "2026-11-06T01:33:20Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -61360,7 +61360,48 @@
               "at": "2026-11-05T21:56:19Z"
             }
           ]
+        },
+        "F-e7db8a8997d8": {
+          "digest": "e7db8a8997d894406346cdab322da008160d45d0b1f4e080f861a858616941f2",
+          "text": "**O1. The landing's fetch does not pass `--no-recurse-submodules`.** `gitrepo.landing_fetch` (`controller/gitrepo.py`) leaves submodule recursion to the managed repository's configuration. Measured through a real `land`: with a submodule at the base and `fetch.recurseSubmodules=true` in the managed config, the landing ended `landed`, and the submodule's `origin/main` advanced to a commit made in its upstream after the clone. The record says nothing of that write, which sits outside the \"one fast-forward of one branch\" that D3 and D4 describe. No hook fired, because the `-c` options reach the child fetch. A submodule whose URL is not a file path should turn every landing into `fetch_failed` under `GIT_ALLOW_PROTOCOL=file` (expected, not measured). Fix: add `--no-recurse-submodules` to the fetch's argv and pin it with a test on this arrangement.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T01:26:23Z"
+            }
+          ]
+        },
+        "F-246d6538a5f1": {
+          "digest": "246d6538a5f1137b350f92e4aac0b9ac7bf5ad3dc7cf873799422c8545eabf57",
+          "text": "**O2. Some endings keep a clone without putting its path in `reconciliation_evidence.clone`, the field the guides send the operator to.** `docs/guide/harnesses.md` and `docs/guide/workers.md` give `rm -rf` of the exact path in that field. Measured over a `LAUNCHED` record: `resume --abandon` writes evidence with no `clone` key and keeps the tree. When the kill fell between `prepare` and the `clone` block (the window D7 covers for `resume` by deriving the path), no record names the tree at all, which is what D7's removal-order rule exists to prevent. By reading, a drifted `resume` of a `LAUNCHED` record has the same gap (`_resume_drifted_protocol` applies the landing only to `COMPLETED`), and the exception after the spawn in `_run_codex_worker` writes only `code` and `message`, so its path is only in `codex_worker.clone.path`. Fix: add `_codex_clone_path` to the evidence on those three endings, with a test for each. The seam is dark and the window narrow, so nothing is lost yet.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T01:26:23Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "b35c20e6f790108d524efaa0dbff8cb6d8ec1bca6814e4a94c864e72923c3239",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-06T01:26:23Z",
+          "verdict_sha256": "1b2b84037b26d6fa38cf8e91543dfcf70f6a93962d3cd6cacb9ea5e9c5e7d10b",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

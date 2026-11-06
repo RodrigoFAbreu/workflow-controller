@@ -3145,7 +3145,10 @@ def _with_landing_evidence(evidence: dict, record: Mapping, recovery: codex_work
     if recovery is None or not recovery.refused:
         return evidence
     block = (record.get("codex_worker") or {}).get("landing") or {}
-    return {**evidence, "landing_cause": block.get("cause"), "clone": recovery.clone}
+    named = {**evidence, "landing_cause": block.get("cause"), "clone": recovery.clone}
+    if block.get("clone_removed"):
+        named["message"] = _CLONE_NOT_ON_DISK  # H4e leftovers, D2: `clone: null` says why, as a `resume` ending does
+    return named
 
 
 def _changed_scripts(recorded: Any, current: Mapping[str, str]) -> list[str]:
@@ -3295,6 +3298,10 @@ def _codex_clone_path(record: Mapping, runtime_root: Path) -> str | None:
     derived = codex_worker_sandbox.WorkerLayout(runtime_root, str(record.get("job_id"))).worktree
     return str(derived) if derived.exists() else None
 
+
+#: What a refused landing's record says when its clone is no longer on disk (H4e leftovers, D2): a path check cannot
+#: tell an earlier recovery's removal from the operator's.
+_CLONE_NOT_ON_DISK = "the clone is not on disk (an earlier recovery or the operator removed it)"
 
 #: ``reconciliation_evidence.code`` of a ``FINISHED`` (or other) Codex record that ends with its clone still on disk
 #: and has no evidence of its own to carry the path (H4e leftovers, D1).
@@ -9008,8 +9015,10 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
             # H4e leftovers, D2: the refusal comes from `recover`'s decision, which cannot know that an earlier
             # `resume` removed the tree; a path check is stateless and cannot tell that from the operator's removal.
             # The record says the clone is not on disk instead of that it is kept, and no stale path is left.
-            block.update({"clone_kept": False, "clone_removed": True, "clone": None})
-            recovery = dataclasses.replace(recovery, clone=None, landing=block)
+            block.update({"clone_kept": False, "clone_removed": True, "clone": None,
+                          "message": "; ".join(filter(None, (block.get("message"), _CLONE_NOT_ON_DISK)))})
+            recovery = codex_worker_landing.Recovery(block, recovery.cause, recovery.refused, recovery.delete_ref,
+                                                     recovery.remove_tree, None, recovery.message)
     codex_block = record.get("codex_worker") if isinstance(record.get("codex_worker"), Mapping) else {}
     return {**record, "codex_worker": {**codex_block, "landing": block}}, recovery
 
@@ -9017,10 +9026,8 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
 def _landing_refusal_evidence(block: Mapping, clone: str | None) -> dict:
     """The ``reconciliation_evidence`` of a refused landing: the code, the cause, the message and the clone's path
     (the operator removes it with ``rm -rf`` of exactly that path, ``docs/guide/workers.md``)."""
-    message = block.get("message") or f"the landing of the Codex worker's commits was refused ({block.get('cause')})"
-    if block.get("clone_removed"):
-        message += "; the clone is not on disk (an earlier recovery or the operator removed it)"
-    return {"code": CODEX_LANDING_REFUSED_CODE, "cause": block.get("cause"), "message": message,
+    return {"code": CODEX_LANDING_REFUSED_CODE, "cause": block.get("cause"), "message": block.get("message") or
+            f"the landing of the Codex worker's commits was refused ({block.get('cause')})",
             "clone": clone, "landing": dict(block)}
 
 

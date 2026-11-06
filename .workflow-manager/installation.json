@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "workflow_version": "2.25.7",
+  "workflow_version": "2.26.0",
   "profile": "full",
   "upstream": {
     "repository": "repflow-android",
@@ -14,13 +14,13 @@
   "source": {
     "kind": "package",
     "repository": "RodrigoFAbreu/workflow",
-    "archive": "workflow-2.25.7.tar.gz",
-    "sha256": "491c685b78db2ad1ff60f8242af231432b1b5fd8ca551c770c020a67676613fd",
+    "archive": "workflow-2.26.0.tar.gz",
+    "sha256": "29c4ad71a5942ef268ffc9673b6b541b52fb1e3ffecfa7527f74a0860bff24fc",
     "trust": "discovered",
     "from": "github:RodrigoFAbreu/workflow"
   },
   "installed_at": "2026-09-05T14:33:32Z",
-  "updated_at": "2026-11-05T18:46:17Z",
+  "updated_at": "2026-11-06T06:33:25Z",
   "managed": {
     ".claude/commands/accept-milestone.md": {
       "sha256": "8eb653d3352bb4dba6efc4fb637a12b8d16ad71b857a33a366f13b7851e8f8f7",
@@ -119,7 +119,7 @@
       "executable": false
     },
     ".claude/commands/satisfy-gate.md": {
-      "sha256": "5c4a3b0d6f0c7d2a9cff32f0a6fe612e7eed53cb779160340d8fe99060678633",
+      "sha256": "97c363072c49ad20e0aef6ccf6906daabdbdf89ebf30aac246c3b54925a057b0",
       "executable": false
     },
     ".github/workflows/workflow-conformance.yml": {
@@ -147,7 +147,7 @@
       "executable": false
     },
     "docs/ai-workflow/ORCHESTRATION_PROTOCOL.md": {
-      "sha256": "d27a88c5a472a0566fdbae67ceebe68a2da92de2a41a330c9e1fd2da7957012f",
+      "sha256": "1aa26da8df01b0965cc4e778d99ab6c70d444720dc8d4a5e3409b0c720486d99",
       "executable": false
     },
     "docs/ai-workflow/PLAN_REVIEW_WORKFLOW.md": {
@@ -307,7 +307,7 @@
       "executable": false
     },
     "scripts/workflow_gate_policy_test.py": {
-      "sha256": "d97cee1decc0c53e0892358121efe09faa5e1cfe6847f22b7971d6a9945e49a8",
+      "sha256": "cd9797852444b3de9f8d12764819dbddfefa267afff941e61bfc73ea14925e97",
       "executable": false
     },
     "scripts/workflow_integration_test.py": {
@@ -315,11 +315,11 @@
       "executable": false
     },
     "scripts/workflow_protocol.py": {
-      "sha256": "83ec837c966af3662503c2142d66b0a970919abb1131c40037e67e220e89f941",
+      "sha256": "75cb5ef0fdb41150ef1fdc975343e3907314aa24abbd12f8ee0f4e85de9f7461",
       "executable": false
     },
     "scripts/workflow_protocol_test.py": {
-      "sha256": "d489bc313c2c714aabce890af750db1311d5bee71921ad1247204024c8f0e862",
+      "sha256": "f26f512fb8f4acd992d3482f77ecd419d8c84ed008b454c3ecdf4098e7c0a550",
       "executable": false
     },
     "scripts/workflow_retention.py": {
@@ -327,7 +327,7 @@
       "executable": false
     },
     "scripts/workflow_state.py": {
-      "sha256": "f94404a814be1ff8706a0670ce490128b4c8963ae633f7be5a72fe0d71f4b585",
+      "sha256": "3ba5ebbd826068ebb86598868e5b100ac130aad7ce3892d41c81792b20b8d0bb",
       "executable": false
     },
     "scripts/workflow_state_completion_obligations_test.py": {

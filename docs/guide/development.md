@@ -246,6 +246,16 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
 - **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.
+- **Job ids in tests that spawn tagged processes.** A job id is the
+  ownership tag, and the cleanup at the end of a launch kills every process
+  of the user whose environment carries it. A test that spawns a fake worker
+  or reviewer therefore has to launch an id of its own: two copies of the
+  suite at once (two pinned runs, for example) that
+  launch `job1` kill each other's fakes, which shows as `did not run`
+  refusals and `-9` exits. `FakeLaunchTest` in `tests.test_review` and
+  `tests.test_review_claude` adds the pid through `jid`, and the Codex worker
+  landing fixtures build theirs with `per_test_job_id`. Check a new test of
+  this kind with `taskset -c 0,1` and two or three copies started together.
 
 ## Documentation checks
 

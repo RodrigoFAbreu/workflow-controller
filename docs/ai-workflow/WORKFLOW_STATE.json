@@ -62060,14 +62060,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-leftovers-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-leftovers-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 6,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "733b940832c9e2cfdc344f5df77117076fc56700",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP2",
+      "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -62076,6 +62076,10 @@
         "CP2": {
           "status": "COMPLETE",
           "start_commit": "3161945a123dc4ac222b752e8e0b28edbf306903"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "e84b9ab0de56906f205cccaab158fe6979ad64ac"
         }
       },
       "current_bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
@@ -62204,8 +62208,8 @@
           "external": 0
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-11-06T08:55:58Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-06T09:05:48Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -20257,6 +20257,26 @@ _ACCEPTANCE_REPORT_NOT_CHECKED = [
 ]
 
 
+def _acceptance_reachability_blocker(repo_root: Path, work_item_id: str, work_item: dict) -> dict | None:
+    """`/accept-milestone` step 2a's first bullet, read from stored state and the
+    tree alone: `{code, detail}` for `work_item_terminal`, `registry_unresolvable` or
+    `phase_not_reachable`, else `None`. Shared by `--acceptance-gate` and
+    `--satisfy-acceptance` (workflow-2.27.0), so the report and the command agree."""
+    phase = work_item.get("phase")
+    if phase == "MILESTONE_COMPLETE":
+        return {"code": "work_item_terminal", "detail": f"{work_item_id} is already MILESTONE_COMPLETE"}
+    try:
+        is_terminal, outstanding = resolve_own_registry_completion_status(repo_root, work_item)
+    except (RegistryCoverageError, StalePlanApprovalRegistryReadError) as exc:
+        return {"code": "registry_unresolvable", "detail": str(exc)}
+    if not milestone_complete_gate_reachable(phase=phase, is_terminal=is_terminal):
+        detail = f"the phase is {phase}; the acceptance stage needs AWAITING_FUNCTIONAL_REVIEW"
+        if not is_terminal:
+            detail += f" and every checkpoint complete (outstanding: {outstanding})"
+        return {"code": "phase_not_reachable", "detail": detail}
+    return None
+
+
 def acceptance_gate_report(repo_root: Path, state: dict, work_item_id: str) -> dict:
     """`--acceptance-gate` (workflow-2.26.0): what `/satisfy-gate acceptance`
     would find before it queries GitHub, from stored state and the tree alone.
@@ -20267,19 +20287,9 @@ def acceptance_gate_report(repo_root: Path, state: dict, work_item_id: str) -> d
     gate = gate_policy.evaluate_gate(repo_root, state, work_item_id, "acceptance")
     requirements = gate.get("requirements") or []
     blockers: list[dict] = []
-    if phase == "MILESTONE_COMPLETE":
-        blockers.append({"code": "work_item_terminal", "detail": f"{work_item_id} is already MILESTONE_COMPLETE"})
-    else:
-        try:
-            is_terminal, outstanding = resolve_own_registry_completion_status(repo_root, work_item)
-        except (RegistryCoverageError, StalePlanApprovalRegistryReadError) as exc:
-            blockers.append({"code": "registry_unresolvable", "detail": str(exc)})
-        else:
-            if not milestone_complete_gate_reachable(phase=phase, is_terminal=is_terminal):
-                detail = f"the phase is {phase}; the acceptance stage needs AWAITING_FUNCTIONAL_REVIEW"
-                if not is_terminal:
-                    detail += f" and every checkpoint complete (outstanding: {outstanding})"
-                blockers.append({"code": "phase_not_reachable", "detail": detail})
+    reachability = _acceptance_reachability_blocker(repo_root, work_item_id, work_item)
+    if reachability is not None:
+        blockers.append(reachability)
     if gate.get("mode") == "human":
         blockers.append({"code": "human_gate", "detail": "acceptance is a human gate; a person decides it"})
     else:
@@ -20317,6 +20327,31 @@ def acceptance_gate_report(repo_root: Path, state: dict, work_item_id: str) -> d
     }
 
 
+class _AcceptanceCliRefusal(Exception):
+    """An error before the acceptance CLIs call anything: a class name and a message."""
+
+    def __init__(self, name: str, message: str):
+        super().__init__(message)
+        self.name = name
+
+
+def _acceptance_cli_context(work_item_id: str) -> tuple[Path, dict]:
+    """The repository root and the validated state both acceptance flags start from;
+    `_AcceptanceCliRefusal` for a missing, malformed or unknown state, and any other
+    exception (`CorruptJsonError`, a run outside Git) for the callers' class-name fallback."""
+    repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+    state = _load_json(repo_root / DEFAULT_STATE_PATH)  # CorruptJsonError reaches the class-name fallback
+    if state is None:
+        raise _AcceptanceCliRefusal("StateMissing", f"{DEFAULT_STATE_PATH} does not exist")
+    if not isinstance(state, dict) or not isinstance(state.get("work_items"), dict):
+        raise _AcceptanceCliRefusal("StateMalformed", f"{DEFAULT_STATE_PATH} is not an object holding a work_items object")
+    if work_item_id not in state["work_items"]:
+        raise _AcceptanceCliRefusal("UnknownWorkItem", work_item_id)
+    if not isinstance(state["work_items"][work_item_id], dict):
+        raise _AcceptanceCliRefusal("StateMalformed", f"work_items[{work_item_id!r}] is not an object")
+    return repo_root, state
+
+
 def _acceptance_gate_cli(work_item_id: str) -> int:
     """`--acceptance-gate`: print `acceptance_gate_report` as one JSON document
     (exit 0 whenever a report is printed, ready or not), or one `{"error", "message"}`
@@ -20326,30 +20361,84 @@ def _acceptance_gate_cli(work_item_id: str) -> int:
         return 1
 
     try:
-        repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
-        state = _load_json(repo_root / DEFAULT_STATE_PATH)  # CorruptJsonError reaches the class-name fallback below
-        if state is None:
-            return fail("StateMissing", f"{DEFAULT_STATE_PATH} does not exist")
-        if not isinstance(state, dict) or not isinstance(state.get("work_items"), dict):
-            return fail("StateMalformed", f"{DEFAULT_STATE_PATH} is not an object holding a work_items object")
-        if work_item_id not in state["work_items"]:
-            return fail("UnknownWorkItem", work_item_id)
-        if not isinstance(state["work_items"][work_item_id], dict):
-            return fail("StateMalformed", f"work_items[{work_item_id!r}] is not an object")
+        repo_root, state = _acceptance_cli_context(work_item_id)
         report = acceptance_gate_report(repo_root, state, work_item_id)
+    except _AcceptanceCliRefusal as exc:
+        return fail(exc.name, str(exc))
     except Exception as exc:  # the contract is JSON, never a traceback
         return fail(type(exc).__name__, str(exc))
     print(json.dumps(report, sort_keys=True, indent=2))
     return 0
 
 
+class AcceptancePreflightError(Exception):
+    """`--satisfy-acceptance` found the stage's step 2a phase or registry check
+    unmet before anything was queried or written; `code` is the report's blocker code."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
+
+
+def _utc_now_stamp() -> str:
+    import datetime
+
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _state_file_digest(repo_root: Path) -> str | None:
+    try:
+        return hashlib.sha256((repo_root / DEFAULT_STATE_PATH).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _satisfy_acceptance_cli(work_item_id: str, *, now: Callable[[], str] | None = None, run=None, resolve=None) -> int:
+    """`--satisfy-acceptance` (workflow-2.27.0): the act of `/satisfy-gate acceptance`
+    as one plain command. Makes step 2a's phase and registry check (the library does
+    not), then calls `satisfy_acceptance_gate` -- one `state_transaction`, nothing
+    else -- and prints `{record, trailer}` (exit 0), or one `{"error", "message",
+    "state_changed"[, "code"]}` object (exit 1). It takes no lock of its own, makes no
+    commit and writes no file besides the state file. `now`, `run` and `resolve` are
+    test seams. `state_changed` compares the state file's digest before the pre-flight
+    with the one after the failure."""
+    before: str | None = None
+    repo_root: Path | None = None
+
+    def fail(name: str, message: str, code: str | None = None) -> int:
+        changed = repo_root is not None and _state_file_digest(repo_root) != before
+        body = {"error": name, "message": message, "state_changed": changed}
+        if code is not None:
+            body["code"] = code
+        print(json.dumps(body, sort_keys=True))
+        return 1
+
+    try:
+        repo_root, state = _acceptance_cli_context(work_item_id)
+        before = _state_file_digest(repo_root)
+        blocker = _acceptance_reachability_blocker(repo_root, work_item_id, state["work_items"][work_item_id])
+        if blocker is not None:
+            raise AcceptancePreflightError(blocker["code"], blocker["detail"])
+        stamp = now() if now is not None else _utc_now_stamp()
+        result = satisfy_acceptance_gate(repo_root, work_item_id, now=stamp, run=run, resolve=resolve)
+    except _AcceptanceCliRefusal as exc:
+        return fail(exc.name, str(exc))
+    except Exception as exc:  # the contract is JSON, never a traceback
+        code = getattr(exc, "code", None)
+        return fail(type(exc).__name__, str(exc), code if isinstance(code, str) else None)
+    print(json.dumps(result, sort_keys=True, indent=2))
+    return 0
+
+
 def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
-    """Read-only CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0): print
+    """CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0), read-only except `--satisfy-acceptance`: print
     `plan_review_publication_status` for one work item as a single JSON
     object -- the contract Controller consumes instead of re-deriving the
     table. Rows 4d and 6 print `{"error": <name>, "message": ...}` and exit
-    1. Writes nothing. `--finding-dispositions` (workflow-2.14.0) is the second,
-    equally read-only option, and `--acceptance-gate` (workflow-2.26.0) the third."""
+    1. That option writes nothing. `--finding-dispositions` (workflow-2.14.0) is the second,
+    equally read-only option, and `--acceptance-gate` (workflow-2.26.0) the third.
+    `--satisfy-acceptance` (workflow-2.27.0) is the fourth and the first that writes:
+    through `state_transaction`, as `satisfy_acceptance_gate` does."""
     import argparse
 
     parser = argparse.ArgumentParser(description=_plan_review_publication_status_cli.__doc__)
@@ -20357,7 +20446,10 @@ def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
     group.add_argument("--plan-review-publication-status", metavar="WORK_ITEM_ID")
     group.add_argument("--finding-dispositions", metavar="WORK_ITEM_ID")
     group.add_argument("--acceptance-gate", metavar="WORK_ITEM_ID")
+    group.add_argument("--satisfy-acceptance", metavar="WORK_ITEM_ID")
     args = parser.parse_args(argv)
+    if args.satisfy_acceptance is not None:  # before the shared `git rev-parse`, like the report
+        return _satisfy_acceptance_cli(args.satisfy_acceptance)
     if args.acceptance_gate is not None:  # before the shared `git rev-parse`; an empty id is not "absent"
         return _acceptance_gate_cli(args.acceptance_gate)
     repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())

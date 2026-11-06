@@ -5632,5 +5632,370 @@ class TestLatestCheckRun(unittest.TestCase):
         self.assertIn("of another job of the same workflow with the same `name:`", text)
 
 
+class TestSatisfyAcceptanceCommand(unittest.TestCase):
+    """workflow-2.27.0: `workflow_state.py --satisfy-acceptance <id>`, the completion as one plain command."""
+
+    def setUp(self):
+        self.r = TestAcceptanceGateReport(methodName="test_a_ready_item_reports_every_requirement_met")
+        self.r.setUp()
+        self.addCleanup(shutil.rmtree, self.r.scratch, True)
+
+    # -- helpers -------------------------------------------------------------
+
+    @staticmethod
+    def files(root: Path) -> dict:
+        """Every file outside `.git`: path to bytes (directories included as markers)."""
+        import hashlib
+        return {str(p.relative_to(root)): "dir" if p.is_dir() else hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(Path(root).rglob("*")) if ".git" not in p.parts}
+
+    @staticmethod
+    def tree_without_lock(root: Path) -> dict:
+        out = TestSatisfyAcceptanceCommand.files(root)
+        for key in [k for k in out if k == ".ai-review/runtime" or k.startswith(".ai-review/runtime/WORKFLOW_STATE.lock")]:
+            del out[key]
+        return out
+
+    def call(self, ev, records=None, *, work_item_id=WI, cwd=None, raises=None, resolve=None, now_value=None):
+        """Run the CLI function in-process in `cwd` (default the repository). Returns (exit, parsed stdout, queries)."""
+        import contextlib as cl
+        import io
+        import os
+
+        queries: list = []
+        body = json.dumps(records if records is not None else [pr_record(ev.anchor)])
+
+        def run(argv, timeout):
+            queries.append(argv)
+            if raises is not None:
+                raise raises
+            return body
+
+        out = io.StringIO()
+        old = os.getcwd()
+        os.chdir(cwd or ev.root)
+        try:
+            with cl.redirect_stdout(out):
+                code = ws._satisfy_acceptance_cli(work_item_id, now=lambda: now_value or "2026-11-06T10:00:00Z",
+                                                  run=run, resolve=resolve or (lambda r: dict(FAKE_GH)))
+        finally:
+            os.chdir(old)
+        return code, json.loads(out.getvalue()), queries
+
+    def library(self, ev, records=None, now_value="2026-11-06T10:00:00Z"):
+        """`satisfy_acceptance_gate` on a copy of the repository with the same `now`."""
+        copy_root = self.r.scratch / "copy"
+        shutil.rmtree(copy_root, ignore_errors=True)
+        shutil.copytree(ev.root, copy_root, symlinks=True)
+        g.clear_caches()
+        body = json.dumps(records if records is not None else [pr_record(ev.anchor)])
+        try:
+            result = ws.satisfy_acceptance_gate(copy_root, WI, now=now_value, run=lambda a, t: body,
+                                                resolve=lambda r: dict(FAKE_GH))
+        except Exception as exc:  # noqa: BLE001
+            return None, exc, copy_root
+        return result, None, copy_root
+
+    # -- S1: parity with the Python path --------------------------------------
+
+    def test_s1_the_command_equals_the_python_path_in_six_states(self):
+        def disposed(ev):
+            self.r.fixture(ev, "partial")
+            keys = sorted(ev.item()["optional_findings"])
+            self.r.records.write_dispositions(ev, {k: {"disposition": "fixed"} for k in keys})
+
+        cases = {
+            "ready": (lambda ev: self.r.fixture(ev, "ready"), None),
+            "disposed": (disposed, None),
+            "red": (lambda ev: self.r.fixture(ev, "ready"),
+                    lambda ev: [pr_record(ev.anchor, decision="CHANGES_REQUESTED", reviews=changes_requested(ev.anchor))]),
+            "human": (lambda ev: self.r.fixture(ev, "human"), None),
+            "unmet": (lambda ev: self.r.fixture(ev, "fresh"), None),
+            "missing": (lambda ev: self.r.fixture(ev, "missing"), None),
+        }
+        for name, (setup, records_of) in cases.items():
+            with self.subTest(name), AcceptanceRepo() as ev:
+                setup(ev)
+                records = records_of(ev) if records_of else None
+                result, refusal, copy_root = self.library(ev, records)
+                code, out, _ = self.call(ev, records)
+                self.assertEqual(self.files(ev.root), self.files(copy_root))
+                if refusal is None:
+                    self.assertEqual((code, out), (0, result))
+                    self.assertEqual(out["trailer"], ws.acceptance_satisfied_by_trailer(out["record"]))
+                    self.assertEqual(ev.item()["phase"], "MILESTONE_COMPLETE")
+                else:
+                    self.assertEqual(code, 1)
+                    self.assertEqual((out["error"], out["message"]), (type(refusal).__name__, str(refusal)))
+                    if name == "red":
+                        self.assertIn("the item was reopened for remediation", out["message"])
+
+    # -- S2: no write ----------------------------------------------------------
+
+    def test_s2_a_refusal_before_the_call_writes_nothing_and_never_queries(self):
+        cases = {"early": ("IMPLEMENTING", "phase_not_reachable"),
+                 "review": ("AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "phase_not_reachable"),
+                 "terminal": ("MILESTONE_COMPLETE", "work_item_terminal")}
+        for name, (phase, code_expected) in cases.items():
+            with self.subTest(name), AcceptanceRepo() as ev:
+                self.r.fixture(ev, "ready")
+                ev.set_state(phase=phase)
+                g.clear_caches()
+                before = (self.tree_without_lock(ev.root), self.r.refs(ev.root))
+                code, out, queries = self.call(ev)
+                self.assertEqual(before, (self.tree_without_lock(ev.root), self.r.refs(ev.root)))
+                self.assertEqual(code, 1)
+                self.assertEqual(sorted(out), ["code", "error", "message", "state_changed"])
+                self.assertEqual((out["error"], out["code"], out["state_changed"]),
+                                 ("AcceptancePreflightError", code_expected, False))
+                self.assertEqual(queries, [])
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            (ev.root / "docs/ai-workflow/registry" / f"{WI}-registry.json").unlink()
+            g.clear_caches()
+            before = self.tree_without_lock(ev.root)
+            code, out, queries = self.call(ev)
+            self.assertEqual((code, out["code"], out["state_changed"], queries), (1, "registry_unresolvable", False, []))
+            self.assertEqual(before, self.tree_without_lock(ev.root))
+
+    def test_s2_a_forge_refusal_and_a_missing_disposition_write_nothing(self):
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            before = (self.tree_without_lock(ev.root), self.r.refs(ev.root))
+            code, out, queries = self.call(ev, raises=forge.ForgeUnavailableError("gh is not installed"))
+            self.assertEqual((code, out["error"], out["code"], out["state_changed"]),
+                             (1, "ForgeUnavailableError", "forge_unavailable", False))
+            self.assertEqual(len(queries), 1)
+            self.assertEqual(before, (self.tree_without_lock(ev.root), self.r.refs(ev.root)))
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "missing")
+            before = (self.tree_without_lock(ev.root), self.r.refs(ev.root))
+            code, out, queries = self.call(ev)
+            self.assertEqual((code, out["error"], out["state_changed"], len(queries)),
+                             (1, "UndispositionedFindingsError", False, 1))
+            for key in ev.item()["optional_findings"]:
+                self.assertIn(key, out["message"])
+            self.assertEqual(before, (self.tree_without_lock(ev.root), self.r.refs(ev.root)))
+
+    def test_s2_every_error_before_the_call_is_a_json_object_and_changes_nothing(self):
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            state_path = ev.root / STATE_REL
+            good = state_path.read_text()
+            cases = [("unknown", lambda: None, "nope", "UnknownWorkItem"),
+                     ("empty", lambda: None, "", "UnknownWorkItem"),
+                     ("corrupt", lambda: state_path.write_text("{"), WI, "CorruptJsonError"),
+                     ("list", lambda: state_path.write_text("[]"), WI, "StateMalformed"),
+                     ("object", lambda: state_path.write_text("{}"), WI, "StateMalformed"),
+                     ("missing", lambda: state_path.unlink(), WI, "StateMissing")]
+            for name, damage, work_item_id, expected in cases:
+                with self.subTest(name):
+                    state_path.write_text(good)
+                    damage()
+                    before = (self.tree_without_lock(ev.root), self.r.refs(ev.root))
+                    code, out, queries = self.call(ev, work_item_id=work_item_id)
+                    self.assertEqual((code, out["error"], out["state_changed"], queries), (1, expected, False, []))
+                    self.assertEqual(before, (self.tree_without_lock(ev.root), self.r.refs(ev.root)))
+            outside = Path(tempfile.mkdtemp(dir=self.r.scratch))
+            code, out, queries = self.call(ev, cwd=outside)
+            self.assertEqual((code, out["error"], out["state_changed"], queries), (1, "CalledProcessError", False, []))
+
+    def test_s2_the_default_timestamp_is_the_documented_utc_format(self):
+        """The command's own clock (no injected `now`) stores `%Y-%m-%dT%H:%M:%SZ` in the record."""
+        import contextlib as cl
+        import io
+        import os
+
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            body = json.dumps([pr_record(ev.anchor)])
+            out = io.StringIO()
+            old = os.getcwd()
+            os.chdir(ev.root)
+            try:
+                with cl.redirect_stdout(out):
+                    code = ws._satisfy_acceptance_cli(WI, run=lambda a, t: body, resolve=lambda r: dict(FAKE_GH))
+            finally:
+                os.chdir(old)
+            self.assertEqual(code, 0)
+            stamp = json.loads(out.getvalue())["record"]["evaluated_at"]
+            self.assertRegex(stamp, r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
+            self.assertEqual(ev.item()["acceptance_satisfaction"]["evaluated_at"], stamp)
+            self.assertRegex(ws._utc_now_stamp(), r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
+
+    # -- S3: the answer ---------------------------------------------------------
+
+    def test_s3_success_prints_exactly_record_and_trailer(self):
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            code, out, _ = self.call(ev)
+            self.assertEqual((code, sorted(out)), (0, ["record", "trailer"]))
+            self.assertEqual(out["record"], ev.item()["acceptance_satisfaction"])
+            self.assertEqual(out["trailer"], f"policy:{out['record']['policy_digest'][:12]}")
+
+    def test_s3_a_gate_refusal_reports_that_the_fact_was_stored(self):
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "fresh")
+            before = (ev.root / STATE_REL).read_bytes()
+            code, out, queries = self.call(ev)
+            self.assertEqual((code, sorted(out)), (1, ["error", "message", "state_changed"]))
+            self.assertEqual((out["error"], out["state_changed"]), ("GateNotSatisfiableError", True))
+            self.assertIn("functional_flows_passed", out["message"])
+            self.assertIn("Only the pull-request fact the query read was stored", out["message"])
+            self.assertNotEqual((ev.root / STATE_REL).read_bytes(), before)
+            self.assertEqual(ev.item()["phase"], "AWAITING_FUNCTIONAL_REVIEW")
+            self.assertEqual(ev.item()["gate_evidence"]["pr"]["head"], ev.anchor)
+
+    # -- S4: discipline -----------------------------------------------------------
+
+    def test_s4_one_transaction_no_commit_no_other_file(self):
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "missing")
+            keys = sorted(ev.item()["optional_findings"])
+            self.r.records.write_dispositions(ev, {k: {"disposition": "fixed"} for k in keys})
+            g.clear_caches()
+            before_files, before_refs = self.tree_without_lock(ev.root), self.r.refs(ev.root)
+            entered = []
+            real = ws.state_transaction
+
+            def counting(root, mutator):
+                entered.append(1)
+                return real(root, mutator)
+
+            ws.state_transaction = counting
+            try:
+                code, out, _ = self.call(ev)
+            finally:
+                ws.state_transaction = real
+            self.assertEqual((code, len(entered)), (0, 1))
+            after_files = self.tree_without_lock(ev.root)
+            changed = sorted(k for k in set(before_files) | set(after_files) if before_files.get(k) != after_files.get(k))
+            self.assertEqual(changed, [STATE_REL])
+            self.assertEqual(before_refs, self.r.refs(ev.root))
+            self.assertFalse((ev.root / "docs/milestones/completed" / f"{WI}-findings.md").exists())
+
+    # -- S5: interface ------------------------------------------------------------
+
+    def test_s5_the_flag_is_in_the_exclusive_group_and_the_old_flags_are_unchanged(self):
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            for other in ("--acceptance-gate", "--finding-dispositions", "--plan-review-publication-status"):
+                ran = self.r.cli(ev.root, "--satisfy-acceptance", WI, other, WI)
+                self.assertEqual((ran.returncode, ran.stdout), (2, ""), other)
+                self.assertIn("not allowed with argument", ran.stderr)
+            self.assertEqual(self.r.cli(ev.root, "--satisfy-acceptance").returncode, 2)
+            before = self.tree_without_lock(ev.root)
+            ran = self.r.cli(ev.root, "--satisfy-acceptance", "")
+            self.assertEqual((ran.returncode, json.loads(ran.stdout)["error"]), (1, "UnknownWorkItem"))
+            self.assertEqual(before, self.tree_without_lock(ev.root))
+            # Dispatched before the shared `git rev-parse`: outside Git the class-name fallback, never a traceback.
+            ran = self.r.cli(Path(tempfile.mkdtemp(dir=self.r.scratch)), "--satisfy-acceptance", WI)
+            out = json.loads(ran.stdout)
+            self.assertEqual((ran.returncode, out["error"], out["state_changed"], ran.stderr),
+                             (1, "CalledProcessError", False, ""))
+            self.assertEqual(sorted(out), ["error", "message", "state_changed"])
+            state = ev.state()
+            report = ws.finding_dispositions_report(ev.root, state, WI)
+            expected = json.dumps({"findings": report, "skeleton": ws.finding_dispositions_skeleton(report, WI)},
+                                  sort_keys=True, indent=2) + "\n"
+            self.assertEqual(self.r.cli(ev.root, "--finding-dispositions", WI).stdout, expected)
+            status = ws.plan_review_publication_status(ev.root, state, WI)
+            expected = json.dumps({k: v for k, v in status.items() if not k.startswith("_")}, sort_keys=True) + "\n"
+            self.assertEqual(self.r.cli(ev.root, "--plan-review-publication-status", WI).stdout, expected)
+            gate = ws.acceptance_gate_report(ev.root, state, WI)
+            self.assertEqual(self.r.cli(ev.root, "--acceptance-gate", WI).stdout,
+                             json.dumps(gate, sort_keys=True, indent=2) + "\n")
+
+    # -- S6: the real resolve_gh ----------------------------------------------------
+
+    def test_s6_without_gh_and_with_an_unsafe_gh_the_real_resolver_refuses_and_writes_nothing(self):
+        import os
+
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "ready")
+            bare = self.r.scratch / "bare"
+            bare.mkdir(mode=0o755)
+            (bare / "git").symlink_to(shutil.which("git"))
+            before = self.tree_without_lock(ev.root), self.r.refs(ev.root)
+            env = dict(os.environ, PATH=str(bare), PYTHONDONTWRITEBYTECODE="1")
+            ran = subprocess.run([sys.executable, str(self.r.SCRIPT), "--satisfy-acceptance", WI], cwd=ev.root,
+                                 env=env, capture_output=True, text=True)
+            out = json.loads(ran.stdout)
+            self.assertEqual((ran.returncode, out["code"], out["state_changed"]), (1, "forge_unavailable", False))
+            self.assertEqual(before, (self.tree_without_lock(ev.root), self.r.refs(ev.root)))
+            unsafe = Path(tempfile.mkdtemp(dir=self.r.scratch))
+            (unsafe / "git").symlink_to(shutil.which("git"))
+            shutil.copy(self.r.trap_dir / "gh", unsafe / "gh")
+            (unsafe / "gh").chmod(0o755)
+            env = dict(os.environ, PATH=str(unsafe), PYTHONDONTWRITEBYTECODE="1")
+            ran = subprocess.run([sys.executable, str(self.r.SCRIPT), "--satisfy-acceptance", WI], cwd=ev.root,
+                                 env=env, capture_output=True, text=True)
+            out = json.loads(ran.stdout)
+            self.assertEqual((ran.returncode, out["code"], out["state_changed"]), (1, "forge_undecidable", False))
+            self.assertEqual(before, (self.tree_without_lock(ev.root), self.r.refs(ev.root)))
+            self.assertEqual(self.r.trap_log.read_text(), "")
+
+    # -- S7: the command text ---------------------------------------------------------
+
+    def test_s7_the_command_text_names_the_flag_after_the_report_and_states_the_boundaries(self):
+        raw = (REPO_ROOT / ".claude" / "commands" / "satisfy-gate.md").read_text()
+        text = " ".join(raw.split())
+        self.assertLess(raw.index("--acceptance-gate"), raw.index("--satisfy-acceptance"))
+        self.assertLess(raw.index("--satisfy-acceptance"), raw.index("satisfy_acceptance_gate"))
+        sentence = "the flag does not run it"
+        self.assertIn(sentence, text)
+        self.assertLess(text.index("preflight-accept"), text.index("--satisfy-acceptance"))
+        self.assertLess(text.index(sentence), text.index("python3 scripts/workflow_state.py --satisfy-acceptance"))
+        for pinned in ("state_changed", "workflow_state.satisfy_acceptance_gate", "workflow_gate_policy.evaluate_gate",
+                       "assert_finding_dispositions_recorded", "apply_acceptance_satisfaction",
+                       "does not commit", "never worked around by hand", "state_writer: true"):
+            self.assertIn(pinned, text)
+        self.assertNotIn("until its own plain", text)
+        self.assertIn("steps 4 and 5 below stay the worker's own edits", text)
+        self.assertNotIn("steps 3 to 5 below", text)
+        self.assertIn("Any other `state_changed: true` means another writer changed the state", text)
+        for line in raw.splitlines():
+            if "--satisfy-acceptance" in line:
+                self.assertNotIn("python3 -I", line)
+
+    def test_s7_the_documented_line_runs_as_written_and_refuses_the_early_state(self):
+        match = re.search(r"^(python3 scripts/workflow_state\.py --satisfy-acceptance <work-item-id>)$",
+                          (REPO_ROOT / ".claude" / "commands" / "satisfy-gate.md").read_text(), re.M)
+        self.assertIsNotNone(match)
+        import shlex
+        argv = shlex.split(match.group(1).replace("<work-item-id>", WI))
+        argv[0] = sys.executable
+        with AcceptanceRepo() as ev:
+            self.r.fixture(ev, "early")
+            before = self.tree_without_lock(ev.root)
+            ran = self.r.cli(ev.root, argv=argv)
+            self.assertNotIn("ModuleNotFoundError", ran.stderr)
+            out = json.loads(ran.stdout)
+            self.assertEqual((ran.returncode, out["code"], out["state_changed"]), (1, "phase_not_reachable", False))
+            self.assertEqual(before, self.tree_without_lock(ev.root))
+            self.assertEqual(self.r.trap_log.read_text(), "")
+
+    # -- S8: the shared pre-flight -----------------------------------------------------
+
+    def test_s8_the_report_and_the_command_call_one_function(self):
+        import inspect
+        self.assertTrue(callable(ws._acceptance_reachability_blocker))
+        self.assertIn("_acceptance_reachability_blocker(", inspect.getsource(ws.acceptance_gate_report))
+        self.assertIn("_acceptance_reachability_blocker(", inspect.getsource(ws._satisfy_acceptance_cli))
+        self.assertNotIn("milestone_complete_gate_reachable", inspect.getsource(ws._satisfy_acceptance_cli))
+        with AcceptanceRepo() as ev:
+            for phase, expected in (("IMPLEMENTING", "phase_not_reachable"), ("MILESTONE_COMPLETE", "work_item_terminal")):
+                ev.set_state(phase=phase)
+                g.clear_caches()
+                blocker = ws._acceptance_reachability_blocker(ev.root, WI, ev.item())
+                self.assertEqual(blocker["code"], expected)
+                self.assertEqual(sorted(blocker), ["code", "detail"])
+                report = ws.acceptance_gate_report(ev.root, ev.state(), WI)
+                self.assertIn(blocker, report["blockers"])
+            ev.set_state(phase="AWAITING_FUNCTIONAL_REVIEW")
+            g.clear_caches()
+            self.assertIsNone(ws._acceptance_reachability_blocker(ev.root, WI, ev.item()))
+
+
 if __name__ == "__main__":
     unittest.main()

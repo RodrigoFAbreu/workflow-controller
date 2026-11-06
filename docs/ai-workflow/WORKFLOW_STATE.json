@@ -62060,7 +62060,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-leftovers-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-leftovers-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 6,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -62174,10 +62174,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "bc939220ef93dd8c43264938f62cfd49be68b851c5bc2c63837128297e4dbc45",
-        "approved_review_content_id": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+        "reviewed_bundle_id": "9648204f6b4c798152b388addbfc064d7fa8f84892e07598f5116e50b446153c",
+        "approved_review_content_id": "29820399607f75d828a066d260b633448181deb79721ca2b1c82cf4478694fe8",
         "review_content_manifest": [
           {
             "path": "controller/job.py",
@@ -62201,7 +62201,7 @@
             "path": "docs/guide/development.md",
             "exists": true,
             "mode": "100644",
-            "blob": "559bf7fc28039b550b295347d814cdd304830759"
+            "blob": "0cb076be8148479af7549548b562049508f5a5f8"
           },
           {
             "path": "docs/guide/harnesses.md",
@@ -62237,7 +62237,7 @@
             "path": "tests/test_review.py",
             "exists": true,
             "mode": "100644",
-            "blob": "727744f4a589540cccb693f3aefd2b99b251aa20"
+            "blob": "d86e7f03ea0b7dfa7a910fb22da801fc78ece20c"
           },
           {
             "path": "tests/test_review_claude.py",
@@ -62246,11 +62246,11 @@
             "blob": "14ce3ece34c68bf461ba7bc3639c8b1013470d2c"
           }
         ],
-        "reviewed_content_commit": "13ed9cd7c0e058a619357074ba80bbf8562dca41",
+        "reviewed_content_commit": "00e9c6f8d1e4d04d9d39f8731ed93f22b12d0b08",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-06T10:33:16Z",
+        "recorded_at": "2026-11-06T11:05:27Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -62280,24 +62280,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "review_content_id": "29820399607f75d828a066d260b633448181deb79721ca2b1c82cf4478694fe8",
             "ledger": {
               "local": {
-                "bundle_id": "bc939220ef93dd8c43264938f62cfd49be68b851c5bc2c63837128297e4dbc45",
+                "bundle_id": "9648204f6b4c798152b388addbfc064d7fa8f84892e07598f5116e50b446153c",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "06369fb0ea891cb3f7a47b81a7c227135eb1b1804c3b2634ca74b67524ad9959",
-                "ledger_entry_sha256": "5e9b7ddaaf02e821c81113f1f07b37806003cac5bdfecc22288067b3903ec6b4",
+                "round": 2,
+                "verdict_sha256": "7bea53d62fac378efbb0ef6afa78ea18ebed3f74faf0a9940a341b6ed610ade2",
+                "ledger_entry_sha256": "b8148f2c5ee2d17c1fef9171b101d9c8bf1179c8ed69bcb3e849d0048cfe30c4",
                 "run_ref": "session:local .ai-review/workflow-controller-h4e-leftovers/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "bc939220ef93dd8c43264938f62cfd49be68b851c5bc2c63837128297e4dbc45",
+                "bundle_id": "9648204f6b4c798152b388addbfc064d7fa8f84892e07598f5116e50b446153c",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "5caa924356090259cf3f80366f72a3ef4b6baecc2ba7088f430de0bace55205f",
-                "ledger_entry_sha256": "b893220c00ed9bbf678458caa2f594abff77e62567f7d7aec82066bc48214874",
-                "run_ref": "codex:20261106T102807Z-78c58133",
+                "round": 2,
+                "verdict_sha256": "5401cafeeeb184a0584fa882812340857a9c8720520441cd30550d4f14c6a23e",
+                "ledger_entry_sha256": "98e7d08aabfcac3203ef30da6590cd3f4e6d6ae2b7044dfac4c5439ceeaf495f",
+                "run_ref": "codex:20261106T110127Z-66bf85bd",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -62307,7 +62307,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-06T10:33:16Z",
+          "evaluated_at": "2026-11-06T11:05:27Z",
           "workflow_release": "2.26.0"
         }
       },
@@ -62341,12 +62341,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 34,
-      "last_transition": "2026-11-06T10:42:52Z",
+      "state_revision": 37,
+      "last_transition": "2026-11-06T11:05:27Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -62639,26 +62639,40 @@
               "at": "2026-11-06T10:27:40Z"
             }
           ]
+        },
+        "F-220d1af8c773": {
+          "digest": "220d1af8c7738eab7f76fb3de1d016d1132ae2f5d541ce7752b455269bb92238",
+          "text": "**O1. The bundle's own records still describe revision 1.** `REVIEW_REQUEST.md` is headed \"revision 1\" and gives content head `13ed9cd` and generation record `9c8cf76`; `TEST_RESULTS.md` is headed \"implementation revision 1\" at `13ed9cd`; and `IMPLEMENTATION_SUMMARY.md` has the `implementation_revision: 2` line but no mention of `7fd6748`. The bounded fix and its checks appear only in `docs/ACTIVE_MILESTONE.md`, so nothing in the bundle reports a full-suite run after the fix. The command `/apply-functional-review` asks only for the revision and content id lines to be refreshed, so this is a gap in the procedure and not a slip in this round. This review's own runs below supply the missing evidence.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "29820399607f75d828a066d260b633448181deb79721ca2b1c82cf4478694fe8",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T11:00:59Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+        "review_content_id": "29820399607f75d828a066d260b633448181deb79721ca2b1c82cf4478694fe8",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "bc939220ef93dd8c43264938f62cfd49be68b851c5bc2c63837128297e4dbc45",
+          "bundle_id": "9648204f6b4c798152b388addbfc064d7fa8f84892e07598f5116e50b446153c",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-06T10:27:40Z",
-          "verdict_sha256": "06369fb0ea891cb3f7a47b81a7c227135eb1b1804c3b2634ca74b67524ad9959",
+          "round": 2,
+          "completed_at": "2026-11-06T11:00:59Z",
+          "verdict_sha256": "7bea53d62fac378efbb0ef6afa78ea18ebed3f74faf0a9940a341b6ed610ade2",
           "run_ref": "session:local .ai-review/workflow-controller-h4e-leftovers/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "bc939220ef93dd8c43264938f62cfd49be68b851c5bc2c63837128297e4dbc45",
+          "bundle_id": "9648204f6b4c798152b388addbfc064d7fa8f84892e07598f5116e50b446153c",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-06T10:31:22Z",
-          "verdict_sha256": "5caa924356090259cf3f80366f72a3ef4b6baecc2ba7088f430de0bace55205f",
-          "run_ref": "codex:20261106T102807Z-78c58133",
+          "round": 2,
+          "completed_at": "2026-11-06T11:03:48Z",
+          "verdict_sha256": "5401cafeeeb184a0584fa882812340857a9c8720520441cd30550d4f14c6a23e",
+          "run_ref": "codex:20261106T110127Z-66bf85bd",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },

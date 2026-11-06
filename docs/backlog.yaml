@@ -437,7 +437,7 @@ items:
     detail: docs/items/workflow-controller-h4e.md
   - id: workflow-controller-h4e-leftovers
     title: "Codex worker clone: the review leftovers of H4e (#306)"
-    status: next
+    status: done
     order: 75
     depends_on: [workflow-controller-h4e]
     detail: docs/items/workflow-controller-h4e-leftovers.md

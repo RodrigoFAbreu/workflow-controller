@@ -62174,7 +62174,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "bc939220ef93dd8c43264938f62cfd49be68b851c5bc2c63837128297e4dbc45",
         "approved_review_content_id": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
@@ -62345,8 +62345,8 @@
           "external": 1
         }
       },
-      "state_revision": 32,
-      "last_transition": "2026-11-06T10:33:16Z",
+      "state_revision": 33,
+      "last_transition": "2026-11-06T10:40:30Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -62660,6 +62660,108 @@
           "verdict_sha256": "5caa924356090259cf3f80366f72a3ef4b6baecc2ba7088f430de0bace55205f",
           "run_ref": "codex:20261106T102807Z-78c58133",
           "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "97afea12986acc6a6d29fbaf5145255e3cf1fe93",
+            "ran_at": "2026-11-06T10:39:58Z",
+            "summary": {
+              "checklist_blob": "a9488a9e4c090a0d21e759fa6ad4fb95476e5a92",
+              "text": "Both modules: Ran 28 tests, OK (landing and worker)."
+            },
+            "log_digest": "898520bdc0307676bf881f7da1a05278770e6ab86fd7f0675a59d6a2141b0a61",
+            "run_ref": "controller:20261106T103704Z-1dc5f240",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "recorded_at": "2026-11-06T10:39:58Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "97afea12986acc6a6d29fbaf5145255e3cf1fe93",
+            "ran_at": "2026-11-06T10:39:58Z",
+            "summary": {
+              "checklist_blob": "a9488a9e4c090a0d21e759fa6ad4fb95476e5a92",
+              "text": "test_job_codex_worker_resume: Ran 77 tests, OK."
+            },
+            "log_digest": "13de0edc5ed80c38328808e1561bb7b4d2a344554b560b635b5503877ecc5e4e",
+            "run_ref": "controller:20261106T103704Z-1dc5f240",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "recorded_at": "2026-11-06T10:39:58Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "97afea12986acc6a6d29fbaf5145255e3cf1fe93",
+            "ran_at": "2026-11-06T10:39:58Z",
+            "summary": {
+              "checklist_blob": "a9488a9e4c090a0d21e759fa6ad4fb95476e5a92",
+              "text": "In the clone as given, 1 failure in each module (127 and 39 tests): the writable build/ is a symlink, so the tests compare the realpath (writable/build/...) with the clone path (clone/build/...). This is a sandbox limit. In a copy with build/ replaced by a real directory, test_review ran 127 tests OK and test_review_claude ran 39 tests OK."
+            },
+            "log_digest": "47be0e340d50bd0805d92953ab76fb410f7a32bb2643cc49369662abaa006868",
+            "run_ref": "controller:20261106T103704Z-1dc5f240",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "recorded_at": "2026-11-06T10:39:58Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "failed",
+            "head": "97afea12986acc6a6d29fbaf5145255e3cf1fe93",
+            "ran_at": "2026-11-06T10:39:58Z",
+            "summary": {
+              "checklist_blob": "a9488a9e4c090a0d21e759fa6ad4fb95476e5a92",
+              "reason": "defect",
+              "text": "Three concurrent runs under taskset -c 0,1, made in a copy with real directories, did not all end OK. Across two attempts (flow-4.log, flow-4-run1..3.log) some copies failed: attempt 1 had one copy with 1 failure and one with 2, and attempt 2 had one copy with 2 failures. The failing test was tests.test_review RunnerTest.test_a_detached_descendant_is_killed_and_the_deadline_holds_with_an_inherited_pipe (test_review.py:1657-1666), failing at assertTrue(result.timed_out). It uses fixed ownership tags (tTrue and tFalse) in the environment of the process it launches. A parallel copy's cleanup kills every process of the user carrying that tag, so the child dies before the timeout. This is the same #306 class of defect, left in a test that was not given an id of its own. Other failures in the first attempt were not inspected. No -9 or 'did not run' messages were checked for in the logs beyond this test. taskset is available."
+            },
+            "log_digest": "940019bac9cb2713eeaf6a06fd132a75eca68d91463db51d0adcf3f3eb3f5690",
+            "run_ref": "controller:20261106T103704Z-1dc5f240",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "recorded_at": "2026-11-06T10:39:58Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "97afea12986acc6a6d29fbaf5145255e3cf1fe93",
+            "ran_at": "2026-11-06T10:39:58Z",
+            "summary": {
+              "checklist_blob": "a9488a9e4c090a0d21e759fa6ad4fb95476e5a92",
+              "text": "check_docs rc=0; backlog check rc=0 with {\"declared\": true, \"fresh\": true, \"roadmap\": \"docs/ROADMAP.md\"}."
+            },
+            "log_digest": "a794c646fb41ce3f08431601918b76e8c77b27098490f25d748d571193923539",
+            "run_ref": "controller:20261106T103704Z-1dc5f240",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "recorded_at": "2026-11-06T10:39:59Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "97afea12986acc6a6d29fbaf5145255e3cf1fe93",
+            "ran_at": "2026-11-06T10:39:59Z",
+            "summary": {
+              "checklist_blob": "a9488a9e4c090a0d21e759fa6ad4fb95476e5a92",
+              "text": "Guides state: reconciliation_evidence.clone and CodexCloneKept for FINISHED (harnesses.md 299-314, workers.md 657, common-problems.md 48); clone_removed true / clone null; the remaining kill window between the terminal and naming writes (harnesses.md 314, workers.md 657). The development.md bullet explains why ids are needed (the ownership tag, cleanup kills other copies' fakes). I did not read the rest of the bullet, so the taskset -c 0,1 instruction is not confirmed from the output."
+            },
+            "log_digest": "478edb97edda08e6f91b5e71676cd10506884d5acc97b7f8a2a830e3f1e8529e",
+            "run_ref": "controller:20261106T103704Z-1dc5f240",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "6b9b0e01c946803aa220b1354d4d2561e048a753525bf32ce3866d83369ae1d8",
+            "recorded_at": "2026-11-06T10:39:59Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
         }
       }
     }

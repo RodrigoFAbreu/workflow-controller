@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e-leftovers",
+  "requirements": {
+    "R1": {
+      "description": "Every Codex worker ending that leaves a clone on disk names its path in reconciliation_evidence.clone (a LAUNCHED reconciliation, a drifted resume, an abandon, a tree_left ending), proved by a test per ending, and the guides say so",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "A recovery whose clone was already removed reports clone_kept false and clone_removed true instead of a kept clone, proved by the window (b) test with the branch moved",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The landing tests use per-test job ids so overlapping tests cannot share an ownership tag",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R4": {
+      "description": "The drifted resume of a LAUNCHED Codex record has a test of its own, first against the unchanged behaviour and then asserting the clone is named",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R5": {
+      "description": "The sandbox-only FakeLaunchTest failures are reproduced and their cause is recorded and acted on by cause, or reported open with the evidence",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

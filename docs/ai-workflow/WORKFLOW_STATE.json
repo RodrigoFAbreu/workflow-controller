@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-h4e-leftovers",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -62049,6 +62049,405 @@
         },
         "evaluated_at": "2026-11-06T06:03:59Z",
         "workflow_release": "2.25.7"
+      }
+    },
+    "workflow-controller-h4e-leftovers": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4e-leftovers",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_H4E_LEFTOVERS_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-leftovers-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-leftovers-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "733b940832c9e2cfdc344f5df77117076fc56700",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+        "approved_review_content_id": "c2c80b7f8f8a46241c4007bbf9acdc5c9147b8ebb4b031c26d2fd192db07246b",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_H4E_LEFTOVERS_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d2973e84d32001360ca0fb327645e4550eb2f6d6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e-leftovers-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f9f41eda92a13325b6d5e9cde43a34234a067a19"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4e-leftovers-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "17e91cf61a3363a4bb71a7e03394aaf936d66228"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-06T08:33:03Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c2c80b7f8f8a46241c4007bbf9acdc5c9147b8ebb4b031c26d2fd192db07246b",
+            "ledger": {
+              "local": {
+                "bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "ae15b49c14b41f98c3f773dd2e0604214c15b6a8ff90071f033366107399ad8e",
+                "ledger_entry_sha256": "58205d24ef309ef9252baf33c2403ae05e33b6a6ea39bd7a53ad8562f7395aa8",
+                "run_ref": "session:local .ai-review/workflow-controller-h4e-leftovers/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "d04b162217ffedf5c553980fe46309ff08bc4aa493b00e10ce8e33b7feae99e5",
+                "ledger_entry_sha256": "278c58310c976efd179a6d6b33e58dca5c1644c58a90a9786cdc39daea1f80d2",
+                "run_ref": "codex:20261106T082747Z-4061604a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-06T08:33:03Z",
+          "workflow_release": "2.26.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "c2c80b7f8f8a46241c4007bbf9acdc5c9147b8ebb4b031c26d2fd192db07246b",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-06T08:27:07Z",
+          "verdict_sha256": "ae15b49c14b41f98c3f773dd2e0604214c15b6a8ff90071f033366107399ad8e",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e-leftovers/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-06T08:30:03Z",
+          "verdict_sha256": "d04b162217ffedf5c553980fe46309ff08bc4aa493b00e10ce8e33b7feae99e5",
+          "run_ref": "codex:20261106T082747Z-4061604a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 6,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 22,
+      "last_transition": "2026-11-06T08:33:03Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-06T08:20:27Z",
+        "consumed": {
+          "review_content_id": "c1b4d7c420cae7cf9b1966663d3057b074867c5cf424d21cc7b36c8ebed25973",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "c2c80b7f8f8a46241c4007bbf9acdc5c9147b8ebb4b031c26d2fd192db07246b",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "c2c80b7f8f8a46241c4007bbf9acdc5c9147b8ebb4b031c26d2fd192db07246b",
+          "bundle_id": "ecbfaf95654835bca2f6b6b75aeead0343f4570e261ab80fe780d0096d4e058a",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "026d77169cb00c217e8391346b96d322cbd9ad9c178c67652d9fe84c6dd2e6be",
+        "7e4079f04f189236b98be62248f710f3868d3c2638dfcb0c1787c032f0f7de83",
+        "85f00d84472bcc2066aea0086b1893f9404a04ba65c3ad7774171b51fce387a2",
+        "a83d59f5a04e4b54905f0c15b3bca1386a27a485b7976a866a327f9716ec98eb",
+        "c1b4d7c420cae7cf9b1966663d3057b074867c5cf424d21cc7b36c8ebed25973"
+      ],
+      "optional_findings": {
+        "F-20b407bf5bcc": {
+          "digest": "20b407bf5bccaad50cc5b665e39345f55596d18fb692eb1d47b027e21ba961a3",
+          "text": "**O1. D2 names a window that cannot reach this refusal.** `decide` returns from its branch (d), a final `landed` or `nothing` block, before reading the branch and never refuses (`controller/codex_worker_landing.py`). Only (b) leads to a removal followed by a refused second recovery. Drop \"(d)\" from D2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a83d59f5a04e4b54905f0c15b3bca1386a27a485b7976a866a327f9716ec98eb",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:38:41Z"
+            }
+          ]
+        },
+        "F-e12f5d6aecaf": {
+          "digest": "e12f5d6aecaf962e4d3c01cdf33ea00558eea4f2b184193155647b6f9f6fcf17",
+          "text": "**O2. D2's message claims a cause it cannot know.** A stateless path check cannot tell an earlier recovery from an operator's `rm -rf`, which the guides tell operators to do. Say the clone \"is not on disk (an earlier recovery or the operator removed it)\", and consider whether `clone_removed: true` should be worded the same way in the guide.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a83d59f5a04e4b54905f0c15b3bca1386a27a485b7976a866a327f9716ec98eb",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:38:41Z"
+            }
+          ]
+        },
+        "F-b4805cdf4e7c": {
+          "digest": "b4805cdf4e7c0f9c3d10a85932dd8380b64fa0616a053b43bb3eedb27210ae6f",
+          "text": "**O3. Naming stays a second write on the `LAUNCHED` path.** `_reconcile_codex_worker` writes the terminal record, then settles, then names. A kill between those leaves a terminal record with no name and no settle, and `resume` does not return to it. H4e's D7 moved removal before the terminal write for this reason. Fixing it may be too large for this item, but then D6 should keep `codex_worker.clone.path` as the stated fallback for that window.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a83d59f5a04e4b54905f0c15b3bca1386a27a485b7976a866a327f9716ec98eb",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:38:41Z"
+            }
+          ]
+        },
+        "F-c99a9bc7a4fa": {
+          "digest": "c99a9bc7a4fa8c9985e2cd52ee65f69dc1967f224edb8540727e27f57effd7bb",
+          "text": "**O4. Name the stale guide sentence in D6.** `docs/guide/harnesses.md:315` says \"A `LAUNCHED` record ends `INTERRUPTED` naming its clone\", which is not true of the other endings D1 now covers.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a83d59f5a04e4b54905f0c15b3bca1386a27a485b7976a866a327f9716ec98eb",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:38:41Z"
+            }
+          ]
+        },
+        "F-3c4329b0af62": {
+          "digest": "3c4329b0af6253842fa8ad2ff1aef38b235bab564a1772ed8f62c7e684c5b84b",
+          "text": "**O5. D5 attributes both messages to one function without separating the modules.** Both messages are Codex-side refusals (`controller/review.py:1303` is the composing helper `_preflight` calls, `:1868` is `_preflight`), while `tests.test_review_claude.FakeLaunchTest` launches with `harness_name=\"claude\"` and neither message appears in that module. The report should record which module raised which message. D5 should also say what \"the implementer's sandbox\" was at `02269f8`, because the reproduction depends on it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "a83d59f5a04e4b54905f0c15b3bca1386a27a485b7976a866a327f9716ec98eb",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:38:41Z"
+            }
+          ]
+        },
+        "F-dccb8bc632d6": {
+          "digest": "dccb8bc632d6b5d8e55c4ad6f46503173a64fb8b60573dc76cb6868c305e6e48",
+          "text": "**O1. \"No ending names a clone from the record alone\" is wider than what D1 changes.** `_run_codex_worker`'s spawned branch (`controller/job.py:9020`) and the live refusal (`:9314`, through `clone_path`) still name the recorded path without looking. Neither can be reached with the tree gone in any way I could find, since both settle with `keep_tree=True` just before. Either route them through the helper or limit the sentence to the `INTERRUPTED` branch.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7e4079f04f189236b98be62248f710f3868d3c2638dfcb0c1787c032f0f7de83",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:46:08Z"
+            }
+          ]
+        },
+        "F-fef8a08daca2": {
+          "digest": "fef8a08daca286b0ae8dbb90a436656baaae200e795324b3ff3bcd1ee4b37997",
+          "text": "**O2. D6's window is wider than \"the `LAUNCHED` path\".** Site 2 (the raise) names in a second write after the `FAILED` persist. Site 3 does too unless the evidence is threaded into `_reconcile_completed` and `_reconcile_protocol`, which persist their own ending. D6 should word the window to cover these, and say that on site 3 `codex_worker.landing.tree_left.path` also holds the path.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7e4079f04f189236b98be62248f710f3868d3c2638dfcb0c1787c032f0f7de83",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:46:08Z"
+            }
+          ]
+        },
+        "F-2fe0b76bf4d5": {
+          "digest": "2fe0b76bf4d5f340c019159bde7fb06d6befbe5c0219e03474265a2f3c0d9a48",
+          "text": "**O3. D2 sets `clone: null` in the evidence but does not say what happens to the landing block's own `clone`.** `_unreadable` puts the recorded path in the block (`controller/codex_worker_landing.py:354`), so a `landing_unreadable` recovery with the tree gone would read `clone_kept: false`, `clone_removed: true` beside a stale `clone` path. D2 should clear it and CP2 should test it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7e4079f04f189236b98be62248f710f3868d3c2638dfcb0c1787c032f0f7de83",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:46:08Z"
+            }
+          ]
+        },
+        "F-f395a227f74f": {
+          "digest": "f395a227f74fd0557fe1d4b9f446d2006225611e7a53bda42e3c75a99d378cf1",
+          "text": "**O4. CP2's Done when asks sites 4 and 5 for a `FINISHED` result they cannot have.** `_resume_drifted_protocol` and `_abandon_mark_failed` always end `FAILED`. \"Where the ending can be `FINISHED`\" rescues the sentence, but naming sites 1, 3 and 6 is clearer.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7e4079f04f189236b98be62248f710f3868d3c2638dfcb0c1787c032f0f7de83",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:46:08Z"
+            }
+          ]
+        },
+        "F-122d43df6179": {
+          "digest": "122d43df61797de3eb76844971e7a0fccc0ad439326500fb056d0abeb3697f47",
+          "text": "**O1. D3's closing sentence is wrong about the other fixtures.** It says \"The other Codex job fixtures keep `job1`: they have no landing and no kill\". `OrphanFixture` already has its own per-test form and is the class that kills. The sentence is true only of `JobFixture`'s direct users in `tests/test_job_codex_worker.py`. Name those instead.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "85f00d84472bcc2066aea0086b1893f9404a04ba65c3ad7774171b51fce387a2",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:55:30Z"
+            }
+          ]
+        },
+        "F-6f4d70fc17ca": {
+          "digest": "6f4d70fc17ca56a88d5c83168cb40906c7e22b0df6f1fbc72900d64656c17b5d",
+          "text": "**O2. Add a guard for I1's trap.** A short comment at `LandingFixture.next_id` saying the id must pass `_LANDING_JOB_ID` would stop a later edit copying the neighbouring form back.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "85f00d84472bcc2066aea0086b1893f9404a04ba65c3ad7774171b51fce387a2",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:55:30Z"
+            }
+          ]
+        },
+        "F-6a30cd32beae": {
+          "digest": "6a30cd32beae0df5df4d0449810a7d9a7e6c90a406756c1166d2c9fea4c2b754",
+          "text": "**O3. D6 could name the field list.** `docs/guide/harnesses.md:299` lists the landing block's fields, and `clone_removed` belongs there too. D6's general wording allows this but does not name it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "85f00d84472bcc2066aea0086b1893f9404a04ba65c3ad7774171b51fce387a2",
+              "verdict": "REVISE",
+              "at": "2026-11-06T07:55:30Z"
+            }
+          ]
+        },
+        "F-062226b415d5": {
+          "digest": "062226b415d56840bd55bd81a305ac7094245aebd09f2b14fab31aaa83b11c2a",
+          "text": "**O1. D2 does not say whether its \"not on disk\" message replaces the decision's own message or joins it.** A refused recovery's `message` carries the reason for the refusal: `the managed branch is at <sha>, neither the base nor the intent's tip`, `verify_move`'s reason, or `the branch could not be read: ...` (`controller/codex_worker_landing.py`). A prototype that replaced it lost the branch position from both the evidence and the landing block. CP2 should keep the decision's message and add the clone sentence to it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "026d77169cb00c217e8391346b96d322cbd9ad9c178c67652d9fe84c6dd2e6be",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T08:07:38Z"
+            }
+          ]
+        },
+        "F-77c72526608c": {
+          "digest": "77c72526608c231afd4aa5fd427dc9a4784e3fa8f7f7940e45df1cbe55b04754",
+          "text": "**O2. CP1's \"`self.job_id`\" is `self.fixture.job_id` in the composed classes.** `ProtocolKilledLandingTest` is a plain `unittest.TestCase`, so the check that CP1's Done when states has to read the property through its fixture. The meaning is clear; the implementer only has to spell it that way.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "026d77169cb00c217e8391346b96d322cbd9ad9c178c67652d9fe84c6dd2e6be",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T08:07:38Z"
+            }
+          ]
+        },
+        "F-ca1835c49848": {
+          "digest": "ca1835c49848b987e21d8500eff34ef55ca9b0e283a22cb2c20aacb19e883204",
+          "text": "**O1. The 40-to-24 rewrite left two statements about the leading underscore untrue.** CP1 names `test_an_ordinary_worker_failure_with_a_clean_range_is_landed_and_judged_by_the_reconciliation` as a name whose last 24 characters start with `_`; they are `ed_by_the_reconciliation` (it was true of the last 40). `test_a_lander_that_raises_is_a_landing_error_refusal` is a true example (`_a_landing_error_refusal`). D3's \"13 of the 74 names\" is the round-3 measurement at 40 characters, stated as if of 24; counting `def test_` in the two modules at this base gives 12 of 73 at 24 characters and 13 of 73 at 40. The `t-` prefix makes the rule safe either way, so nothing breaks, but a unit check written from the sentence would assert something false.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "c1b4d7c420cae7cf9b1966663d3057b074867c5cf424d21cc7b36c8ebed25973",
+              "verdict": "REVISE",
+              "at": "2026-11-06T08:18:07Z"
+            }
+          ]
+        },
+        "F-899f634f332b": {
+          "digest": "899f634f332be6433f2dc5500bc8943ed21df3387df032199c161d06a312379d",
+          "text": "**O1. CP1's \"`job_id` and the id the job is launched with agree for each\" reads as covering fixtures that have no `job_id`.** The sentence follows an enumeration that includes `OrphanFixture` users, while D3 and D4 say `OrphanFixture` has no `job_id` attribute and D3 adds none. A check written literally over every enumerated test raises `AttributeError` on those 22 tests. D3's own text settles the intent (the agreement is for `LandingFixture` and `KilledLandingFixture` users, and `OrphanFixture` users are checked on the launched id's form and uniqueness), so the implementer can apply it without a plan change; nothing else depends on it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "c2c80b7f8f8a46241c4007bbf9acdc5c9147b8ebb4b031c26d2fd192db07246b",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T08:27:07Z"
+            }
+          ]
+        }
       }
     }
   }

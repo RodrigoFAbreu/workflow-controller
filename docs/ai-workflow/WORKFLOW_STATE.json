@@ -60730,7 +60730,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -60878,12 +60878,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 1
         }
       },
-      "state_revision": 39,
-      "last_transition": "2026-11-06T01:51:51Z",
+      "state_revision": 40,
+      "last_transition": "2026-11-06T02:14:36Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -61386,6 +61386,48 @@
               "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
               "verdict": "APPROVE",
               "at": "2026-11-06T01:26:23Z"
+            }
+          ]
+        },
+        "F-3b7bc0aad374": {
+          "digest": "3b7bc0aad374eeb10170b8dc20c01dd40fc1086178a58ba10e3d117c2df83a8a",
+          "text": "**O1. Window (b) removes the tree before anything durable says so, so a second crash can report a kept clone that is gone.** `_apply_codex_landing` persists nothing (a listed difference from D7, with the claim that \"each window is idempotent if a kill comes first\"). Measured: after a kill past the merge, a `resume` interrupted in `_reconcile_completed` leaves the record `COMPLETED`, the block still `started` and the tree removed; a stray file then makes the next `resume` end `landing_unverified` with `clone_kept: true` and `reconciliation_evidence.clone` naming a path that does not exist. No commit is lost, because they have landed, and it takes a double fault. Persisting the block before the removal, as D7 orders it, would send the second `resume` through window (d).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
+              "verdict": "REVISE",
+              "at": "2026-11-06T02:14:36Z"
+            }
+          ]
+        },
+        "F-3cf7da8b1774": {
+          "digest": "3cf7da8b1774a2b148a6f5bbeb69173442d1351e0bceccd688f9127b2c62bdb6",
+          "text": "**O2. `TEST_RESULTS.md` and `REVIEW_REQUEST.md` report the previous round's run.** `TEST_RESULTS.md` still opens \"implementation revision 1\" with head `67db6bf`, and `REVIEW_REQUEST.md` says \"Full suite PASS at `67db6bf`, 5771 tests\" for a revision 2 bundle. The only record of the post-fix run is one line in `IMPLEMENTATION_SUMMARY.md`, with no head, plan or wall time. This round reran the suite, so the claim holds; the document does not show it. `REVIEW_PROTOCOL.md` enforces this consistency at the plan stage only.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
+              "verdict": "REVISE",
+              "at": "2026-11-06T02:14:36Z"
+            }
+          ]
+        },
+        "F-0773bc9fa9cc": {
+          "digest": "0773bc9fa9ccc817a0c2a0cca3f9689ad7c7ceb33c72dcebaa167320a2e3751d",
+          "text": "**O3. A `LAUNCHED` Codex record ended by a drifted `resume` or `--abandon` names its clone only in `codex_worker.clone`.** `_with_landing_evidence` (`controller/job.py:3136`) adds `clone` only for a refused recovery, and recovery runs only for `COMPLETED` (`controller/job.py:3111`). `docs/common-problems.md` and `docs/guide/workers.md` send the operator to `reconciliation_evidence.clone`, which these two endings do not carry (read, not measured). The plan's \"every ending\" rule covers `COMPLETED` records, so this is outside D7's letter; the same guide sentence could say where to look.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
+              "verdict": "REVISE",
+              "at": "2026-11-06T02:14:36Z"
             }
           ]
         }

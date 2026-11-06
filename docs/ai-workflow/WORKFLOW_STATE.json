@@ -60730,7 +60730,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 8,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -60847,7 +60847,228 @@
           "workflow_release": "2.25.7"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+        "approved_review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "66df03437d791e00fb3152a6a70c5fea29d7acea"
+          },
+          {
+            "path": "controller/codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c69756e32356e2aad20a0915964e6ae6eeea2ddd"
+          },
+          {
+            "path": "controller/codex_worker_tree.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7d067212acc2e760f958db5d8f619c2d99050aa8"
+          },
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8e82b7d27181a6c45876524fb92496c162390a9"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0f92f23f43a60456160432ca54b28052aa1cb17f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ee61ec63bc1de883ffd3ad046acb33ab4d0fd02"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8d613995cbe5855e9c98ceab234695d7c9d9e1a"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b00ecc10987e0c45270ac6a53beac08d0f33b84c"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0e7edfee832f85e5f2bbed48ac3585bf588627d8"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c428357d97154f69e56c9e5f11ace118863b487e"
+          },
+          {
+            "path": "tests/harness_contract/codex/worker_clone.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7996c08692ff1c5e467c83f8a25e5248d3be201f"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d9398de8ae1a8ff517da18c22102c78f05cb4023"
+          },
+          {
+            "path": "tests/test_codex_worker_clone_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f25e578bfe8735f4d02ab4d72964993afa6f349e"
+          },
+          {
+            "path": "tests/test_codex_worker_job_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f364f434a443eebdd9bc5bca06a6575c2baa77dd"
+          },
+          {
+            "path": "tests/test_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a31353e3e1fe00eb3c1773ca625bc3136980e3bd"
+          },
+          {
+            "path": "tests/test_codex_worker_ownership_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3fba1da3d578f89e73f3b4d1cf865a68a8c2135a"
+          },
+          {
+            "path": "tests/test_codex_worker_tree.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f27de64b76dc590022db65dc53020520796c7ff5"
+          },
+          {
+            "path": "tests/test_codex_worker_usage_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1a7d5d81d1fce4e9e25810e67f80dc627ccf4c37"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d9c3da0dbafa0b6e8c36ff5ad015b5211214f7e5"
+          },
+          {
+            "path": "tests/test_job_codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "030afa0b8d025bf4d6f109d181cbb75651d295d5"
+          },
+          {
+            "path": "tests/test_job_codex_worker_interrupt.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "080d28361467b5dea568a7c8314b6161b2f08bb7"
+          },
+          {
+            "path": "tests/test_job_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a236dc295a80d41a2949b4d26470d1076e63ed46"
+          },
+          {
+            "path": "tests/test_job_codex_worker_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "313210708454ab7912bae454de47ba4e50528d45"
+          },
+          {
+            "path": "tests/test_no_rewrite_invariants.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b9dd511124dc1a09389146539395abf395890aa0"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "551a211a553eb1a52e829cf26f1defbd42bec7f4"
+          }
+        ],
+        "reviewed_content_commit": "02269f844a1d26b422ea7601965f26f1ab02b2b2",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-06T05:28:54Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "ledger": {
+              "local": {
+                "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "92756c2f39bbc23d3120bf5d63c805906aa9b92369c165e705abad4495ced483",
+                "ledger_entry_sha256": "a27e526c9c55a59199b52c442a7cd80b6dbb4aa748c97be00296934eaa513ddf",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "db4da7372023408246d58d9318b05213f66b010981c66ff6f13741973a393f52",
+                "ledger_entry_sha256": "0b11553e5fed22e97dba32678ada2a52e930903e438643971a683ca755cc8c3a",
+                "run_ref": "codex:20261106T052335Z-e4e72960",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-06T05:28:54Z",
+          "workflow_release": "2.25.7"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
@@ -60878,12 +61099,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 3,
-          "external": 1
+          "local": 4,
+          "external": 2
         }
       },
-      "state_revision": 43,
-      "last_transition": "2026-11-06T04:21:50Z",
+      "state_revision": 46,
+      "last_transition": "2026-11-06T05:28:54Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -61458,20 +61679,98 @@
               "at": "2026-11-06T03:34:53Z"
             }
           ]
+        },
+        "F-733c11154ce0": {
+          "digest": "733c11154ce0d71c855edae0e9e1b8d46e9d4a9b83240cf24704c8db9dbc2f0e",
+          "text": "**O1. The drifted `resume` of a `LAUNCHED` Codex record has no test of its own.** Round 3's O1 fix added the `elif` branch at `controller/job.py:3114`, and `IMPLEMENTATION_SUMMARY.md` says this path has no test. The behaviour is right: measured over a directory populated as the launcher does, a drifted `resume` leaves `codex-home/sessions` and `tree` only. With the branch removed in a disposable copy, the same run leaves `bin`, `home`, `last-message.md`, `scratch`, `tmp` and `codex-home/state_5.sqlite`, and all 54 tests of `tests.test_job_codex_worker_resume` still pass. `ProtocolCodexTest.test_an_admitted_record_with_nothing_alive_is_failed_release_changed_with_the_copy_removed` could take the assertion.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-53088ed321f4": {
+          "digest": "53088ed321f4e8f8c199c8215dd2ceb14ce5cf5a29aee6e3f262e2ccd18f10f8",
+          "text": "**O2. `REVIEW_REQUEST.md` still describes round 2.** It says \"Post-fix round 2 after the local review's I1 (fix commit `28c784f`)\" and \"Full suite PASS at `28c784f`, 5773 tests\", under a heading of revision 4. `TEST_RESULTS.md` reports two failing full runs at this round's content head and its title still says revision 3. A manual reviewer who reads only the request gets the wrong test status. Round 2's O2 was this same drift, so the generation step should state the current round's fix commits and run.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-9ca4ef9367ee": {
+          "digest": "9ca4ef9367ee5e23f56ea07c56d7f02107190d7c430e326ff8387ae2491b88cd",
+          "text": "**O3. A `LAUNCHED` Codex record that does not end `INTERRUPTED` keeps its clone with no `reconciliation_evidence.clone`.** `_reconcile_codex_worker` (`controller/job.py`) names the clone only for `INTERRUPTED`, and `_reconcile_launched` can also end `FAILED` (a Workflow error reason) or `FINISHED`. `docs/guide/workers.md` and `docs/guide/harnesses.md` tell the operator to use that evidence key, and name `codex_worker.clone.path` as the alternative only for a drifted `resume` or `--abandon`. This was read, not measured. It loses nothing, because the path stays in the `clone` block and follows from the job id, so naming the clone for every ending, or adding this case to the guides' parenthesis, is enough.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-5808ee5058ef": {
+          "digest": "5808ee5058ef2ddcc05d36121497c0a7ff57696743d8a91e6422a87213ded471",
+          "text": "**O4. The `FakeLaunchTest` full-run failures in `TEST_RESULTS.md` remain untraced.** The implementer's two runs at `02269f8` failed three and five different tests in `tests.test_review` and `tests.test_review_claude` (`the composing command did not run`, `features list did not run`). This round's full run at the same content passed, and H4e changes neither those modules nor `controller/review.py`, so this is not a defect of this item. Nothing shows the cause, however, and the report's \"a fake-launcher process start failing under load\" is a guess, so it should become a follow-up issue beside round 3's O2 (shared job ids).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-1819f0eaed8d": {
+          "digest": "1819f0eaed8dc5e593ded47da777bacca9d40af269c8c07f145c78b51f357a4c",
+          "text": "Revision 4 lacks a clean full-suite result: both reported runs failed in `FakeLaunchTest`, with the cause untraced. A stable rerun would close this validation gap; no implementation regression was established.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:26:54Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
+        "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "b35c20e6f790108d524efaa0dbff8cb6d8ec1bca6814e4a94c864e72923c3239",
+          "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-06T01:26:23Z",
-          "verdict_sha256": "1b2b84037b26d6fa38cf8e91543dfcf70f6a93962d3cd6cacb9ea5e9c5e7d10b",
-          "run_ref": "session:local .ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+          "round": 4,
+          "completed_at": "2026-11-06T05:23:09Z",
+          "verdict_sha256": "92756c2f39bbc23d3120bf5d63c805906aa9b92369c165e705abad4495ced483",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-06T05:26:54Z",
+          "verdict_sha256": "db4da7372023408246d58d9318b05213f66b010981c66ff6f13741973a393f52",
+          "run_ref": "codex:20261106T052335Z-e4e72960",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

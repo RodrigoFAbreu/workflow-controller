@@ -654,7 +654,7 @@ contain secrets. These files are written the same way whether or not
 anyone is watching, and a failed event write is a warning, never a
 change of outcome. There is no retention or pruning: a kept Codex worker clone
 (`<runtime>/worker/<job>/tree`) is removed by the operator with `rm -rf` of the exact path in
-the record's `reconciliation_evidence.clone` (`codex_worker.clone.path` when a drifted `resume` or `--abandon` ended it).
+the record's `reconciliation_evidence.clone`, which every ending that leaves a clone names (a `FINISHED` record has the code `CodexCloneKept`; `codex_worker.clone.path` is the fallback only for a record killed between its terminal write and the naming write).
 
 Three ways to watch:
 

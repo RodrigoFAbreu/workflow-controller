@@ -8,8 +8,11 @@
 give every test its own job id through one helper (`per_test_job_id` in `tests/test_job_codex_worker.py`: a `t-` prefix, the
 test name's tail, a digest of the full test id and the pid), `LandingFixture` exposes `job_id`, the composed classes hand
 their outer test id to the fixture before `setUp`, a unit check proves the ids legal and pairwise distinct, and a drifted
-`resume` of a `LAUNCHED` protocol record has a test of its own. CP2 (naming the kept clone) and CP3 (the sandbox failures)
-remain.
+`resume` of a `LAUNCHED` protocol record has a test of its own. CP2 is complete: `controller/job.py` has `_with_kept_clone`,
+which names the clone in the evidence only when a tree stands on disk, and calls it at each ending that keeps one (the
+`LAUNCHED` and `COMPLETED` reconciliations, the one that raises, the drifted `resume`, the abandon, the live path's terminal
+writes and both exits of a launch that never spawned); a `FINISHED` record gets a `CodexCloneKept` block; a refusal whose
+clone is gone reports `clone_removed: true` with `clone: null`; the three pages say so. CP3 (the sandbox failures) remains.
 
 ## Previous milestone
 

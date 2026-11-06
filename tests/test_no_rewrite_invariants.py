@@ -11,8 +11,10 @@ literals holding string constants -- never identifiers or prose:
 - the Git scan fails on ``--force``/``--force-with-lease``, a
   ``+``-prefixed refspec, ``reset --hard``, ``rebase``, ``commit --amend``,
   ``branch -D``/``-d``, ``tag -f``/``-d``, ``push --delete`` and
-  ``update-ref -d``, and on any mutating Git subcommand outside
-  ``controller/gitrepo.py``;
+  ``update-ref -d`` (except the one spelling
+  ``["update-ref", "-d", f"refs/controller/landing/{id}"]`` in
+  ``controller/gitrepo.py``, the Codex landing's private namespace), and on
+  any mutating Git subcommand outside ``controller/gitrepo.py``;
 - the forge scan fails on the element pairs ``"pr", "merge"``, ``"pr",
   "close"`` and ``"release", "delete"``, on ``"--clobber"``, and on ``"api"``
   as the element immediately following ``"gh"``. The one exception is
@@ -67,6 +69,34 @@ def _argv_nodes(source: str, filename: str) -> list[tuple[ast.List | ast.Tuple, 
     return found
 
 
+def leading_constant(node: ast.expr) -> str | None:
+    """The leading string constant of an f-string element (``f"refs/x/{y}"`` gives ``"refs/x/"``), the whole value of
+    a plain string constant, else ``None`` (a name, a call, an f-string that starts with a field)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr) and node.values and isinstance(node.values[0], ast.Constant) \
+            and isinstance(node.values[0].value, str):
+        return node.values[0].value
+    return None
+
+
+#: The one admitted ref delete (``workflow-controller-h4e``, D4): ``["update-ref", "-d", f"refs/controller/landing/{id}"]``
+#: in ``controller/gitrepo.py``, the Controller's own private namespace.
+LANDING_REF_PREFIX = "refs/controller/landing/"
+
+
+def admitted_landing_delete(node: ast.List | ast.Tuple, filename: str) -> bool:
+    """Whether ``node`` is exactly the admitted ref delete, in ``controller/gitrepo.py``: three elements, the third an
+    f-string whose leading constant starts with ``refs/controller/landing/``."""
+    if Path(filename).name != GIT_BOUNDARY or len(node.elts) != 3:
+        return False
+    first, second, third = node.elts
+    return (isinstance(first, ast.Constant) and first.value == "update-ref"
+            and isinstance(second, ast.Constant) and second.value == "-d"
+            and isinstance(third, ast.JoinedStr)
+            and (leading_constant(third) or "").startswith(LANDING_REF_PREFIX))
+
+
 def argv_literals(source: str, filename: str = "<source>") -> list[tuple[int, list[str | None]]]:
     """``(line, elements)`` for every list/tuple literal holding at least one
     string constant; a non-constant element is ``None``."""
@@ -88,7 +118,8 @@ def _git_subcommand(elements: list[str | None]) -> str | None:
 def git_violations(source: str, filename: str) -> list[str]:
     problems = []
     boundary = Path(filename).name == GIT_BOUNDARY
-    for line, elements in argv_literals(source, filename):
+    for node, elements in _argv_nodes(source, filename):
+        line = node.lineno
         where = f"{filename}:{line}"
         for i, element in enumerate(elements):
             if element is None:
@@ -101,6 +132,8 @@ def git_violations(source: str, filename: str) -> list[str]:
                 problems.append(f"{where}: {element}")
         for subcommand, flag in _FORBIDDEN_GIT_FLAGS:
             if subcommand in elements and flag in elements[elements.index(subcommand) + 1:]:
+                if (subcommand, flag) == ("update-ref", "-d") and admitted_landing_delete(node, filename):
+                    continue
                 problems.append(f"{where}: {subcommand} {flag}")
         subcommand = _git_subcommand(elements)
         if not boundary and subcommand in MUTATING_GIT_SUBCOMMANDS:
@@ -230,6 +263,38 @@ class ControllerScanTest(unittest.TestCase):
         spelled = {_git_subcommand(e) for _, e in argv_literals(text)}
         self.assertTrue({"push", "fetch", "switch", "merge", "tag"} <= spelled, spelled)
         self.assertTrue(git_violations(text, "controller/elsewhere.py"))
+
+
+class LandingDeleteTest(unittest.TestCase):
+    """The one admitted ``update-ref -d`` (H4e, D4), both ways, over synthetic sources and the real function."""
+
+    def scan(self, argv: str, filename: str = "controller/gitrepo.py") -> list[str]:
+        return git_violations(f"def f(job_id, ref):\n    return _landing_git(root, {argv}, runner)\n", filename)
+
+    def test_the_real_spelling_in_gitrepo_passes(self) -> None:
+        self.assertEqual(self.scan('["update-ref", "-d", f"refs/controller/landing/{job_id}"]'), [])
+        text = (CONTROLLER_DIR / GIT_BOUNDARY).read_text()
+        self.assertIn('["update-ref", "-d", f"refs/controller/landing/{job_id}"]', text)
+
+    def test_every_other_ref_delete_still_fails(self) -> None:
+        for argv in ('["update-ref", "-d", ref]', '["update-ref", "-d", f"{ref}"]',
+                     '["update-ref", "-d", f"refs/heads/{job_id}"]',
+                     '["update-ref", "-d", f"refs/controller/other/{job_id}"]',
+                     '["update-ref", "-d", f"refs/controller/landing/{job_id}", "extra"]',
+                     '["update-ref", "-d", "refs/controller/landing/x"]'):
+            with self.subTest(argv=argv):
+                self.assertTrue(any("update-ref -d" in p for p in self.scan(argv)), argv)
+
+    def test_the_exception_is_gitrepo_only(self) -> None:
+        argv = '["update-ref", "-d", f"refs/controller/landing/{job_id}"]'
+        problems = self.scan(argv, "controller/job.py")
+        self.assertTrue(any("update-ref -d" in p for p in problems))
+        self.assertTrue(any("mutating git update-ref outside" in p for p in problems))
+
+    def test_the_real_gitrepo_passes_the_scan(self) -> None:
+        text = (CONTROLLER_DIR / GIT_BOUNDARY).read_text()
+        self.assertEqual(git_violations(text, "controller/gitrepo.py"), [])
+        self.assertIn('"checkout", "-q", "-B"', text)
 
 
 PLANTED = '''\

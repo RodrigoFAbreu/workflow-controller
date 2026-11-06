@@ -109,13 +109,14 @@ class ChildLiveController(unittest.TestCase):
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
                  for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
 
-        def prepare(managed_repo, layout) -> Path:
+        def prepare(managed_repo, layout, base):
             make_clone(layout.worktree)
-            return layout.worktree
+            return process_fixtures.prepared_clone(layout.worktree)
 
         with mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}), \
                 mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, FIXTURE: LiveLauncher(commands)}), \
                 mock.patch.object(job, "CODEX_WORKTREE_PREPARER", prepare), \
+                mock.patch.object(job, "CODEX_LANDER", process_fixtures.nothing_lander), \
                 mock.patch.object(job, "CODEX_HOME_RESOLVER", operator_codex_home):
             config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<live>")
             options = routing.RoutingOptions(config=config, config_source="settings")

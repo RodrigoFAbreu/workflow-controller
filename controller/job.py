@@ -107,7 +107,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_tester, codex_worker, codex_worker_job, codex_worker_sandbox, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -3107,6 +3107,13 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     alone -- no Workflow script ran."""
     observed = str((record.get("pre_state") or {}).get("phase"))
     worker_outcome = record.get("worker_outcome") if record.get("status") == STATUS_COMPLETED else None
+    recovery = None
+    if _is_codex_worker_record(record) and record.get("status") == STATUS_COMPLETED:
+        # H4e (D7): the drift ending keeps its status and code and adds the final landing block.
+        record, recovery = _apply_codex_landing(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    elif _is_codex_worker_record(record):
+        # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7); the caller settled the credentials.
+        _settle_codex_worker_dir(runtime_root, str(record["job_id"]), keep_tree=True)
     now = _now()
     block = dict(record["protocol"])
     current = protocol.managed_digests(managed_repo.root)
@@ -3116,16 +3123,26 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     failed = {
         **record, "status": STATUS_FAILED, "transition_verified": False, "observed_phase_after": observed,
         "protocol": {**block, "reconcile": None},
-        "reconciliation_evidence": _protocol_failure_evidence(
+        "reconciliation_evidence": _with_landing_evidence(_protocol_failure_evidence(
             WORKFLOW_RELEASE_CHANGED_REASON, observed_phase=observed, worker_outcome=worker_outcome,
             workflow_error={
                 "code": WorkflowReleaseChangedError.code,
                 "message": (f"{managed_repo.root}'s Workflow installation has drifted and its managed scripts "
                             "are not the ones the job was decided under; it is not reconciled"),
                 "evidence": {"changed_scripts": _changed_scripts(block.get("script_sha256"), current)}}),
+            record, recovery),
         "reconciled_at": now, "updated_at": now,
     }
     return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
+
+
+def _with_landing_evidence(evidence: dict, record: Mapping, recovery: codex_worker_landing.Recovery | None) -> dict:
+    """``evidence`` of a drift or abandon ending, plus the landing ``cause`` and the clone's path when the landing did
+    not land (H4e, D7); unchanged for a record that had no landing to recover or whose commits landed."""
+    if recovery is None or not recovery.refused:
+        return evidence
+    block = (record.get("codex_worker") or {}).get("landing") or {}
+    return {**evidence, "landing_cause": block.get("cause"), "clone": recovery.clone}
 
 
 def _changed_scripts(recorded: Any, current: Mapping[str, str]) -> list[str]:
@@ -3228,8 +3245,45 @@ def _reconcile_codex_worker(record: JobRecord, *, managed_repo: Any, runtime_roo
     _end_review_group(record, managed_repo.root)
     _settle_codex_credentials(record, runtime_root)
     if record.get("status") == STATUS_COMPLETED:
+        # H4e (D7): one recovery helper for every ending of a COMPLETED Codex record. `resume` never fetches or
+        # merges; it reads refs and the tree, and writes only what `_apply_codex_landing` names.
+        record, recovery = _apply_codex_landing(record, managed_repo=managed_repo, runtime_root=runtime_root)
+        if recovery.refused:
+            now = _now()
+            block = record["codex_worker"]["landing"]
+            failed = {**record, "status": STATUS_FAILED, "transition_verified": False,
+                      "reconciliation_evidence": _landing_refusal_evidence(block, recovery.clone),
+                      "reconciled_at": now, "updated_at": now}
+            return _persist(runtime_root, record["job_id"], failed, event="reconciled",
+                            details=_reconciled_details(failed))
         return _reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime_root)
-    return _reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    reconciled = _reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    # The clone of an ended `LAUNCHED` record is kept as `tree` and the sessions alone (D7); the credentials were
+    # settled above, so the copy-back has run.
+    _settle_codex_worker_dir(runtime_root, record["job_id"], keep_tree=True)
+    if reconciled.get("status") == STATUS_INTERRUPTED:
+        # The clone is kept and named (H4e, D7): a worker that committed before the Controller was lost landed
+        # nothing. A kill between `prepare` and the `clone` block leaves no record of it; the path follows from
+        # the job id, and a tree no record names is never removed here.
+        clone = _codex_clone_path(reconciled, runtime_root)
+        if clone is not None:
+            reconciled = _persist(runtime_root, reconciled["job_id"], {
+                **reconciled, "reconciliation_evidence": {
+                    "code": "CodexWorkerInterrupted", "clone": clone,
+                    "message": "the Controller was lost with the Codex worker running; nothing of its commits "
+                               "landed, and the clone is kept"},
+            }, event="codex_clone_named", details={"clone": clone})
+    return reconciled
+
+
+def _codex_clone_path(record: Mapping, runtime_root: Path) -> str | None:
+    """The clone a Codex worker record names, else the path derived from the job id when a tree stands there."""
+    block = record.get("codex_worker") if isinstance(record.get("codex_worker"), Mapping) else {}
+    clone = block.get("clone")
+    if isinstance(clone, Mapping) and isinstance(clone.get("path"), str):
+        return clone["path"]
+    derived = codex_worker_sandbox.WorkerLayout(runtime_root, str(record.get("job_id"))).worktree
+    return str(derived) if derived.exists() else None
 
 
 def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | None = None) -> JobRecord:
@@ -4762,8 +4816,12 @@ def abandon(
     every pending job file ``resume`` cannot reconcile, and for a record
     whose worker is ``unverifiable``. Runs under the lifecycle lock (none
     for a target root that no longer resolves) and launches nothing. Writes
-    only the Controller's own runtime, through ``runtime.write_json``/
-    ``runtime.write_bytes``. Returns the terminal record it wrote.
+    the Controller's own runtime, through ``runtime.write_json``/
+    ``runtime.write_bytes``, and -- for a ``COMPLETED`` Codex worker record
+    only (H4e, D7) -- deletes ``refs/controller/landing/<job id>`` in the
+    managed repository, the Controller's own job-specific ref, and removes
+    the worker's clone when its commits landed or there were none. Returns
+    the terminal record it wrote.
 
     - **Marked ``FAILED`` in place**: a parseable record with a known
       ``schema_version``, for this target, whose status is not terminal --
@@ -4888,22 +4946,29 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()},
             )
         worker_liveness = {**assessment.to_dict(), "acknowledged": assessment.verdict == worker.UNVERIFIABLE}
+    recovery = None
     if _is_codex_worker_record(record):
         _settle_codex_credentials(record, runtime_root)
+        if status == STATUS_COMPLETED:
+            # H4e (D7): the same recovery helper as `resume`; it never stops the abandon.
+            record, recovery = _apply_codex_landing(record, managed_repo=managed_repo, runtime_root=runtime_root)
+        else:
+            # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7), as `resume` does (round 3, O1).
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
     validity = _validity_or_none(record, managed_repo, identity)
     now = _now()
     abandoned: JobRecord = {
         **record,
         "status": STATUS_FAILED,
         "transition_verified": False,
-        "reconciliation_evidence": {
+        "reconciliation_evidence": _with_landing_evidence({
             "code": OPERATOR_ABANDONED_CODE,
             "abandoned_status": status,
             "validity": (
                 "validate_record could not read the record's fields" if validity is None
                 else (None if validity.valid else validity.reason)
             ),
-        },
+        }, record, recovery),
         "reconciled_at": now,
         "updated_at": now,
     }
@@ -8727,10 +8792,11 @@ def _supervisor_lock(runtime_root: Path, job_id: str, *, record: Mapping | None 
         os.close(fd)
 
 
-#: The tree a Codex worker runs in (H4c1, D5): ``(managed_repo, layout) -> Path``, the layout's worktree prepared.
-#: ``None`` by default -- how the tree is made and how its commits return to the managed repository is an owner
-#: decision (needed before H4e), so with no preparer the branch refuses before the launch.
-CODEX_WORKTREE_PREPARER: Callable[[Any, codex_worker_sandbox.WorkerLayout], Path] | None = None
+#: The tree a Codex worker runs in (H4c1, D5; H4e, D1): ``(managed_repo, layout, base) -> Prepared``, the layout's
+#: worktree prepared as a private clone of the managed branch at ``base``, the commit the Controller captured before the
+#: job. ``None`` by default -- no real role routes a Codex worker until H4e2, so with no preparer the branch refuses
+#: before the launch. ``codex_worker_tree.prepare`` is the real preparer.
+CODEX_WORKTREE_PREPARER: Callable[[Any, codex_worker_sandbox.WorkerLayout, str], codex_worker_tree.Prepared] | None = None
 
 #: ``worker_streams.format`` of a Codex job: its stdout is plain text, not stream-json.
 CODEX_STREAM_FORMAT = "text"
@@ -8751,10 +8817,139 @@ def _is_codex_launcher(launcher: Any) -> bool:
     return isinstance(launcher, codex_worker.CodexLauncher)
 
 
+#: The landing of a Codex worker's commits (H4e, D3, D6): ``(managed_repo, prepared, runtime_root, job_id, *,
+#: worker_breach, on_intent) -> Landing``. ``codex_worker_landing.land`` is the real one; the Codex job tests that
+#: build their own clone set it to a ``nothing`` landing.
+CODEX_LANDER: Callable[..., codex_worker_landing.Landing] = codex_worker_landing.land
+
+#: ``reconciliation_evidence.code`` of a job ended by a refused landing (H4e, D6).
+CODEX_LANDING_REFUSED_CODE = "CodexLandingRefused"
+
+
+def _settle_codex_worker_dir(runtime_root: Path, job_id: str, *, keep_tree: bool) -> str | None:
+    """Remove everything of the Codex worker's job directory ``worker/<job id>/`` except the retained
+    ``codex-home/sessions`` (the rollout a later admission reads, as ``review.settle_job_dir``) and, with
+    ``keep_tree``, the ``tree`` (the clone whose commits are unlanded and may matter, D7). Every removal is
+    contained by ``runtime.remove_tree``; a failure never raises and is returned as the reason the clone was left
+    (``None`` when the clone is gone or kept on purpose); a failure to remove anything else is not reported."""
+    layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
+    try:
+        names = sorted(entry.name for entry in os.scandir(layout.base))
+    except OSError:
+        return None
+    left: str | None = None
+    for name in names:
+        if name == "tree" and keep_tree:
+            continue
+        try:
+            if name == "codex-home" and (layout.codex_home / "sessions").is_dir():
+                runtime.remove_tree(runtime_root, layout.rel(name), keep=("sessions",))
+            else:
+                runtime.remove_tree(runtime_root, layout.rel(name))
+        except (RuntimeContainmentError, OSError) as exc:
+            if name == "tree":
+                left = f"{type(exc).__name__}: {exc}"
+    return left
+
+
+def _codex_clone_of(record: Mapping) -> codex_worker_tree.Prepared | None:
+    """The ``Prepared`` the ``clone`` block of a Codex worker record describes, or ``None`` when the block is absent
+    or malformed."""
+    try:
+        clone = record["codex_worker"]["clone"]
+        return codex_worker_tree.Prepared(path=Path(clone["path"]), branch=clone["branch"], base=clone["base"],
+                                          guard=clone["guard"])
+    except (KeyError, TypeError):
+        return None
+
+
+def _land_codex_worker(managed_repo: Any, *, runtime_root: Path, job_id: str, record: JobRecord,
+                       result: worker.WorkerResult) -> tuple[JobRecord, codex_worker_landing.Landing]:
+    """H4e D6, D7: land the clone's commits after the ``COMPLETED`` write. The intent block is persisted by the
+    lander's ``on_intent`` callback before the fetch. Returns the record (carrying the intent block when one was
+    written) and the :class:`~controller.codex_worker_landing.Landing`; nothing here raises for a Git failure, and an
+    exception out of the seam is a ``landing_error`` refusal."""
+    prepared = _codex_clone_of(record)
+    if prepared is None:
+        landing = codex_worker_landing.Landing(
+            "refused", "landing_error", "", None, "", message="the record holds no usable clone block")
+        return record, landing
+    current = {"record": record}
+
+    def on_intent(tip: str) -> None:
+        held = current["record"]
+        block = {**held["codex_worker"], "landing": {
+            "outcome": "started", "base": prepared.base, "tip": tip, "branch": prepared.branch}}
+        current["record"] = _persist(runtime_root, job_id, {**held, "codex_worker": block, "updated_at": _now()},
+                                     event="codex_landing_started", details={"tip": tip})
+
+    breach = result.subtype == codex_worker.SUBTYPE_BREACH
+    try:
+        landing = CODEX_LANDER(managed_repo, prepared, runtime_root, job_id, worker_breach=breach,
+                               on_intent=on_intent)
+    except Exception as exc:  # noqa: BLE001 -- the seam is the caller's; a refusal like the lander's own
+        landing = codex_worker_landing.Landing(
+            "refused", "landing_error", prepared.base, None, prepared.branch,
+            message=f"the landing failed unexpectedly: {type(exc).__name__}: {exc}")
+    return current["record"], landing
+
+
+def _delete_landing_ref(managed_repo: Any, runtime_root: Path, job_id: str) -> bool:
+    """Delete ``refs/controller/landing/<job id>`` in the managed repository (the one write ``recover`` makes there);
+    ``True`` when it is gone or never existed, ``False`` when the delete failed."""
+    try:
+        runner = codex_worker_tree.scrubbed_runner(
+            codex_worker_sandbox.WorkerLayout(runtime_root, job_id).base, no_optional_locks=True)
+        gitrepo.landing_delete_ref(Path(managed_repo.root), job_id, runner=runner)
+    except (GitOperationError, OSError, subprocess.TimeoutExpired):
+        return False
+    return True
+
+
+def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: Path,
+                         ) -> tuple[JobRecord, codex_worker_landing.Recovery]:
+    """The applying part of D7's recovery helper: take ``codex_worker_landing.recover``'s decision for a
+    ``COMPLETED`` Codex record and carry it out -- delete the landing ref, remove the tree when the decision says its
+    commits landed or there were none -- and return the record with the final ``landing`` block set. It persists
+    nothing: every caller's own terminal write carries the block, and each window is idempotent when a kill comes
+    first. A failed ref delete is ``ref_left`` and a failed tree removal ``tree_left``; neither changes the ending."""
+    recovery = codex_worker_landing.recover(managed_repo, record)
+    job_id = str(record["job_id"])
+    block = dict(recovery.landing)
+    if recovery.refused and recovery.clone is None:
+        # A malformed `clone` block names no usable path; the guide's `rm -rf` needs one, derived from the job id.
+        block["clone"] = _codex_clone_path(record, runtime_root)
+        recovery = codex_worker_landing.Recovery(recovery.landing, recovery.cause, recovery.refused, recovery.delete_ref,
+                                                 recovery.remove_tree, block["clone"], recovery.message)
+    if recovery.delete_ref and not _delete_landing_ref(managed_repo, runtime_root, job_id):
+        block["ref_left"] = True
+        block["ref"] = f"{gitrepo.LANDING_REF_PREFIX}{job_id}"
+    if recovery.remove_tree:
+        left = _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+        if left is not None:
+            block["tree_left"] = {"reason": left, "path": recovery.clone}
+            block["clone_kept"] = True
+    else:
+        # A kept clone keeps `tree` and the sessions alone (D7), as the live refusal does; the credentials were
+        # settled by the caller before this call, so the copy-back has already run.
+        _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+    codex_block = record.get("codex_worker") if isinstance(record.get("codex_worker"), Mapping) else {}
+    return {**record, "codex_worker": {**codex_block, "landing": block}}, recovery
+
+
+def _landing_refusal_evidence(block: Mapping, clone: str | None) -> dict:
+    """The ``reconciliation_evidence`` of a refused landing: the code, the cause, the message and the clone's path
+    (the operator removes it with ``rm -rf`` of exactly that path, ``docs/guide/workers.md``)."""
+    return {"code": CODEX_LANDING_REFUSED_CODE, "cause": block.get("cause"), "message": block.get("message") or
+            f"the landing of the Codex worker's commits was refused ({block.get('cause')})",
+            "clone": clone, "landing": dict(block)}
+
+
 def _run_codex_worker(
     managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
     route: routing.ResolvedRoute, timeout: float | None, launcher: Any,
     worker_not_started: Callable[[ControllerError], None], ticker: usage.RenewalTicker | None = None,
+    base: str | None = None,
 ) -> tuple[worker.WorkerResult, JobRecord, dict]:
     """The call-and-wait block of a Codex worker (H4c1, D2, D4, D8): the tree and Codex home from their seams, the
     launch with the eight options of D4, ``worker_process`` flushed on spawn and the two stream files filled after
@@ -8788,7 +8983,11 @@ def _run_codex_worker(
                 "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to the "
                 "managed repository is not decided yet",
                 evidence={"job_id": job_id, "harness": route.harness})
-        cwd = Path(preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id)))
+        prepared = preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id), base)
+        record = _persist(runtime_root, job_id, {
+            **record, "codex_worker": {**record["codex_worker"], "clone": prepared.to_dict()},
+            "updated_at": _now()}, event="codex_worker_clone")
+        cwd = Path(prepared.path)
         options = codex_worker_job.launch_options(
             runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, cwd=cwd, timeout=timeout,
             on_spawn=on_spawn, route=route)
@@ -8799,6 +8998,14 @@ def _run_codex_worker(
     except KeyboardInterrupt:
         raise
     except Exception as exc:
+        if "worker_process" not in spawned:
+            # The worker never ran (H4e, D7): nothing of it is worth keeping, and no record names the clone.
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+        else:
+            # It ran: the clone may hold commits, so `tree` alone is kept (credentials first, so the copy-back
+            # runs) and the record names it.
+            _settle_codex_credentials(record, runtime_root)
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
         if isinstance(exc, ControllerError) and "worker_process" not in spawned:
             worker_not_started(exc)
         else:
@@ -8807,7 +9014,10 @@ def _run_codex_worker(
                     **record,
                     "status": STATUS_FAILED,
                     "transition_verified": False,
-                    "reconciliation_evidence": {"code": type(exc).__name__, "message": str(exc)},
+                    "reconciliation_evidence": {
+                        "code": type(exc).__name__, "message": str(exc),
+                        **({"clone": clone} if "worker_process" in spawned
+                           and (clone := _codex_clone_path(record, runtime_root)) is not None else {})},
                     "updated_at": _now(),
                 }, event=_final_event(STATUS_FAILED), details={"error": type(exc).__name__})
                 _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
@@ -8987,7 +9197,7 @@ def _launch_job(
         result, record, spawned = _run_codex_worker(
             managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
             route=route, timeout=resolved_timeout, launcher=launcher, worker_not_started=worker_not_started,
-            ticker=ticker)
+            ticker=ticker, base=pre_state["target_head"])
     else:
         try:
             result = launcher.launch(
@@ -9086,6 +9296,36 @@ def _launch_job(
     record = _persist(runtime, job_id, record, event="completed",
                       details={"outcome": result.outcome, "exit_code": result.returncode,
                                "telemetry": telemetry.completed_summary(block)})
+
+    if codex:
+        # H4e (D6, D7): the worker's commits return to the managed branch, or the landing is refused and the job
+        # ends here, the clone kept. The removal of the tree precedes every terminal write below.
+        record, landing = _land_codex_worker(managed_repo, runtime_root=runtime, job_id=job_id, record=record,
+                                             result=result)
+        clone_path = (record.get("codex_worker") or {}).get("clone", {}).get("path")
+        if landing.outcome == "refused":
+            _settle_codex_worker_dir(runtime, job_id, keep_tree=True)
+            block = landing.to_block(clone_kept=True)
+            record = _persist(runtime, job_id, {
+                **record,
+                "codex_worker": {**record["codex_worker"], "landing": block},
+                "status": STATUS_FAILED,
+                "transition_verified": False,
+                "reconciliation_evidence": _landing_refusal_evidence(block, clone_path),
+                "updated_at": _now(),
+            }, event=_final_event(STATUS_FAILED), details={"error": CODEX_LANDING_REFUSED_CODE,
+                                                           "cause": landing.cause})
+            _run_job_ended(run_id, job_id, STATUS_FAILED, record)
+            return record
+        block = landing.to_block(clone_kept=False)
+        record = _persist(runtime, job_id, {
+            **record, "codex_worker": {**record["codex_worker"], "landing": block}, "updated_at": _now()},
+            event="codex_landed" if landing.outcome == "landed" else "codex_nothing_to_land",
+            details={"commits": len(landing.commits)})
+        left = _settle_codex_worker_dir(runtime, job_id, keep_tree=False)
+        if left is not None:
+            record = {**record, "codex_worker": {**record["codex_worker"], "landing": {
+                **block, "clone_kept": True, "tree_left": {"reason": left, "path": clone_path}}}}
 
     if decision.protocol is not None:
         # Orchestration-protocol-v1 E.1: the Workflow's own `reconcile`

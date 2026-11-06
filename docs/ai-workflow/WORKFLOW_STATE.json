@@ -60720,6 +60720,1336 @@
         "evaluated_at": "2026-11-05T18:19:22Z",
         "workflow_release": "2.25.6"
       }
+    },
+    "workflow-controller-h4e": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4e",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 8,
+      "implementation_revision": 4,
+      "functional_review_round": null,
+      "base_commit": "af82b315e6fca74aa96b07185bb85f8093af6f5a",
+      "reviewed_implementation_head": "02269f844a1d26b422ea7601965f26f1ab02b2b2",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP4",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "68969c5b04a9f63c6916c0cc77eac0582db8f103"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "1c2f6e2b8900e52001fc6296b5e44cac0e91a8f0"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "fc2c0fc49a2afdffd760e37c418b7f2862bd74b9"
+        },
+        "CP4": {
+          "status": "COMPLETE",
+          "start_commit": "4aeb16cf71cebf03b1d1c14ceafa17b7fc59a3a1"
+        }
+      },
+      "current_bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+        "approved_review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5f90f2fd93d502f0e7080cbf707ab679caff2dd8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fb9e9ed92094231cbe339ae9df4350b31a06d816"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7170756ff9c8e92aa7cb943fb56de566cfb1f85e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-05T21:59:11Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+            "ledger": {
+              "local": {
+                "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "b9088267bc12fd00ee65ccdc8e20684326adc66bca3df142d10c6b36a8d898a6",
+                "ledger_entry_sha256": "ac03cb116d2683b09120dc3065ffe81ebf94eb2656d9134f70d2f087589b1ace",
+                "run_ref": "session:local .ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "178cda7aea088b5cb99375f4d5e9f978361e5968a91af8b453d511c5712e2823",
+                "ledger_entry_sha256": "fd21b74011084c06bd1aefcabbdc0a20f9f44aa9a6e333d0aea1f8f1af52bf8c",
+                "run_ref": "codex:20261105T215309Z-956bcc8b",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-05T21:59:11Z",
+          "workflow_release": "2.25.7"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+        "approved_review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "66df03437d791e00fb3152a6a70c5fea29d7acea"
+          },
+          {
+            "path": "controller/codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c69756e32356e2aad20a0915964e6ae6eeea2ddd"
+          },
+          {
+            "path": "controller/codex_worker_tree.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7d067212acc2e760f958db5d8f619c2d99050aa8"
+          },
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8e82b7d27181a6c45876524fb92496c162390a9"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0f92f23f43a60456160432ca54b28052aa1cb17f"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7ee61ec63bc1de883ffd3ad046acb33ab4d0fd02"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8d613995cbe5855e9c98ceab234695d7c9d9e1a"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b00ecc10987e0c45270ac6a53beac08d0f33b84c"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0e7edfee832f85e5f2bbed48ac3585bf588627d8"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c428357d97154f69e56c9e5f11ace118863b487e"
+          },
+          {
+            "path": "tests/harness_contract/codex/worker_clone.txt",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7996c08692ff1c5e467c83f8a25e5248d3be201f"
+          },
+          {
+            "path": "tests/process_fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d9398de8ae1a8ff517da18c22102c78f05cb4023"
+          },
+          {
+            "path": "tests/test_codex_worker_clone_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f25e578bfe8735f4d02ab4d72964993afa6f349e"
+          },
+          {
+            "path": "tests/test_codex_worker_job_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f364f434a443eebdd9bc5bca06a6575c2baa77dd"
+          },
+          {
+            "path": "tests/test_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a31353e3e1fe00eb3c1773ca625bc3136980e3bd"
+          },
+          {
+            "path": "tests/test_codex_worker_ownership_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3fba1da3d578f89e73f3b4d1cf865a68a8c2135a"
+          },
+          {
+            "path": "tests/test_codex_worker_tree.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f27de64b76dc590022db65dc53020520796c7ff5"
+          },
+          {
+            "path": "tests/test_codex_worker_usage_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1a7d5d81d1fce4e9e25810e67f80dc627ccf4c37"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d9c3da0dbafa0b6e8c36ff5ad015b5211214f7e5"
+          },
+          {
+            "path": "tests/test_job_codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "030afa0b8d025bf4d6f109d181cbb75651d295d5"
+          },
+          {
+            "path": "tests/test_job_codex_worker_interrupt.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "080d28361467b5dea568a7c8314b6161b2f08bb7"
+          },
+          {
+            "path": "tests/test_job_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a236dc295a80d41a2949b4d26470d1076e63ed46"
+          },
+          {
+            "path": "tests/test_job_codex_worker_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "313210708454ab7912bae454de47ba4e50528d45"
+          },
+          {
+            "path": "tests/test_no_rewrite_invariants.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b9dd511124dc1a09389146539395abf395890aa0"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "551a211a553eb1a52e829cf26f1defbd42bec7f4"
+          }
+        ],
+        "reviewed_content_commit": "02269f844a1d26b422ea7601965f26f1ab02b2b2",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-06T05:28:54Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "ledger": {
+              "local": {
+                "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "92756c2f39bbc23d3120bf5d63c805906aa9b92369c165e705abad4495ced483",
+                "ledger_entry_sha256": "a27e526c9c55a59199b52c442a7cd80b6dbb4aa748c97be00296934eaa513ddf",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "db4da7372023408246d58d9318b05213f66b010981c66ff6f13741973a393f52",
+                "ledger_entry_sha256": "0b11553e5fed22e97dba32678ada2a52e930903e438643971a683ca755cc8c3a",
+                "run_ref": "codex:20261106T052335Z-e4e72960",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-06T05:28:54Z",
+          "workflow_release": "2.25.7"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-05T21:52:45Z",
+          "verdict_sha256": "b9088267bc12fd00ee65ccdc8e20684326adc66bca3df142d10c6b36a8d898a6",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-05T21:56:19Z",
+          "verdict_sha256": "178cda7aea088b5cb99375f4d5e9f978361e5968a91af8b453d511c5712e2823",
+          "run_ref": "codex:20261105T215309Z-956bcc8b",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 8,
+          "external": 1
+        },
+        "implementation": {
+          "local": 4,
+          "external": 2
+        }
+      },
+      "state_revision": 47,
+      "last_transition": "2026-11-06T06:03:59Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-05T21:47:48Z",
+        "consumed": {
+          "review_content_id": "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+          "plan_revision": 7,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+          "plan_revision": 8
+        },
+        "bound": {
+          "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+          "bundle_id": "9943bae4ccf8572445fa361ff41483dc82f3c0b35b46943aea190d9b56414e20",
+          "plan_revision": 8
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+        "63f6e87e5747d05db1089c636662206d5338a6dc3f1342218f0d2c91bf3845bc",
+        "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+        "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+        "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+        "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+        "f50724e6b90a2ca669987e47f96755a832f596a6c407c88de861b4d17e9e8c67"
+      ],
+      "optional_findings": {
+        "F-8b5ca667ec74": {
+          "digest": "8b5ca667ec7447a5a7518f7437dc0b4eb581500bb9de66aadddac916eca2db39",
+          "text": "**O1. Use `--no-local` for the clone, so it holds only the managed branch's objects.** Measured: with D1's `--no-hardlinks --single-branch`, a commit that exists only on another branch of the managed repository is readable in the clone, because a local-path clone copies the object store; with `--no-local` it is absent. It would also stop a managed repository's alternates being carried into the clone, which from Git's documented behaviour would otherwise contradict D1's \"no alternates\" and fail the guard (not measured). The clone is also smaller and cheaper. The cost is that `upload-pack` runs in the managed repository, so its config needs the same review as D4's.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-e4092e0d3a9a": {
+          "digest": "e4092e0d3a9aa8bfab412d088f5780925452c1e6579bc08ade257503a458305e",
+          "text": "**O2. State where a committed symlink stands.** The item page's safety review asks that the landing cannot be tricked by a symlink. The plan covers symlinks under the clone's `.git` only. A tracked symlink (mode 120000) pointing outside the repository lands under D5's content-neutral rule. That may be the right answer, but it should be stated as the decision, and pinned with a test or a named refusal.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-42d6b722c66f": {
+          "digest": "42d6b722c66f3be4f34e3fe4c9b31979bc1344fce9033887687da2311e321a2e",
+          "text": "**O3. Make D3 (6) a per-commit check.** \"No `.gitmodules` change and no gitlink entry in the range's diff\" reads as a diff of `base` against `tip`, which misses a gitlink added and removed inside the range, although D3 (5) already walks each commit. Saying \"in any commit of the range\" removes the ambiguity.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-1bf0932e8eef": {
+          "digest": "1bf0932e8eefec3c46113c5dd86d0f36b3fa9eb58691832ec45744fa84fa1156",
+          "text": "**O4. Say what D4's merge does with the managed repository's filters.** D1 proves nothing runs in the clone, but a worker-committed `.gitattributes` can select a `filter.<name>.smudge` program from the managed repository's local config during D4's merge (from Git's documented behaviour, not measured). The program is the operator's, not the worker's, so R3 may hold, but the plan says nothing about it. The same goes for running the merge under the scrubbed `HOME`, which drops the operator's global `filter.*` and `core.autocrlf` and could write different bytes from a normal checkout. D1's phrase \"`-c filter.*` unset by the scrubbed environment\" also misdescribes the mechanism: the clone's config has no filter keys, and nothing is unset.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8c4e63000dd1668d070320e28bf1e5060bbc360e301e6db37636fdad2d897390",
+              "verdict": "REVISE",
+              "at": "2026-11-05T19:52:39Z"
+            }
+          ]
+        },
+        "F-684e6d167494": {
+          "digest": "684e6d16749452f9d1e24903ab6594f3d352f79e6003b200d99c072452dd50e5",
+          "text": "**O1. Find a configured hook through includes.** D3 (3) says the managed repository's \"local config\". Measured: with a free-name hook in a file reached by `include.path`, `git config --local --get-regexp '^hook\\.'` returns nothing, while the same query without `--local`, or with `--includes`, finds it; and that hook fired on `git -c core.hooksPath=/dev/null update-ref`. Name the query in D3 (under the scrubbed environment, plain `--get-regexp` reads the repository's config and its includes) and add this case to CP2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-d2984a087491": {
+          "digest": "d2984a0874913f516af1b9309cde7d7522220add16814bbdebf8a37dd3c42f2d",
+          "text": "**O2. Check `managed_hooks_configured` in `prepare` as well.** It can only fail, as D3 places it, after a whole worker run has been paid for. The same check before the clone saves that run; D3 (3) would stay as the recheck.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-97c2ae198b63": {
+          "digest": "97c2ae198b63bea040abf4dd7d513f6c7101bf9c4836014f3c1dde48548e1e18",
+          "text": "**O3. Classify both shapes of the `--no-overwrite-ignore` refusal.** Measured, both exit 1: an ignored file gives `The following untracked working tree files would be overwritten by merge`, and an ignored directory that the range replaces with a file gives `Updating the following directories would lose untracked files in them`. CP2 tests only the first, so an implementation that matches that text would report the second as `fast_forward_failed`. Telling them apart by exit code (1 against 128 for the ref failure of B2) or adding a second test both work.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-eb2cb5ba5c16": {
+          "digest": "eb2cb5ba5c16171994edd17d1576d42469f38dfd2c176bdba29054629a7b478e",
+          "text": "**O4. State what a range that edits `.gitignore` does.** Measured: a commit removing `ign/` from `.gitignore` lands, then the managed `ign/state` is untracked, so D4's post-move check gives `landing_unverified` with `moved: true`. Defined and safe, but it is the one way an otherwise clean commit reaches that outcome, and the plan's text only describes filters. Say so in D4 and add a CP2 test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-55a2bbce6d12": {
+          "digest": "55a2bbce6d12252f75c32a1b592833607dda917a859a6add911f49e0ca355657",
+          "text": "**O5. Say that the scrubbed environment changes what counts as untracked.** Measured: a file ignored only through the operator's `~/.config/git/ignore` is listed by `git ls-files --others --exclude-standard` under a scrubbed `HOME` and not under the operator's. D2 would then refuse `managed_tree_not_clean` while the operator's own `git status` is clean. Failing closed is fine; the `docs/common-problems.md` entry for that cause should name this.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-930ded4f368b": {
+          "digest": "930ded4f368b6926eca5e0e5a8e41241bc325aa989e560694703e59d08893753",
+          "text": "**O6. Check the `rm -r` the guide will tell the operator to run.** Git's object files are read-only, so `rm -r` of a kept clone on a terminal prompts for each one (from `rm`'s documented behaviour, not measured). `rm -rf` of the exact path in the record may be the better wording.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "7969e97d9206a1fd3b72e0bce915918015c46eae5933962385e33398e141b622",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:04:51Z"
+            }
+          ]
+        },
+        "F-bce8d62ef358": {
+          "digest": "bce8d62ef3583d7048ed75fe90ab16464c9589b99dc1cfefe058100ef15cd2e0",
+          "text": "**O1. Correct the stated reason for `managed_hooks_configured`.** The Open decisions section says a free-name hook \"cannot be switched off by an event key\". Measured with a control: `hook.free.event=post-merge` fired on `merge --ff-only` under `core.hooksPath=/dev/null` alone, and did not fire with `-c hook.post-merge.enabled=false` added. `git-config(1)` documents `hook.<event>.enabled`. So D4's keys do cover free names for the listed events. The refusal is still defensible, because it fails closed and covers an event the list misses, but the reason should be corrected, and CP2's measurement could decide whether the refusal is still needed.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-6865c5954b76": {
+          "digest": "6865c5954b76563caa2434645030668f72e17eb259d42cfd939fe6cc39eb884f",
+          "text": "**O2. CP2's \"config hook of each event name\" test would pass for the wrong reason.** Measured: with `hook.post-merge.event` and `hook.post-merge.command` set, `git update-ref` under the hardened options dies with exit 128 (`hook friendly-name 'post-merge' collides with a known event name`), so the hook \"does not fire\" only because Git refused to run. With `.command` alone there is no event and nothing to fire. Test a free friendly name with an `event` key instead. The same config would make `resume`'s `landing_delete_ref` fail, so say that this reaches `ref_left`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-6e85bbfac9f5": {
+          "digest": "6e85bbfac9f5bfa1e6f92d9cc76796fb36ab36f1c62930342837dc4706be3b94",
+          "text": "**O3. The scan cannot read the ref as D4 describes it.** `_argv_nodes` (`tests/test_no_rewrite_invariants.py:66`) maps a non-constant element to `None`, so `[\"update-ref\", \"-d\", f\"refs/controller/landing/{job_id}\"]` scans as `[\"update-ref\", \"-d\", None]`. \"With a ref starting `refs/controller/landing/`\" therefore needs the scan to read the f-string's leading constant. A variable holding the ref must stay refused. CP2's test should use this real shape.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-4ace9bea3f5c": {
+          "digest": "4ace9bea3f5c829bbc0c465abeebfff89087a2b47dec7792716d16532e9856ae",
+          "text": "**O4. `core.fsmonitor` in the managed repository runs under the hardened reads.** Measured: a managed `core.fsmonitor` program fired on `git status` with `GIT_OPTIONAL_LOCKS=0`, and did not fire with `-c core.fsmonitor=false`. It is operator configuration the worker cannot set, the same class as D4's filters, so it is not a safety hole. Either add `core.fsmonitor=false` to the reads and to `LANDING_CONFIG`, or state it next to the filter decision.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-32ad833f5010": {
+          "digest": "32ad833f5010955f687f4fc8cc887be8f46d85851bb941eb54224198b35c271b",
+          "text": "**O5. D7's window (a) can mislabel a dirty tree.** With no intent block the merge never ran, so a dirty tree at `resume` is not the merge's doing (for example the operator's own edits since the crash), yet it is recorded `merge_left_tree_dirty`. Use that cause only when the intent block exists; otherwise record `landing_interrupted` with the dirty paths.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-9bbf035ac57d": {
+          "digest": "9bbf035ac57d927ccdd4088b98849f3abc10be3207ded0abb956db1af9672fa0",
+          "text": "**O6. Name a stale `index.lock` in the recovery text.** From Git's documented behaviour, not measured: a merge killed by the Controller's git timeout can leave `.git/index.lock`, and `git restore` then fails until the operator removes it. The `merge_left_tree_dirty` entry in `docs/common-problems.md` should say so. The recovery itself holds: measured after a held-lock failure, `git restore --staged --worktree .` cleared the modified, added and deleted entries, and a later `merge --ff-only` succeeded.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-09e16bbf1a43": {
+          "digest": "09e16bbf1a43d06dd1241b9c1f29aa06409fdd2f9a5e1d45d28395da0a9867e0",
+          "text": "**O7. Two small text corrections.** CP1 says \"the five listed Codex job test files\" but lists six. CP4 lists `docs/backlog.yaml` and `docs/ROADMAP.md` for a status change \"at acceptance\", which `/accept-milestone` makes itself through `workflow_backlog.py accept`, so CP4 need not touch those two files unless it edits them for another reason.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "bdf9c3ba4e44966b6cba2a1aea5498eedfa59ffdc62b94ab3a7bd97b8580c969",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:14:54Z"
+            }
+          ]
+        },
+        "F-e3c5952417b3": {
+          "digest": "e3c5952417b34a84ea7e8ebdb6b2707433b547e5309bc7e1f05c90115ca05fca",
+          "text": "**O1. A forged commit-graph hides a merge commit from D3's check (5).** `GUARD_EXCLUDED_ROOTS` leaves all of `.git/objects` out of the guard, so `.git/objects/info/commit-graph` is writable by the worker and unseen by check (1). `gitrepo.commit_parents` is `rev-list --parents`, which reads parents from the graph. Measured: a commit made with `commit-tree` whose second parent is already in the managed branch's history; after zeroing that parent in the graph's `CDAT` chunk, `commit_parents` gave one parent for every commit in the range and `rev-list --merges --count` gave 0, while `cat-file` showed two parents. D4's fetch with `fsckObjects`, the `checked_tip` comparison and `merge --ff-only` all succeeded, and the managed branch then held a true merge commit. The effect is bounded: where the hidden parent was not already in the managed repository, the fetch failed (`did not receive expected object`), and `diff-tree` still reported a gitlink when I forged the root tree in the graph, so this is a false \"linear\" and not a content bypass. Running checks (4) to (6) with `-c core.commitGraph=false` gave the true answer (measured: `--merges --count` 1), and a test could pin it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-61a53dd345b0": {
+          "digest": "61a53dd345b0993bb3ab923335d7805f25653736a9a388b0320e77a3350f9a29",
+          "text": "**O2. The wording of `recover` disagrees with itself.** CP2 calls it \"reads only\" and tests it \"reading refs only\", and D7 opens with \"reads refs and the tree and nothing else\", while windows (a) and (b) delete the landing ref. CP2's test as written cannot pass over those windows. Window (c) does not say the ref is deleted, although R5 says no ending leaves one. Window (c) is also defined by \"the intent's `tip`\", which does not exist when there is no intent block, so a record with no intent and a moved branch needs saying. CP2 calls the module pure and CP3 owns the writes, so it would also help to say which part returns a decision and which part persists it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-478ad0fe1b41": {
+          "digest": "478ad0fe1b410b1fcc5ea9ce1a56f380ce886c35e5a4bb4d130dcc73399742dd",
+          "text": "**O3. Two kills leave a tree that no record names.** \"Removed at the end of `_launch_job`\" reads as after the terminal write. A kill between them leaves a terminal record, which `resume` reports and never reconciles, and a tree nothing removes, since there is no retention. `_reconcile_review` settles the job directory before its terminal write, and doing the same here closes this, because window (d) repeats the removal. The second is a kill between `prepare` returning and the `clone` block being persisted: `resume` ends the record `INTERRUPTED`, and the record names no clone. The path can be derived from the job id, so D7 could say so.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-141fe4814305": {
+          "digest": "141fe4814305a8e5608a4803f9938a8383b60b9813de72c2fbbebfb0a2558de1",
+          "text": "**O4. R6 and the mapping still say \"the guides, the backlog and the roadmap state the facts in place\", while CP4 now says `docs/backlog.yaml` and `docs/ROADMAP.md` are not edited here.** This is left over from applying O7 of round 3. Reword R6 in the plan and the mapping so the two agree.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-bd753fb3e224": {
+          "digest": "bd753fb3e2244cc6d7ee721e10ed54fe074ab99240bac1eea41787a77f0004b5",
+          "text": "**O5. `--abandon`'s stated write set becomes false.** `docs/guide/workers.md:571` says \"`--abandon` launches nothing and writes only the Controller's own runtime\", and the docstring of `abandon` (`controller/job.py:4765`) says the same. Under D7 it can also delete `refs/controller/landing/<job id>` in the managed repository. CP4 should name that sentence, and CP3 the docstring.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "4f3e403a3a8a0dfc57209a2adc2a986d33345e540d41ce2a3c629d12db6bd639",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:25:46Z"
+            }
+          ]
+        },
+        "F-ea59b732ac25": {
+          "digest": "ea59b732ac251e74beb05631e0ffa76b31a44c893b9ed8473c9b8f493377d8bb",
+          "text": "**O1. D7 moved the tree removal before the terminal write without saying what a failed removal does.** `runtime.remove_tree` can raise (`RuntimeContainmentError`, `OSError`), and D7 gives a rule for a failed ref delete (`ref_left`) but none for this. On the live path a landed job would leave `_launch_job` with an exception and a `COMPLETED` record, and on `resume --abandon` the applying part would raise, which stops the ending that I1 of round 4 says must not stop. A stated rule closes it: a failed removal is recorded (`tree_left`, with the reason and the path), the record ends as it would have, and the guide's `rm -rf` applies. The precedent, `_reconcile_review`, does not guard its `settle_job_dir`, so this is tidiness, not a known failure.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "f50724e6b90a2ca669987e47f96755a832f596a6c407c88de861b4d17e9e8c67",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:33:28Z"
+            }
+          ]
+        },
+        "F-0f509813a7df": {
+          "digest": "0f509813a7df8abcd8ed8ec69ec7f6d931db56d0aaa11f0948a98f80fda9710c",
+          "text": "**O2. Two small wordings in D7.** \"In windows (b) and (d), the removal of the tree\" is unqualified, while window (b) keeps the tree when `verify_move` fails; the closing sentence has it right. And the helper is defined \"for a record with a `clone` block\" while a malformed block is `landing_unreadable`, so a `COMPLETED` Codex record with no `clone` block at all is not stated; \"malformed\" could say it includes a missing block. CP2 and CP3 could also say where the applying part lives: CP2 describes `recover` in `codex_worker_landing` with a part CP3 owns, and CP3's **Files:** paragraph lists `controller/job.py` but not that module, so it has to live in `job.py`, and the declaration gate would stop anything else.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "f50724e6b90a2ca669987e47f96755a832f596a6c407c88de861b4d17e9e8c67",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:33:28Z"
+            }
+          ]
+        },
+        "F-fdcd021c5fbb": {
+          "digest": "fdcd021c5fbbc45a29240a5a11e978aa15df8099efdc3c0c16cc60e0477f76db",
+          "text": "**O1. The mapping's R2 is stale against the plan's R2.** Compared mechanically, R1 and R3 to R6 are byte-identical and R2 differs: `docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json` lacks round 5's clause (\"a merge that failed with the branch at `checked_tip` goes through `verify_move` and one with the branch at neither commit is `landing_unverified` with `moved` true\") and the parenthesis on `landing_unverified`. I found nothing that compares them, so no gate stops it, but the mapping is protected content and should say the same.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "63f6e87e5747d05db1089c636662206d5338a6dc3f1342218f0d2c91bf3845bc",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:44:15Z"
+            }
+          ]
+        },
+        "F-25697213b902": {
+          "digest": "25697213b90285a139fa4245f1986d08e48a72a77d01b9b91789783718a76b3a",
+          "text": "**O2. `ref_commit` does not raise on an unreadable branch, so `decide` reaches window (c), not `landing_unreadable`.** Measured: with a garbage branch ref, `gitrepo.ref_commit` returns `None` (`head_state` raises `GitOperationError`). D7's `decide` catches exceptions, so if it reads the branch through `ref_commit`, `None` looks like \"the branch at neither commit\" and the record says `landing_unverified` with `moved: true` over a branch nobody could read. Both end `FAILED` with the clone kept, so nothing unsafe follows; only the recorded reason is off. D4's \"when that read also fails\" has the same shape after a merge, where `moved: true` is right. A short statement that `None` from `ref_commit` counts as unreadable in `decide`, or a test pinning the chosen answer, closes it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "63f6e87e5747d05db1089c636662206d5338a6dc3f1342218f0d2c91bf3845bc",
+              "verdict": "REVISE",
+              "at": "2026-11-05T20:44:15Z"
+            }
+          ]
+        },
+        "F-87f817b987df": {
+          "digest": "87f817b987df22e5fef4b0aa7d7dc7f8e9ac5d6e993c95de941e46dde8a853b2",
+          "text": "**O1. CP4's live test has no route to an inventory row.** `check_inventory` (`tests/test_fake_claude_contract.py:1541`) fails on a test module that starts a process with no row in `LEFTOVER_INVENTORY`, which lives in `tests/process_fixtures.py`. CP1 to CP3 list that file and CP4 does not, although `tests/test_codex_worker_clone_live.py` is the module most likely to need a row: the existing live modules that start a process have one. Either add the file to CP4's Files, or say the live test starts no process itself and reads Git through the `fixtures` helpers.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+              "verdict": "REVISE",
+              "at": "2026-11-05T21:45:30Z"
+            }
+          ]
+        },
+        "F-2f9f1a8ca412": {
+          "digest": "2f9f1a8ca4129a50c9897a7ae916b33b289e54fa545dbd58d79a6834d84304db",
+          "text": "**O2. The existing missing-root guidance has the same fault, outside this item.** `controller/job.py:4874` says of a Codex record whose root is gone that the operator ends the worker by hand and then runs `--abandon`, and `_invalid_record_clearing_command` names `--abandon` for `target_repo_unresolvable`. Neither is reachable through the CLI (I1). This is existing behaviour and need not change here; a follow-up issue can decide whether `--abandon` should tolerate a missing root.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "d1488b57455fdaceab5afac915434b575043ec9fbdb6f0b268c95b06454cee8a",
+              "verdict": "REVISE",
+              "at": "2026-11-05T21:45:30Z"
+            }
+          ]
+        },
+        "F-f9c521718cc6": {
+          "digest": "f9c521718cc638d16697dd3545b358385a7942cf51d1eaa8601bcd6b01838821",
+          "text": "**O1. D7 names the wrong route to `landing_unreadable`.** D7 says that through the command `landing_unreadable` \"is reached for an unreadable Workflow state (the Manager's `verify` and `status` exit 0 over a garbage `WORKFLOW_STATE.json`, so `--abandon` reaches `job.abandon`)\". Reaching `job.abandon` is right, but `decide` reads only refs and the tree, and Git reads both over a garbage `WORKFLOW_STATE.json` (measured: `git status` exits 0 and reports ` M docs/ai-workflow/WORKFLOW_STATE.json`, and `rev-parse` of the branch exits 0). So that record takes the ordinary windows, not `landing_unreadable`. With an intent block and the branch at `base`, the file reads as dirty and the cause is `merge_left_tree_dirty`, which names the merge for an edit it did not make; that fails closed and repairs nothing. No test depends on the sentence, but CP4 puts \"the `landing_unreadable` ending of D7\" in `docs/guide/workers.md`, so the sentence should be corrected there: through the command, `landing_unreadable` is reached for a garbage `.git/index` and a malformed block.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:52:45Z"
+            }
+          ]
+        },
+        "F-bb41626fd512": {
+          "digest": "bb41626fd512fa80340b7b421ea5bf8531cd68e1a10c81ddad8a21df9d0b8f50",
+          "text": "**O2. CP3 and CP4 do not always say which level they mean.** CP3 says `resume --abandon` over a record whose managed root is missing \"ends `FAILED`\", and later says that `resume --abandon` with the managed root removed exits 20 through `cli.main`. Both hold, because the first is a call of `job.abandon` (D7), but only the later sentences are labelled. CP4's `docs/common-problems.md` sentence gives `GitDirectoryUnresolvableError` as the `job`-level refusal for \"`.git` or the managed root\" removed; for a missing root the `job` level does not refuse that way (`resume` raises `StaleJobRecordError` and `job.abandon` ends the record, as D7 says). An operator page needs only the command's refusal, so the `job`-level clause can be dropped there and the CP3 tests labelled.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:52:45Z"
+            }
+          ]
+        },
+        "F-c9bf5281292b": {
+          "digest": "c9bf5281292b807a4de7328b58dd9f70f27cce92018b48d3582a5efa8b9e2829",
+          "text": "**O3. CP3's restore-then-abandon test does need a Manager and a matching generation.** The plan's \"needs no Manager\" is scoped to the refusal, but the restored run passes `_inspect_target`, so it needs `fixtures.write_stub_workflow_manager`. A record written by the fixtures' `FAKE_IDENTITY` (generation 7) is refused as newer through the real CLI (measured), so it needs the running generation, as `tests/test_lifecycle_orchestration.py`'s `cli` helper arranges. An unpinned in-process `cli.main` also re-executes the process (`controller/cli.py:189`, measured: it ended a probe), so the test goes through that helper's route or a subprocess.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:52:45Z"
+            }
+          ]
+        },
+        "F-844ea4a3f22b": {
+          "digest": "844ea4a3f22b8d2bed0c9a07adb08fdbad2b956322a1bfd883ed76006747ca09",
+          "text": "D7 incorrectly names unreadable Workflow state as a route to `landing_unreadable` through `--abandon`. Reaching `job.abandon` does not make the proposed recovery helper’s refs/tree reads fail; the record follows its ordinary recovery window. Use a corrupt `.git/index` or malformed clone/landing block as the examples before copying this explanation into CP4’s guides.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "9422f58593195181d9af426172ab9413cb7c6913e8befab91b7177f5a384e90f",
+              "verdict": "APPROVE",
+              "at": "2026-11-05T21:56:19Z"
+            }
+          ]
+        },
+        "F-e7db8a8997d8": {
+          "digest": "e7db8a8997d894406346cdab322da008160d45d0b1f4e080f861a858616941f2",
+          "text": "**O1. The landing's fetch does not pass `--no-recurse-submodules`.** `gitrepo.landing_fetch` (`controller/gitrepo.py`) leaves submodule recursion to the managed repository's configuration. Measured through a real `land`: with a submodule at the base and `fetch.recurseSubmodules=true` in the managed config, the landing ended `landed`, and the submodule's `origin/main` advanced to a commit made in its upstream after the clone. The record says nothing of that write, which sits outside the \"one fast-forward of one branch\" that D3 and D4 describe. No hook fired, because the `-c` options reach the child fetch. A submodule whose URL is not a file path should turn every landing into `fetch_failed` under `GIT_ALLOW_PROTOCOL=file` (expected, not measured). Fix: add `--no-recurse-submodules` to the fetch's argv and pin it with a test on this arrangement.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T01:26:23Z"
+            }
+          ]
+        },
+        "F-246d6538a5f1": {
+          "digest": "246d6538a5f1137b350f92e4aac0b9ac7bf5ad3dc7cf873799422c8545eabf57",
+          "text": "**O2. Some endings keep a clone without putting its path in `reconciliation_evidence.clone`, the field the guides send the operator to.** `docs/guide/harnesses.md` and `docs/guide/workers.md` give `rm -rf` of the exact path in that field. Measured over a `LAUNCHED` record: `resume --abandon` writes evidence with no `clone` key and keeps the tree. When the kill fell between `prepare` and the `clone` block (the window D7 covers for `resume` by deriving the path), no record names the tree at all, which is what D7's removal-order rule exists to prevent. By reading, a drifted `resume` of a `LAUNCHED` record has the same gap (`_resume_drifted_protocol` applies the landing only to `COMPLETED`), and the exception after the spawn in `_run_codex_worker` writes only `code` and `message`, so its path is only in `codex_worker.clone.path`. Fix: add `_codex_clone_path` to the evidence on those three endings, with a test for each. The seam is dark and the window narrow, so nothing is lost yet.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "16a83c4cfccc817ca842c10c7e55ec0c1beb28773aa89eea108ed44fc7327311",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T01:26:23Z"
+            }
+          ]
+        },
+        "F-3b7bc0aad374": {
+          "digest": "3b7bc0aad374eeb10170b8dc20c01dd40fc1086178a58ba10e3d117c2df83a8a",
+          "text": "**O1. Window (b) removes the tree before anything durable says so, so a second crash can report a kept clone that is gone.** `_apply_codex_landing` persists nothing (a listed difference from D7, with the claim that \"each window is idempotent if a kill comes first\"). Measured: after a kill past the merge, a `resume` interrupted in `_reconcile_completed` leaves the record `COMPLETED`, the block still `started` and the tree removed; a stray file then makes the next `resume` end `landing_unverified` with `clone_kept: true` and `reconciliation_evidence.clone` naming a path that does not exist. No commit is lost, because they have landed, and it takes a double fault. Persisting the block before the removal, as D7 orders it, would send the second `resume` through window (d).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
+              "verdict": "REVISE",
+              "at": "2026-11-06T02:14:36Z"
+            }
+          ]
+        },
+        "F-3cf7da8b1774": {
+          "digest": "3cf7da8b1774a2b148a6f5bbeb69173442d1351e0bceccd688f9127b2c62bdb6",
+          "text": "**O2. `TEST_RESULTS.md` and `REVIEW_REQUEST.md` report the previous round's run.** `TEST_RESULTS.md` still opens \"implementation revision 1\" with head `67db6bf`, and `REVIEW_REQUEST.md` says \"Full suite PASS at `67db6bf`, 5771 tests\" for a revision 2 bundle. The only record of the post-fix run is one line in `IMPLEMENTATION_SUMMARY.md`, with no head, plan or wall time. This round reran the suite, so the claim holds; the document does not show it. `REVIEW_PROTOCOL.md` enforces this consistency at the plan stage only.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
+              "verdict": "REVISE",
+              "at": "2026-11-06T02:14:36Z"
+            }
+          ]
+        },
+        "F-0773bc9fa9cc": {
+          "digest": "0773bc9fa9ccc817a0c2a0cca3f9689ad7c7ceb33c72dcebaa167320a2e3751d",
+          "text": "**O3. A `LAUNCHED` Codex record ended by a drifted `resume` or `--abandon` names its clone only in `codex_worker.clone`.** `_with_landing_evidence` (`controller/job.py:3136`) adds `clone` only for a refused recovery, and recovery runs only for `COMPLETED` (`controller/job.py:3111`). `docs/common-problems.md` and `docs/guide/workers.md` send the operator to `reconciliation_evidence.clone`, which these two endings do not carry (read, not measured). The plan's \"every ending\" rule covers `COMPLETED` records, so this is outside D7's letter; the same guide sentence could say where to look.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
+              "verdict": "REVISE",
+              "at": "2026-11-06T02:14:36Z"
+            }
+          ]
+        },
+        "F-f798f4a6e1db": {
+          "digest": "f798f4a6e1db66bb8702a942d3587e93510695a0a4a7afe9fa7e0b741f462634",
+          "text": "**O1. A `LAUNCHED` record ended by `--abandon` keeps the whole job directory, not `tree` and the sessions.** `_abandon_mark_failed` (`controller/job.py:4906`) settles the credentials, but calls `_apply_codex_landing`, and so the directory settling, only for `COMPLETED`. Measured over a directory populated by `populate_job_dir`: after `--abandon` the directory holds `bin`, `codex-home`, `home`, `last-message.md`, `scratch`, `tmp` and `tree`, and `codex-home` still holds `config.toml`, `installation_id`, `models_cache.json` and `state_5.sqlite`; `resume` over the same record leaves only `codex-home/sessions` and `tree`. The credential is gone in both. `_resume_drifted_protocol` has the same `COMPLETED` guard, so a drifted `LAUNCHED` ending should behave the same way (read, not measured). This is what round 2's I1 fixed, on two paths its acceptance criteria did not name. It loses no commit and no secret, but with no retention, an operator who removes `tree` by hand leaves the rest for good.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "0406a98c74418e852e01c69b76445992fff7628e63fe298c554cea0669cce114",
+              "verdict": "REVISE",
+              "at": "2026-11-06T03:34:53Z"
+            }
+          ]
+        },
+        "F-724bb04f97e5": {
+          "digest": "724bb04f97e550d52d48df14ff8cd99839f2920e44b95155c2656c3fbabc20b4",
+          "text": "**O2. The landing tests share the job id `job1`, and that id is the ownership tag `resume` scans for, so the tests can fail when they overlap.** The plan's Risks section says each test gets its own job id, because of the shared-tag flake #259. `KilledLandingFixture` and `LandingFixture` use the literal `job1`, and their tests are spread across all eight shards. Measured: with one `sleep` running under `WORKFLOW_CONTROLLER_OWNERSHIP=job1`, `test_a_drifted_resume_keeps_its_status_and_code_and_adds_the_final_block` fails with `'COMPLETED' != 'FAILED'` every time, because `_owned_work_hold` holds the record; without that process it passes. The same failure occurred in this round's first full run, which overlapped my own run of the same module in a disposable copy, so that run does not show a collision inside the suite alone. `TEST_RESULTS.md` reports a failure of a neighbouring test in this class in the implementer's run, with \"a still-running tagged process\". The likely cause there is the same, but it was not traced to a colliding process. Per-test ids, as `OrphanFixture.next_id` already does, would remove the collision.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "0406a98c74418e852e01c69b76445992fff7628e63fe298c554cea0669cce114",
+              "verdict": "REVISE",
+              "at": "2026-11-06T03:34:53Z"
+            }
+          ]
+        },
+        "F-733c11154ce0": {
+          "digest": "733c11154ce0d71c855edae0e9e1b8d46e9d4a9b83240cf24704c8db9dbc2f0e",
+          "text": "**O1. The drifted `resume` of a `LAUNCHED` Codex record has no test of its own.** Round 3's O1 fix added the `elif` branch at `controller/job.py:3114`, and `IMPLEMENTATION_SUMMARY.md` says this path has no test. The behaviour is right: measured over a directory populated as the launcher does, a drifted `resume` leaves `codex-home/sessions` and `tree` only. With the branch removed in a disposable copy, the same run leaves `bin`, `home`, `last-message.md`, `scratch`, `tmp` and `codex-home/state_5.sqlite`, and all 54 tests of `tests.test_job_codex_worker_resume` still pass. `ProtocolCodexTest.test_an_admitted_record_with_nothing_alive_is_failed_release_changed_with_the_copy_removed` could take the assertion.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-53088ed321f4": {
+          "digest": "53088ed321f4e8f8c199c8215dd2ceb14ce5cf5a29aee6e3f262e2ccd18f10f8",
+          "text": "**O2. `REVIEW_REQUEST.md` still describes round 2.** It says \"Post-fix round 2 after the local review's I1 (fix commit `28c784f`)\" and \"Full suite PASS at `28c784f`, 5773 tests\", under a heading of revision 4. `TEST_RESULTS.md` reports two failing full runs at this round's content head and its title still says revision 3. A manual reviewer who reads only the request gets the wrong test status. Round 2's O2 was this same drift, so the generation step should state the current round's fix commits and run.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-9ca4ef9367ee": {
+          "digest": "9ca4ef9367ee5e23f56ea07c56d7f02107190d7c430e326ff8387ae2491b88cd",
+          "text": "**O3. A `LAUNCHED` Codex record that does not end `INTERRUPTED` keeps its clone with no `reconciliation_evidence.clone`.** `_reconcile_codex_worker` (`controller/job.py`) names the clone only for `INTERRUPTED`, and `_reconcile_launched` can also end `FAILED` (a Workflow error reason) or `FINISHED`. `docs/guide/workers.md` and `docs/guide/harnesses.md` tell the operator to use that evidence key, and name `codex_worker.clone.path` as the alternative only for a drifted `resume` or `--abandon`. This was read, not measured. It loses nothing, because the path stays in the `clone` block and follows from the job id, so naming the clone for every ending, or adding this case to the guides' parenthesis, is enough.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-5808ee5058ef": {
+          "digest": "5808ee5058ef2ddcc05d36121497c0a7ff57696743d8a91e6422a87213ded471",
+          "text": "**O4. The `FakeLaunchTest` full-run failures in `TEST_RESULTS.md` remain untraced.** The implementer's two runs at `02269f8` failed three and five different tests in `tests.test_review` and `tests.test_review_claude` (`the composing command did not run`, `features list did not run`). This round's full run at the same content passed, and H4e changes neither those modules nor `controller/review.py`, so this is not a defect of this item. Nothing shows the cause, however, and the report's \"a fake-launcher process start failing under load\" is a guess, so it should become a follow-up issue beside round 3's O2 (shared job ids).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:23:09Z"
+            }
+          ]
+        },
+        "F-1819f0eaed8d": {
+          "digest": "1819f0eaed8dc5e593ded47da777bacca9d40af269c8c07f145c78b51f357a4c",
+          "text": "Revision 4 lacks a clean full-suite result: both reported runs failed in `FakeLaunchTest`, with the cause untraced. A stable rerun would close this validation gap; no implementation regression was established.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T05:26:54Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-06T05:23:09Z",
+          "verdict_sha256": "92756c2f39bbc23d3120bf5d63c805906aa9b92369c165e705abad4495ced483",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4e/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "df5ecf6179af139b51d0244f7c1bc63846c3f97a83eabdc347594a271c1bcf5e",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-06T05:26:54Z",
+          "verdict_sha256": "db4da7372023408246d58d9318b05213f66b010981c66ff6f13741973a393f52",
+          "run_ref": "codex:20261106T052335Z-e4e72960",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:38:10Z",
+            "summary": {
+              "checklist_blob": "6edec6cebe826de5a88c8c7093ea38b823cdf6fd",
+              "text": "tests.test_codex_worker_tree: Ran 19 tests, OK."
+            },
+            "log_digest": "37fc019b46b23fd5ec1f10862bc2e5837e23e24c9783fbd2665a445d138a1b02",
+            "run_ref": "controller:20261106T053337Z-859908b8",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:38:10Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:38:10Z",
+            "summary": {
+              "checklist_blob": "6edec6cebe826de5a88c8c7093ea38b823cdf6fd",
+              "text": "tests.test_codex_worker_landing: Ran 66 tests, OK."
+            },
+            "log_digest": "37fc019b46b23fd5ec1f10862bc2e5837e23e24c9783fbd2665a445d138a1b02",
+            "run_ref": "controller:20261106T053337Z-859908b8",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:38:11Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:38:11Z",
+            "summary": {
+              "checklist_blob": "6edec6cebe826de5a88c8c7093ea38b823cdf6fd",
+              "text": "Ran 57, 17, 13, 10 tests, each OK."
+            },
+            "log_digest": "cc8f3c9bb6a846160e8a4a626111538ea44254323b887ba9971fcf0d6f8399f0",
+            "run_ref": "controller:20261106T053337Z-859908b8",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:38:11Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:42:46Z",
+            "summary": {
+              "result": "passed",
+              "detail": "In an operator clone at the tester head, outside the sandbox, all six modules OK: test_job_codex_worker_landing (19), test_job_codex_worker (28), test_job_codex_worker_resume (54), test_job_codex_worker_usage (11), test_resume (134, 109 s) and test_codex_worker (37). The three test_resume failures in the tester sandbox (supervisor probe reads unknown instead of unattached, exit 45 instead of 40) were the sandbox hiding other processes' lock holders."
+            },
+            "log_digest": "9141db17992240a16eb010f7b55dcad760b24d0ac84347ed58c726bc1f5e843e",
+            "run_ref": "operator:h4e-flow4-rerun",
+            "reporter": "operator",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:42:46Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:38:12Z",
+            "summary": {
+              "checklist_blob": "6edec6cebe826de5a88c8c7093ea38b823cdf6fd",
+              "text": "check_docs rc=0, harness_table --check rc=0, workflow_backlog check rc=0 with {\"declared\": true, \"fresh\": true, \"roadmap\": \"docs/ROADMAP.md\"}."
+            },
+            "log_digest": "b1b3ed416a344473f0a04eb20a87b8e76c6bb0502630c17174dab453afdc1bf2",
+            "run_ref": "controller:20261106T053337Z-859908b8",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:38:12Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:38:12Z",
+            "summary": {
+              "checklist_blob": "6edec6cebe826de5a88c8c7093ea38b823cdf6fd",
+              "text": "harnesses.md (clean-tree requirement, record blocks, cleanup, crash windows, rm -rf of kept clone), workers.md (kept clone removal, resume/abandon landing), common-problems.md (restore .git then resume --abandon) and the H4e2 page (open question on clean-tree requirement) all contain the required content."
+            },
+            "log_digest": "2b803d6be2d8704fce6762f6f05cb9cda600e9772e00e47522f55c8ee10f6d97",
+            "run_ref": "controller:20261106T053337Z-859908b8",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:38:13Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "ran_at": "2026-11-06T05:38:13Z",
+            "summary": {
+              "checklist_blob": "6edec6cebe826de5a88c8c7093ea38b823cdf6fd",
+              "text": "Ran 2 tests, OK (skipped=1); skip reason: 'set CONTROLLER_LIVE_CODEX_TESTS=1 to run the live Codex worker clone proof'. worker_clone.txt records the measured live run (landed, one commit, author Codex worker, clone removed)."
+            },
+            "log_digest": "7527c60713c3c96b4936c7324761ddb19676ae73e550cb2b3ccffa5f0545ae68",
+            "run_ref": "controller:20261106T053337Z-859908b8",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:38:13Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 305,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/305"
+          },
+          "state": "open",
+          "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+          "observed_at": "2026-11-06T06:03:59Z",
+          "ingest_seq": 4,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "02269f844a1d26b422ea7601965f26f1ab02b2b2",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-11-06T06:03:59Z",
+            "raw_sha256": "77b717cb600ea61a40190053871e12a1fbcf3c4c6ea624db20aec97578ab5ce5",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "9e824061111fe5f5b6a5d5690909ba37abafca4a4ca830bdf83246d3c94afd21"
+          },
+          "fact_id": "011324a38ad2bc37529591ba3b221c9c706ee7562993cdd37ed69ee416cb0691"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 305,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/305"
+          },
+          "state": "open",
+          "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+          "observed_at": "2026-11-06T05:59:30Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "02269f844a1d26b422ea7601965f26f1ab02b2b2",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.27.10"
+            },
+            "fetched_at": "2026-11-06T05:59:30Z",
+            "raw_sha256": "77b717cb600ea61a40190053871e12a1fbcf3c4c6ea624db20aec97578ab5ce5",
+            "run_ref": "controller:20261106T055930Z-20c5e0c4"
+          },
+          "fact_id": "b2e3621957440f1a2680d4f3972ec7be3d79b6a07fa4d5caf4ec2ec9dd889adf"
+        },
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 4
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #305 at 636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "02269f844a1d26b422ea7601965f26f1ab02b2b2",
+          "anchor_identity": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "01a7207c83b3907c217a7fb7bb29af2bae8d798b77c64e3e2011dd2f62c2bf12",
+            "recorded_at": "2026-11-06T05:28:54Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "e6140be257a77225de02a614081d0efa2cffc5ae0821bbfcb2e6fda5fbc01b05",
+              "log_digest": "37fc019b46b23fd5ec1f10862bc2e5837e23e24c9783fbd2665a445d138a1b02",
+              "run_ref": "controller:20261106T053337Z-859908b8"
+            },
+            "flow-2": {
+              "evidence_id": "af75b61a207dedc2fd598345f8a3f055aa00a8662d76e9cf2c7c6b434c08fc63",
+              "log_digest": "37fc019b46b23fd5ec1f10862bc2e5837e23e24c9783fbd2665a445d138a1b02",
+              "run_ref": "controller:20261106T053337Z-859908b8"
+            },
+            "flow-3": {
+              "evidence_id": "fb45b9466c2bd39a6841d1a91636082f9eecbb1d70fc8324401e1638057b6221",
+              "log_digest": "cc8f3c9bb6a846160e8a4a626111538ea44254323b887ba9971fcf0d6f8399f0",
+              "run_ref": "controller:20261106T053337Z-859908b8"
+            },
+            "flow-4": {
+              "evidence_id": "7b462c9e840aa98571b35214da2c6edbf664774cf0f066476efd2f9974f121d1",
+              "log_digest": "9141db17992240a16eb010f7b55dcad760b24d0ac84347ed58c726bc1f5e843e",
+              "run_ref": "operator:h4e-flow4-rerun"
+            },
+            "flow-5": {
+              "evidence_id": "96bb04be046af49f313984182148cca2c56db2598ddd6d90446e8ce868978c77",
+              "log_digest": "b1b3ed416a344473f0a04eb20a87b8e76c6bb0502630c17174dab453afdc1bf2",
+              "run_ref": "controller:20261106T053337Z-859908b8"
+            },
+            "flow-6": {
+              "evidence_id": "4cf807093854088c2f239cfd0f98ebdc6e064ca626a089f2b2aa0750221a088a",
+              "log_digest": "2b803d6be2d8704fce6762f6f05cb9cda600e9772e00e47522f55c8ee10f6d97",
+              "run_ref": "controller:20261106T053337Z-859908b8"
+            },
+            "flow-7": {
+              "evidence_id": "c9b1b01c5da48ba8c8075433f3c79949bddec4c6f7a19115e2f38119ce0f03fa",
+              "log_digest": "7527c60713c3c96b4936c7324761ddb19676ae73e550cb2b3ccffa5f0545ae68",
+              "run_ref": "controller:20261106T053337Z-859908b8"
+            }
+          },
+          "pr": {
+            "fact_id": "011324a38ad2bc37529591ba3b221c9c706ee7562993cdd37ed69ee416cb0691",
+            "head": "636b2f156f1d2f7de4dd46f83591e0a1cd45f2bf",
+            "provenance": "workflow_gh",
+            "raw_sha256": "77b717cb600ea61a40190053871e12a1fbcf3c4c6ea624db20aec97578ab5ce5"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-11-06T06:03:59Z",
+        "workflow_release": "2.25.7"
+      }
     }
   }
 }

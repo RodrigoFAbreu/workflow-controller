@@ -93,6 +93,53 @@ class ReadTest(_Case):
         (self.clone / "README.md").write_text("changed\n")
         self.assertEqual(gitrepo.tracked_changes(self.clone), [" M README.md"])
 
+    def test_untracked_files_lists_an_untracked_file_and_not_an_ignored_one(self) -> None:
+        (self.clone / ".gitignore").write_text("ign/\n")
+        commit_all(self.clone, "ignore")
+        (self.clone / "ign").mkdir()
+        (self.clone / "ign" / "state").write_text("s\n")
+        self.assertEqual(gitrepo.untracked_files(self.clone), [])
+        (self.clone / "new file.txt").write_text("x\n")
+        self.assertEqual(gitrepo.untracked_files(self.clone), ["new file.txt"])
+        self.assertEqual(gitrepo.untracked_files(self.clone, no_optional_locks=True), ["new file.txt"])
+
+    def test_a_quiet_read_passes_the_fsmonitor_override_and_no_optional_locks(self) -> None:
+        spy = _Spy()
+        gitrepo.tracked_changes(self.clone, runner=spy, no_optional_locks=True)
+        gitrepo.untracked_files(self.clone, runner=spy, no_optional_locks=True)
+        gitrepo.head_state(self.clone, runner=spy, no_optional_locks=True)
+        gitrepo.ref_commit(self.clone, "HEAD", runner=spy, no_optional_locks=True)
+        for argv in spy.calls:
+            self.assertEqual(argv[3:5], ["-c", "core.fsmonitor=false"], argv)
+        spy = _Spy()
+        gitrepo.tracked_changes(self.clone, runner=spy)
+        self.assertNotIn("core.fsmonitor=false", spy.calls[0])
+
+    def test_a_quiet_read_does_not_fire_post_index_change_on_a_stale_index(self) -> None:
+        marker = self.tmp / "fired"
+        hook = self.clone / ".git" / "hooks" / "post-index-change"
+        hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+        hook.chmod(0o755)
+        (self.clone / "README.md").touch()  # a stale index entry: the stat data differs, the content does not
+        gitrepo.tracked_changes(self.clone, no_optional_locks=True)
+        self.assertFalse(marker.exists())
+
+    def test_checkout_branch_at_moves_the_branch_to_the_commit_without_running_a_hook(self) -> None:
+        marker = self.tmp / "fired"
+        hook = self.clone / ".git" / "hooks" / "post-checkout"
+        hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+        hook.chmod(0o755)
+        first = self.commit("a.txt", "a\n")
+        gitrepo.checkout_branch_at(self.clone, "work", self.base)
+        self.assertEqual(gitrepo.head_state(self.clone), gitrepo.HeadState("work", self.base))
+        self.assertEqual(gitrepo.ref_commit(self.clone, "refs/heads/main"), first)
+        self.assertFalse(marker.exists())
+
+    def test_config_probe_reads_a_key_and_is_none_for_no_match(self) -> None:
+        self.assertIsNone(gitrepo.config_probe(self.clone, ["--get-regexp", r"^hook\."]))
+        run(["git", "config", "hook.x.event", "post-merge"], cwd=self.clone)
+        self.assertEqual(gitrepo.config_probe(self.clone, ["--get-regexp", r"^hook\."]), "hook.x.event post-merge\n")
+
     def test_show_distinguishes_absent_from_failure(self) -> None:
         self.assertEqual(gitrepo.show(self.clone, "HEAD", "README.md"), b"fixture\n")
         self.assertIsNone(gitrepo.show(self.clone, "HEAD", "missing.txt"))
@@ -554,6 +601,105 @@ class SquashReadTest(_Case):
         failing = lambda argv: subprocess.CompletedProcess(argv, 0, b"not a tree\n", b"")  # noqa: E731
         with self.assertRaises(GitOperationError):
             gitrepo.merge_tree(self.clone, trunk, side, runner=failing)
+
+
+class LandingWritesTest(_Case):
+    """``landing_fetch``, ``landing_merge`` and ``landing_delete_ref`` (H4e, CP2, D4): one hardened option set, a
+    refspec check, and the clone-side reads with the commit graph off."""
+
+    def test_the_refspec_check_allows_only_a_heads_source_into_the_landing_namespace(self) -> None:
+        gitrepo.check_landing_refspec("refs/heads/main:refs/controller/landing/job-1")
+        gitrepo.check_landing_refspec("refs/heads/feature/x:refs/controller/landing/job.1")
+        for bad in ("+refs/heads/main:refs/controller/landing/j", "refs/heads/*:refs/controller/landing/j",
+                    "refs/heads/main:refs/controller/landing/*", "refs/tags/v1:refs/controller/landing/j",
+                    "refs/heads/main:refs/heads/main", "refs/heads/main:refs/remotes/origin/main",
+                    "refs/heads/main:refs/controller/landing/", "refs/heads/main:refs/controller/other/j",
+                    "refs/heads/main", "refs/heads/:refs/controller/landing/j",
+                    "refs/heads/main:refs/controller/landing/a:b", "refs/heads/a..b:refs/controller/landing/j"):
+            with self.subTest(bad=bad), self.assertRaises(GitOperationError):
+                gitrepo.check_landing_refspec(bad)
+
+    def test_landing_fetch_refuses_a_bad_branch_or_job_id_before_running_git(self) -> None:
+        def never(argv):
+            raise AssertionError(argv)
+
+        for branch, job in (("a*", "j"), ("main", "../x"), ("main", "a/b"), ("main", ""), ("a b", "j"), ("a:b", "j")):
+            with self.subTest(branch=branch, job=job), self.assertRaises(GitOperationError):
+                gitrepo.landing_fetch(self.clone, self.origin, branch, job, runner=never)
+        with self.assertRaises(GitOperationError):
+            gitrepo.landing_delete_ref(self.clone, "../heads/main", runner=never)
+        with self.assertRaises(GitOperationError):
+            gitrepo.landing_merge(self.clone, "HEAD", runner=never)
+
+    def test_all_three_writes_pass_the_landing_config(self) -> None:
+        spy = _Spy()
+        gitrepo.landing_fetch(self.clone, self.origin, "main", "j1", runner=spy)
+        gitrepo.landing_merge(self.clone, self.base, runner=spy)
+        gitrepo.landing_delete_ref(self.clone, "j1", runner=spy)
+        self.assertEqual([argv[3 + len(gitrepo.LANDING_CONFIG) + (len(gitrepo.LANDING_FETCH_CONFIG) if i == 0 else 0)]
+                          for i, argv in enumerate(spy.calls)], ["fetch", "merge", "update-ref"])
+        for argv in spy.calls:
+            self.assertEqual(argv[3:3 + len(gitrepo.LANDING_CONFIG)], list(gitrepo.LANDING_CONFIG), argv)
+        self.assertEqual(spy.calls[0][3 + len(gitrepo.LANDING_CONFIG):][:len(gitrepo.LANDING_FETCH_CONFIG)],
+                         list(gitrepo.LANDING_FETCH_CONFIG))
+        self.assertIn("--no-overwrite-ignore", spy.calls[1])
+        self.assertIn("--ff-only", spy.calls[1])
+        self.assertEqual(spy.calls[2][-3:], ["update-ref", "-d", "refs/controller/landing/j1"])
+
+    def test_the_landing_config_switches_off_hooks_fsmonitor_maintenance_and_each_listed_event(self) -> None:
+        pairs = [gitrepo.LANDING_CONFIG[i + 1] for i in range(0, len(gitrepo.LANDING_CONFIG), 2)]
+        for expected in ("core.hooksPath=/dev/null", "core.fsmonitor=false", "gc.auto=0", "maintenance.auto=false"):
+            self.assertIn(expected, pairs)
+        for event in ("reference-transaction", "post-index-change", "post-merge", "pre-merge-commit",
+                      "post-checkout", "post-commit", "post-rewrite", "pre-auto-gc"):
+            self.assertIn(f"hook.{event}.enabled=false", pairs)
+        self.assertNotIn("+", "".join(pairs))
+
+    def test_landing_fetch_lands_the_branch_only_in_the_private_namespace(self) -> None:
+        tip = self.commit("a.txt", "a\n")
+        run(["git", "update-ref", "refs/heads/main", self.base], cwd=self.origin)
+        gitrepo.landing_fetch(self.origin, self.clone, "main", "j1")
+        self.assertEqual(gitrepo.ref_commit(self.origin, "refs/controller/landing/j1"), tip)
+        self.assertEqual(gitrepo.ref_commit(self.origin, "refs/heads/main"), self.base)
+        gitrepo.landing_delete_ref(self.origin, "j1")
+        self.assertIsNone(gitrepo.ref_commit(self.origin, "refs/controller/landing/j1"))
+
+    def test_landing_merge_is_a_fast_forward_and_refuses_anything_else(self) -> None:
+        other = self.second_clone()
+        theirs = self.commit("t.txt", "t\n", other)
+        mine = self.commit("m.txt", "m\n")
+        run(["git", "fetch", "-q", str(other), "HEAD"], cwd=self.clone)
+        with self.assertRaises(GitOperationError) as caught:
+            gitrepo.landing_merge(self.clone, theirs)
+        self.assertEqual(caught.exception.evidence["exit_code"], 128)
+        self.assertEqual(gitrepo.head_state(self.clone).commit, mine)
+
+    def test_clone_reads_run_with_the_commit_graph_off(self) -> None:
+        spy = _Spy()
+        gitrepo.clone_refs(self.clone, runner=spy)
+        gitrepo.strict_descendant(self.clone, self.base, self.commit("a.txt", "a\n"), runner=spy)
+        gitrepo.range_commits(self.clone, self.base, "HEAD", 5, runner=spy)
+        for argv in spy.calls:
+            self.assertIn("core.commitGraph=false", argv)
+
+    def test_range_commits_strict_descendant_refs_and_submodule_reads(self) -> None:
+        first = self.commit("a.txt", "a\n")
+        second = self.commit("b.txt", "b\n")
+        self.assertEqual(gitrepo.range_commits(self.clone, self.base, second, 10),
+                         [(first, [self.base]), (second, [first])])
+        self.assertEqual(len(gitrepo.range_commits(self.clone, self.base, second, 1)), 1)
+        self.assertTrue(gitrepo.strict_descendant(self.clone, self.base, second))
+        self.assertFalse(gitrepo.strict_descendant(self.clone, second, second))
+        self.assertFalse(gitrepo.strict_descendant(self.clone, second, self.base))
+        self.assertEqual(gitrepo.head_symref(self.clone), "refs/heads/main")
+        run(["git", "checkout", "-q", "--detach"], cwd=self.clone)
+        self.assertIsNone(gitrepo.head_symref(self.clone))
+        self.assertIn("refs/heads/main", gitrepo.clone_refs(self.clone))
+        self.assertFalse(gitrepo.commit_touches_submodule(self.clone, second, first))
+        run(["git", "update-index", "--add", "--cacheinfo", f"160000,{first},sub"], cwd=self.clone)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "gitlink"], cwd=self.clone)
+        link = current_head(self.clone)
+        self.assertTrue(gitrepo.commit_touches_submodule(self.clone, link, second))
 
 
 class RunnerTest(unittest.TestCase):

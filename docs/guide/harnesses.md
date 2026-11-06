@@ -247,14 +247,77 @@ run's plain text with `worker_streams.format` `text`, `worker_state` `ENDED`, an
 `usage_record_failed` when the build raises); the `usage` block is described in the next section. A Codex job has no deadline
 unless a timeout is set, as for a Claude worker.
 
-Two things are deliberately undecided. The **tree**: the job runs in a worktree the module seam `job.CODEX_WORKTREE_PREPARER`
-supplies (`None` by default, which refuses the launch before it starts and leaves a terminal `WorkerNotStarted` record). A
-test sets it to a clone. Because a clone is not the managed repository, a finished Codex job does not prove its effects landed:
-on a legacy target the record ends `FAILED` with `phase_not_in_to_any_of`, and on a protocol decision `reconcile` answers
-`no_progress` and the job ends `FINISHED` with `protocol.progress: "none"`. How the tree is made and how its commits land is an
-owner decision needed before H4e. **Ownership** is described in the next section. The
-Codex home comes from `job.CODEX_HOME_RESOLVER` (the CLI's own `$CODEX_HOME` rule). The opt-in live proof is
+What the job runs in, and what becomes of its commits, is decided by H4e
+([#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) and described in the next section: a private clone
+that the Controller prepares from the module seam `job.CODEX_WORKTREE_PREPARER` and lands from `job.CODEX_LANDER`. Both seams
+are still dark: the preparer's default is `None`, which refuses the launch before it starts and leaves a terminal
+`WorkerNotStarted` record, and only a test or the live proof sets it. **Ownership** is described in the sections below.
+The Codex home comes from `job.CODEX_HOME_RESOLVER` (the CLI's own `$CODEX_HOME` rule). The opt-in live proof of the record is
 `tests.test_codex_worker_job_live`; its measured result is `tests/harness_contract/codex/worker_job.txt`.
+
+### A Codex worker's private clone and its landing
+
+H4e prepares a clone for a Codex worker and lands its commits, behind the same seams and for a fixture role only; no setting,
+option, exit code or gate is new, and nothing real reaches the branch.
+
+- **The clone.** `controller/codex_worker_tree.py` (`prepare`) makes `<runtime>/worker/<job>/tree` with
+  `git clone --no-checkout --no-local --no-hardlinks --no-tags --single-branch`: a separate repository with its own `.git`
+  directory, no remote (the only one is removed), no alternates, no hooks (`core.hooksPath=/dev/null`) and only the objects
+  reachable from the managed branch (`--no-local` makes the clone fetch through `upload-pack`, so it copies no object store). It
+  is checked out on the managed branch at the commit the Controller captured before the job. Its own config carries the author
+  `Codex worker <codex-worker@controller.invalid>`, so a plain `git commit` in the sandboxed shell, which has no identity,
+  succeeds. A worker that sets another author with `-c` still lands: the landing does not judge authors.
+- **The clean-tree requirement.** A clone sees only committed state, and a landing is a fast-forward of the branch, so
+  `prepare` refuses unless the managed repository is attached to a branch that is still at the captured commit, has no tracked
+  change, staged change, intent-to-add entry or untracked non-ignored file, holds no config hook and does not contain the
+  Controller's runtime root. The cost is real: the Workflow keeps plan files intent-to-add and `WORKFLOW_STATE.json` edits
+  uncommitted between gates, and ignored `.ai-review/` bundles are invisible to a clone, so a role that needs them cannot run in
+  a clone yet. H4e2 must settle that before it routes a role.
+- **The landing.** When the worker has ended, `controller/codex_worker_landing.py` (`land`) runs under the lifecycle lock the job
+  already holds. In order it refuses (each refusal names a `cause`) a run the launcher judged a breach (`sandbox_breach`), a
+  clone whose `.git` changed other than by commits (`clone_git_changed`), a clone with a ref other than its branch
+  (`extra_refs`), a managed branch that moved (`managed_branch_moved`), a managed tree that is not clean
+  (`managed_tree_not_clean`), a runtime root inside the managed root (`runtime_inside_managed`), a configured hook
+  (`managed_hooks_configured`), a tip that is not a strict descendant of the base (`not_a_descendant`), a merge commit
+  (`merge_commit`), more than 200 commits (`too_many_commits`) and a submodule or gitlink in any commit (`submodule`). It then
+  fetches the clone's branch into `refs/controller/landing/<job id>` (`fetch_failed`, `tip_moved`) and moves the managed branch
+  with `merge --ff-only --no-overwrite-ignore` (`would_overwrite_ignored`, `fast_forward_failed`, `merge_left_tree_dirty`,
+  `landing_unverified`, `landing_error`). Every write in the managed repository goes through one hardened option set
+  (`gitrepo.LANDING_CONFIG`: no hook, no fsmonitor, no automatic maintenance), and the range checks read with the commit graph
+  off. The clone's object store is the worker's and Git does not verify an object's id on those reads, so the range is checked
+  twice: in the clone before the fetch, and again in the managed repository after it, where the base is authentic and the fetch
+  verified every object it took. The fetch passes `--no-recurse-submodules`, so a submodule the base already holds is never
+  fetched into or updated, whatever the managed repository's `fetch.recurseSubmodules`. A clone whose branch is the base lands `nothing`, a success. The check after the move wants the branch at the tip, `HEAD`
+  on it and a clean tree, so a range that removes a path from `.gitignore` lands and then ends `landing_unverified` with `moved`
+  true: the files it stops ignoring are untracked. The hook suppression was measured against Git 2.56. A Git without `hook.*`
+  keys ignores them harmlessly, and `core.hooksPath` then turns off the file hooks.
+- **Integrity, not content.** The landing judges the integrity of the move. The Workflow judges the content exactly as it does
+  for an in-place worker, because a fast-forward keeps every commit id and tree: a worker that changes a protected file stales
+  the approval it covered here as it would there, and the landing weakens no approval check.
+- **The record.** `codex_worker.clone` is `{path, branch, base, guard}`, written before the launch. Before the fetch the Controller
+  writes the intent `landing = {outcome: "started", base, tip, branch}`; after the landing, the final block `{outcome:
+  "landed" | "nothing" | "refused", cause, base, tip, commits, branch, clone_kept, moved, ref_left, dirty}`. `landed` and
+  `nothing` go on to the unchanged verification (the legacy transition check, or the protocol's `reconcile`), which now sees the
+  landed commits; a job that landed nothing keeps `phase_not_in_to_any_of` or `no_progress`. A refused landing, whatever the
+  worker's own outcome, ends the job `FAILED` with `reconciliation_evidence.code` `CodexLandingRefused`, the `cause`, and the
+  clone's path in `reconciliation_evidence.clone`, in one write with the `refused` block.
+- **Cleanup.** The clone is removed through `runtime.remove_tree` before the job's terminal write on `landed`, `nothing`, an
+  ordinary worker failure, a launcher refusal before the spawn and a `clone_failed`; the sessions the usage gate reads are kept.
+  It is kept, and named in the record, after a refused landing and after an exception once the worker was spawned. A kept
+  clone is removed by the operator: `rm -rf` of the exact path in `reconciliation_evidence.clone` (a record ended by a drifted `resume` or by `--abandon` before any landing recovery carries it in `codex_worker.clone.path` only). There is no `runtime`
+  command and no retention or pruning ([Workers](workers.md#observing-workers)).
+- **Crash windows.** `resume` never fetches or merges. Over a `COMPLETED` Codex record it reads the refs and the tree and
+  finishes the landing's bookkeeping: killed before the fetch or after it and before the merge, the leftover landing ref is
+  deleted, nothing lands and the record ends `CodexLandingRefused` `landing_interrupted` with the clone kept; killed inside the
+  merge, between its tree update and its ref update, the branch is at the base with the worker's content in the tree, which is
+  `merge_left_tree_dirty` with nothing repaired; killed after the merge, the same post-move check as the live path gives the
+  final block (`landed` with `recovered`, or `landing_unverified`); an unreadable repository or a malformed `clone` or `landing`
+  block is `landing_unreadable`, which deletes nothing and keeps the clone. A `LAUNCHED` record ends
+  `INTERRUPTED` naming its clone and lands nothing. [Common problems](../common-problems.md#a-codex-workers-landing-was-refused)
+  has the causes and their remedies.
+
+The opt-in live proof is `tests.test_codex_worker_clone_live`: a real `codex exec` makes one plain commit in the clone and the
+commit lands with the fixed author; its measured result is `tests/harness_contract/codex/worker_clone.txt`.
 
 ### A Codex worker on the usage budget
 
@@ -309,7 +372,7 @@ with that record, so a lost Controller never leaves an orphan `codex` or `bwrap`
   record `LAUNCHED` at `STARTING` with no `worker_process`; `resume` ends it `INTERRUPTED`, as for a Claude worker, and never
   `FAILED`, which would count a run that never started against the apply relaunch bound.
 
-The tree stays undecided (it is left in place), and nothing real reaches the branch: the `codex` adapter still declares no worker
+Nothing real reaches the branch: the `codex` adapter still declares no worker
 role, no setting selects it and no real launcher is registered. The opt-in live proof is
 `tests.test_codex_worker_ownership_live`: it kills a child Controller that is running a real worker and checks that `resume`
 leaves no process of the tag; its measured result is `tests/harness_contract/codex/worker_ownership.txt` (the real worker

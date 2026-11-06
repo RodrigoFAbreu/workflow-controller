@@ -30,6 +30,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from controller import (  # noqa: E402
     codex_build, codex_worker as cw, command_files, harness, job, review, routing, worker, worker_launch,
 )
+from tests import process_fixtures  # noqa: E402
 from tests.test_codex_worker_sandbox import make_clone  # noqa: E402
 from tests.test_codex_worker_sandbox_live import operator_codex_home  # noqa: E402
 from tests.test_job import FAKE_IDENTITY, _build_target  # noqa: E402
@@ -102,13 +103,14 @@ class LiveJobRecordTest(unittest.TestCase):
         fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None, roles=(harness.WORKER,))
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
                  for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
-        def prepare(managed_repo, layout) -> Path:
+        def prepare(managed_repo, layout, base):
             make_clone(layout.worktree)
-            return layout.worktree
+            return process_fixtures.prepared_clone(layout.worktree)
 
         with mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}), \
                 mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, FIXTURE: LiveLauncher(commands)}), \
                 mock.patch.object(job, "CODEX_WORKTREE_PREPARER", prepare), \
+                mock.patch.object(job, "CODEX_LANDER", process_fixtures.nothing_lander), \
                 mock.patch.object(job, "CODEX_HOME_RESOLVER", operator_codex_home):
             config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<live>")
             options = routing.RoutingOptions(config=config, config_source="settings")

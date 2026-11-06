@@ -21,7 +21,7 @@ H4e is split at the first review by the sizing rule ([#303](https://github.com/R
 1. **The preparer.** Clone the managed repository into the job's layout under the runtime root (a local `git clone --no-hardlinks`, no hooks, `core.hooksPath=/dev/null`, `gc.auto=0`; the clone's own `.git`, never a `.git` file pointing into the managed repository), check out the work item's branch at the commit the Controller recorded, and record that base commit in the job record. The worker never gets a way to write into the managed repository (no remote it can push to).
 2. **The landing.** When the job ends, the Controller (never the worker) fetches the clone's branch and fast-forwards the managed branch, **only if**: the managed branch is still at the recorded base; the clone's commits are linear descendants of it (no merge commit); and nothing outside the branch changed (no other refs, no hook or config changes). Otherwise the job ends `FAILED` with a named reason and the clone is kept for inspection. A landing is a git write in the managed repository, so it runs only where the Controller already writes (under its lifecycle lock, between jobs, never while a review job reads the repository: a change of refs or config during a Codex review ends it `ReviewRepositoryChanged`).
 3. **Reconcile sees it.** After a landing the managed repository is as if the worker had worked in place, so the protocol decision's `reconcile` finds the progress (or the legacy phase check passes); a job that landed nothing keeps today's `no_progress`.
-4. **Cleanup.** The clone is removed through `runtime.remove_tree` at job end (C10k refuses a path below a link) except a kept-for-inspection clone, which retention removes later; it must not leak into `/tmp` (the runtime root is not `/tmp`; the Controller's own test leftovers there already cost memory).
+4. **Cleanup.** The clone is removed through `runtime.remove_tree` at job end (C10k refuses a path below a link) except a kept-for-inspection clone, which the operator removes (`rm -rf` of the path in the record's `reconciliation_evidence.clone`; there is no retention); it must not leak into `/tmp` (the runtime root is not `/tmp`; the Controller's own test leftovers there already cost memory).
 
 ## Decisions the plan must settle
 - Where the clone lives and how the layout names it; the exact fast-forward mechanism (`git fetch` from the clone path into a private ref, then `merge --ff-only`) and what the working tree of the checkout does.
@@ -35,3 +35,7 @@ Routing any real role to Codex (H4e2), `milestone-implement` (H4f), the settings
 ## Planning notes
 
 The rules that apply to this item (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+
+## What was built
+
+The plan is `docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md`. The clone and its landing are described in place in [harnesses](../guide/harnesses.md#a-codex-workers-private-clone-and-its-landing), the causes and remedies in [common problems](../common-problems.md#a-codex-workers-landing-was-refused), and the measured live run in `tests/harness_contract/codex/worker_clone.txt`. The seam stays dark: nothing real reaches the branch.

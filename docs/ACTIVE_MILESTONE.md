@@ -2,6 +2,47 @@
 
 ## Status
 
+**Complete.** `workflow-controller-h4e` (H4e, issue
+[#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) prepares a private clone for a Codex worker and lands
+its commits fast-forward behind the H3 seam, for a fixture role. The plan is
+`docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md` (revision 8). CP1 is complete: `controller/codex_worker_tree.py` has
+`prepare` (D1, D2: a separate clone with no remote, no alternates and no hooks, the fixed `Codex worker` author, checked out
+at the commit the Controller captured, refused with a named `CodexTreeError.cause` unless the managed branch is clean and
+unmoved), `gitrepo` gains `untracked_files`, `checkout_branch_at`, `config_probe` and the `no_optional_locks` reads, and
+`job._run_codex_worker` passes `pre_state["target_head"]` to the preparer seam, persists the `clone` block before the
+launch and removes the tree when the worker never ran. CP2 is complete: `controller/codex_worker_landing.py` has `land`
+(D3, D4: the checks in order, each refusal naming a `cause`, then a hardened fetch into `refs/controller/landing/<job id>` and
+`merge --ff-only --no-overwrite-ignore`), `verify_move` (the one post-move check) and `decide`/`recover` (D7's deciding half,
+which only reads); `gitrepo` gains `LANDING_CONFIG`, `landing_fetch`, `landing_merge`, `landing_delete_ref` (the one stated
+exception to "never deletes a ref", admitted by exactly one spelling in `tests/test_no_rewrite_invariants.py`) and the clone
+reads with the commit graph off. CP3 is complete: `controller/job.py` calls the `job.CODEX_LANDER` seam (default `land`) after the
+`COMPLETED` write, writes the intent block before the fetch and the final `landing` block after, ends a refused landing
+`FAILED` `CodexLandingRefused` in one write with the clone kept and named in `reconciliation_evidence.clone`, and settles the job
+directory before the terminal write (the clone removed on `landed`, `nothing`, an ordinary failure and a launcher refusal before
+the spawn, kept after a refusal or an exception once the worker was spawned). `resume`, a drifted `resume` and
+`resume --abandon` share one applying part of D7's recovery helper (`_apply_codex_landing`: the final block, the landing ref
+deleted, the tree removed only where its commits landed or there were none, `tree_left` when a removal fails), and a `LAUNCHED`
+Codex record ends `INTERRUPTED` naming its clone. CP4 is complete: `tests/test_codex_worker_clone_live.py` is the opt-in live
+proof (skipped by default and on CI with its reason; with `CONTROLLER_LIVE_CODEX_TESTS=1` a real `codex exec` made one plain
+commit in the real preparer's clone and the real lander fast-forwarded it onto the managed branch with the `Codex worker`
+author, the clone removed and no landing ref left; the job ended `FAILED` `phase_not_in_to_any_of` by the unchanged rules), its
+measured result is `tests/harness_contract/codex/worker_clone.txt`, and the guides
+(`docs/guide/harnesses.md`, `docs/guide/workers.md`, `docs/guide/development.md`) and `docs/common-problems.md` state the clone,
+the landing, the record blocks, the cleanup, the crash windows and the operator's removal of a kept clone in place. The
+item pages are corrected (no retention) and H4e2's page records the open question of the clean-tree requirement. All four
+checkpoints are implemented. The self-review fixed a commit that removes or replaces a gitlink the base holds, which landed
+because `gitrepo.commit_touches_submodule` read the old mode with its leading `:`; a `ref_left` block now names the real ref,
+not a `<job id>` placeholder; a `landing_unreadable` block names the clone and `reconciliation_evidence.clone` is the path
+derived from the job id when the `clone` block has no usable one; `extra_refs` and `managed_hooks_configured` name what they
+found; and the guides say what a `.gitignore` edit does, which Git the hook suppression was measured on, and that
+`landing_unreadable` deletes no ref.
+
+The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for H4e2 (Codex worker, step 5b: the four review roles on Codex), the item `python3 scripts/workflow_backlog.py next` returns.
+
+Previous item, now complete:
+
 **Complete.** `workflow-controller-a2b` (A2b, issue
 [#298](https://github.com/RodrigoFAbreu/workflow-controller/issues/298)) moves the roadmap prose to item pages and the rules to a
 live page. The plan is `docs/ai-workflow/CONTROLLER_A2B_PROSE_MIGRATION_PLAN.md` (revision 3). CP1 is complete: the 72 done
@@ -11,10 +52,6 @@ pins that every `detail` resolves to a regular file. CP2 is complete: the 25 ope
 all, each row's text found in its page), CL1a to CL1e and C12b to C12d carry a "Planning notes" section taken from issues
 #130 and #27 and the archive's follow-ups 8, 9 and 14, the one dangling title (C10g-3c2) is a complete phrase, and the comment on
 line 2 of `docs/backlog.yaml` is reworded. CP3 is complete: `docs/planning-rules.md` holds the archive's rules text (the clean-up limit and sizing rule, the deferred directions, 11.11, 11.12 and the principles) unchanged, the archive's banner and `docs/README.md` link it, `docs/guide/development.md` and `docs/guide/milestone-branches.md` point at it, the five release notes (1.4.1 to 1.7.0) link the archive section, and the selection test in `tests/test_backlog.py` builds its two-ready-item case in a copy. The self-review corrected the C10g-3c2 page's heading to the completed title, linked the rules from each open item's page, kept the CL1d and CL1e notes to what issue #130 says, made the rules page say its numbered list is frozen, and added the item pages to `docs/guide/development.md` and `docs/README.md`.
-
-The milestone is implemented, functionally reviewed and accepted by policy.
-
-Next action: `/milestone-plan` for H4e (Codex worker, step 5), the item `python3 scripts/workflow_backlog.py next` returns.
 
 Previous item, now complete:
 
@@ -326,63 +363,61 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-a2b` (A2b, issue [#298](https://github.com/RodrigoFAbreu/workflow-controller/issues/298)),
-implementation revision 1. The change moves the roadmap prose to 97 item pages (`docs/items/<id>.md`), names each in a `detail`
-line of `docs/backlog.yaml`, adds the rules page `docs/planning-rules.md`, completes the dangling titles, repoints the references
-and five release notes, and edits `tests/test_backlog.py`, `tests/test_docs.py` and `tools/check_docs.py`. No file under
-`controller/` changes. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or
-`ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the
-product clone with `python3 -B` and no `PYTHONPATH=.`; the flows are read-only commands and unit tests, so they write only to the
-scratch `TMPDIR`.
+Item `workflow-controller-h4e` (H4e, issue [#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)),
+implementation revision 4. The change adds `controller/codex_worker_tree.py` (the private clone preparer) and
+`controller/codex_worker_landing.py` (the fast-forward landing and its recovery), the `gitrepo` reads and writes they use, the
+`job.py` call sites (preparer seam, `CODEX_LANDER`, the cleanup, `resume` and `resume --abandon`), the opt-in live proof, the
+guides and `docs/common-problems.md`. Nothing routes a role to Codex yet, so there is no user-visible command; the flows are the
+unit modules. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a
+`PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product
+clone, one module at a time, with `python3 -B` and no `PYTHONPATH=.`; they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The backlog validates and the page is fresh.**
-Run `python3 -B scripts/workflow_backlog.py check; echo rc=$?`.
-Expected: `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}` and `rc=0`.
+**Flow 1: The clone preparer.**
+Run `python3 -B -m unittest tests.test_codex_worker_tree 2>&1 | tail -3`.
+Expected: `Ran 19 tests` and `OK` (a clone with no remote, alternates or hooks, the `Codex worker` author, a named
+`CodexTreeError.cause` for a dirty or moved branch and for a runtime root inside the managed repository).
 
-**Flow 2: Selection is unchanged.**
-Run `python3 -B scripts/workflow_backlog.py next`.
-Expected: exit 0; the item is `workflow-controller-a2b` with `detail` `docs/items/workflow-controller-a2b.md`, and `warnings` is empty.
+**Flow 2: The landing.**
+Run `python3 -B -m unittest tests.test_codex_worker_landing 2>&1 | tail -3`.
+Expected: `Ran 66 tests` and `OK` (each refusal names its `cause` and leaves the repository as it was; a fast-forward lands only
+the clone's commits; a gitlink removed or replaced is refused).
 
-**Flow 3: Every item has a page.**
-Run `ls docs/items | wc -l; grep -c 'detail:' docs/backlog.yaml; grep -c '^  - id:' docs/backlog.yaml`.
-Expected: `97`, `97`, `97`.
+**Flow 3: The Git helpers and the invariants.**
+Run, one after the other: `python3 -B -m unittest tests.test_gitrepo`, `tests.test_no_rewrite_invariants`,
+`tests.test_package_structure`, `tests.test_write_containment`, each piped to `tail -3`.
+Expected: `Ran 57`, `Ran 17`, `Ran 13` and `Ran 10 tests`, each `OK` (`landing_delete_ref` admitted by exactly one spelling).
 
-**Flow 4: The backlog and docs tests.**
-Run `python3 -B -m unittest tests.test_backlog tests.test_docs 2>&1 | tail -3`.
-Expected: `Ran 82 tests` and `OK` (22 backlog tests, including that every `detail` resolves to a regular file, and 60 docs tests,
-including the dead link on an item page).
+**Flow 4: The job seam, the cleanup and recovery.**
+Run `tests.test_job_codex_worker_landing` (19), `tests.test_job_codex_worker` (28), `tests.test_job_codex_worker_resume` (54, about
+35 s), `tests.test_job_codex_worker_usage` (11), `tests.test_resume` (134, about 90 s) and `tests.test_codex_worker` (37), each as
+`python3 -B -m unittest tests.<module> 2>&1 | tail -3`.
+Expected: every module `OK`. If the sandbox's read-only `/tmp` or missing user namespaces stop a process or job module, that
+module is `environment`-limited and operator-run (the plan says so); a failure with another cause is a finding.
 
-**Flow 5: Documentation and links.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`.
-Expected: `rc=0`, with `docs/items/*.md` now link-checked.
+**Flow 5: Documentation, table and backlog.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/harness_table.py --check; echo rc=$?` and
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?`.
+Expected: `rc=0` each; the backlog line is `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}`.
 
-**Flow 6: A finished item's page.**
-Run `sed -n 1,20p docs/items/workflow-controller-a2a.md | cut -c1-200`.
-Expected: a heading, `Item id:`, a "Roadmap row (moved verbatim)" section with the row's text, `Needs:` and `Section:` lines; no
-status marker; a link to the archive reads `../roadmap-archive.md#...`.
+**Flow 6: The guides state the clone and the landing.**
+Read the clone and landing sections of `docs/guide/harnesses.md` and `docs/guide/workers.md`, the new entry in
+`docs/common-problems.md`, and `docs/items/workflow-controller-h4e2.md`.
+Expected: the guides name the clean-tree requirement, the record blocks, the cleanup rules, the crash windows and the operator's
+removal of a kept clone; `common-problems.md` gives the restore-then-`resume --abandon` remedy; H4e2's page records the open
+question of the clean-tree requirement.
 
-**Flow 7: An open item's page and the completed title.**
-Read `docs/items/workflow-controller-cl1a.md` and `docs/items/workflow-controller-c10g-3c2.md`.
-Expected: CL1a has a "Planning notes" section from issue #130 and links the rules page; the C10g-3c2 heading is a complete phrase
-(ending "... that proves it") and `grep -n 'c10g-3c2' -A2 docs/backlog.yaml | head` shows the same complete title.
+**Flow 7: The live proof is skipped here.**
+Run `python3 -B -m unittest tests.test_codex_worker_clone_live -v 2>&1 | tail -6`.
+Expected: `Ran 2 tests`, `OK (skipped=1)`, with the skip reason naming `CONTROLLER_LIVE_CODEX_TESTS=1`. Read
+`tests/harness_contract/codex/worker_clone.txt` for the measured result of the one real run (not repeatable in the sandbox).
 
-**Flow 8: The rules page and its links.**
-Read `docs/planning-rules.md` (headings: next in order and the sizing rules, the deferred directions, 11.11, 11.12, the principles),
-the banner at the top of `docs/roadmap-archive.md`, the line in `docs/README.md`, and the pointers in `docs/guide/development.md`
-and `docs/guide/milestone-branches.md`. Then run `grep -n 'roadmap-archive' docs/releases/1.4.1.md docs/releases/1.4.2.md docs/releases/1.5.0.md docs/releases/1.6.0.md docs/releases/1.7.0.md`.
-Expected: the rules text matches the archive's unchanged; the archive banner and README name the rules page; each of the five
-notes links `../roadmap-archive.md#1112-release-notes-follow-the-milestone`.
-
-**Flow 9: The selection test is independent of live statuses.**
-Run `python3 -B -m unittest tests.test_backlog -v 2>&1 | grep -i select`.
-Expected: the selection tests pass; the two-ready-item case is built in a copy, not read from the live backlog.
-
-**Known limitations / out of scope.** The Manager and Workflow lane rows (they stay in the archive); a declared generator; a
-tracker; any Workflow script change; retiring `docs/roadmap-archive.md` (kept frozen and linked, plan "Open points"); the name
-of `docs/planning-rules.md` (a rename is one move and a link edit). The full suite is not a flow (`test_functional_sandbox` has a
-known CI flake, #206; the Git 2.56 trailer tests fail on main). No real-host run is part of this checklist.
+**Known limitations / out of scope.** Routing any role to Codex (H4e2); `milestone-implement` on Codex (H4f); carrying uncommitted
+managed state into the clone and back (the clean-tree requirement narrows what can run, H4e2 decides); a setting for the clone; a
+retention or pruning command for kept clones; any change to the Claude worker, the tester or the reviewer. The live test needs a
+real `codex`, `bwrap`, a recorded `verify-codex` build and a credential, so it is operator-run. The full suite is not a flow
+(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
 
 
 ## Next action

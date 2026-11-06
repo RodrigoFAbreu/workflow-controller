@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e",
+  "plan_revision": 8,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The clone preparer and its record",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The landing and every refusal",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "Landing at job end, the status, the cleanup and `resume`",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The live proof and the guides",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    }
+  ]
+}

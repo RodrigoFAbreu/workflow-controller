@@ -1,0 +1,33 @@
+# Codex worker clone and landing, codex-cli 0.163.0 (H4e, workflow-controller-h4e)
+
+Measured 2026-11-06 with
+`CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest -v tests.test_codex_worker_clone_live`
+(two tests, 10.5 s: `LiveCommandRendersTest`, no model; `LiveCloneLandingTest`, one short real model turn).
+
+Setup: a scratch managed repository (legacy, non-protocol, phase `PLANNING`, committed and clean on `main`), a recorded
+`verify-codex` entry for the real build, the fixture role `codex-live-clone` and a `CodexLauncher` subclass registered for
+the test only, the REAL preparer (`codex_worker_tree.prepare`) and the REAL lander (`codex_worker_landing.land`), the
+operator's Codex home through `job.CODEX_HOME_RESOLVER`, and a command that asks the worker to create `worker-proof.txt`
+and run a plain `git add` and `git commit -m "worker proof"` (no `-c user.*`, no git config).
+
+Result: the test passed through `job.execute_step` and a real `codex exec`:
+
+    --- status: FAILED (phase_not_in_to_any_of), worker_outcome SUCCESS, subtype success, exit 0, 8948 ms ---
+    done
+    --- landing ---
+    outcome landed, cause None, moved true, clone_kept false, ref_left false, dirty [],
+    base 0f57a2bc6f92 -> tip 5071c2dcfb62 (one commit)
+    --- managed branch main: 0f57a2bc6f92 -> 5071c2dcfb62, author Codex worker <codex-worker@controller.invalid> ---
+    --- diagnosis ---
+    harness: codex; readings: five_hour 15.0 %, weekly 22.0 %; usage_rollouts: one non-subagent rollout,
+    31727 input / 163 output tokens; subagents: []; credentials: unchanged; breach: []; detail: ''; subtype: success
+
+Asserted and held: the worker's plain `git commit` succeeded in the clone (the fixed D1 author made it possible without
+`-c user.*`); the commit landed on the managed branch by a fast-forward, one commit past the base, authored by `Codex
+worker`; the managed tree is clean and holds `worker-proof.txt`; no `refs/controller/*` ref is left; the clone was removed
+at job end; the record carries a `landed` block with `clone_kept` false; `validate_record` accepts the record; no
+credential copy is left.
+
+The record's `status` is `FAILED` with `phase_not_in_to_any_of`, by the unchanged rules: the landed commit did not make the
+phase transition the step expected, so the Workflow's own verification judges the content as before. The landing judged
+the integrity of the move only (D5).

@@ -12,7 +12,10 @@ and raises :class:`~controller.errors.GitOperationError` carrying the argv,
 exit code and stderr.
 
 What it never does (I2): force anything, ``reset``, rebase, amend, delete a
-ref, or move a tag. A push is a plain refspec push -- for a branch only
+ref, or move a tag. The one stated exception is :func:`landing_delete_ref`
+(``workflow-controller-h4e``, D4), which deletes only a ref under
+``refs/controller/landing/``, the Controller's own private namespace for a
+Codex worker's landing, never anything the operator or the Workflow owns. A push is a plain refspec push -- for a branch only
 after a local fast-forward check against the freshly fetched remote ref, for
 a tag only when the remote does not have it. A rejected push is re-read and
 reported, never retried.
@@ -85,18 +88,29 @@ def _failure(message: str, argv: Sequence[str], result: subprocess.CompletedProc
     return GitOperationError(message, evidence=details)
 
 
-def _run(repo_root: Path, args: Sequence[str], runner: Runner | None) -> tuple[list[str], subprocess.CompletedProcess]:
-    argv = ["git", "-C", str(repo_root), *args]
+#: Options of a read that must not run anything of the repository's own (H4e, D2 (I3)): ``git status`` refreshes the
+#: index opportunistically, which fires a ``post-index-change`` hook, and a ``core.fsmonitor`` program runs on a status.
+QUIET_READ_OPTIONS = ("-c", "core.fsmonitor=false")
+
+
+def _quiet_runner() -> Runner:
+    """The default runner with ``GIT_OPTIONAL_LOCKS=0`` (no opportunistic index refresh)."""
+    return subprocess_runner({**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
+
+
+def _run(repo_root: Path, args: Sequence[str], runner: Runner | None, *,
+         quiet: bool = False) -> tuple[list[str], subprocess.CompletedProcess]:
+    argv = ["git", "-C", str(repo_root), *(QUIET_READ_OPTIONS if quiet else ()), *args]
     try:
-        result = (runner or _DEFAULT_RUNNER)(argv)
+        result = (runner or (_quiet_runner() if quiet else _DEFAULT_RUNNER))(argv)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise _failure(f"git {args[0]} could not run: {exc}", argv) from None
     return argv, result
 
 
-def _git(repo_root: Path, args: Sequence[str], runner: Runner | None) -> str:
+def _git(repo_root: Path, args: Sequence[str], runner: Runner | None, *, quiet: bool = False) -> str:
     """``git -C <repo_root> <args>``'s stdout; any non-zero exit refuses."""
-    argv, result = _run(repo_root, args, runner)
+    argv, result = _run(repo_root, args, runner, quiet=quiet)
     if result.returncode != 0:
         raise _failure(f"git {args[0]} failed (exit {result.returncode}): "
                        f"{_text(result.stderr).strip()}", argv, result)
@@ -104,11 +118,11 @@ def _git(repo_root: Path, args: Sequence[str], runner: Runner | None) -> str:
 
 
 def _probe(repo_root: Path, args: Sequence[str], runner: Runner | None, *,
-           absent: int = 1, absent_stderr: str | None = None) -> str | None:
+           absent: int = 1, absent_stderr: str | None = None, quiet: bool = False) -> str | None:
     """Like :func:`_git`, but exit ``absent`` with empty stdout -- and either
     empty stderr or stderr containing ``absent_stderr`` -- is "no such
     thing" (``None``) rather than a failure. Any other outcome refuses."""
-    argv, result = _run(repo_root, args, runner)
+    argv, result = _run(repo_root, args, runner, quiet=quiet)
     if result.returncode == 0:
         return _text(result.stdout)
     stderr = _text(result.stderr)
@@ -145,8 +159,8 @@ class HeadState:
         return self.branch is None
 
 
-def head_state(repo_root: Path, *, runner: Runner | None = None) -> HeadState:
-    ref = _probe(repo_root, ["symbolic-ref", "-q", "HEAD"], runner)
+def head_state(repo_root: Path, *, runner: Runner | None = None, no_optional_locks: bool = False) -> HeadState:
+    ref = _probe(repo_root, ["symbolic-ref", "-q", "HEAD"], runner, quiet=no_optional_locks)
     branch = None
     if ref is not None:
         full = _single_line(ref, "git symbolic-ref HEAD")
@@ -154,14 +168,16 @@ def head_state(repo_root: Path, *, runner: Runner | None = None) -> HeadState:
             raise GitOperationError(f"HEAD points at {full}, not a branch",
                                     evidence={"symbolic_ref": full})
         branch = full[len("refs/heads/"):]
-    return HeadState(branch=branch, commit=ref_commit(repo_root, "HEAD", runner=runner))
+    return HeadState(branch=branch, commit=ref_commit(repo_root, "HEAD", runner=runner,
+                                                      no_optional_locks=no_optional_locks))
 
 
-def ref_commit(repo_root: Path, ref: str, *, runner: Runner | None = None) -> str | None:
+def ref_commit(repo_root: Path, ref: str, *, runner: Runner | None = None,
+               no_optional_locks: bool = False) -> str | None:
     """The commit ``ref`` resolves to (peeling tags), or ``None`` when no
     such ref exists."""
     out = _probe(repo_root, ["rev-parse", "-q", "--verify", "--end-of-options", f"{ref}^{{commit}}"],
-                 runner)
+                 runner, quiet=no_optional_locks)
     return None if out is None else _single_line(out, f"git rev-parse {ref}")
 
 
@@ -226,11 +242,12 @@ def first_parent_subjects(repo_root: Path, base: str | None, commit: str, *,
     return pairs
 
 
-def _status_records(repo_root: Path, runner: Runner | None) -> list[tuple[str, str | None]]:
+def _status_records(repo_root: Path, runner: Runner | None, *,
+                    no_optional_locks: bool = False) -> list[tuple[str, str | None]]:
     """``git status --porcelain --untracked-files=no -z`` as ``(entry,
     source)`` per changed tracked path; ``source`` is the rename/copy source
     path Git reports as its own field, else ``None``."""
-    out = _git(repo_root, ["status", "--porcelain", "--untracked-files=no", "-z"], runner)
+    out = _git(repo_root, ["status", "--porcelain", "--untracked-files=no", "-z"], runner, quiet=no_optional_locks)
     records, fields = [], out.split("\0")
     i = 0
     while i < len(fields):
@@ -246,10 +263,18 @@ def _status_records(repo_root: Path, runner: Runner | None) -> list[tuple[str, s
     return records
 
 
-def tracked_changes(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
+def tracked_changes(repo_root: Path, *, runner: Runner | None = None, no_optional_locks: bool = False) -> list[str]:
     """``git status --porcelain --untracked-files=no`` entries, one per
-    changed tracked path; empty for a clean tracked tree."""
-    return [entry for entry, _source in _status_records(repo_root, runner)]
+    changed tracked path; empty for a clean tracked tree. ``no_optional_locks``
+    reads with ``GIT_OPTIONAL_LOCKS=0`` and ``core.fsmonitor`` off (H4e, I3)."""
+    return [entry for entry, _source in _status_records(repo_root, runner, no_optional_locks=no_optional_locks)]
+
+
+def untracked_files(repo_root: Path, *, runner: Runner | None = None, no_optional_locks: bool = False) -> list[str]:
+    """The untracked, non-ignored paths (``git ls-files --others --exclude-standard -z``), which
+    :func:`tracked_changes` does not see (it passes ``--untracked-files=no``)."""
+    out = _git(repo_root, ["ls-files", "--others", "--exclude-standard", "-z"], runner, quiet=no_optional_locks)
+    return [path for path in out.split("\0") if path]
 
 
 #: What :func:`tracked_change_digests` records for the worktree fields of a
@@ -739,6 +764,161 @@ def fast_forward(repo_root: Path, branch: str, onto: str, *, runner: Runner | No
                                 evidence={"branch": branch, "head_branch": state.branch})
     _git(repo_root, ["merge", "--ff-only", "--no-edit", onto], runner)
     return head_state(repo_root, runner=runner).commit
+
+
+def config_probe(repo_root: Path, args: Sequence[str], *, runner: Runner | None = None) -> str | None:
+    """``git config <args>``'s stdout, or ``None`` when no key matches (exit 1, nothing on either stream)."""
+    return _probe(repo_root, ["config", *args], runner, quiet=True)
+
+
+def checkout_branch_at(repo_root: Path, branch: str, base: str, *, runner: Runner | None = None) -> None:
+    """``git checkout -q -B <branch> <base>`` with hooks, auto-gc and maintenance off: the Codex worker's private
+    clone is checked out at the commit the Controller recorded (H4e, D1). Only ever called on that clone, a
+    repository the Controller has just made, never on a target repository."""
+    _git(repo_root, ["-c", "core.hooksPath=/dev/null", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
+                     "checkout", "-q", "-B", branch, base, "--"], runner)
+
+
+# ---------------------------------------------------------------------------
+# The Codex worker's landing (H4e, D4): every write runs no hook and no automatic maintenance.
+# ---------------------------------------------------------------------------
+
+#: The events whose config hooks the landing switches off (``hook.<event>.enabled=false``); finalised by CP2's
+#: measurement against the installed Git. ``managed_hooks_configured`` fails closed for an event this list misses.
+LANDING_HOOK_EVENTS = ("reference-transaction", "post-index-change", "post-merge", "pre-merge-commit",
+                       "post-checkout", "post-commit", "post-rewrite", "pre-auto-gc")
+
+#: The one hardened option set of the landing's fetch, merge and ref delete (and its status reads): file hooks, an
+#: fsmonitor program, automatic gc and maintenance and every listed config hook are off.
+LANDING_CONFIG = (
+    "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
+    *(arg for event in LANDING_HOOK_EVENTS for arg in ("-c", f"hook.{event}.enabled=false")),
+)
+
+#: What the landing's fetch adds: a crafted object or a non-file transport is refused by Git itself.
+LANDING_FETCH_CONFIG = ("-c", "fetch.fsckObjects=true", "-c", "transfer.fsckObjects=true",
+                        "-c", "protocol.allow=never", "-c", "protocol.file.allow=always")
+
+LANDING_REF_PREFIX = "refs/controller/landing/"
+_LANDING_JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_LANDING_BRANCH_CHARS = re.compile(r"^[^\s~^:?*\[\\]+$")
+
+
+def _landing_ref(job_id: str) -> str:
+    if not _LANDING_JOB_ID.match(job_id) or ".." in job_id or job_id.endswith((".lock", ".")):
+        raise GitOperationError(f"refusing landing ref for job id {job_id!r}", evidence={"job_id": job_id})
+    return LANDING_REF_PREFIX + job_id
+
+
+def check_landing_refspec(refspec: str) -> None:
+    """Only ``refs/heads/<name>:refs/controller/landing/<id>``: no ``+``, no wildcard, no other source or destination."""
+    src, sep, dst = refspec.partition(":")
+    name = src[len("refs/heads/"):]
+    ok = (sep == ":" and not refspec.startswith("+") and "*" not in refspec and src.startswith("refs/heads/")
+          and bool(name) and _LANDING_BRANCH_CHARS.match(name) is not None and ".." not in name
+          and dst.startswith(LANDING_REF_PREFIX) and _LANDING_JOB_ID.match(dst[len(LANDING_REF_PREFIX):]) is not None
+          and ":" not in dst)
+    if not ok:
+        raise GitOperationError(
+            f"refusing landing refspec {refspec!r}: only refs/heads/<name>:{LANDING_REF_PREFIX}<job id> is allowed",
+            evidence={"refspec": refspec})
+
+
+def _landing_git(repo_root: Path, args: Sequence[str], runner: Runner | None, *, fetch: bool = False) -> str:
+    """The one private runner of the landing's writes: ``git -C <root>`` with :data:`LANDING_CONFIG`."""
+    options = (*LANDING_CONFIG, *(LANDING_FETCH_CONFIG if fetch else ()))
+    argv = ["git", "-C", str(repo_root), *options, *args]
+    try:
+        result = (runner or _DEFAULT_RUNNER)(argv)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise _failure(f"git {args[0]} could not run: {exc}", argv) from None
+    if result.returncode != 0:
+        raise _failure(f"git {args[0]} failed (exit {result.returncode}): {_text(result.stderr).strip()}",
+                       argv, result)
+    return _text(result.stdout)
+
+
+def landing_fetch(repo_root: Path, path: Path | str, branch: str, job_id: str, *,
+                  runner: Runner | None = None) -> None:
+    """Fetch the clone's ``refs/heads/<branch>`` into ``refs/controller/landing/<job id>`` of ``repo_root``."""
+    refspec = f"refs/heads/{branch}:{_landing_ref(job_id)}"
+    check_landing_refspec(refspec)
+    _landing_git(repo_root, ["fetch", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", "--",
+                             str(path), refspec], runner, fetch=True)
+
+
+def landing_merge(repo_root: Path, sha: str, *, runner: Runner | None = None) -> None:
+    """``git merge --ff-only --no-overwrite-ignore <sha>``: Git refuses (exit 1) when the range adds a path that is an
+    ignored file of this repository."""
+    if not re.fullmatch(r"[0-9a-f]{40,64}", sha):
+        raise GitOperationError(f"refusing to merge {sha!r}: not a full commit id", evidence={"commit": sha})
+    _landing_git(repo_root, ["merge", "--ff-only", "--no-overwrite-ignore", "--no-edit", sha], runner)
+
+
+def landing_delete_ref(repo_root: Path, job_id: str, *, runner: Runner | None = None) -> None:
+    """Delete ``refs/controller/landing/<job id>``: the stated, narrow exception to "never deletes a ref"."""
+    _landing_ref(job_id)
+    _landing_git(repo_root, ["update-ref", "-d", f"refs/controller/landing/{job_id}"], runner)
+
+
+#: Reads of the Codex worker's clone, where the worker could have written ``.git/objects/info/commit-graph`` (excluded
+#: from the guard), so the range checks read parents from the objects (H4e, D3, O1 of round 4).
+NO_COMMIT_GRAPH = ("-c", "core.commitGraph=false")
+
+
+def clone_refs(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
+    """Every ref of ``repo_root`` (``for-each-ref``), full names, sorted."""
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "for-each-ref", "--format=%(refname)"], runner, quiet=True)
+    return sorted(line for line in out.splitlines() if line)
+
+
+def head_symref(repo_root: Path, *, runner: Runner | None = None) -> str | None:
+    """The ref ``HEAD`` is a symbolic ref to, or ``None`` for a detached ``HEAD``."""
+    out = _probe(repo_root, ["symbolic-ref", "-q", "HEAD"], runner, quiet=True)
+    return None if out is None else _single_line(out, "git symbolic-ref HEAD")
+
+
+def strict_descendant(repo_root: Path, base: str, tip: str, *, runner: Runner | None = None) -> bool:
+    """Whether ``base`` is an ancestor of ``tip`` and not ``tip`` itself, read with the commit graph off."""
+    if base == tip:
+        return False
+    argv, result = _run(repo_root, [*NO_COMMIT_GRAPH, "merge-base", "--is-ancestor", base, tip], runner, quiet=True)
+    if result.returncode in (0, 1) and not result.stderr:
+        return result.returncode == 0
+    raise _failure(f"cannot decide whether {base} is an ancestor of {tip}", argv, result)
+
+
+def range_commits(repo_root: Path, base: str, tip: str, limit: int, *,
+                  runner: Runner | None = None) -> list[tuple[str, list[str]]]:
+    """``(commit, parents)`` for ``base..tip``, oldest first, at most ``limit`` commits, read with the commit graph
+    off."""
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "rev-list", "--parents", "--reverse", f"--max-count={limit}",
+                           "--end-of-options", f"{base}..{tip}"], runner, quiet=True)
+    commits = []
+    for line in out.splitlines():
+        fields = line.split()
+        if fields:
+            commits.append((fields[0], fields[1:]))
+    return commits
+
+
+def commit_touches_submodule(repo_root: Path, commit: str, parent: str, *, runner: Runner | None = None) -> bool:
+    """Whether ``commit``'s own diff against ``parent`` has a ``.gitmodules`` change or a gitlink (mode 160000).
+
+    ``--ignore-submodules=none`` is explicit: without it ``diff-tree`` honours an ``ignore = all`` in the ``.gitmodules``
+    of the repository it reads, and leaves the gitlink out of its output."""
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-textconv",
+                           "--no-ext-diff", "--ignore-submodules=none", parent, commit, "--"], runner,
+                quiet=True)
+    fields = out.split("\0")
+    # ``-z --raw``: ``:<old mode> <new mode> <old sha> <new sha> <status>`` NUL ``<path>`` NUL ...
+    i = 0
+    while i + 1 < len(fields) and fields[i].startswith(":"):
+        meta, path = fields[i].removeprefix(":").split(), fields[i + 1]
+        if "160000" in meta[:2] or path == ".gitmodules" or path.endswith("/.gitmodules"):
+            return True
+        i += 2
+    return False
 
 
 def push_branch(repo_root: Path, remote: str, branch: str, *, runner: Runner | None = None) -> str:

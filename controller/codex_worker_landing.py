@@ -319,7 +319,8 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
     assert result is not None
     if not ref_left:
         return result
-    return dataclasses.replace(result, ref_left=True, ref=f"{gitrepo.LANDING_REF_PREFIX}{job_id}")
+    return Landing(result.outcome, result.cause, result.base, result.tip, result.branch, result.commits,
+                   result.moved, True, result.dirty, result.message, f"{gitrepo.LANDING_REF_PREFIX}{job_id}")
 
 
 # ---------------------------------------------------------------------------

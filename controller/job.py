@@ -8909,8 +8909,9 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
     block = dict(recovery.landing)
     if recovery.refused and recovery.clone is None:
         # A malformed `clone` block names no usable path; the guide's `rm -rf` needs one, derived from the job id.
-        recovery = dataclasses.replace(recovery, clone=_codex_clone_path(record, runtime_root))
-        block["clone"] = recovery.clone
+        block["clone"] = _codex_clone_path(record, runtime_root)
+        recovery = codex_worker_landing.Recovery(recovery.landing, recovery.cause, recovery.refused, recovery.delete_ref,
+                                                 recovery.remove_tree, block["clone"], recovery.message)
     if recovery.delete_ref and not _delete_landing_ref(managed_repo, runtime_root, job_id):
         block["ref_left"] = True
         block["ref"] = f"{gitrepo.LANDING_REF_PREFIX}{job_id}"

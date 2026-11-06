@@ -2,6 +2,25 @@
 
 ## Status
 
+**In progress.** `workflow-controller-h4e2` (H4e2, issue
+[#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)): the review recorder and the read-only run of the
+two review roles, both dark (no role is routed to Codex). The plan is `docs/ai-workflow/CONTROLLER_H4E2_PLAN.md` (revision
+12), two checkpoints. CP1 is complete: `controller/review_recorder.py` records a local review verdict through the Workflow's
+own writers. A small driver program runs through `run_in_private_copy` beside the digest-checked script set; `check` makes the
+command's guards, recomputes `bundle_id` and `review_content_id`, probes the signatures of the Workflow functions it calls and
+returns the header values, gate context, round and script digests while writing nothing; `record` takes the path of a composed
+verdict file, checks the state identity and the digests, repeats the guards and makes the command's write set (the feedback
+file, then `record_local_plan_review` or `record_local_implementation_review` with the audit keys and the verdict text, and
+for an implementation `REVISE` the Workflow's own commit of that state). A refusal is a `RecorderResult` with one cause of
+`CAUSES`; the runner's own errors propagate. `run_in_private_copy` gains `real_index=False`: with `True` it uses the target's
+own index and switches off every hook event a commit fires, each setting checked like the rest. The tests run the Workflow
+scripts this repository has installed and compare the state and feedback with the in-place command's function sequence byte
+for byte. CP2 (the read-only run in the Codex clone) is next.
+
+Next action: `/milestone-implement workflow-controller-h4e2` for CP2.
+
+## Previous milestone (H4e leftovers)
+
 **Complete.** `workflow-controller-h4e-leftovers` (H4e leftovers, issue
 [#306](https://github.com/RodrigoFAbreu/workflow-controller/issues/306)). The plan is
 `docs/ai-workflow/CONTROLLER_H4E_LEFTOVERS_PLAN.md` (revision 6). CP1 is complete: the landing and orphan test fixtures
@@ -16,7 +35,7 @@ clone is gone reports `clone_removed: true` with `clone: null`; the three pages 
 
 Next action: `/milestone-plan` for `workflow-controller-h4e2` (Codex worker, step 5b: the four review roles on Codex), the item `python3 scripts/workflow_backlog.py next` returns.
 
-## Previous milestone
+## Earlier milestone
 
 **Complete.** `workflow-controller-h4e` (H4e, issue
 [#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) prepares a private clone for a Codex worker and lands

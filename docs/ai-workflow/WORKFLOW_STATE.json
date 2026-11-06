@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-h4e2",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -62902,6 +62902,803 @@
         },
         "evaluated_at": "2026-11-06T11:34:30Z",
         "workflow_release": "2.26.0"
+      }
+    },
+    "workflow-controller-h4e2": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4e2",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_H4E2_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 12,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "343bd1b0781ae81abb1d80d4bd0fe5e004b38419",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+        "approved_review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_H4E2_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e48b1fe20a3f299db6a82bfd670b2688fd48b4e8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "effae289b7cc77d40a4a631d43e358b454e96b48"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3a0ade48f0c2ae5c661bec89537f7d3ba0353556"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-06T23:42:05Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+            "ledger": {
+              "local": {
+                "bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+                "verdict": "APPROVE",
+                "round": 12,
+                "verdict_sha256": "a52254009a2b56d6c77932b8bcaa32eb1f88712f5c319e3b96bd3f4f574efa07",
+                "ledger_entry_sha256": "38402c7a6733f00cf41fc0fc2937fcdc1098b5a7d6a0fdee5e81f8527c501ebf",
+                "run_ref": "session:local .ai-review/workflow-controller-h4e2/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+                "verdict": "APPROVE",
+                "round": 12,
+                "verdict_sha256": "3434e30d13080d7d2bfbf6c0afd590ac12c13e17d23bbc2559b3b800d3138f9e",
+                "ledger_entry_sha256": "017232cab4c28f58e883f887be991788a2249282e1547172c5f8a603250c87d1",
+                "run_ref": "codex:20261106T233729Z-643fb766",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-06T23:42:05Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+          "verdict": "APPROVE",
+          "round": 12,
+          "completed_at": "2026-11-06T23:36:48Z",
+          "verdict_sha256": "a52254009a2b56d6c77932b8bcaa32eb1f88712f5c319e3b96bd3f4f574efa07",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+          "verdict": "APPROVE",
+          "round": 12,
+          "completed_at": "2026-11-06T23:40:19Z",
+          "verdict_sha256": "3434e30d13080d7d2bfbf6c0afd590ac12c13e17d23bbc2559b3b800d3138f9e",
+          "run_ref": "codex:20261106T233729Z-643fb766",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 12,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 42,
+      "last_transition": "2026-11-06T23:42:05Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-06T23:30:45Z",
+        "consumed": {
+          "review_content_id": "c57938d17fd99ed2f247c0f55c322da66001c8babd6099b0ed2fbf68fdba066e",
+          "plan_revision": 11,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+          "plan_revision": 12
+        },
+        "bound": {
+          "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+          "bundle_id": "35b6c761d693644ba87a0c70a46d15469e4b015e05341f8a6d0f700e4c8f5bd5",
+          "plan_revision": 12
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0f82aa14a2a7fbdbc8f40b4942907948b7c3d0c7dca09620881c8f26ee16e46e",
+        "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+        "30390fa73e0e8c017e5feb248c2a819df7140afae1e82fde17bdbd507975d9d3",
+        "3223f05fc37d5da98b1d87c7b395934093a9d137b617335806efad0ebf194837",
+        "42a6113669a128ff041290d200b87bbc2f377adb76936eb481c7bde5663ab8fa",
+        "4ae2cc1505e99ad381edc45f67aeb9a24c41bb271b83289dfd4976f2b960a7ed",
+        "6edfef1e2a79bf84927c11049d3cd7399ffd68a366de071bb5fd867a2c2c1f35",
+        "954c7f9acefbf5d601c7d1994a1e410c0b069f38f7849e923f2182be203dad53",
+        "954fe7df19375602027cc5bab6c39d2296bf6db5d2b47fa3210db41d1a5ff50f",
+        "a5606fc5d4f13f27e01fb3fa90210b4e94197f0ad0d895bd199a3e20921af39f",
+        "c57938d17fd99ed2f247c0f55c322da66001c8babd6099b0ed2fbf68fdba066e"
+      ],
+      "optional_findings": {
+        "F-f0252bb6251f": {
+          "digest": "f0252bb6251f3b05d240946fd9a00af61aeafa396f4d182ab518e8b685cc0097",
+          "text": "O1. D4's private-key check reads only the first 1 KiB, so a key later in a file passes both ways. Either scan the whole bounded file (8 MiB at most) or say plainly that this is a heuristic.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "3223f05fc37d5da98b1d87c7b395934093a9d137b617335806efad0ebf194837",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:06:00Z"
+            }
+          ]
+        },
+        "F-868e6768c0c9": {
+          "digest": "868e6768c0c9518a7fb130566004079d0abddb7ee944b8e7a04f70efb277d3c5",
+          "text": "O2. `local_review_audit`'s `run_ref` is `session:local <feedback path>`. When a role passes an absolute path, the clone's path enters the state ledger and points nowhere after the clone is removed. Say which form a Codex worker writes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "3223f05fc37d5da98b1d87c7b395934093a9d137b617335806efad0ebf194837",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:06:00Z"
+            }
+          ]
+        },
+        "F-c1d64a89a9ce": {
+          "digest": "c1d64a89a9ce195a3675f9cb8e9949c694d7db29d0a2b8aac97abf286c8dd623",
+          "text": "O3. CP1's \"a mismatch is fixed in the plan table at once, in the self-review\" edits a protected plan file after approval. Name `/amend` or its equivalent, or settle the table now, since this review has already found the mismatch (B1).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "3223f05fc37d5da98b1d87c7b395934093a9d137b617335806efad0ebf194837",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:06:00Z"
+            }
+          ]
+        },
+        "F-e5fece361ced": {
+          "digest": "e5fece361cedb39299ac37b21d9ba2ce89f7f34e531e35b3893dc1c33fb1a615",
+          "text": "O4. CP5's live proof runs only the two implementation roles. The plan-stage roles have different mechanics (intent-to-add, no commits), so add `review-plan` to it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "3223f05fc37d5da98b1d87c7b395934093a9d137b617335806efad0ebf194837",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:06:00Z"
+            }
+          ]
+        },
+        "F-e196a938346b": {
+          "digest": "e196a938346b3bf1703f7ec0ac7fbf3953bca3103401dae80eb7dbee6a7b34c0",
+          "text": "O1. D3 (e)'s baseline compare uses digests the manifest recorded, and the manifest holds only \"seeded or absent\" paths. At `AMENDING_PLAN` a plan file can be clean in the managed tree, so it has no recorded digest. Say that such a path is compared with its blob at `prepared.base`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "954fe7df19375602027cc5bab6c39d2296bf6db5d2b47fa3210db41d1a5ff50f",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:20:17Z"
+            }
+          ]
+        },
+        "F-1c8b6734f1a0": {
+          "digest": "1c8b6734f1a0ac8ebf8214b4075733c43936116bbfc07b08712ce98c5e77de4e",
+          "text": "O2. Bundle identity hashes file modes, so the apply must restore each file's mode from the clone. `runtime.replace_external_file` (`controller/runtime.py:636`) already takes `mode`, fsyncs and renames; generalise it rather than add a second primitive. Its temporary file sits beside the target, so a kill leaves an untracked file that the next `prepare(overlay=True)` refuses; name that in the `overlay_partial` guidance.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "954fe7df19375602027cc5bab6c39d2296bf6db5d2b47fa3210db41d1a5ff50f",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:20:17Z"
+            }
+          ]
+        },
+        "F-36f0984e6261": {
+          "digest": "36f0984e62617d795537918fe3f042c22411362c38514e100759c2db2a13e8ee",
+          "text": "O3. `review.mode` defaults to `auto` (`controller/settings.py:192`), so a Codex route on default settings pays for a Codex round and only then stops with `review_mode_unavailable` at the external gate. D5's phrase \"the default human external gate\" reads as though the default were manual. Consider warning at `run`/`step` start when a route produces mixed families under a non-manual mode.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "954fe7df19375602027cc5bab6c39d2296bf6db5d2b47fa3210db41d1a5ff50f",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:20:17Z"
+            }
+          ]
+        },
+        "F-2d716581abc8": {
+          "digest": "2d716581abc85daa8cd0b5f91a4f7544a07c30e4ce248804e097335ed8b243eb",
+          "text": "O4. Nothing owns the page changes D0 implies: `docs/items/workflow-controller-h4e2.md` still says four roles and \"the fast-forward landing unchanged\", and the H4e3 backlog entry is \"to be filed\" with no owner. CP5's `workflow_backlog.py check` will not notice either. Name the docs PR that does this at approval.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "954fe7df19375602027cc5bab6c39d2296bf6db5d2b47fa3210db41d1a5ff50f",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:20:17Z"
+            }
+          ]
+        },
+        "F-9f4d6ac53fe0": {
+          "digest": "9f4d6ac53fe08f7e67a642112453d314261a56870d0d5e5f901d769bd7049956",
+          "text": "O1. The field rule pins a list and leaves \"the rest of the entry\" free, though D3 elsewhere prefers closed sets. Measured: a `/review-plan` `APPROVE` changes only `phase`, `plan_review_stages`, `review_round_counts`, `state_revision` and `last_transition`. A per-role allowlist is therefore practical, and it would also close `checkpoints`, `last_completed_checkpoint_id`, `amendment_history`, `parent_work_item_id` and `work_item_kind`, which are free today and which neither role should change at the plan stage (`/apply-plan-review`'s exact field set should be measured in CP1 first).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "6edfef1e2a79bf84927c11049d3cd7399ffd68a366de071bb5fd867a2c2c1f35",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:30:19Z"
+            }
+          ]
+        },
+        "F-f7d83795a492": {
+          "digest": "f7d83795a4921d51db395c2449b94a24b8a8b13c097fc861bda09304bc865327",
+          "text": "O2. D4 says each cause is a `CodexOverlayRefused` `cause`, but `extra_refs` is a landing cause with its own refusal evidence (`controller/codex_worker_landing.py:34,175`), so CP4's `refs/heads/evil` attack ends with a landing refusal. Say which error code each ends in, so CP4's assertion is exact.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "6edfef1e2a79bf84927c11049d3cd7399ffd68a366de071bb5fd867a2c2c1f35",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:30:19Z"
+            }
+          ]
+        },
+        "F-ca5368b62ba4": {
+          "digest": "ca5368b62ba431f95038fc2532d9f63eff2a4beacb20c27e09be0453fa9baf3a",
+          "text": "O3. CP4's Done when says \"each attack ends the job `FAILED`\", but its list ends with prose naming the key markers, which is admitted. Word that case as the admitted control.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "6edfef1e2a79bf84927c11049d3cd7399ffd68a366de071bb5fd867a2c2c1f35",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:30:19Z"
+            }
+          ]
+        },
+        "F-d2d8508c98d6": {
+          "digest": "d2d8508c98d6fcc68f1c28d8a97b8150e9510e7a0686b10eb6da25b538f99009",
+          "text": "O4. D2b's threading list omits `compose_argv` and `_override_values` (`controller/codex_worker_sandbox.py:331,379`), which both read `required_overrides(layout, ...)` and so need the same new argument, or the override must live on `WorkerLayout` so that no signature changes. Carrying it on the layout would be the smaller change, and it would keep a non-overlay job byte-identical by construction.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "6edfef1e2a79bf84927c11049d3cd7399ffd68a366de071bb5fd867a2c2c1f35",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:30:19Z"
+            }
+          ]
+        },
+        "F-bd374aed7406": {
+          "digest": "bd374aed7406fcc7f03dc31b47b031fca1ead740dbe6b53ab14a127ef610e784",
+          "text": "O1. D4 says a crafted ref is the \"one stated exception\" to `CodexOverlayRefused`, but there is a second. CP4's `.git/hooks/post-merge` changes a guarded entry (`controller/codex_worker_sandbox.py:739-741,756-762`, since only `objects`, `refs`, `logs` and a few named files are excluded), so `check_guard` makes the outcome `sandbox_breach`. D3 then ends that job with no `collect`, so the attack can never end `CodexOverlayRefused` with cause `hook`. Name its ending and error code so CP4's assertion is exact. D3 also drops today's breach refusal through `land` (`controller/codex_worker_landing.py:257-259`), so say which code replaces `CODEX_LANDING_REFUSED_CODE` for a breach.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "30390fa73e0e8c017e5feb248c2a819df7140afae1e82fde17bdbd507975d9d3",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:41:27Z"
+            }
+          ]
+        },
+        "F-56c6e2c64234": {
+          "digest": "56c6e2c64234deec30c4779499a63d2d62636fcbdbc694256b9d19d5585d691d",
+          "text": "O2. D3 says \"the role is told to pass the repository-relative feedback path\" and no checkpoint owns the telling. `worker_task` appends `action.task_addendum` (`controller/job.py:5118-5124`), which is the available channel, and the user-only scan reads it. Name it and test it in CP3. Otherwise a model that passes an absolute path spends a whole round and ends in the field-rule refusal. Every recorded `run_ref` on `HEAD` that was sampled is relative, so the refusal itself is right.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "30390fa73e0e8c017e5feb248c2a819df7140afae1e82fde17bdbd507975d9d3",
+              "verdict": "REVISE",
+              "at": "2026-11-06T15:41:27Z"
+            }
+          ]
+        },
+        "F-6e78619e311e": {
+          "digest": "6e78619e311eeb75ba791ff289085ea84663baed53080d430a651a45dda23de3",
+          "text": "O1. Header step 5's edit set quotes text that is not in D2b, and leaves dangling references. It replaces \"this plan proposes `WORKFLOW_WORKTREE_ROOT_OVERRIDE` … the Workflow chooses the final name\", but those words appear only in step 5 itself; D2b now says \"the name and the Workflow version … are written here when the plan is re-declared … header step 5; until then the working name …\". Under \"exactly this edit set\" and \"nothing else changes\", Open decisions (3) (\"filed … now (the header's step 1)\") and D2b's \"the prerequisite above\" would also point at a paragraph that no longer exists. Quote D2b's real sentence and add those two.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "4ae2cc1505e99ad381edc45f67aeb9a24c41bb271b83289dfd4976f2b960a7ed",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T15:49:14Z"
+            }
+          ]
+        },
+        "F-dfbc0b32f827": {
+          "digest": "dfbc0b32f8275d906231e9fcbbccd648a12e7f7c23c5686bfcf60a7ce0030395",
+          "text": "O2. The four owner questions have no stated time, and one answer conflicts with step 5. Open decisions says \"the four questions below\" and lists five items. D0's ruling for a split moves CP3 to CP5 to H4e2b, which needs a backlog change, while step 5 says nothing else changes before the first review and step 4 needs no backlog change. Ask the owner when this entry stops, before the retirement, so a split ruling changes the order before any text is re-declared.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "4ae2cc1505e99ad381edc45f67aeb9a24c41bb271b83289dfd4976f2b960a7ed",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T15:49:14Z"
+            }
+          ]
+        },
+        "F-029f421c298e": {
+          "digest": "029f421c298e4a69cd52d9253fbc4fac1ee2a3cb966f72bc469fa29c6c52eff2",
+          "text": "O3. CP4's \"path escaping with `..`\" attack cannot be made by a fake `codex` through the real job path, yet its Done when says each attack ends `FAILED` with its named cause. `collect` reads `git status` and a walk under `.ai-review/<id>/`, neither of which yields such a path, and Git refuses it in the index (measured: `git update-index --add --cacheinfo` answers \"Invalid path '../x'\" for `../x` and `a/../x`). A file written outside the clone is simply never seen by `collect`. Test the cause at module level in CP2 with a crafted input, and drop it from CP4's list or restate it there, so the implementer needs no amendment.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "4ae2cc1505e99ad381edc45f67aeb9a24c41bb271b83289dfd4976f2b960a7ed",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T15:49:14Z"
+            }
+          ]
+        },
+        "F-4a639d886ee7": {
+          "digest": "4a639d886ee7063ea2b95f6ae4004516986d5dc37cf3548120dd739d4f998f23",
+          "text": "O4. Step 3 (a) saves only the four plan files, but (b) then removes the only copies of the verdicts: `feedback/REVIEW_FEEDBACK.md` and the item's `optional_findings` ledger (14 entries), both of which go with the state file and the ignored tree. Save the feedback file too, so the findings of this round, which step 5 does not let the re-declared text pick up, are not lost to the next reviewer.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "4ae2cc1505e99ad381edc45f67aeb9a24c41bb271b83289dfd4976f2b960a7ed",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T15:49:14Z"
+            }
+          ]
+        },
+        "F-83e6b36412d4": {
+          "digest": "83e6b36412d45d660ef1bef4fbb1b43f22144518ad11223102841a0d443e69ce",
+          "text": "O5. Two acts in step 3 are less exact than \"each act named\". (a) A bare `mktemp -d` lands in `/tmp`, which is tmpfs on this machine (`findmnt`), for what the step itself calls the only copy, so a reboot before step 4 loses it; name a persistent directory. (b) \"Discard\" needs two commands for an intent-to-add path: `git restore <path>` leaves it at ` A` (measured), while `git restore --staged <path>` followed by removing the file clears it. Left as it is, the failure is safe (the trunk start refuses), but it stops the order.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "4ae2cc1505e99ad381edc45f67aeb9a24c41bb271b83289dfd4976f2b960a7ed",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T15:49:14Z"
+            }
+          ]
+        },
+        "F-be500e8d641a": {
+          "digest": "be500e8d641a835385b05fcd04773f2ff60979f7650855f13b19147d7cbf1bfe",
+          "text": "O1. A Codex `review-plan` writes its own `Reviewer model:` line, and `distinct_reviewer_models` compares only the recorded strings, so a wrong vendor from a Codex local reviewer defeats the distinct-reviewer rule D5 relies on. The job knows `route.model` and the harness family, so the overlay could refuse a local ledger entry whose `reviewer_model` family is not the route's.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "0f82aa14a2a7fbdbc8f40b4942907948b7c3d0c7dca09620881c8f26ee16e46e",
+              "verdict": "REVISE",
+              "at": "2026-11-06T16:05:47Z"
+            }
+          ]
+        },
+        "F-682827c23a77": {
+          "digest": "682827c23a7768cf29a1839b60f6bbdbf67ea2e1092783862e7f989bea97a129",
+          "text": "O2. Header step 5's edit set says \"nothing else changes\" before the re-declared plan's first review, but `Released baseline: 1.27.10` and the `1.28.0` it implies go stale if a release lands before the adoption. Either add those two to the edit set or restate them from the new tip.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "0f82aa14a2a7fbdbc8f40b4942907948b7c3d0c7dca09620881c8f26ee16e46e",
+              "verdict": "REVISE",
+              "at": "2026-11-06T16:05:47Z"
+            }
+          ]
+        },
+        "F-5d60afcb3789": {
+          "digest": "5d60afcb3789220ba14e0c87bd38218afb9a7cfe1f3b5feddce3c8b3fb84e60a",
+          "text": "O1. `review_round_counts` is in the `review-plan` allowlist with no value rule, and the Workflow validates only its shape (`review_round_counts_errors`, `scripts/workflow_state.py:16504`), so D3's \"judged by the Workflow's checks\" does not hold for it. The real writer adds exactly one to `plan.local` on `APPROVE` or `REVISE` and leaves `BLOCK` a no-op (`_count_review_round`, `:16534`), and the protocol snapshot's `plan_local` reads the stored value (`scripts/workflow_protocol.py:2279-2288`). A rule that the count moves by that exact amount closes a role resetting its own count; whether a lowered count actually evades the Controller's cap was not exercised.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "a5606fc5d4f13f27e01fb3fa90210b4e94197f0ad0d895bd199a3e20921af39f",
+              "verdict": "REVISE",
+              "at": "2026-11-06T16:13:28Z"
+            }
+          ]
+        },
+        "F-e174c6adb6e1": {
+          "digest": "e174c6adb6e16ea4b9178ed2d5766b3802e1900918345cafb8c3d1cff23470ca",
+          "text": "O2. D3 lists `local_review_audit` among \"the rest of the entry\", but it is a function, not an entry field. Its outputs are the ledger keys in (b) above, which the value rules now constrain. Name the keys instead.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 7,
+              "review_content_id": "a5606fc5d4f13f27e01fb3fa90210b4e94197f0ad0d895bd199a3e20921af39f",
+              "verdict": "REVISE",
+              "at": "2026-11-06T16:13:28Z"
+            }
+          ]
+        },
+        "F-6a851b1805ef": {
+          "digest": "6a851b1805efbb9e8aa51f3338d04c3d065c4008009234eaffd57547387c5bd3",
+          "text": "O1. D3's `check` does not call `assert_feedback_not_owned_by_other_work_item`, so a foreign feedback file refuses only at `record`, after the Codex turn is paid for. On a legacy-layout item, D1 would also copy that file into the clone as \"the previous `REVIEW_FEEDBACK.md`\", against \"no other item's files\". The guard reads only, so it can run in `check`, before the copy. A scoped item cannot hit this.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "42a6113669a128ff041290d200b87bbc2f377adb76936eb481c7bde5663ab8fa",
+              "verdict": "REVISE",
+              "at": "2026-11-06T20:12:03Z"
+            }
+          ]
+        },
+        "F-7d61baa6de76": {
+          "digest": "7d61baa6de761a690ebf3d9dee13720b69eb05d3426cc356000224d55e5acba7",
+          "text": "O2. \"What exists\" and D6 cite the legacy verification rows (`controller/job.py:1293-1303`, `:1373-1391`), but for a protocol decision those rows are not the check: `_launch_job` calls `_protocol_resolution` and the Workflow's `reconcile` judges the outcome (`:9424`). D3's state-identity check also exists only on that path. State that the read-only branch needs `decision.protocol` and refuses without it, and cite `reconcile` as the verification.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "42a6113669a128ff041290d200b87bbc2f377adb76936eb481c7bde5663ab8fa",
+              "verdict": "REVISE",
+              "at": "2026-11-06T20:12:03Z"
+            }
+          ]
+        },
+        "F-7b252c2229eb": {
+          "digest": "7b252c2229ebdd2c8f43841c445b3aab85e23a080ce2a8f9ece8776ed7c6a3c2",
+          "text": "O3. D2 requires the final message to be UTF-8, but the launcher reads it with `errors=\"replace\"` (`controller/codex_worker.py:41`), so `result` can no longer show invalid bytes. Either read the raw file or drop the rule. Also, `_worker_dict` keeps the first 4000 characters of `result` in the job record (`controller/job.py:5179-5181`), so a verdict refused as `credential_in_verdict` still leaves its opening in the runtime root. The worker's stream files were not checked for the same text. Decide whether \"the verdict is discarded\" covers that excerpt.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 8,
+              "review_content_id": "42a6113669a128ff041290d200b87bbc2f377adb76936eb481c7bde5663ab8fa",
+              "verdict": "REVISE",
+              "at": "2026-11-06T20:12:03Z"
+            }
+          ]
+        },
+        "F-e0920d160eef": {
+          "digest": "e0920d160eefd9c6635b2d61c538513aced4fb714e37af5dc7fbfdbd0aff63dc",
+          "text": "O1. D4 says replacing the excerpt and scanning the stream files means a verdict refused as `credential_in_verdict` \"leaves nothing of its text in the runtime root\". That is not quite so: `_settle_codex_worker_dir` keeps `codex-home/sessions` on every path (`controller/job.py:8923-8924`), and a rollout holds the assistant's message as a `response_item` (`tests/harness_contract/codex/rollout_excerpt.jsonl`, ordinal 11). The usage admission needs those rollouts, so either scrub or delete the job's rollout on this refusal, or narrow the sentence to what is actually removed. Nothing here reaches the managed repository. Separately, the excerpt replacement and the scan live in `controller/job.py`, which only CP3 declares, but CP3 lists D5 and D6, not this part of D4, and no Done-when tests it (see Missing tests).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 9,
+              "review_content_id": "954c7f9acefbf5d601c7d1994a1e410c0b069f38f7849e923f2182be203dad53",
+              "verdict": "REVISE",
+              "at": "2026-11-06T20:20:13Z"
+            }
+          ]
+        },
+        "F-0f5ca66b8220": {
+          "digest": "0f5ca66b8220e8c7a605b20466a8b225b537c48fbb9fafe53257d8f7525b7caa",
+          "text": "O2. D2 says `launch_codex_worker` \"returns the raw bytes beside `result`\", but `worker.WorkerResult` has no such field and `controller/worker.py` is in no checkpoint's Files. The final-message file still stands when the launcher returns, since `_settle_codex_worker_dir` runs later, so `codex_review_role` can read `layout.last_message` as bytes with no launcher change. Say that instead, or declare the file.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 9,
+              "review_content_id": "954c7f9acefbf5d601c7d1994a1e410c0b069f38f7849e923f2182be203dad53",
+              "verdict": "REVISE",
+              "at": "2026-11-06T20:20:13Z"
+            }
+          ]
+        },
+        "F-f64f5e460fc1": {
+          "digest": "f64f5e460fc1b4b5215c3bb7360727fdcd562d6e84d2213e0fa403a40b7de5a4",
+          "text": "O3. CP4 says \"`python3 scripts/workflow_backlog.py` regenerates it\". With no subcommand that is a usage error, because the subparser is required (`scripts/workflow_backlog.py:1326`). The command is `generate` (with `--replace`, `:1333-1334`, if it refuses an existing page). CP4 also leaves unnamed the test file holding the grep of `docs/guide/runtime.md` and `docs/guide/commands.md`; it fits in a file CP4 already declares.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 9,
+              "review_content_id": "954c7f9acefbf5d601c7d1994a1e410c0b069f38f7849e923f2182be203dad53",
+              "verdict": "REVISE",
+              "at": "2026-11-06T20:20:13Z"
+            }
+          ]
+        },
+        "F-d6b28a4cd7db": {
+          "digest": "d6b28a4cd7db4df7097a5adb341df68dfbb6d944030bed8da960e82226854212",
+          "text": "O1. D1's `record` \"takes the composed verdict text\" and does not say how it reaches the driver. `_execute_query` runs with `stdin=subprocess.DEVNULL` (`controller/workflow_contract.py:611`), and one Linux argv string is limited to 128 KiB while D4 admits a 1 MiB verdict, so a verdict in the argument list fails only near the bound. Name a file under the runtime root, as `_ingest_review` does, and add a test at the bound.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:21:42Z"
+            }
+          ]
+        },
+        "F-d595050aad79": {
+          "digest": "d595050aad79cf61acd582389114fa32604fb512633af82d07fe0b91fb54b972",
+          "text": "O2. `check`'s round is \"the stage's local count plus one\", while both commands say one more than the highest prior round on record. They differ today on this very item: the count is 9 and the only ledger entry says round 5. The count matches what recent rounds wrote and is the better rule; say it is deliberate so CP1's comparison with the in-place sequence does not chase the wording.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:21:42Z"
+            }
+          ]
+        },
+        "F-35c2e6e35345": {
+          "digest": "35c2e6e35345406d5c4b03bc775033d48090b114c5f9d80cca04bd304cb435e6",
+          "text": "O3. CP1's \"a configured `hook.post-commit` ... leave no marker\" needs the hook in the operator's scope. A `hook.*.command` in the repository's own configuration is refused before the driver runs (`_refuse_target_hook_commands`, `controller/workflow_contract.py:876`), so that fixture gives `query_git_not_isolated` and no commit, not \"one commit holding only the state\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:21:42Z"
+            }
+          ]
+        },
+        "F-8a832896c290": {
+          "digest": "8a832896c290c65af20d34a77907d5a800996417331cf6800c3c7345d7c4feb8",
+          "text": "O4. CP1's `workflow_refused` test names \"a wrong phase\", but at the implementation stage the command's step 0 routes every phase other than `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` to the advisory branch, which is D1's `recorder_branch_unsupported`. Say the wrong-phase test is the plan stage's.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:21:42Z"
+            }
+          ]
+        },
+        "F-7ff9c8e75f52": {
+          "digest": "7ff9c8e75f528ee24b9cc5c4889791ca4e6f276854d9d22926da3c6899a665a2",
+          "text": "O5. CP1 compares state \"byte for byte\", and `last_transition`, `completed_at` and the binding's `at` all come from the writers' `now`, which `record`'s inputs do not list. Have `record` take `now` from the composed `Completed at:` value, which also keeps the file and the ledger in step.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:21:42Z"
+            }
+          ]
+        },
+        "F-4a9f6f3b80b0": {
+          "digest": "4a9f6f3b80b069a35bbfdedd5071182c5c91843118f29e0b0a35d8beecc0d0e3",
+          "text": "O6. `docs/items/workflow-controller-h4e2.md` still says the item \"reuses the H4e preparer ... and the fast-forward landing unchanged\", while D5's module does not import the landing and D2 adds a keyword to the preparer. The page is on `main`, so correct it with a docs change rather than here.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "25b7f3d6b34bb571a047da6ce03077af7784db0e4dbd4e1cf6e98f8dd1b94650",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:21:42Z"
+            }
+          ]
+        },
+        "F-8ad5a9cafaf8": {
+          "digest": "8ad5a9cafaf805435d3cd71910cc74f350479cb8709b3d7d6c97773c62587aa0",
+          "text": "O1. D5 says a runner error during `record` means \"nothing was written before the runner refused\" and \"the item is still at its review phase\", and offers a by-hand record. D1 limits that to an error \"raised before `record`'s first write\", and the two differ: the 120 s `query_timeout` can kill the driver after `state_transaction` published (`controller/workflow_contract.py:93`), and `_refuse_filters_git_would_run` and the private directory's removal both raise after the driver has returned. The window is narrow and a by-hand record would be refused by the phase guard, so nothing is corrupted, but the evidence would be wrong. A driver that dies without printing JSON has no named outcome either. Suggest this wording for both cases: the Workflow's state is the truth, as D5 already says of `CodexReviewRecordInterrupted`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 11,
+              "review_content_id": "c57938d17fd99ed2f247c0f55c322da66001c8babd6099b0ed2fbf68fdba066e",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:29:02Z"
+            }
+          ]
+        },
+        "F-27d6359ca7f5": {
+          "digest": "27d6359ca7f539e7f4daab4ad0866e62f54e52433f2278c3f10c5bd140e1d8ff",
+          "text": "O2. D3 asks for \"the five sections the Workflow requires\". `REVIEW_PROTOCOL.md`'s required structure, which both local commands cite, lists eight: it adds Architecture and maintainability, Migration and data-integrity, and Usability. No validator enforces them, so the five pass; only the integration tests' prose mentions them. A local role that stands in for the command would still drop those three prompts. Ask for all eight, or say the difference is deliberate and add it to the Risks entry on the prompt.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 11,
+              "review_content_id": "c57938d17fd99ed2f247c0f55c322da66001c8babd6099b0ed2fbf68fdba066e",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:29:02Z"
+            }
+          ]
+        },
+        "F-d180b8522f81": {
+          "digest": "d180b8522f81e9181fcddc57ab175e745e4a6168abdd80d3ea5859c0746a9902",
+          "text": "O3. CP2 needs a message of invalid UTF-8 from the real launcher with the fake `codex`, but the fake writes `Path(out).write_text(text)` from a JSON string (`tests/fake_codex.py:571-573`), which cannot produce invalid bytes. CP2's **Files:** omit `tests/fake_codex.py`. Add it, with a small `message_bytes` scenario key, or say the test rewrites `last-message.md` through a wrapping `launch` seam.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 11,
+              "review_content_id": "c57938d17fd99ed2f247c0f55c322da66001c8babd6099b0ed2fbf68fdba066e",
+              "verdict": "REVISE",
+              "at": "2026-11-06T23:29:02Z"
+            }
+          ]
+        },
+        "F-756421cba9ce": {
+          "digest": "756421cba9ce9760010450c90626ba0efd54665a2b839fa937e7bd68b5f061a2",
+          "text": "O1. D1 and CP1 cover hooks under `real_index`, but say nothing about commit signing. `_GIT_PINNED_CONFIG` (`controller/workflow_contract.py:120`) pins no `commit.gpgsign`, so `commit_pending_applying_review_feedback_entry`'s plain `git commit` signs when the configuration asks. I ran a scratch repository with `commit.gpgsign=true` and a `gpg.program` in its own local configuration, under `core.hookspath=/dev/null` and `hook.post-commit.enabled=false`: the program ran, exited 1 and the commit failed with exit 128. Nothing is corrupted, because a failing signer is `recorder_commit_pending` and a hanging one meets the 120 s timeout, where the Workflow's state is the truth. But the runner refuses a target's hook command because it \"cannot know\" what the command does (`_refuse_target_hook_commands`), and this is a program from the same file. Choose one and test it: refuse `commit.gpgsign` with a target-scope `gpg.program`, or say that signing behaves as in the in-place command. `-c commit.gpgsign=false` is what `controller/review.py:545` does for its own commit, but here it would make the recorder's commit differ from the in-place one for an operator who signs.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 12,
+              "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T23:36:48Z"
+            }
+          ]
+        },
+        "F-72da39eeca9a": {
+          "digest": "72da39eeca9ade40860b549ddfd12f021f9ceb260c406862cc3b4ffd8f47cf83",
+          "text": "O2. CP1's \"a `hook.post-commit` command set in the operator's own Git configuration\" cannot be written literally. On Git 2.56, `git config --global hook.post-commit.command ...` is accepted, then every `git commit` fails with \"fatal: hook friendly-name 'post-commit' collides with a known event name\", even with `-c hook.post-commit.enabled=false`. That fixture would give `recorder_commit_pending` rather than \"no marker\". Use a friendly name: `hook.<name>.command` with `hook.<name>.event=post-commit`. I ran that form: it fires by default, and both `hook.post-commit.enabled=false` and `hook.<name>.enabled=false` stop it, so D1's setting does what it claims.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 12,
+              "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T23:36:48Z"
+            }
+          ]
+        },
+        "F-f7d408b24d0d": {
+          "digest": "f7d408b24d0d02eecdcdecf7f5f6b8910120d35383dd211f48bb6a746d9a6abc",
+          "text": "O3. D3 tells the run to write \"the stage's revision line as the command's template writes it\", but no template has one. A search of `REVIEW_PROTOCOL.md`, `review-plan.md`, `review-implementation.md` and `workflow_fingerprint.py` for \"revision reviewed\", \"Plan revision\" and \"Implementation revision\" finds nothing. `Plan revision reviewed:` is only what recent verdicts chose to write. CP2 cannot pin a label that is not specified, and CP1's comparison is unaffected because both sides use the composed file. Name the labels, or drop the line.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 12,
+              "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T23:36:48Z"
+            }
+          ]
+        },
+        "F-6c999ca7a348": {
+          "digest": "6c999ca7a3489f1fa1590c00584319634efe2debbf0ae6f286c94a870d212261",
+          "text": "O4. D2 uses \"the base commit\" for the commit `prepare` requires the managed branch to be at (`check_managed`, `controller/codex_worker_tree.py:98-101`, \"the commit recorded before the job\"), while D3's `Reviewed base commit:` is the work item's `base_commit`. At the implementation stage the two differ, and passing the item's value gives `managed_branch_moved` every time. CP2's implementation test would show this, but H4e2b's wiring reads this text. Call D2's value the head the Controller recorded before the job.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 12,
+              "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T23:36:48Z"
+            }
+          ]
+        },
+        "F-d2202a4951b3": {
+          "digest": "d2202a4951b3b57c71135e1c05411591ea3fb5abcac1254e74d08767f3c69918",
+          "text": "O5. CP2's opening paragraph lost words in an edit: \"...and so cannot produce invalid UTF-8 and the real recorder on fixture repositories; a `launch` seam...\". \"The real recorder on fixture repositories\" belongs to the first clause, after \"the fake `codex` of `tests/fake_codex.py`\". The meaning can be recovered, but this sentence is the only one saying the tests use the real recorder.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 12,
+              "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T23:36:48Z"
+            }
+          ]
+        },
+        "F-c83363a7ebd1": {
+          "digest": "c83363a7ebd1b7daff69cbf7ff5c0e02970696e9fa10498167e74e73c80c1ad3",
+          "text": "Clarify D2’s “base commit” as the HEAD recorded before the job. `prepare` requires that commit, while D3’s `Reviewed base commit:` identifies the work item’s baseline. These differ during implementation review; CP2’s existing implementation fixture can assert the distinction.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 12,
+              "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
+              "verdict": "APPROVE",
+              "at": "2026-11-06T23:40:19Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e2",
+  "requirements": {
+    "R1": {
+      "description": "The Controller records a returned verdict through the Workflow's own writers in the managed repository, with the guards each command names, a fail-closed interface probe and the state-identity check; the feedback and state written are what the in-place command writes, and each refusal of D1 has its cause and its test",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A read-only Codex review runs in the H4e clone on a copy of the bound bundle: dirty-tree admission for read-only runs only, the input manifest, the local-stage prompt, the final message read from its file, the composed header and the after-run unchanged check",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Every cause of D4 is refused with its own test, and each leaves the managed repository unchanged",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Every ending of D5, including sandbox_breach, and each recover ending on resume, --abandon and drift, has its code and its test, and the clone is removed on each",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

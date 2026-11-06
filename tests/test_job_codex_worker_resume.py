@@ -691,6 +691,19 @@ class AbandonLandingTest(KilledLandingFixture):
         self.assertEqual(self.refs(), "")
         self.assertEqual(self.branch_tip(), self.base)
 
+    def test_abandon_of_a_launched_record_keeps_only_the_tree_and_the_sessions(self) -> None:
+        """O1 of round 3: only a ``COMPLETED`` record had its job directory settled."""
+        def launch(task, **options):
+            self.populate_job_dir()
+            raise KeyboardInterrupt
+
+        with mock.patch.object(cw, "launch_codex_worker", launch), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        abandoned = self.abandon(record)
+        self.assertEqual(abandoned["status"], job.STATUS_FAILED)
+        self.assert_only_tree_and_sessions()
+
     def test_abandon_after_a_merge_that_holds_removes_the_tree_and_keeps_the_code(self) -> None:
         record = self.killed("after_merge")
         abandoned = self.abandon(record)

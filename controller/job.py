@@ -3111,6 +3111,9 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     if _is_codex_worker_record(record) and record.get("status") == STATUS_COMPLETED:
         # H4e (D7): the drift ending keeps its status and code and adds the final landing block.
         record, recovery = _apply_codex_landing(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    elif _is_codex_worker_record(record):
+        # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7); the caller settled the credentials.
+        _settle_codex_worker_dir(runtime_root, str(record["job_id"]), keep_tree=True)
     now = _now()
     block = dict(record["protocol"])
     current = protocol.managed_digests(managed_repo.root)
@@ -4949,6 +4952,9 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
         if status == STATUS_COMPLETED:
             # H4e (D7): the same recovery helper as `resume`; it never stops the abandon.
             record, recovery = _apply_codex_landing(record, managed_repo=managed_repo, runtime_root=runtime_root)
+        else:
+            # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7), as `resume` does (round 3, O1).
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
     validity = _validity_or_none(record, managed_repo, identity)
     now = _now()
     abandoned: JobRecord = {

@@ -484,6 +484,15 @@ def prepared_clone(worktree: "str | os.PathLike"):
         guard=codex_worker_sandbox.guard_digest(worktree))
 
 
+def nothing_lander(managed_repo, prepared, runtime_root, job_id, *, worker_breach, on_intent):
+    """The lander seam (``job.CODEX_LANDER``, H4e) for the job tests whose clone is not a clone of any managed
+    repository: a ``nothing`` landing at the clone's base, the outcome of a worker that committed nothing. The real
+    landing is ``codex_worker_landing.land``, exercised against real repositories in ``test_job_codex_worker_landing``."""
+    from controller import codex_worker_landing
+    return codex_worker_landing.Landing("nothing", codex_worker_landing.NOTHING_TO_LAND, prepared.base, prepared.base,
+                                        prepared.branch)
+
+
 def wait_until(predicate, *, timeout: float = 15.0, interval: float = 0.02) -> bool:
     """Poll ``predicate`` until it is true or ``timeout`` elapses (bounded)."""
     deadline = time.monotonic() + timeout

@@ -75,6 +75,7 @@ class JobFixture(cwtest.LaunchFixture):
                                             {**worker_launch.LAUNCHERS, FIXTURE: self.launcher}))
         self.enterContext(mock.patch.object(job, "_new_job_id", self.next_id))
         self.enterContext(mock.patch.object(job, "CODEX_WORKTREE_PREPARER", self.prepare))
+        self.enterContext(mock.patch.object(job, "CODEX_LANDER", process_fixtures.nothing_lander))
         self.enterContext(mock.patch.object(job, "CODEX_HOME_RESOLVER", lambda: self.operator))
         self.options = self.routing_options()
         (self.tmp / "legacy-root").mkdir()

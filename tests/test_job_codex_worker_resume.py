@@ -8,7 +8,9 @@ the open flake #259). Nothing real reaches the branch.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -22,17 +24,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import (  # noqa: E402
-    codex_worker as cw, codex_worker_sandbox as ws, job, managed_repo, protocol, review, worker,
+    cli, codex_worker as cw, codex_worker_landing, codex_worker_sandbox as ws, codex_worker_tree, gitrepo, job,
+    managed_repo, protocol, review, worker,
 )
 from controller.errors import (  # noqa: E402
-    DriftedInstallationError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError,
+    DriftedInstallationError, GitDirectoryUnresolvableError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError,
     PendingJobReconciliationError, StaleJobRecordError,
 )
 from tests import fixtures, process_fixtures  # noqa: E402
 from tests.test_job import FAKE_IDENTITY  # noqa: E402
 from tests.test_job_codex_worker import JobFixture  # noqa: E402
+from tests.test_job_codex_worker_landing import STATE, LandingFixture, git  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
-from tests.test_protocol_outcome import _Env  # noqa: E402
+from tests.test_protocol_outcome import WID, _CHECKPOINT_CODE, _Env  # noqa: E402
 
 
 def sha(path: Path) -> str:
@@ -452,6 +456,405 @@ class AbandonTest(OrphanFixture):
         self.end_and_reap()
         shutil.rmtree(self.managed.root)
         self.assert_abandoned(record, self.abandon(record))
+
+
+class KilledLandingFixture(LandingFixture):
+    """A job whose landing is killed (a ``KeyboardInterrupt``, which no ``except Exception`` of the job catches) at a
+    stage of D7's windows, leaving the ``COMPLETED`` record a lost Controller would leave."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.phase = self.expected_phase()
+        self.after = lambda clone: self.commit_in(clone, {STATE: self.state_with_phase(self.phase)}, "transition")
+        self.enterContext(mock.patch.object(gitrepo, "landing_fetch", wraps=gitrepo.landing_fetch))
+        self.fetches = self.merges = 0
+
+    def killing_lander(self, stage: str):
+        def lander(managed_repo, prepared, runtime_root, job_id, *, worker_breach, on_intent):
+            layout = ws.WorkerLayout(runtime_root, job_id)
+            if stage == "before_intent":
+                raise KeyboardInterrupt
+            tip = gitrepo.ref_commit(prepared.path, f"refs/heads/{prepared.branch}")
+            on_intent(tip)
+            if stage == "before_fetch":
+                raise KeyboardInterrupt
+            gitrepo.landing_fetch(managed_repo.root, prepared.path, prepared.branch, job_id,
+                                  runner=codex_worker_landing._runner(layout.base, fetch=True))
+            if stage == "after_fetch":
+                raise KeyboardInterrupt
+            gitrepo.landing_merge(managed_repo.root, tip, runner=codex_worker_landing._runner(layout.base))
+            raise KeyboardInterrupt
+
+        return lander
+
+    def killed(self, stage: str) -> dict:
+        with mock.patch.object(job, "CODEX_LANDER", self.killing_lander(stage)), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_COMPLETED)
+        return record
+
+    def resume(self, managed=None) -> dict:
+        with mock.patch.object(gitrepo, "landing_fetch", side_effect=AssertionError("resume fetched")), \
+                mock.patch.object(gitrepo, "landing_merge", side_effect=AssertionError("resume merged")):
+            (record,) = job.resume(managed or self.managed, identity=FAKE_IDENTITY, runtime=self.runtime)
+        return record
+
+    def abandon(self, record: dict, managed=None) -> dict:
+        return job.abandon(managed or self.managed, identity=FAKE_IDENTITY, runtime=self.runtime,
+                           job_id=record["job_id"])
+
+    def rewrite(self, **changes) -> dict:
+        record = self.only_record()
+        record.update(changes)
+        (self.runtime / "jobs" / f"{record['job_id']}.json").write_text(json.dumps(record))
+        return record
+
+    def refs(self) -> str:
+        return git(self.managed.root, "for-each-ref", "refs/controller")
+
+    def assert_refused_clone_kept(self, resumed: dict, cause: str, *, moved=False) -> dict:
+        self.assertEqual(resumed["status"], job.STATUS_FAILED)
+        evidence = resumed["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["cause"]), (job.CODEX_LANDING_REFUSED_CODE, cause))
+        block = resumed["codex_worker"]["landing"]
+        self.assertEqual((block["outcome"], block["cause"], block["clone_kept"]), ("refused", cause, True))
+        self.assertEqual(block["moved"], None if cause == "landing_unreadable" else moved)
+        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertTrue(self.clone_kept())
+        self.assertEqual(self.refs(), "")
+        return block
+
+
+class WindowsTest(KilledLandingFixture):
+    def test_killed_before_the_fetch_resume_ends_the_landing_interrupted_and_nothing_landed(self) -> None:
+        self.killed("before_fetch")
+        resumed = self.resume()
+        self.assert_refused_clone_kept(resumed, "landing_interrupted")
+        self.assertEqual(self.branch_tip(), self.base)
+
+    def test_killed_after_the_fetch_the_leftover_landing_ref_is_removed(self) -> None:
+        self.killed("after_fetch")
+        self.assertNotEqual(self.refs(), "")
+        resumed = self.resume()
+        self.assert_refused_clone_kept(resumed, "landing_interrupted")
+        self.assertEqual(self.branch_tip(), self.base)
+
+    def test_killed_after_the_merge_resume_records_landed_recovered_and_removes_the_tree(self) -> None:
+        self.killed("after_merge")
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        block = resumed["codex_worker"]["landing"]
+        self.assertEqual((block["outcome"], block["recovered"], block["clone_kept"]), ("landed", True, False))
+        self.assertEqual(block["tip"], self.branch_tip())
+        self.assertEqual(self.refs(), "")
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_the_branch_at_neither_commit_is_landing_unverified_and_the_clone_is_kept(self) -> None:
+        self.killed("after_fetch")
+        fixtures.commit_all(self.managed.root, "elsewhere", allow_empty=True)
+        resumed = self.resume()
+        self.assert_refused_clone_kept(resumed, "landing_unverified", moved=True)
+
+    def test_the_branch_at_base_with_the_workers_content_staged_is_merge_left_tree_dirty(self) -> None:
+        self.killed("before_fetch")
+        (self.managed.root / "half.txt").write_text("half\n")
+        git(self.managed.root, "add", "half.txt")
+        resumed = self.resume()
+        block = self.assert_refused_clone_kept(resumed, "merge_left_tree_dirty")
+        self.assertTrue(any("half.txt" in path for path in block["dirty"]), block["dirty"])
+        self.assertEqual(git(self.managed.root, "status", "--porcelain"), "A  half.txt")  # nothing repaired
+
+    def test_no_intent_block_and_a_dirty_tree_is_landing_interrupted_with_the_paths(self) -> None:
+        self.killed("before_intent")
+        (self.managed.root / "mine.txt").write_text("mine\n")
+        resumed = self.resume()
+        block = self.assert_refused_clone_kept(resumed, "landing_interrupted")
+        self.assertEqual(block["dirty"], ["mine.txt"])
+        self.assertTrue((self.managed.root / "mine.txt").exists())
+
+    def test_a_range_that_removes_an_ignore_rule_is_landing_unverified_never_landed(self) -> None:
+        (self.managed.root / ".gitignore").write_text("ign/\n")
+        fixtures.commit_all(self.managed.root, "ignore")
+        (self.managed.root / "ign").mkdir()
+        (self.managed.root / "ign" / "x").write_text("ignored\n")
+        self.base = git(self.managed.root, "rev-parse", "HEAD")
+        self.after = lambda clone: self.commit_in(clone, {".gitignore": "\n"}, "unignore")
+        self.killed("after_merge")
+        resumed = self.resume()
+        self.assert_refused_clone_kept(resumed, "landing_unverified", moved=True)
+        self.assertEqual(self.branch_tip(), resumed["codex_worker"]["landing"]["tip"])
+
+    def test_a_kill_between_the_removal_of_the_tree_and_the_terminal_write_is_finished_by_resume(self) -> None:
+        with mock.patch.object(job, "_observe_post_phase", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual((record["status"], record["codex_worker"]["landing"]["outcome"]),
+                         (job.STATUS_COMPLETED, "landed"))
+        self.assertFalse((self.job_dir() / "tree").exists())
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_a_final_block_with_the_tree_still_there_is_removed_by_resume(self) -> None:
+        real = job._settle_codex_worker_dir
+
+        def settle(runtime_root, job_id, *, keep_tree):
+            raise KeyboardInterrupt
+
+        with mock.patch.object(job, "_settle_codex_worker_dir", settle), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        self.assertTrue(self.clone_kept())
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertFalse((self.job_dir() / "tree").exists())
+        del real
+
+    def test_a_final_nothing_block_goes_to_the_reconciliation_and_the_tree_is_removed(self) -> None:
+        self.after = None
+        with mock.patch.object(job, "_observe_post_phase", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        self.assertEqual(self.only_record()["codex_worker"]["landing"]["outcome"], "nothing")
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FAILED)
+        self.assertEqual(resumed["reconciliation_evidence"]["reason"], "phase_not_in_to_any_of")
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_a_failed_removal_of_the_tree_is_recorded_as_tree_left(self) -> None:
+        self.killed("after_merge")
+        real = job.runtime.remove_tree
+
+        def remove(root, rel, **kw):
+            if str(rel).endswith("/tree"):
+                raise OSError("busy")
+            return real(root, rel, **kw)
+
+        with mock.patch.object(job.runtime, "remove_tree", remove):
+            resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED)
+        block = resumed["codex_worker"]["landing"]
+        self.assertTrue(block["clone_kept"])
+        self.assertIn("busy", block["tree_left"]["reason"])
+
+
+class LaunchedLandingTest(KilledLandingFixture):
+    def test_a_kill_between_prepare_and_the_clone_block_ends_interrupted_naming_the_derived_path(self) -> None:
+        def prepare(managed, layout, base):
+            codex_worker_tree.prepare(managed, layout, base)
+            raise KeyboardInterrupt
+
+        with mock.patch.object(job, "CODEX_WORKTREE_PREPARER", prepare), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        self.assertNotIn("clone", record["codex_worker"])
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED)
+        self.assertEqual(resumed["reconciliation_evidence"]["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertTrue(self.clone_kept())
+
+    def test_a_launched_record_whose_worker_committed_does_not_land_and_names_the_clone(self) -> None:
+        def launch(task, **options):
+            self.after(Path(options["cwd"]))
+            raise KeyboardInterrupt
+
+        with mock.patch.object(cw, "launch_codex_worker", launch), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        self.assertEqual(self.only_record()["status"], job.STATUS_LAUNCHED)
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED)
+        self.assertEqual(resumed["reconciliation_evidence"]["clone"], resumed["codex_worker"]["clone"]["path"])
+        self.assertEqual(self.branch_tip(), self.base)
+        self.assertTrue(self.clone_kept())
+        self.assertNotIn("landing", resumed["codex_worker"])
+
+
+class AbandonLandingTest(KilledLandingFixture):
+    def assert_abandoned_with_block(self, abandoned: dict, cause: str) -> None:
+        self.assertEqual(abandoned["status"], job.STATUS_FAILED)
+        evidence = abandoned["reconciliation_evidence"]
+        self.assertEqual(evidence["code"], "OperatorAbandoned")
+        self.assertEqual((evidence["landing_cause"], evidence["clone"]),
+                         (cause, str(ws.WorkerLayout(self.runtime, "job1").worktree)))
+        block = abandoned["codex_worker"]["landing"]
+        self.assertEqual((block["outcome"], block["cause"], block["clone_kept"]), ("refused", cause, True))
+        self.assertTrue(self.clone_kept())
+
+    def test_abandon_deletes_the_landing_ref_and_adds_the_final_block(self) -> None:
+        record = self.killed("after_fetch")
+        self.assertNotEqual(self.refs(), "")
+        self.assert_abandoned_with_block(self.abandon(record), "landing_interrupted")
+        self.assertEqual(self.refs(), "")
+        self.assertEqual(self.branch_tip(), self.base)
+
+    def test_abandon_after_a_merge_that_holds_removes_the_tree_and_keeps_the_code(self) -> None:
+        record = self.killed("after_merge")
+        abandoned = self.abandon(record)
+        self.assertEqual(abandoned["reconciliation_evidence"]["code"], "OperatorAbandoned")
+        self.assertNotIn("landing_cause", abandoned["reconciliation_evidence"])
+        self.assertEqual(abandoned["codex_worker"]["landing"]["outcome"], "landed")
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_abandon_over_a_missing_managed_root_ends_with_landing_unreadable_and_no_exception(self) -> None:
+        record = self.killed("after_fetch")
+        shutil.rmtree(self.managed.root)
+        self.assert_abandoned_with_block(self.abandon(record), "landing_unreadable")
+
+    def test_abandon_over_a_malformed_clone_or_landing_block_ends_with_landing_unreadable(self) -> None:
+        record = self.killed("after_fetch")
+        block = record["codex_worker"]
+        for name, changed in (("clone", {**block, "clone": "garbage"}), ("landing", {**block, "landing": "garbage"})):
+            with self.subTest(block=name):
+                self.rewrite(codex_worker=changed, status=job.STATUS_COMPLETED)
+                abandoned = self.abandon(record)
+                self.assertEqual(abandoned["reconciliation_evidence"]["code"], "OperatorAbandoned")
+                self.assertEqual(abandoned["codex_worker"]["landing"]["cause"], "landing_unreadable")
+                self.rewrite(status=job.STATUS_COMPLETED)
+
+    def test_a_resume_over_a_missing_root_refuses_with_nothing_written_and_abandon_then_ends_it(self) -> None:
+        record = self.killed("after_fetch")
+        before = self.only_record()
+        shutil.rmtree(self.managed.root)
+        with self.assertRaises(StaleJobRecordError):
+            job.resume(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime)
+        self.assertEqual(self.only_record(), before)
+        self.assert_abandoned_with_block(self.abandon(record), "landing_unreadable")
+
+
+class UnreadableTest(KilledLandingFixture):
+    def test_a_garbage_git_index_ends_failed_landing_unreadable_with_the_clone_kept(self) -> None:
+        self.killed("before_fetch")
+        (self.managed.root / ".git" / "index").write_bytes(b"garbage")
+        resumed = self.resume()
+        self.assert_refused_clone_kept(resumed, "landing_unreadable")
+
+    def test_a_malformed_clone_block_and_a_malformed_landing_block_end_landing_unreadable(self) -> None:
+        record = self.killed("before_fetch")
+        block = record["codex_worker"]
+        for name, changed in (("clone", {**block, "clone": {"path": 3}}), ("landing", {**block, "landing": [1]})):
+            with self.subTest(block=name):
+                self.rewrite(codex_worker=changed, status=job.STATUS_COMPLETED)
+                resumed = self.resume()
+                self.assertEqual(resumed["status"], job.STATUS_FAILED)
+                self.assertEqual(resumed["reconciliation_evidence"]["cause"], "landing_unreadable")
+                self.assertTrue(self.clone_kept())
+                self.rewrite(status=job.STATUS_COMPLETED, reconciliation_evidence=None)
+
+    def test_a_removed_git_directory_refuses_resume_and_abandon_with_nothing_written(self) -> None:
+        record = self.killed("before_fetch")
+        before = self.only_record()
+        for what in (".git", ".git/objects"):
+            with self.subTest(removed=what):
+                aside = self.tmp / "aside"
+                shutil.move(str(self.managed.root / what), str(aside))
+                try:
+                    with self.assertRaises(GitDirectoryUnresolvableError):
+                        job.resume(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime)
+                    with self.assertRaises(GitDirectoryUnresolvableError):
+                        self.abandon(record)
+                    self.assertEqual(self.only_record(), before)
+                finally:
+                    shutil.move(str(aside), str(self.managed.root / what))
+
+    def test_the_restored_git_directory_lets_abandon_end_the_record(self) -> None:
+        record = self.killed("before_fetch")
+        aside = self.tmp / "aside"
+        shutil.move(str(self.managed.root / ".git"), str(aside))
+        with self.assertRaises(GitDirectoryUnresolvableError):
+            self.abandon(record)
+        shutil.move(str(aside), str(self.managed.root / ".git"))
+        abandoned = self.abandon(record)
+        self.assertEqual(abandoned["reconciliation_evidence"]["code"], "OperatorAbandoned")
+        self.assertEqual(abandoned["reconciliation_evidence"]["landing_cause"], "landing_interrupted")
+
+
+class ProtocolKilledLandingTest(unittest.TestCase):
+    """A protocol Codex record killed in the landing: the drifted ending, and the command's own refusals."""
+
+    def setUp(self) -> None:
+        self.fixture = KilledLandingFixture("run_step")
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.env = _Env(self, "ready", implementing=True)
+        self.fixture.managed = self.env.inspect()
+        self.fixture.runtime = self.env.runtime
+        self.fixture.record()
+        self.fixture.after = lambda clone: fixtures.run_workflow_python(clone, _CHECKPOINT_CODE, WID, "all")
+        with mock.patch.object(job, "CODEX_LANDER", self.fixture.killing_lander("after_fetch")), \
+                self.assertRaises(KeyboardInterrupt):
+            job.execute_step(self.env.inspect(), identity=IDENTITY, runtime=self.env.runtime,
+                             routing=self.fixture.options, timeout=30)
+        (self.record,) = self.env.records()
+        self.assertIn("protocol", self.record)
+
+    def drifted(self):
+        script = self.env.root / "scripts" / "workflow_state.py"
+        script.write_text("# changed after the job was decided\n" + script.read_text())
+        stub = fixtures.write_stub_workflow_manager(self.env.td / "drifted-manager", release="2.7.0", verify_exit=1)
+        target = managed_repo.inspect_for_resume(self.env.root, manager_bin=str(stub))
+        self.assertIsNotNone(target.drift)
+        return target
+
+    def refs(self) -> str:
+        return git(self.env.root, "for-each-ref", "refs/controller")
+
+    def test_a_drifted_resume_keeps_its_status_and_code_and_adds_the_final_block(self) -> None:
+        self.assertNotEqual(self.refs(), "")
+        with mock.patch.object(gitrepo, "landing_merge", side_effect=AssertionError("merged")):
+            (resumed,) = job.resume(self.drifted(), identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(resumed["status"], job.STATUS_FAILED)
+        evidence = resumed["reconciliation_evidence"]
+        self.assertEqual(evidence["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual((evidence["landing_cause"], evidence["clone"]),
+                         ("merge_left_tree_dirty", resumed["codex_worker"]["clone"]["path"]))
+        # the drift itself (an edited managed script) leaves the tree changed, which window (a) reports
+        self.assertEqual(resumed["codex_worker"]["landing"]["cause"], "merge_left_tree_dirty")
+        self.assertEqual(resumed["codex_worker"]["landing"]["dirty"], [" M scripts/workflow_state.py"])
+        self.assertEqual(self.refs(), "")
+
+    def test_a_drifted_resume_over_a_malformed_block_ends_release_changed_with_landing_unreadable(self) -> None:
+        block = {**self.record["codex_worker"], "clone": "garbage"}
+        path = self.env.runtime / "jobs" / f"{self.record['job_id']}.json"
+        path.write_text(json.dumps({**self.record, "codex_worker": block}))
+        (resumed,) = job.resume(self.drifted(), identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(resumed["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual(resumed["reconciliation_evidence"]["landing_cause"], "landing_unreadable")
+
+    def test_a_drifted_resume_with_a_garbage_git_index_ends_release_changed_with_landing_unreadable(self) -> None:
+        target = self.drifted()
+        (self.env.root / ".git" / "index").write_bytes(b"garbage")
+        (resumed,) = job.resume(target, identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(resumed["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual(resumed["reconciliation_evidence"]["landing_cause"], "landing_unreadable")
+
+    def command(self, *argv: str) -> tuple[int, str]:
+        stderr = io.StringIO()
+        with mock.patch.object(cli, "_dispatch", lambda args, raw: cli.cmd_resume(args, self.env.runtime, IDENTITY)), \
+                mock.patch.object(cli, "require_pinned_execution"), contextlib.redirect_stderr(stderr), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["--workflow-manager", str(self.env.stub), "resume", "--abandon", self.record["job_id"],
+                             str(self.env.root), *argv])
+        return code, stderr.getvalue()
+
+    def test_the_command_refuses_a_removed_git_directory_and_a_removed_root_with_exit_20(self) -> None:
+        before = (self.env.runtime / "jobs" / f"{self.record['job_id']}.json").read_text()
+        aside = self.env.td / "aside"
+        shutil.move(str(self.env.root / ".git"), str(aside))
+        code, error = self.command()
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED, error)
+        self.assertEqual((self.env.runtime / "jobs" / f"{self.record['job_id']}.json").read_text(), before)
+        moved = self.env.td / "moved-root"
+        shutil.move(str(self.env.root), str(moved))
+        code, error = self.command()
+        self.assertEqual(code, cli.EXIT_FAIL_CLOSED, error)
+        self.assertEqual((self.env.runtime / "jobs" / f"{self.record['job_id']}.json").read_text(), before)
+        shutil.move(str(moved), str(self.env.root))
+        shutil.move(str(aside), str(self.env.root / ".git"))
+        code, error = self.command()
+        self.assertEqual(code, cli.EXIT_OK, error)
+        ended = json.loads((self.env.runtime / "jobs" / f"{self.record['job_id']}.json").read_text())
+        self.assertEqual(ended["reconciliation_evidence"]["code"], "OperatorAbandoned")
 
 
 class UnchangedTest(unittest.TestCase):

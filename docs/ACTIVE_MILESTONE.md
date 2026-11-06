@@ -15,8 +15,14 @@ launch and removes the tree when the worker never ran. CP2 is complete: `control
 `merge --ff-only --no-overwrite-ignore`), `verify_move` (the one post-move check) and `decide`/`recover` (D7's deciding half,
 which only reads); `gitrepo` gains `LANDING_CONFIG`, `landing_fetch`, `landing_merge`, `landing_delete_ref` (the one stated
 exception to "never deletes a ref", admitted by exactly one spelling in `tests/test_no_rewrite_invariants.py`) and the clone
-reads with the commit graph off. Nothing calls it yet. CP3 and CP4 (landing at job end, the status, the cleanup and `resume`,
-then the live proof and the guides) remain.
+reads with the commit graph off. CP3 is complete: `controller/job.py` calls the `job.CODEX_LANDER` seam (default `land`) after the
+`COMPLETED` write, writes the intent block before the fetch and the final `landing` block after, ends a refused landing
+`FAILED` `CodexLandingRefused` in one write with the clone kept and named in `reconciliation_evidence.clone`, and settles the job
+directory before the terminal write (the clone removed on `landed`, `nothing`, an ordinary failure and a launcher refusal before
+the spawn, kept after a refusal or an exception once the worker was spawned). `resume`, a drifted `resume` and
+`resume --abandon` share one applying part of D7's recovery helper (`_apply_codex_landing`: the final block, the landing ref
+deleted, the tree removed only where its commits landed or there were none, `tree_left` when a removal fails), and a `LAUNCHED`
+Codex record ends `INTERRUPTED` naming its clone. CP4 (the live proof and the guides) remains.
 
 Previous item, now complete:
 

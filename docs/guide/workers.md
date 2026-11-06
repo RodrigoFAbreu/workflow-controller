@@ -568,8 +568,15 @@ is added as soon as it is spawned, and `resume` never launches a worker.
   place. A file with no trustworthy field (unparseable, or an unknown
   schema) has its bytes set aside under `jobs/abandoned/` and is replaced
   by a minimal terminal record; its target cannot be read, so any
-  target's `--abandon` accepts it. `--abandon` launches nothing and writes
-  only the Controller's own runtime. It refuses (exit 20) a terminal
+  target's `--abandon` accepts it. `--abandon` launches nothing and
+  writes only the Controller's own runtime, with one exception: over a
+  `COMPLETED` Codex worker record it also deletes the leftover
+  `refs/controller/landing/<job id>` in the managed repository (the
+  Controller's own private namespace), and when the managed repository or
+  the landing's blocks cannot be read it ends the record with a
+  `landing_unreadable` landing block and the clone kept, never stopping on
+  the unreadable part ([A Codex worker's private clone and its
+  landing](harnesses.md#a-codex-workers-private-clone-and-its-landing)). It refuses (exit 20) a terminal
   record, another target's record, a `JOB_ID` that names no pending file
   directly, and a record written by a newer Controller generation (that
   generation's own `resume` clears it). It refuses with exit 45 while the
@@ -645,7 +652,9 @@ root. The Controller also appends a lifecycle event log per job and per
 The log files are created with mode `0o600`, since tool output can
 contain secrets. These files are written the same way whether or not
 anyone is watching, and a failed event write is a warning, never a
-change of outcome. There is no retention or pruning.
+change of outcome. There is no retention or pruning: a kept Codex worker clone
+(`<runtime>/worker/<job>/tree`) is removed by the operator with `rm -rf` of the exact path in
+the record's `reconciliation_evidence.clone`.
 
 Three ways to watch:
 

@@ -22,7 +22,15 @@ directory before the terminal write (the clone removed on `landed`, `nothing`, a
 the spawn, kept after a refusal or an exception once the worker was spawned). `resume`, a drifted `resume` and
 `resume --abandon` share one applying part of D7's recovery helper (`_apply_codex_landing`: the final block, the landing ref
 deleted, the tree removed only where its commits landed or there were none, `tree_left` when a removal fails), and a `LAUNCHED`
-Codex record ends `INTERRUPTED` naming its clone. CP4 (the live proof and the guides) remains.
+Codex record ends `INTERRUPTED` naming its clone. CP4 is complete: `tests/test_codex_worker_clone_live.py` is the opt-in live
+proof (skipped by default and on CI with its reason; with `CONTROLLER_LIVE_CODEX_TESTS=1` a real `codex exec` made one plain
+commit in the real preparer's clone and the real lander fast-forwarded it onto the managed branch with the `Codex worker`
+author, the clone removed and no landing ref left; the job ended `FAILED` `phase_not_in_to_any_of` by the unchanged rules), its
+measured result is `tests/harness_contract/codex/worker_clone.txt`, and the guides
+(`docs/guide/harnesses.md`, `docs/guide/workers.md`, `docs/guide/development.md`) and `docs/common-problems.md` state the clone,
+the landing, the record blocks, the cleanup, the crash windows and the operator's removal of a kept clone in place. The
+item pages are corrected (no retention) and H4e2's page records the open question of the clean-tree requirement. All four
+checkpoints are implemented; the self-review and the full verification follow.
 
 Previous item, now complete:
 

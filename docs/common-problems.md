@@ -30,6 +30,24 @@ A previous [job](glossary.md#job) was never reconciled. Run `workflow-controller
 
 `explain` shows what was checked and why the job's expected outcome was not met. Fix what it names and run again, or finish the step by hand. The job's log, which `workflow-controller follow <repo>` and `status` point to, shows what the worker did. See [troubleshooting](guide/troubleshooting.md#common-situations).
 
+## A Codex worker's landing was refused
+
+This applies only to the fixture role behind the Codex worker seam (H4e); no real role runs a Codex worker yet. The job ended `FAILED` with `reconciliation_evidence.code` `CodexLandingRefused`, a `cause` and the clone's path in `reconciliation_evidence.clone`. The commits the worker made are in that clone, nothing was landed, and the managed repository is exactly as it was, except for `landing_unverified` and `merge_left_tree_dirty` below. The mechanism is in [harnesses](guide/harnesses.md#a-codex-workers-private-clone-and-its-landing). By cause:
+
+- `managed_branch_moved`, `managed_tree_not_clean`: the managed branch moved, or the tree gained a change, between the clone and the landing. Put the repository back (commit or discard the change) and run again. A file ignored only through your own global ignore file (`~/.config/git/ignore`) counts as untracked here, because the Controller reads with a scrubbed environment; ignore it in the repository's `.gitignore` or `.git/info/exclude` instead.
+- `runtime_inside_managed`: the runtime root is inside the managed repository. Keep it outside, for example with `--runtime-dir` on a path elsewhere.
+- `managed_hooks_configured`: the managed repository's configuration defines a Git hook (`hook.*`). Remove it for the run.
+- `clone_git_changed`, `extra_refs`, `sandbox_breach`: the worker changed the clone's `.git` (hooks, config, a link, alternates), made a tag, branch or stash, or the launcher judged the run a breach. Inspect the clone; the Controller lands none of it.
+- `not_a_descendant`, `merge_commit`, `too_many_commits` (more than 200), `submodule`: the worker's commits are not a linear stack of at most 200 commits on the base without a submodule. Rework them in the clone or by hand.
+- `fetch_failed`, `tip_moved`, `would_overwrite_ignored`, `fast_forward_failed`, `landing_error`: Git refused the fetch or the fast-forward, the clone's tip moved after it was checked, or the move would overwrite an ignored file in the managed tree. The record's `message` carries Git's words. The managed repository is unchanged.
+- `landing_unverified`: the managed branch moved, or cannot be shown unmoved (`moved` is `true` in the landing block). Look at `git log` and the tree before anything else; nothing was repaired.
+- `merge_left_tree_dirty`: the branch is still at the base but a failed merge left the worker's content in the tree and the index (the paths are in the landing block's `dirty` list). This is also why the next job refuses with `managed_tree_not_clean`. Clear it with `git restore --staged --worktree .` in the managed repository. If the merge was killed by the Controller's Git timeout, it may have left `.git/index.lock`: remove that file first, because the restore cannot run while it exists.
+- `landing_interrupted`, `landing_unreadable`: the Controller was lost during the landing, or the record or the repository could not be read when `resume` looked. `resume` landed nothing and deleted any leftover `refs/controller/landing/<job id>`.
+
+A refused landing keeps its clone. Remove it with `rm -rf` of the exact path in `reconciliation_evidence.clone` (Git's object files are read-only, so name the path; do not glob). There is no `runtime` command to do it and no retention. A landing whose ref could not be deleted afterwards still reads `landed` with `ref_left: true`; delete it with `git update-ref -d refs/controller/landing/<job id>` in the managed repository.
+
+If `.git` or the managed root is removed under a `COMPLETED` Codex record, `resume` and `resume --abandon` both refuse (`NotARepositoryError` on the command, `GitDirectoryUnresolvableError` in the job layer) and write nothing. Removing the directory does not make `--abandon` run. Restore `.git`, or the repository at the same path, and run `resume --abandon`. If the repository is gone for good, remove the record file and the kept clone by hand.
+
 ## The command exited 45 and nothing was launched
 
 The worktree is held: another Controller, a `run` waiting for checks or a merge, or a worker that may still be running holds its lock. Nothing is wrong. Wait, or follow the message; after a Ctrl-C or a drain timeout, `workflow-controller resume <repo>` re-attaches. See [restart](guide/workers.md#restart-resume-re-attaches) and [the drain bound](guide/workers.md#owned-processes-the-daemon-list-and-the-drain-bound).

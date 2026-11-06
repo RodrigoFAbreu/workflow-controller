@@ -26,7 +26,7 @@ from controller.decision import phase_from_wire  # noqa: E402
 from controller.errors import GitOperationError  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
 from tests.test_job import FAKE_IDENTITY, _build_target, _WriteSpy  # noqa: E402
-from tests.test_job_codex_worker import JobFixture  # noqa: E402
+from tests.test_job_codex_worker import JobFixture, per_test_job_id  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
 from tests.test_protocol_outcome import WID, _CHECKPOINT_CODE, _Env  # noqa: E402
 
@@ -62,6 +62,17 @@ class LandingFixture(JobFixture):
 
         self.enterContext(mock.patch.object(self.launcher, "launch", launch))
 
+    def next_id(self) -> str:
+        # per_test_job_id keeps the `t-` prefix: the id must pass `gitrepo._LANDING_JOB_ID` (it starts alphanumeric).
+        self.ids += 1
+        return per_test_job_id(self.id(), self.ids)
+
+    @property
+    def job_id(self) -> str:
+        """The id of the job this test goes on to run (its first), computed, not read from the counter (a probe
+        run may have advanced and reset it)."""
+        return per_test_job_id(self.id(), 1)
+
     # -- the worker's work ----------------------------------------------------------------------------------------
     def commit_in(self, clone: Path, files: dict[str, str], message: str = "work") -> str:
         for name, text in files.items():
@@ -89,10 +100,10 @@ class LandingFixture(JobFixture):
     def branch(self) -> str:
         return git(self.managed.root, "symbolic-ref", "--short", "HEAD")
 
-    def job_dir(self, job_id: str = "job1") -> Path:
-        return self.runtime / "worker" / job_id
+    def job_dir(self, job_id: str | None = None) -> Path:
+        return self.runtime / "worker" / (job_id or self.job_id)
 
-    def leftovers(self, job_id: str = "job1") -> list[str]:
+    def leftovers(self, job_id: str | None = None) -> list[str]:
         """Every file under the job directory except the retained rollouts, relative to it."""
         base = self.job_dir(job_id)
         if not base.exists():
@@ -101,7 +112,7 @@ class LandingFixture(JobFixture):
                       if "codex-home/sessions" not in str(p.relative_to(base)) and p.relative_to(base) != Path("codex-home")
                       and not p.is_dir())
 
-    def populate_job_dir(self, job_id: str = "job1") -> None:
+    def populate_job_dir(self, job_id: str | None = None) -> None:
         """Fill the job directory as the real launcher does: every directory and file it leaves beside the tree."""
         base = self.job_dir(job_id)
         for name in ("bin", "home", "scratch", "tmp", "codex-home/sessions"):
@@ -110,13 +121,13 @@ class LandingFixture(JobFixture):
                      "codex-home/models_cache.json", "codex-home/state_5.sqlite", "codex-home/sessions/rollout.jsonl"):
             (base / name).write_text("x\n")
 
-    def assert_only_tree_and_sessions(self, job_id: str = "job1") -> None:
+    def assert_only_tree_and_sessions(self, job_id: str | None = None) -> None:
         """What a kept clone leaves (D7): ``tree`` and ``codex-home/sessions`` alone."""
         base = self.job_dir(job_id)
         self.assertEqual(sorted(p.name for p in base.iterdir()), ["codex-home", "tree"])
         self.assertEqual(sorted(p.name for p in (base / "codex-home").iterdir()), ["sessions"])
 
-    def clone_kept(self, job_id: str = "job1") -> bool:
+    def clone_kept(self, job_id: str | None = None) -> bool:
         return (self.job_dir(job_id) / "tree" / ".git").is_dir()
 
     def managed_snapshot(self) -> dict:
@@ -131,9 +142,9 @@ class LandingFixture(JobFixture):
         self.assertEqual((evidence["code"], evidence["cause"]), (job.CODEX_LANDING_REFUSED_CODE, cause))
         block = record["codex_worker"]["landing"]
         self.assertEqual((block["outcome"], block["cause"], block["clone_kept"]), ("refused", cause, True))
-        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
         self.assertTrue(self.clone_kept())
-        self.assertEqual(self.tagged("job1"), [])
+        self.assertEqual(self.tagged(self.job_id), [])
         return block
 
 
@@ -223,7 +234,7 @@ class LandedTest(LandingFixture):
         block = record["codex_worker"]["landing"]
         self.assertTrue(block["clone_kept"])
         self.assertIn("busy", block["tree_left"]["reason"])
-        self.assertEqual(block["tree_left"]["path"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(block["tree_left"]["path"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
 
 
 class RefusedTest(LandingFixture):
@@ -349,7 +360,7 @@ class DirectoryTest(LandingFixture):
         self.assertEqual(record["reconciliation_evidence"]["code"], "OSError")
         self.assertTrue(self.clone_kept())
         self.assert_only_tree_and_sessions()
-        self.assertEqual(record["codex_worker"]["clone"]["path"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(record["codex_worker"]["clone"]["path"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
         self.assertEqual(record["reconciliation_evidence"]["clone"], record["codex_worker"]["clone"]["path"])
 
 
@@ -358,6 +369,7 @@ class ProtocolLandingTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.fixture = LandingFixture("run_step")
+        self.fixture.id = self.id  # before setUp: the fixture's own id is the same for every test of this class
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.env = _Env(self, "ready", implementing=True)

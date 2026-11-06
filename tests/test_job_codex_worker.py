@@ -8,6 +8,7 @@ reaches the branch: the real registry is asserted unchanged at the end.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import os
 import sys
@@ -36,6 +37,19 @@ from tests.test_protocol_outcome import _Env  # noqa: E402
 FIXTURE = "codex-fixture"
 EIGHT = {"runtime_root", "job_id", "operator_home", "cwd", "timeout", "on_spawn", "model", "effort"}
 GENERIC_COMMAND = "---\ndescription: a fixture command\nargument-hint: \"<x>\"\nstate_writer: false\n---\nRun: $ARGUMENTS\n"
+
+
+def per_test_job_id(test_id: str, n: int) -> str:
+    """A job id that is the test's own: `t-<test name, last 24 characters>-<8 hex digits of sha256(test_id)>-<pid>-<n>`.
+
+    The job id is the ownership tag `resume` and the tag scans use, so two tests (or two parallel copies of one) must
+    never share it. The `t-` prefix is load-bearing: the id is a landing ref component and must pass
+    `gitrepo._LANDING_JOB_ID` (`^[A-Za-z0-9][A-Za-z0-9._-]*$`), while a test name's tail can start with `_`. The tail is
+    only for a human reading a tag; the digest of the full test id (module.class.method) is what keeps two names that end
+    alike apart.
+    """
+    digest = hashlib.sha256(test_id.encode()).hexdigest()[:8]
+    return f"t-{test_id.rsplit('.', 1)[-1][-24:]}-{digest}-{os.getpid()}-{n}"
 
 
 class FixtureLauncher(cw.CodexLauncher):

@@ -2,6 +2,17 @@
 
 ## Status
 
+**In progress.** `workflow-controller-h4e-leftovers` (H4e leftovers, issue
+[#306](https://github.com/RodrigoFAbreu/workflow-controller/issues/306)). The plan is
+`docs/ai-workflow/CONTROLLER_H4E_LEFTOVERS_PLAN.md` (revision 6). CP1 is complete: the landing and orphan test fixtures
+give every test its own job id through one helper (`per_test_job_id` in `tests/test_job_codex_worker.py`: a `t-` prefix, the
+test name's tail, a digest of the full test id and the pid), `LandingFixture` exposes `job_id`, the composed classes hand
+their outer test id to the fixture before `setUp`, a unit check proves the ids legal and pairwise distinct, and a drifted
+`resume` of a `LAUNCHED` protocol record has a test of its own. CP2 (naming the kept clone) and CP3 (the sandbox failures)
+remain.
+
+## Previous milestone
+
 **Complete.** `workflow-controller-h4e` (H4e, issue
 [#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) prepares a private clone for a Codex worker and lands
 its commits fast-forward behind the H3 seam, for a fixture role. The plan is

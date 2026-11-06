@@ -1661,7 +1661,7 @@ class RunnerTest(unittest.TestCase):
                                                            "stderr=subprocess.DEVNULL")
                 started = time.monotonic()
                 result = review.run_bounded([sys.executable, "-c", script], cwd=Path("/"),
-                                            env={"PATH": review.SYSTEM_PATH, review.OWNERSHIP_VAR: f"t{inherit}"},
+                                            env={"PATH": review.SYSTEM_PATH, review.OWNERSHIP_VAR: f"t{inherit}-{os.getpid()}"},
                                             timeout=0.5)
                 self.assertTrue(result.timed_out)
                 self.assertLess(time.monotonic() - started, 0.5 + review._DRAIN_SECONDS + 3)

@@ -346,6 +346,40 @@ class RangeRefusalTest(Fixture):
                 git(self.clone, "commit", "-q", "-m", "drop the gitlink")
                 self.refuses("submodule", prepared=prepared)
 
+    def _base_with_ignore_all(self, *, gitlink: bool) -> tree.PreparedTree:
+        """A base that commits ``.gitmodules`` with ``ignore = all`` for ``vendor/x``, optionally holding the gitlink."""
+        (self.root / ".gitmodules").write_text('[submodule "x"]\n\tpath = vendor/x\n\turl = ./x\n\tignore = all\n')
+        git(self.root, "add", ".gitmodules")
+        if gitlink:
+            git(self.root, "update-index", "--add", "--cacheinfo", f"160000,{self.base},vendor/x")
+        git(self.root, "commit", "-q", "-m", "gitmodules with ignore = all")
+        base = out(self.root, "rev-parse", "HEAD")
+        prepared = tree.prepare(self.managed, ws.WorkerLayout(self.runtime, "job2"), base)
+        self.clone = prepared.path
+        return prepared
+
+    def test_submodule_for_a_gitlink_under_ignore_all_in_the_committed_gitmodules(self) -> None:
+        """I1 of round 3: ``diff-tree`` honoured ``ignore = all`` and left the gitlink out, so a bump, a removal and
+        an addition at the path the committed ``.gitmodules`` names all landed."""
+        for kind in ("bumped", "removed", "added"):
+            with self.subTest(kind=kind):
+                self.setUp()
+                prepared = self._base_with_ignore_all(gitlink=kind != "added")
+                if kind == "removed":
+                    git(self.clone, "rm", "-q", "--cached", "vendor/x")
+                else:
+                    sha = out(self.clone, "rev-parse", "HEAD")
+                    git(self.clone, "update-index", "--add", "--cacheinfo", f"160000,{sha},vendor/x")
+                git(self.clone, "commit", "-q", "-m", kind)
+                self.refuses("submodule", prepared=prepared)
+
+    def test_the_clone_side_check_sees_a_gitlink_hidden_by_the_workers_uncommitted_gitmodules(self) -> None:
+        sha = out(self.clone, "rev-parse", "HEAD")
+        (self.clone / ".gitmodules").write_text('[submodule "x"]\n\tpath = vendor/x\n\turl = ./x\n\tignore = all\n')
+        git(self.clone, "update-index", "--add", "--cacheinfo", f"160000,{sha},vendor/x")
+        git(self.clone, "commit", "-q", "-m", "gitlink")
+        self.assertTrue(gitrepo.commit_touches_submodule(self.clone, out(self.clone, "rev-parse", "HEAD"), sha))
+
     def test_a_forged_commit_graph_cannot_hide_a_merge_commit(self) -> None:
         """O1 of round 4: ``.git/objects`` is outside the guard, so the worker can write a commit graph that gives the
         merge commit one parent; the range checks read with the graph off."""

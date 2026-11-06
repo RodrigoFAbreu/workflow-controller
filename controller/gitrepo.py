@@ -903,9 +903,13 @@ def range_commits(repo_root: Path, base: str, tip: str, limit: int, *,
 
 
 def commit_touches_submodule(repo_root: Path, commit: str, parent: str, *, runner: Runner | None = None) -> bool:
-    """Whether ``commit``'s own diff against ``parent`` has a ``.gitmodules`` change or a gitlink (mode 160000)."""
+    """Whether ``commit``'s own diff against ``parent`` has a ``.gitmodules`` change or a gitlink (mode 160000).
+
+    ``--ignore-submodules=none`` is explicit: without it ``diff-tree`` honours an ``ignore = all`` in the ``.gitmodules``
+    of the repository it reads, and leaves the gitlink out of its output."""
     out = _git(repo_root, [*NO_COMMIT_GRAPH, "diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-textconv",
-                           "--no-ext-diff", parent, commit, "--"], runner, quiet=True)
+                           "--no-ext-diff", "--ignore-submodules=none", parent, commit, "--"], runner,
+                quiet=True)
     fields = out.split("\0")
     # ``-z --raw``: ``:<old mode> <new mode> <old sha> <new sha> <status>`` NUL ``<path>`` NUL ...
     i = 0

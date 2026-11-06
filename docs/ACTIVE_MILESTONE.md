@@ -378,7 +378,7 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 ## Functional review checklist
 
 Item `workflow-controller-h4e-leftovers` (H4e leftovers, issue [#306](https://github.com/RodrigoFAbreu/workflow-controller/issues/306)),
-implementation revision 1. The change makes the landing, orphan and review-launch tests use job ids of their own (so parallel
+implementation revision 2. The change makes the landing, orphan and review-launch tests use job ids of their own (so parallel
 copies of the suite stop killing each other's fakes), names the kept Codex worker clone in every ending that leaves one on disk
 (`_with_kept_clone` in `controller/job.py`; a `FINISHED` record gets a `CodexCloneKept` block; a refusal whose clone is gone
 reports `clone_removed: true`, `clone: null`), and says so in `docs/guide/harnesses.md`, `docs/guide/workers.md`,
@@ -405,9 +405,11 @@ Run `python3 -B -m unittest tests.test_review 2>&1 | tail -3` and `tests.test_re
 Expected: `Ran 127 tests` and `Ran 39 tests`, each `OK`.
 
 **Flow 4: Parallel copies no longer kill each other's fakes (the #306 defect).**
+Revision 2 re-tests this flow: the first functional review found `RunnerTest.test_a_detached_descendant_is_killed_and_the_deadline_holds_with_an_inherited_pipe`
+still used fixed ownership tags (`tTrue`, `tFalse`); it now adds the pid to them. It runs inside `tests.test_review`, so the command below covers it.
 Start three copies of Flow 3 together with a CPU pin and wait for all:
 `for i in 1 2 3; do (TMPDIR=$(mktemp -d) taskset -c 0,1 python3 -B -m unittest tests.test_review tests.test_review_claude 2>&1 | tail -3) & done; wait`.
-Expected: every copy ends `OK` (no `-9` exits, no `the composing command did not run`, no `` `features list` did not run ``). If
+Expected: every copy prints `Ran 166 tests` and `OK` (no `-9` exits, no `the composing command did not run`, no `` `features list` did not run ``). If
 `taskset` is missing from the sandbox's `PATH`, this flow is `environment`-limited and operator-run; any other failure is a finding.
 
 **Flow 5: Documentation and backlog.**

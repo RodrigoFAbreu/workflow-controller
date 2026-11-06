@@ -20243,20 +20243,123 @@ def _finding_dispositions_cli(repo_root: Path, work_item_id: str) -> int:
     return 0
 
 
+#: `--acceptance-gate` (workflow-2.26.0): the pull-request requirements are the
+#: stored fact's, which the stage's own query replaces before it decides, so they
+#: are reported as information and are never blockers; these three are not.
+_ACCEPTANCE_REPORT_PR_REQUIREMENTS = ("pr_fact_current", "no_standing_pr_objection", "ci_green", "pr_approved")
+_ACCEPTANCE_REPORT_BLOCKING_REQUIREMENTS = ("checkpoints_complete", "technical_approval_current",
+                                            "functional_flows_passed")
+_ACCEPTANCE_REPORT_NOT_CHECKED = [
+    "complete_work_item refusals: incomplete child work items, completion obligations",
+    "the backlog pre-flight (scripts/workflow_backlog.py preflight-accept)",
+    "the GitHub query and the pull-request requirements it replaces (the stage runs it first and it decides)",
+    "the requires_pr_approved pre-flight (a query)",
+]
+
+
+def acceptance_gate_report(repo_root: Path, state: dict, work_item_id: str) -> dict:
+    """`--acceptance-gate` (workflow-2.26.0): what `/satisfy-gate acceptance`
+    would find before it queries GitHub, from stored state and the tree alone.
+    Reads only: no lock, no write, no `gh`. `ready` means nothing this report can
+    see refuses the stage; `not_checked` names what it does not claim."""
+    work_item = state["work_items"][work_item_id]
+    phase = work_item.get("phase")
+    gate = gate_policy.evaluate_gate(repo_root, state, work_item_id, "acceptance")
+    requirements = gate.get("requirements") or []
+    blockers: list[dict] = []
+    if phase == "MILESTONE_COMPLETE":
+        blockers.append({"code": "work_item_terminal", "detail": f"{work_item_id} is already MILESTONE_COMPLETE"})
+    else:
+        try:
+            is_terminal, outstanding = resolve_own_registry_completion_status(repo_root, work_item)
+        except (RegistryCoverageError, StalePlanApprovalRegistryReadError) as exc:
+            blockers.append({"code": "registry_unresolvable", "detail": str(exc)})
+        else:
+            if not milestone_complete_gate_reachable(phase=phase, is_terminal=is_terminal):
+                detail = f"the phase is {phase}; the acceptance stage needs AWAITING_FUNCTIONAL_REVIEW"
+                if not is_terminal:
+                    detail += f" and every checkpoint complete (outstanding: {outstanding})"
+                blockers.append({"code": "phase_not_reachable", "detail": detail})
+    if gate.get("mode") == "human":
+        blockers.append({"code": "human_gate", "detail": "acceptance is a human gate; a person decides it"})
+    else:
+        blockers += [{"code": "requirement_unmet", "detail": f"{r['id']}: {r['detail']}"}
+                     for r in requirements
+                     if r["id"] in _ACCEPTANCE_REPORT_BLOCKING_REQUIREMENTS and not r["met"]]
+    invalid = None
+    missing: list[dict] = []
+    skeleton = None
+    try:
+        report = finding_dispositions_report(repo_root, state, work_item_id)
+    except InvalidFindingDispositionsError as exc:
+        invalid = str(exc)
+        blockers.append({"code": "dispositions_invalid", "detail": invalid})
+    else:
+        pending = [item for item in report if item["disposition"] is None]
+        missing = [{"key": item["key"], "label": _finding_label(item)} for item in pending]
+        if pending:
+            skeleton = finding_dispositions_skeleton(report, work_item_id)
+        blockers += [{"code": "disposition_missing", "detail": item["key"]} for item in pending]
+    return {
+        "work_item_id": work_item_id,
+        "phase": phase,
+        "gate": gate,
+        "stored_pr_fact": {
+            "unmet": [{"id": r["id"], "detail": r["detail"]} for r in requirements
+                      if r["id"] in _ACCEPTANCE_REPORT_PR_REQUIREMENTS and not r["met"]],
+            "note": "information only: the stage's own query replaces the stored fact before it decides",
+        },
+        "dispositions": {"missing": missing, "invalid": invalid, "skeleton": skeleton},
+        "blockers": blockers,
+        "query_pending": bool(gate.get("pending_query")) and not gate.get("satisfiable"),
+        "ready": not blockers,
+        "not_checked": list(_ACCEPTANCE_REPORT_NOT_CHECKED),
+    }
+
+
+def _acceptance_gate_cli(work_item_id: str) -> int:
+    """`--acceptance-gate`: print `acceptance_gate_report` as one JSON document
+    (exit 0 whenever a report is printed, ready or not), or one `{"error", "message"}`
+    object (exit 1); never a traceback, never a write."""
+    def fail(name: str, message: str) -> int:
+        print(json.dumps({"error": name, "message": message}, sort_keys=True))
+        return 1
+
+    try:
+        repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+        state = _load_json(repo_root / DEFAULT_STATE_PATH)  # CorruptJsonError reaches the class-name fallback below
+        if state is None:
+            return fail("StateMissing", f"{DEFAULT_STATE_PATH} does not exist")
+        if not isinstance(state, dict) or not isinstance(state.get("work_items"), dict):
+            return fail("StateMalformed", f"{DEFAULT_STATE_PATH} is not an object holding a work_items object")
+        if work_item_id not in state["work_items"]:
+            return fail("UnknownWorkItem", work_item_id)
+        if not isinstance(state["work_items"][work_item_id], dict):
+            return fail("StateMalformed", f"work_items[{work_item_id!r}] is not an object")
+        report = acceptance_gate_report(repo_root, state, work_item_id)
+    except Exception as exc:  # the contract is JSON, never a traceback
+        return fail(type(exc).__name__, str(exc))
+    print(json.dumps(report, sort_keys=True, indent=2))
+    return 0
+
+
 def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
     """Read-only CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0): print
     `plan_review_publication_status` for one work item as a single JSON
     object -- the contract Controller consumes instead of re-deriving the
     table. Rows 4d and 6 print `{"error": <name>, "message": ...}` and exit
     1. Writes nothing. `--finding-dispositions` (workflow-2.14.0) is the second,
-    equally read-only option."""
+    equally read-only option, and `--acceptance-gate` (workflow-2.26.0) the third."""
     import argparse
 
     parser = argparse.ArgumentParser(description=_plan_review_publication_status_cli.__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--plan-review-publication-status", metavar="WORK_ITEM_ID")
     group.add_argument("--finding-dispositions", metavar="WORK_ITEM_ID")
+    group.add_argument("--acceptance-gate", metavar="WORK_ITEM_ID")
     args = parser.parse_args(argv)
+    if args.acceptance_gate is not None:  # before the shared `git rev-parse`; an empty id is not "absent"
+        return _acceptance_gate_cli(args.acceptance_gate)
     repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
     if args.finding_dispositions:
         return _finding_dispositions_cli(repo_root, args.finding_dispositions)

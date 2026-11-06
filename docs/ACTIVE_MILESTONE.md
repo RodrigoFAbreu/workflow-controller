@@ -2,6 +2,22 @@
 
 ## Status
 
+**Complete.** `workflow-controller-h4e-leftovers` (H4e leftovers, issue
+[#306](https://github.com/RodrigoFAbreu/workflow-controller/issues/306)). The plan is
+`docs/ai-workflow/CONTROLLER_H4E_LEFTOVERS_PLAN.md` (revision 6). CP1 is complete: the landing and orphan test fixtures
+give every test its own job id through one helper (`per_test_job_id` in `tests/test_job_codex_worker.py`: a `t-` prefix, the
+test name's tail, a digest of the full test id and the pid), `LandingFixture` exposes `job_id`, the composed classes hand
+their outer test id to the fixture before `setUp`, a unit check proves the ids legal and pairwise distinct, and a drifted
+`resume` of a `LAUNCHED` protocol record has a test of its own. CP2 is complete: `controller/job.py` has `_with_kept_clone`,
+which names the clone in the evidence only when a tree stands on disk, and calls it at each ending that keeps one (the
+`LAUNCHED` and `COMPLETED` reconciliations, the one that raises, the drifted `resume`, the abandon, the live path's terminal
+writes and both exits of a launch that never spawned); a `FINISHED` record gets a `CodexCloneKept` block; a refusal whose
+clone is gone reports `clone_removed: true` with `clone: null`; the three pages say so. CP3 is complete: the two `FakeLaunchTest` failures of the full suite were not the sandbox. Two copies of the suite at once (`taskset -c 0,1`, two parallel runs) launched the same job ids (`job1`, `jobe`, ...), and the cleanup at the end of a launch kills every process whose environment carries the ownership tag, so each copy killed the other's fake `codex` (`-9` exits, `the composing command did not run`, `` `features list` did not run ``); one copy alone passes. `tests.test_review` and `tests.test_review_claude` now add the pid to every job id through `jid`, three copies together pass, and `docs/guide/development.md` says why a test that spawns tagged processes needs ids of its own. All three checkpoints are implemented. The self-review removed a `dataclasses.replace` from `_apply_codex_landing` that failed the write-containment scan, made a drifted `resume` and `--abandon` carry the "not on disk" message a `resume` refusal already had (D2 and the guide ask for it), and added the composed class `JobIdTest` had missed and the check that the fixture's `job_id` is the record's (CP1's done-when). The automated functional review found one more defect of the #306 class (flow 4): `RunnerTest.test_a_detached_descendant_is_killed_and_the_deadline_holds_with_an_inherited_pipe` set fixed ownership tags (`tTrue`, `tFalse`), so a parallel copy's cleanup killed its child before the timeout. It now adds the pid to its tags (bounded fix; three pinned copies of `tests.test_review` and of `RunnerTest` pass), and `docs/guide/development.md` names the case. Flow 4 needs re-testing; other tags in the suite were not changed by this round. Flow 4 was re-tested and passed; the milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for `workflow-controller-h4e2` (Codex worker, step 5b: the four review roles on Codex), the item `python3 scripts/workflow_backlog.py next` returns.
+
+## Previous milestone
+
 **Complete.** `workflow-controller-h4e` (H4e, issue
 [#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) prepares a private clone for a Codex worker and lands
 its commits fast-forward behind the H3 seam, for a fixture role. The plan is
@@ -363,62 +379,57 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-h4e` (H4e, issue [#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)),
-implementation revision 4. The change adds `controller/codex_worker_tree.py` (the private clone preparer) and
-`controller/codex_worker_landing.py` (the fast-forward landing and its recovery), the `gitrepo` reads and writes they use, the
-`job.py` call sites (preparer seam, `CODEX_LANDER`, the cleanup, `resume` and `resume --abandon`), the opt-in live proof, the
-guides and `docs/common-problems.md`. Nothing routes a role to Codex yet, so there is no user-visible command; the flows are the
-unit modules. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a
-`PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product
-clone, one module at a time, with `python3 -B` and no `PYTHONPATH=.`; they write only to the scratch `TMPDIR`.
+Item `workflow-controller-h4e-leftovers` (H4e leftovers, issue [#306](https://github.com/RodrigoFAbreu/workflow-controller/issues/306)),
+implementation revision 2. The change makes the landing, orphan and review-launch tests use job ids of their own (so parallel
+copies of the suite stop killing each other's fakes), names the kept Codex worker clone in every ending that leaves one on disk
+(`_with_kept_clone` in `controller/job.py`; a `FINISHED` record gets a `CodexCloneKept` block; a refusal whose clone is gone
+reports `clone_removed: true`, `clone: null`), and says so in `docs/guide/harnesses.md`, `docs/guide/workers.md`,
+`docs/common-problems.md` and `docs/guide/development.md`. There is no user-visible command; the flows are the unit modules. Every
+flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the
+sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone, one
+module at a time, with `python3 -B` and no `PYTHONPATH=.`; they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The clone preparer.**
-Run `python3 -B -m unittest tests.test_codex_worker_tree 2>&1 | tail -3`.
-Expected: `Ran 19 tests` and `OK` (a clone with no remote, alternates or hooks, the `Codex worker` author, a named
-`CodexTreeError.cause` for a dirty or moved branch and for a runtime root inside the managed repository).
+**Flow 1: The landing and the job seam.**
+Run `python3 -B -m unittest tests.test_job_codex_worker_landing 2>&1 | tail -3` and the same for `tests.test_job_codex_worker`.
+Expected: `Ran 28 tests` and `OK` for each (the fixture job ids are legal and pairwise distinct; the kept clone is named at each
+ending).
 
-**Flow 2: The landing.**
-Run `python3 -B -m unittest tests.test_codex_worker_landing 2>&1 | tail -3`.
-Expected: `Ran 66 tests` and `OK` (each refusal names its `cause` and leaves the repository as it was; a fast-forward lands only
-the clone's commits; a gitlink removed or replaced is refused).
+**Flow 2: Resume, abandon and the drifted resume.**
+Run `python3 -B -m unittest tests.test_job_codex_worker_resume 2>&1 | tail -3` (about 30 s).
+Expected: `Ran 77 tests` and `OK` (a `LAUNCHED` record names its kept clone; a record whose tree is gone names none and says
+`clone_removed: true`; a drifted `resume` and `--abandon` carry the "not on disk" message; a `FINISHED` record carries
+`CodexCloneKept`).
 
-**Flow 3: The Git helpers and the invariants.**
-Run, one after the other: `python3 -B -m unittest tests.test_gitrepo`, `tests.test_no_rewrite_invariants`,
-`tests.test_package_structure`, `tests.test_write_containment`, each piped to `tail -3`.
-Expected: `Ran 57`, `Ran 17`, `Ran 13` and `Ran 10 tests`, each `OK` (`landing_delete_ref` admitted by exactly one spelling).
+**Flow 3: The review launch tests.**
+Run `python3 -B -m unittest tests.test_review 2>&1 | tail -3` and `tests.test_review_claude`.
+Expected: `Ran 127 tests` and `Ran 39 tests`, each `OK`.
 
-**Flow 4: The job seam, the cleanup and recovery.**
-Run `tests.test_job_codex_worker_landing` (19), `tests.test_job_codex_worker` (28), `tests.test_job_codex_worker_resume` (54, about
-35 s), `tests.test_job_codex_worker_usage` (11), `tests.test_resume` (134, about 90 s) and `tests.test_codex_worker` (37), each as
-`python3 -B -m unittest tests.<module> 2>&1 | tail -3`.
-Expected: every module `OK`. If the sandbox's read-only `/tmp` or missing user namespaces stop a process or job module, that
-module is `environment`-limited and operator-run (the plan says so); a failure with another cause is a finding.
+**Flow 4: Parallel copies no longer kill each other's fakes (the #306 defect).**
+Revision 2 re-tests this flow: the first functional review found `RunnerTest.test_a_detached_descendant_is_killed_and_the_deadline_holds_with_an_inherited_pipe`
+still used fixed ownership tags (`tTrue`, `tFalse`); it now adds the pid to them. It runs inside `tests.test_review`, so the command below covers it.
+Start three copies of Flow 3 together with a CPU pin and wait for all:
+`for i in 1 2 3; do (TMPDIR=$(mktemp -d) taskset -c 0,1 python3 -B -m unittest tests.test_review tests.test_review_claude 2>&1 | tail -3) & done; wait`.
+Expected: every copy prints `Ran 166 tests` and `OK` (no `-9` exits, no `the composing command did not run`, no `` `features list` did not run ``). If
+`taskset` is missing from the sandbox's `PATH`, this flow is `environment`-limited and operator-run; any other failure is a finding.
 
-**Flow 5: Documentation, table and backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/harness_table.py --check; echo rc=$?` and
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?`.
+**Flow 5: Documentation and backlog.**
+Run `python3 -B tools/check_docs.py; echo rc=$?` and `python3 -B scripts/workflow_backlog.py check; echo rc=$?`.
 Expected: `rc=0` each; the backlog line is `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}`.
 
-**Flow 6: The guides state the clone and the landing.**
-Read the clone and landing sections of `docs/guide/harnesses.md` and `docs/guide/workers.md`, the new entry in
-`docs/common-problems.md`, and `docs/items/workflow-controller-h4e2.md`.
-Expected: the guides name the clean-tree requirement, the record blocks, the cleanup rules, the crash windows and the operator's
-removal of a kept clone; `common-problems.md` gives the restore-then-`resume --abandon` remedy; H4e2's page records the open
-question of the clean-tree requirement.
+**Flow 6: The guides state the new behaviour.**
+Read the clone and landing sections of `docs/guide/harnesses.md`, `docs/guide/workers.md`, the "refused landing" entry of
+`docs/common-problems.md` and the "Job ids in tests that spawn tagged processes" bullet of `docs/guide/development.md`.
+Expected: every ending that keeps a clone names it (`reconciliation_evidence.clone`, or `CodexCloneKept` for a `FINISHED`
+record); a clone not on disk is reported as `clone_removed: true`, `clone: null`; the one remaining window (a kill between the
+terminal write and the naming write) is stated; the development guide says why such tests need ids of their own and how to check
+(`taskset -c 0,1` with two or three copies).
 
-**Flow 7: The live proof is skipped here.**
-Run `python3 -B -m unittest tests.test_codex_worker_clone_live -v 2>&1 | tail -6`.
-Expected: `Ran 2 tests`, `OK (skipped=1)`, with the skip reason naming `CONTROLLER_LIVE_CODEX_TESTS=1`. Read
-`tests/harness_contract/codex/worker_clone.txt` for the measured result of the one real run (not repeatable in the sandbox).
-
-**Known limitations / out of scope.** Routing any role to Codex (H4e2); `milestone-implement` on Codex (H4f); carrying uncommitted
-managed state into the clone and back (the clean-tree requirement narrows what can run, H4e2 decides); a setting for the clone; a
-retention or pruning command for kept clones; any change to the Claude worker, the tester or the reviewer. The live test needs a
-real `codex`, `bwrap`, a recorded `verify-codex` build and a credential, so it is operator-run. The full suite is not a flow
-(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
-
+**Known limitations / out of scope.** Routing any role to Codex (H4e2); `milestone-implement` on Codex (H4f); a retention or pruning
+command for kept clones; the kill window between a terminal record and its second naming write (documented, not closed); any
+change to the Claude worker, the tester or the reviewer. The full suite is not a flow (`test_functional_sandbox` has a known CI
+flake, #206; the Git 2.56 trailer tests fail on main).
 
 ## Next action
 

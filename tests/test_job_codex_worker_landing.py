@@ -26,7 +26,7 @@ from controller.decision import phase_from_wire  # noqa: E402
 from controller.errors import GitOperationError  # noqa: E402
 from tests import fixtures, process_fixtures  # noqa: E402
 from tests.test_job import FAKE_IDENTITY, _build_target, _WriteSpy  # noqa: E402
-from tests.test_job_codex_worker import JobFixture  # noqa: E402
+from tests.test_job_codex_worker import JobFixture, per_test_job_id  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
 from tests.test_protocol_outcome import WID, _CHECKPOINT_CODE, _Env  # noqa: E402
 
@@ -62,6 +62,17 @@ class LandingFixture(JobFixture):
 
         self.enterContext(mock.patch.object(self.launcher, "launch", launch))
 
+    def next_id(self) -> str:
+        # per_test_job_id keeps the `t-` prefix: the id must pass `gitrepo._LANDING_JOB_ID` (it starts alphanumeric).
+        self.ids += 1
+        return per_test_job_id(self.id(), self.ids)
+
+    @property
+    def job_id(self) -> str:
+        """The id of the job this test goes on to run (its first), computed, not read from the counter (a probe
+        run may have advanced and reset it)."""
+        return per_test_job_id(self.id(), 1)
+
     # -- the worker's work ----------------------------------------------------------------------------------------
     def commit_in(self, clone: Path, files: dict[str, str], message: str = "work") -> str:
         for name, text in files.items():
@@ -89,10 +100,10 @@ class LandingFixture(JobFixture):
     def branch(self) -> str:
         return git(self.managed.root, "symbolic-ref", "--short", "HEAD")
 
-    def job_dir(self, job_id: str = "job1") -> Path:
-        return self.runtime / "worker" / job_id
+    def job_dir(self, job_id: str | None = None) -> Path:
+        return self.runtime / "worker" / (job_id or self.job_id)
 
-    def leftovers(self, job_id: str = "job1") -> list[str]:
+    def leftovers(self, job_id: str | None = None) -> list[str]:
         """Every file under the job directory except the retained rollouts, relative to it."""
         base = self.job_dir(job_id)
         if not base.exists():
@@ -101,7 +112,7 @@ class LandingFixture(JobFixture):
                       if "codex-home/sessions" not in str(p.relative_to(base)) and p.relative_to(base) != Path("codex-home")
                       and not p.is_dir())
 
-    def populate_job_dir(self, job_id: str = "job1") -> None:
+    def populate_job_dir(self, job_id: str | None = None) -> None:
         """Fill the job directory as the real launcher does: every directory and file it leaves beside the tree."""
         base = self.job_dir(job_id)
         for name in ("bin", "home", "scratch", "tmp", "codex-home/sessions"):
@@ -110,13 +121,13 @@ class LandingFixture(JobFixture):
                      "codex-home/models_cache.json", "codex-home/state_5.sqlite", "codex-home/sessions/rollout.jsonl"):
             (base / name).write_text("x\n")
 
-    def assert_only_tree_and_sessions(self, job_id: str = "job1") -> None:
+    def assert_only_tree_and_sessions(self, job_id: str | None = None) -> None:
         """What a kept clone leaves (D7): ``tree`` and ``codex-home/sessions`` alone."""
         base = self.job_dir(job_id)
         self.assertEqual(sorted(p.name for p in base.iterdir()), ["codex-home", "tree"])
         self.assertEqual(sorted(p.name for p in (base / "codex-home").iterdir()), ["sessions"])
 
-    def clone_kept(self, job_id: str = "job1") -> bool:
+    def clone_kept(self, job_id: str | None = None) -> bool:
         return (self.job_dir(job_id) / "tree" / ".git").is_dir()
 
     def managed_snapshot(self) -> dict:
@@ -131,9 +142,9 @@ class LandingFixture(JobFixture):
         self.assertEqual((evidence["code"], evidence["cause"]), (job.CODEX_LANDING_REFUSED_CODE, cause))
         block = record["codex_worker"]["landing"]
         self.assertEqual((block["outcome"], block["cause"], block["clone_kept"]), ("refused", cause, True))
-        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
         self.assertTrue(self.clone_kept())
-        self.assertEqual(self.tagged("job1"), [])
+        self.assertEqual(self.tagged(self.job_id), [])
         return block
 
 
@@ -223,7 +234,7 @@ class LandedTest(LandingFixture):
         block = record["codex_worker"]["landing"]
         self.assertTrue(block["clone_kept"])
         self.assertIn("busy", block["tree_left"]["reason"])
-        self.assertEqual(block["tree_left"]["path"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(block["tree_left"]["path"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
 
 
 class RefusedTest(LandingFixture):
@@ -349,8 +360,105 @@ class DirectoryTest(LandingFixture):
         self.assertEqual(record["reconciliation_evidence"]["code"], "OSError")
         self.assertTrue(self.clone_kept())
         self.assert_only_tree_and_sessions()
-        self.assertEqual(record["codex_worker"]["clone"]["path"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(record["codex_worker"]["clone"]["path"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
         self.assertEqual(record["reconciliation_evidence"]["clone"], record["codex_worker"]["clone"]["path"])
+
+
+def _busy_tree_removal():
+    """A ``runtime.remove_tree`` whose removal of any ``.../tree`` fails, as a busy mount or a held file does."""
+    real = job.runtime.remove_tree
+
+    def remove(root, rel, **kw):
+        if str(rel).endswith("/tree"):
+            raise OSError("busy")
+        return real(root, rel, **kw)
+
+    return mock.patch.object(job.runtime, "remove_tree", remove)
+
+
+class CloneNamedLiveTest(LandingFixture):
+    """H4e leftovers, D1 sites 6 and 7: the live path names the clone its removal left, and only that one."""
+
+    def clone_path(self) -> str:
+        return str(ws.WorkerLayout(self.runtime, self.job_id).worktree)
+
+    def test_a_finished_job_whose_tree_removal_failed_carries_a_clone_kept_block(self) -> None:
+        phase = self.expected_phase()
+        self.after = lambda clone: self.commit_in(clone, {STATE: self.state_with_phase(phase)})
+        with _busy_tree_removal():
+            record = self.run_step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]), (job.CODEX_CLONE_KEPT_CODE, self.clone_path()))
+        self.assertEqual(record["codex_worker"]["landing"]["tree_left"]["path"], evidence["clone"])
+
+    def test_a_failed_job_whose_tree_removal_failed_names_the_clone_beside_its_evidence(self) -> None:
+        self.after = lambda clone: self.commit_in(clone, {"unrelated.txt": "x\n"})
+        with _busy_tree_removal():
+            record = self.run_step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual(evidence["clone"], self.clone_path())
+        self.assertNotEqual(evidence["code"], job.CODEX_CLONE_KEPT_CODE)
+
+    def test_status_and_explain_read_a_clone_kept_record_without_failing(self) -> None:
+        """No reader treats a ``FINISHED`` record's evidence as a failure (the open point of the plan): ``status``'s
+        job line and ``explain``'s last-job diagnosis go by status and stream files, never by the evidence."""
+        from controller import cli, observe
+        phase = self.expected_phase()
+        self.after = lambda clone: self.commit_in(clone, {STATE: self.state_with_phase(phase)})
+        with _busy_tree_removal():
+            record = self.run_step()
+        self.assertEqual(record["reconciliation_evidence"]["code"], job.CODEX_CLONE_KEPT_CODE)
+        summary = observe.job_summary(record, now=record["updated_at"])
+        self.assertTrue(summary["finished"])
+        self.assertIn(job.STATUS_FINISHED, observe.job_summary_text(summary))
+        self.assertEqual(job._reconciled_details(record)["code"], job.CODEX_CLONE_KEPT_CODE)
+        diagnosis = cli._last_job_diagnosis(self.runtime, self.managed)
+        self.assertTrue(diagnosis is None or diagnosis["job_id"] == record["job_id"])
+
+    def test_a_job_that_removed_its_tree_names_no_clone(self) -> None:
+        phase = self.expected_phase()
+        self.after = lambda clone: self.commit_in(clone, {STATE: self.state_with_phase(phase)})
+        record = self.run_step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertNotIn("reconciliation_evidence", record)
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_a_refused_launch_whose_removal_failed_is_worker_not_started_and_names_the_clone(self) -> None:
+        self.recorded = True  # nothing recorded in the build record: the launcher refuses with a ControllerError
+        with _busy_tree_removal(), self.assertRaises(Exception):
+            self.run_step()
+        record = self.only_record()
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]), (job.WORKER_NOT_STARTED_CODE, self.clone_path()))
+        self.assertTrue(job.never_launched(record))
+        self.assertTrue(self.clone_kept())
+
+    def test_a_refused_launch_whose_removal_succeeded_names_no_clone(self) -> None:
+        self.recorded = True
+        with self.assertRaises(Exception):
+            self.run_step()
+        self.assertNotIn("clone", self.only_record()["reconciliation_evidence"])
+
+    def test_another_exception_before_the_spawn_names_the_clone_and_keeps_its_type_as_the_code(self) -> None:
+        self.record()
+        with mock.patch.object(self.launcher, "launch", side_effect=RuntimeError("launcher broke")), \
+                _busy_tree_removal(), self.assertRaises(RuntimeError):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]), ("RuntimeError", self.clone_path()))
+
+    def test_another_exception_before_the_spawn_with_the_tree_removed_names_no_clone(self) -> None:
+        self.record()
+        with mock.patch.object(self.launcher, "launch", side_effect=RuntimeError("launcher broke")), \
+                self.assertRaises(RuntimeError):
+            self.run_step()
+        evidence = self.only_record()["reconciliation_evidence"]
+        self.assertEqual(evidence["code"], "RuntimeError")
+        self.assertNotIn("clone", evidence)
 
 
 class ProtocolLandingTest(unittest.TestCase):
@@ -358,6 +466,7 @@ class ProtocolLandingTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.fixture = LandingFixture("run_step")
+        self.fixture.id = self.id  # before setUp: the fixture's own id is the same for every test of this class
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.env = _Env(self, "ready", implementing=True)
@@ -382,6 +491,15 @@ class ProtocolLandingTest(unittest.TestCase):
         self.assertEqual(record["protocol"]["reconcile"]["class"], "progress")
         self.assertEqual(record["status"], job.STATUS_FINISHED)
         self.assertNotIn("progress", record["protocol"])
+
+    def test_a_finished_protocol_job_whose_tree_removal_failed_carries_a_clone_kept_block(self) -> None:
+        self.fixture.after = lambda clone: fixtures.run_workflow_python(clone, _CHECKPOINT_CODE, WID, "all")
+        with _busy_tree_removal():
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]),
+                         (job.CODEX_CLONE_KEPT_CODE, str(ws.WorkerLayout(self.env.runtime, record["job_id"]).worktree)))
 
     def test_a_worker_that_commits_nothing_keeps_no_progress(self) -> None:
         record = self.step()

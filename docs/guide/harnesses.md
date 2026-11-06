@@ -296,15 +296,25 @@ option, exit code or gate is new, and nothing real reaches the branch.
   the approval it covered here as it would there, and the landing weakens no approval check.
 - **The record.** `codex_worker.clone` is `{path, branch, base, guard}`, written before the launch. Before the fetch the Controller
   writes the intent `landing = {outcome: "started", base, tip, branch}`; after the landing, the final block `{outcome:
-  "landed" | "nothing" | "refused", cause, base, tip, commits, branch, clone_kept, moved, ref_left, dirty}`. `landed` and
+  "landed" | "nothing" | "refused", cause, base, tip, commits, branch, clone, clone_kept, clone_removed, moved, ref_left, dirty}`. `landed` and
   `nothing` go on to the unchanged verification (the legacy transition check, or the protocol's `reconcile`), which now sees the
   landed commits; a job that landed nothing keeps `phase_not_in_to_any_of` or `no_progress`. A refused landing, whatever the
   worker's own outcome, ends the job `FAILED` with `reconciliation_evidence.code` `CodexLandingRefused`, the `cause`, and the
-  clone's path in `reconciliation_evidence.clone`, in one write with the `refused` block.
+  clone's path in `reconciliation_evidence.clone`, in one write with the `refused` block. A recovery by `resume` or `--abandon` that
+  refuses a landing whose clone is no longer on disk (an earlier recovery removed it before it was killed, or you did) says so
+  instead: `clone_kept: false`, `clone_removed: true`, `clone: null` in the block and `clone: null` in the evidence, with the
+  message "the clone is not on disk (an earlier recovery or the operator removed it)". The Controller reads the path and cannot
+  tell those two causes apart.
 - **Cleanup.** The clone is removed through `runtime.remove_tree` before the job's terminal write on `landed`, `nothing`, an
   ordinary worker failure, a launcher refusal before the spawn and a `clone_failed`; the sessions the usage gate reads are kept.
   It is kept, and named in the record, after a refused landing and after an exception once the worker was spawned. A kept
-  clone is removed by the operator: `rm -rf` of the exact path in `reconciliation_evidence.clone` (a record ended by a drifted `resume` or by `--abandon` before any landing recovery carries it in `codex_worker.clone.path` only). There is no `runtime`
+  clone is removed by the operator: `rm -rf` of the exact path in `reconciliation_evidence.clone`. Every ending that leaves a
+  clone on disk names it there, after the tree was settled: a `FINISHED` record that kept its clone (a removal that failed, for
+  one) has `reconciliation_evidence` of `{"code": "CodexCloneKept", "clone": <path>, "message": ...}`, and any other ending
+  carries `clone` beside its own evidence. A record whose tree is gone names no clone and never says one is kept. One window
+  stays: for a `LAUNCHED` record, a `COMPLETED` record's recovery and a reconciliation that raised, the name is a second write
+  after the terminal record, so a kill between the two leaves a terminal record without it; the path is then in
+  `codex_worker.clone.path`, and `resume` does not return to a terminal record. There is no `runtime`
   command and no retention or pruning ([Workers](workers.md#observing-workers)).
 - **Crash windows.** `resume` never fetches or merges. Over a `COMPLETED` Codex record it reads the refs and the tree and
   finishes the landing's bookkeeping: killed before the fetch or after it and before the merge, the leftover landing ref is
@@ -312,8 +322,8 @@ option, exit code or gate is new, and nothing real reaches the branch.
   merge, between its tree update and its ref update, the branch is at the base with the worker's content in the tree, which is
   `merge_left_tree_dirty` with nothing repaired; killed after the merge, the same post-move check as the live path gives the
   final block (`landed` with `recovered`, or `landing_unverified`); an unreadable repository or a malformed `clone` or `landing`
-  block is `landing_unreadable`, which deletes nothing and keeps the clone. A `LAUNCHED` record ends
-  `INTERRUPTED` naming its clone and lands nothing. [Common problems](../common-problems.md#a-codex-workers-landing-was-refused)
+  block is `landing_unreadable`, which deletes nothing and keeps the clone. A `LAUNCHED` record lands nothing: it ends
+  as its reconciliation decides (`INTERRUPTED` when nothing durable happened) and names the clone it kept. [Common problems](../common-problems.md#a-codex-workers-landing-was-refused)
   has the causes and their remedies.
 
 The opt-in live proof is `tests.test_codex_worker_clone_live`: a real `codex exec` makes one plain commit in the clone and the

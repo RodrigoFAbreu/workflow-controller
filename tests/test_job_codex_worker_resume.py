@@ -29,12 +29,12 @@ from controller import (  # noqa: E402
 )
 from controller.errors import (  # noqa: E402
     DriftedInstallationError, GitDirectoryUnresolvableError, GitOperationError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError,
-    PendingJobReconciliationError, StaleJobRecordError,
+    PendingJobReconciliationError, StaleJobRecordError, UnreconcilableJobError,
 )
 from tests import fixtures, process_fixtures  # noqa: E402
 from tests.test_job import FAKE_IDENTITY  # noqa: E402
-from tests.test_job_codex_worker import JobFixture  # noqa: E402
-from tests.test_job_codex_worker_landing import STATE, LandingFixture, git  # noqa: E402
+from tests.test_job_codex_worker import JobFixture, per_test_job_id  # noqa: E402
+from tests.test_job_codex_worker_landing import STATE, LandingFixture, _busy_tree_removal, git  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
 from tests.test_protocol_outcome import WID, _CHECKPOINT_CODE, _Env  # noqa: E402
 
@@ -52,7 +52,7 @@ class OrphanFixture(JobFixture):
 
     def next_id(self) -> str:
         self.ids += 1
-        return f"{self.id().rsplit('.', 1)[-1][-40:]}-{os.getpid()}-{self.ids}"
+        return per_test_job_id(self.id(), self.ids)
 
     def launch_that(self):
         def launch(task, **options):
@@ -289,12 +289,12 @@ class ProtocolCodexTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.fixture = OrphanFixture("run_step")
+        self.fixture.id = self.id  # before setUp: the fixture's own id is the same for every test of this class
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.env = _Env(self)
         self.fixture.managed = self.env.inspect()
         self.fixture.runtime = self.env.runtime
-        self.fixture.next_id = lambda: f"protocol-codex-{self.id().rsplit('.', 1)[-1][-30:]}-{os.getpid()}"
 
     def orphan(self) -> dict:
         fixture = self.fixture
@@ -365,6 +365,28 @@ class ProtocolCodexTest(unittest.TestCase):
         self.assertEqual(failed["reconciliation_evidence"]["reason"], "workflow_release_changed")
         self.assertFalse((fixture.layout_of(record).codex_home / "auth.json").exists())
         self.assertIn("rotated-by-the-worker", (fixture.operator / "auth.json").read_text())
+
+    def test_a_drifted_resume_of_a_launched_record_settles_the_job_directory_and_lands_nothing(self) -> None:
+        record = self.orphan()
+        fixture = self.fixture
+        fixture.end_and_reap()
+        base = fixture.layout_of(record).base
+        for name in ("bin", "home", "scratch", "tmp", "codex-home/sessions"):
+            (base / name).mkdir(parents=True, exist_ok=True)
+        for name in ("last-message.md", "codex-home/config.toml", "codex-home/models_cache.json",
+                     "codex-home/sessions/rollout.jsonl"):
+            (base / name).write_text("x\n")
+        target = self.drifted()
+        (failed,) = job.resume(target, identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(failed["status"], job.STATUS_FAILED)
+        self.assertEqual(failed["reconciliation_evidence"]["reason"], "workflow_release_changed")
+        self.assertEqual(sorted(p.name for p in base.iterdir()), ["codex-home", "tree"])
+        self.assertEqual(sorted(p.name for p in (base / "codex-home").iterdir()), ["sessions"])
+        self.assertNotIn("landing", failed.get("codex_worker", {}))
+        self.assertEqual(git(self.env.root, "for-each-ref", "refs/controller"), "")
+        self.assertEqual(process_fixtures.tagged_pids(failed["job_id"]), [])
+        # H4e leftovers, D1 site 4: the kept clone is named in the drift ending's evidence.
+        self.assertEqual(failed["reconciliation_evidence"]["clone"], str(base / "tree"))
 
 
 class AbandonTest(OrphanFixture):
@@ -520,7 +542,7 @@ class KilledLandingFixture(LandingFixture):
         block = resumed["codex_worker"]["landing"]
         self.assertEqual((block["outcome"], block["cause"], block["clone_kept"]), ("refused", cause, True))
         self.assertEqual(block["moved"], None if cause == "landing_unreadable" else moved)
-        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
         self.assertTrue(self.clone_kept())
         self.assert_only_tree_and_sessions()
         self.assertEqual(self.refs(), "")
@@ -638,6 +660,71 @@ class WindowsTest(KilledLandingFixture):
         block = resumed["codex_worker"]["landing"]
         self.assertTrue(block["clone_kept"])
         self.assertIn("busy", block["tree_left"]["reason"])
+        # H4e leftovers, D1 site 3: a recovery that left the tree names it in the evidence of its ending.
+        evidence = resumed["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]), (job.CODEX_CLONE_KEPT_CODE, block["tree_left"]["path"]))
+        self.assertEqual(self.only_record()["reconciliation_evidence"], evidence)
+
+    def test_a_recovery_that_removed_the_tree_names_no_clone(self) -> None:
+        self.killed("after_merge")
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED)
+        self.assertNotIn("reconciliation_evidence", resumed)
+
+
+class RemovedCloneTest(KilledLandingFixture):
+    """H4e leftovers, D2: a refusal never says a clone is kept when its path is gone."""
+
+    def test_a_branch_moved_after_the_first_removal_reports_the_clone_removed_not_kept(self) -> None:
+        self.killed("after_merge")
+        shutil.rmtree(self.job_dir() / "tree")  # window (b): an earlier resume removed it, then was killed
+        self.commit_in(self.managed.root, {"moved.txt": "x\n"}, "the operator moved the branch")
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FAILED)
+        evidence = resumed["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["cause"]), (job.CODEX_LANDING_REFUSED_CODE, "landing_unverified"))
+        self.assertIsNone(evidence["clone"])
+        self.assertIn("clone", evidence)
+        self.assertIn("is not on disk (an earlier recovery or the operator removed it)", evidence["message"])
+        block = resumed["codex_worker"]["landing"]
+        self.assertEqual((block["clone_kept"], block["clone_removed"], block["clone"]), (False, True, None))
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_a_landing_unreadable_recovery_with_the_tree_gone_has_no_stale_clone(self) -> None:
+        self.killed("before_fetch")
+        shutil.rmtree(self.job_dir() / "tree")
+        (self.managed.root / ".git" / "index").write_bytes(b"garbage")
+        resumed = self.resume()
+        self.assertEqual(resumed["reconciliation_evidence"]["cause"], "landing_unreadable")
+        self.assertIsNone(resumed["reconciliation_evidence"]["clone"])
+        block = resumed["codex_worker"]["landing"]
+        self.assertEqual((block["clone_kept"], block["clone_removed"], block["clone"]), (False, True, None))
+
+    def test_an_abandon_whose_clone_is_gone_says_so_and_names_none(self) -> None:
+        record = self.killed("after_merge")
+        shutil.rmtree(self.job_dir() / "tree")
+        self.commit_in(self.managed.root, {"moved.txt": "x\n"}, "the operator moved the branch")
+        abandoned = self.abandon(record)
+        evidence = abandoned["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["landing_cause"], evidence["clone"]),
+                         ("OperatorAbandoned", "landing_unverified", None))
+        self.assertIn("is not on disk (an earlier recovery or the operator removed it)", evidence["message"])
+        block = abandoned["codex_worker"]["landing"]
+        self.assertEqual((block["clone_kept"], block["clone_removed"], block["clone"]), (False, True, None))
+
+    def test_a_refusal_with_the_tree_standing_still_says_kept(self) -> None:
+        self.killed("before_fetch")
+        (self.managed.root / ".git" / "index").write_bytes(b"garbage")
+        block = self.assert_refused_clone_kept(self.resume(), "landing_unreadable")
+        self.assertNotIn("clone_removed", block)
+
+    def test_the_helper_leaves_a_clone_null_alone_and_reads_the_path_only(self) -> None:
+        record = {"job_id": self.job_id, "codex_worker": {}}
+        self.killed("before_fetch")
+        self.assertEqual(job._with_kept_clone({"clone": None}, record, self.runtime), {"clone": None})
+        shutil.rmtree(self.job_dir() / "tree")
+        self.assertEqual(job._with_kept_clone({"code": "X"}, record, self.runtime), {"code": "X"})
+        self.assertIsNone(job._with_kept_clone(None, record, self.runtime))
 
 
 class LaunchedLandingTest(KilledLandingFixture):
@@ -652,7 +739,7 @@ class LaunchedLandingTest(KilledLandingFixture):
         self.assertNotIn("clone", record["codex_worker"])
         resumed = self.resume()
         self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED)
-        self.assertEqual(resumed["reconciliation_evidence"]["clone"], str(ws.WorkerLayout(self.runtime, "job1").worktree))
+        self.assertEqual(resumed["reconciliation_evidence"]["clone"], str(ws.WorkerLayout(self.runtime, self.job_id).worktree))
         self.assertTrue(self.clone_kept())
 
     def test_a_launched_record_whose_worker_committed_does_not_land_and_names_the_clone(self) -> None:
@@ -666,11 +753,100 @@ class LaunchedLandingTest(KilledLandingFixture):
         self.assertEqual(self.only_record()["status"], job.STATUS_LAUNCHED)
         resumed = self.resume()
         self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED)
-        self.assertEqual(resumed["reconciliation_evidence"]["clone"], resumed["codex_worker"]["clone"]["path"])
+        self.assertEqual((resumed["reconciliation_evidence"]["code"], resumed["reconciliation_evidence"]["clone"]),
+                         ("CodexWorkerInterrupted", resumed["codex_worker"]["clone"]["path"]))
         self.assertEqual(self.branch_tip(), self.base)
         self.assertTrue(self.clone_kept())
         self.assert_only_tree_and_sessions()
         self.assertNotIn("landing", resumed["codex_worker"])
+
+
+    # -- H4e leftovers, D1 sites 1 and 2 ---------------------------------------------------------------------------
+    def elsewhere(self) -> str:
+        """A known phase that is neither the record's pre-phase nor the one the step expects."""
+        return next(p for p in ("AWAITING_FUNCTIONAL_REVIEW", "REVISING_PLAN", "MILESTONE_COMPLETE")
+                    if p != self.phase)
+
+    def launched(self, *, transition: bool = False) -> dict:
+        """A ``LAUNCHED`` record whose worker was lost; ``transition`` moves the managed repository's phase as the
+        worker's step would have, so the reconciliation verifies it."""
+        def launch(task, **options):
+            if transition:
+                self.commit_in(self.managed.root, {STATE: self.state_with_phase(self.phase)}, "transition")
+            self.populate_job_dir()
+            raise KeyboardInterrupt
+
+        with mock.patch.object(cw, "launch_codex_worker", launch), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        return record
+
+    def test_a_launched_record_that_reconciles_finished_names_the_clone_it_kept(self) -> None:
+        self.launched(transition=True)
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED)
+        evidence = resumed["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]), (job.CODEX_CLONE_KEPT_CODE, resumed["codex_worker"]["clone"]["path"]))
+        self.assertEqual(self.only_record()["reconciliation_evidence"], evidence)
+        self.assert_only_tree_and_sessions()
+
+    def assert_ending_names_the_clone(self, status: str) -> None:
+        record = self.launched()
+
+        def reconcile(rec, **kw):
+            return job._persist(self.runtime, rec["job_id"], {
+                **rec, "status": status, "transition_verified": False,
+                "reconciliation_evidence": {"code": "Whatever", "detail": 1}}, event="reconciled")
+
+        with mock.patch.object(job, "_reconcile_launched", reconcile):
+            resumed = self.resume()
+        self.assertEqual(resumed["status"], status)
+        self.assertEqual(resumed["reconciliation_evidence"],
+                         {"code": "Whatever", "detail": 1, "clone": record["codex_worker"]["clone"]["path"]})
+
+    def test_a_launched_record_that_reconciles_failed_names_the_clone_beside_its_evidence(self) -> None:
+        self.assert_ending_names_the_clone(job.STATUS_FAILED)
+
+    def test_a_launched_record_that_reconciles_incomplete_names_the_clone_beside_its_evidence(self) -> None:
+        self.assert_ending_names_the_clone(job.STATUS_INCOMPLETE)
+
+    def test_a_launched_record_whose_tree_is_gone_names_no_clone_and_claims_none_kept(self) -> None:
+        self.launched()
+        shutil.rmtree(self.job_dir() / "tree")
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED)
+        self.assertNotIn("reconciliation_evidence", resumed)
+        self.assertNotIn("reconciliation_evidence", self.only_record())
+
+    def test_a_launched_record_that_raises_unreconcilable_is_persisted_failed_naming_the_clone(self) -> None:
+        def launch(task, **options):
+            self.commit_in(self.managed.root, {STATE: self.state_with_phase(self.elsewhere())}, "moved")
+            self.populate_job_dir()
+            raise KeyboardInterrupt
+
+        with mock.patch.object(cw, "launch_codex_worker", launch), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        with self.assertRaises(UnreconcilableJobError):
+            job.resume(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime)
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]), ("UnreconcilableJobError", record["codex_worker"]["clone"]["path"]))
+        self.assert_only_tree_and_sessions()
+
+    def test_an_unreconcilable_launched_record_that_persisted_nothing_settles_nothing(self) -> None:
+        record = self.launched()
+        self.rewrite(lifecycle_lock=None)
+        stripped = {k: v for k, v in self.only_record().items() if k != "lifecycle_lock"}
+        (self.runtime / "jobs" / f"{record['job_id']}.json").write_text(json.dumps(stripped))
+        self.commit_in(self.managed.root, {STATE: self.state_with_phase(self.elsewhere())}, "moved")
+        before = self.only_record()
+        with self.assertRaises(UnreconcilableJobError):
+            job.resume(self.managed, identity=FAKE_IDENTITY, runtime=self.runtime)
+        self.assertEqual(self.only_record()["status"], before["status"])
+        self.assertNotIn("reconciliation_evidence", self.only_record())
+        self.assertTrue(self.clone_kept())
 
 
 class AbandonLandingTest(KilledLandingFixture):
@@ -679,7 +855,7 @@ class AbandonLandingTest(KilledLandingFixture):
         evidence = abandoned["reconciliation_evidence"]
         self.assertEqual(evidence["code"], "OperatorAbandoned")
         self.assertEqual((evidence["landing_cause"], evidence["clone"]),
-                         (cause, str(ws.WorkerLayout(self.runtime, "job1").worktree)))
+                         (cause, str(ws.WorkerLayout(self.runtime, self.job_id).worktree)))
         block = abandoned["codex_worker"]["landing"]
         self.assertEqual((block["outcome"], block["cause"], block["clone_kept"]), ("refused", cause, True))
         self.assertTrue(self.clone_kept())
@@ -703,6 +879,44 @@ class AbandonLandingTest(KilledLandingFixture):
         abandoned = self.abandon(record)
         self.assertEqual(abandoned["status"], job.STATUS_FAILED)
         self.assert_only_tree_and_sessions()
+
+    def test_abandon_of_a_launched_record_names_the_clone_it_kept(self) -> None:
+        """H4e leftovers, D1 site 5."""
+        def launch(task, **options):
+            self.populate_job_dir()
+            raise KeyboardInterrupt
+
+        with mock.patch.object(cw, "launch_codex_worker", launch), self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        abandoned = self.abandon(self.only_record())
+        evidence = abandoned["reconciliation_evidence"]
+        self.assertEqual((evidence["code"], evidence["clone"]),
+                         ("OperatorAbandoned", str(ws.WorkerLayout(self.runtime, self.job_id).worktree)))
+
+    def test_abandon_of_a_completed_record_whose_tree_removal_failed_names_the_clone(self) -> None:
+        record = self.killed("after_merge")
+        with _busy_tree_removal():
+            abandoned = self.abandon(record)
+        self.assertEqual(abandoned["reconciliation_evidence"]["clone"], abandoned["codex_worker"]["landing"]["tree_left"]["path"])
+        self.assertTrue(self.clone_kept())
+
+    def test_abandon_of_an_unreadable_record_names_a_tree_standing_at_the_derived_path(self) -> None:
+        """H4e leftovers, D1 site 8: the path follows from the job id and is named only when a tree stands there."""
+        jobs = self.runtime / "jobs"
+        jobs.mkdir(parents=True, exist_ok=True)
+        for job_id, tree in (("job-with-a-tree", True), ("job-without-a-tree", False)):
+            with self.subTest(job_id=job_id):
+                (jobs / f"{job_id}.json").write_text("{not json")
+                if tree:
+                    (ws.WorkerLayout(self.runtime, job_id).worktree).mkdir(parents=True)
+                abandoned = self.abandon({"job_id": job_id})
+                evidence = abandoned["reconciliation_evidence"]
+                self.assertEqual(evidence["code"], "OperatorAbandoned")
+                self.assertIn("original", evidence)
+                if tree:
+                    self.assertEqual(evidence["clone"], str(ws.WorkerLayout(self.runtime, job_id).worktree))
+                else:
+                    self.assertNotIn("clone", evidence)
 
     def test_abandon_after_a_merge_that_holds_removes_the_tree_and_keeps_the_code(self) -> None:
         record = self.killed("after_merge")
@@ -756,7 +970,7 @@ class UnreadableTest(KilledLandingFixture):
                 self.assertEqual(resumed["reconciliation_evidence"]["cause"], "landing_unreadable")
                 self.assertTrue(self.clone_kept())
                 # The guide's `rm -rf` names this path, so it must be the clone's even when the block's is unusable.
-                worktree = str(ws.WorkerLayout(self.runtime, "job1").worktree)
+                worktree = str(ws.WorkerLayout(self.runtime, self.job_id).worktree)
                 self.assertEqual(resumed["reconciliation_evidence"]["clone"], worktree)
                 self.assertEqual(resumed["codex_worker"]["landing"]["clone"], worktree)
                 self.rewrite(status=job.STATUS_COMPLETED, reconciliation_evidence=None)
@@ -767,7 +981,7 @@ class UnreadableTest(KilledLandingFixture):
             resumed = self.resume()
         block = resumed["codex_worker"]["landing"]
         self.assertEqual((block["cause"], block["ref_left"], block["ref"]),
-                         ("landing_interrupted", True, "refs/controller/landing/job1"))
+                         ("landing_interrupted", True, f"refs/controller/landing/{self.job_id}"))
 
     def test_a_removed_git_directory_refuses_resume_and_abandon_with_nothing_written(self) -> None:
         record = self.killed("before_fetch")
@@ -797,11 +1011,14 @@ class UnreadableTest(KilledLandingFixture):
         self.assertEqual(abandoned["reconciliation_evidence"]["landing_cause"], "landing_interrupted")
 
 
-class ProtocolKilledLandingTest(unittest.TestCase):
-    """A protocol Codex record killed in the landing: the drifted ending, and the command's own refusals."""
+class _ProtocolKilledBase(unittest.TestCase):
+    """A protocol Codex record killed in the landing at ``STAGE``, and the helpers its test classes share."""
+
+    STAGE = "after_fetch"
 
     def setUp(self) -> None:
         self.fixture = KilledLandingFixture("run_step")
+        self.fixture.id = self.id  # before setUp, as above
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.env = _Env(self, "ready", implementing=True)
@@ -809,16 +1026,17 @@ class ProtocolKilledLandingTest(unittest.TestCase):
         self.fixture.runtime = self.env.runtime
         self.fixture.record()
         self.fixture.after = lambda clone: fixtures.run_workflow_python(clone, _CHECKPOINT_CODE, WID, "all")
-        with mock.patch.object(job, "CODEX_LANDER", self.fixture.killing_lander("after_fetch")), \
+        with mock.patch.object(job, "CODEX_LANDER", self.fixture.killing_lander(self.STAGE)), \
                 self.assertRaises(KeyboardInterrupt):
             job.execute_step(self.env.inspect(), identity=IDENTITY, runtime=self.env.runtime,
                              routing=self.fixture.options, timeout=30)
         (self.record,) = self.env.records()
         self.assertIn("protocol", self.record)
 
-    def drifted(self):
+    def drifted(self, *, change_a_script: bool = True):
         script = self.env.root / "scripts" / "workflow_state.py"
-        script.write_text("# changed after the job was decided\n" + script.read_text())
+        if change_a_script:
+            script.write_text("# changed after the job was decided\n" + script.read_text())
         stub = fixtures.write_stub_workflow_manager(self.env.td / "drifted-manager", release="2.7.0", verify_exit=1)
         target = managed_repo.inspect_for_resume(self.env.root, manager_bin=str(stub))
         self.assertIsNotNone(target.drift)
@@ -826,6 +1044,50 @@ class ProtocolKilledLandingTest(unittest.TestCase):
 
     def refs(self) -> str:
         return git(self.env.root, "for-each-ref", "refs/controller")
+
+
+class ProtocolMergedDriftTest(_ProtocolKilledBase):
+    """H4e leftovers, D1 site 4: a drifted ``COMPLETED`` record whose commits landed names the tree only when a
+    failed removal left it. The drift is the record's recorded digest map, not an edited script, so the managed tree
+    stays clean and the landing is judged landed."""
+
+    STAGE = "after_merge"
+
+    def drift_the_record(self):
+        block = {**self.record["protocol"], "script_sha256": {"scripts/workflow_state.py": "0" * 64}}
+        path = self.env.runtime / "jobs" / f"{self.record['job_id']}.json"
+        path.write_text(json.dumps({**self.record, "protocol": block}))
+        return self.drifted(change_a_script=False)
+
+    def test_a_landed_record_removes_the_tree_and_names_no_clone(self) -> None:
+        (resumed,) = job.resume(self.drift_the_record(), identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(resumed["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual(resumed["codex_worker"]["landing"]["outcome"], "landed")
+        self.assertNotIn("clone", resumed["reconciliation_evidence"])
+
+    def test_a_failed_removal_names_the_clone_the_recovery_left(self) -> None:
+        target = self.drift_the_record()
+        with _busy_tree_removal():
+            (resumed,) = job.resume(target, identity=IDENTITY, runtime=self.env.runtime)
+        self.assertEqual(resumed["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual(resumed["reconciliation_evidence"]["clone"], resumed["codex_worker"]["landing"]["tree_left"]["path"])
+
+
+class ProtocolKilledLandingTest(_ProtocolKilledBase):
+    """A protocol Codex record killed in the landing: the drifted ending, and the command's own refusals."""
+
+    def test_the_fixture_job_id_is_the_id_the_record_carries(self) -> None:
+        self.assertEqual(self.fixture.job_id, self.record["job_id"])
+
+    def test_a_drifted_resume_whose_clone_is_gone_says_so_and_names_none(self) -> None:
+        shutil.rmtree(ws.WorkerLayout(self.env.runtime, self.record["job_id"]).worktree)
+        (resumed,) = job.resume(self.drifted(), identity=IDENTITY, runtime=self.env.runtime)
+        evidence = resumed["reconciliation_evidence"]
+        self.assertEqual(evidence["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertIsNone(evidence["clone"])
+        self.assertIn("is not on disk (an earlier recovery or the operator removed it)", evidence["message"])
+        block = resumed["codex_worker"]["landing"]
+        self.assertEqual((block["clone_kept"], block["clone_removed"], block["clone"]), (False, True, None))
 
     def test_a_drifted_resume_keeps_its_status_and_code_and_adds_the_final_block(self) -> None:
         self.assertNotEqual(self.refs(), "")
@@ -883,6 +1145,75 @@ class ProtocolKilledLandingTest(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_OK, error)
         ended = json.loads((self.env.runtime / "jobs" / f"{self.record['job_id']}.json").read_text())
         self.assertEqual(ended["reconciliation_evidence"]["code"], "OperatorAbandoned")
+
+
+class JobIdTest(unittest.TestCase):
+    """Every landing or orphan test runs its job under an id of its own (D3): a legal landing ref component, distinct
+    across every concrete test identity and across processes, the same for `job_id` and the id the job launches with."""
+
+    #: The classes that build a fixture by composition, with the fixture each one builds.
+    COMPOSED = {"ProtocolLandingTest": LandingFixture, "ProtocolKilledLandingTest": KilledLandingFixture,
+                "ProtocolMergedDriftTest": KilledLandingFixture, "ProtocolCodexTest": OrphanFixture}
+
+    def identities(self) -> list[tuple[str, type, str]]:
+        import importlib
+        found = []
+
+        def walk(suite):
+            for item in suite:
+                if isinstance(item, unittest.TestSuite):
+                    walk(item)
+                else:
+                    cls = type(item)
+                    if issubclass(cls, (LandingFixture, OrphanFixture)) or cls.__name__ in self.COMPOSED:
+                        found.append((item.id(), cls, item._testMethodName))
+
+        loader = unittest.TestLoader()
+        for name in ("tests.test_job_codex_worker_landing", "tests.test_job_codex_worker_resume",
+                     "tests.test_job_codex_worker_usage"):
+            walk(loader.loadTestsFromModule(importlib.import_module(name)))
+        return found
+
+    def first_id(self, test_id: str, cls: type, method: str) -> str:
+        if cls.__name__ in self.COMPOSED:
+            fixture = self.COMPOSED[cls.__name__]("run_step")
+            fixture.id = lambda: test_id  # what the composed class's setUp gives its fixture before `setUp`
+        else:
+            fixture = cls(method)
+        fixture.ids = 0
+        first = fixture.next_id()
+        if isinstance(fixture, LandingFixture):
+            self.assertEqual(fixture.job_id, first, test_id)
+        return first
+
+    def test_every_id_is_a_legal_landing_component_and_pairwise_distinct(self) -> None:
+        identities = self.identities()
+        self.assertGreater(len(identities), 60)
+        seen: dict[str, str] = {}
+        for test_id, cls, method in identities:
+            job_id = self.first_id(test_id, cls, method)
+            self.assertIsNotNone(gitrepo._LANDING_JOB_ID.match(job_id), (test_id, job_id))
+            self.assertFalse(job_id.startswith("job1"), job_id)
+            self.assertNotIn(job_id, seen, (test_id, seen.get(job_id)))
+            seen[job_id] = test_id
+        for pair in (("ProtocolKilledLandingTest.test_a_drifted_resume_over_a_malformed_block_ends_release_changed_with_landing_unreadable",
+                      "ProtocolKilledLandingTest.test_a_drifted_resume_with_a_garbage_git_index_ends_release_changed_with_landing_unreadable"),
+                     ("DriftedTest.test_a_lone_codex_record_not_admitted_is_refused_before_any_write_and_the_orphan_keeps_running",
+                      "ProtocolCodexTest.test_a_protocol_record_not_admitted_is_refused_before_any_write_and_the_orphan_keeps_running")):
+            ids = [i for i in seen if any(seen[i].endswith(name) for name in pair)]
+            self.assertEqual(len(ids), 2, pair)
+
+    def test_a_name_that_starts_with_an_underscore_still_gets_a_legal_id(self) -> None:
+        job_id = per_test_job_id("tests.m.C.test_a_lander_that_raises_is_a_landing_error_refusal", 1)
+        self.assertIsNotNone(gitrepo._LANDING_JOB_ID.match(job_id), job_id)
+        self.assertTrue(job_id.startswith("t-_"), job_id)  # the tail starts with `_`: the `t-` prefix is what saves it
+
+    def test_the_id_differs_between_processes_and_between_tests(self) -> None:
+        here = per_test_job_id("m.C.test_x", 1)
+        with mock.patch.object(os, "getpid", return_value=os.getpid() + 1):
+            self.assertNotEqual(per_test_job_id("m.C.test_x", 1), here)
+        self.assertNotEqual(per_test_job_id("m.C.test_y", 1), here)
+        self.assertNotEqual(per_test_job_id("m.C.test_x", 2), here)
 
 
 class UnchangedTest(unittest.TestCase):

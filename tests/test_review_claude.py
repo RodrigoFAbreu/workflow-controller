@@ -250,11 +250,17 @@ class FakeLaunchTest(unittest.TestCase):
         self.system.mkdir()
         self.marker = self.tmp / "marker"
 
+    def jid(self, job):
+        """The job id with this process's pid: the ownership tag is the job id, and the cleanup at the end of a launch
+        kills every process of the user that carries it, so two copies of this suite running at once (the CI shards,
+        two pinned runs) must not launch the same id."""
+        return f"{job}-{os.getpid()}"
+
     def launch(self, scenario=None, *, stage="plan", job="job1", timeout=60, **extra):
         scenario = {"log": str(self.log), "orphan_seconds": 30, **(scenario or {})}
         binary = fake_claude_review.write_binary(self.tmp / "bin", scenario)
         return review.launch_review(
-            worktree=self.repo, runtime_root=self.runtime, job_id=job, harness_name="claude", binary_name=str(binary),
+            worktree=self.repo, runtime_root=self.runtime, job_id=self.jid(job), harness_name="claude", binary_name=str(binary),
             operator_home=self.operator, stage=stage, manifest=MANIFEST, bundle_dir="/b/current", model=MODEL,
             effort="high", timeout=timeout, system_dir=self.system,
             inherited_env={"PATH": "/evil", "ANTHROPIC_API_KEY": "evil", "CLAUDE_CODE_OAUTH_TOKEN": "evil"}, **extra)
@@ -270,7 +276,7 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(result["verdicts"][0]["disposition"], "returned")
         self.assertEqual(result["credentials"], "unchanged")
         self.assertEqual(result["subagents"], [])
-        self.assertEqual(list((self.runtime / "reviews" / "job1").iterdir()) if (self.runtime / "reviews" / "job1").exists()
+        self.assertEqual(list((self.runtime / "reviews" / self.jid("job1")).iterdir()) if (self.runtime / "reviews" / self.jid("job1")).exists()
                          else [], [], "a Claude job keeps no session: nothing of it remains")
         self.assertNotIn("stream_readings", result)
         self.assertEqual(sorted(w["window"] for w in result["readings"]), ["five_hour", "weekly"])
@@ -279,8 +285,8 @@ class FakeLaunchTest(unittest.TestCase):
         self.launch()
         (record,) = self.records()
         self.assertEqual(record["argv"], review.claude_argv(binary=Path("claude"), model=MODEL, effort="high")[1:])
-        layout = review.JobLayout(self.runtime, "job1")
-        expected = review.claude_environment(layout, Path(record["env"]["PATH"].split(":")[0]) / "claude", "job1", {})
+        layout = review.JobLayout(self.runtime, self.jid("job1"))
+        expected = review.claude_environment(layout, Path(record["env"]["PATH"].split(":")[0]) / "claude", self.jid("job1"), {})
         self.assertEqual(record["env"], expected)
         self.assertNotIn("evil", json.dumps(record["env"]))
         self.assertEqual(record["config_dir"], str(layout.claude_home))
@@ -297,7 +303,7 @@ class FakeLaunchTest(unittest.TestCase):
             return done.returncode, done.stdout.strip()
 
         def probe(pid, pgid):
-            tree = self.runtime / "reviews" / "job1" / "tree"
+            tree = self.runtime / "reviews" / self.jid("job1") / "tree"
             seen["real_head"] = git(self.repo, "rev-parse", "HEAD")[1]
             seen["copy_head"] = git(tree, "rev-parse", "HEAD")[1]
             seen["copy_commits"] = git(tree, "rev-list", "--all", "--count")[1]
@@ -330,7 +336,7 @@ class FakeLaunchTest(unittest.TestCase):
         seen = {}
 
         def probe(pid, pgid):
-            tree = self.runtime / "reviews" / "job1" / "tree"
+            tree = self.runtime / "reviews" / self.jid("job1") / "tree"
             seen["names"] = sorted(p.name for p in tree.iterdir())
 
         result = self.launch(on_spawn=probe)
@@ -457,7 +463,7 @@ class FakeLaunchTest(unittest.TestCase):
         seen = {}
 
         def probe(pid, pgid):
-            mine = self.runtime / "reviews" / "job1" / "claude-home" / ".credentials.json"
+            mine = self.runtime / "reviews" / self.jid("job1") / "claude-home" / ".credentials.json"
             seen["mode"] = mine.stat().st_mode & 0o777
             seen["same"] = mine.read_bytes() == self.credential.read_bytes()
 
@@ -497,7 +503,7 @@ class FakeLaunchTest(unittest.TestCase):
         patched = dataclasses.replace(review.CLAUDE, build_home=without_credential)
         with mock.patch.dict(review.HARNESSES, {"claude": patched}):
             result = review.launch_review(
-                worktree=self.repo, runtime_root=self.runtime, job_id="j-login", harness_name="claude",
+                worktree=self.repo, runtime_root=self.runtime, job_id=self.jid("j-login"), harness_name="claude",
                 binary_name=str(binary), operator_home=self.operator, stage="plan", manifest=MANIFEST,
                 bundle_dir="/b", model=MODEL, effort="high", timeout=30, system_dir=self.system)
         self.assertEqual(result["outcome"], "failed")

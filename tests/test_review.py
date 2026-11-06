@@ -1048,11 +1048,17 @@ class FakeLaunchTest(unittest.TestCase):
         self.system = self.tmp / "etc-codex"
         self.system.mkdir()
 
+    def jid(self, job):
+        """The job id with this process's pid: the ownership tag is the job id, and the cleanup at the end of a launch
+        kills every process of the user that carries it, so two copies of this suite running at once (the CI shards,
+        two pinned runs) must not launch the same id."""
+        return f"{job}-{os.getpid()}"
+
     def launch(self, scenario=None, *, stage="plan", job="job1", timeout=60, compose=None, binary=None, **extra):
         scenario = {"log": str(self.log), "system_dir": str(self.system), "orphan_seconds": 30, **(scenario or {})}
         binary = binary or fake_codex.write_binary(self.tmp / "bin", scenario)
         return review.launch_review(
-            worktree=self.repo, runtime_root=self.runtime, job_id=job, harness_name="codex", binary_name=str(binary),
+            worktree=self.repo, runtime_root=self.runtime, job_id=self.jid(job), harness_name="codex", binary_name=str(binary),
             operator_home=self.operator, stage=stage, manifest=MANIFEST, bundle_dir="/b/current", model="gpt-6.1-sol",
             effort="high", timeout=timeout, system_dir=self.system, compose=compose,
             inherited_env={"PATH": "/evil", "OPENAI_API_KEY": "evil"}, **extra)
@@ -1073,8 +1079,8 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(result["outcome"], "verdict", result)
         self.assertEqual(result["status"], "APPROVE")
         self.assertIn("Reviewed bundle ID: " + MANIFEST["bundle_id"], result["verdict"])
-        self.assertEqual(sorted(p.name for p in (self.runtime / "reviews" / "job1").iterdir()), ["codex-home"])
-        self.assertEqual(sorted(p.name for p in (self.runtime / "reviews" / "job1" / "codex-home").iterdir()),
+        self.assertEqual(sorted(p.name for p in (self.runtime / "reviews" / self.jid("job1")).iterdir()), ["codex-home"])
+        self.assertEqual(sorted(p.name for p in (self.runtime / "reviews" / self.jid("job1") / "codex-home").iterdir()),
                          ["sessions"])
         kinds = [r["kind"] for r in self.records()]
         self.assertEqual(kinds, ["mcp", "features", "compose", "exec"])
@@ -1087,17 +1093,17 @@ class FakeLaunchTest(unittest.TestCase):
             with self.subTest(kind=record["kind"]):
                 self.assertEqual(sorted(record["env"]), sorted(review.ENV_ALLOWLIST))
                 self.assertNotIn("evil", json.dumps(record["env"]))
-                self.assertEqual(record["codex_home"], str(self.runtime / "reviews" / "job1" / "codex-home"))
-                self.assertEqual(record["env"][review.OWNERSHIP_VAR], "job1")
+                self.assertEqual(record["codex_home"], str(self.runtime / "reviews" / self.jid("job1") / "codex-home"))
+                self.assertEqual(record["env"][review.OWNERSHIP_VAR], self.jid("job1"))
         execution = self.records("exec")[0]
         self.assertEqual(execution["approval_policy"], "never")
         self.assertIs(execution["network_access"], False)
         self.assertEqual(execution["web_search"], "disabled")
         self.assertEqual((execution["model"], execution["effort"], execution["service_tier"]),
                          ("gpt-6.1-sol", "high", review.SERVICE_TIER))
-        tmpdir = str(self.runtime / "reviews" / "job1" / "tmp")
+        tmpdir = str(self.runtime / "reviews" / self.jid("job1") / "tmp")
         self.assertEqual(execution["writable_roots"], [execution["cwd"], tmpdir])
-        self.assertEqual(execution["cwd"], str(self.runtime / "reviews" / "job1" / "tree"))
+        self.assertEqual(execution["cwd"], str(self.runtime / "reviews" / self.jid("job1") / "tree"))
         self.assertEqual(sorted(set(execution["features_enabled"]) & set(review.DISABLED_FEATURES)), [])
 
     def test_inherited_servers_hooks_notify_and_profiles_are_never_run(self):
@@ -1194,10 +1200,10 @@ class FakeLaunchTest(unittest.TestCase):
     def test_the_production_composing_command_speaks_json_rpc_and_returns_layers(self):
         binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "system_dir": str(self.system),
                                                             "orphan_seconds": 30})
-        layout = review.JobLayout(self.runtime, "jobc")
-        review.build_copy(self.repo, self.runtime, "jobc")
+        layout = review.JobLayout(self.runtime, self.jid("jobc"))
+        review.build_copy(self.repo, self.runtime, self.jid("jobc"))
         review.build_home(layout, self.operator)
-        env = review.child_environment(layout, binary, "jobc", {})
+        env = review.child_environment(layout, binary, self.jid("jobc"), {})
         composed = review.compose_config(binary, layout, env, model="gpt-6.1-sol", effort="high", timeout=30)
         self.assertEqual(sorted(composed), ["config", "layers", "origins"])
         self.assertEqual(composed["config"]["projects"], {str(layout.tree): {"trust_level": "untrusted"}})
@@ -1214,10 +1220,10 @@ class FakeLaunchTest(unittest.TestCase):
     def test_the_composing_command_keeps_stdin_open_until_config_read_is_answered(self):
         binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "system_dir": str(self.system),
                                                             "orphan_seconds": 30, "cancel_on_eof": True})
-        layout = review.JobLayout(self.runtime, "jobe")
-        review.build_copy(self.repo, self.runtime, "jobe")
+        layout = review.JobLayout(self.runtime, self.jid("jobe"))
+        review.build_copy(self.repo, self.runtime, self.jid("jobe"))
         review.build_home(layout, self.operator)
-        env = review.child_environment(layout, binary, "jobe", {})
+        env = review.child_environment(layout, binary, self.jid("jobe"), {})
         composed = review.compose_config(binary, layout, env, model="gpt-6.1-sol", effort="high", timeout=30)
         self.assertEqual(sorted(composed), ["config", "layers", "origins"])
         # the old lifecycle (all requests, then end-of-input) gets no answer from such a server
@@ -1275,7 +1281,7 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual(self.launch()["outcome"], "verdict")
 
     def test_the_private_tmpdir_is_the_only_extra_writable_root(self):
-        inside = self.runtime / "reviews" / "job1" / "tmp" / "scratch"
+        inside = self.runtime / "reviews" / self.jid("job1") / "tmp" / "scratch"
         self.launch({"exec": {"write_outside": [str(inside), str(Path(tempfile.gettempdir()) / "review-x")]}})
         writes = self.records("exec")[0]["writes"]
         self.assertFalse(writes[0]["blocked"])
@@ -1442,7 +1448,7 @@ class FakeLaunchTest(unittest.TestCase):
         self.assertEqual([s["total_tokens"] for s in result["subagents"]], [43234])
         retried = self.launch({"exec": {"verdict": "wrong_id_first"}}, job="j-retry")
         self.assertEqual(retried["subagents"], [])          # two root rollouts, no spawn
-        self.assertEqual(len(list((self.runtime / "reviews" / "j-retry" / "codex-home" / "sessions").rglob("rollout-*"))), 2)
+        self.assertEqual(len(list((self.runtime / "reviews" / self.jid("j-retry") / "codex-home" / "sessions").rglob("rollout-*"))), 2)
 
     def test_the_prompt_discourages_spawning_sub_agents(self):
         self.assertIn("do not spawn sub-agents", review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b"))
@@ -1452,10 +1458,10 @@ class FakeLaunchTest(unittest.TestCase):
         result = self.launch({"exec": {"verdict": "wrong_id_first"}})
         self.assertEqual(result["outcome"], "verdict")
         # without the override the pinned Codex appends a trust entry and the retry's home check refuses
-        layout = review.JobLayout(self.runtime, "jobt")
+        layout = review.JobLayout(self.runtime, self.jid("jobt"))
         review.build_home(layout, self.operator)
         binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "orphan_seconds": 30})
-        env = review.child_environment(layout, binary, "jobt", {})
+        env = review.child_environment(layout, binary, self.jid("jobt"), {})
         tree = layout.tree
         tree.mkdir(parents=True)
         command = review.argv("exec", binary=binary, tree=tree, verdict=layout.verdict, tmpdir=layout.tmp)
@@ -1470,10 +1476,10 @@ class FakeLaunchTest(unittest.TestCase):
     def test_the_bundled_skills_override_keeps_skills_out_of_the_home(self):
         self.launch()
         # settle removed the home; run the pinned exec by hand and look at it
-        layout = review.JobLayout(self.runtime, "jobs")
+        layout = review.JobLayout(self.runtime, self.jid("jobs"))
         review.build_home(layout, self.operator)
         binary = fake_codex.write_binary(self.tmp / "bin", {"log": str(self.log), "orphan_seconds": 30})
-        env = review.child_environment(layout, binary, "jobs", {})
+        env = review.child_environment(layout, binary, self.jid("jobs"), {})
         layout.tree.mkdir(parents=True)
         command = review.argv("exec", binary=binary, tree=layout.tree, verdict=layout.verdict, tmpdir=layout.tmp)
         review.run_bounded(command, cwd=layout.tree, env=env, timeout=30, stdin_text="p")
@@ -1549,7 +1555,7 @@ class FakeLaunchTest(unittest.TestCase):
         result = self.launch({"exec": {"refresh_auth": True}})
         self.assertEqual(result["credentials"], "copied")
         self.assertIn("rotated-", self.auth.read_text())
-        self.assertFalse((self.runtime / "reviews" / "job1" / "codex-home" / "auth.json").exists())
+        self.assertFalse((self.runtime / "reviews" / self.jid("job1") / "codex-home" / "auth.json").exists())
 
     def test_an_operator_file_changed_meanwhile_is_left_alone(self):
         self.auth.write_text(json.dumps({"tokens": {"refresh_token": "interactive"}}))
@@ -1572,7 +1578,7 @@ class FakeLaunchTest(unittest.TestCase):
         result = self.launch({"rate_limits": {"primary": 42.0, "secondary": 11.0}})
         windows = {r["window"]: r["percent"] for r in result["readings"]}
         self.assertEqual(sorted(windows.values()), [11.0, 42.0])
-        sessions = self.runtime / "reviews" / "job1" / "codex-home" / "sessions"
+        sessions = self.runtime / "reviews" / self.jid("job1") / "codex-home" / "sessions"
         self.assertEqual(len(list(sessions.glob("*/*/*/rollout-*.jsonl"))), 1)
 
     def test_an_interruption_right_after_the_verdict_is_read_keeps_it(self):
@@ -1655,7 +1661,7 @@ class RunnerTest(unittest.TestCase):
                                                            "stderr=subprocess.DEVNULL")
                 started = time.monotonic()
                 result = review.run_bounded([sys.executable, "-c", script], cwd=Path("/"),
-                                            env={"PATH": review.SYSTEM_PATH, review.OWNERSHIP_VAR: f"t{inherit}"},
+                                            env={"PATH": review.SYSTEM_PATH, review.OWNERSHIP_VAR: f"t{inherit}-{os.getpid()}"},
                                             timeout=0.5)
                 self.assertTrue(result.timed_out)
                 self.assertLess(time.monotonic() - started, 0.5 + review._DRAIN_SECONDS + 3)

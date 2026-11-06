@@ -3133,6 +3133,9 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
             record, recovery),
         "reconciled_at": now, "updated_at": now,
     }
+    if _is_codex_worker_record(record):
+        # H4e leftovers, D1 site 4: a clone this ending kept is named (a refused landing already carries its own).
+        failed = _name_kept_clone(failed, runtime_root)
     return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
 
 
@@ -3142,7 +3145,10 @@ def _with_landing_evidence(evidence: dict, record: Mapping, recovery: codex_work
     if recovery is None or not recovery.refused:
         return evidence
     block = (record.get("codex_worker") or {}).get("landing") or {}
-    return {**evidence, "landing_cause": block.get("cause"), "clone": recovery.clone}
+    named = {**evidence, "landing_cause": block.get("cause"), "clone": recovery.clone}
+    if block.get("clone_removed"):
+        named["message"] = _CLONE_NOT_ON_DISK  # H4e leftovers, D2: `clone: null` says why, as a `resume` ending does
+    return named
 
 
 def _changed_scripts(recorded: Any, current: Mapping[str, str]) -> list[str]:
@@ -3256,24 +3262,31 @@ def _reconcile_codex_worker(record: JobRecord, *, managed_repo: Any, runtime_roo
                       "reconciled_at": now, "updated_at": now}
             return _persist(runtime_root, record["job_id"], failed, event="reconciled",
                             details=_reconciled_details(failed))
-        return _reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime_root)
-    reconciled = _reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime_root)
+        # The clone of a recovery that kept it is named (H4e leftovers, D1 site 3): the path check says whether it did.
+        return _persist_named_clone(
+            _reconcile_completed(record, managed_repo=managed_repo, runtime_root=runtime_root), runtime_root)
+    try:
+        reconciled = _reconcile_launched(record, managed_repo=managed_repo, runtime_root=runtime_root)
+    except UnreconcilableJobError:
+        # H4e leftovers, D1 site 2: the reconciliation persisted the record `FAILED` before it raised (the variant
+        # that persisted nothing proves no worker gone and settles nothing); the clone is kept and named, then the
+        # error goes on.
+        persisted = _read_job_record(Path(runtime_root) / "jobs" / f"{record['job_id']}.json")
+        if persisted is not None and persisted.get("status") == STATUS_FAILED:
+            _settle_codex_worker_dir(runtime_root, record["job_id"], keep_tree=True)
+            _persist_named_clone(persisted, runtime_root)
+        raise
     # The clone of an ended `LAUNCHED` record is kept as `tree` and the sessions alone (D7); the credentials were
     # settled above, so the copy-back has run.
     _settle_codex_worker_dir(runtime_root, record["job_id"], keep_tree=True)
-    if reconciled.get("status") == STATUS_INTERRUPTED:
-        # The clone is kept and named (H4e, D7): a worker that committed before the Controller was lost landed
-        # nothing. A kill between `prepare` and the `clone` block leaves no record of it; the path follows from
-        # the job id, and a tree no record names is never removed here.
-        clone = _codex_clone_path(reconciled, runtime_root)
-        if clone is not None:
-            reconciled = _persist(runtime_root, reconciled["job_id"], {
-                **reconciled, "reconciliation_evidence": {
-                    "code": "CodexWorkerInterrupted", "clone": clone,
-                    "message": "the Controller was lost with the Codex worker running; nothing of its commits "
-                               "landed, and the clone is kept"},
-            }, event="codex_clone_named", details={"clone": clone})
-    return reconciled
+    # The clone is kept and named, whatever the ending (H4e leftovers, D1 site 1): a worker that committed before the
+    # Controller was lost landed nothing. A kill between `prepare` and the `clone` block leaves no record of it; the
+    # path follows from the job id, and a tree no record names is never removed here. A tree that is gone names nothing.
+    seed = ({"code": "CodexWorkerInterrupted",
+             "message": "the Controller was lost with the Codex worker running; nothing of its commits landed, and "
+                        "the clone is kept"}
+            if reconciled.get("status") == STATUS_INTERRUPTED else None)
+    return _persist_named_clone(reconciled, runtime_root, seed=seed)
 
 
 def _codex_clone_path(record: Mapping, runtime_root: Path) -> str | None:
@@ -3284,6 +3297,61 @@ def _codex_clone_path(record: Mapping, runtime_root: Path) -> str | None:
         return clone["path"]
     derived = codex_worker_sandbox.WorkerLayout(runtime_root, str(record.get("job_id"))).worktree
     return str(derived) if derived.exists() else None
+
+
+#: What a refused landing's record says when its clone is no longer on disk (H4e leftovers, D2): a path check cannot
+#: tell an earlier recovery's removal from the operator's.
+_CLONE_NOT_ON_DISK = "the clone is not on disk (an earlier recovery or the operator removed it)"
+
+#: ``reconciliation_evidence.code`` of a ``FINISHED`` (or other) Codex record that ends with its clone still on disk
+#: and has no evidence of its own to carry the path (H4e leftovers, D1).
+CODEX_CLONE_KEPT_CODE = "CodexCloneKept"
+
+
+def _standing_clone_path(record: Mapping, runtime_root: Path) -> str | None:
+    """The path of the Codex worker's clone when a tree **stands on disk** there, else ``None``: the path the record
+    names, or the one that follows from the job id. ``_codex_clone_path`` alone returns a recorded path without looking,
+    so a record whose tree is gone would be told "kept" (H4e leftovers, D1)."""
+    clone = _codex_clone_path(record, runtime_root)
+    return clone if clone is not None and os.path.lexists(clone) else None
+
+
+def _with_kept_clone(evidence: Mapping | None, record: Mapping, runtime_root: Path) -> dict | None:
+    """``evidence`` with ``clone`` set to the path of the Codex worker's clone, when a tree stands there and the
+    evidence has no ``clone`` **key** (a ``clone: null`` of a removed clone is left alone, H4e leftovers D2). No
+    evidence at all becomes a ``CodexCloneKept`` block. It reads the path and writes nothing; an ending that removed
+    the tree calls nothing, and a tree that is gone leaves ``evidence`` as it was."""
+    if isinstance(evidence, Mapping) and "clone" in evidence:
+        return dict(evidence)
+    clone = _standing_clone_path(record, runtime_root)
+    if clone is None:
+        return None if evidence is None else dict(evidence)
+    if evidence is None:
+        return {"code": CODEX_CLONE_KEPT_CODE, "clone": clone,
+                "message": "the Codex worker's clone is kept on disk; remove it with rm -rf of exactly this path "
+                           "when its commits no longer matter"}
+    return {**evidence, "clone": clone}
+
+
+def _name_kept_clone(record: JobRecord, runtime_root: Path, *, seed: Mapping | None = None) -> JobRecord:
+    """``record`` with its ``reconciliation_evidence`` naming the clone that stands on disk (:func:`_with_kept_clone`),
+    or ``record`` itself when nothing is to be named. ``seed`` is the evidence a record with none of its own gets
+    (instead of the generic ``CodexCloneKept`` block), and is written only when a clone is named."""
+    current = record.get("reconciliation_evidence")
+    named = _with_kept_clone(current if current is not None else seed, record, runtime_root)
+    if named is None or "clone" not in named or (isinstance(current, Mapping) and "clone" in current):
+        return record
+    return {**record, "reconciliation_evidence": named}
+
+
+def _persist_named_clone(record: JobRecord, runtime_root: Path, *, seed: Mapping | None = None) -> JobRecord:
+    """:func:`_name_kept_clone` as a second write, for a terminal record that was already persisted (the naming
+    window the guides name: a kill between the two writes leaves the path in ``codex_worker.clone.path`` alone)."""
+    named = _name_kept_clone(record, runtime_root, seed=seed)
+    if named is record:
+        return record
+    return _persist(runtime_root, record["job_id"], {**named, "updated_at": _now()}, event="codex_clone_named",
+                    details={"clone": named["reconciliation_evidence"]["clone"]})
 
 
 def _reconcile_review(record: JobRecord, *, runtime_root: Path, root: Path | None = None) -> JobRecord:
@@ -4972,6 +5040,10 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
         "reconciled_at": now,
         "updated_at": now,
     }
+    if _is_codex_worker_record(record):
+        # H4e leftovers, D1 site 5: the abandon of a `COMPLETED` or `LAUNCHED` record names the clone it kept (a
+        # refused landing already carries its own).
+        abandoned = _name_kept_clone(abandoned, runtime_root)
     if worker_liveness is not None:
         abandoned["worker_liveness"] = worker_liveness
     return _persist(runtime_root, job_id, abandoned, event="abandoned",
@@ -4993,12 +5065,18 @@ def _abandon_replace(runtime_root: Path, path: Path, raw: bytes, *,
     original = f"jobs/abandoned/{copy_name}"
     runtime.write_bytes(runtime_root, original, raw)
     now = _now()
+    evidence: dict = {"code": OPERATOR_ABANDONED_CODE, "original": original}
+    # H4e leftovers, D1 site 8: an unreadable record names no clone, but the path follows from the job id and a tree
+    # standing there is named, so the operator can remove it.
+    standing = codex_worker_sandbox.WorkerLayout(runtime_root, path.stem).worktree
+    if os.path.lexists(standing):
+        evidence["clone"] = str(standing)
     minimal: JobRecord = {
         "schema_version": SCHEMA_VERSION,
         "job_id": path.stem,
         "target_repo": None,
         "status": STATUS_FAILED,
-        "reconciliation_evidence": {"code": OPERATOR_ABANDONED_CODE, "original": original},
+        "reconciliation_evidence": evidence,
         "reconciled_at": now,
         "updated_at": now,
     }
@@ -8933,6 +9011,14 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
         # A kept clone keeps `tree` and the sessions alone (D7), as the live refusal does; the credentials were
         # settled by the caller before this call, so the copy-back has already run.
         _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+        if recovery.refused and _standing_clone_path(record, runtime_root) is None:
+            # H4e leftovers, D2: the refusal comes from `recover`'s decision, which cannot know that an earlier
+            # `resume` removed the tree; a path check is stateless and cannot tell that from the operator's removal.
+            # The record says the clone is not on disk instead of that it is kept, and no stale path is left.
+            block.update({"clone_kept": False, "clone_removed": True, "clone": None,
+                          "message": "; ".join(filter(None, (block.get("message"), _CLONE_NOT_ON_DISK)))})
+            recovery = codex_worker_landing.Recovery(block, recovery.cause, recovery.refused, recovery.delete_ref,
+                                                     recovery.remove_tree, None, recovery.message)
     codex_block = record.get("codex_worker") if isinstance(record.get("codex_worker"), Mapping) else {}
     return {**record, "codex_worker": {**codex_block, "landing": block}}, recovery
 
@@ -8948,7 +9034,7 @@ def _landing_refusal_evidence(block: Mapping, clone: str | None) -> dict:
 def _run_codex_worker(
     managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
     route: routing.ResolvedRoute, timeout: float | None, launcher: Any,
-    worker_not_started: Callable[[ControllerError], None], ticker: usage.RenewalTicker | None = None,
+    worker_not_started: Callable[..., None], ticker: usage.RenewalTicker | None = None,
     base: str | None = None,
 ) -> tuple[worker.WorkerResult, JobRecord, dict]:
     """The call-and-wait block of a Codex worker (H4c1, D2, D4, D8): the tree and Codex home from their seams, the
@@ -8999,7 +9085,9 @@ def _run_codex_worker(
         raise
     except Exception as exc:
         if "worker_process" not in spawned:
-            # The worker never ran (H4e, D7): nothing of it is worth keeping, and no record names the clone.
+            # The worker never ran (H4e, D7): nothing of it is worth keeping, and no record names the clone. A
+            # removal that failed leaves a tree the ending names (H4e leftovers, D1 site 7), whatever `left` says:
+            # `_settle_codex_worker_dir` returns `None` when its scandir fails even if the tree stands.
             _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
         else:
             # It ran: the clone may hold commits, so `tree` alone is kept (credentials first, so the copy-back
@@ -9007,17 +9095,20 @@ def _run_codex_worker(
             _settle_codex_credentials(record, runtime_root)
             _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
         if isinstance(exc, ControllerError) and "worker_process" not in spawned:
-            worker_not_started(exc)
+            worker_not_started(exc, (_with_kept_clone({}, record, runtime_root) or {}).get("clone"))
         else:
             with contextlib.suppress(Exception):
+                evidence = {"code": type(exc).__name__, "message": str(exc)}
+                if "worker_process" in spawned:
+                    if (clone := _codex_clone_path(record, runtime_root)) is not None:
+                        evidence["clone"] = clone
+                else:
+                    evidence = _with_kept_clone(evidence, record, runtime_root) or evidence
                 failed = _persist(runtime_root, job_id, {
                     **record,
                     "status": STATUS_FAILED,
                     "transition_verified": False,
-                    "reconciliation_evidence": {
-                        "code": type(exc).__name__, "message": str(exc),
-                        **({"clone": clone} if "worker_process" in spawned
-                           and (clone := _codex_clone_path(record, runtime_root)) is not None else {})},
+                    "reconciliation_evidence": evidence,
                     "updated_at": _now(),
                 }, event=_final_event(STATUS_FAILED), details={"error": type(exc).__name__})
                 _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
@@ -9084,14 +9175,17 @@ def _launch_job(
         _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
         return failed
 
-    def worker_not_started(exc: ControllerError) -> None:
+    def worker_not_started(exc: ControllerError, clone: str | None = None) -> None:
         # CP5: a worker that never started is terminal at once -- the
         # Controller knows for certain no worker exists, so the record is
         # FAILED (`WorkerNotStarted`, which the apply relaunch bound never
-        # counts) and needs no `resume`. The exit code is today's.
+        # counts) and needs no `resume`. The exit code is today's. A Codex
+        # worker's clone that the removal left on disk is named in `clone`
+        # (H4e leftovers, D1 site 7); the code stays `WorkerNotStarted`.
         not_started({
             "code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
             "message": exc.message, "evidence": exc.evidence,
+            **({"clone": clone} if clone is not None else {}),
         }, type(exc).__name__)
 
     # CP4 (release-runtime-observability): the worker writes its own
@@ -9338,6 +9432,9 @@ def _launch_job(
                 fields = {**fields, "status": STATUS_FAILED, "transition_verified": False,
                           "reconciliation_evidence": violation}
         record = {**record, **fields, "updated_at": _now()}
+        if codex:
+            # H4e leftovers, D1 site 6: a clone this ending left (`tree_left`) is named in the terminal write.
+            record = _name_kept_clone(record, runtime)
         record = _persist(runtime, job_id, record, event=_final_event(record["status"]), details={
             "observed_phase_after": record["observed_phase_after"],
             "transition_verified": record.get("transition_verified", False),
@@ -9429,6 +9526,9 @@ def _launch_job(
             "observed_phase": phase_to_wire(observed_phase_after),
             "worker_stdout": result.stdout,
         }
+    if codex:
+        # H4e leftovers, D1 site 6: the legacy branch's terminal write names a clone the removal left (`tree_left`).
+        record = _name_kept_clone(record, runtime)
     record = _persist(runtime, job_id, record, event=_final_event(final_status), details={
         "observed_phase_after": record["observed_phase_after"], "transition_verified": verified,
     })

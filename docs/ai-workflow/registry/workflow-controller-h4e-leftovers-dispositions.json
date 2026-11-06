@@ -1,0 +1,86 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-h4e-leftovers",
+ "dispositions": {
+  "F-062226b415d5": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-122d43df6179": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-1e1703a2830f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6683478032"
+  },
+  "F-20b407bf5bcc": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-220d1af8c773": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6683478032"
+  },
+  "F-2fe0b76bf4d5": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-3c4329b0af62": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-6a30cd32beae": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-6f4d70fc17ca": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-77c72526608c": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-899f634f332b": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-b4805cdf4e7c": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-c99a9bc7a4fa": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-ca1835c49848": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-dccb8bc632d6": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-e12f5d6aecaf": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-f03d26c77284": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6683478032"
+  },
+  "F-f395a227f74f": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-fbb00d324969": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/310"
+  },
+  "F-fef8a08daca2": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved after the plan reviews): applied, or stated there as a decision, and carried into the implementation."
+  }
+ }
+}

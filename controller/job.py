@@ -8907,8 +8907,13 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
     recovery = codex_worker_landing.recover(managed_repo, record)
     job_id = str(record["job_id"])
     block = dict(recovery.landing)
+    if recovery.refused and recovery.clone is None:
+        # A malformed `clone` block names no usable path; the guide's `rm -rf` needs one, derived from the job id.
+        recovery = dataclasses.replace(recovery, clone=_codex_clone_path(record, runtime_root))
+        block["clone"] = recovery.clone
     if recovery.delete_ref and not _delete_landing_ref(managed_repo, runtime_root, job_id):
         block["ref_left"] = True
+        block["ref"] = f"{gitrepo.LANDING_REF_PREFIX}{job_id}"
     if recovery.remove_tree:
         left = _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
         if left is not None:

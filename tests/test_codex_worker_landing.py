@@ -201,7 +201,9 @@ class CheckRefusalTest(Fixture):
                 else:
                     (self.clone / "src.txt").write_text("changed\n")
                     git(self.clone, "stash", "-q")
-                self.refuses("extra_refs")
+                result = self.refuses("extra_refs")
+                self.assertIn({"tag": "refs/tags/v1", "branch": "refs/heads/other", "stash": "refs/stash"}[kind],
+                              result.message)
 
     def test_extra_refs_for_a_head_that_is_not_the_branch(self) -> None:
         self.commit()
@@ -233,7 +235,7 @@ class CheckRefusalTest(Fixture):
         self.commit()
         git(self.root, "config", "hook.mine.event", "post-merge")
         git(self.root, "config", "hook.mine.command", f"touch {self.marker('config')}")
-        self.refuses("managed_hooks_configured")
+        self.assertIn("hook.mine.event", self.refuses("managed_hooks_configured").message)
         git(self.root, "config", "--unset-all", "hook.mine.event")
         git(self.root, "config", "--unset-all", "hook.mine.command")
         extra = self.tmp / "extra.cfg"
@@ -324,6 +326,25 @@ class RangeRefusalTest(Fixture):
                         git(self.clone, "rm", "-q", "--cached", "sub")
                         git(self.clone, "commit", "-q", "-m", "remove it")
                 self.refuses("submodule")
+
+    def test_submodule_for_removing_or_replacing_a_gitlink_the_base_holds(self) -> None:
+        """Self-review: the gitlink is only on the old side of the commit's diff, with no ``.gitmodules`` change."""
+        for kind in ("removed", "replaced"):
+            with self.subTest(kind=kind):
+                self.setUp()
+                git(self.root, "update-index", "--add", "--cacheinfo", f"160000,{self.base},sub")
+                git(self.root, "commit", "-q", "-m", "a gitlink")
+                (self.root / "sub").mkdir()
+                base = out(self.root, "rev-parse", "HEAD")
+                prepared = tree.prepare(self.managed, ws.WorkerLayout(self.runtime, "job2"), base)
+                self.clone = prepared.path
+                git(self.clone, "rm", "-q", "--cached", "sub")
+                if kind == "replaced":
+                    (self.clone / "sub").rmdir()
+                    (self.clone / "sub").write_text("a file\n")
+                    git(self.clone, "add", "sub")
+                git(self.clone, "commit", "-q", "-m", "drop the gitlink")
+                self.refuses("submodule", prepared=prepared)
 
     def test_a_forged_commit_graph_cannot_hide_a_merge_commit(self) -> None:
         """O1 of round 4: ``.git/objects`` is outside the guard, so the worker can write a commit graph that gives the
@@ -579,7 +600,8 @@ class AfterMergeTest(Fixture):
         with mock.patch.object(gitrepo, "landing_delete_ref", side_effect=GitOperationError("denied")):
             result = self.land()
         self.assertEqual((result.outcome, result.moved, result.ref_left), ("landed", True, True))
-        self.assertTrue(result.to_block(clone_kept=False)["ref_left"])
+        block = result.to_block(clone_kept=False)
+        self.assertEqual((block["ref_left"], block["ref"]), (True, f"refs/controller/landing/{JOB}"))
 
 
 class HardeningTest(Fixture):

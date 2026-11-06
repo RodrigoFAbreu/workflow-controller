@@ -284,7 +284,10 @@ option, exit code or gate is new, and nothing real reaches the branch.
   with `merge --ff-only --no-overwrite-ignore` (`would_overwrite_ignored`, `fast_forward_failed`, `merge_left_tree_dirty`,
   `landing_unverified`, `landing_error`). Every write in the managed repository goes through one hardened option set
   (`gitrepo.LANDING_CONFIG`: no hook, no fsmonitor, no automatic maintenance), and the range checks read with the commit graph
-  off. A clone whose branch is the base lands `nothing`, a success.
+  off. A clone whose branch is the base lands `nothing`, a success. The check after the move wants the branch at the tip, `HEAD`
+  on it and a clean tree, so a range that removes a path from `.gitignore` lands and then ends `landing_unverified` with `moved`
+  true: the files it stops ignoring are untracked. The hook suppression was measured against Git 2.56. A Git without `hook.*`
+  keys ignores them harmlessly, and `core.hooksPath` then turns off the file hooks.
 - **Integrity, not content.** The landing judges the integrity of the move. The Workflow judges the content exactly as it does
   for an in-place worker, because a fast-forward keeps every commit id and tree: a worker that changes a protected file stales
   the approval it covered here as it would there, and the landing weakens no approval check.
@@ -302,9 +305,11 @@ option, exit code or gate is new, and nothing real reaches the branch.
   command and no retention or pruning ([Workers](workers.md#observing-workers)).
 - **Crash windows.** `resume` never fetches or merges. Over a `COMPLETED` Codex record it reads the refs and the tree and
   finishes the landing's bookkeeping: killed before the fetch or after it and before the merge, the leftover landing ref is
-  deleted, nothing lands and the record ends `CodexLandingRefused` `landing_interrupted` with the clone kept; killed after the
-  merge, the same post-move check as the live path gives the final block (`landed` with `recovered`, or `landing_unverified`);
-  an unreadable repository or a malformed `clone` or `landing` block is `landing_unreadable`. A `LAUNCHED` record ends
+  deleted, nothing lands and the record ends `CodexLandingRefused` `landing_interrupted` with the clone kept; killed inside the
+  merge, between its tree update and its ref update, the branch is at the base with the worker's content in the tree, which is
+  `merge_left_tree_dirty` with nothing repaired; killed after the merge, the same post-move check as the live path gives the
+  final block (`landed` with `recovered`, or `landing_unverified`); an unreadable repository or a malformed `clone` or `landing`
+  block is `landing_unreadable`, which deletes nothing and keeps the clone. A `LAUNCHED` record ends
   `INTERRUPTED` naming its clone and lands nothing. [Common problems](../common-problems.md#a-codex-workers-landing-was-refused)
   has the causes and their remedies.
 

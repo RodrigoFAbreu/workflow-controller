@@ -65,7 +65,8 @@ class Landing:
     """The outcome of :func:`land`. ``outcome`` is ``landed``, ``nothing`` or ``refused``; ``cause`` names a refusal
     (``nothing_to_land`` for ``nothing``); ``tip`` is the checked tip (``None`` before it was read); ``moved`` is true
     only when the managed branch was moved (so ``landing_unverified`` is ``refused`` with ``moved`` true);
-    ``ref_left`` is true when the landing ref could not be deleted; ``dirty`` are the paths a failed merge left."""
+    ``ref_left`` is true when the landing ref could not be deleted, and ``ref`` then names it; ``dirty`` are the paths
+    a failed merge left."""
 
     outcome: str
     cause: str | None
@@ -77,6 +78,7 @@ class Landing:
     ref_left: bool = False
     dirty: tuple[str, ...] = ()
     message: str = ""
+    ref: str | None = None
 
     def to_block(self, *, clone_kept: bool) -> dict:
         """The final ``landing`` block of the job record (D6)."""
@@ -87,7 +89,7 @@ class Landing:
         if self.message:
             block["message"] = self.message
         if self.ref_left:
-            block["ref"] = f"{gitrepo.LANDING_REF_PREFIX}<job id>"
+            block["ref"] = self.ref
         return block
 
 
@@ -170,8 +172,8 @@ def _check_clone(prepared: Any, runner: gitrepo.Runner) -> None:
     extra = [ref for ref in refs if ref != wanted]
     head = gitrepo.head_symref(clone, runner=runner)
     if extra or head != wanted:
-        raise _refuse("extra_refs", f"the clone holds a ref other than {wanted}, or HEAD is not that branch",
-                      evidence={"refs": extra, "head": head})
+        raise _refuse("extra_refs", f"the clone holds a ref other than {wanted}, or HEAD is not that branch: refs "
+                      f"{extra[:20]}, HEAD {head}", evidence={"refs": extra, "head": head})
 
 
 def _check_managed(managed_root: Path, prepared: Any, runtime_root: Path, runner: gitrepo.Runner) -> None:
@@ -195,7 +197,7 @@ def _check_managed(managed_root: Path, prepared: Any, runtime_root: Path, runner
                       evidence={"runtime_root": str(runtime_root), "managed_root": str(managed_root)})
     hooks = codex_worker_tree.managed_hooks(managed_root, runner)
     if hooks:
-        raise _refuse("managed_hooks_configured", "the managed repository defines a config hook",
+        raise _refuse("managed_hooks_configured", f"the managed repository defines a config hook: {hooks[:20]}",
                       evidence={"hooks": hooks})
 
 
@@ -317,8 +319,7 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
     assert result is not None
     if not ref_left:
         return result
-    return Landing(result.outcome, result.cause, result.base, result.tip, result.branch, result.commits,
-                   result.moved, True, result.dirty, result.message)
+    return dataclasses.replace(result, ref_left=True, ref=f"{gitrepo.LANDING_REF_PREFIX}{job_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -341,11 +342,14 @@ class Recovery:
     message: str = ""
 
 
-def _unreadable(clone: str | None, base: Any, branch: Any, reason: str) -> Recovery:
+def _unreadable(clone: Any, base: Any, branch: Any, reason: str) -> Recovery:
+    """``clone`` comes from a block that may be malformed: anything but a string is no path (``None``), and the
+    applying part derives the path from the job id."""
+    path = clone if isinstance(clone, str) else None
     block = {"outcome": "refused", "cause": "landing_unreadable", "base": base, "tip": None, "commits": [],
-             "branch": branch, "clone_kept": True, "moved": None, "ref_left": False, "dirty": [],
+             "branch": branch, "clone": path, "clone_kept": True, "moved": None, "ref_left": False, "dirty": [],
              "message": f"the branch could not be read: {reason}"}
-    return Recovery(block, "landing_unreadable", True, False, False, clone, block["message"])
+    return Recovery(block, "landing_unreadable", True, False, False, path, block["message"])
 
 
 def _is_sha(value: Any) -> bool:

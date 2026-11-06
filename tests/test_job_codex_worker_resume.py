@@ -28,7 +28,7 @@ from controller import (  # noqa: E402
     managed_repo, protocol, review, worker,
 )
 from controller.errors import (  # noqa: E402
-    DriftedInstallationError, GitDirectoryUnresolvableError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError,
+    DriftedInstallationError, GitDirectoryUnresolvableError, GitOperationError, LifecycleWorkerActiveError, LifecycleWorkerUnverifiableError,
     PendingJobReconciliationError, StaleJobRecordError,
 )
 from tests import fixtures, process_fixtures  # noqa: E402
@@ -739,7 +739,19 @@ class UnreadableTest(KilledLandingFixture):
                 self.assertEqual(resumed["status"], job.STATUS_FAILED)
                 self.assertEqual(resumed["reconciliation_evidence"]["cause"], "landing_unreadable")
                 self.assertTrue(self.clone_kept())
+                # The guide's `rm -rf` names this path, so it must be the clone's even when the block's is unusable.
+                worktree = str(ws.WorkerLayout(self.runtime, "job1").worktree)
+                self.assertEqual(resumed["reconciliation_evidence"]["clone"], worktree)
+                self.assertEqual(resumed["codex_worker"]["landing"]["clone"], worktree)
                 self.rewrite(status=job.STATUS_COMPLETED, reconciliation_evidence=None)
+
+    def test_a_failed_ref_delete_names_the_ref_and_changes_no_cause(self) -> None:
+        self.killed("after_fetch")
+        with mock.patch.object(gitrepo, "landing_delete_ref", side_effect=GitOperationError("denied")):
+            resumed = self.resume()
+        block = resumed["codex_worker"]["landing"]
+        self.assertEqual((block["cause"], block["ref_left"], block["ref"]),
+                         ("landing_interrupted", True, "refs/controller/landing/job1"))
 
     def test_a_removed_git_directory_refuses_resume_and_abandon_with_nothing_written(self) -> None:
         record = self.killed("before_fetch")

@@ -30,7 +30,12 @@ measured result is `tests/harness_contract/codex/worker_clone.txt`, and the guid
 (`docs/guide/harnesses.md`, `docs/guide/workers.md`, `docs/guide/development.md`) and `docs/common-problems.md` state the clone,
 the landing, the record blocks, the cleanup, the crash windows and the operator's removal of a kept clone in place. The
 item pages are corrected (no retention) and H4e2's page records the open question of the clean-tree requirement. All four
-checkpoints are implemented; the self-review and the full verification follow.
+checkpoints are implemented. The self-review fixed a commit that removes or replaces a gitlink the base holds, which landed
+because `gitrepo.commit_touches_submodule` read the old mode with its leading `:`; a `ref_left` block now names the real ref,
+not a `<job id>` placeholder; a `landing_unreadable` block names the clone and `reconciliation_evidence.clone` is the path
+derived from the job id when the `clone` block has no usable one; `extra_refs` and `managed_hooks_configured` name what they
+found; and the guides say what a `.gitignore` edit does, which Git the hook suppression was measured on, and that
+`landing_unreadable` deletes no ref.
 
 Previous item, now complete:
 

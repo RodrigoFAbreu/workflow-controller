@@ -910,7 +910,7 @@ def commit_touches_submodule(repo_root: Path, commit: str, parent: str, *, runne
     # ``-z --raw``: ``:<old mode> <new mode> <old sha> <new sha> <status>`` NUL ``<path>`` NUL ...
     i = 0
     while i + 1 < len(fields) and fields[i].startswith(":"):
-        meta, path = fields[i].split(), fields[i + 1]
+        meta, path = fields[i].removeprefix(":").split(), fields[i + 1]
         if "160000" in meta[:2] or path == ".gitmodules" or path.endswith("/.gitmodules"):
             return True
         i += 2

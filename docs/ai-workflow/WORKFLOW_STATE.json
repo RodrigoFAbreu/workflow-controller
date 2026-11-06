@@ -60730,7 +60730,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -60878,12 +60878,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
+          "local": 3,
           "external": 1
         }
       },
-      "state_revision": 41,
-      "last_transition": "2026-11-06T02:59:57Z",
+      "state_revision": 42,
+      "last_transition": "2026-11-06T03:34:53Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -61428,6 +61428,34 @@
               "review_content_id": "e01f1c4f845b2a86dfd155602cd247f57189002699c4503cd6a92c3bb63a8583",
               "verdict": "REVISE",
               "at": "2026-11-06T02:14:36Z"
+            }
+          ]
+        },
+        "F-f798f4a6e1db": {
+          "digest": "f798f4a6e1db66bb8702a942d3587e93510695a0a4a7afe9fa7e0b741f462634",
+          "text": "**O1. A `LAUNCHED` record ended by `--abandon` keeps the whole job directory, not `tree` and the sessions.** `_abandon_mark_failed` (`controller/job.py:4906`) settles the credentials, but calls `_apply_codex_landing`, and so the directory settling, only for `COMPLETED`. Measured over a directory populated by `populate_job_dir`: after `--abandon` the directory holds `bin`, `codex-home`, `home`, `last-message.md`, `scratch`, `tmp` and `tree`, and `codex-home` still holds `config.toml`, `installation_id`, `models_cache.json` and `state_5.sqlite`; `resume` over the same record leaves only `codex-home/sessions` and `tree`. The credential is gone in both. `_resume_drifted_protocol` has the same `COMPLETED` guard, so a drifted `LAUNCHED` ending should behave the same way (read, not measured). This is what round 2's I1 fixed, on two paths its acceptance criteria did not name. It loses no commit and no secret, but with no retention, an operator who removes `tree` by hand leaves the rest for good.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "0406a98c74418e852e01c69b76445992fff7628e63fe298c554cea0669cce114",
+              "verdict": "REVISE",
+              "at": "2026-11-06T03:34:53Z"
+            }
+          ]
+        },
+        "F-724bb04f97e5": {
+          "digest": "724bb04f97e550d52d48df14ff8cd99839f2920e44b95155c2656c3fbabc20b4",
+          "text": "**O2. The landing tests share the job id `job1`, and that id is the ownership tag `resume` scans for, so the tests can fail when they overlap.** The plan's Risks section says each test gets its own job id, because of the shared-tag flake #259. `KilledLandingFixture` and `LandingFixture` use the literal `job1`, and their tests are spread across all eight shards. Measured: with one `sleep` running under `WORKFLOW_CONTROLLER_OWNERSHIP=job1`, `test_a_drifted_resume_keeps_its_status_and_code_and_adds_the_final_block` fails with `'COMPLETED' != 'FAILED'` every time, because `_owned_work_hold` holds the record; without that process it passes. The same failure occurred in this round's first full run, which overlapped my own run of the same module in a disposable copy, so that run does not show a collision inside the suite alone. `TEST_RESULTS.md` reports a failure of a neighbouring test in this class in the implementer's run, with \"a still-running tagged process\". The likely cause there is the same, but it was not traced to a colliding process. Per-test ids, as `OrphanFixture.next_id` already does, would remove the collision.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "0406a98c74418e852e01c69b76445992fff7628e63fe298c554cea0669cce114",
+              "verdict": "REVISE",
+              "at": "2026-11-06T03:34:53Z"
             }
           ]
         }

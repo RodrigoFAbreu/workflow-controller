@@ -79,27 +79,29 @@
 | 73 | [The prose migration](items/workflow-controller-a2b.md) `workflow-controller-a2b` | Done | - | workflow-controller-a2a |
 | 74 | [Codex worker, step 5a: the clone and its fast-forward landing](items/workflow-controller-h4e.md) `workflow-controller-h4e` | Done | - | workflow-controller-h4c2, workflow-controller-h4d, workflow-controller-h1 |
 | 75 | [Codex worker clone: the review leftovers of H4e (#306)](items/workflow-controller-h4e-leftovers.md) `workflow-controller-h4e-leftovers` | Done | - | workflow-controller-h4e |
-| 76 | [Codex worker, step 5b: the four review roles on Codex](items/workflow-controller-h4e2.md) `workflow-controller-h4e2` | Next | - | workflow-controller-h4e, workflow-controller-h4e-leftovers |
-| 77 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Next | - | workflow-controller-h4e |
-| 78 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |
-| 79 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |
-| 80 | [The same report at a \`CHANGES_REQUESTED\` decision](items/workflow-controller-c10d-b.md) `workflow-controller-c10d-b` | Next | - | workflow-controller-c10d-a |
-| 81 | [Retention of finished work-item files](items/workflow-controller-cl1a.md) `workflow-controller-cl1a` | Next | - | - |
-| 82 | [A \`verify\` check that warns and then fails above a limit](items/workflow-controller-cl1b.md) `workflow-controller-cl1b` | Next | - | workflow-controller-cl1a |
-| 83 | [A safe prune command](items/workflow-controller-cl1c.md) `workflow-controller-cl1c` | Next | - | workflow-controller-cl1b |
-| 84 | [A notification](items/workflow-controller-cl1d.md) `workflow-controller-cl1d` | Next | - | workflow-controller-cl1b |
-| 85 | [An opt-in automatic cleanup after acceptance, off by default](items/workflow-controller-cl1e.md) `workflow-controller-cl1e` | Next | - | workflow-controller-cl1c |
-| 86 | [Self-recovery, part 1](items/workflow-controller-c12b.md) `workflow-controller-c12b` | Next | - | workflow-controller-c10d-a, workflow-controller-c10d-b |
-| 87 | [Self-recovery, part 2](items/workflow-controller-c12c.md) `workflow-controller-c12c` | Next | - | workflow-controller-c12b |
-| 88 | [Self-recovery, part 3](items/workflow-controller-c12d.md) `workflow-controller-c12d` | Next | - | workflow-controller-c12c |
-| 89 | [Per-repository caps and per-lane budget files](items/workflow-controller-c8c.md) `workflow-controller-c8c` | Next | - | workflow-controller-c8 |
-| 90 | [The kanban runner](items/workflow-controller-c11.md) `workflow-controller-c11` | Idea | - | workflow-controller-c8, workflow-controller-c10d-a, workflow-controller-c10d-b, workflow-controller-c12b, workflow-controller-c12c, workflow-controller-c12d |
-| 91 | [Backlog refinement, the measurement part](items/workflow-controller-a3.md) `workflow-controller-a3` | Idea | - | workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b |
-| 92 | [The tracker interface](items/workflow-controller-a4.md) `workflow-controller-a4` | Idea | - | workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11 |
-| 93 | [Escalation record](items/workflow-controller-o1.md) `workflow-controller-o1` | Idea | - | workflow-controller-c11 |
-| 94 | [Answer channel](items/workflow-controller-o2.md) `workflow-controller-o2` | Idea | - | workflow-controller-o1 |
-| 95 | [The decider](items/workflow-controller-o3.md) `workflow-controller-o3` | Idea | - | workflow-controller-o1, workflow-controller-o2 |
-| 96 | [Roadmap intake and progress reports](items/workflow-controller-o4.md) `workflow-controller-o4` | Idea | - | workflow-controller-o3 |
-| 97 | [Upgrades: install the Controller's own new releases safely](items/workflow-controller-o5.md) `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
-| 98 | [Many repositories](items/workflow-controller-o6.md) `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
-| 99 | [The control room](items/workflow-controller-o7.md) `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |
+| 76 | [Codex worker, step 5b: the review recorder and the read-only run of the two review roles](items/workflow-controller-h4e2.md) `workflow-controller-h4e2` | Next | - | workflow-controller-h4e, workflow-controller-h4e-leftovers |
+| 77 | [Codex worker, step 5c: route the two review roles, safety tests and live proof](items/workflow-controller-h4e2b.md) `workflow-controller-h4e2b` | Next | - | workflow-controller-h4e2 |
+| 78 | [Codex worker, step 5d: apply-plan-review and apply-implementation-review on Codex](items/workflow-controller-h4e3.md) `workflow-controller-h4e3` | Next | - | workflow-controller-h4e2b |
+| 79 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Next | - | workflow-controller-h4e3 |
+| 80 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |
+| 81 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |
+| 82 | [The same report at a \`CHANGES_REQUESTED\` decision](items/workflow-controller-c10d-b.md) `workflow-controller-c10d-b` | Next | - | workflow-controller-c10d-a |
+| 83 | [Retention of finished work-item files](items/workflow-controller-cl1a.md) `workflow-controller-cl1a` | Next | - | - |
+| 84 | [A \`verify\` check that warns and then fails above a limit](items/workflow-controller-cl1b.md) `workflow-controller-cl1b` | Next | - | workflow-controller-cl1a |
+| 85 | [A safe prune command](items/workflow-controller-cl1c.md) `workflow-controller-cl1c` | Next | - | workflow-controller-cl1b |
+| 86 | [A notification](items/workflow-controller-cl1d.md) `workflow-controller-cl1d` | Next | - | workflow-controller-cl1b |
+| 87 | [An opt-in automatic cleanup after acceptance, off by default](items/workflow-controller-cl1e.md) `workflow-controller-cl1e` | Next | - | workflow-controller-cl1c |
+| 88 | [Self-recovery, part 1](items/workflow-controller-c12b.md) `workflow-controller-c12b` | Next | - | workflow-controller-c10d-a, workflow-controller-c10d-b |
+| 89 | [Self-recovery, part 2](items/workflow-controller-c12c.md) `workflow-controller-c12c` | Next | - | workflow-controller-c12b |
+| 90 | [Self-recovery, part 3](items/workflow-controller-c12d.md) `workflow-controller-c12d` | Next | - | workflow-controller-c12c |
+| 91 | [Per-repository caps and per-lane budget files](items/workflow-controller-c8c.md) `workflow-controller-c8c` | Next | - | workflow-controller-c8 |
+| 92 | [The kanban runner](items/workflow-controller-c11.md) `workflow-controller-c11` | Idea | - | workflow-controller-c8, workflow-controller-c10d-a, workflow-controller-c10d-b, workflow-controller-c12b, workflow-controller-c12c, workflow-controller-c12d |
+| 93 | [Backlog refinement, the measurement part](items/workflow-controller-a3.md) `workflow-controller-a3` | Idea | - | workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b |
+| 94 | [The tracker interface](items/workflow-controller-a4.md) `workflow-controller-a4` | Idea | - | workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11 |
+| 95 | [Escalation record](items/workflow-controller-o1.md) `workflow-controller-o1` | Idea | - | workflow-controller-c11 |
+| 96 | [Answer channel](items/workflow-controller-o2.md) `workflow-controller-o2` | Idea | - | workflow-controller-o1 |
+| 97 | [The decider](items/workflow-controller-o3.md) `workflow-controller-o3` | Idea | - | workflow-controller-o1, workflow-controller-o2 |
+| 98 | [Roadmap intake and progress reports](items/workflow-controller-o4.md) `workflow-controller-o4` | Idea | - | workflow-controller-o3 |
+| 99 | [Upgrades: install the Controller's own new releases safely](items/workflow-controller-o5.md) `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
+| 100 | [Many repositories](items/workflow-controller-o6.md) `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
+| 101 | [The control room](items/workflow-controller-o7.md) `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |

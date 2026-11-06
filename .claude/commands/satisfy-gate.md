@@ -179,9 +179,38 @@ anything is decided, so a stale stored fact never blocks the re-run. A
 `ready: false` report is the same stop as step 2's: write nothing. `ready: true`
 still runs step 1, which queries GitHub and decides; `not_checked` names what the
 report does not claim. The report is **read-only** (no lock, no write, no GitHub
-call). Run it as written, not under `python3 -I`. The completion (steps 1 to 3's
-one transaction) is still the Python call below until its own plain command
-exists; the Python descriptions in this section stay the specification.
+call). Run it as written, not under `python3 -I`.
+
+Step 0's `python3 scripts/workflow_backlog.py preflight-accept <work-item-id>`
+runs **first**, before the completion command below: the flag does not run it, and
+`ready: true` does not stand in for it (the report names it in `not_checked`). A
+refusal there is the stop that stores nothing; completing first would complete the
+item before `workflow_backlog.py accept` could refuse at `/accept-milestone` step 3.
+Then, once step 0 passed, complete with one plain command (workflow-2.27.0):
+
+```
+python3 scripts/workflow_state.py --satisfy-acceptance <work-item-id>
+```
+
+It makes `/accept-milestone` step 2a's phase and registry check first (the library
+does not; the same code the report uses for `work_item_terminal`,
+`registry_unresolvable` and `phase_not_reachable`), then runs steps 1 to 3's one
+transaction (`workflow_state.satisfy_acceptance_gate`: the query, the trust
+record and the order unchanged) in one process, and prints exactly `{"record",
+"trailer"}` with exit 0; `trailer` is the value for step 4's
+`Workflow-Gate-Satisfied-By`. A refusal exits 1 with one object `{"error",
+"message", "state_changed"}` (plus `"code"` when the exception has one:
+`forge_unavailable`, `forge_undecidable`, `phase_not_reachable`, ...). With
+`state_changed: false` stop and write nothing. With `state_changed: true` and
+`GateNotSatisfiableError`, only the pull-request fact the query read (and a possible
+reopening, named in the message) was stored, as step 2 says. Any other
+`state_changed: true` means another writer changed the state: stop and re-read it. A refusal is never
+worked around by hand-writing the completion. The command does not commit, does
+not edit documents, does not write the findings record and does not record the
+floor: steps 4 and 5 below stay the worker's own edits, `git commit` and the two
+Python calls (the findings record and the floor) until their own plain commands
+exist. Run it as written, not under `python3 -I`. The Python descriptions in this
+section stay the specification.
 
 0. **Backlog pre-flight, before the first step** (workflow-2.17.0, `D-Accept`).
    Step 1 below stores the pull-request fact, so run `python3

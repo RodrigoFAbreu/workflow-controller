@@ -447,99 +447,114 @@ items:
     order: 76
     depends_on: [workflow-controller-h4e, workflow-controller-h4e-leftovers]
     detail: docs/items/workflow-controller-h4e2.md
+  - id: workflow-controller-ci1a
+    title: "CI: skip the test shards for docs-only changes"
+    status: next
+    order: 77
+    detail: docs/items/workflow-controller-ci1a.md
+  - id: workflow-controller-ci1b
+    title: "CI: split the giant test atoms and refresh the shard timings"
+    status: next
+    order: 78
+    detail: docs/items/workflow-controller-ci1b.md
+  - id: workflow-controller-ci1c
+    title: "CI: measure parallel test workers inside a shard"
+    status: next
+    order: 79
+    detail: docs/items/workflow-controller-ci1c.md
   - id: workflow-controller-h4e2b
     title: "Codex worker, step 5c: route the two review roles, safety tests and live proof"
     status: next
-    order: 77
+    order: 80
     depends_on: [workflow-controller-h4e2]
     detail: docs/items/workflow-controller-h4e2b.md
   - id: workflow-controller-h4e3
     title: "Codex worker, step 5d: apply-plan-review and apply-implementation-review on Codex"
     status: next
-    order: 78
+    order: 81
     depends_on: [workflow-controller-h4e2b]
     detail: docs/items/workflow-controller-h4e3.md
   - id: workflow-controller-h4f
     title: "Codex worker, step 6"
     status: next
-    order: 79
+    order: 82
     depends_on: [workflow-controller-h4e3]
     detail: docs/items/workflow-controller-h4f.md
   - id: workflow-controller-h4g
     title: "Codex worker, step 7"
     status: next
-    order: 80
+    order: 83
     depends_on: [workflow-controller-h4f]
     detail: docs/items/workflow-controller-h4g.md
   - id: workflow-controller-c10d-a
     title: "The post-acceptance defect loop at the merge flow's `checks_failing` stop"
     status: next
-    order: 81
+    order: 84
     depends_on: [workflow-controller-c10c]
     detail: docs/items/workflow-controller-c10d-a.md
   - id: workflow-controller-c10d-b
     title: "The same report at a `CHANGES_REQUESTED` decision"
     status: next
-    order: 82
+    order: 85
     depends_on: [workflow-controller-c10d-a]
     detail: docs/items/workflow-controller-c10d-b.md
   - id: workflow-controller-cl1a
     title: Retention of finished work-item files
     status: next
-    order: 83
+    order: 86
     detail: docs/items/workflow-controller-cl1a.md
   - id: workflow-controller-cl1b
     title: "A `verify` check that warns and then fails above a limit"
     status: next
-    order: 84
+    order: 87
     depends_on: [workflow-controller-cl1a]
     detail: docs/items/workflow-controller-cl1b.md
   - id: workflow-controller-cl1c
     title: A safe prune command
     status: next
-    order: 85
+    order: 88
     depends_on: [workflow-controller-cl1b]
     detail: docs/items/workflow-controller-cl1c.md
   - id: workflow-controller-cl1d
     title: A notification
     status: next
-    order: 86
+    order: 89
     depends_on: [workflow-controller-cl1b]
     detail: docs/items/workflow-controller-cl1d.md
   - id: workflow-controller-cl1e
     title: "An opt-in automatic cleanup after acceptance, off by default"
     status: next
-    order: 87
+    order: 90
     depends_on: [workflow-controller-cl1c]
     detail: docs/items/workflow-controller-cl1e.md
   - id: workflow-controller-c12b
     title: "Self-recovery, part 1"
     status: next
-    order: 88
+    order: 91
     depends_on: [workflow-controller-c10d-a, workflow-controller-c10d-b]
     detail: docs/items/workflow-controller-c12b.md
   - id: workflow-controller-c12c
     title: "Self-recovery, part 2"
     status: next
-    order: 89
+    order: 92
     depends_on: [workflow-controller-c12b]
     detail: docs/items/workflow-controller-c12c.md
   - id: workflow-controller-c12d
     title: "Self-recovery, part 3"
     status: next
-    order: 90
+    order: 93
     depends_on: [workflow-controller-c12c]
     detail: docs/items/workflow-controller-c12d.md
   - id: workflow-controller-c8c
     title: Per-repository caps and per-lane budget files
     status: next
-    order: 91
+    order: 94
     depends_on: [workflow-controller-c8]
     detail: docs/items/workflow-controller-c8c.md
   - id: workflow-controller-c11
     title: The kanban runner
     status: idea
-    order: 92
+    order: 95
     depends_on:
       - workflow-controller-c8
       - workflow-controller-c10d-a
@@ -551,54 +566,54 @@ items:
   - id: workflow-controller-a3
     title: "Backlog refinement, the measurement part"
     status: idea
-    order: 93
+    order: 96
     depends_on: [workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b]
     detail: docs/items/workflow-controller-a3.md
   - id: workflow-controller-a4
     title: The tracker interface
     status: idea
-    order: 94
+    order: 97
     depends_on: [workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11]
     detail: docs/items/workflow-controller-a4.md
   - id: workflow-controller-o1
     title: Escalation record
     status: idea
-    order: 95
+    order: 98
     depends_on: [workflow-controller-c11]
     detail: docs/items/workflow-controller-o1.md
   - id: workflow-controller-o2
     title: Answer channel
     status: idea
-    order: 96
+    order: 99
     depends_on: [workflow-controller-o1]
     detail: docs/items/workflow-controller-o2.md
   - id: workflow-controller-o3
     title: The decider
     status: idea
-    order: 97
+    order: 100
     depends_on: [workflow-controller-o1, workflow-controller-o2]
     detail: docs/items/workflow-controller-o3.md
   - id: workflow-controller-o4
     title: Roadmap intake and progress reports
     status: idea
-    order: 98
+    order: 101
     depends_on: [workflow-controller-o3]
     detail: docs/items/workflow-controller-o4.md
   - id: workflow-controller-o5
     title: "Upgrades: install the Controller's own new releases safely"
     status: idea
-    order: 99
+    order: 102
     depends_on: [workflow-controller-o3]
     detail: docs/items/workflow-controller-o5.md
   - id: workflow-controller-o6
     title: Many repositories
     status: idea
-    order: 100
+    order: 103
     depends_on: [workflow-controller-o5]
     detail: docs/items/workflow-controller-o6.md
   - id: workflow-controller-o7
     title: The control room
     status: idea
-    order: 101
+    order: 104
     depends_on: [workflow-controller-o2, workflow-controller-o6]
     detail: docs/items/workflow-controller-o7.md

@@ -1,0 +1,182 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-h4e",
+ "dispositions": {
+  "F-0773bc9fa9cc": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-09e16bbf1a43": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-0f509813a7df": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-141fe4814305": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-1819f0eaed8d": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-1bf0932e8eef": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-246d6538a5f1": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-25697213b902": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-2f9f1a8ca412": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-32ad833f5010": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-3b7bc0aad374": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-3cf7da8b1774": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6678229166"
+  },
+  "F-42d6b722c66f": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-478ad0fe1b41": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-4ace9bea3f5c": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-53088ed321f4": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6678229166"
+  },
+  "F-55a2bbce6d12": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-5808ee5058ef": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-61a53dd345b0": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-684e6d167494": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-6865c5954b76": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-6e85bbfac9f5": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-724bb04f97e5": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-733c11154ce0": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-844ea4a3f22b": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-87f817b987df": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-8b5ca667ec74": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-930ded4f368b": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-97c2ae198b63": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-9bbf035ac57d": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-9ca4ef9367ee": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/306"
+  },
+  "F-bb41626fd512": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-bce8d62ef358": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-bd753fb3e224": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-c9bf5281292b": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-d2984a087491": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-e3c5952417b3": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-e4092e0d3a9a": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-e7db8a8997d8": {
+   "disposition": "fixed",
+   "note": "Fixed in the implementation: gitrepo.landing_fetch passes --no-recurse-submodules (controller/gitrepo.py), as the code at the accepted head shows."
+  },
+  "F-ea59b732ac25": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-eb2cb5ba5c16": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-f798f4a6e1db": {
+   "disposition": "fixed",
+   "note": "Fixed in 02269f8 (H4e round 3 O1): a clone ended by --abandon or a drifted resume over a LAUNCHED record keeps only the tree and the sessions."
+  },
+  "F-f9c521718cc6": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  },
+  "F-fdcd021c5fbb": {
+   "disposition": "fixed",
+   "note": "Settled in the plan revisions (the plan was approved at revision 8): applied, or stated there as a decision, and carried into the implementation."
+  }
+ }
+}

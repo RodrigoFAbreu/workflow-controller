@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-h4e` (H4e, issue
+**Complete.** `workflow-controller-h4e` (H4e, issue
 [#303](https://github.com/RodrigoFAbreu/workflow-controller/issues/303)) prepares a private clone for a Codex worker and lands
 its commits fast-forward behind the H3 seam, for a fixture role. The plan is
 `docs/ai-workflow/CONTROLLER_CODEX_WORKER_CLONE_PLAN.md` (revision 8). CP1 is complete: `controller/codex_worker_tree.py` has
@@ -37,6 +37,10 @@ derived from the job id when the `clone` block has no usable one; `extra_refs` a
 found; and the guides say what a `.gitignore` edit does, which Git the hook suppression was measured on, and that
 `landing_unreadable` deletes no ref.
 
+The milestone is implemented, functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for H4e2 (Codex worker, step 5b: the four review roles on Codex), the item `python3 scripts/workflow_backlog.py next` returns.
+
 Previous item, now complete:
 
 **Complete.** `workflow-controller-a2b` (A2b, issue
@@ -48,10 +52,6 @@ pins that every `detail` resolves to a regular file. CP2 is complete: the 25 ope
 all, each row's text found in its page), CL1a to CL1e and C12b to C12d carry a "Planning notes" section taken from issues
 #130 and #27 and the archive's follow-ups 8, 9 and 14, the one dangling title (C10g-3c2) is a complete phrase, and the comment on
 line 2 of `docs/backlog.yaml` is reworded. CP3 is complete: `docs/planning-rules.md` holds the archive's rules text (the clean-up limit and sizing rule, the deferred directions, 11.11, 11.12 and the principles) unchanged, the archive's banner and `docs/README.md` link it, `docs/guide/development.md` and `docs/guide/milestone-branches.md` point at it, the five release notes (1.4.1 to 1.7.0) link the archive section, and the selection test in `tests/test_backlog.py` builds its two-ready-item case in a copy. The self-review corrected the C10g-3c2 page's heading to the completed title, linked the rules from each open item's page, kept the CL1d and CL1e notes to what issue #130 says, made the rules page say its numbered list is frozen, and added the item pages to `docs/guide/development.md` and `docs/README.md`.
-
-The milestone is implemented, functionally reviewed and accepted by policy.
-
-Next action: `/milestone-plan` for H4e (Codex worker, step 5), the item `python3 scripts/workflow_backlog.py next` returns.
 
 Previous item, now complete:
 

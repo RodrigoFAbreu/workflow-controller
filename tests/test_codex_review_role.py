@@ -26,7 +26,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from controller import codex_review_role as crr, codex_worker as cw, codex_worker_sandbox as ws  # noqa: E402
 from controller import codex_worker_tree, protocol, review, review_recorder, worker  # noqa: E402
-from controller.errors import ControllerError, WorkflowQueryError  # noqa: E402
+from controller.errors import ControllerError, WorkflowQueryError, WorkflowReleaseChangedError  # noqa: E402
 from tests import fake_codex, fixtures  # noqa: E402
 from tests.test_codex_worker import LaunchFixture  # noqa: E402
 from tests.test_review_recorder import FEEDBACK, SECTIONS, STATE, WID, build_target  # noqa: E402
@@ -137,6 +137,7 @@ class RunTests:
         self.assert_clone_gone()
         self.assertEqual([e["stage"] for e in self.events], ["preparing", "recording", "recorded"])
         self.assertEqual(self.events[2]["result"]["code"], crr.RECORDED)
+        self.assertEqual(self.events[2]["result"]["values"]["feedback_path"], FEEDBACK)
         self.assertEqual(len(self.events[1]["verdict_sha256"]), 64)
 
     def test_the_prompt_names_the_local_role_and_the_bundle_and_asks_for_no_file(self) -> None:
@@ -298,6 +299,16 @@ class RunTests:
             target.write_text(target.read_text() + "tampered\n")
             return result
 
+        def unreadable_input(task, **kw):
+            result = self.seam(task, **kw)
+            next((kw["cwd"] / ".ai-review").rglob("REVIEW_REQUEST.md")).chmod(0)
+            return result
+
+        def grown_input(task, **kw):
+            result = self.seam(task, **kw)
+            os.truncate(next((kw["cwd"] / ".ai-review").rglob("REVIEW_REQUEST.md")), crr.MAX_INPUT_FILE_BYTES + 1)
+            return result
+
         def extra_input(task, **kw):
             result = self.seam(task, **kw)
             (kw["cwd"] / ".ai-review" / "extra.md").write_text("x")
@@ -308,6 +319,8 @@ class RunTests:
             "ref": ({"git": [["update-ref", "refs/heads/evil", "HEAD"]]}, None),
             "commit": ({"git": [["commit", "--allow-empty", "-m", "x"]]}, None),
             "input": ({}, changed_input),
+            "unreadable input": ({}, unreadable_input),
+            "grown input": ({}, grown_input),
             "extra": ({}, extra_input),
         }
         for name, (spec, launch) in cases.items():
@@ -328,6 +341,8 @@ class RunTests:
             ("recorder", {"patch": mock.patch.object(review_recorder, "check", return_value=refused)},
              "recorder_identity_mismatch"),
             ("runner", {"patch": mock.patch.object(review_recorder, "check", side_effect=runner)}, "check"),
+            ("release", {"patch": mock.patch.object(protocol, "resolve_artifact", side_effect=WorkflowReleaseChangedError(
+                "changed", evidence={}))}, crr.RELEASE_CHANGED),
             ("preparer", {"over": {"base": "0" * 40}}, "managed_branch_moved"),
         )
         for name, spec, cause in cases:
@@ -542,6 +557,11 @@ class ModuleTests(unittest.TestCase):
         from controller import job
         self.assertEqual(crr.OPERATOR_ABANDONED, job.OPERATOR_ABANDONED_CODE)
         self.assertEqual(crr.RELEASE_CHANGED, job.WORKFLOW_RELEASE_CHANGED_REASON)
+
+    def test_the_body_is_the_message_unchanged_from_its_first_section(self) -> None:
+        body = b"## Blocking findings\r\n\r\nNone.\x0cstill the same line\n\n## Important findings\n\nNone.\n"
+        status, scope, parsed = crr.parse_verdict(b"Status: APPROVE\nReview scope: full\n\n" + body)
+        self.assertEqual((status, scope, parsed.encode()), ("APPROVE", "full", body))
 
     def test_the_causes_are_the_ones_the_plan_names(self) -> None:
         self.assertEqual(set(crr.CAUSES), {

@@ -25,9 +25,15 @@ to the recorder. The deny set (`CAUSES`: `special_file`, `submodule`, `credentia
 `verdict_over_bound`, `verdict_unparsed`, `credential_in_verdict`, `read_only_violated`) and D5's endings each have a test,
 as does each `recover` ending; the fake `codex` gains `message_bytes`. `docs/guide/harnesses.md` has a section on the
 recorder and the run, and `docs/guide/workers.md` links it. Both checkpoints are implemented; no role is routed to Codex
-until H4e2b.
+until H4e2b. The self-review fixed six things: the guide's link to the H4e2b page, a page this branch does not hold, failed
+`tools/check_docs.py` in any clean clone (it passed only beside an uncommitted copy of `main`'s page) and now names #315; the
+local prompt now says an `APPROVE` never states `Review scope: changes`, which the Workflow would refuse after the turn was paid
+for; `after_check` reads an input only while it can still be the manifest's file and names an unreadable one
+`read_only_violated` instead of raising; the verdict body stays byte for byte the role's (it was normalised by line splitting);
+a release change while the inputs resolve is a `CodexReviewNotStarted`; and the `recorded` progress block carries the recorder's
+values.
 
-Next action: the full verification, then the implementation review bundle (`/milestone-implement workflow-controller-h4e2`).
+Next action: the implementation review bundle, then the local implementation review.
 
 ## Previous milestone (H4e leftovers)
 

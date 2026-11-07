@@ -391,7 +391,7 @@ outlives its killed Controller, and `resume` ends it).
 ### The review recorder and the read-only run of the two local review roles
 
 H4e2 ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) adds two building blocks. **No role is routed
-to either until H4e2b** ([`docs/items/workflow-controller-h4e2b.md`](../items/workflow-controller-h4e2b.md)), so nothing an
+to either until H4e2b** (split off in [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)), so nothing an
 operator can select changes.
 
 - **The recorder** (`controller/review_recorder.py`) records a local review verdict (`LOCAL_MODEL_PLAN_REVIEW` or

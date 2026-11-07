@@ -30,6 +30,7 @@ from .errors import (
     ControllerError,
     WorkflowProtocolFailedError,
     WorkflowQueryError,
+    WorkflowReleaseChangedError,
 )
 
 #: D4: one cause per refusal.
@@ -242,14 +243,15 @@ def _armour_in(*texts: str | bytes | None) -> bool:
 
 
 def parse_verdict(data: bytes) -> tuple[str, str | None, str]:
-    """``(status, review_scope, body)`` of the final message, or :class:`InputRefused`-style refusal as a
-    ``ValueError`` carrying the cause ``verdict_unparsed``. Before the first ``## `` line only the ``Status:`` line,
-    one optional ``Review scope:`` line and blank lines are allowed."""
+    """``(status, review_scope, body)`` of the final message; a ``ValueError`` is the cause ``verdict_unparsed``.
+    Before the first ``## `` line only the ``Status:`` line, one optional ``Review scope:`` line and blank lines are
+    allowed. The body is the message's own text from that line on: a verdict the Workflow would refuse is refused,
+    never repaired (D3)."""
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError(f"the final message is not valid UTF-8 ({exc})") from None
-    lines = text.splitlines()
+    lines = text.splitlines(keepends=True)
     first = next((n for n, line in enumerate(lines) if line.startswith("## ")), len(lines))
     status: str | None = None
     scope: str | None = None
@@ -264,7 +266,7 @@ def parse_verdict(data: bytes) -> tuple[str, str | None, str]:
             raise ValueError(f"the final message has {line[:60]!r} before its first section")
     if status not in review.STATUSES:
         raise ValueError(f"the final message's Status is {status!r}, not one of {', '.join(review.STATUSES)}")
-    return status, scope, "\n".join(lines[first:]).rstrip("\n") + "\n"
+    return status, scope, "".join(lines[first:]).rstrip("\n") + "\n"
 
 
 def compose_verdict(values: Mapping[str, Any], status: str, scope: str | None, body: str, *, model: str,
@@ -316,7 +318,9 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
             problems.append(f"HEAD is {head}")
     except OSError as exc:
         problems.append(str(exc))
-    seen: dict[str, str] = {}
+    # An input is read only while it can still be the file the manifest names, and a failure to read it is a change:
+    # the run left it, so whatever the worker did to it is D2's refusal, never an exception or an unbounded read.
+    seen: set[str] = set()
     base = clone / ".ai-review"
     for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
         for name in dirnames:
@@ -325,15 +329,25 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
         for name in filenames:
             path = Path(dirpath) / name
             rel = path.relative_to(clone).as_posix()
-            if not stat.S_ISREG(os.lstat(path).st_mode):
+            info = os.lstat(path)
+            if not stat.S_ISREG(info.st_mode):
                 problems.append(f"non-regular {rel}")
                 continue
-            seen[rel] = _sha256(path.read_bytes())
-    if set(seen) != set(manifest):
-        problems.append(f".ai-review holds {sorted(set(seen) ^ set(manifest))} beyond or short of the inputs")
-    for rel, digest in seen.items():
-        if rel in manifest and manifest[rel]["sha256"] != digest:
-            problems.append(f"input {rel} changed")
+            seen.add(rel)
+            if rel not in manifest:
+                continue
+            if info.st_size > MAX_INPUT_FILE_BYTES:
+                problems.append(f"input {rel} changed")
+                continue
+            try:
+                digest = _sha256(path.read_bytes())
+            except OSError as exc:
+                problems.append(f"input {rel} cannot be read: {exc}")
+                continue
+            if manifest[rel]["sha256"] != digest:
+                problems.append(f"input {rel} changed")
+    if seen != set(manifest):
+        problems.append(f".ai-review holds {sorted(seen ^ set(manifest))} beyond or short of the inputs")
     return problems
 
 
@@ -410,6 +424,8 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
         return _not_started(exc.cause, exc.message, **{k: v for k, v in exc.evidence.items() if k != "cause"})
     except codex_worker_tree.CodexTreeError as exc:
         return _not_started(exc.cause, exc.message)
+    except WorkflowReleaseChangedError as exc:
+        return _not_started(RELEASE_CHANGED, exc.message, error=type(exc).__name__)
     except (WorkflowQueryError, WorkflowProtocolFailedError) as exc:
         return _not_started("check", exc.message, reason=exc.evidence.get("reason"), error=type(exc).__name__)
     dirty = {"managed_dirty": prepared.dirty} if prepared.dirty and any(prepared.dirty.values()) else {}
@@ -495,7 +511,7 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
         ending = Ending(RECORD_REFUSED, recorded.workflow_class or recorded.cause, result, {
             **evidence_base, "message": recorded.message, "recorder_cause": recorded.cause})
     progress({"read_only": True, "stage": "recorded", "result": _recorded_block(ending.code, {
-        "cause": ending.cause, "ok": recorded.ok, "message": recorded.message})})
+        "cause": ending.cause, "ok": recorded.ok, "message": recorded.message, "values": dict(recorded.values)})})
     return ending
 
 

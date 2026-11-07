@@ -531,7 +531,8 @@ def build_local_prompt(stage: str, *, bundle_dir: str, brief: str | None = None,
         f"{BRIEF_PRECEDENCE}\n\n{guidance}\n\n"
         "Your final message is the verdict, as Markdown. Its first line is `Status: APPROVE`, `Status: REVISE` or "
         "`Status: BLOCK` (exactly one), optionally followed by one `Review scope: changes` or `Review scope: full` "
-        "line. Write no title and no other header line: the Controller writes the header. Then write the sections "
+        "line. An APPROVE is a review of the whole bundle: never state `Review scope: changes` on it, which is "
+        "refused. Write no title and no other header line: the Controller writes the header. Then write the sections "
         f"{sections}, in that order.\n\n{VERDICT_FORMAT_RULES}\n")
 
 

@@ -217,6 +217,7 @@ class RoundPromptTest(unittest.TestCase):
                 self.assertIn("`/b/current`", prompt)
                 self.assertIn("write no file", prompt)
                 self.assertIn("Write no title and no other header line", prompt)
+                self.assertIn("never state `Review scope: changes` on it", prompt)
                 self.assertNotIn("Reviewer model", prompt)
                 self.assertNotIn("# Review Decision\n\nStatus", prompt)
                 for name in review.LOCAL_VERDICT_SECTIONS:

@@ -69,7 +69,7 @@ COMMANDS = {"plan": "/review-plan", "implementation": "/review-implementation"}
 
 #: A private-key armour line: five dashes, ``BEGIN``, optional upper-case key-type words, ``PRIVATE KEY``, five
 #: dashes, as one token. Prose naming the markers separately does not match.
-ARMOUR = re.compile(rb"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY(?: BLOCK)?-----")
+ARMOUR = re.compile(rb"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----")
 
 _CREDENTIAL_NAMES = frozenset({"auth.json", ".env", "id_rsa", "id_ed25519", ".claude.json", ".credentials.json"})
 _CREDENTIAL_DIRS = frozenset({".ssh", ".aws", ".codex"})

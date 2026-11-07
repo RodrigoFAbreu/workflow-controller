@@ -62913,7 +62913,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -63053,12 +63053,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 2,
+          "local": 3,
           "external": 0
         }
       },
-      "state_revision": 51,
-      "last_transition": "2026-11-07T03:24:52Z",
+      "state_revision": 52,
+      "last_transition": "2026-11-07T04:07:30Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -63789,6 +63789,62 @@
               "review_content_id": "1cf725645335a33deac3ff088f4e4faaad63ed7776b4c768be129aebcdff2163",
               "verdict": "REVISE",
               "at": "2026-11-07T03:15:02Z"
+            }
+          ]
+        },
+        "F-20e962d528be": {
+          "digest": "20e962d528be322d0e38aba80e89ea08cfda43d6de3c2e8679c4a56041094e1d",
+          "text": "O1: Nothing now tests the plain, no-key-type form of D4's armour line. Round 2 removed the test holding the only such assertion and the only negative case (a public-key line) along with the PGP literal, and the module's `ARMOUR` constant (`tests/test_codex_review_role.py:34`) has a key-type word. I changed `*` to `+` in the pattern at `controller/codex_review_role.py:72`, which stops the check matching PKCS#8 keys, and the role's armour tests, input-refusal test and `ModuleTests` still passed. The pattern is correct. Two assertions built by concatenation, one for each case, would close this.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "90f2e41eec22aaf21a6ab2703b93b8c64b9d2ca3296b6967f919593f678b7d85",
+              "verdict": "REVISE",
+              "at": "2026-11-07T04:07:30Z"
+            }
+          ]
+        },
+        "F-4b73d0cc9188": {
+          "digest": "4b73d0cc918805bc9f0dce857e715cb1d55c3d0a5c4427087b79fd1b8453eafc",
+          "text": "O2: Two branches D4 and D2 name are not exercised. Removing the `.git` component from the `submodule` check (`controller/codex_review_role.py:146`) survives the input-refusal and credential-name tests, and removing the `non-regular` report in `after_check` (`:349`) survives the read-only test. Both behave correctly as read; a `.git` path case and a symlink replacing an input would cover them.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "90f2e41eec22aaf21a6ab2703b93b8c64b9d2ca3296b6967f919593f678b7d85",
+              "verdict": "REVISE",
+              "at": "2026-11-07T04:07:30Z"
+            }
+          ]
+        },
+        "F-209f30457f48": {
+          "digest": "209f30457f4802d79835edab5c8458c26e83f45bfc9e96fec2725ac435a743b7",
+          "text": "O3: `REVIEW_REQUEST.md` line 13 still says `Full suite PASS at 8aca75d in a clean clone, 5912 tests`. That is true of that commit, but `TEST_RESULTS.md` correctly reports `70fd3fd` and 5924, and the next reader meets the older figure first. Update it at the next generation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "90f2e41eec22aaf21a6ab2703b93b8c64b9d2ca3296b6967f919593f678b7d85",
+              "verdict": "REVISE",
+              "at": "2026-11-07T04:07:30Z"
+            }
+          ]
+        },
+        "F-7cefefeb954f": {
+          "digest": "7cefefeb954fef6247d5587102a42e8dde2ad8607fb8f977e8e2275d38450a3c",
+          "text": "O4: `TEST_RESULTS.md` reports one failure of `tests.test_codex_tester ... test_the_credential_copy_is_gone_after_a_run_a_refusal_and_a_deadline` under load (`timeout=2`). This milestone does not touch that test and my full run did not reproduce the failure. It should have an issue of its own if it has none; I could not search the issues from this session.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "90f2e41eec22aaf21a6ab2703b93b8c64b9d2ca3296b6967f919593f678b7d85",
+              "verdict": "REVISE",
+              "at": "2026-11-07T04:07:30Z"
             }
           ]
         }

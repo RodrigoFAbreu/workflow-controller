@@ -23,6 +23,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -457,13 +458,15 @@ class ImplementationStageTest(RecorderCase):
         self.assertEqual(result.values["gate"]["gate"], "technical_approval")
         self.assertEqual(self.snapshot(), before)
 
-    def _matches_in_place(self, status: str) -> review_recorder.RecorderResult:
+    def _matches_in_place(self, status: str, on_recorded: Any = None) -> review_recorder.RecorderResult:
         values = self.check().values
         text = self.compose(values, status)
         head = fixtures.current_head(self.root)
         result = self.record(text, values)
         self.assertTrue(result.ok, result)
         recorded = self.written()
+        if on_recorded:
+            on_recorded()
         log = _git(self.root, "log", "--format=%H%n%B%x00", f"{head}..HEAD")
         self.setUp()
         fixtures.run_workflow_python(self.root, IN_PLACE, "implementation", status, COMPLETED_AT,
@@ -485,9 +488,11 @@ class ImplementationStageTest(RecorderCase):
 
     def test_revise_leaves_one_commit_holding_only_the_state_and_a_clean_index(self) -> None:
         head = fixtures.current_head(self.root)
-        result = self._matches_in_place("REVISE")
+        recorder_head: list[str] = []
+        result = self._matches_in_place("REVISE", on_recorded=lambda: recorder_head.append(
+            fixtures.current_head(self.root)))
         self.assertEqual(result.values["phase"], "APPLYING_REVIEW_FEEDBACK")
-        self.assertEqual(result.values["committed"], fixtures.current_head(self.root))
+        self.assertEqual(result.values["committed"], recorder_head[0])
         self.setUp()
         values = self.check().values
         self.record(self.compose(values, "REVISE"), values)

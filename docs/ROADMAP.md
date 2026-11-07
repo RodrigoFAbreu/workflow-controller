@@ -79,7 +79,7 @@
 | 73 | [The prose migration](items/workflow-controller-a2b.md) `workflow-controller-a2b` | Done | - | workflow-controller-a2a |
 | 74 | [Codex worker, step 5a: the clone and its fast-forward landing](items/workflow-controller-h4e.md) `workflow-controller-h4e` | Done | - | workflow-controller-h4c2, workflow-controller-h4d, workflow-controller-h1 |
 | 75 | [Codex worker clone: the review leftovers of H4e (#306)](items/workflow-controller-h4e-leftovers.md) `workflow-controller-h4e-leftovers` | Done | - | workflow-controller-h4e |
-| 76 | [Codex worker, step 5b: the four review roles on Codex](items/workflow-controller-h4e2.md) `workflow-controller-h4e2` | Next | - | workflow-controller-h4e, workflow-controller-h4e-leftovers |
+| 76 | [Codex worker, step 5b: the four review roles on Codex](items/workflow-controller-h4e2.md) `workflow-controller-h4e2` | Done | - | workflow-controller-h4e, workflow-controller-h4e-leftovers |
 | 77 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Next | - | workflow-controller-h4e |
 | 78 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |
 | 79 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |

@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-h4e2` (H4e2, issue
+**Complete.** `workflow-controller-h4e2` (H4e2, issue
 [#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)): the review recorder and the read-only run of the
 two review roles, both dark (no role is routed to Codex). The plan is `docs/ai-workflow/CONTROLLER_H4E2_PLAN.md` (revision
 12), two checkpoints. CP1 is complete: `controller/review_recorder.py` records a local review verdict through the Workflow's
@@ -35,7 +35,9 @@ values. The full suite then found three tests the checkpoints had broken, none o
 of `_copy_and_execute` did not take `real_index`, the process inventory had no row for the recorder fixture's bundle generation,
 and the guard on readers of a worker's prose did not know the armour scan, which now sits in one named function it lists.
 
-Next action: the implementation review bundle, then the local implementation review.
+Both checkpoints are implemented; the milestone is functionally reviewed and accepted by policy.
+
+Next action: `/milestone-plan` for `workflow-controller-h4f` (Codex worker, step 6), the item `python3 scripts/workflow_backlog.py next` returns.
 
 ## Previous milestone (H4e leftovers)
 

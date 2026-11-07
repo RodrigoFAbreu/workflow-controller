@@ -443,7 +443,7 @@ items:
     detail: docs/items/workflow-controller-h4e-leftovers.md
   - id: workflow-controller-h4e2
     title: "Codex worker, step 5b: the four review roles on Codex"
-    status: next
+    status: done
     order: 76
     depends_on: [workflow-controller-h4e, workflow-controller-h4e-leftovers]
     detail: docs/items/workflow-controller-h4e2.md

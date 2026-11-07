@@ -1,0 +1,250 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-h4e2",
+ "dispositions": {
+  "F-029f421c298e": {
+   "disposition": "fixed",
+   "note": "The path_escape cause is tested at module level with crafted inputs, as asked. tests/test_codex_review_role.py test_each_input_refusal_ends_before_the_launch injects '../../../outside.txt' and an absolute path through a patched input_paths, and test_a_path_under_the_runtime_root_is_a_path_escape calls collect_inputs. The job-path attack list (old CP4) is H4e2b's."
+  },
+  "F-0f5ca66b8220": {
+   "disposition": "fixed",
+   "note": "D3: WorkerResult gains no raw-bytes field; the run reads WorkerLayout(...).last_message as bytes after the launcher returns (controller/codex_review_role.py _run). controller/worker.py is unchanged."
+  },
+  "F-0fcc50321ba6": {
+   "disposition": "dropped",
+   "reason": "The other two statuses are covered through the byte comparison. tests/test_review_recorder.py compares the recorded state and feedback byte for byte with the Workflow's own in-place writer sequence for APPROVE, REVISE and BLOCK, so the recorder's REVISE/BLOCK state is the state the Workflow's own writer produces. Validator acceptance of that output is the Workflow's own invariant, not something the recorder can change. The reviewer judged a difference unlikely."
+  },
+  "F-1c8b6734f1a0": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-1f61fbd30230": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-209f30457f48": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6703416818"
+  },
+  "F-20e962d528be": {
+   "disposition": "fixed",
+   "note": "tests/test_codex_review_role.py ModuleTests.test_the_armour_pattern_matches_a_plain_key_line_and_not_a_public_key_line (commit d6dffc9) builds the plain no-key-type line by concatenation and has a public-key negative case."
+  },
+  "F-27d6359ca7f5": {
+   "disposition": "fixed",
+   "note": "D3 asks for all eight sections. controller/review.py LOCAL_VERDICT_SECTIONS holds them, parse_verdict refuses a message that lacks one, and tests/test_codex_review_role.py test_the_sections_are_the_headings_the_protocol_requires pins them to REVIEW_PROTOCOL.md."
+  },
+  "F-2d716581abc8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-35c2e6e35345": {
+   "disposition": "fixed",
+   "note": "CP1 puts the configured hook in the operator's scope (GIT_CONFIG_GLOBAL, test_no_hook_runs_for_the_commit). The repository-scope hook command is its own runner-error test: test_a_repository_hook_command_is_refused_before_the_driver_and_no_commit_is_made (tests/test_review_recorder.py)."
+  },
+  "F-36f0984e6261": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-4a639d886ee7": {
+   "disposition": "dropped",
+   "reason": "The finding is about the pre-split header's re-declaration steps (revisions 5-6). That procedure ran once and the split re-declared the plan, so revision 12 has no such steps. The plan is a historical record. The findings it wanted kept were kept: they are in the item's optional_findings ledger and triaged here."
+  },
+  "F-4a9f6f3b80b0": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-4b73d0cc9188": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-5210cb484a59": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6703416818"
+  },
+  "F-56c6e2c64234": {
+   "disposition": "fixed",
+   "note": "No telling is needed any more. D3 asks the role to write no file, and D1's recorder passes the repository-relative feedback path itself (controller/review_recorder.py do_record). tests/test_review_recorder.py asserts the relative run_ref."
+  },
+  "F-5d60afcb3789": {
+   "disposition": "dropped",
+   "reason": "Superseded by the owner's 2026-11-06 decision (#314, docs/items/workflow-controller-h4e2.md): review roles run read-only and the Controller records the verdict through the Workflow's own writers, so there is no per-role field allowlist or value rule left to tighten. The finding was about revision 3-7's allowlist."
+  },
+  "F-682827c23a77": {
+   "disposition": "fixed",
+   "note": "The re-declared revision 12 header restates the baseline from the new tip: 'Released baseline: workflow-controller 1.27.10', with no release (chore), so no 1.28.0 is implied. v1.27.10 is still the latest release."
+  },
+  "F-6a851b1805ef": {
+   "disposition": "fixed",
+   "note": "D1's check calls assert_feedback_not_owned_by_other_work_item before any copy or launch (controller/review_recorder.py guards). tests/test_review_recorder.py test_a_foreign_feedback_directory_is_refused asserts recorder_feedback_foreign at check on a legacy flat layout."
+  },
+  "F-6c999ca7a348": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-6e78619e311e": {
+   "disposition": "dropped",
+   "reason": "The finding is about the pre-split header's re-declaration steps (revisions 5-6). That procedure ran once and the split re-declared the plan, so revision 12 has no such steps. The plan is a historical record. The findings it wanted kept were kept: they are in the item's optional_findings ledger and triaged here."
+  },
+  "F-72da39eeca9a": {
+   "disposition": "fixed",
+   "note": "The operator-scope hook fixture uses a friendly name: tests/test_review_recorder.py test_no_hook_runs_for_the_commit writes [hook \"marker\"] event = post-commit to GIT_CONFIG_GLOBAL and asserts no marker."
+  },
+  "F-72e381c9e353": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-756421cba9ce": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-7b252c2229eb": {
+   "disposition": "fixed",
+   "note": "D3 reads the final message as bytes from last-message.md, not from result (controller/codex_review_role.py _run), and invalid UTF-8 is verdict_unparsed (test_a_message_the_result_would_have_repaired_is_unparsed, using fake_codex message_bytes). On credential_in_verdict, _emptied clears result, stdout, stderr and stream_diagnosis.detail (test_armour_in_the_message_is_refused_and_leaves_no_text)."
+  },
+  "F-7cefefeb954f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/259"
+  },
+  "F-7d61baa6de76": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-7ff9c8e75f52": {
+   "disposition": "fixed",
+   "note": "D1: record takes now from the composed Completed at: (controller/review_recorder.py do_record, header_value(text, 'Completed at:')). tests/test_review_recorder.py compares state and feedback byte for byte with the in-place sequence and asserts completed_at == COMPLETED_AT."
+  },
+  "F-83e6b36412d4": {
+   "disposition": "dropped",
+   "reason": "The finding is about the pre-split header's re-declaration steps (revisions 5-6). That procedure ran once and the split re-declared the plan, so revision 12 has no such steps. The plan is a historical record. The findings it wanted kept were kept: they are in the item's optional_findings ledger and triaged here."
+  },
+  "F-868e6768c0c9": {
+   "disposition": "fixed",
+   "note": "D1 has the recorder, not the role, pass a repository-relative feedback path. In controller/review_recorder.py the driver passes feedback.relative_to(root), and tests/test_review_recorder.py asserts run_ref == 'session:local <relative path>'."
+  },
+  "F-88185f78f112": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6703416818"
+  },
+  "F-8a832896c290": {
+   "disposition": "fixed",
+   "note": "CP1 now says the wrong-phase test is the plan stage's. tests/test_review_recorder.py test_a_wrong_phase_is_the_workflows_own_refusal (plan) asserts WrongPhaseForPlanReviewStageError, and test_an_implementation_item_the_command_routes_to_its_advisory_branch_is_unsupported covers the implementation side."
+  },
+  "F-8ad5a9cafaf8": {
+   "disposition": "fixed",
+   "note": "D1 and D5 now say that for a runner error during record, and for a driver that exits without JSON, the Workflow's state is the truth. controller/codex_review_role.py puts state_is_the_truth in the CodexReviewRecordRefused evidence, tested by test_a_runner_error_during_record_names_the_state_as_the_truth."
+  },
+  "F-993f23a21cc1": {
+   "disposition": "fixed",
+   "note": "controller/workflow_contract.py _git_isolation pops an inherited GIT_INDEX_FILE when real_index is set (commit 9fab8b3). tests/test_workflow_contract.py asserts GIT_INDEX_FILE is absent from the env, with the variable set to /nonexistent/index."
+  },
+  "F-9bd8ad368dc6": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6703416818"
+  },
+  "F-9f4d6ac53fe0": {
+   "disposition": "dropped",
+   "reason": "Superseded by the owner's 2026-11-06 decision (#314, docs/items/workflow-controller-h4e2.md): review roles run read-only and the Controller records the verdict through the Workflow's own writers, so there is no per-role field allowlist or value rule left to tighten. The finding was about revision 3-7's allowlist."
+  },
+  "F-9f92821eff45": {
+   "disposition": "fixed",
+   "note": "controller/codex_review_role.py carries check's advisory into the ending evidence (evidence_base). tests/test_codex_review_role.py test_the_recorders_advisory_reaches_the_ending_evidence."
+  },
+  "F-a02f340ed752": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-a40ae7e802a5": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-bd374aed7406": {
+   "disposition": "fixed",
+   "note": "D4/D5 name the ending: a hook the worker writes into the clone's .git is sandbox_breach, ending CodexReviewWorkerFailed, and there is no landing. tests/test_codex_review_role.py test_each_worker_failure_subtype_is_named has a fake codex write .git/hooks/post-merge and asserts sandbox_breach."
+  },
+  "F-be500e8d641a": {
+   "disposition": "fixed",
+   "note": "D3: the Controller writes Reviewer model: openai/<route model> itself (controller/codex_review_role.py compose_verdict), and parse_verdict refuses any extra line before the first section. tests/test_codex_review_role.py test_every_malformed_message_is_unparsed has a 'forged model' case that ends verdict_unparsed."
+  },
+  "F-c1d64a89a9ce": {
+   "disposition": "fixed",
+   "note": "Revision 12's CP1 no longer has the 'fixed in the plan table at once, in the self-review' step. The checkpoint table says it is generated from the registry and never edited by hand."
+  },
+  "F-c83363a7ebd1": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-c84b74b93ce3": {
+   "disposition": "fixed",
+   "note": "controller/codex_review_role.py parse_verdict refuses a Review scope: other than changes or full (REVIEW_SCOPES) as verdict_unparsed. tests/test_codex_review_role.py has the 'a bad scope on a revise' case (banana) and a ModuleTests assertion."
+  },
+  "F-ca5368b62ba4": {
+   "disposition": "fixed",
+   "note": "CP2 words the case as the admitted control: 'prose naming the markers is recorded, a real armour block is refused'. tests/test_codex_review_role.py test_prose_naming_the_markers_is_recorded_and_real_armour_is_refused asserts CodexReviewRecorded."
+  },
+  "F-d180b8522f81": {
+   "disposition": "fixed",
+   "note": "CP2 lists tests/fake_codex.py, which gained a message_bytes scenario key (write_bytes of base64-decoded data). test_a_message_the_result_would_have_repaired_is_unparsed uses it."
+  },
+  "F-d2202a4951b3": {
+   "disposition": "dropped",
+   "reason": "This is an editing slip in the approved plan's prose. The plan is a historical record and is not edited after approval, and the meaning can be recovered. The implementation does what the sentence meant: tests/test_codex_review_role.py runs the real recorder (review_recorder.check/record unpatched) on fixture repositories."
+  },
+  "F-d2d8508c98d6": {
+   "disposition": "dropped",
+   "reason": "This is about revision 3's D2b overlay (WORKFLOW_WORKTREE_ROOT_OVERRIDE threaded through compose_argv/_override_values). The read-only design (owner decision 2026-11-06) removed the overlay, so revision 12 has no override and controller/codex_worker_sandbox.py is not changed."
+  },
+  "F-d2f96dd12888": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-d595050aad79": {
+   "disposition": "fixed",
+   "note": "D1 says the local count plus one is deliberate. controller/review_recorder.py uses review_round_counts[stage].local + 1, and tests/test_review_recorder.py test_the_round_is_the_local_count_plus_one pins it."
+  },
+  "F-d6b28a4cd7db": {
+   "disposition": "fixed",
+   "note": "D1's record takes a file path: controller/review_recorder.py record(verdict_path) passes the path as an argument and the driver reads the file, and codex_review_role writes reviews/<job>-verdict.md under the runtime root. tests/test_review_recorder.py test_a_verdict_near_the_one_mebibyte_bound_is_recorded covers the bound."
+  },
+  "F-dfbc0b32f827": {
+   "disposition": "dropped",
+   "reason": "The owner answered: the split was ruled on 2026-11-06 (#315) before the re-declaration, and the backlog and pages changed in docs PR #316. Revision 12's Open decisions has no pending owner questions."
+  },
+  "F-e0920d160eef": {
+   "disposition": "fixed",
+   "note": "D4 now says only that the text reaches neither the managed repository nor any field of the run's result, and that the session rollouts stay in codex-home/sessions. tests/test_codex_review_role.py test_armour_in_the_message_is_refused_and_leaves_no_text asserts the emptied fields and that the rollout remains. The job.py excerpt is gone: the emptying is in codex_review_role._emptied."
+  },
+  "F-e174c6adb6e1": {
+   "disposition": "dropped",
+   "reason": "Superseded by the owner's 2026-11-06 decision (#314, docs/items/workflow-controller-h4e2.md): review roles run read-only and the Controller records the verdict through the Workflow's own writers, so there is no per-role field allowlist or value rule left to tighten. The finding was about revision 3-7's allowlist."
+  },
+  "F-e196a938346b": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-e5fece361ced": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-e9bc2528949c": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-f0252bb6251f": {
+   "disposition": "fixed",
+   "note": "D4 now scans the whole input file (CONTROLLER_H4E2_PLAN.md D4: 'whole content'). In controller/codex_review_role.py, collect_inputs runs ARMOUR.search over each file's full bytes, bounded at 8 MiB."
+  },
+  "F-f64f5e460fc1": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/315#issuecomment-6703416614"
+  },
+  "F-f7d408b24d0d": {
+   "disposition": "fixed",
+   "note": "The labels are named in code: controller/review_recorder.py check returns revision_label 'Plan revision reviewed:' or 'Implementation revision reviewed:', and compose_verdict writes it. tests/test_review_recorder.py test_check_returns_the_header_values_gate_round_and_digests_and_writes_nothing pins the plan label."
+  },
+  "F-f7d83795a492": {
+   "disposition": "fixed",
+   "note": "A crafted ref now has one exact ending. D4 says it is read_only_violated (nothing is landed, so there is no landing cause), and tests/test_codex_review_role.py test_a_write_a_new_ref_and_a_changed_input_each_violate_the_read_only_run asserts CodexReviewRefused/read_only_violated for update-ref refs/heads/evil."
+  }
+ }
+}

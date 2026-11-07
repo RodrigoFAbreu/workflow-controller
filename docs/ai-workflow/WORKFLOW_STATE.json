@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 6,
       "implementation_revision": 8,
       "functional_review_round": null,
@@ -64535,7 +64535,144 @@
           "workflow_release": "2.27.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "1fa912280b9982b098b99a8d811e11087b16d9392090940c74322d9bc9445285",
+        "approved_review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1c9ee3e634756332ee61f7f7a89e9ad15d177397"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d4c5a39fe3b2c6050bb92ba319fe7cd2f52efa72"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci1a-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7b85b4845e3d929bb5220b809e741660647e6a17"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "26f2df2d869de413969b2b02d74be4fc02bdcb6c"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7064b4a326c311b8da30159cc6ba58e32c3bf941"
+          },
+          {
+            "path": "docs/items/workflow-controller-ci1a.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "62488b22b462e5c0cb13b0eef2f239ffdae04154"
+          },
+          {
+            "path": "tests/test_ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a1dc7e01a5aa860d8da03d6e6ffe370408758176"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "557f677596f8acfb5d533243acbe4f03271b4e42"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57f33a17fa9a4719f9f1a3c5570b9d8aed189959"
+          },
+          {
+            "path": "tools/ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "347a6878978710c2804dec31f7096a9974b8fdba"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2ec22ad3f2538d0495917c7b67c9507c65568c72"
+          }
+        ],
+        "reviewed_content_commit": "9b484b9c973ab516ab7f5c8dc23aea4eea1e4129",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-07T23:11:10Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "ledger": {
+              "local": {
+                "bundle_id": "1fa912280b9982b098b99a8d811e11087b16d9392090940c74322d9bc9445285",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "4d12fb39ad57c12e38ff9803db5ce00ee926adcb6b3b7231eb6c1ac404876832",
+                "ledger_entry_sha256": "11c4f28ce7d27c25e0a11fc8041c5bbbb82408a577656c6c6e80477842696959",
+                "run_ref": "session:local .ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "1fa912280b9982b098b99a8d811e11087b16d9392090940c74322d9bc9445285",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "7cb3d72ca92672c550bf0a0261a28173ca1e8280c997859f2c1b0c112443bcee",
+                "ledger_entry_sha256": "b0af3b263f970566b9be8a78c1929b9786ab18e73fd028d1b1c9e83d2b5262ce",
+                "run_ref": "codex:20261107T230706Z-3d9b494d",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-07T23:11:10Z",
+          "workflow_release": "2.27.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
@@ -64566,12 +64703,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 7,
-          "external": 5
+          "local": 8,
+          "external": 6
         }
       },
-      "state_revision": 48,
-      "last_transition": "2026-11-07T22:50:26Z",
+      "state_revision": 51,
+      "last_transition": "2026-11-07T23:11:10Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64920,20 +65057,56 @@
               "at": "2026-11-07T14:32:43Z"
             }
           ]
+        },
+        "F-9a00af917bb6": {
+          "digest": "9a00af917bb6433e348af9586225d3ad82331efdc3834fbdb0ee1040b8e10929",
+          "text": "**O1. Calls through the class name are not followed, although the guide says \"method\".** `ModuleScan.reached()`'s `helper_name` (`tests/test_ci_changes.py:578-586`) resolves `f()` and `self.f()`/`cls.f()` only. `B._repo().rglob(\"*\")` with `@staticmethod def _repo(): return fixtures.REPO_ROOT`, and `_repo = lambda: fixtures.REPO_ROOT` then `_repo().rglob(\"*\")`, are not flagged (checked with `scan()`). No module in the repository does this today, and the guide already says the guard is static and has limits. Either follow `<class defined in the module>.f()`, or make `docs/guide/ci-and-releases.md` (\"a call to a same-module function or method\") say `self.`/`cls.` methods.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T23:06:24Z"
+            }
+          ]
+        },
+        "F-a3871cd1d6cf": {
+          "digest": "a3871cd1d6cfc70543db830d8a3cffd7d446b0095fe8dafafef7d616de3523bd",
+          "text": "**O2. `TEST_RESULTS.md` still describes revision 7.** Its header and figures name revision 7, `05ad8d3` and 76 narrow tests, while the bundle is revision 8 at `9b484b9`. The revision-8 results are only in `IMPLEMENTATION_SUMMARY.md`. Refresh it with the post-fix bundle so the two agree.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T23:06:24Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "8284c3bfa9c7f22cff82a8bf328a0d3406d2db1a471d9959cbedf03fede750bb",
+        "review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "10011a47581a9ee82d17319997424c4302a7fac9c068af15c00bf6a5e224e514",
+          "bundle_id": "1fa912280b9982b098b99a8d811e11087b16d9392090940c74322d9bc9445285",
           "verdict": "APPROVE",
-          "round": 7,
-          "completed_at": "2026-11-07T14:32:43Z",
-          "verdict_sha256": "505b20e10ac5464f03fcb88bfe8c9374707c4a5d93fb024d02ca7f1b26313f35",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "round": 8,
+          "completed_at": "2026-11-07T23:06:24Z",
+          "verdict_sha256": "4d12fb39ad57c12e38ff9803db5ce00ee926adcb6b3b7231eb6c1ac404876832",
+          "run_ref": "session:local .ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "1fa912280b9982b098b99a8d811e11087b16d9392090940c74322d9bc9445285",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-07T23:09:39Z",
+          "verdict_sha256": "7cb3d72ca92672c550bf0a0261a28173ca1e8280c997859f2c1b0c112443bcee",
+          "run_ref": "codex:20261107T230706Z-3d9b494d",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

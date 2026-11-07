@@ -134,8 +134,9 @@ required check pending forever.
   segment or through an `os.path` form it does not fold is not seen, and a
   pattern made only of `*`/`**` (a whole-tree walk) counts only on a root
   that a repository-root value reaches (`REPO_ROOT`, or what is assigned,
-  returned or passed from it, in the same module), whatever the root is
-  called; the reach is by name within a module, so a temporary directory
+  returned or passed from it, a call to a same-module function or
+  method that returns one, or an import alias of `REPO_ROOT`, in the same
+  module), whatever the root is called; the reach is by name within a module, so a temporary directory
   that shares a name with a reached one is flagged and needs an entry in
   `MENTIONS`, and a value passed in from another module is not followed.
 - **Fail closed.** `code` is `false` only for a `pull_request` event whose

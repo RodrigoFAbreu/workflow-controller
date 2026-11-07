@@ -570,8 +570,18 @@ class ModuleScan:
             text = ast.unparse(node)
             return (chain is not None and chain.kind == "rootval") or text in reached or (
                 isinstance(node, (ast.Name, ast.Attribute)) and _is_repository_constant(text)) or (
-                isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and returns_root(node.func.id, seen))
+                isinstance(node, ast.Call) and helper_name(node) is not None
+                and returns_root(helper_name(node), seen))
+
+        def helper_name(call: ast.Call) -> str | None:
+            """The module function a call names: ``f()`` or ``self.f()``/``cls.f()``."""
+            func = call.func
+            if isinstance(func, ast.Name):
+                return func.id
+            if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+                    and func.value.id in ("self", "cls")):
+                return func.attr
+            return None
 
         def walk(node: ast.AST, scope: Scope) -> bool:
             changed = False
@@ -593,7 +603,16 @@ class ModuleScan:
                     if text and text not in reached:
                         reached.add(text)
                         changed = True
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name == REPOSITORY_CONSTANT and alias.asname and alias.asname not in reached:
+                        reached.add(alias.asname)
+                        changed = True
             if isinstance(node, ast.Call):
+                call_text = ast.unparse(node)
+                if call_text not in reached and helper_name(node) is not None and is_root(node, scope):
+                    reached.add(call_text)
+                    changed = True
                 callee = node.func.id if isinstance(node.func, ast.Name) else (
                     node.func.attr if isinstance(node.func, ast.Attribute) else None)
                 if callee in params:
@@ -822,9 +841,11 @@ class DocumentationSetGuardTests(unittest.TestCase):
         self.assertEqual({(s["module"], s["path"]) for s in reads if s not in backlog},
                          {(m, p) for m, p, _ in cc.MENTIONS}, [describe(s) for s in reads])
         self.assertEqual(len(by_module), 7, by_module)
-        # The table is one entry per module and root expression, about ten
-        # to twelve; it is counted apart from the list of mentions.
-        self.assertLessEqual(len(cc.FIXTURES), 12)
+        # An expectation check, not a ceiling: the plan expects roughly ten
+        # to twelve entries (one per module and root expression, counted apart
+        # from the mentions), and the table is bounded by the fixture sites it
+        # explains. A larger table is a prompt to look again, not a defect.
+        self.assertLessEqual(len(cc.FIXTURES), 12, "more than the expected ten to twelve fixture entries")
 
 
 # ---------------------------------------------------------------------------
@@ -1276,6 +1297,53 @@ class TopLevelGlobTests(unittest.TestCase):
                 import tempfile
                 base = tempfile.mkdtemp()
                 found = list(base.rglob("*"))
+            """,
+        }.items():
+            with self.subTest(name=name):
+                self.assertFalse(scan(source).violations)
+
+    def test_a_whole_tree_walk_rooted_at_a_helper_call_or_an_alias_is_flagged(self):
+        """LIR-R6-I1: a call to a helper that returns a repository-root value
+        is a root; one that returns a temporary path is not."""
+        sources = {
+            "function helper": """
+                from tests import fixtures
+                def checkout():
+                    return fixtures.REPO_ROOT
+                found = [p.read_text() for p in checkout().rglob("*")]
+            """,
+            "method helper": """
+                from tests import fixtures
+                class T:
+                    def _repo(self):
+                        return fixtures.REPO_ROOT
+                    def test(self):
+                        return list(self._repo().rglob("*"))
+            """,
+            "import alias": """
+                from tests.fixtures import REPO_ROOT as R
+                found = list(R.rglob("*"))
+            """,
+        }
+        for name, source in sources.items():
+            with self.subTest(name=name):
+                self.assertTrue(scan(source).violations)
+        for name, source in {
+            "temporary function helper": """
+                import tempfile
+                from pathlib import Path
+                def scratch():
+                    return Path(tempfile.mkdtemp())
+                found = list(scratch().rglob("*"))
+            """,
+            "temporary method helper": """
+                import tempfile
+                from pathlib import Path
+                class T:
+                    def _tmp(self):
+                        return Path(tempfile.mkdtemp())
+                    def test(self):
+                        return list(self._tmp().rglob("*"))
             """,
         }.items():
             with self.subTest(name=name):

@@ -505,8 +505,8 @@ def build_prompt(stage: str, expected: Mapping[str, str], *, bundle_dir: str, no
 #: structure), for :func:`build_local_prompt` (``workflow-controller-h4e2`` D3).
 LOCAL_REVIEWER_ROLES = {"plan": "LOCAL_MODEL_PLAN_REVIEW", "implementation": "LOCAL_MODEL_IMPLEMENTATION_REVIEW"}
 LOCAL_VERDICT_SECTIONS = ("Blocking findings", "Important findings", "Optional findings", "Missing tests",
-                          "Architecture and maintainability", "Migration and data-integrity", "Usability",
-                          "Required acceptance criteria")
+                          "Architecture and maintainability concerns", "Migration and data-integrity concerns",
+                          "Usability concerns", "Required acceptance criteria")
 
 
 def build_local_prompt(stage: str, *, bundle_dir: str, brief: str | None = None, changes_path: str | None = None,

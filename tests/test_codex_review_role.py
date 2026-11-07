@@ -154,6 +154,56 @@ class RunTests:
         (entry,) = self.execs()
         self.assertEqual(entry["prompt"], prompt)
 
+    def test_the_composed_header_passes_the_workflows_parser_with_the_model_exactly_when_required(self) -> None:
+        values = review_recorder.check(self.root, self.STAGE, WID).values
+        body = message("APPROVE").split("\n", 2)[2]
+        probe = ("text = Path(sys.argv[1]).read_text()\nfingerprint.assert_verdict_well_formed(text)\n"
+                 "print(ws.json.dumps(fingerprint.parse_review_feedback_header(text)))\n")
+        for distinct in (True, False):
+            with self.subTest(distinct=distinct):
+                composed = crr.compose_verdict({**values, "gate": {**(values.get("gate") or {}), "requires_distinct": distinct}},
+                                               "APPROVE", None, body, model="gpt-x", completed_at="2026-11-07T00:00:00Z")
+                path = self._area / "composed.md"
+                path.write_text(composed)
+                out = fixtures.run_workflow_python(self.root, probe, str(path)).stdout
+                header = json.loads(out.strip().splitlines()[-1])
+                self.assertEqual(header["status"], "APPROVE")
+                self.assertEqual(header["reviewer_model"], "openai/gpt-x" if distinct else None)
+
+    def test_the_workflows_validator_and_next_action_accept_the_recorded_state(self) -> None:
+        self.script(message=message("APPROVE"))
+        ending = self.run_role()
+        self.assertEqual(ending.code, crr.RECORDED, dict(ending.evidence))
+        fixtures.run_workflow_python(
+            self.root, "ws.validate_state(ws.json.loads(Path('docs/ai-workflow/WORKFLOW_STATE.json').read_text()), "
+                       "repo_root=Path.cwd())\n")
+        action = protocol.next_action(self.root, WID)
+        self.assertNotEqual(action.basis.state_identity, "")
+        self.assertIn(json.loads((self.root / STATE).read_text())["work_items"][WID]["phase"],
+                      ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"))
+
+    def test_the_inputs_include_a_previous_feedback_and_a_verified_changes_file(self) -> None:
+        feedback = self.root / FEEDBACK
+        feedback.parent.mkdir(parents=True, exist_ok=True)
+        feedback.write_text("# Review Decision\n\nStatus: REVISE\n")
+        real = review.changes_file_for
+        changes_rel = f".ai-review/{WID}/CHANGES_SINCE_REVIEW.md"
+        (self.root / changes_rel).write_text("# Changes\n")
+        with mock.patch.object(review, "changes_file_for", lambda *a, **k: changes_rel):
+            seen: dict = {}
+
+            def spy(task, **kw):
+                clone = kw["cwd"]
+                seen["files"] = sorted(p.relative_to(clone).as_posix() for p in (clone / ".ai-review").rglob("*")
+                                       if p.is_file())
+                return self.seam(task, **kw)
+
+            self.script(message=message("APPROVE"))
+            self.run_role(launch=spy)
+        self.assertIn(FEEDBACK, seen["files"])
+        self.assertIn(changes_rel, seen["files"])
+        self.assertTrue(real)
+
     def test_the_clone_holds_exactly_the_inputs_and_a_dirty_managed_tree_is_still_reviewed(self) -> None:
         (self.root / "README.md").write_text("uncommitted\n")
         self.script(message=message("APPROVE"))
@@ -248,6 +298,9 @@ class RunTests:
             "second status": "Status: APPROVE\nStatus: REVISE\n" + sections,
             "title": "# Review Decision\nStatus: APPROVE\n" + sections,
             "prose first": "Looks fine.\nStatus: APPROVE\n" + sections,
+            "no section at all": "Status: APPROVE\n",
+            "a missing section": message("APPROVE").replace("## Usability concerns", "## Usability"),
+            "a bad scope on a revise": message("REVISE", scope="banana"),
         }
         for name, text in cases.items():
             with self.subTest(name):
@@ -265,6 +318,24 @@ class RunTests:
     def test_prose_naming_the_markers_is_recorded_and_real_armour_is_refused(self) -> None:
         self.script(message=message("APPROVE", extra=" The check looks for `-----BEGIN` and `PRIVATE KEY-----`."))
         self.assertEqual(self.run_role().code, crr.RECORDED)
+
+    def test_a_pgp_private_key_block_is_armour_too(self) -> None:
+        self.assertTrue(crr.ARMOUR.search(b"-----BEGIN PGP PRIVATE KEY BLOCK-----"))
+        self.assertTrue(crr.ARMOUR.search(b"-----BEGIN PRIVATE KEY-----"))
+        self.assertFalse(crr.ARMOUR.search(b"-----BEGIN PUBLIC KEY-----"))
+
+    def test_the_recorders_advisory_reaches_the_ending_evidence(self) -> None:
+        real = review_recorder.check
+
+        def with_advisory(*args, **kw):
+            result = real(*args, **kw)
+            return dataclasses.replace(result, values={**result.values, "advisory": "bundle_id differs"})
+
+        self.script(message=message("APPROVE"))
+        with mock.patch.object(review_recorder, "check", with_advisory):
+            ending = self.run_role()
+        self.assertEqual(ending.code, crr.RECORDED, dict(ending.evidence))
+        self.assertEqual(ending.evidence["advisory"], "bundle_id differs")
 
     def test_armour_in_the_message_is_refused_and_leaves_no_text(self) -> None:
         self.script(message=message("APPROVE", extra=f" {ARMOUR}"))
@@ -366,6 +437,7 @@ class RunTests:
             ("no_final_message", {"verdict": "none"}, {}),
             ("timeout", {"verdict": "hang"}, {"timeout": 1}),
             ("usage_limit", {"verdict": "limit"}, {}),
+            ("terminated_by_signal", {"message": message("APPROVE"), "signal": "SIGTERM"}, {}),
             ("sandbox_breach", {"message": message("APPROVE"),
                                 "write_outside": [str(self.layout.worktree / ".git" / "hooks" / "post-merge")]}, {}),
         )
@@ -559,9 +631,24 @@ class ModuleTests(unittest.TestCase):
         self.assertEqual(crr.RELEASE_CHANGED, job.WORKFLOW_RELEASE_CHANGED_REASON)
 
     def test_the_body_is_the_message_unchanged_from_its_first_section(self) -> None:
-        body = b"## Blocking findings\r\n\r\nNone.\x0cstill the same line\n\n## Important findings\n\nNone.\n"
+        rest = "".join(f"\n## {name}\n\nNone.\n" for name in review.LOCAL_VERDICT_SECTIONS[1:])
+        body = (b"## Blocking findings\r\n\r\nNone.\x0cstill the same line\n" + rest.encode())
         status, scope, parsed = crr.parse_verdict(b"Status: APPROVE\nReview scope: full\n\n" + body)
         self.assertEqual((status, scope, parsed.encode()), ("APPROVE", "full", body))
+
+    def test_the_sections_are_the_headings_the_protocol_requires(self) -> None:
+        text = (REPO_ROOT / "docs" / "ai-workflow" / "REVIEW_PROTOCOL.md").read_text()
+        template = text.split("Reviewed review_content_id: <the exact review_content_id this feedback reviewed>", 1)[1]
+        headings = [line[3:] for line in template.split("```", 1)[0].splitlines() if line.startswith("## ")]
+        self.assertEqual(headings, list(review.LOCAL_VERDICT_SECTIONS))
+
+    def test_a_message_with_no_section_or_a_missing_one_is_refused(self) -> None:
+        for data in (b"Status: APPROVE\n", b"Status: APPROVE\n\nLooks good.\n",
+                     b"Status: APPROVE\n\n## Blocking findings\n\nNone.\n"):
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                crr.parse_verdict(data)
+        with self.assertRaises(ValueError):
+            crr.parse_verdict(b"Status: REVISE\nReview scope: banana\n\n" + message("REVISE").split("\n", 2)[2].encode())
 
     def test_the_causes_are_the_ones_the_plan_names(self) -> None:
         self.assertEqual(set(crr.CAUSES), {

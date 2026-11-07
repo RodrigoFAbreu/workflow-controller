@@ -412,7 +412,7 @@ operator can select changes.
 - **The deny set** (`codex_review_role.CAUSES`), one cause per refusal. On the way in, before the launch:
   `special_file`, `submodule`, `credential_input` (a credential-like name, or a private-key armour line in the content),
   `path_escape` and `input_over_bound` (2000 paths, 64 MiB, 8 MiB a file). On the way out, the verdict is discarded and
-  nothing is recorded: `verdict_over_bound` (1 MiB), `verdict_unparsed`, `credential_in_verdict` (armour in the message, the
+  nothing is recorded: `verdict_over_bound` (1 MiB), `verdict_unparsed` (invalid UTF-8, a bad `Status:` or `Review scope:`, extra lines before the first section, or any of the eight protocol sections missing), `credential_in_verdict` (armour in the message, the
   worker's `stdout` or `stderr`, checked first on every result; the result is returned with those fields emptied, though the
   session rollouts stay in `codex-home/sessions` for the usage admission) and `read_only_violated` (the clone is not as the
   run left it: a changed file, a new ref, a moved `HEAD`, a changed or extra input).

@@ -56,7 +56,8 @@ written here once the watchdog is armed: a test that orphans a fake waits for it
 ``exec``: ``verdict`` (``exact``, ``wrong_id_first``, ``bad_revision``,
 ``none``, ``limit``, ``hang``, ``missing_status``, ``block``, ``revise``; the header-retry
 kinds ``revise_then_approve``, ``revise_then_revise`` and ``no_status_then_exact`` each give a wrong id first and an exact
-header on the retry, with the ``Status:`` the name says), ``exit``,
+header on the retry, with the ``Status:`` the name says), ``exit``, ``signal`` (a signal name the fake sends itself after writing its
+message, so the launcher sees a death by signal),
 ``limit_shape`` (``string``, ``http429``, ``percent`` or ``string_full`` (the string error with the five-hour window at 100 percent): how the rollout reports the
 limit), ``message`` (text written to the ``-o`` file instead of a review verdict, so a tester's final message can be scripted; ``""``
 writes an empty file), ``message_bytes`` (base64 of the raw bytes written to the ``-o`` file instead, for a message that is not UTF-8), ``stderr`` (text printed on stderr, a transcript line), ``stdout`` (text printed on stdout), ``subagent``
@@ -577,6 +578,8 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
             Path(out).write_text(text)
     if notify:
         record["ran"].append({"layer": "notify", **_run_command(notify, cwd)})
+    if spec.get("signal"):
+        os.kill(os.getpid(), getattr(signal, spec["signal"]))
     return code
 
 

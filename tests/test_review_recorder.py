@@ -36,8 +36,8 @@ STATE = "docs/ai-workflow/WORKFLOW_STATE.json"
 FEEDBACK = f".ai-review/{WID}/feedback/REVIEW_FEEDBACK.md"
 COMPLETED_AT = "2026-11-07T10:00:00Z"
 SECTIONS = ("Blocking findings", "Important findings", "Optional findings", "Missing tests",
-            "Architecture and maintainability", "Migration and data-integrity", "Usability",
-            "Required acceptance criteria")
+            "Architecture and maintainability concerns", "Migration and data-integrity concerns",
+            "Usability concerns", "Required acceptance criteria")
 
 
 def _state(root: Path) -> dict:

@@ -69,7 +69,7 @@ COMMANDS = {"plan": "/review-plan", "implementation": "/review-implementation"}
 
 #: A private-key armour line: five dashes, ``BEGIN``, optional upper-case key-type words, ``PRIVATE KEY``, five
 #: dashes, as one token. Prose naming the markers separately does not match.
-ARMOUR = re.compile(rb"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----")
+ARMOUR = re.compile(rb"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY(?: BLOCK)?-----")
 
 _CREDENTIAL_NAMES = frozenset({"auth.json", ".env", "id_rsa", "id_ed25519", ".claude.json", ".credentials.json"})
 _CREDENTIAL_DIRS = frozenset({".ssh", ".aws", ".codex"})
@@ -247,11 +247,15 @@ def _worker_output_holds_armour(raw: bytes, result: worker.WorkerResult) -> bool
     return _armour_in(raw, result.result, result.stdout, result.stderr)
 
 
+REVIEW_SCOPES = ("changes", "full")
+
+
 def parse_verdict(data: bytes) -> tuple[str, str | None, str]:
     """``(status, review_scope, body)`` of the final message; a ``ValueError`` is the cause ``verdict_unparsed``.
     Before the first ``## `` line only the ``Status:`` line, one optional ``Review scope:`` line and blank lines are
     allowed. The body is the message's own text from that line on: a verdict the Workflow would refuse is refused,
-    never repaired (D3)."""
+    never repaired (D3). Every section of ``review.LOCAL_VERDICT_SECTIONS`` must be present as a heading line, and a
+    ``Review scope:`` must be ``changes`` or ``full``."""
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -271,6 +275,12 @@ def parse_verdict(data: bytes) -> tuple[str, str | None, str]:
             raise ValueError(f"the final message has {line[:60]!r} before its first section")
     if status not in review.STATUSES:
         raise ValueError(f"the final message's Status is {status!r}, not one of {', '.join(review.STATUSES)}")
+    if scope is not None and scope not in REVIEW_SCOPES:
+        raise ValueError(f"the final message's Review scope is {scope!r}, not one of {', '.join(REVIEW_SCOPES)}")
+    headings = {line.rstrip("\r\n") for line in lines[first:] if line.startswith("## ")}
+    missing = [name for name in review.LOCAL_VERDICT_SECTIONS if f"## {name}" not in headings]
+    if missing:
+        raise ValueError("the final message lacks the section(s) " + ", ".join(f"`## {name}`" for name in missing))
     return status, scope, "".join(lines[first:]).rstrip("\n") + "\n"
 
 
@@ -488,7 +498,8 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
     digest = _sha256(composed_bytes)
     path = runtime.write_bytes(runtime_root, f"reviews/{job_id}-verdict.md", composed_bytes)
     progress({"read_only": True, "stage": "recording", "verdict_sha256": digest})
-    evidence_base = {"verdict": composed, "verdict_sha256": digest, **dirty}
+    evidence_base = {"verdict": composed, "verdict_sha256": digest, **dirty,
+                     **({"advisory": values["advisory"]} if values.get("advisory") else {})}
     try:
         recorded = review_recorder.record(root, stage, work_item_id, path, state_identity=state_identity,
                                           digests=values["digests"])

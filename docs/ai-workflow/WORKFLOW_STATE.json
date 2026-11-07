@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -64566,12 +64566,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 5,
+          "local": 6,
           "external": 4
         }
       },
-      "state_revision": 43,
-      "last_transition": "2026-11-07T13:25:45Z",
+      "state_revision": 44,
+      "last_transition": "2026-11-07T13:40:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64890,6 +64890,20 @@
               "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
               "verdict": "APPROVE",
               "at": "2026-11-07T13:05:38Z"
+            }
+          ]
+        },
+        "F-9516b63ee341": {
+          "digest": "9516b63ee34149434147963871675db7215c8c780421d86f5870534b2ff5e789",
+          "text": "**O1. The fixture-table cap of 12 is not in the plan.** `test_the_first_run_matches_the_expected_result` asserts `len(cc.FIXTURES) <= 12`. The rejection of \"fixture entries for every unknown root\" in rounds 4 and 5 rests on that cap. D2's Limits paragraph says the opposite: the fixture table \"is bounded by the fixture sites it explains, never by that limit\". \"Roughly ten to twelve\" is the plan's expected count, not a ceiling. The narrowed rule may still be the right engineering call, but its stated reason should match the plan, or the assertion should be relabelled as an expectation check.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 6,
+              "review_content_id": "a9a3e2fcf7ea7955dabc0f3171ce70901a91c9a7222bb2362ac7394764a84bbc",
+              "verdict": "REVISE",
+              "at": "2026-11-07T13:40:23Z"
             }
           ]
         }

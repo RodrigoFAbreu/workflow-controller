@@ -264,14 +264,23 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
 `tools/check_docs.py` keeps the documentation true without a network or a
 running Controller. It uses only the standard library, and
 `tests/test_docs.py` runs it on the repository and tries every rule on
-small synthetic trees, so the checks run inside the validate job's `tests`
-shards with no workflow change.
+small synthetic trees. They run in the validate workflow's `docs` job on every
+pull request, and in the `tests` shards of a pull request that changes code.
 
 ```bash
 python3 tools/check_docs.py             # exit 0 when clean, 1 with one line per problem
 python3 tools/check_docs.py --root DIR  # check another tree
-python3 -m unittest tests.test_docs
+python3 -m unittest tests.test_docs tests.test_backlog
 ```
+
+These are the commands of the `docs` job, so a clean run locally is a clean
+`docs` job. A pull request that changes only documentation also skips the test
+shards (see [Documentation-only pull requests](ci-and-releases.md#documentation-only-pull-requests)).
+Which paths count as documentation is `tools/ci_changes.py`'s set, and
+`python3 -m unittest tests.test_ci_changes` keeps it honest. When a new test
+reads a path of that set, the guard test names the reader and the path; take
+the path out of the set (or read it only from the two gate modules), because
+a path a test reads is code.
 
 What it checks:
 

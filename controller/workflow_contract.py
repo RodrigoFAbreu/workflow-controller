@@ -696,6 +696,8 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
     ``hook.<event>.enabled=false`` is added for every event in
     :data:`_COMMIT_HOOK_EVENTS`, each checked like the rest."""
     base = {**os.environ, "GIT_ALLOW_PROTOCOL": "", _FILTER_PROBE_ENV: str(private_dir)}
+    if real_index:
+        base.pop("GIT_INDEX_FILE", None)  # "the target's own index" means the one in its Git directory
     run = _PreflightGit(root, context=context, timeout=timeout, deadline=deadline)
     pinned = _with_git_config(base, _GIT_PINNED_CONFIG, context)
     private_index: dict[str, str] = {}

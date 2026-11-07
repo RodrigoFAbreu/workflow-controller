@@ -1169,6 +1169,12 @@ class RealIndexTest(_SeededTargets):
         self.assertNotIn("index", call["private_entries"])
         self.assertNotIn("GIT_INDEX_FILE", call["env"])
 
+    def test_with_the_keyword_an_inherited_git_index_file_is_dropped(self) -> None:
+        with mock.patch.dict(os.environ, {"GIT_INDEX_FILE": "/nonexistent/index"}):
+            answer, call = self.run_probe(self.target("ready"), real_index=True)
+        self.assertIsNone(answer["index"])
+        self.assertNotIn("GIT_INDEX_FILE", call["env"])
+
     def test_with_the_keyword_every_commit_hook_event_is_switched_off_at_command_scope(self) -> None:
         answer, _call = self.run_probe(self.target("ready"), real_index=True)
         for event in workflow_contract._COMMIT_HOOK_EVENTS:

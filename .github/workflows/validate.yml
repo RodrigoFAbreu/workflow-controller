@@ -3,7 +3,9 @@
 #
 # The required validation, called by ci.yml and main.yml. Its input tests-from-run is
 # empty except when main.yml reuses a pull request run (CI_MAIN_REUSE=on); then the
-# shards are skipped and tests-result re-verifies that run's recorded results.
+# shards are skipped and tests-result re-verifies that run's recorded results. A pull
+# request that changes only documentation (tools/ci_changes.py) skips plan and tests;
+# the docs job runs on every event and tests-result requires it.
 name: Validate
 "on":
   workflow_call:
@@ -14,7 +16,44 @@ name: Validate
         required: false
         default: ""
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: "${{ steps.detect.outputs.code }}"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: detect
+        id: detect
+        run: "python3 tools/ci_changes.py detect"
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: "install (editable)"
+        run: "pip install -e ."
+      - name: "documentation checks"
+        run: |
+          python3 tools/check_docs.py
+          python3 -m unittest tests.test_docs tests.test_backlog
   plan:
+    needs:
+      - changes
+    if: "needs.changes.outputs.code == 'true'"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,8 +80,9 @@ jobs:
   tests:
     name: "tests (${{ matrix.shard }})"
     needs:
+      - changes
       - plan
-    if: "inputs.tests-from-run == ''"
+    if: "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -70,6 +110,8 @@ jobs:
           path: results/
   tests-result:
     needs:
+      - changes
+      - docs
       - plan
       - tests
     if: "always()"
@@ -84,18 +126,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/download-artifact@v4
+      - if: "needs.changes.outputs.code == 'true'"
+        uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: test-plan
           path: results
-      - if: "inputs.tests-from-run == ''"
+      - if: "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'"
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           pattern: "results-*"
           path: results/shards
-      - if: "inputs.tests-from-run != ''"
+      - if: "inputs.tests-from-run != '' && needs.changes.outputs.code == 'true'"
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -106,22 +149,25 @@ jobs:
           repository: "${{ github.repository }}"
       - name: "verify the reused results"
         id: verify
-        if: "inputs.tests-from-run != ''"
+        if: "inputs.tests-from-run != '' && needs.changes.outputs.code == 'true'"
         run: "python3 tools/ci_reuse.py verify --reused-dir reused --plan results/plan.json"
       - name: aggregate
-        if: "inputs.tests-from-run == ''"
+        if: "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'"
         run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir results/shards --run-attempt ${{ github.run_attempt }} --write-selected results/selected --upstream-result plan=${{ needs.plan.result }} --upstream-result tests=${{ needs.tests.result }} --plan-artifact test-plan --results-artifact-prefix results-"
       - name: "aggregate the reused results"
-        if: "inputs.tests-from-run != ''"
+        if: "inputs.tests-from-run != '' && needs.changes.outputs.code == 'true'"
         run: "python3 tools/run_tests.py aggregate --plan results/plan.json --results-dir ${{ steps.verify.outputs.selected-dir }} --write-selected results/selected --upstream-result plan=${{ needs.plan.result }}"
       - name: "record the tree"
-        if: "always()"
+        if: "always() && needs.changes.outputs.code == 'true'"
         run: "mkdir -p results/selected && git rev-parse 'HEAD^{tree}' > results/selected/tree.txt"
-      - if: "always()"
+      - if: "always() && needs.changes.outputs.code == 'true'"
         uses: actions/upload-artifact@v4
         with:
           name: "timings-ci-attempt-${{ github.run_attempt }}"
           path: results/selected/
+      - name: "require the gate"
+        if: "always()"
+        run: "python3 tools/ci_changes.py require --changes ${{ needs.changes.result }} --docs ${{ needs.docs.result }} --code \"${{ needs.changes.outputs.code }}\""
   package:
     runs-on: ubuntu-latest
     permissions:

@@ -350,13 +350,17 @@ class ValidatePlanTest(unittest.TestCase):
         return shlex.split(_run(steps[_index(steps, lambda s: fragment in _run(s))]))
 
     def test_job_graph(self) -> None:
-        self.assertEqual(list(self.jobs), ["plan", "tests", "tests-result", "package"])
-        self.assertNotIn("needs", self.jobs["plan"])
-        self.assertEqual(self.jobs["tests"]["needs"], ["plan"])
-        self.assertEqual(self.jobs["tests-result"]["needs"], ["plan", "tests"])
+        self.assertEqual(list(self.jobs),
+                         ["changes", "docs", "plan", "tests", "tests-result", "package"])
+        self.assertNotIn("needs", self.jobs["changes"])
+        self.assertNotIn("needs", self.jobs["docs"])
+        self.assertEqual(self.jobs["plan"]["needs"], ["changes"])
+        self.assertEqual(self.jobs["tests"]["needs"], ["changes", "plan"])
+        self.assertEqual(self.jobs["tests-result"]["needs"], ["changes", "docs", "plan", "tests"])
         self.assertEqual(self.jobs["tests-result"]["if"], "always()")
         # The shards are skipped only when a reused run's id is passed in.
-        self.assertEqual(self.jobs["tests"]["if"], "inputs.tests-from-run == ''")
+        self.assertEqual(self.jobs["tests"]["if"],
+                         "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
         self.assertNotIn("needs", self.jobs["package"])
 
     def test_check_names(self) -> None:
@@ -415,14 +419,16 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertEqual([s["with"] for s in downloads[:2]],
                          [{"name": "test-plan", "path": "results"},
                           {"pattern": "results-*", "path": "results/shards"}])
-        self.assertEqual(downloads[1]["if"], "inputs.tests-from-run == ''")
+        self.assertEqual(downloads[1]["if"],
+                         "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
         self.assertNotIn("merge-multiple", ci.emit(ci.validate_workflow()))
         # A missing artifact must reach aggregate (which exits 2, naming it),
         # not end the job before it can say so.
         self.assertTrue(all(s["continue-on-error"] is True for s in downloads))
         aggregate = _index(steps, lambda s: s.get("name") == "aggregate")
         self.assertTrue(all(steps.index(s) < aggregate for s in downloads))
-        self.assertEqual(steps[aggregate]["if"], "inputs.tests-from-run == ''")
+        self.assertEqual(steps[aggregate]["if"],
+                         "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
         self.assertNotIn("continue-on-error", steps[aggregate])
 
     def test_artifact_names(self) -> None:
@@ -439,12 +445,15 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertRegex(name, ci.test_shards.RESULTS_ARTIFACT_DIR_RE)
         timings = [s for s in _steps(self.jobs["tests-result"]) if "upload-artifact" in _uses(s)]
         self.assertEqual([(s["if"], s["with"]) for s in timings],
-                         [("always()", {"name": "timings-ci-attempt-${{ github.run_attempt }}",
-                                        "path": "results/selected/"})])
-        self.assertEqual(timings[0], _steps(self.jobs["tests-result"])[-1])
+                         [("always() && needs.changes.outputs.code == 'true'",
+                           {"name": "timings-ci-attempt-${{ github.run_attempt }}",
+                            "path": "results/selected/"})])
+        # The require step is last (CI1a D5); the upload is the one before it.
+        self.assertEqual(timings[0], _steps(self.jobs["tests-result"])[-2])
         # The tree is recorded before the upload, whatever the verdict.
         tree = _index(_steps(self.jobs["tests-result"]), lambda s: s.get("name") == "record the tree")
-        self.assertEqual(_steps(self.jobs["tests-result"])[tree]["if"], "always()")
+        self.assertEqual(_steps(self.jobs["tests-result"])[tree]["if"],
+                         "always() && needs.changes.outputs.code == 'true'")
         self.assertIn("results/selected/tree.txt", _run(_steps(self.jobs["tests-result"])[tree]))
 
     def test_tests_job_allows_user_namespaces_before_the_shard(self) -> None:
@@ -467,6 +476,127 @@ class ValidatePlanTest(unittest.TestCase):
                     with self.subTest(job=job_name, uses=_uses(step)):
                         self.assertIsInstance(step["uses"], str)
                         self.assertRegex(step["uses"], r"^actions/[a-z-]+@v\d+$")
+
+
+class ChangeDetectionTest(unittest.TestCase):
+    """CI1a: ``changes`` and ``docs`` jobs, and the documentation-only mode of
+    ``tests-result`` (D3, D4, D5, D6)."""
+
+    CODE = "needs.changes.outputs.code == 'true'"
+
+    def setUp(self) -> None:
+        self.validate = ci.validate_workflow()
+        self.jobs = _jobs(self.validate)
+        self.result_steps = _steps(self.jobs["tests-result"])
+
+    def _expressions(self, job: dict) -> list[str]:
+        """Every string of the job that can hold a ``${{ }}`` or an ``if``."""
+        found = []
+
+        def walk(value) -> None:
+            if isinstance(value, str):
+                found.append(value)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    walk(item)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+        walk({k: v for k, v in job.items() if k != "outputs"})
+        return found
+
+    def test_every_needs_read_names_a_direct_dependency_and_a_declared_output(self) -> None:
+        for name, job in self.jobs.items():
+            direct = set(job.get("needs", []))
+            for text in self._expressions(job):
+                for needed, rest in re.findall(r"needs\.([a-z-]+)((?:\.[a-z]+)*)", text):
+                    with self.subTest(job=name, read=f"needs.{needed}{rest}"):
+                        self.assertIn(needed, direct)
+                        if rest.startswith(".outputs."):
+                            output = rest[len(".outputs."):]
+                            self.assertIn(output, self.jobs[needed].get("outputs", {}))
+
+    def test_changes_declares_code_from_the_detect_step(self) -> None:
+        changes = self.jobs["changes"]
+        self.assertEqual(changes["outputs"], {"code": "${{ steps.detect.outputs.code }}"})
+        steps = _steps(changes)
+        detect = steps[_index(steps, lambda s: s.get("id") == "detect")]
+        self.assertEqual(_run(detect), "python3 tools/ci_changes.py detect")
+        checkout = steps[_index(steps, lambda s: _uses(s).startswith("actions/checkout@"))]
+        self.assertEqual(checkout["with"]["fetch-depth"], 0)
+
+    def test_docs_runs_the_documentation_gate_from_a_shallow_checkout(self) -> None:
+        docs = self.jobs["docs"]
+        self.assertNotIn("needs", docs)
+        self.assertNotIn("if", docs)
+        steps = _steps(docs)
+        checkout = steps[_index(steps, lambda s: _uses(s).startswith("actions/checkout@"))]
+        self.assertNotIn("fetch-depth", checkout.get("with", {}))
+        gate = _run(steps[-1]).split("\n")
+        self.assertEqual(gate, ["python3 tools/check_docs.py",
+                                "python3 -m unittest tests.test_docs tests.test_backlog"])
+        self.assertTrue(any(_run(s) == "pip install -e ." for s in steps[:-1]))
+
+    def test_plan_and_tests_carry_the_code_condition(self) -> None:
+        self.assertEqual(self.jobs["plan"]["needs"], ["changes"])
+        self.assertEqual(self.jobs["plan"]["if"], self.CODE)
+        self.assertEqual(self.jobs["tests"]["needs"], ["changes", "plan"])
+        self.assertEqual(self.jobs["tests"]["if"], f"inputs.tests-from-run == '' && {self.CODE}")
+
+    def test_tests_result_needs_every_gate_job_and_still_always_runs(self) -> None:
+        self.assertEqual(self.jobs["tests-result"]["needs"], ["changes", "docs", "plan", "tests"])
+        self.assertEqual(self.jobs["tests-result"]["if"], "always()")
+
+    def test_require_is_the_last_step_and_runs_after_the_report(self) -> None:
+        last = self.result_steps[-1]
+        self.assertEqual(last["if"], "always()")
+        self.assertEqual(shlex.split(_run(last)),
+                         ["python3", "tools/ci_changes.py", "require",
+                          "--changes", "${{", "needs.changes.result", "}}",
+                          "--docs", "${{", "needs.docs.result", "}}",
+                          "--code", "${{ needs.changes.outputs.code }}"])
+        self.assertEqual(sum("ci_changes.py require" in _run(s) for s in self.result_steps), 1)
+        # The aggregate has run before require can fail the job.
+        aggregate = _index(self.result_steps, lambda s: s.get("name") == "aggregate")
+        self.assertLess(aggregate, len(self.result_steps) - 1)
+
+    def test_the_tree_and_the_timings_keep_always_with_the_code_condition(self) -> None:
+        tree = self.result_steps[_index(self.result_steps, lambda s: s.get("name") == "record the tree")]
+        uploads = [s for s in self.result_steps if "upload-artifact" in _uses(s)]
+        self.assertEqual(len(uploads), 1)
+        for step in (tree, uploads[0]):
+            self.assertEqual(step["if"], f"always() && {self.CODE}")
+
+    def test_only_require_decides_when_code_is_false(self) -> None:
+        for step in self.result_steps:
+            if _uses(step).startswith(("actions/checkout@", "actions/setup-python@")):
+                self.assertNotIn("if", step)
+                continue
+            if "ci_changes.py require" in _run(step):
+                continue
+            with self.subTest(step=step.get("name") or step.get("uses")):
+                self.assertIn(self.CODE, step["if"])
+
+    def test_no_paths_filter_in_any_generated_workflow(self) -> None:
+        for name, workflow in _models().items():
+            text = ci.emit(workflow)
+            with self.subTest(workflow=name):
+                self.assertNotIn("paths-ignore", text)
+                self.assertNotRegex(text, r"(?m)^\s+paths:")
+
+    def test_main_and_ci_call_validate_unchanged_and_ignore_changes(self) -> None:
+        models = _models()
+        self.assertEqual(_jobs(models["ci.yml"])["validate"]["uses"], "./.github/workflows/validate.yml")
+        self.assertEqual(_jobs(models["main.yml"])["validate"]["uses"], "./.github/workflows/validate.yml")
+        self.assertNotIn("changes", ci.emit(models["main.yml"]).replace("tests-from-run", ""))
+
+    def test_the_required_check_and_package_names_are_unchanged(self) -> None:
+        self.assertIn("tests-result", self.jobs)
+        self.assertIn("package", self.jobs)
+        self.assertNotIn("name", self.jobs["tests-result"])
+        self.assertNotIn("name", self.jobs["package"])
+        self.assertNotIn("needs", self.jobs["package"])
+        self.assertNotIn("if", self.jobs["package"])
 
 
 class AllJobsTest(unittest.TestCase):
@@ -598,7 +728,7 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, False)
         # validate.yml's four jobs, reuse, reuse-report, release-plan, build and publish, then title.
         # plus main.yml's four after-merge and release-target check jobs.
-        self.assertEqual(checkouts, 14)
+        self.assertEqual(checkouts, 16)
 
 
 class CiWorkflowTest(unittest.TestCase):
@@ -1103,14 +1233,16 @@ class ReuseTest(unittest.TestCase):
                 self.assertNotIn("reuse", jobs[name]["needs"])
 
     def test_the_shards_run_unless_a_run_is_reused(self) -> None:
-        self.assertEqual(self.validate["tests"]["if"], "inputs.tests-from-run == ''")
+        code = " && needs.changes.outputs.code == 'true'"
+        self.assertEqual(self.validate["tests"]["if"], "inputs.tests-from-run == ''" + code)
         steps = _steps(self.validate["tests-result"])
         by_name = {s.get("name"): s for s in steps}
-        self.assertEqual(by_name["aggregate"]["if"], "inputs.tests-from-run == ''")
+        self.assertEqual(by_name["aggregate"]["if"], "inputs.tests-from-run == ''" + code)
         for name in ("verify the reused results", "aggregate the reused results"):
-            self.assertEqual(by_name[name]["if"], "inputs.tests-from-run != ''")
-        # The plan is this run's own, in both cases: plan runs whatever the input.
-        self.assertNotIn("if", self.validate["plan"])
+            self.assertEqual(by_name[name]["if"], "inputs.tests-from-run != ''" + code)
+        # The plan is this run's own, in both cases: plan runs whatever the
+        # input, and depends only on the change detection (CI1a D4).
+        self.assertEqual(self.validate["plan"]["if"], "needs.changes.outputs.code == 'true'")
         self.assertNotIn("if", self.validate["package"])
 
     def test_reused_results_are_verified_then_aggregated_and_never_continue_on_error(self) -> None:

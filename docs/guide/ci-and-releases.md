@@ -133,8 +133,11 @@ required check pending forever.
   gate. The guard is static and has limits: a path built from a non-constant
   segment or through an `os.path` form it does not fold is not seen, and a
   pattern made only of `*`/`**` (a whole-tree walk) counts only on a root
-  named as the repository (`REPO_ROOT`, `ROOT`), not on a temporary or
-  runtime directory under another name.
+  that a repository-root value reaches (`REPO_ROOT`, or what is assigned,
+  returned or passed from it, in the same module), whatever the root is
+  called; the reach is by name within a module, so a temporary directory
+  that shares a name with a reached one is flagged and needs an entry in
+  `MENTIONS`, and a value passed in from another module is not followed.
 - **Fail closed.** `code` is `false` only for a `pull_request` event whose
   merge ref differs from its first parent by documentation paths alone. A
   push to `main`, a manual dispatch, a `HEAD` that is not a merge commit, an

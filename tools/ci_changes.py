@@ -86,7 +86,12 @@ GATE_TOOLS: tuple[tuple[str, str], ...] = (
 
 #: Reads that are mentions: a module and a folded path it names without
 #: reading. Kept short; more than ten means the plan is amended (D2).
-MENTIONS: tuple[tuple[str, str, str], ...] = ()
+MENTIONS: tuple[tuple[str, str, str], ...] = (
+    ("controller/identity.py", "**/*",
+     "hashes every file of a pinned snapshot or a temporary tree (compute_tree_digest); never the checkout's documentation"),
+    ("scripts/workflow_state_test.py", "**/*",
+     "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
+)
 
 #: Roots that are temporary repositories a module builds itself: a module and
 #: a root expression, each with its reason. A fixture entry is refused when a

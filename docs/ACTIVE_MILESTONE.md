@@ -416,57 +416,64 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-h4e-leftovers` (H4e leftovers, issue [#306](https://github.com/RodrigoFAbreu/workflow-controller/issues/306)),
-implementation revision 2. The change makes the landing, orphan and review-launch tests use job ids of their own (so parallel
-copies of the suite stop killing each other's fakes), names the kept Codex worker clone in every ending that leaves one on disk
-(`_with_kept_clone` in `controller/job.py`; a `FINISHED` record gets a `CodexCloneKept` block; a refusal whose clone is gone
-reports `clone_removed: true`, `clone: null`), and says so in `docs/guide/harnesses.md`, `docs/guide/workers.md`,
-`docs/common-problems.md` and `docs/guide/development.md`. There is no user-visible command; the flows are the unit modules. Every
-flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the
-sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone, one
-module at a time, with `python3 -B` and no `PYTHONPATH=.`; they write only to the scratch `TMPDIR`.
+Item `workflow-controller-h4e2` (H4e2, issue [#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)),
+implementation revision 6, plan `docs/ai-workflow/CONTROLLER_H4E2_PLAN.md` (revision 12). The change adds two building blocks and
+routes nothing to them: `controller/review_recorder.py` (records a local plan or implementation review verdict through the
+Workflow's own writers, in a private copy of the repository) and `controller/codex_review_role.py` (`run_review`: one local review
+role as a read-only Codex worker in H4e's private clone, with the Controller composing the verdict header and applying the deny
+set). There is no user-visible command; the flows are the unit modules. Every flow runs offline: no network, no real `gh` (the
+stand-in refuses and logs), `claude`, `codex` or `ssh` (the fake `codex` is `tests/fake_codex.py`), a `PATH` of the sandbox's `bin/`
+and the system directories, and no write inside the read-only product clone. Run from the product clone, one module at a time,
+with `python3 -B` and no `PYTHONPATH=.`; they write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The landing and the job seam.**
-Run `python3 -B -m unittest tests.test_job_codex_worker_landing 2>&1 | tail -3` and the same for `tests.test_job_codex_worker`.
-Expected: `Ran 28 tests` and `OK` for each (the fixture job ids are legal and pairwise distinct; the kept clone is named at each
-ending).
+**Flow 1: The recorder reproduces the in-place command.**
+Run `python3 -B -m unittest tests.test_review_recorder 2>&1 | tail -3` (about 20 s).
+Expected: `Ran 33 tests` and `OK`. These run the installed Workflow scripts and compare the state and feedback of a recorded
+plan and implementation verdict with the in-place command's function sequence byte for byte; each refusal cause of `CAUSES` has a
+test, `check` writes nothing, an `APPROVE` writes no commit and an implementation `REVISE` makes the Workflow's own commit with
+the head asserted, and an inherited `GIT_INDEX_FILE` is dropped when the target's own index is used (`real_index=True`).
 
-**Flow 2: Resume, abandon and the drifted resume.**
-Run `python3 -B -m unittest tests.test_job_codex_worker_resume 2>&1 | tail -3` (about 30 s).
-Expected: `Ran 77 tests` and `OK` (a `LAUNCHED` record names its kept clone; a record whose tree is gone names none and says
-`clone_removed: true`; a drifted `resume` and `--abandon` carry the "not on disk" message; a `FINISHED` record carries
-`CodexCloneKept`).
+**Flow 2: The read-only Codex run and its deny set.**
+Run `python3 -B -m unittest tests.test_codex_review_role 2>&1 | tail -3` (about 2 minutes).
+Expected: `Ran 72 tests` and `OK`. Covers: the clone made with `prepare(read_only=True)` (a dirty managed tree is admitted and its
+dirty paths returned); the copy of the bound bundle, changes file and previous feedback with an input manifest; the verdict read
+as bytes from `last-message.md`; the header composed from the recorder's `check` values (`Reviewer model: openai/<model>` exactly
+when the gate requires distinct models); each deny cause (`special_file`, `submodule`, `credential_input`, `path_escape`,
+`input_over_bound`, `verdict_over_bound`, `verdict_unparsed`, `credential_in_verdict`, `read_only_violated`) and each D5 ending
+and each `recover` ending; the tree comparison through a fresh index and the refusal of index flags that hide a tracked edit.
 
-**Flow 3: The review launch tests.**
-Run `python3 -B -m unittest tests.test_review 2>&1 | tail -3` and `tests.test_review_claude`.
-Expected: `Ran 127 tests` and `Ran 39 tests`, each `OK`.
+**Flow 3: The supporting changes keep their contracts.**
+Run, one per command, `python3 -B -m unittest tests.test_workflow_contract 2>&1 | tail -3`, the same for
+`tests.test_codex_worker_tree` and `tests.test_codex_worker`.
+Expected: `Ran 73 tests` and `OK (skipped=1)`; `Ran 22 tests` and `OK`; `Ran 40 tests` and `OK` (`launch_codex_worker` takes
+`prompt=`; the preparer's `read_only` mode; the Workflow signature probe).
 
-**Flow 4: Parallel copies no longer kill each other's fakes (the #306 defect).**
-Revision 2 re-tests this flow: the first functional review found `RunnerTest.test_a_detached_descendant_is_killed_and_the_deadline_holds_with_an_inherited_pipe`
-still used fixed ownership tags (`tTrue`, `tFalse`); it now adds the pid to them. It runs inside `tests.test_review`, so the command below covers it.
-Start three copies of Flow 3 together with a CPU pin and wait for all:
-`for i in 1 2 3; do (TMPDIR=$(mktemp -d) taskset -c 0,1 python3 -B -m unittest tests.test_review tests.test_review_claude 2>&1 | tail -3) & done; wait`.
-Expected: every copy prints `Ran 166 tests` and `OK` (no `-9` exits, no `the composing command did not run`, no `` `features list` did not run ``). If
-`taskset` is missing from the sandbox's `PATH`, this flow is `environment`-limited and operator-run; any other failure is a finding.
+**Flow 4: The review prompt and the unchanged review suite.**
+Run `python3 -B -m unittest tests.test_review 2>&1 | tail -3`.
+Expected: `OK` (the new `build_local_prompt` asks for a `Status:` line and the eight sections and no file, and says an `APPROVE`
+never states `Review scope: changes`).
 
 **Flow 5: Documentation and backlog.**
 Run `python3 -B tools/check_docs.py; echo rc=$?` and `python3 -B scripts/workflow_backlog.py check; echo rc=$?`.
 Expected: `rc=0` each; the backlog line is `{"declared": true, "fresh": true, "roadmap": "docs/ROADMAP.md"}`.
 
 **Flow 6: The guides state the new behaviour.**
-Read the clone and landing sections of `docs/guide/harnesses.md`, `docs/guide/workers.md`, the "refused landing" entry of
-`docs/common-problems.md` and the "Job ids in tests that spawn tagged processes" bullet of `docs/guide/development.md`.
-Expected: every ending that keeps a clone names it (`reconciliation_evidence.clone`, or `CodexCloneKept` for a `FINISHED`
-record); a clone not on disk is reported as `clone_removed: true`, `clone: null`; the one remaining window (a kill between the
-terminal write and the naming write) is stated; the development guide says why such tests need ids of their own and how to check
-(`taskset -c 0,1` with two or three copies).
+Read the recorder and read-only run section of `docs/guide/harnesses.md` (from "H4e2 (#312) adds two building blocks", line 393) and the link in
+`docs/guide/workers.md`.
+Expected: both blocks are described with their causes and endings; the text says **no role is routed to Codex until H4e2b**
+(#315); the link to the H4e2b page resolves (the cleaner check is Flow 5).
 
-**Known limitations / out of scope.** Routing any role to Codex (H4e2); `milestone-implement` on Codex (H4f); a retention or pruning
-command for kept clones; the kill window between a terminal record and its second naming write (documented, not closed); any
-change to the Claude worker, the tester or the reviewer. The full suite is not a flow (`test_functional_sandbox` has a known CI
-flake, #206; the Git 2.56 trailer tests fail on main).
+**Flow 7: Dark by construction.**
+Run `grep -rn "codex_review_role\|review_recorder" controller --include=*.py | grep import` .
+Expected: only the two modules' own imports of each other and `controller/__init__.py`; nothing in the routing, `job` or run
+paths calls `run_review` or the recorder yet.
+
+**Known limitations / out of scope.** Routing any review role to Codex, the adversarial safety tests, the live proof and the cost
+table (H4e2b, #315); `apply-plan-review` and `apply-implementation-review` on Codex (H4e3); `milestone-implement` on Codex (H4f).
+The session rollouts of a `credential_in_verdict` ending stay in `codex-home/sessions`. The full suite is not a flow
+(`test_functional_sandbox` has a known CI flake, #206; the Git 2.56 trailer tests fail on main).
 
 ## Next action
 

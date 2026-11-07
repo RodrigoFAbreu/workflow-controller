@@ -31,7 +31,9 @@ local prompt now says an `APPROVE` never states `Review scope: changes`, which t
 for; `after_check` reads an input only while it can still be the manifest's file and names an unreadable one
 `read_only_violated` instead of raising; the verdict body stays byte for byte the role's (it was normalised by line splitting);
 a release change while the inputs resolve is a `CodexReviewNotStarted`; and the `recorded` progress block carries the recorder's
-values.
+values. The full suite then found three tests the checkpoints had broken, none of them a behaviour change: a query test's stub
+of `_copy_and_execute` did not take `real_index`, the process inventory had no row for the recorder fixture's bundle generation,
+and the guard on readers of a worker's prose did not know the armour scan, which now sits in one named function it lists.
 
 Next action: the implementation review bundle, then the local implementation review.
 

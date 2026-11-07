@@ -319,6 +319,8 @@ LEFTOVER_INVENTORY = (
      "venv, pip and install runs the test waits for; each exits by itself"),
     ("fixtures.py", "start:run:controller", 1, "short",
      "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
+    ("test_review_recorder.py", "start:run", 1, "short",
+     "the fixture's own `prepare-ai-review.sh` on its scratch repository, waited by the test"),
     ("test_review_mode.py", "start:run", 1, "short",
      "the captures generator's --check run: a read-only comparison that exits by itself"),
     ("test_functional_enforcement.py", "start:run", 4, "bounded",

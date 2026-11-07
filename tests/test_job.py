@@ -2141,7 +2141,10 @@ class ProseOverStateTest(_LifecycleCase):
                 for node in ast.walk(func):
                     if isinstance(node, ast.Attribute) and node.attr in ("result", "raw_json"):
                         readers.append((path.name, func.name, node.attr))
-        self.assertEqual(sorted(set(readers)), [("job.py", "_worker_dict", "result"),
+        # `_worker_output_holds_armour` scans the prose for a private key and returns only whether it found one
+        # (`workflow-controller-h4e2` D4); the verdict itself is read from its file, never from this field.
+        self.assertEqual(sorted(set(readers)), [("codex_review_role.py", "_worker_output_holds_armour", "result"),
+                                                ("job.py", "_worker_dict", "result"),
                                                 ("review.py", "_claude_run", "result")])
 
 

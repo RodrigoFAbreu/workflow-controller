@@ -242,6 +242,11 @@ def _armour_in(*texts: str | bytes | None) -> bool:
     return False
 
 
+def _worker_output_holds_armour(raw: bytes, result: worker.WorkerResult) -> bool:
+    """D4's first check: whether the final message or any of the result's text holds an armour line."""
+    return _armour_in(raw, result.result, result.stdout, result.stderr)
+
+
 def parse_verdict(data: bytes) -> tuple[str, str | None, str]:
     """``(status, review_scope, body)`` of the final message; a ``ValueError`` is the cause ``verdict_unparsed``.
     Before the first ``## `` line only the ``Status:`` line, one optional ``Review scope:`` line and blank lines are
@@ -454,7 +459,7 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
         raw = layout.last_message.read_bytes()
     except OSError:
         raw = b""
-    if _armour_in(raw, result.result, result.stdout, result.stderr):
+    if _worker_output_holds_armour(raw, result):
         try:
             runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
         except (OSError, ControllerError):

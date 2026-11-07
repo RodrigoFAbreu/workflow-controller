@@ -1828,8 +1828,9 @@ class ProcessDefaultsTest(unittest.TestCase):
         from controller import workflow_contract
         seen = []
 
-        def execute(private_dir, sources, script, args, *, root, timeout, context):
+        def execute(private_dir, sources, script, args, *, root, timeout, context, real_index):
             seen.append(timeout)
+            self.assertFalse(real_index)
             return _completed(["query"])
 
         contract = SimpleNamespace(release="2.6.0", query_script_sha256="0" * 64)

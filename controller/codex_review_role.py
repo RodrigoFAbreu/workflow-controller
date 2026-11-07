@@ -320,6 +320,11 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
     problems: list[str] = []
     runner = codex_worker_tree.scrubbed_runner(layout.base)
     try:
+        # ``git status`` honours index flags a worker can set (``--skip-worktree``, ``--assume-unchanged``), which
+        # hide a tracked edit from it; an entry carrying any flag is a change in itself, whatever the file holds.
+        for record in (r for r in _clone_git(clone, runner, "ls-files", "-v", "-z").split("\0") if r):
+            if record[:1] != "H":
+                problems.append(f"index flag {record[0]} on {record[2:]}")
         listing = _clone_git(clone, runner, "status", "--porcelain=v1", "-z", "--untracked-files=all")
         for record in (r for r in listing.split("\0") if r):
             path = record[3:]

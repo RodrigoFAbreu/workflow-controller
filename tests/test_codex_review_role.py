@@ -402,6 +402,14 @@ class RunTests:
             (kw["cwd"] / ".ai-review" / "extra.md").write_text("x")
             return result
 
+        def hidden_edit(flag):
+            def launch(task, **kw):
+                result = self.seam(task, **kw)
+                (kw["cwd"] / "README.md").write_text("hidden edit\n")
+                subprocess.run(["git", "-C", str(kw["cwd"]), "update-index", flag, "README.md"], check=True)
+                return result
+            return launch
+
         cases = {
             "write": ({"write_outside": [str(self.layout.worktree / "new.txt")]}, None),
             "ref": ({"git": [["update-ref", "refs/heads/evil", "HEAD"]]}, None),
@@ -410,6 +418,8 @@ class RunTests:
             "unreadable input": ({}, unreadable_input),
             "grown input": ({}, grown_input),
             "extra": ({}, extra_input),
+            "skip-worktree edit": ({}, hidden_edit("--skip-worktree")),
+            "assume-unchanged edit": ({}, hidden_edit("--assume-unchanged")),
         }
         for name, (spec, launch) in cases.items():
             with self.subTest(name):

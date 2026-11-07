@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -64566,12 +64566,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-11-07T09:55:10Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-07T10:16:03Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64738,7 +64738,76 @@
               "at": "2026-11-07T08:30:01Z"
             }
           ]
+        },
+        "F-84fe6b9a1aa1": {
+          "digest": "84fe6b9a1aa1fc64299be27fe6b6b10b5be641866068343a85b54c7f0bdf5fd6",
+          "text": "**LIR-R1-001: the first-run test pins counts permanently.** `tests/test_ci_changes.py:730` (`test_the_first_run_matches_the_expected_result`) asserts exactly five reads, all in `tests/test_backlog.py`, and exactly seven fixture modules on every run, not only the first. A legitimate later change, such as a sixth `test_backlog` read or a new test module that builds a temporary repository and adds its own fixture-table entry, would fail the guard. The message would read like a violation and would not say that the expected counts should be updated. The plan's D2/CP1 asked the first run to reproduce the expected result, and the other guard tests already enforce the rules themselves. Consider relaxing this test to the rules (reads only in gate modules, every fixture site on the table) or giving it a message that says the pinned counts are a record to update.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-df20dc691462": {
+          "digest": "df20dc6914625fff57a2645f18033cf1452ddd92f6da677f1b8b74898d01f499",
+          "text": "**LIR-R1-002: two reader forms are not seen by the scanner.** `open(os.path.join(os.path.dirname(__file__), \"..\", \"docs\", \"run.md\"))` and an f-string segment without placeholders (`ROOT / f\"docs/run.md\"`) are not flagged. Neither exists in the repository today (checked), and D2's root-value definition covers only `Path(__file__)` chains, so this is within the plan. The Known limit as written in the guide's \"The guard\" bullet does not name them, though. Either flag `os.path.dirname(__file__)` chains and placeholder-free `JoinedStr` segments, or add one sentence to the guide that the guard sees `pathlib` roots only.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-0ee267468fb0": {
+          "digest": "0ee267468fb03eb0ef4149e394b2e8a17abfe4622a4974d9bc87e600cf18fa8e",
+          "text": "**LIR-R1-003: `DOCS_TOP_LEVEL` uses `match` with `$`.** `tools/ci_changes.py` matches `docs/run.md\\n`, because `$` also matches before a trailing newline. As the implementation summary says, the result is still a top-level file under `docs/` and is harmless, but `DOCS_TOP_LEVEL.fullmatch(path)` states the intent exactly and costs nothing.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-dc4c3665ff33": {
+          "digest": "dc4c3665ff3306aeb53446d4665f75d8c63e7f2f9d57ec22153b2a459b006abd",
+          "text": "**LIR-R1-004: the guide hard-codes the shard count.** The new \"Documentation-only pull requests\" section says the pull request \"skips `plan` and the six `tests` shards\". The shard count comes from `tools/test_shards.shard_count` and changes with the plan, as the same guide says of the required checks. \"the `tests` shards\" would stay true.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "81b6fcd4e20daf17e5e9f86aad700dfc5d626639b823b28fe6b0001a14947ff0",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-07T10:12:00Z",
+          "verdict_sha256": "b4d4a893cf84ba022d963529c05b079165f4c6be8ed52a5eddc31fd7f253b6b6",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

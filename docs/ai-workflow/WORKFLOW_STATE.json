@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -64566,12 +64566,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 1
         }
       },
-      "state_revision": 32,
-      "last_transition": "2026-11-07T10:29:06Z",
+      "state_revision": 33,
+      "last_transition": "2026-11-07T10:33:01Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64792,6 +64792,20 @@
               "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
               "verdict": "APPROVE",
               "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-493890b5b5e3": {
+          "digest": "493890b5b5e32d047fd53b48482e4d805764a8076d760d329cb7a0c160272b71",
+          "text": "**LIR-R2-O1 — The `rootval` root-level branch is over-broad.** `return rest[0] == \"**\" or fnmatch.fnmatch(\"docs\", rest[0])` flags any `rglob` from the repository root (for example `ROOT.rglob(\"__pycache__\")` or `ROOT.rglob(\"*.py\")`) although such a pattern can name no member of the set. It fails closed, so it is not a defect today, but the fix for LIR-R2-001 should match the whole pattern against the members (for example `fnmatch` of each member path, or of `docs/<name>` and the prefix trees, against the joined pattern) for every root kind, rather than widening this branch to `expr` roots as it stands — that would flag the existing temporary-directory scans such as `tests/test_lock.py:243` `root.rglob(\"*\")` (which can, in fact, name a member, so it would then need a fixture entry or a mention with its reason).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c48627e651414fd567503d7fe42bcbc2bb1d886c0b24247fd2afc4d062975d00",
+              "verdict": "REVISE",
+              "at": "2026-11-07T10:33:01Z"
             }
           ]
         }

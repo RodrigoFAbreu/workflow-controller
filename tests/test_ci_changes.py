@@ -585,6 +585,15 @@ class ModuleScan:
         return reached
 
 
+def _top_level_members() -> tuple[str, ...]:
+    """The names directly under ``docs/`` that are members of the set: every
+    such file in the checkout, and two samples so a pattern such as ``*.md``
+    still counts when the checkout lacks a file it would match."""
+    found = {path.name for path in (ROOT / "docs").iterdir()
+             if path.is_file() and cc.is_documentation(f"docs/{path.name}")}
+    return tuple(sorted(found | {"x.md", "backlog.yaml"}))
+
+
 def touches_set(segs: tuple[str, ...], kind: str = "expr") -> bool:
     """Whether a folded path, or a glob pattern, can name a member of the set.
     A bare parent such as ``docs`` is not a candidate."""
@@ -602,7 +611,7 @@ def touches_set(segs: tuple[str, ...], kind: str = "expr") -> bool:
     if literal == ("docs",):
         if rest[0] == "**" or len(rest) > 1:
             return rest[0] == "**" or any(fnmatch.fnmatch(p.split("/")[1], rest[0]) for p in prefixes)
-        return fnmatch.fnmatch("x.md", rest[0]) or fnmatch.fnmatch("backlog.yaml", rest[0])
+        return any(fnmatch.fnmatch(name, rest[0]) for name in _top_level_members())
     if literal == () and kind == "rootval":
         # A glob over the repository root itself reaches the documentation.
         return rest[0] == "**" or fnmatch.fnmatch("docs", rest[0])
@@ -1059,6 +1068,27 @@ class FixtureRefusalTests(unittest.TestCase):
         scanned = ModuleScan(module, repository_sources()[module])
         self.assertTrue(scanned._is_helper("_repo_root", frozenset()))
         self.assertNotIn("_repo_root", {e for m, e, _ in cc.FIXTURES if m == module})
+
+
+class TopLevelGlobTests(unittest.TestCase):
+    """LIR-R1-001/I1: a constant glob directly under docs/ is a reader of
+    every member it matches, not only of two sample names."""
+
+    def test_a_constant_glob_that_reaches_a_member_is_flagged(self):
+        for pattern in ("ROAD*.md", "[A-Z]*.md", "ROADMA?.md", "*.md"):
+            with self.subTest(pattern=pattern):
+                report = scan(f"""
+                    from pathlib import Path
+                    ROOT = Path(__file__).resolve().parent.parent
+                    def read():
+                        return list((ROOT / "docs").glob("{pattern}"))
+                """)
+                self.assertTrue(report.violations, report.sites)
+
+    def test_a_glob_that_reaches_no_member_is_not_flagged(self):
+        for pattern in ("ACTIVE*.md", "ZZZ*.md"):
+            with self.subTest(pattern=pattern):
+                self.assertFalse(touches_set(("docs", pattern)))
 
 
 class TouchesSetTests(unittest.TestCase):

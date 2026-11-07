@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -64566,12 +64566,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 4,
-          "external": 3
+          "local": 5,
+          "external": 4
         }
       },
-      "state_revision": 40,
-      "last_transition": "2026-11-07T12:51:01Z",
+      "state_revision": 42,
+      "last_transition": "2026-11-07T13:08:21Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64850,17 +64850,59 @@
               "at": "2026-11-07T12:01:20Z"
             }
           ]
+        },
+        "F-b69ea7b2dea8": {
+          "digest": "b69ea7b2dea84c81d4307e06c2e2739f38191cebd3dcee2f50aef7f18ee119de",
+          "text": "**O1. Keyword-only parameters are not followed by the reach rule.** `ModuleScan.reached` (`tests/test_ci_changes.py:555`) collects parameters from `posonlyargs` and `args` only, so `def read(*, root): return list(root.glob(\"**/*\"))` called as `read(root=fixtures.REPO_ROOT)` is not flagged (probe confirmed). This is the call-argument route (c) of D2. The fix is to include `kwonlyargs` in `params`, plus a regression test.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T13:05:38Z"
+            }
+          ]
+        },
+        "F-2b33f9f0d755": {
+          "digest": "2b33f9f0d7555d957564b8c9761067c1a1f28b5200ec38bb9d50873e390ee987",
+          "text": "**O2. A `MENTIONS` entry keyed on `**/*` exempts every whole-tree walk in its module.** The entries for `scripts/workflow_state_test.py` and `controller/identity.py` match by (module, folded path). So a later real walk of the repository root in either module is also allowed: appending `_R = Path(__file__).resolve().parent.parent` and `[p.read_bytes() for p in _R.rglob(\"*\") if p.is_file()]` to `scripts/workflow_state_test.py` produces no violation (probe confirmed). This matches the plan's \"module and folded path\" shape for a mention, so it is not a plan deviation. Keying these two entries also on the root expression (`root`, `directory`) would confine each one to the site it explains.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T13:05:38Z"
+            }
+          ]
+        },
+        "F-311e9c97153d": {
+          "digest": "311e9c97153dab3bee1c4c85dd4e09b89452516f9c3754fbfb25d1143631ef73",
+          "text": "**O3. `TEST_RESULTS.md` in the bundle still describes implementation revision 2** (head `29de47a`, 6009 tests). Revision 5's results appear only in `IMPLEMENTATION_SUMMARY.md`. I re-ran them at `d2c1565`: `python3 tools/run_tests.py` gave 6012 tests in 8 shards, all PASS, coverage exact, wall time 687.5 s. Refresh the file on the next post-fix generation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T13:05:38Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "6573860943506847f3ea76c9aa8bbd2e45f213292f9097e234e11cc9e8f04049",
+        "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "31db3c58f9ddb2815d4e6052721726227e7d3ab3565d00e3ccbda92ab969d171",
+          "bundle_id": "ef4045475bbb7b1524a566661ec3788e8fd5340b1a82b7ae4648dd0eb59ddf0e",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-11-07T12:01:20Z",
-          "verdict_sha256": "6be55546134ba9040f2ecc67940e156d481069fc0297dad4f006ec23044eaf76",
-          "run_ref": "session:local .ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "round": 5,
+          "completed_at": "2026-11-07T13:05:38Z",
+          "verdict_sha256": "3a7cc537cfc7ba2c43f49b0dd8484402427e8ccf8ae7ec1e7fdba487c029918e",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null

@@ -62913,7 +62913,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -63053,12 +63053,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 4,
+          "local": 5,
           "external": 1
         }
       },
-      "state_revision": 56,
-      "last_transition": "2026-11-07T05:23:35Z",
+      "state_revision": 57,
+      "last_transition": "2026-11-07T05:40:11Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -63901,6 +63901,20 @@
               "review_content_id": "d3db4c603afed13dfbf8517de94262c5445ad1a5ea9dc0354f2fe779c44fccca",
               "verdict": "APPROVE",
               "at": "2026-11-07T04:52:02Z"
+            }
+          ]
+        },
+        "F-993f23a21cc1": {
+          "digest": "993f23a21cc1003137d8a88304c8dd30239b25d50ce3b1e216b9ac223a2c780a",
+          "text": "**O1. An inherited `GIT_INDEX_FILE` is not removed on the `real_index` path.** `_git_isolation` (`controller/workflow_contract.py`) leaves `os.environ`'s value in `base` when `real_index=True`, where the private path overrides it. Observed: a `record` run with the variable set to a path that does not exist ends `recorder_index_dirty`, naming every tracked file, with nothing written, so it fails closed but after a paid turn. Dropping the variable when `real_index` is set would match what \"the target's own index\" says. This is an unusual environment (a Controller started from inside a Git hook).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "56a1e9975ae50bb4e6ce51e26cd9ec847c4293d4538e98207a8c1d4bae394121",
+              "verdict": "REVISE",
+              "at": "2026-11-07T05:40:11Z"
             }
           ]
         }

@@ -388,6 +388,43 @@ role, no setting selects it and no real launcher is registered. The opt-in live 
 leaves no process of the tag; its measured result is `tests/harness_contract/codex/worker_ownership.txt` (the real worker
 outlives its killed Controller, and `resume` ends it).
 
+### The review recorder and the read-only run of the two local review roles
+
+H4e2 ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) adds two building blocks. **No role is routed
+to either until H4e2b** (split off in [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)), so nothing an
+operator can select changes.
+
+- **The recorder** (`controller/review_recorder.py`) records a local review verdict (`LOCAL_MODEL_PLAN_REVIEW` or
+  `LOCAL_MODEL_IMPLEMENTATION_REVIEW`) in the managed repository through the Workflow's own writers, run from the installed
+  script set by `workflow_contract.run_in_private_copy`. `check` writes nothing; `record` takes the path of a composed
+  verdict and makes the in-place command's write set. The Controller decides no state field. It refuses with one cause each:
+  `recorder_branch_unsupported`, `recorder_feedback_foreign`, `recorder_index_dirty`, `recorder_identity_mismatch`,
+  `recorder_interface_changed`, `state_identity_changed`, `workflow_release_changed`, `recorder_commit_pending` and
+  `workflow_refused`. The runner's own errors propagate unchanged.
+- **The read-only run** (`controller/codex_review_role.py`, `run_review`) runs one of the two roles as a Codex worker in the
+  private clone of [a Codex worker's private clone](#a-codex-workers-private-clone-and-its-landing), made with
+  `read_only=True`, which skips only the `managed_tree_not_clean` refusal (a read-only job lands nothing; the dirty paths are
+  returned beside the clone). The clone gets a copy of the bound bundle, of the verified `CHANGES_SINCE_REVIEW.md` and of
+  the previous `REVIEW_FEEDBACK.md`, with an input manifest, and nothing is ever copied back. The role is asked for no file:
+  its final message (read from `last-message.md` as bytes) holds a `Status:` line, an optional `Review scope:` line and the
+  eight sections, and the Controller writes the header itself (`Reviewer model: openai/<model>` exactly when the gate
+  requires distinct reviewer models) before the recorder records it.
+- **The deny set** (`codex_review_role.CAUSES`), one cause per refusal. On the way in, before the launch:
+  `special_file`, `submodule`, `credential_input` (a credential-like name, or a private-key armour line in the content),
+  `path_escape` and `input_over_bound` (2000 paths, 64 MiB, 8 MiB a file). On the way out, the verdict is discarded and
+  nothing is recorded: `verdict_over_bound` (1 MiB), `verdict_unparsed` (invalid UTF-8, a bad `Status:` or `Review scope:`, extra lines before the first section, or any of the eight protocol sections missing), `credential_in_verdict` (armour in the message, the
+  worker's `stdout` or `stderr`, checked first on every result; the result is returned with those fields emptied, though the
+  session rollouts stay in `codex-home/sessions` for the usage admission) and `read_only_violated` (the clone is not as the
+  run left it: a changed file, found by comparing the tree with the base commit through a fresh index the worker never touched, so an index flag such as `--skip-worktree` or `--assume-unchanged`, or a rewritten index entry, hides nothing; a new ref, a moved `HEAD`, a changed or extra input).
+- **The endings** (`Ending(code, cause, worker, evidence)`), the clone removed on each: `CodexReviewNotStarted`,
+  `CodexReviewWorkerFailed` (`timeout`, `terminated_by_signal`, `usage_limit`, `non_zero_exit`, `no_final_message`,
+  `sandbox_breach`), `CodexReviewRefused`, `ReviewStateIdentityChanged`, `workflow_release_changed`,
+  `CodexReviewRecordRefused` (the verdict is in the evidence), `CodexReviewRecordPending` (an implementation `REVISE` whose
+  commit refused: the feedback and state are written, the next role commits the pending entry) and `CodexReviewRecorded`.
+  `recover` ends a record holding the `codex_review` block on `resume`, `--abandon` and a drifted Workflow release
+  (`CodexReviewNotRecorded`, `CodexReviewRecordInterrupted`, `OperatorAbandoned`, `workflow_release_changed`); wiring it into
+  the job's recovery sites is H4e2b.
+
 ## The shared command renderer
 
 `controller/command_files.py` holds `render_command(name, arguments, commands_dir)`, a pure function over the shared

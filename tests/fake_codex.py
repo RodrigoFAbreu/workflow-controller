@@ -56,10 +56,11 @@ written here once the watchdog is armed: a test that orphans a fake waits for it
 ``exec``: ``verdict`` (``exact``, ``wrong_id_first``, ``bad_revision``,
 ``none``, ``limit``, ``hang``, ``missing_status``, ``block``, ``revise``; the header-retry
 kinds ``revise_then_approve``, ``revise_then_revise`` and ``no_status_then_exact`` each give a wrong id first and an exact
-header on the retry, with the ``Status:`` the name says), ``exit``,
+header on the retry, with the ``Status:`` the name says), ``exit``, ``signal`` (a signal name the fake sends itself after writing its
+message, so the launcher sees a death by signal),
 ``limit_shape`` (``string``, ``http429``, ``percent`` or ``string_full`` (the string error with the five-hour window at 100 percent): how the rollout reports the
 limit), ``message`` (text written to the ``-o`` file instead of a review verdict, so a tester's final message can be scripted; ``""``
-writes an empty file), ``stderr`` (text printed on stderr, a transcript line), ``stdout`` (text printed on stdout), ``subagent``
+writes an empty file), ``message_bytes`` (base64 of the raw bytes written to the ``-o`` file instead, for a message that is not UTF-8), ``stderr`` (text printed on stderr, a transcript line), ``stdout`` (text printed on stdout), ``subagent``
 (write a sub-agent rollout with that many total tokens),
 ``write_outside`` (list of paths to write), ``escape_to`` (a real-worktree path
 the fake writes as if the sandbox failed), ``git`` (argvs run in the working
@@ -70,6 +71,7 @@ root), ``tool_attempts`` (feature names), ``use_web_search``,
 from __future__ import annotations
 
 import atexit
+import base64
 import datetime
 import json
 import os
@@ -506,6 +508,7 @@ def main() -> int:
 def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path, home: Path, record: dict) -> int:
     spec = scenario.get("exec", {})
     prompt = sys.stdin.read() if argv[-1] == "-" else argv[-1]
+    record["prompt"] = prompt
     for name, table in merged.get("mcp_servers", {}).items():
         record["ran"].append({"layer": "mcp_servers", "name": name, **_run_command(_command_of(table), cwd)})
     if state.get("hooks"):
@@ -569,10 +572,14 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
     elif verdict_kind != "none":
         out = argv[argv.index("-o") + 1] if "-o" in argv else None
         text = spec["message"] if "message" in spec else _verdict(verdict_kind, prompt)
-        if out and text is not None and ("message" in spec or text):
+        if out and "message_bytes" in spec:
+            Path(out).write_bytes(base64.b64decode(spec["message_bytes"]))
+        elif out and text is not None and ("message" in spec or text):
             Path(out).write_text(text)
     if notify:
         record["ran"].append({"layer": "notify", **_run_command(notify, cwd)})
+    if spec.get("signal"):
+        os.kill(os.getpid(), getattr(signal, spec["signal"]))
     return code
 
 

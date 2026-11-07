@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e2",
+  "plan_revision": 12,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The recorder: the Workflow's own writers, run by the Controller",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The read-only review run in the Codex clone, its deny set and its endings",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 4,
+      "session_target": 1
+    }
+  ]
+}

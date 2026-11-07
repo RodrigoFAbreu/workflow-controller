@@ -133,6 +133,12 @@ _OPERATOR_GIT_SCOPES = frozenset({"system", "global", "command"})
 #: A test installs every hook githooks(5) names and runs Workflow's queries
 #: in place to check this.
 _QUERY_HOOK_EVENTS = ("post-index-change",)
+#: Every hook event a ``git commit`` can fire (githooks(5)), plus the
+#: index-change event. A ``real_index`` run, which commits, switches each of
+#: them off by name beside the hook-file switch-off of
+#: :data:`_GIT_PINNED_CONFIG`.
+_COMMIT_HOOK_EVENTS = ("pre-commit", "prepare-commit-msg", "commit-msg", "post-commit",
+                       "post-index-change", "reference-transaction")
 #: The first Git release that reads a boolean ``core.fsmonitor`` as its
 #: built-in daemon (on) or as none (off). An earlier Git, the 2.35
 #: maintenance releases included, runs any value but an empty one as the
@@ -508,7 +514,7 @@ def _run_query(
 
 def run_in_private_copy(
     root: Path, sources: dict[str, bytes], script: str, args: list[str], *, timeout: float,
-    context: dict,
+    context: dict, real_index: bool = False,
 ) -> subprocess.CompletedProcess:
     """Write ``sources`` (target-relative path to bytes) into a fresh private
     directory, prepare the Git the run uses (:func:`_git_isolation`), run
@@ -517,14 +523,20 @@ def run_in_private_copy(
     (``controller.protocol``): the isolation is one mechanism, not two.
     ``context`` carries ``query`` (the operation's name in messages) and the
     evidence both runners report; it is updated with the run. Raises only
-    :class:`WorkflowQueryError`."""
+    :class:`WorkflowQueryError`.
+
+    ``real_index`` (the review recorder's ``record``, which commits): the
+    run uses the target's own index instead of a private copy, and every
+    hook event a commit fires is switched off by name beside the hook-file
+    switch-off already in force, each setting checked to be in force as the
+    runner checks its own. Every other isolation setting is unchanged."""
     try:
         scratch = tempfile.TemporaryDirectory(prefix=_PRIVATE_DIR_PREFIX)
     except OSError as exc:
         raise _private_copy_failed(context, "create the private directory", exc) from exc
     try:
         completed = _copy_and_execute(Path(scratch.name), sources, script, args, root=root,
-                                      timeout=timeout, context=context)
+                                      timeout=timeout, context=context, real_index=real_index)
     except BaseException as exc:
         try:
             scratch.cleanup()
@@ -570,7 +582,7 @@ def _verified_sources(root: Path, contract: WorkflowContract, context: dict) -> 
 
 def _copy_and_execute(
     private_dir: Path, sources: dict[str, bytes], script: str, args: list[str], *,
-    root: Path, timeout: float, context: dict,
+    root: Path, timeout: float, context: dict, real_index: bool = False,
 ) -> subprocess.CompletedProcess:
     """Steps 2 to 4: write the verified bytes under their own names into
     ``private_dir``'s scripts directory, prepare the query's Git, then run
@@ -581,7 +593,8 @@ def _copy_and_execute(
             runtime.write_bytes(private_dir, f"{_PRIVATE_SCRIPTS_DIR}/{PurePosixPath(rel_path).name}", data)
         except (OSError, RuntimeContainmentError) as exc:
             raise _private_copy_failed(context, f"write the private copy of {rel_path}", exc) from exc
-    env = _git_isolation(root, private_dir, context=context, timeout=timeout, deadline=deadline)
+    env = _git_isolation(root, private_dir, context=context, timeout=timeout, deadline=deadline,
+                         real_index=real_index)
     argv = [sys.executable, "-B", "-E", "-s",
             str(private_dir / _PRIVATE_SCRIPTS_DIR / PurePosixPath(script).name), *args]
     context["argv"] = argv
@@ -632,7 +645,7 @@ def _timed_out(context: dict, timeout: float, exc: subprocess.TimeoutExpired) ->
 
 
 def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: float,
-                   deadline: float) -> dict[str, str]:
+                   deadline: float, real_index: bool = False) -> dict[str, str]:
     """The environment the query runs in, which every Git command it starts
     inherits (invariant I6: the Workflow scripts run ``git hash-object``,
     ``git diff --name-only`` and ``git ls-files`` in the target, and Git
@@ -676,13 +689,22 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
     older Git runs a boolean as a program's path, so there it is refused.
 
     The configuration is read again under that environment, and each
-    setting must be in force as the last, command-scope value."""
+    setting must be in force as the last, command-scope value.
+
+    ``real_index`` keeps all of this except the private index: the target's
+    own index is used (no copy, no ``GIT_INDEX_FILE``), and a
+    ``hook.<event>.enabled=false`` is added for every event in
+    :data:`_COMMIT_HOOK_EVENTS`, each checked like the rest."""
     base = {**os.environ, "GIT_ALLOW_PROTOCOL": "", _FILTER_PROBE_ENV: str(private_dir)}
+    if real_index:
+        base.pop("GIT_INDEX_FILE", None)  # "the target's own index" means the one in its Git directory
     run = _PreflightGit(root, context=context, timeout=timeout, deadline=deadline)
     pinned = _with_git_config(base, _GIT_PINNED_CONFIG, context)
-    index = Path(os.fsdecode(run(["rev-parse", "--git-path", "index"], pinned).rstrip(b"\n")))
-    _copy_index(root / index, private_dir, context)
-    private_index = {"GIT_INDEX_FILE": str(private_dir / _PRIVATE_INDEX)}
+    private_index: dict[str, str] = {}
+    if not real_index:
+        index = Path(os.fsdecode(run(["rev-parse", "--git-path", "index"], pinned).rstrip(b"\n")))
+        _copy_index(root / index, private_dir, context)
+        private_index = {"GIT_INDEX_FILE": str(private_dir / _PRIVATE_INDEX)}
     # What Workflow's own Git reads, without the Controller's settings. The
     # commands asked under it (`config`, `rev-parse --git-path`) read no
     # index or working tree, and fire no hook.
@@ -693,6 +715,8 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
     _refuse_populated_submodules(root, run, {**pinned, **private_index}, context)
     context["refused_filters"] = _filters_with_programs(entries)
     overrides = _GIT_PINNED_CONFIG + _git_named_overrides(entries, context["refused_filters"])
+    if real_index:
+        overrides += tuple((f"hook.{event}.enabled", "false") for event in _COMMIT_HOOK_EVENTS)
     env = _with_git_config({**base, **private_index}, overrides, context)
     in_force: dict[str, tuple[str, str | None]] = {}
     for scope, key, value in _git_config_entries(run, env):

@@ -1133,6 +1133,77 @@ class QueryHookCensusTest(_SeededTargets):
         self.assertEqual(fired_at_any_stage, set(workflow_contract._QUERY_HOOK_EVENTS))
 
 
+class RealIndexTest(_SeededTargets):
+    """``run_in_private_copy(..., real_index=True)`` (H4e2, D1): the review
+    recorder's ``record`` commits, so it uses the target's own index and
+    switches off every hook event a commit fires, each setting checked like
+    the rest. Without it nothing changes."""
+
+    SEEDS = {"ready": ("2.6.0", "ready", {})}
+    PROBE = "scripts/probe.py"
+    PROBE_SOURCE = (
+        b"import json, os, subprocess, sys\n"
+        b"config = subprocess.run(['git', 'config', '--list', '--show-scope'], capture_output=True, text=True).stdout\n"
+        b"print(json.dumps({'index': os.environ.get('GIT_INDEX_FILE'), 'config': config.splitlines()}))\n"
+    )
+
+    def run_probe(self, root: Path, *, real_index: bool) -> tuple[dict, dict]:
+        spy = _PrivateDirSpy()
+        context = {"release": None, "query": "probe", "work_item_id": "", "cwd": str(root), "argv": None,
+                   "returncode": None, "stdout_tail": "", "stderr_tail": ""}
+        with mock.patch.object(workflow_contract, "_execute_query", spy):
+            completed = workflow_contract.run_in_private_copy(
+                root, {self.PROBE: self.PROBE_SOURCE}, self.PROBE, [], timeout=60, context=context,
+                real_index=real_index)
+        return json.loads(completed.stdout), spy.calls[0]
+
+    def test_without_the_keyword_the_index_is_a_private_copy_and_no_commit_hook_is_named(self) -> None:
+        answer, call = self.run_probe(self.target("ready"), real_index=False)
+        self.assertIsNotNone(answer["index"])
+        self.assertIn("index", call["private_entries"])
+        self.assertFalse([line for line in answer["config"] if ".enabled=false" in line and "hook." in line])
+
+    def test_with_the_keyword_the_targets_own_index_is_used_and_nothing_is_copied(self) -> None:
+        answer, call = self.run_probe(self.target("ready"), real_index=True)
+        self.assertIsNone(answer["index"])
+        self.assertNotIn("index", call["private_entries"])
+        self.assertNotIn("GIT_INDEX_FILE", call["env"])
+
+    def test_with_the_keyword_an_inherited_git_index_file_is_dropped(self) -> None:
+        with mock.patch.dict(os.environ, {"GIT_INDEX_FILE": "/nonexistent/index"}):
+            answer, call = self.run_probe(self.target("ready"), real_index=True)
+        self.assertIsNone(answer["index"])
+        self.assertNotIn("GIT_INDEX_FILE", call["env"])
+
+    def test_with_the_keyword_every_commit_hook_event_is_switched_off_at_command_scope(self) -> None:
+        answer, _call = self.run_probe(self.target("ready"), real_index=True)
+        for event in workflow_contract._COMMIT_HOOK_EVENTS:
+            with self.subTest(event=event):
+                self.assertIn(f"command\thook.{event}.enabled=false", answer["config"])
+        for key, value in workflow_contract._GIT_PINNED_CONFIG:
+            self.assertIn(f"command\t{key}={value}", answer["config"])
+
+    def test_a_hook_setting_that_is_not_in_force_is_refused_as_not_isolated(self) -> None:
+        real = workflow_contract._with_git_config
+
+        def ignoring_hooks(env, pairs, context):
+            return real(env, tuple(pair for pair in pairs if not pair[0].startswith("hook.")), context)
+
+        with mock.patch.object(workflow_contract, "_with_git_config", ignoring_hooks):
+            with self.assertRaises(WorkflowQueryError) as caught:
+                self.run_probe(self.target("ready"), real_index=True)
+        self.assertEqual(caught.exception.evidence["reason"], "query_git_not_isolated")
+        self.assertTrue(caught.exception.evidence["facility"].startswith("hook."))
+
+    def test_the_pinned_isolation_still_applies_with_the_keyword(self) -> None:
+        root = self.target("ready")
+        hook = root / ".git" / "hooks" / "post-index-change"
+        _executable(hook, "exit 0")
+        with self.assertRaises(WorkflowQueryError) as caught:
+            self.run_probe(root, real_index=True)
+        self.assertEqual(caught.exception.evidence["facility"], "hook")
+
+
 # ---------------------------------------------------------------------------
 # The private directory, and every runner failure a WorkflowQueryError.
 # ---------------------------------------------------------------------------

@@ -79,7 +79,7 @@
 | 73 | [The prose migration](items/workflow-controller-a2b.md) `workflow-controller-a2b` | Done | - | workflow-controller-a2a |
 | 74 | [Codex worker, step 5a: the clone and its fast-forward landing](items/workflow-controller-h4e.md) `workflow-controller-h4e` | Done | - | workflow-controller-h4c2, workflow-controller-h4d, workflow-controller-h1 |
 | 75 | [Codex worker clone: the review leftovers of H4e (#306)](items/workflow-controller-h4e-leftovers.md) `workflow-controller-h4e-leftovers` | Done | - | workflow-controller-h4e |
-| 76 | [Codex worker, step 5b: the review recorder and the read-only run of the two review roles](items/workflow-controller-h4e2.md) `workflow-controller-h4e2` | Next | - | workflow-controller-h4e, workflow-controller-h4e-leftovers |
+| 76 | [Codex worker, step 5b: the review recorder and the read-only run of the two review roles](items/workflow-controller-h4e2.md) `workflow-controller-h4e2` | Done | - | workflow-controller-h4e, workflow-controller-h4e-leftovers |
 | 77 | [CI: skip the test shards for docs-only changes](items/workflow-controller-ci1a.md) `workflow-controller-ci1a` | Next | - | - |
 | 78 | [CI: split the giant test atoms and refresh the shard timings](items/workflow-controller-ci1b.md) `workflow-controller-ci1b` | Next | - | - |
 | 79 | [CI: measure parallel test workers inside a shard](items/workflow-controller-ci1c.md) `workflow-controller-ci1c` | Next | - | - |

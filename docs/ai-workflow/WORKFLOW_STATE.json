@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -64566,12 +64566,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 34,
-      "last_transition": "2026-11-07T10:47:15Z",
+      "state_revision": 36,
+      "last_transition": "2026-11-07T10:52:51Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64808,16 +64808,30 @@
               "at": "2026-11-07T10:33:01Z"
             }
           ]
+        },
+        "F-032783f1260d": {
+          "digest": "032783f1260d900c4b7cf1465a1d75e2758ea97366acddfe562b62d589c17dad",
+          "text": "**LIR-R3-O1: the guide does not name the guard's whole-tree-walk exemption.** The round-2 fix (`tests/test_ci_changes.py` `touches_set`, the `literal == ()` branch) treats a pattern made only of `*`/`**` as a candidate only on a `Path(__file__)`-derived root, so `fixtures.REPO_ROOT.rglob(\"*\")` is not flagged (checked with `scan()`), while `rglob(\"*.md\")`, `glob(\"docs/*\")`, `glob(\"*/items/*.md\")` and `rglob(\"*.yaml\")` on the same root are. The judgement is reasoned in IMPLEMENTATION_SUMMARY and in the code comment, and it holds today: every non-narrowing walk outside the gate is a tree listing of a temporary or runtime directory (for example `tests/test_observation_equivalence.py:716` and `tests/test_cli.py:2261` `_tree_listing`), not a read of the documentation. But the \"The guard\" bullet in `docs/guide/ci-and-releases.md` names no limit at all, so a reader of the guide would not know that a whole-tree walk of the real repository through an imported root, or the non-constant-segment and `os.path` forms of the plan's Known limit and LIR-R1-002, pass the guard. One sentence there would cover all three.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "56ea11eb7d40061d62586066b8dead2d2b5eec5c81e7a28ae2afb8adf3851675",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:49:38Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+        "review_content_id": "56ea11eb7d40061d62586066b8dead2d2b5eec5c81e7a28ae2afb8adf3851675",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "81b6fcd4e20daf17e5e9f86aad700dfc5d626639b823b28fe6b0001a14947ff0",
+          "bundle_id": "7ee181fe21a3e411749c23410a1d85de5a51f889421db35556c41dbbd3a7c1ee",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-07T10:12:00Z",
-          "verdict_sha256": "b4d4a893cf84ba022d963529c05b079165f4c6be8ed52a5eddc31fd7f253b6b6",
+          "round": 3,
+          "completed_at": "2026-11-07T10:49:38Z",
+          "verdict_sha256": "09ed8e13a4130c10f08d0ea979e83f33530caee2023012d213bcd02d166bed83",
           "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },

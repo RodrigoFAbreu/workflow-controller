@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci1a",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -64411,6 +64411,321 @@
         },
         "evaluated_at": "2026-11-07T06:46:40Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-ci1a": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci1a",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI1A_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "2affeab6ce016451e6c1d83b27aa6b1db0b95cc9",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+        "approved_review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI1A_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9e55276e29dfa39e0e40a4f59cf5f1ab8cc39438"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "057914972314a15acd9eafd987acbfe828780992"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "96bf6dcc393d5d057ee648afa5ec9418b9c819de"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-07T08:34:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+            "ledger": {
+              "local": {
+                "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "7d8ae65a3763bea7d83a2e4397cc455f3824e8207d6b925e94e9bcd1aedf0d55",
+                "ledger_entry_sha256": "4b6ad5cc6205137b689f8a166da71650513639073c0b42ce4b74972eaf086e04",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "b2d2b79c960f07bfee46fb4de9d94ee5236b5e9f7247ba7f1ad139affb9d385f",
+                "ledger_entry_sha256": "f317914fdd0347f9f2bf39445b64e5e08e9d472127333d0ecee8732344ef69dc",
+                "run_ref": "codex:20261107T083023Z-249cd7f0",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-07T08:34:38Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-07T08:30:01Z",
+          "verdict_sha256": "7d8ae65a3763bea7d83a2e4397cc455f3824e8207d6b925e94e9bcd1aedf0d55",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-07T08:32:02Z",
+          "verdict_sha256": "b2d2b79c960f07bfee46fb4de9d94ee5236b5e9f7247ba7f1ad139affb9d385f",
+          "run_ref": "codex:20261107T083023Z-249cd7f0",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 6,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 22,
+      "last_transition": "2026-11-07T08:34:38Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-07T08:25:13Z",
+        "consumed": {
+          "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+          "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+        "94fc15574bb885d98c8bee7887c8b0f74a072905e369fcfde2ad9287d53b7535",
+        "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+        "e606c2da4f2a39a5130b47d3b6c1a1a7676ae14bc82bedb6bd215877eb58223f",
+        "e943269f3f497fa2d0cb084c82b1e9f8c48c71dbecc4ae05453ff31c66d43618"
+      ],
+      "optional_findings": {
+        "F-d767db84a65d": {
+          "digest": "d767db84a65d9748e1eabbad82ce5ec9f63bd21741e154d08cc82433950ebae2",
+          "text": "**LPR-R1-007: name the diff endpoints in `detect`.** D1 and CP1 give `changed_paths(base, head)` without saying what `head` is or that the diff is two-dot. On a `pull_request` run `HEAD` is the merge ref; `HEAD^1..HEAD` gives exactly what the merge introduces and does not depend on `pull_request.base.sha` matching the merge's first parent. If `base.sha` stays, state that it is two-dot against the merge ref, and test a stale base.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:37:47Z"
+            }
+          ]
+        },
+        "F-e88ebc788c9c": {
+          "digest": "e88ebc788c9c2b9ec548e91ded3883bd572a980fa41ac6d16c4f3f115b86acdc",
+          "text": "**LPR-R1-008: the D2 scan list repeats itself.** `scripts/*.py` already contains `scripts/*_test.py`. State also whether `tests/workflow_releases/` (frozen trees) is scanned, since `tests/` as written includes it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:37:47Z"
+            }
+          ]
+        },
+        "F-1807175c9006": {
+          "digest": "1807175c9006690a93e6c94a29aa3a56cb281fe66e25cb11602ffe065a929627",
+          "text": "**LPR-R1-009: D3 and CP2 are ambiguous about the `docs` checkout.** CP2's \"checkout with `fetch-depth: 0`\" reads as applying to both new jobs; only `changes` needs history. A shallow checkout for `docs` keeps the gate cheap.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:37:47Z"
+            }
+          ]
+        },
+        "F-97e56a735559": {
+          "digest": "97e56a735559f993ad6299e0b035b30fb800abb51a27f44d4127ee513c27937d",
+          "text": "**LPR-R2-002: nothing tests that `changes` declares the output its readers use.** CP2's direct-dependency test checks the job name in `needs.<job>`, not the output name, and neither D4 nor CP2 states the job-level `outputs: {code: ...}` mapping or a step id for `detect`. Without the mapping, `needs.changes.outputs.code` is empty, so the shards never run and `require` fails every pull request. That is loud but survives until the first CI run. Name the mapping in CP2 and extend the test to `needs.<job>.outputs.<name>`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "94fc15574bb885d98c8bee7887c8b0f74a072905e369fcfde2ad9287d53b7535",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:57:53Z"
+            }
+          ]
+        },
+        "F-bdcb34787b2d": {
+          "digest": "bdcb34787b2d0cbd5cb3f33d9bc6bbf8c3efead2c8b6e76e030f4d4b75dc766b",
+          "text": "**LPR-R2-003: the Goal's \"about half\" does not match D1's measurement.** The Goal repeats the item page's \"About half of the recent pull requests touch no code\", while D1 measures 19 of the last 60 commits as documentation-only under this set, about a third. The saving per pull request is unaffected, but CP3 records the 19 of 60 on a page that still says about half. Have CP3 reword the page's sentence, or say what the two numbers each count.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "94fc15574bb885d98c8bee7887c8b0f74a072905e369fcfde2ad9287d53b7535",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:57:53Z"
+            }
+          ]
+        },
+        "F-4c9d576e0a4f": {
+          "digest": "4c9d576e0a4fdafe8511c84a6785b16c9140cb53e806080bc755acbec29d5879",
+          "text": "**LPR-R4-002: three path forms fall outside D2's path positions and the Known limit does not name them.** `Path(ROOT, \"docs/run.md\")` and `os.path.join(ROOT, \"docs\", \"run.md\")` carry the path in an argument after the first, and `ROOT.joinpath(\"docs\", \"run.md\")` is not a listed position, so a new reader written this way is not flagged. None of the three exists at the base commit (the replay checks for them), and main still runs everything, so a miss would surface after the merge. Either add them to the positions or name them in the Known limit.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "e943269f3f497fa2d0cb084c82b1e9f8c48c71dbecc4ae05453ff31c66d43618",
+              "verdict": "REVISE",
+              "at": "2026-11-07T08:12:48Z"
+            }
+          ]
+        },
+        "F-4d4023a6b4e2": {
+          "digest": "4d4023a6b4e2fab1b77a611b40ca3386bc39c9a75fc9601b676e399287833caf",
+          "text": "**LPR-R5-001: D2's named roots and site count are approximate.** D2 lists the fixture roots as `root`, `repo.root`, `d.root`, `ev.root`, `self.scratch.root`, `self.root` and `checkout`, but `scripts/workflow_state_completion_obligations_test.py:2699-2711` builds its candidates on `self.repo.root`, a root expression not named. An independent replay of the rule finds 47 sites rather than 48 (42 fixture sites rather than 43; round 4's replay found 37), the same eight modules and the same module-and-path outcome. CP1 and its Done-when cite \"the 43 sites\" as a result to reproduce, though the count depends on how sites are counted. The implementer should treat the modules, roots and outcome as the expected result, state the exact table and count from the first run, and not read a differing site count as a disagreement that shrinks the set.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:21:09Z"
+            }
+          ]
+        },
+        "F-0a7c7c3c38b0": {
+          "digest": "0a7c7c3c38b0a87226d47a7e143a43b0296d96dbc0eb05b47c0b6216a74b4575",
+          "text": "**LPR-R5-002: the new test module can itself become an eighth fixture module.** CP1's `detect` tests build a real temporary repository, and a natural `root / \"docs\" / \"items\" / \"a.md\"` in `tests/test_ci_changes.py` is a candidate under D2's rule. It would then need a fixture-table entry, and CP1's Done-when (\"seven fixture modules on the table\") would not literally hold. Either give the module its own entry and report eight, or build those paths from a non-constant segment; the checkpoint's report should say which.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:21:09Z"
+            }
+          ]
+        },
+        "F-ffc65798172f": {
+          "digest": "ffc65798172f084d000a84490aee3d898e17e772e4918eecf7b8bb875b62019e",
+          "text": "**LPR-R5-003: the Known limit does not name whole-tree readers.** A bare parent is not a candidate, so `(REPO_ROOT / \"docs\").rglob(\"*\")` (folds to `docs/*`), `REPO_ROOT.glob(\"docs/**/*.md\")`, `os.walk(REPO_ROOT / \"docs\")` and a `git ls-files` listing used to open files are not flagged, and an iterating reader of this kind also passes the removal experiment D1 relies on, because deleting the files leaves it nothing to fail on. None exists at the base commit (checked below), and main still runs everything, so a miss surfaces after the merge. Worth a sentence in the Known limit, or flagging a real-root `glob`/`rglob`/`walk` over `docs`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:21:09Z"
+            }
+          ]
+        },
+        "F-cfff24ac3e4c": {
+          "digest": "cfff24ac3e4c884564d969cb636416784dfe36ea947b20bf6d889642f06bf62f",
+          "text": "**LPR-R6-001: `tests-result` is not the only required check, and the plan does not say what happens to the others.** D4 says \"the required check is `tests-result`\", but the live ruleset of `main` (and `docs/guide/ci-and-releases.md:694`) also requires `validate / plan`, which D4 skips on a documentation-only pull request. GitHub's documentation says a job skipped by a conditional reports Success and does not block a merge, even when required, so the behaviour is right, but that rests on a premise the plan does not state. D4 could name it, CP3 could update both check lists in that guide (`:238` and `:694`, the second to say a skipped `plan` passes and that the new `changes` and `docs` jobs need not be required because `tests-result` covers them), and D8's live proof could record that the pull request merged with `validate / plan` skipped, not only its duration.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:30:01Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -62913,7 +62913,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -63053,12 +63053,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 0
         }
       },
-      "state_revision": 49,
-      "last_transition": "2026-11-07T03:00:22Z",
+      "state_revision": 50,
+      "last_transition": "2026-11-07T03:15:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -63747,6 +63747,48 @@
               "review_content_id": "00a0b38b30c2e2a9a08128bc4876576d298b41520fc0fc371f035520f1446939",
               "verdict": "REVISE",
               "at": "2026-11-07T02:11:03Z"
+            }
+          ]
+        },
+        "F-72e381c9e353": {
+          "digest": "72e381c9e35370b259cef4be49b1e808536fb7c3eea87730300d75e10a9b3df1",
+          "text": "O1: Any Workflow reviewer can put a private-key armour line into the ledger just by quoting it, as round 1 did, and from then on the input check refuses every bundle that holds the state file. Going back to D4's pattern fixes today's match only. H4e2b should decide how `WORKFLOW_STATE.json` under `files/` is treated by that check before the live proof, since it is the one input that accumulates reviewers' prose from all items.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "1cf725645335a33deac3ff088f4e4faaad63ed7776b4c768be129aebcdff2163",
+              "verdict": "REVISE",
+              "at": "2026-11-07T03:15:02Z"
+            }
+          ]
+        },
+        "F-1f61fbd30230": {
+          "digest": "1f61fbd3023052c1117dd7b51d51f4b5a7df71fa9bac37cc98419eba6d546477",
+          "text": "O2: `after_check` compares only the digest, although the input manifest also records each file's mode. A worker's `chmod` that leaves an input readable passes. Nothing is copied back, so this has no effect on the managed repository; comparing the mode would make D2's `exactly the manifest's` literal.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "1cf725645335a33deac3ff088f4e4faaad63ed7776b4c768be129aebcdff2163",
+              "verdict": "REVISE",
+              "at": "2026-11-07T03:15:02Z"
+            }
+          ]
+        },
+        "F-0fcc50321ba6": {
+          "digest": "0fcc50321ba60dc051421e96660b475b82979b8332c3aeff3855b9bc16fffdb8",
+          "text": "O3: The acceptance of the state after a record is tested for an `APPROVE` only (`test_the_workflows_validator_and_next_action_accept_the_recorded_state`). CP1 names `APPROVE`, `REVISE` and `BLOCK`. The byte-for-byte comparison with the in-place sequence makes a difference unlikely, and adding the other two to the same test would close it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "1cf725645335a33deac3ff088f4e4faaad63ed7776b4c768be129aebcdff2163",
+              "verdict": "REVISE",
+              "at": "2026-11-07T03:15:02Z"
             }
           ]
         }

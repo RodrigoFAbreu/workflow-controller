@@ -15,9 +15,19 @@ for an implementation `REVISE` the Workflow's own commit of that state). A refus
 `CAUSES`; the runner's own errors propagate. `run_in_private_copy` gains `real_index=False`: with `True` it uses the target's
 own index and switches off every hook event a commit fires, each setting checked like the rest. The tests run the Workflow
 scripts this repository has installed and compare the state and feedback with the in-place command's function sequence byte
-for byte. CP2 (the read-only run in the Codex clone) is next.
+for byte. CP2 is complete: `controller/codex_review_role.py` has `run_review`, which runs one local review role as a Codex
+worker in H4e's private clone made with `prepare(read_only=True)` (a dirty managed tree is admitted and its dirty paths
+returned), on a copy of the bound bundle, the verified changes file and the previous feedback, with an input manifest and
+nothing copied back. `launch_codex_worker` gains `prompt=`, `review.build_local_prompt` asks for a `Status:` line and the
+eight sections and no file, and the run reads the final message from `last-message.md` as bytes, composes the header from
+the recorder's `check` values (`Reviewer model: openai/<model>` exactly when the gate requires distinct models) and hands it
+to the recorder. The deny set (`CAUSES`: `special_file`, `submodule`, `credential_input`, `path_escape`, `input_over_bound`,
+`verdict_over_bound`, `verdict_unparsed`, `credential_in_verdict`, `read_only_violated`) and D5's endings each have a test,
+as does each `recover` ending; the fake `codex` gains `message_bytes`. `docs/guide/harnesses.md` has a section on the
+recorder and the run, and `docs/guide/workers.md` links it. Both checkpoints are implemented; no role is routed to Codex
+until H4e2b.
 
-Next action: `/milestone-implement workflow-controller-h4e2` for CP2.
+Next action: the full verification, then the implementation review bundle (`/milestone-implement workflow-controller-h4e2`).
 
 ## Previous milestone (H4e leftovers)
 

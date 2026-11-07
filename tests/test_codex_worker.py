@@ -283,6 +283,25 @@ class OutcomeTest(LaunchFixture):
                          (worker.INTERRUPTED, cw.SUBTYPE_SIGNAL, -signal.SIGKILL))
         self.assertTrue(outcome.is_error)
 
+    def test_a_prompt_replaces_the_rendered_command_and_every_control_still_runs(self) -> None:
+        self.script(message="done")
+        outcome = self.launch("/do-thing now", prompt="Review this, please.")
+        self.assertEqual(outcome.outcome, worker.SUCCESS)
+        (entry,) = self.execs()
+        self.assertEqual(entry["prompt"], "Review this, please.")
+
+    def test_without_a_prompt_the_command_is_rendered_as_before(self) -> None:
+        self.script(message="done")
+        self.launch("/do-thing now")
+        (entry,) = self.execs()
+        self.assertEqual(entry["prompt"].strip(), "Do the thing: now")
+
+    def test_a_prompt_does_not_excuse_a_malformed_task_or_an_unverified_build(self) -> None:
+        self.recorded = True  # no verified build is recorded: the gate refuses
+        self.assertIsInstance(self.refusal("not a command", prompt="p"), ReviewLaunchRefusedError)
+        self.assertIsInstance(self.refusal("/do-thing", prompt="p"), ReviewLaunchRefusedError)
+        self.assertEqual(self.execs(), [])
+
     def test_a_limit_record_is_failure(self) -> None:
         self.script(verdict="limit", message="partial")
         outcome = self.launch()

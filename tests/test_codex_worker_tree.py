@@ -48,8 +48,8 @@ class Fixture(unittest.TestCase):
         self.runtime = self.tmp / "runtime"
         self.layout = ws.WorkerLayout(self.runtime, "job1")
 
-    def prepare(self, base: str | None = None, layout: ws.WorkerLayout | None = None) -> tree.Prepared:
-        return tree.prepare(self.managed, layout or self.layout, base or self.base)
+    def prepare(self, base: str | None = None, layout: ws.WorkerLayout | None = None, **kw) -> tree.Prepared:
+        return tree.prepare(self.managed, layout or self.layout, base or self.base, **kw)
 
     def snapshot(self) -> dict:
         return {"head": out(self.root, "rev-parse", "HEAD"), "refs": out(self.root, "for-each-ref"),
@@ -190,6 +190,29 @@ class RefusalTest(Fixture):
         (self.root / "loose.txt").write_text("l\n")
         error = self.assertRefused("managed_tree_not_clean")
         self.assertEqual(error.evidence["untracked"], ["loose.txt"])
+
+    def test_a_read_only_clone_is_made_of_a_dirty_tree_and_returns_the_dirty_paths(self) -> None:
+        (self.root / "src.txt").write_text("changed\n")
+        (self.root / "loose.txt").write_text("l\n")
+        prepared = self.prepare(read_only=True)
+        self.assertEqual(prepared.dirty, {"tracked_changes": [" M src.txt"], "untracked": ["loose.txt"]})
+        self.assertEqual((prepared.path / "src.txt").read_text(), "one\n")
+        self.assertFalse((prepared.path / "loose.txt").exists())
+        self.assertEqual(prepared.to_dict()["dirty"], prepared.dirty)
+
+    def test_a_read_only_clone_of_a_clean_tree_has_empty_dirty_paths_and_a_default_clone_has_none(self) -> None:
+        self.assertEqual(self.prepare(read_only=True).dirty, {"tracked_changes": [], "untracked": []})
+        self.assertIsNone(self.prepare(layout=ws.WorkerLayout(self.runtime, "job2")).dirty)
+        self.assertNotIn("dirty", self.prepare(layout=ws.WorkerLayout(self.runtime, "job3")).to_dict())
+
+    def test_a_read_only_clone_keeps_every_other_refusal(self) -> None:
+        (self.root / "next.txt").write_text("n\n")
+        git(self.root, "add", "next.txt")
+        git(self.root, "commit", "-q", "-m", "next")
+        with self.assertRaises(tree.CodexTreeError) as caught:
+            self.prepare(read_only=True)
+        self.assertEqual(caught.exception.cause, "managed_branch_moved")
+        self.assertFalse(self.layout.worktree.exists())
 
     def test_an_ignored_file_is_not_an_unclean_tree(self) -> None:
         (self.root / ".gitignore").write_text("ign/\n")

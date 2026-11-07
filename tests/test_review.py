@@ -209,6 +209,30 @@ class RoundPromptTest(unittest.TestCase):
                     self.assertEqual(prompt.count(middle + review.BRIEF_PRECEDENCE), 1)
                     self.assertEqual(prompt.count("external round"), 1 if given else 0)
 
+    def test_the_local_form_names_the_local_role_asks_for_no_file_and_no_header(self) -> None:
+        for stage, role in review.LOCAL_REVIEWER_ROLES.items():
+            with self.subTest(stage=stage):
+                prompt = review.build_local_prompt(stage, bundle_dir="/b/current")
+                self.assertIn(role, prompt)
+                self.assertIn("`/b/current`", prompt)
+                self.assertIn("write no file", prompt)
+                self.assertIn("Write no title and no other header line", prompt)
+                self.assertNotIn("Reviewer model", prompt)
+                self.assertNotIn("# Review Decision\n\nStatus", prompt)
+                for name in review.LOCAL_VERDICT_SECTIONS:
+                    self.assertIn(f"`## {name}`", prompt)
+                self.assertIn(review.BUNDLE_TEXT_RULE, prompt)
+                self.assertIn(review.VERDICT_FORMAT_RULES, prompt)
+
+    def test_the_local_form_adds_the_changes_paragraph_for_the_local_role_except_in_round_one(self) -> None:
+        prompt = review.build_local_prompt("plan", bundle_dir="/b", changes_path=self.PATH, local_round=2)
+        self.assertIn("## LOCAL_MODEL_PLAN_REVIEW", prompt)
+        self.assertIn(self.PATH, prompt)
+        plain = review.build_local_prompt("plan", bundle_dir="/b")
+        self.assertEqual(review.build_local_prompt("plan", bundle_dir="/b", changes_path=self.PATH, local_round=1),
+                         plain)
+        self.assertNotIn("CHANGES_SINCE_REVIEW", plain)
+
     def test_a_known_first_external_round_has_no_round_paragraph(self) -> None:
         plain = review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b")
         self.assertEqual(review.build_prompt("plan", PLAN_EXPECTED, bundle_dir="/b", changes_path=self.PATH,

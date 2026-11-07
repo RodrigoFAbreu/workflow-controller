@@ -51,10 +51,16 @@ class Prepared:
     branch: str
     base: str
     guard: dict
+    #: The managed repository's uncommitted paths (``tracked_changes`` and ``untracked``), only for a ``read_only``
+    #: clone, which is made whatever they are; ``None`` otherwise.
+    dirty: dict | None = None
 
     def to_dict(self) -> dict:
         """The ``clone`` block of the ``codex_worker`` record."""
-        return {"path": str(self.path), "branch": self.branch, "base": self.base, "guard": self.guard}
+        block = {"path": str(self.path), "branch": self.branch, "base": self.base, "guard": self.guard}
+        if self.dirty is not None:
+            block["dirty"] = self.dirty
+        return block
 
 
 def scrubbed_runner(ceiling: Path, *, no_optional_locks: bool = False) -> gitrepo.Runner:
@@ -83,8 +89,10 @@ def _refuse(cause: str, message: str, **evidence: Any) -> CodexTreeError:
     return CodexTreeError(cause, message, evidence=evidence)
 
 
-def check_managed(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str) -> str:
-    """D2's refusals, in order, with no write anywhere. Returns the managed branch's name."""
+def check_managed(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str, *,
+                  read_only: bool = False) -> str:
+    """D2's refusals, in order, with no write anywhere. Returns the managed branch's name. With ``read_only`` (a job
+    that lands nothing, ``workflow-controller-h4e2`` D2) only the ``managed_tree_not_clean`` refusal is skipped."""
     root = Path(managed_repo.root)
     runner = scrubbed_runner(layout.base, no_optional_locks=True)
     try:
@@ -99,7 +107,7 @@ def check_managed(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, 
                           base=base)
         changes = gitrepo.tracked_changes(root, runner=runner, no_optional_locks=True)
         untracked = gitrepo.untracked_files(root, runner=runner, no_optional_locks=True)
-        if changes or untracked:
+        if (changes or untracked) and not read_only:
             raise _refuse("managed_tree_not_clean", "the managed repository has uncommitted changes, which a clone "
                           "cannot receive and a landing could not return", tracked_changes=changes,
                           untracked=untracked)
@@ -137,11 +145,27 @@ def _git(clone: Path, args: list[str], runner: gitrepo.Runner, what: str) -> Non
                       "stderr": result.stderr.decode("utf-8", "replace").strip()})
 
 
-def prepare(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str) -> Prepared:
-    """D1 and D2: refuse unless the managed branch is clean and at ``base``, then make the private clone at
-    ``layout.worktree`` and return it. A clone partly made is removed before the error is raised."""
+def managed_dirty(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout) -> dict:
+    """The managed repository's uncommitted paths, read without optional locks."""
     root = Path(managed_repo.root)
-    branch = check_managed(managed_repo, layout, base)
+    runner = scrubbed_runner(layout.base, no_optional_locks=True)
+    try:
+        return {"tracked_changes": gitrepo.tracked_changes(root, runner=runner, no_optional_locks=True),
+                "untracked": gitrepo.untracked_files(root, runner=runner, no_optional_locks=True)}
+    except GitOperationError as exc:
+        raise _refuse("clone_failed", f"the managed repository could not be read: {exc.message}",
+                      **exc.evidence) from exc
+
+
+def prepare(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str, *,
+            read_only: bool = False) -> Prepared:
+    """D1 and D2: refuse unless the managed branch is clean and at ``base``, then make the private clone at
+    ``layout.worktree`` and return it. A clone partly made is removed before the error is raised. With ``read_only``
+    a dirty managed tree is not refused (the clone is made from the commit, a read-only job lands nothing) and its
+    dirty paths are returned in :attr:`Prepared.dirty`; every other refusal stands."""
+    root = Path(managed_repo.root)
+    branch = check_managed(managed_repo, layout, base, read_only=read_only)
+    dirty = managed_dirty(managed_repo, layout) if read_only else None
     clone = layout.worktree
     runner = scrubbed_runner(layout.base)
     argv = ["git", "clone", "--no-checkout", "--no-local", "--no-hardlinks", "--no-tags", "--single-branch",
@@ -169,4 +193,4 @@ def prepare(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: 
     except BaseException:
         _remove_partial(layout)
         raise
-    return Prepared(path=clone, branch=branch, base=base, guard=guard)
+    return Prepared(path=clone, branch=branch, base=base, guard=guard, dirty=dirty)

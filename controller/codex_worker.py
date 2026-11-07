@@ -7,7 +7,9 @@ starts or writes anything, runs the controls, runs ``codex exec`` under a deadli
 the nested-repository scan and the build around the run, copies the credential back and removes the copy on every path,
 and maps what happened to one of the four outcomes (:func:`classify`). :class:`CodexLauncher` is the
 :class:`controller.worker_launch.WorkerLauncher` of it. It is registered for a fixture role only: no setting, option or
-gate selects it, ``harness.CODEX`` declares no worker role and ``worker_launch.LAUNCHERS`` does not list it (see
+gate selects it, ``harness.CODEX`` declares no worker role and ``worker_launch.LAUNCHERS`` does not list it. The ``prompt`` keyword of
+:func:`launch_codex_worker` sends a given text on stdin in place of the rendered command (the read-only review run of
+:mod:`controller.codex_review_role`, itself routed to no role; see
 ``docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md``).
 """
 
@@ -159,8 +161,10 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
                         model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT,
                         binary_name: str = "codex", system_dir: Path = review.SYSTEM_LAYER_DIR,
                         run: Callable[..., review.RunResult] | None = None, system_path: str = review.SYSTEM_PATH,
-                        real_home: Path | None = None) -> worker.WorkerResult:
-    """Launch ``task`` (``/<name> [arguments]``) as a Codex worker in ``cwd`` and return the ``WorkerResult``.
+                        real_home: Path | None = None, prompt: str | None = None) -> worker.WorkerResult:
+    """Launch ``task`` (``/<name> [arguments]``) as a Codex worker in ``cwd`` and return the ``WorkerResult``. With
+    ``prompt`` the task is still parsed (a malformed one is refused) but ``prompt`` is sent on stdin in place of the
+    rendered command (``workflow-controller-h4e2`` D3); every other control is unchanged.
 
     In the order of D4: the command is rendered, the binary resolved (symlink kept), the build gate (nothing is written
     or started before it passes), the placement checks, the guard digest, then ``build`` and the controls inside the
@@ -169,8 +173,8 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
     controls only; ``binary_name``, ``system_dir``, ``system_path`` and ``real_home`` are the seams of the binary, the
     outside layers, the build digest and the readable roots."""
     name, arguments = _parse_task(task)
-    rendered = command_files.render_command(name, arguments, Path(commands_dir) if commands_dir is not None
-                                            else Path(cwd) / ".claude" / "commands")
+    stdin_prompt = prompt if prompt is not None else command_files.render_command(
+        name, arguments, Path(commands_dir) if commands_dir is not None else Path(cwd) / ".claude" / "commands").prompt
     binary = review.resolve_binary(binary_name)
     admitted = codex_build.is_verified(runtime_root, binary, system_path=system_path)
     if not admitted.ok:
@@ -200,7 +204,7 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
                                             model=model, effort=effort, run=run)
         started = time.monotonic()
         ran = review.run_bounded(list(built.argv), cwd=layout.worktree, env=built.environment, timeout=timeout,
-                                 stdin_text=rendered.prompt, on_spawn=on_spawn)
+                                 stdin_text=stdin_prompt, on_spawn=on_spawn)
         duration_ms = int((time.monotonic() - started) * 1000)
     except BaseException:
         _settle(diagnosis, layout, built, Path(operator_home), in_flight=True)

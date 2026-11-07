@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci1a",
+  "requirements": {
+    "R1": {
+      "description": "A pull request whose every changed path is documentation is detected by a pure classifier over a fixed documentation set that no test outside the documentation gate reads, failing closed to code on any doubt, with a guard test over the set",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "validate.yml gains a changes job and a docs gate job, skips plan and the shards for a documentation-only pull request, and tests-result still succeeds only when changes and the gate succeeded and fails closed otherwise, with no workflow-level path filter and main unchanged",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The guides describe the jobs, the documentation set, the fail-closed rules and the local documentation gate",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

@@ -642,6 +642,12 @@ class ModuleTests(unittest.TestCase):
                                              if isinstance(node, ast.ImportFrom) and node.module}
         self.assertFalse([n for n in names if "codex_worker_landing" in (n or "")])
 
+    def test_the_armour_pattern_matches_a_plain_key_line_and_not_a_public_key_line(self) -> None:
+        plain = ("-----BEGIN " + "PRIVATE KEY-----").encode()
+        self.assertTrue(crr.ARMOUR.search(plain))
+        self.assertTrue(crr.ARMOUR.search(ARMOUR.encode()))
+        self.assertFalse(crr.ARMOUR.search(b"-----BEGIN PUBLIC KEY-----"))
+
     def test_the_abandon_and_drift_codes_are_the_ones_the_job_writes(self) -> None:
         from controller import job
         self.assertEqual(crr.OPERATOR_ABANDONED, job.OPERATOR_ABANDONED_CODE)

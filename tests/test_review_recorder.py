@@ -380,6 +380,20 @@ class PlanStageTest(RecorderCase):
                          (False, "recorder_interface_changed", None))
         self.assertIn("record_local_plan_review", result.message)
 
+    def test_a_renamed_parameter_of_a_workflow_writer_is_an_interface_change(self) -> None:
+        script = self.root / "scripts" / "workflow_state.py"
+        source = script.read_text()
+        old = "    verdict_text: str | None = None,\n"
+        self.assertIn(old, source[source.index("def record_local_plan_review("):])
+        head = source.index("def record_local_plan_review(")
+        script.write_text(source[:head] + source[head:].replace(old, "    verdict_body: str | None = None,\n", 1))
+        result = self.check()
+        self.assertEqual((result.ok, result.cause, result.workflow_class),
+                         (False, "recorder_interface_changed", None))
+        self.assertIn("workflow_state.record_local_plan_review", result.message)
+        self.assertIn("verdict_body", result.message)
+        self.assertIn("verdict_text", result.message)
+
     def test_a_moved_state_is_state_identity_changed_and_nothing_is_written(self) -> None:
         values = self.check().values
         stale = self.identity()

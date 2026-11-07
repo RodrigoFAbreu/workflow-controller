@@ -532,7 +532,7 @@ class ModuleScan:
     def _record(self, node: ast.AST, chain: Chain, glob: str | None) -> None:
         if chain.kind == "dir":
             return
-        if not touches_set(chain.segs, chain.kind):
+        if not touches_set(chain.segs, chain.kind, chain.root):
             return
         self.sites.append({"module": self.rel, "line": node.lineno, "path": "/".join(chain.segs),
                            "root": chain.root if chain.kind == "expr" else None, "kind": chain.kind})
@@ -585,16 +585,38 @@ class ModuleScan:
         return reached
 
 
+def _set_members() -> tuple[tuple[str, ...], ...]:
+    """Every member of the set that exists in the checkout, as path segments
+    (so a pattern naming one specific file, under ``docs/items/`` or
+    ``docs/releases/`` too, still counts), and samples so a pattern still
+    counts when the checkout lacks a file it would match."""
+    found = set()
+    for base, _dirs, files in os.walk(ROOT / "docs"):
+        for name in files:
+            rel = (Path(base) / name).relative_to(ROOT).as_posix()
+            if cc.is_documentation(rel):
+                found.add(rel)
+    found |= {"docs/x.md", "docs/backlog.yaml"}
+    for prefix, _ in cc.DOCS_PREFIXES:
+        found |= {f"{prefix}x.md", f"{prefix}sub/x.md"}
+    return tuple(tuple(member.split("/")) for member in sorted(found))
+
+
 def _top_level_members() -> tuple[str, ...]:
-    """The names directly under ``docs/`` that are members of the set: every
-    such file in the checkout, and two samples so a pattern such as ``*.md``
-    still counts when the checkout lacks a file it would match."""
-    found = {path.name for path in (ROOT / "docs").iterdir()
-             if path.is_file() and cc.is_documentation(f"docs/{path.name}")}
-    return tuple(sorted(found | {"x.md", "backlog.yaml"}))
+    """The names directly under ``docs/`` that are members of the set."""
+    return tuple(member[1] for member in _set_members() if len(member) == 2)
 
 
-def touches_set(segs: tuple[str, ...], kind: str = "expr") -> bool:
+#: Final names that stand for the repository checkout itself.
+REPOSITORY_ROOT_NAMES = frozenset({"REPO_ROOT", "ROOT", "REPO", "repo_root", "repository_root"})
+
+
+def _names_repository(root: str | None) -> bool:
+    """Whether an unresolved root expression is named as the repository."""
+    return bool(root) and root.rsplit(".", 1)[-1] in REPOSITORY_ROOT_NAMES
+
+
+def touches_set(segs: tuple[str, ...], kind: str = "expr", root: str | None = None) -> bool:
     """Whether a folded path, or a glob pattern, can name a member of the set.
     A bare parent such as ``docs`` is not a candidate."""
     if not segs:
@@ -614,17 +636,16 @@ def touches_set(segs: tuple[str, ...], kind: str = "expr") -> bool:
         return any(fnmatch.fnmatch(name, rest[0]) for name in _top_level_members())
     if literal == ():
         # A glob with no literal prefix may be rooted at the repository (any
-        # root not on the fixture table is a read of it, D2): it is a candidate
-        # when the whole pattern can name a member of the set.
-        # A pattern that narrows nothing (only ``*`` and ``**``) lists any tree,
-        # so on a root that is not the repository's own it is not a read of
-        # the documentation: the temporary-directory walks would all qualify.
-        if kind != "rootval" and all(seg in ("*", "**") for seg in rest):
+        # root not on the fixture table is a read of it, D2, and a pattern
+        # cannot show a root is temporary): it is a candidate when the whole
+        # pattern can name a member of the set.  A pattern that narrows nothing
+        # (only ``*`` and ``**``) is a candidate on a repository-named root
+        # (``fixtures.REPO_ROOT``, ``ROOT``): the tree listings of temporary
+        # and runtime directories under other names are not reads of it.
+        if kind == "expr" and all(seg in ("*", "**") for seg in rest) and not _names_repository(root):
             return False
-        members = [f"docs/{name}" for name in _top_level_members()]
-        for prefix in prefixes:
-            members += [prefix, f"{prefix}/x.md", f"{prefix}/sub/x.md"]
-        return any(_segments_match(rest, tuple(member.split("/"))) for member in members)
+        members = [("docs",), *(tuple(p.split("/")) for p in prefixes)] + list(_set_members())
+        return any(_segments_match(rest, member) for member in members)
     return False
 
 
@@ -1125,6 +1146,52 @@ class TopLevelGlobTests(unittest.TestCase):
         """)
         self.assertTrue(report.violations, report.sites)
 
+    def test_a_root_level_glob_names_a_specific_existing_member(self):
+        """LIR-R3-I1: a filename that exists under docs/items or docs/releases."""
+        members = ["/".join(m) for m in _set_members()]
+        items = [m for m in members if m.startswith("docs/items/") and m.count("/") == 2]
+        releases = [m for m in members if m.startswith("docs/releases/") and m.count("/") == 2]
+        self.assertTrue(items and releases)
+        names = [items[0].rsplit("/", 1)[1], "ROADMAP.md"]
+        for name in names:
+            for root in ("fixtures.REPO_ROOT", "ROOT"):
+                for call in (f'rglob("{name}")', f'glob("**/{name}")'):
+                    with self.subTest(root=root, call=call):
+                        report = scan(f"""
+                            from tests import fixtures
+                            from pathlib import Path
+                            ROOT = Path(__file__).resolve().parent.parent
+                            def read():
+                                return list({root}.{call})
+                        """)
+                        self.assertTrue(report.violations, report.sites)
+        report = scan(f"""
+            from tests import fixtures
+            def read():
+                return list(fixtures.REPO_ROOT.rglob("{releases[0].rsplit("/", 1)[1]}"))
+        """)
+        self.assertTrue(report.violations, report.sites)
+
+    def test_a_whole_tree_walk_of_the_repository_is_flagged_unless_a_fixture(self):
+        """LIR-R3-I2: an imported repository root is not temporary."""
+        for call in ('rglob("*")', 'glob("**/*")'):
+            with self.subTest(call=call):
+                source = f"""
+                    from tests import fixtures
+                    def read():
+                        return list(fixtures.REPO_ROOT.{call})
+                """
+                self.assertTrue(scan(source).violations)
+                covered = Tables(gate_modules=(), gate_tools=(), mentions=(),
+                                 fixtures=(("tests/test_x.py", "fixtures.REPO_ROOT"),))
+                report = evaluate({"tests/test_x.py": textwrap.dedent(source)}, covered)
+                self.assertEqual(report.violations, [])
+        report = scan("""
+            def read(tmp):
+                return list(tmp.rglob("*"))
+        """)
+        self.assertFalse(report.violations, report.sites)
+
     def test_a_root_level_glob_that_names_no_member_is_not_flagged(self):
         for call in ('rglob("*.py")', 'rglob("__pycache__")'):
             with self.subTest(call=call):
@@ -1154,6 +1221,10 @@ class TouchesSetTests(unittest.TestCase):
                     self.assertTrue(touches_set(segs, kind))
         self.assertTrue(touches_set(("**", "*"), "rootval"))
         self.assertFalse(touches_set(("**", "*"), "expr"))
+        self.assertFalse(touches_set(("**", "*"), "expr", "self.runtime_root"))
+        for root in ("fixtures.REPO_ROOT", "ROOT", "repo_root"):
+            self.assertTrue(touches_set(("**", "*"), "expr", root))
+            self.assertTrue(touches_set(("*",), "expr", root))
         for segs in (("**", "*.py"), ("**", "__pycache__"), ("*.py",)):
             for kind in ("rootval", "expr"):
                 with self.subTest(segs=segs, kind=kind):

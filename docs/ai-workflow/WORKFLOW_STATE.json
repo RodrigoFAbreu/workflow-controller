@@ -64422,7 +64422,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 6,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -64566,12 +64566,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 3,
-          "external": 2
+          "local": 4,
+          "external": 3
         }
       },
-      "state_revision": 37,
-      "last_transition": "2026-11-07T11:47:39Z",
+      "state_revision": 39,
+      "last_transition": "2026-11-07T12:03:08Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -64822,17 +64822,45 @@
               "at": "2026-11-07T10:49:38Z"
             }
           ]
+        },
+        "F-65724c784245": {
+          "digest": "65724c784245b52a1774d3df05592258be1eed54d1e4b35d4bd4e56e2075d902",
+          "text": "**LIR-R4-O1: a whole-tree walk of the repository through a parameter, an alias or an attribute is still not flagged, although the scan can prove the root is the repository.** `touches_set` (`tests/test_ci_changes.py:644`) counts a pattern made only of `*`/`**` on an `expr` root only when the root's final name is in `REPOSITORY_ROOT_NAMES`. Checked with `scan()`: `def walk(root): return list(root.rglob(\"*\"))` called as `walk(REPO_ROOT)` with `REPO_ROOT = Path(__file__).resolve().parent.parent`, the same with `walk(fixtures.REPO_ROOT)`, `base = fixtures.REPO_ROOT` then `base.rglob(\"*\")`, and `self.repo = fixtures.REPO_ROOT` then `self.repo.rglob(\"*\")` all give no site, while `(base / \"docs\" / \"run.md\")` on the same alias is flagged. In the first case `ModuleScan.reached()` already reports `root` as reached by a repository-root value, so treating a wildcard-only walk as a candidate when its root is in `reached()` (and letting `reached()` treat a repository-named expression such as `fixtures.REPO_ROOT` as a root value) would close the parameter, alias and attribute forms without flagging the temporary-directory listings. Nothing in the repository uses these forms today, the plan's Know",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "6573860943506847f3ea76c9aa8bbd2e45f213292f9097e234e11cc9e8f04049",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T12:01:20Z"
+            }
+          ]
+        },
+        "F-9da29d84f361": {
+          "digest": "9da29d84f3610f120e82b0cade17cd30a2359723c3088b1355bd51f5dc6c447e",
+          "text": "**LIR-R4-O2: `TEST_RESULTS.md` was not updated for round 3.** Its header still says \"implementation revision 2\", head `29de47a`, and neither it nor IMPLEMENTATION_SUMMARY's \"Round 3 fixes\" section records a full-suite run for `8a17040`/`c04a1d6`. This review ran it (below), so nothing is unverified, but the bundle's own evidence should cover each fix round.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "6573860943506847f3ea76c9aa8bbd2e45f213292f9097e234e11cc9e8f04049",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T12:01:20Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "56ea11eb7d40061d62586066b8dead2d2b5eec5c81e7a28ae2afb8adf3851675",
+        "review_content_id": "6573860943506847f3ea76c9aa8bbd2e45f213292f9097e234e11cc9e8f04049",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "7ee181fe21a3e411749c23410a1d85de5a51f889421db35556c41dbbd3a7c1ee",
+          "bundle_id": "31db3c58f9ddb2815d4e6052721726227e7d3ab3565d00e3ccbda92ab969d171",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-11-07T10:49:38Z",
-          "verdict_sha256": "09ed8e13a4130c10f08d0ea979e83f33530caee2023012d213bcd02d166bed83",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "round": 4,
+          "completed_at": "2026-11-07T12:01:20Z",
+          "verdict_sha256": "6be55546134ba9040f2ecc67940e156d481069fc0297dad4f006ec23044eaf76",
+          "run_ref": "session:local .ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null

@@ -62913,7 +62913,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -63053,12 +63053,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 3,
-          "external": 0
+          "local": 4,
+          "external": 1
         }
       },
-      "state_revision": 53,
-      "last_transition": "2026-11-07T04:34:46Z",
+      "state_revision": 55,
+      "last_transition": "2026-11-07T04:56:21Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -63847,7 +63847,76 @@
               "at": "2026-11-07T04:07:30Z"
             }
           ]
+        },
+        "F-a02f340ed752": {
+          "digest": "a02f340ed752654d402485b29240db9ffd7387b43d3f02e91b15ad6fba9dd4c8",
+          "text": "O1: `after_check` passes two changed clones. I ran both through `run_review`: a worker that writes `sub/.gitignore` holding `*` plus a file beside it, and a worker that moves `.ai-review` elsewhere and leaves a symlink to it (`os.walk` follows the top directory, `controller/codex_review_role.py:340`). Both ended `CodexReviewRecorded`. The first fits D2's wording (an ignored untracked file is allowed), and nothing leaves the clone but the final message, so the verdict is not affected. H4e2b's safety review should either refuse them (`status --ignored`, an `lstat` of `.ai-review`) or state that the check does not cover them.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "d3db4c603afed13dfbf8517de94262c5445ad1a5ea9dc0354f2fe779c44fccca",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T04:52:02Z"
+            }
+          ]
+        },
+        "F-88185f78f112": {
+          "digest": "88185f78f1126b0161a117aeae090dbc55590220aa6295e61dac72d078732ec6",
+          "text": "O2: `TEST_RESULTS.md` says `CHANGES_SINCE_REVIEW.md` is refused because it quotes the removed test lines. That was true of revision 3 and is stale at revision 4: `collect_inputs` on the real item accepted the current bundle, this changes file and the previous feedback (45 files). The question for H4e2b about files that quote armour still stands; only the statement is out of date.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "d3db4c603afed13dfbf8517de94262c5445ad1a5ea9dc0354f2fe779c44fccca",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T04:52:02Z"
+            }
+          ]
+        },
+        "F-9bd8ad368dc6": {
+          "digest": "9bd8ad368dc65f5acccfbc3bda66fd879e381c96cfe5bcfb2f4d5530e870e67e",
+          "text": "O3: `IMPLEMENTATION_SUMMARY.md`'s last section says the final verification ran in a clean clone, while `TEST_RESULTS.md` and `REVIEW_REQUEST.md` say the working checkout, and round 3's acceptance criterion asked for a clean clone. The result holds, because I ran it in a clean clone (see the end of this verdict), but the two statements disagree and the sentence should be corrected at the next generation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "d3db4c603afed13dfbf8517de94262c5445ad1a5ea9dc0354f2fe779c44fccca",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T04:52:02Z"
+            }
+          ]
+        },
+        "F-d2f96dd12888": {
+          "digest": "d2f96dd1288831d4097f67666cb7ef75cc281bda1b233111e6122085105c4303",
+          "text": "O4: On `credential_in_verdict`, a failure to delete `last-message.md` is swallowed (`controller/codex_review_role.py:475`), so the armoured message can stay on disk with nothing in the evidence saying so, where D4 says the run deletes it. A clone removal failure is named as `clone_removal_error`; this one could be named the same way. From reading only; I did not make the deletion fail.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "d3db4c603afed13dfbf8517de94262c5445ad1a5ea9dc0354f2fe779c44fccca",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T04:52:02Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "d3db4c603afed13dfbf8517de94262c5445ad1a5ea9dc0354f2fe779c44fccca",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7a912b10fa921b612048c39206bc159c51b849e3b88210c267a52321ad276e84",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-07T04:52:02Z",
+          "verdict_sha256": "92d698573a219bb17ebcd6d653502619ed6c4837778c3a33e9fa3dac5a88456e",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

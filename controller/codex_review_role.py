@@ -21,11 +21,13 @@ import hashlib
 import os
 import re
 import stat
+import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from . import codex_worker, codex_worker_sandbox, codex_worker_tree, protocol, review, review_recorder, runtime, worker
+from . import (codex_worker, codex_worker_sandbox, codex_worker_tree, gitrepo, protocol, review, review_recorder,
+               runtime, worker)
 from .errors import (
     ControllerError,
     WorkflowProtocolFailedError,
@@ -320,12 +322,14 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
     problems: list[str] = []
     runner = codex_worker_tree.scrubbed_runner(layout.base)
     try:
-        # ``git status`` honours index flags a worker can set (``--skip-worktree``, ``--assume-unchanged``), which
-        # hide a tracked edit from it; an entry carrying any flag is a change in itself, whatever the file holds.
-        for record in (r for r in _clone_git(clone, runner, "ls-files", "-v", "-z").split("\0") if r):
-            if record[:1] != "H":
-                problems.append(f"index flag {record[0]} on {record[2:]}")
-        listing = _clone_git(clone, runner, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+        # The clone's own index is the worker's to write (it can set ``--skip-worktree``/``--assume-unchanged`` or
+        # rewrite an entry's object id), so the tree is compared with the base commit through a fresh index the worker
+        # never touched, kept outside the clone: nothing it holds can hide a tracked edit.
+        with tempfile.TemporaryDirectory(dir=layout.base) as scratch:
+            env = {**review._git_env(layout.base), "GIT_INDEX_FILE": str(Path(scratch) / "index")}
+            fresh = gitrepo.subprocess_runner(env)
+            _clone_git(clone, fresh, "read-tree", prepared.base)
+            listing = _clone_git(clone, fresh, "status", "--porcelain=v1", "-z", "--untracked-files=all")
         for record in (r for r in listing.split("\0") if r):
             path = record[3:]
             if not (path == ".ai-review" or path.startswith(".ai-review/")):

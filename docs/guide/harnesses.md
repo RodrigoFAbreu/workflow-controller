@@ -415,7 +415,7 @@ operator can select changes.
   nothing is recorded: `verdict_over_bound` (1 MiB), `verdict_unparsed` (invalid UTF-8, a bad `Status:` or `Review scope:`, extra lines before the first section, or any of the eight protocol sections missing), `credential_in_verdict` (armour in the message, the
   worker's `stdout` or `stderr`, checked first on every result; the result is returned with those fields emptied, though the
   session rollouts stay in `codex-home/sessions` for the usage admission) and `read_only_violated` (the clone is not as the
-  run left it: a changed file, including one an index flag such as `--skip-worktree` or `--assume-unchanged` hides, which is refused as a flag; a new ref, a moved `HEAD`, a changed or extra input).
+  run left it: a changed file, found by comparing the tree with the base commit through a fresh index the worker never touched, so an index flag such as `--skip-worktree` or `--assume-unchanged`, or a rewritten index entry, hides nothing; a new ref, a moved `HEAD`, a changed or extra input).
 - **The endings** (`Ending(code, cause, worker, evidence)`), the clone removed on each: `CodexReviewNotStarted`,
   `CodexReviewWorkerFailed` (`timeout`, `terminated_by_signal`, `usage_limit`, `non_zero_exit`, `no_final_message`,
   `sandbox_breach`), `CodexReviewRefused`, `ReviewStateIdentityChanged`, `workflow_release_changed`,

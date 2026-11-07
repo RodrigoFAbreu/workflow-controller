@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import base64
 import dataclasses
+import hashlib
 import json
 import os
 import shutil
@@ -410,7 +411,23 @@ class RunTests:
                 return result
             return launch
 
+        def crafted_index(task, **kw):
+            result = self.seam(task, **kw)
+            clone = kw["cwd"]
+            (clone / "README.md").write_text("crafted edit\n")
+            git = lambda *a: subprocess.run(["git", "-C", str(clone), *a], check=True, capture_output=True,
+                                            text=True).stdout.strip()
+            git("add", "README.md")
+            edited, head_blob = git("rev-parse", ":README.md"), git("rev-parse", "HEAD:README.md")
+            index = clone / ".git" / "index"
+            raw = index.read_bytes()[:-20].replace(bytes.fromhex(edited), bytes.fromhex(head_blob))
+            index.write_bytes(raw + hashlib.sha1(raw).digest())
+            later = os.stat(clone / "README.md").st_mtime + 5
+            os.utime(index, (later, later))
+            return result
+
         cases = {
+            "crafted index": ({}, crafted_index),
             "write": ({"write_outside": [str(self.layout.worktree / "new.txt")]}, None),
             "ref": ({"git": [["update-ref", "refs/heads/evil", "HEAD"]]}, None),
             "commit": ({"git": [["commit", "--allow-empty", "-m", "x"]]}, None),

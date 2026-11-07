@@ -288,8 +288,9 @@ The workflow files `ci.yml`, `main.yml`, `main-reuse-report.yml`, `validate.yml`
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
 committed file differs from the model.
 
-The checks are `validate / plan`, `validate / tests (<i>)`,
-`validate / tests-result`, `validate / package` and `PR title`. See
+The checks are `validate / changes`, `validate / docs`,
+`validate / plan`, `validate / tests (<i>)`, `validate / tests-result`,
+`validate / package` and `PR title`. See
 [Repository settings](#repository-settings) for which of them `main`
 requires.
 
@@ -748,7 +749,13 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
     `validate / package`, `workflow-conformance` and `PR title`. The
     individual `validate / tests (<i>)` shards are deliberately not
     required: their number changes with the plan, and `tests-result`
-    fails whenever a shard fails or is missing;
+    fails whenever a shard fails or is missing. `validate / changes` and
+    `validate / docs` are not required either, because `tests-result`
+    fails unless both succeeded. On a
+    [documentation-only pull request](#documentation-only-pull-requests)
+    `validate / plan` is skipped by its condition, and GitHub reports a
+    job skipped that way as a success, so the required check passes and
+    the merge is not blocked;
   - a pull request does **not** have to be up to date with `main` to be
     merged. That requirement would block the `integration_required`
     procedure (merging a milestone pull request that `main` moved ahead

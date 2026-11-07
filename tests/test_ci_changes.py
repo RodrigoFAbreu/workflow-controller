@@ -362,10 +362,12 @@ class ModuleScan:
         self.depth = len(Path(rel).parts)
         self.module_scope = Scope(self.tree.body, None)
         self.scopes: dict[int, Scope] = {}
-        self.functions: dict[str, ast.FunctionDef] = {}
+        # Every definition of a name is kept: two classes may each define a
+        # method of the same name, and any one of them may return the root.
+        self.functions: dict[str, list[ast.FunctionDef]] = {}
         for node in ast.walk(self.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                self.functions.setdefault(node.name, node)
+                self.functions.setdefault(node.name, []).append(node)
         self._helper_cache: dict[str, bool] = {}
         self._reached_cache: set[str] | None = None
         self.sites: list[dict] = []
@@ -393,15 +395,15 @@ class ModuleScan:
         """A module function whose ``return`` is a repository-root value."""
         if name in self._helper_cache:
             return self._helper_cache[name]
-        func = self.functions.get(name)
         result = False
-        if func is not None and name not in seen:
-            scope = self._scope_for(func, self.module_scope)
-            for node in ast.walk(func):
-                if isinstance(node, ast.Return) and node.value is not None:
-                    chain = self.fold(node.value, scope, seen | {name})
-                    if chain is not None and chain.kind == "rootval":
-                        result = True
+        if name not in seen:
+            for func in self.functions.get(name, ()):
+                scope = self._scope_for(func, self.module_scope)
+                for node in ast.walk(func):
+                    if isinstance(node, ast.Return) and node.value is not None:
+                        chain = self.fold(node.value, scope, seen | {name})
+                        if chain is not None and chain.kind == "rootval":
+                            result = True
         self._helper_cache[name] = result
         return result
 
@@ -552,18 +554,18 @@ class ModuleScan:
         of D2: assignment, a helper's return, an attribute, a call argument,
         and transitively."""
         reached: set[str] = set()
-        params = {name: [a.arg for a in (*f.args.posonlyargs, *f.args.args)] for name, f in self.functions.items()}
-        named = {name: {a.arg for a in (*f.args.posonlyargs, *f.args.args, *f.args.kwonlyargs)}
-                 for name, f in self.functions.items()}
+        params = {name: [[a.arg for a in (*f.args.posonlyargs, *f.args.args)] for f in defs]
+                  for name, defs in self.functions.items()}
+        named = {name: {a.arg for f in defs for a in (*f.args.posonlyargs, *f.args.args, *f.args.kwonlyargs)}
+                 for name, defs in self.functions.items()}
 
         def returns_root(name: str, seen: frozenset) -> bool:
             """A module function one of whose ``return`` values is a root value."""
-            func = self.functions.get(name)
-            if func is None or name in seen:
+            if name in seen:
                 return False
-            scope = self._scope_for(func, self.module_scope)
             return any(isinstance(n, ast.Return) and n.value is not None
-                       and is_root(n.value, scope, seen | {name}) for n in ast.walk(func))
+                       and is_root(n.value, self._scope_for(func, self.module_scope), seen | {name})
+                       for func in self.functions.get(name, ()) for n in ast.walk(func))
 
         def is_root(node: ast.AST, scope: Scope, seen: frozenset = frozenset()) -> bool:
             chain = self.fold(node, scope)
@@ -616,13 +618,13 @@ class ModuleScan:
                 callee = node.func.id if isinstance(node.func, ast.Name) else (
                     node.func.attr if isinstance(node.func, ast.Attribute) else None)
                 if callee in params:
-                    names = params[callee]
-                    if isinstance(node.func, ast.Attribute) and names and names[0] in ("self", "cls"):
-                        names = names[1:]
-                    for index, arg in enumerate(node.args):
-                        if index < len(names) and is_root(arg, scope) and names[index] not in reached:
-                            reached.add(names[index])
-                            changed = True
+                    for names in params[callee]:
+                        if isinstance(node.func, ast.Attribute) and names and names[0] in ("self", "cls"):
+                            names = names[1:]
+                        for index, arg in enumerate(node.args):
+                            if index < len(names) and is_root(arg, scope) and names[index] not in reached:
+                                reached.add(names[index])
+                                changed = True
                     wanted = named[callee]
                     for kw in node.keywords:
                         if kw.arg in wanted and is_root(kw.value, scope) and kw.arg not in reached:
@@ -1348,6 +1350,38 @@ class TopLevelGlobTests(unittest.TestCase):
         }.items():
             with self.subTest(name=name):
                 self.assertFalse(scan(source).violations)
+
+    def test_a_same_named_helper_that_returns_the_root_is_not_hidden_by_another(self):
+        """LIR-R7-I1: every definition of a helper name counts, not the first."""
+        for order in (("scratch", "root"), ("root", "scratch")):
+            with self.subTest(order=order):
+                bodies = {"scratch": "return Path('/tmp/scratch')", "root": "return fixtures.REPO_ROOT"}
+                first, second = (bodies[k] for k in order)
+                report = scan(f"""
+                    from pathlib import Path
+                    from tests import fixtures
+                    class A:
+                        def _repo(self):
+                            {first}
+                    class B:
+                        def _repo(self):
+                            {second}
+                        def test(self):
+                            return list(self._repo().rglob("*"))
+                """)
+                self.assertTrue(report.violations, report.sites)
+        report = scan("""
+            from pathlib import Path
+            class A:
+                def _repo(self):
+                    return Path('/tmp/a')
+            class B:
+                def _repo(self):
+                    return Path('/tmp/b')
+                def test(self):
+                    return list(self._repo().rglob("*"))
+        """)
+        self.assertFalse(report.violations, report.sites)
 
     def test_a_root_level_glob_that_names_no_member_is_not_flagged(self):
         for call in ('rglob("*.py")', 'rglob("__pycache__")'):

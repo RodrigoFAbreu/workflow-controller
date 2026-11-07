@@ -62913,7 +62913,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -63053,12 +63053,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 47,
-      "last_transition": "2026-11-07T02:01:12Z",
+      "state_revision": 48,
+      "last_transition": "2026-11-07T02:11:03Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -63705,6 +63705,48 @@
               "review_content_id": "6acef9089aa97493fe914e90c82f63e3d8ad1802af22e8e9b39b1d15717bf74a",
               "verdict": "APPROVE",
               "at": "2026-11-06T23:40:19Z"
+            }
+          ]
+        },
+        "F-c84b74b93ce3": {
+          "digest": "c84b74b93ce3f2280d32ecbc66e084c186eefdc267e4fed1485aca589b352d8c",
+          "text": "O1: `parse_verdict` accepts any text as the `Review scope:` value, and the role's text reaches the composed header. `Review scope: banana` on a `REVISE` was recorded in my probe, because `assert_verdict_well_formed` checks the scope only on an `APPROVE`. It is the one header value the role chooses, and the prompt allows only `changes` and `full`. Refusing anything else as `verdict_unparsed` would close it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "00a0b38b30c2e2a9a08128bc4876576d298b41520fc0fc371f035520f1446939",
+              "verdict": "REVISE",
+              "at": "2026-11-07T02:11:03Z"
+            }
+          ]
+        },
+        "F-9f92821eff45": {
+          "digest": "9f92821eff4556721843940d0d9f03e11c797ccf261d0fb2a4879e1afe40c5d2",
+          "text": "O2: The plan-stage `advisory` from `validate_local_plan_review_preconditions_bound` is returned by `check` and then dropped: `_run` puts it in no ending's evidence. `.claude/commands/review-plan.md` step 5 says to report it. It never blocks, but an operator running this path would not see that the `bundle_id` differs from `current_bundle_id` after a wrapper-only regeneration. Carry it in the evidence when it is set.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "00a0b38b30c2e2a9a08128bc4876576d298b41520fc0fc371f035520f1446939",
+              "verdict": "REVISE",
+              "at": "2026-11-07T02:11:03Z"
+            }
+          ]
+        },
+        "F-e9bc2528949c": {
+          "digest": "e9bc2528949ca90f97c1f818313ad9f6aa845679651b97ad414656dc1a46b4bd",
+          "text": "O3: The armour pattern does not match `-----BEGIN PGP PRIVATE KEY BLOCK-----`, because `BLOCK` follows `PRIVATE KEY`. This follows D4's wording, and D4 calls the lists tunable, so it is a gap in the rule and not a departure from it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "00a0b38b30c2e2a9a08128bc4876576d298b41520fc0fc371f035520f1446939",
+              "verdict": "REVISE",
+              "at": "2026-11-07T02:11:03Z"
             }
           ]
         }

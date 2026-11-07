@@ -553,20 +553,42 @@ class ModuleScan:
         and transitively."""
         reached: set[str] = set()
         params = {name: [a.arg for a in (*f.args.posonlyargs, *f.args.args)] for name, f in self.functions.items()}
+        named = {name: {a.arg for a in (*f.args.posonlyargs, *f.args.args, *f.args.kwonlyargs)}
+                 for name, f in self.functions.items()}
 
-        def is_root(node: ast.AST, scope: Scope) -> bool:
+        def returns_root(name: str, seen: frozenset) -> bool:
+            """A module function one of whose ``return`` values is a root value."""
+            func = self.functions.get(name)
+            if func is None or name in seen:
+                return False
+            scope = self._scope_for(func, self.module_scope)
+            return any(isinstance(n, ast.Return) and n.value is not None
+                       and is_root(n.value, scope, seen | {name}) for n in ast.walk(func))
+
+        def is_root(node: ast.AST, scope: Scope, seen: frozenset = frozenset()) -> bool:
             chain = self.fold(node, scope)
             text = ast.unparse(node)
             return (chain is not None and chain.kind == "rootval") or text in reached or (
-                isinstance(node, (ast.Name, ast.Attribute)) and _is_repository_constant(text))
+                isinstance(node, (ast.Name, ast.Attribute)) and _is_repository_constant(text)) or (
+                isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and returns_root(node.func.id, seen))
 
         def walk(node: ast.AST, scope: Scope) -> bool:
             changed = False
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 inner = self._scope_for(node, scope)
-                return any([walk(child, inner) for child in node.body])
-            if isinstance(node, ast.Assign) and is_root(node.value, scope):
-                for target in node.targets:
+                args = node.args
+                positional = [*args.posonlyargs, *args.args]
+                defaults = [*zip(positional[len(positional) - len(args.defaults):], args.defaults),
+                            *((a, d) for a, d in zip(args.kwonlyargs, args.kw_defaults) if d is not None)]
+                for arg, default in defaults:
+                    if arg.arg not in reached and is_root(default, scope):
+                        reached.add(arg.arg)
+                        changed = True
+                return any([walk(child, inner) for child in node.body]) or changed
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None and is_root(node.value, scope):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
                     text = ast.unparse(target) if isinstance(target, (ast.Name, ast.Attribute)) else None
                     if text and text not in reached:
                         reached.add(text)
@@ -582,7 +604,7 @@ class ModuleScan:
                         if index < len(names) and is_root(arg, scope) and names[index] not in reached:
                             reached.add(names[index])
                             changed = True
-                    wanted = set(params[callee])
+                    wanted = named[callee]
                     for kw in node.keywords:
                         if kw.arg in wanted and is_root(kw.value, scope) and kw.arg not in reached:
                             reached.add(kw.arg)
@@ -1268,6 +1290,27 @@ class TopLevelGlobTests(unittest.TestCase):
                         return list(fixtures.REPO_ROOT.{call})
                 """)
                 self.assertFalse(report.violations, report.sites)
+
+    def test_a_wildcard_walk_of_a_root_the_scan_follows_is_flagged(self):
+        """Every route a repository-root value takes to a walked name (D2): a
+        helper's return, an annotated assignment, a keyword-only parameter and
+        a default value, and the same walk of a temporary root is not flagged."""
+        reader = "def read({params}): return list(root.glob('**/*'))\n"
+        cases = {
+            "helper": "def checkout(): return fixtures.REPO_ROOT\n" + reader.format(params="root")
+                      + "read(checkout())\n",
+            "annotated": "base: Path = fixtures.REPO_ROOT\nlist(base.rglob('*'))\n",
+            "keyword_only": reader.format(params="*, root") + "read(root=fixtures.REPO_ROOT)\n",
+            "default": reader.format(params="root=fixtures.REPO_ROOT"),
+            "annotated_default": reader.format(params="root: Path = fixtures.REPO_ROOT"),
+        }
+        for name, body in cases.items():
+            with self.subTest(form=name):
+                report = scan("from tests import fixtures\n" + body)
+                self.assertTrue(report.violations, name)
+        report = scan("def read(root): return list(root.glob('**/*'))\n"
+                      "def make(): return Path('/tmp')\nread(make())\n")
+        self.assertFalse(report.violations, report.sites)
 
     def test_a_glob_that_reaches_no_member_is_not_flagged(self):
         for pattern in ("ACTIVE*.md", "ZZZ*.md"):

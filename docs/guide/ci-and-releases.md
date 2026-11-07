@@ -130,7 +130,11 @@ required check pending forever.
   `tools/` and `controller/` for readers of a path in the set and fails
   with the reader and the path when a module outside the documentation gate
   reads one. The fix is to take the path out of the set, not to widen the
-  gate.
+  gate. The guard is static and has limits: a path built from a non-constant
+  segment or through an `os.path` form it does not fold is not seen, and a
+  pattern made only of `*`/`**` (a whole-tree walk) counts only on a root
+  named as the repository (`REPO_ROOT`, `ROOT`), not on a temporary or
+  runtime directory under another name.
 - **Fail closed.** `code` is `false` only for a `pull_request` event whose
   merge ref differs from its first parent by documentation paths alone. A
   push to `main`, a manual dispatch, a `HEAD` that is not a merge commit, an

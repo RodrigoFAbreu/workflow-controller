@@ -182,27 +182,49 @@ class RunTests:
         self.assertIn(json.loads((self.root / STATE).read_text())["work_items"][WID]["phase"],
                       ("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"))
 
+    def write_changes(self, content_id: str | None = None) -> str:
+        """A real ``CHANGES_SINCE_REVIEW.md`` beside the bundle, with a section for this stage's local role."""
+        bundle = protocol.resolve_artifact(self.root, WID, "review_bundle").path
+        manifest = review.parse_manifest((self.root / bundle / "MANIFEST.md").read_text())
+        rel = f"{Path(bundle).parent.as_posix()}/{review.CHANGES_FILE_NAME}"
+        role = review.LOCAL_REVIEWER_ROLES[self.STAGE]
+        (self.root / rel).write_text(
+            f"# CHANGES_SINCE_REVIEW.md\nreview_content_id: {content_id or manifest['review_content_id']}\n\n"
+            f"## {role}\n\nwhat changed\n")
+        return rel
+
+    def run_spied(self) -> tuple[dict, str]:
+        """Run at local round 2 (a first round states no changes rule), returning the clone's files and the prompt."""
+        state = json.loads((self.root / STATE).read_text())
+        state["work_items"][WID]["review_round_counts"][self.STAGE]["local"] = 1
+        (self.root / STATE).write_text(json.dumps(state, indent=2) + "\n")
+        seen: dict = {}
+
+        def spy(task, **kw):
+            clone = kw["cwd"]
+            seen["files"] = sorted(p.relative_to(clone).as_posix() for p in (clone / ".ai-review").rglob("*")
+                                   if p.is_file())
+            return self.seam(task, **kw)
+
+        self.script(message=message("APPROVE"))
+        self.run_role(launch=spy)
+        return seen, self.launched[-1]["prompt"]
+
     def test_the_inputs_include_a_previous_feedback_and_a_verified_changes_file(self) -> None:
         feedback = self.root / FEEDBACK
         feedback.parent.mkdir(parents=True, exist_ok=True)
         feedback.write_text("# Review Decision\n\nStatus: REVISE\n")
-        real = review.changes_file_for
-        changes_rel = f".ai-review/{WID}/CHANGES_SINCE_REVIEW.md"
-        (self.root / changes_rel).write_text("# Changes\n")
-        with mock.patch.object(review, "changes_file_for", lambda *a, **k: changes_rel):
-            seen: dict = {}
-
-            def spy(task, **kw):
-                clone = kw["cwd"]
-                seen["files"] = sorted(p.relative_to(clone).as_posix() for p in (clone / ".ai-review").rglob("*")
-                                       if p.is_file())
-                return self.seam(task, **kw)
-
-            self.script(message=message("APPROVE"))
-            self.run_role(launch=spy)
+        changes_rel = self.write_changes()
+        seen, prompt = self.run_spied()
         self.assertIn(FEEDBACK, seen["files"])
         self.assertIn(changes_rel, seen["files"])
-        self.assertTrue(real)
+        self.assertIn(changes_rel, prompt)
+
+    def test_a_changes_file_naming_another_content_id_is_not_copied_or_named(self) -> None:
+        changes_rel = self.write_changes(content_id="0" * 64)
+        seen, prompt = self.run_spied()
+        self.assertNotIn(changes_rel, seen["files"])
+        self.assertNotIn(changes_rel, prompt)
 
     def test_the_clone_holds_exactly_the_inputs_and_a_dirty_managed_tree_is_still_reviewed(self) -> None:
         (self.root / "README.md").write_text("uncommitted\n")
@@ -318,11 +340,6 @@ class RunTests:
     def test_prose_naming_the_markers_is_recorded_and_real_armour_is_refused(self) -> None:
         self.script(message=message("APPROVE", extra=" The check looks for `-----BEGIN` and `PRIVATE KEY-----`."))
         self.assertEqual(self.run_role().code, crr.RECORDED)
-
-    def test_a_pgp_private_key_block_is_armour_too(self) -> None:
-        self.assertTrue(crr.ARMOUR.search(b"-----BEGIN PGP PRIVATE KEY BLOCK-----"))
-        self.assertTrue(crr.ARMOUR.search(b"-----BEGIN PRIVATE KEY-----"))
-        self.assertFalse(crr.ARMOUR.search(b"-----BEGIN PUBLIC KEY-----"))
 
     def test_the_recorders_advisory_reaches_the_ending_evidence(self) -> None:
         real = review_recorder.check

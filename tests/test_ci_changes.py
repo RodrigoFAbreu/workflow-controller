@@ -612,10 +612,31 @@ def touches_set(segs: tuple[str, ...], kind: str = "expr") -> bool:
         if rest[0] == "**" or len(rest) > 1:
             return rest[0] == "**" or any(fnmatch.fnmatch(p.split("/")[1], rest[0]) for p in prefixes)
         return any(fnmatch.fnmatch(name, rest[0]) for name in _top_level_members())
-    if literal == () and kind == "rootval":
-        # A glob over the repository root itself reaches the documentation.
-        return rest[0] == "**" or fnmatch.fnmatch("docs", rest[0])
+    if literal == ():
+        # A glob with no literal prefix may be rooted at the repository (any
+        # root not on the fixture table is a read of it, D2): it is a candidate
+        # when the whole pattern can name a member of the set.
+        # A pattern that narrows nothing (only ``*`` and ``**``) lists any tree,
+        # so on a root that is not the repository's own it is not a read of
+        # the documentation: the temporary-directory walks would all qualify.
+        if kind != "rootval" and all(seg in ("*", "**") for seg in rest):
+            return False
+        members = [f"docs/{name}" for name in _top_level_members()]
+        for prefix in prefixes:
+            members += [prefix, f"{prefix}/x.md", f"{prefix}/sub/x.md"]
+        return any(_segments_match(rest, tuple(member.split("/"))) for member in members)
     return False
+
+
+def _segments_match(pattern: tuple[str, ...], path: tuple[str, ...]) -> bool:
+    """Whether a glob, split into segments, matches a path split the same way;
+    ``**`` stands for zero or more whole segments."""
+    if not pattern:
+        return not path
+    head, tail = pattern[0], pattern[1:]
+    if head == "**":
+        return any(_segments_match(tail, path[i:]) for i in range(len(path) + 1))
+    return bool(path) and fnmatch.fnmatch(path[0], head) and _segments_match(tail, path[1:])
 
 
 @dataclass
@@ -1085,6 +1106,35 @@ class TopLevelGlobTests(unittest.TestCase):
                 """)
                 self.assertTrue(report.violations, report.sites)
 
+    def test_a_root_level_glob_is_flagged_whatever_the_root(self):
+        """LIR-R2-001: an imported or parameter root is a read of the repository."""
+        for root, call in (("fixtures.REPO_ROOT", 'rglob("*.md")'), ("fixtures.REPO_ROOT", 'glob("**/*.md")'),
+                           ("ROOT", 'rglob("*.md")')):
+            with self.subTest(root=root, call=call):
+                report = scan(f"""
+                    from tests import fixtures
+                    from pathlib import Path
+                    ROOT = Path(__file__).resolve().parent.parent
+                    def read():
+                        return list({root}.{call})
+                """)
+                self.assertTrue(report.violations, report.sites)
+        report = scan("""
+            def read(root):
+                return list(root.rglob("*.md"))
+        """)
+        self.assertTrue(report.violations, report.sites)
+
+    def test_a_root_level_glob_that_names_no_member_is_not_flagged(self):
+        for call in ('rglob("*.py")', 'rglob("__pycache__")'):
+            with self.subTest(call=call):
+                report = scan(f"""
+                    from tests import fixtures
+                    def read():
+                        return list(fixtures.REPO_ROOT.{call})
+                """)
+                self.assertFalse(report.violations, report.sites)
+
     def test_a_glob_that_reaches_no_member_is_not_flagged(self):
         for pattern in ("ACTIVE*.md", "ZZZ*.md"):
             with self.subTest(pattern=pattern):
@@ -1099,10 +1149,15 @@ class TouchesSetTests(unittest.TestCase):
             with self.subTest(segs=segs):
                 self.assertTrue(touches_set(segs))
         for segs in (("**", "*.md"), ("*", "run.md")):
-            with self.subTest(segs=segs, kind="rootval"):
-                self.assertTrue(touches_set(segs, "rootval"))
-            with self.subTest(segs=segs, kind="expr"):
-                self.assertFalse(touches_set(segs, "expr"))
+            for kind in ("rootval", "expr"):
+                with self.subTest(segs=segs, kind=kind):
+                    self.assertTrue(touches_set(segs, kind))
+        self.assertTrue(touches_set(("**", "*"), "rootval"))
+        self.assertFalse(touches_set(("**", "*"), "expr"))
+        for segs in (("**", "*.py"), ("**", "__pycache__"), ("*.py",)):
+            for kind in ("rootval", "expr"):
+                with self.subTest(segs=segs, kind=kind):
+                    self.assertFalse(touches_set(segs, kind))
         for segs in ((), ("docs",), ("docs", "guide", "commands.md"), ("docs", "guide", "*.md"),
                      ("docs", "adr", "*.md"), ("tools", "x.py"), ("docs", "roadmap-archive.md"),
                      ("scripts", "*.py")):

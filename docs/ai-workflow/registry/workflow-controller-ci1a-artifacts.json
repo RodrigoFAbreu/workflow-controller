@@ -70,8 +70,7 @@
       "docs/DOMAIN_GLOSSARY.md": "the application's own domain terminology and business rules -- product design content a product technical review binds (salvage audit I8)",
       "docs/UX_FLOWS.md": "the application's own navigation/UI/interaction flows -- product design content a product technical review binds (salvage audit I8)",
       ".github/workflows/validate.yml": "the generated workflow GitHub executes -- a CP2 deliverable, so it must take part in the implementation review content ID and the approval's freshness (EPR-001)",
-      "README.md": "names the jobs of validate.yml and is updated with them in CP2 -- a deliverable, so protected and no longer excluded (EPR-001)",
-      "docs/items/workflow-controller-ci1a.md": "this item's page, which CP3 rewrites with the replay measurement -- a deliverable, so protected (EPR-001)"
+      "README.md": "names the jobs of validate.yml and is updated with them in CP2 -- a deliverable, so protected and no longer excluded (EPR-001)"
     },
     "protected_prefixes": {
       "app/": "application source and its own tests -- product deliverable",

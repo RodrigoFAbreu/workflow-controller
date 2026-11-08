@@ -2075,11 +2075,6 @@
       "seconds": 96.065,
       "tests": 6
     },
-    "tests.test_pr_report.ReportTest": {
-      "samples": 2,
-      "seconds": 262.41,
-      "tests": 8
-    },
     "tests.test_pr_report.ReporterExecutableTest": {
       "samples": 2,
       "seconds": 0.039,
@@ -2089,11 +2084,6 @@
       "samples": 2,
       "seconds": 44.215,
       "tests": 3
-    },
-    "tests.test_pr_report.WaitTest": {
-      "samples": 2,
-      "seconds": 219.638,
-      "tests": 7
     },
     "tests.test_protocol.EnvelopeHandlingTest": {
       "samples": 22,
@@ -2210,11 +2200,6 @@
       "seconds": 11.894,
       "tests": 13
     },
-    "tests.test_protocol_job.OutcomesTest": {
-      "samples": 2,
-      "seconds": 269.627,
-      "tests": 8
-    },
     "tests.test_protocol_job.RecordBlockTest": {
       "samples": 22,
       "seconds": 3.126,
@@ -2224,11 +2209,6 @@
       "samples": 2,
       "seconds": 13.736,
       "tests": 12
-    },
-    "tests.test_protocol_job.TheFaultStopsTest": {
-      "samples": 2,
-      "seconds": 266.961,
-      "tests": 9
     },
     "tests.test_protocol_job.ThePreLaunchStopsTest": {
       "samples": 2,
@@ -2255,11 +2235,6 @@
       "seconds": 6.735,
       "tests": 1
     },
-    "tests.test_protocol_lifecycle.PrDefectLoopLifecycleTest": {
-      "samples": 2,
-      "seconds": 464.306,
-      "tests": 9
-    },
     "tests.test_protocol_lifecycle.ProtocolModeLifecycleTest": {
       "samples": 22,
       "seconds": 23.688,
@@ -2269,11 +2244,6 @@
       "samples": 22,
       "seconds": 21.752,
       "tests": 1
-    },
-    "tests.test_protocol_lifecycle.SatisfyGateLifecycleTest": {
-      "samples": 2,
-      "seconds": 256.645,
-      "tests": 8
     },
     "tests.test_protocol_outcome.CheckpointCompletionTest": {
       "samples": 22,

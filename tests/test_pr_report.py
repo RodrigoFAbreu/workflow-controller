@@ -265,7 +265,7 @@ class ReporterCase(unittest.TestCase):
         return self.evidence(life).get("pr_reported")
 
 
-class ReportTest(ReporterCase):
+class ReportRecordTest(ReporterCase):
     def test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result(self) -> None:
         life = self.at_38f()
         self.bind(life)
@@ -324,6 +324,8 @@ class ReportTest(ReporterCase):
         self.assertEqual(third["pr_report"]["outcome"], "stale")
         self.assertEqual(self.reported(life)["ingest_seq"], seq)
 
+
+class ReportRefusalTest(ReporterCase):
     def test_an_unchanged_report_over_row_38g_stays_a_user_gate(self) -> None:
         life = self.at_38f()
         self.bind(life)
@@ -358,6 +360,8 @@ class ReportTest(ReporterCase):
         self.assertIn("ForgeRepositoryMismatchError", record["human_gate_pending"]["what_is_required"])
         self.assertIsNone(self.reported(life))
 
+
+class ReportScopeTest(ReporterCase):
     def test_queries_that_cannot_answer_stop_with_their_reasons_and_write_nothing(self) -> None:
         life = self.at_38f()
         self.bind(life)
@@ -392,7 +396,7 @@ class ReportTest(ReporterCase):
         self.assertIsNone(job._pr_report_row(review_gate))
 
 
-class WaitTest(ReporterCase):
+class WaitBudgetTest(ReporterCase):
     def test_pending_checks_wait_and_then_report_the_green_result(self) -> None:
         life = self.at_38f()
         self.bind(life)
@@ -433,6 +437,8 @@ class WaitTest(ReporterCase):
         self.assertIn("no checks reported", record["human_gate_pending"]["what_is_required"])
         self.assertIsNone(self.reported(life))
 
+
+class WaitReportsTest(ReporterCase):
     def test_pending_checks_are_reported_when_waiting_would_hide_something(self) -> None:
         life = self.at_38f()
         self.bind(life)
@@ -638,7 +644,7 @@ class ReportNotificationTest(unittest.TestCase):
     def test_notifications_follow_the_real_pending_check_records(self) -> None:
         for wait_seconds, expected in ((0, []), (25, ["checks_wait"])):
             with self.subTest(wait_seconds=wait_seconds):
-                case = ReportTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
+                case = ReportRecordTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
                 self.addCleanup(case.doCleanups)  # ``case`` is never run, so nothing else removes its repository
                 life = case.at_38f()
                 case.bind(life)
@@ -650,7 +656,7 @@ class ReportNotificationTest(unittest.TestCase):
     def test_the_real_record_carries_the_age_of_the_pending_checks_and_a_long_one_is_a_blocker(self) -> None:
         for at, expected in (("2020-01-01T00:00:00Z", ["lane_blocked"]), (milestone_branch._utc_now(), ["checks_wait"])):
             with self.subTest(last_event=at):
-                case = ReportTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
+                case = ReportRecordTest("test_a_green_query_is_recorded_and_the_record_holds_the_workflows_result")
                 self.addCleanup(case.doCleanups)
                 life = case.at_38f()
                 case.bind(life)

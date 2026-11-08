@@ -419,7 +419,7 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 ## Functional review checklist
 
 Item `workflow-controller-ci1a` (CI1a, issue [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)),
-implementation revision 8, plan `docs/ai-workflow/CONTROLLER_CI1A_PLAN.md` (revision 6). The change skips the plan and the six
+implementation revision 9, plan `docs/ai-workflow/CONTROLLER_CI1A_PLAN.md` (revision 6). The change skips the plan and the six
 test shards for a pull request whose every changed path is documentation: `tools/ci_changes.py` (the classifier, `detect` and
 `require`), the generated `.github/workflows/validate.yml` (the `changes` and `docs` jobs and the skipped mode) and the guides.
 There is no user-visible command. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`,
@@ -434,7 +434,7 @@ declaration listed the item's own page, `docs/items/workflow-controller-ci1a.md`
 (F1, a defect). Bounded fix, confirmed by the owner: that one entry is deleted, and the existing excluded prefix `docs/items/`
 now covers the page (`.github/workflows/validate.yml` and `README.md` stay protected). This departs from the plan's D10 and
 CP3 "Done when", which cannot be amended from this phase. No product code, test or guide changed, so the seven flows are
-unaffected; re-test: `preflight-accept workflow-controller-ci1a` returns `"ok": true`, and the flows run again at the new head.
+unaffected; re-test (round 2, revision 9): `preflight-accept workflow-controller-ci1a` returns `"ok": true`, and the flows run again at the new head.
 
 **Flow 1: The classifier and its documentation-set guard.**
 Run `python3 -B -m unittest tests.test_ci_changes 2>&1 | tail -3` (about 45 s).

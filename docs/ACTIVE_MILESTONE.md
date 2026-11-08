@@ -428,6 +428,14 @@ Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write 
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
+**Functional review round 1 (2026-11-08).** All seven flows passed at `05b10af`. Acceptance then refused: `python3
+scripts/workflow_backlog.py preflight-accept workflow-controller-ci1a` gave `declaration_conflict`, because the artifact
+declaration listed the item's own page, `docs/items/workflow-controller-ci1a.md`, under `implementation_stage.protected_paths`
+(F1, a defect). Bounded fix, confirmed by the owner: that one entry is deleted, and the existing excluded prefix `docs/items/`
+now covers the page (`.github/workflows/validate.yml` and `README.md` stay protected). This departs from the plan's D10 and
+CP3 "Done when", which cannot be amended from this phase. No product code, test or guide changed, so the seven flows are
+unaffected; re-test: `preflight-accept workflow-controller-ci1a` returns `"ok": true`, and the flows run again at the new head.
+
 **Flow 1: The classifier and its documentation-set guard.**
 Run `python3 -B -m unittest tests.test_ci_changes 2>&1 | tail -3` (about 45 s).
 Expected: `Ran 77 tests` and `OK`. Covers the classifier, change detection on real temporary repositories, the exit rule, and the

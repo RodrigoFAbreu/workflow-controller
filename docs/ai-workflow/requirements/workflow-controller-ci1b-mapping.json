@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci1b",
+  "requirements": {
+    "R1": {
+      "description": "The six multi-test classes above 200 s are split into smaller sibling classes with identical test bodies (apart from the one class name D1 names), so the shard planner has finer bricks",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The committed shard timings are refreshed from real CI, a ratchet keeps multi-test atoms under 200 s, and the CI shard count rises only on the planner's own evidence",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The guides and the item page describe the shard count, the runner budget, the floor and the unsplit atoms",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

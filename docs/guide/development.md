@@ -171,7 +171,7 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   and `XDG_STATE_HOME`. The shard count is planned from recorded
   durations: about 60 s of work per shard, at least 2, at most
   `min(8, CPUs)`. CI plans from the `ci` profile, which has a ceiling of six shards
-  (`CI_MAX_SHARDS`, the runner budget stated in
+  (`CI_MAX_SHARDS`; a seventh is the owner's runner-budget decision, see
   [Continuous integration](ci-and-releases.md#continuous-integration)).
   Two modules stay out of the CI plan and run on `main` instead
   (`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, see
@@ -243,6 +243,16 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   different: its old entry names an atom that no longer exists, which
   `CommittedTimingsTest` rejects until a `timings merge` prunes it (the
   merge drops every entry the inventory no longer contains).
+  **Ratchet.** `CommittedTimingsTest` fails when a class atom of more than one
+  test has more than 200 s (`MAX_SPLITTABLE_ATOM_SECONDS`) in the committed
+  file: split the class along its test methods, keeping helpers in a non-`TestCase`
+  base, as CI1b did. A single-test atom is exempt because it cannot be split by class.
+  **Apportioning a split.** A merge drops the old class, so its new classes get
+  seconds from a base: the old class's committed value folded with the CI
+  artifacts' observations (`EWMA_WEIGHT`, oldest first, only runs where every test
+  of the old class passed once), times each new class's local share of the sum
+  over the classes that replaced it, written as `{seconds, samples: 1, tests}`.
+  The next merge from CI replaces those entries with observed seconds.
 - **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.

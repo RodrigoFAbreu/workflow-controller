@@ -829,7 +829,7 @@ class _TesterCase(unittest.TestCase):
         return life
 
 
-class OutcomesTest(_TesterCase):
+class OutcomesEvidenceTest(_TesterCase):
     def test_every_flow_passing_records_the_evidence_and_the_workflow_moves_on(self) -> None:
         life = self.life()
         life.plan = [("flow-1", "passed", None)]
@@ -872,6 +872,27 @@ class OutcomesTest(_TesterCase):
         self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
         self.assertEqual(life.tasks[launched:], ["apply-functional-review"])
 
+    def test_a_flow_the_tester_left_out_is_an_environment_limit_with_a_valid_log_digest(self) -> None:
+        life = self.life(flows=2)
+        life.plan = [("flow-1", "passed", None)]
+        record = life.step()
+        self.assertEqual(record["functional"]["outcome"], "environment_limited")
+        left = life.evidence()["flow-2"]
+        self.assertEqual((left["status"], left["summary"]["reason"]), ("failed", "environment"))
+        self.assertIn("left this flow out", left["summary"]["text"])
+        self.assertEqual(len(left["log_digest"]), 64)
+
+    def test_functional_automated_false_keeps_the_old_stop(self) -> None:
+        life = self.life()
+        for functional in (dict(life.functional, automated=False), None):
+            with self.subTest(functional=functional):
+                record = life.step(functional=functional)
+                self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+                self.assertNotIn("kind", record)
+        self.assertEqual(life.launches, [])
+
+
+class OutcomesFailureTest(_TesterCase):
     def test_identical_failure_text_at_a_new_head_is_new_findings_the_workflow_does_not_skip(self) -> None:
         life = self.life()
         life.plan = [("flow-1", "failed", "defect")]
@@ -907,16 +928,6 @@ class OutcomesTest(_TesterCase):
         self.assertEqual(life.row(), "38i")
         self.assertEqual(review_rounds.functional_rounds(life.tester_records(), str(life.root), lifecycle.WID), 0)
 
-    def test_a_flow_the_tester_left_out_is_an_environment_limit_with_a_valid_log_digest(self) -> None:
-        life = self.life(flows=2)
-        life.plan = [("flow-1", "passed", None)]
-        record = life.step()
-        self.assertEqual(record["functional"]["outcome"], "environment_limited")
-        left = life.evidence()["flow-2"]
-        self.assertEqual((left["status"], left["summary"]["reason"]), ("failed", "environment"))
-        self.assertIn("left this flow out", left["summary"]["text"])
-        self.assertEqual(len(left["log_digest"]), 64)
-
     def test_a_tester_cut_at_the_timeout_leaves_the_unrun_flows_as_environment(self) -> None:
         life = self.life(flows=2)
         life.plan = [("flow-1", "passed", None)]
@@ -936,15 +947,6 @@ class OutcomesTest(_TesterCase):
         self.assertNotIn("flow-2 (", text)
         self.assertEqual(set(life.evidence()), {"flow-1", "flow-2", "flow-3"})
         self.assertEqual(review_rounds.functional_rounds(life.tester_records(), str(life.root), lifecycle.WID), 1)
-
-    def test_functional_automated_false_keeps_the_old_stop(self) -> None:
-        life = self.life()
-        for functional in (dict(life.functional, automated=False), None):
-            with self.subTest(functional=functional):
-                record = life.step(functional=functional)
-                self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
-                self.assertNotIn("kind", record)
-        self.assertEqual(life.launches, [])
 
 
 class ThePreLaunchStopsTest(_TesterCase):
@@ -1042,11 +1044,13 @@ ws.state_transaction(Path.cwd(), lambda s: state)
         self.assertEqual(bad.step()["functional"]["gate"], "checklist_unrecognised")
 
 
-class TheFaultStopsTest(_TesterCase):
+class _TheFaultStopsHelpers:
     def gate_of(self, record: dict) -> str:
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
         return record["functional"]["gate"]
 
+
+class TheFaultStopsSandboxTest(_TheFaultStopsHelpers, _TesterCase):
     def test_each_cause_of_an_unavailable_tester_is_a_review_wait_with_nothing_recorded(self) -> None:
         for cause in (functional_review.UNAVAILABLE_NO_BINARY, functional_review.UNAVAILABLE_ROLE_REFUSED,
                       functional_review.UNAVAILABLE_ENFORCEMENT, functional_review.UNAVAILABLE_CLONE_MISMATCH):
@@ -1141,6 +1145,8 @@ class TheFaultStopsTest(_TesterCase):
         self.assertEqual(life.evidence(), {})
         self.assertEqual(life.row(), "38e")
 
+
+class TheFaultStopsRecordTest(_TheFaultStopsHelpers, _TesterCase):
     def test_unreadable_results_record_nothing(self) -> None:
         life = self.life()
         life.plan = lambda kwargs, outdir: None  # no RESULTS.json

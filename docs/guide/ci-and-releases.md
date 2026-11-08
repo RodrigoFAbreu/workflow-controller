@@ -94,10 +94,12 @@ at least 2 and at most 6 shards (`CI_MAX_SHARDS` in `tools/test_shards.py`),
 from the committed `tools/test_timings.json` only. The maximum wins today, so
 CI runs six shards. The maximum is a runner budget: 6 shards, `package` and the
 managed `workflow-conformance` job hold at most 8 Linux runners for one pull
-request, on an account that shares 20 jobs. Refresh `tools/test_timings.json` (see the development
-guide) when the longest shard drifts well past the about 23-minute
-estimate the committed timings give; it was refreshed on 2026-10-22 from the
-real six-shard run, and drifts within days as the acceptance matrix and the
+request, on an account that shares 20 jobs. A seventh shard would make it 9 and
+is the owner's decision, not the planner's. On the timings refreshed on 2026-11-08
+the planner's longest-shard estimate is about 24 minutes (1439 s) at six shards,
+1288 s at seven and 1233 s at eight (the offline plans of CI1b). Refresh `tools/test_timings.json` (see the development
+guide) when the longest shard drifts well past that estimate; it was refreshed on
+2026-11-08 from the real six-shard runs of CI, and drifts within days as the acceptance matrix and the
 scenario tests grow. A stale or missing entry costs wall time
 (the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
@@ -107,6 +109,22 @@ run's summary also names each failing test, its shard, the shard's log,
 the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 `test-plan` the `plan.json` the replay command reads) and the
 reproduction commands.
+
+What bounds the longest shard. The conformance `acceptance_matrix` suite is one
+atom (1119.7 s in the committed timings) and so a floor below which the longest
+pull-request shard cannot go; on a shard it shares with Controller tests the lane
+contention of 1.15 makes it about 1288 s. It is not what sets the estimate at six
+shards (1439 s); at seven it does (every shard about 1288 s), and at eight it runs
+alone while the longest shard is 1233 s, only 55 s below seven. Cutting it
+needs the suite's `shards` option, which belongs to the frozen Workflow content, so
+that is a separate upstream step and is not done here. The other atoms that stay whole
+are the single-test ones: the conformance `protocol`, `state` and `gate_policy` suites,
+`IsolationTest`, `CycleClosesTest`, `PersonStopsTest` and the generated `Scenario_*`
+classes; a class of one test cannot be made smaller by moving methods. The largest
+check outside the shard estimate is `tests.test_catalogue_determinism.CatalogueDeterminismTest`
+(1075.4 s), which `CI_PLACEMENT` runs in `main.yml` after the merge. Six classes of several
+tests that held a shard up were split along their test methods in CI1b, and a ratchet in
+`tests.test_test_shards` keeps a multi-test class from growing back past 200 s.
 
 ### Documentation-only pull requests
 

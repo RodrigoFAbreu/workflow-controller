@@ -674,66 +674,14 @@ class GateLifecycle(Lifecycle):
         self.user_step(_FUNCTIONAL_EVIDENCE)
 
 
-class SatisfyGateLifecycleTest(unittest.TestCase):
+class _SatisfyGateLifecycleHelpers:
     """gate-policy CP2 (D5, D8): the vendored 2.12.0's own ``next-action`` answers rows 14a, 28a and 38h and the
     Controller launches ``/satisfy-gate`` for each; a refused validation stops the run."""
 
     def notifications(self, records: list[dict]) -> list[str]:
         return [event.event_type for record in records for event in job.derive_job_event(record)]
 
-    def test_a_run_passes_plan_technical_approval_and_acceptance_by_policy_without_a_stop(self) -> None:
-        life = GateLifecycle(self)
-        life.to_acceptance()
-        self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38h")
-        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)  # acceptance.satisfy
-        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
-        self.assertEqual(life.tasks, [
-            "review-plan", "satisfy-gate plan", "milestone-implement", "milestone-implement", "review-implementation",
-            "satisfy-gate implementation", "prepare-functional-review", "satisfy-gate acceptance"])
-        records = [r for r in self.records(life) if r["status"] == job.STATUS_FINISHED]
-        self.assertEqual([r["protocol"]["action_id"] for r in records if "satisfy" in r["protocol"]["action_id"]],
-                         ["plan.satisfy", "implementation.satisfy", "acceptance.satisfy"])
-        self.assertTrue(all(r["transition_verified"] for r in records))
-        events = self.notifications(records)
-        self.assertEqual(events.count("approval_recorded"), 3)
-        self.assertEqual(events.count("milestone_accepted"), 1)
-        item = fixtures.state_entry(life.root, WID)
-        self.assertIn("acceptance_satisfaction", item)
-        # The approvals are the vendored ``build_policy_approval_record``'s, not a human's: basis and evidence.
-        for field in ("plan_approval", "technical_approval"):
-            approval = item[field]
-            self.assertEqual(approval["basis"], "POLICY_SATISFIED", field)
-            evidence = approval["policy_evidence"]
-            self.assertEqual(approval["user_confirmation"], "policy:" + evidence["policy_digest"], field)
-            self.assertTrue(evidence["requirements"] and all(r["met"] for r in evidence["requirements"]), field)
-        self.assertTrue({"14a", "28a", "38h"} <= set(life.rows), life.rows)
-        self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
-
     UNMET = "distinct_reviewer_models: the reviewers are both openai/gpt-6.1-sol"
-
-    def test_a_refused_validation_stops_the_run_after_two_launches_and_sends_no_approval(self) -> None:
-        self.refused_validation_run(("Refused: plan_approval is not satisfiable by policy. " + "The policy was evaluated. " * 30
-                                     + f"unmet: ['{self.UNMET}']. Nothing was written"))
-
-    def test_a_refusal_requirement_survives_a_preamble_that_already_says_unmet(self) -> None:
-        self.refused_validation_run("I checked the unmet requirements against the current review records. "
-                                    + "The policy was evaluated. " * 30
-                                    + f"Refused; unmet: ['{self.UNMET}']. Nothing was written")
-
-    def test_a_refusal_requirement_survives_a_trailing_unmet_see_above(self) -> None:
-        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
-                                    + "The policy was evaluated. " * 30
-                                    + f"The requirement {self.UNMET} does not hold. unmet: see above")
-
-    def test_a_refusal_requirement_survives_an_early_unmet_followed_by_it_only_after_a_semicolon(self) -> None:
-        self.refused_validation_run("Refused: unmet: see the policy; the details follow. "
-                                    + "The policy was evaluated. " * 30
-                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
-
-    def test_a_refusal_requirement_survives_a_report_with_no_unmet_marker(self) -> None:
-        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
-                                    + "The policy was evaluated. " * 30
-                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
 
     def refused_validation_run(self, report: str) -> None:
         life = GateLifecycle(self)
@@ -792,6 +740,39 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertEqual(self.notifications([refused]), ["step_done"])
         return life
 
+    def records(self, life: Lifecycle) -> list[dict]:
+        return [json.loads(path.read_text()) for path in sorted((life.runtime / "jobs").glob("*.json"))]
+
+
+class SatisfyGateLifecycleApprovalTest(_SatisfyGateLifecycleHelpers, unittest.TestCase):
+    def test_a_run_passes_plan_technical_approval_and_acceptance_by_policy_without_a_stop(self) -> None:
+        life = GateLifecycle(self)
+        life.to_acceptance()
+        self.assertEqual(protocol.next_action(life.root, WID).raw["row"], "38h")
+        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)  # acceptance.satisfy
+        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
+        self.assertEqual(life.tasks, [
+            "review-plan", "satisfy-gate plan", "milestone-implement", "milestone-implement", "review-implementation",
+            "satisfy-gate implementation", "prepare-functional-review", "satisfy-gate acceptance"])
+        records = [r for r in self.records(life) if r["status"] == job.STATUS_FINISHED]
+        self.assertEqual([r["protocol"]["action_id"] for r in records if "satisfy" in r["protocol"]["action_id"]],
+                         ["plan.satisfy", "implementation.satisfy", "acceptance.satisfy"])
+        self.assertTrue(all(r["transition_verified"] for r in records))
+        events = self.notifications(records)
+        self.assertEqual(events.count("approval_recorded"), 3)
+        self.assertEqual(events.count("milestone_accepted"), 1)
+        item = fixtures.state_entry(life.root, WID)
+        self.assertIn("acceptance_satisfaction", item)
+        # The approvals are the vendored ``build_policy_approval_record``'s, not a human's: basis and evidence.
+        for field in ("plan_approval", "technical_approval"):
+            approval = item[field]
+            self.assertEqual(approval["basis"], "POLICY_SATISFIED", field)
+            evidence = approval["policy_evidence"]
+            self.assertEqual(approval["user_confirmation"], "policy:" + evidence["policy_digest"], field)
+            self.assertTrue(evidence["requirements"] and all(r["met"] for r in evidence["requirements"]), field)
+        self.assertTrue({"14a", "28a", "38h"} <= set(life.rows), life.rows)
+        self.assertEqual(protocol.next_action(life.root, WID).disposition, "complete")
+
     def test_pending_checks_end_at_row_38f_and_stay_there_until_a_person_accepts(self) -> None:
         life = self.pending_acceptance()
         launched = len(life.tasks)
@@ -831,8 +812,31 @@ class SatisfyGateLifecycleTest(unittest.TestCase):
         self.assertEqual(record["protocol"]["action_id"], "pr.apply_review")
         self.assertEqual([e.event_type for e in job.derive_job_event(record)], ["step_done"])
 
-    def records(self, life: Lifecycle) -> list[dict]:
-        return [json.loads(path.read_text()) for path in sorted((life.runtime / "jobs").glob("*.json"))]
+
+class SatisfyGateLifecycleRefusalTest(_SatisfyGateLifecycleHelpers, unittest.TestCase):
+    def test_a_refused_validation_stops_the_run_after_two_launches_and_sends_no_approval(self) -> None:
+        self.refused_validation_run(("Refused: plan_approval is not satisfiable by policy. " + "The policy was evaluated. " * 30
+                                     + f"unmet: ['{self.UNMET}']. Nothing was written"))
+
+    def test_a_refusal_requirement_survives_a_preamble_that_already_says_unmet(self) -> None:
+        self.refused_validation_run("I checked the unmet requirements against the current review records. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"Refused; unmet: ['{self.UNMET}']. Nothing was written")
+
+    def test_a_refusal_requirement_survives_a_trailing_unmet_see_above(self) -> None:
+        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. unmet: see above")
+
+    def test_a_refusal_requirement_survives_an_early_unmet_followed_by_it_only_after_a_semicolon(self) -> None:
+        self.refused_validation_run("Refused: unmet: see the policy; the details follow. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
+
+    def test_a_refusal_requirement_survives_a_report_with_no_unmet_marker(self) -> None:
+        self.refused_validation_run("Refused: plan_approval is not satisfiable by policy. "
+                                    + "The policy was evaluated. " * 30
+                                    + f"The requirement {self.UNMET} does not hold. Nothing was written")
 
 
 # ---------------------------------------------------------------------------
@@ -1096,111 +1100,12 @@ class LoopLifecycle(GateLifecycle):
         self.user_step(_FUNCTIONAL_EVIDENCE)
 
 
-class PrDefectLoopLifecycleTest(unittest.TestCase):
+class _PrDefectLoopLifecycleHelpers:
     """workflow-controller-pr-defect-loop CP3 (D7, D9): the loop on the vendored 2.12.0's own answers, fake workers
     calling the Workflow's functions, the Controller's query injected. No test reaches GitHub."""
 
     def notifications(self, records: list[dict]) -> list[str]:
         return [event.event_type for record in records for event in job.derive_job_event(record)]
-
-    def test_pending_checks_clear_themselves_and_the_run_ends_complete(self) -> None:
-        life = LoopLifecycle(self, checks="pending")
-        life.to_refused_acceptance()
-        self.assertEqual(life.row(), "38f")
-        # explain says what the next step does, not only the Workflow's by-hand remedy.
-        self.assertEqual(life.explain()["pr_report"], {
-            "row": "38f", "queried_commit": life.explain()["pr_report"]["queried_commit"], "pull_request": 7,
-            "waits": True, "last_report": None})
-        self.assertIn("pull request report: the next step queries pull request #7", life.explain_text())
-        self.assertIn("waits while the checks are pending", life.explain_text().replace("It first waits", "waits"))
-        life.wait_seconds = 100
-        # The checks turn green while the step waits for them.
-        life.world.on_query = lambda n: life.world.set(checks="green") if n == 3 else None
-        waited = life.step()
-        self.assertEqual(waited["kind"], job.PR_REPORT_KIND)
-        self.assertEqual(waited["status"], job.STATUS_FINISHED, waited)
-        self.assertEqual(waited["pr_report"]["outcome"], "reported")
-        self.assertEqual(len(life.sleeps), 2)
-        self.assertEqual(life.row(), "38d")
-        self.assertIn(f"next automatic action: /apply-pr-review {WID}", life.explain_text())
-        applied = life.step()
-        self.assertEqual(applied["protocol"]["action_id"], "pr.apply_review")
-        self.assertEqual(applied["protocol"]["reconcile"]["class"], "no_progress")
-        self.assertEqual([a["result"] for a in life.applied], ["pr_fact_refreshed"])
-        self.assertEqual(life.row(), "38h")
-        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
-        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
-        self.assertEqual(life.tasks[-3:], ["satisfy-gate acceptance", "apply-pr-review", "satisfy-gate acceptance"])
-
-
-    def test_a_red_pull_request_reopens_the_item_and_the_run_returns_to_acceptance(self) -> None:
-        life = LoopLifecycle(self, checks="pending")
-        life.to_refused_acceptance()
-        before = len(life.job_records())
-        life.world.set(checks="green", decision="CHANGES_REQUESTED")
-        reported = life.step()
-        self.assertEqual(reported["pr_report"]["outcome"], "reported")
-        self.assertEqual(life.row(), "38d")
-        reopened = life.step()
-        self.assertEqual(reopened["protocol"]["action_id"], "pr.apply_review")
-        self.assertEqual(reopened["protocol"]["reconcile"]["class"], "progress")
-        self.assertEqual([a["result"] for a in life.applied], ["reopened"])
-        self.assertEqual(life.applied[0]["cause"], "changes_requested")
-        self.assertEqual(self.notifications([reopened]), ["step_done"])
-        # The fix is pushed and the reviewer's request is resolved: the ordinary rows carry the item back to acceptance.
-        life.world.set(checks="green", decision="")
-        life.back_to_acceptance()
-        self.assertEqual(life.row(), "38f")
-        self.assertEqual(life.step()["pr_report"]["outcome"], "reported")
-        self.assertEqual(life.row(), "38d")
-        self.assertEqual(life.step()["protocol"]["reconcile"]["class"], "no_progress")
-        self.assertEqual([a["result"] for a in life.applied], ["reopened", "pr_fact_refreshed"])
-        self.assertEqual(life.row(), "38h")
-        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
-        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
-        self.assertEqual(len(life.applies()), 2)
-        self.assertNotIn("no_progress_repeated", life.stops())
-        self.assertTrue(all(r["status"] == job.STATUS_FINISHED for r in life.job_records()[before:]
-                            if r.get("kind") == job.PR_REPORT_KIND or r.get("protocol", {}).get("action_id") in (
-                                "pr.apply_review", "acceptance.satisfy")))
-
-    def test_an_objection_is_not_hidden_by_pending_checks(self) -> None:
-        life = LoopLifecycle(self, checks="pending")
-        life.to_refused_acceptance()
-        life.world.set(checks="pending", decision="CHANGES_REQUESTED")
-        life.wait_seconds = 100
-        reported = life.step()
-        self.assertEqual(reported["pr_report"]["outcome"], "reported")
-        self.assertEqual(life.sleeps, [])  # no wait: D6 (c)
-        self.assertEqual(len(life.world.queries), 1)
-        self.assertEqual(life.row(), "38d")
-        reopened = life.step()
-        self.assertEqual(reopened["protocol"]["reconcile"]["class"], "progress")
-        self.assertEqual([a["result"] for a in life.applied], ["reopened"])
-        self.assertEqual(life.applied[0]["cause"], "changes_requested")
-
-    def test_an_output_that_changes_nothing_is_not_reported_again_and_the_apply_is_not_repeated(self) -> None:
-        # Approval required: the first report differs from the stored fact (checks turned green), so row 38d refreshes
-        # it with no progress, and the gate that is still unmet is the approval -- the Workflow's own stop.
-        life = LoopLifecycle(self, checks="pending", acceptance={"requires_pr_approved": True})
-        life.to_refused_acceptance()
-        life.world.set(checks="green")
-        self.assertEqual(life.step()["pr_report"]["outcome"], "reported")
-        # The fact is refreshed and the answer moves on to the next gate (38g), which the Workflow classes gate_reached.
-        self.assertEqual(life.step()["protocol"]["reconcile"]["class"], "gate_reached")
-        self.assertEqual(life.row(), "38g")
-        launched = len(life.tasks)
-        for _ in range(2):
-            stopped = life.step()
-            self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
-            self.assertEqual(stopped["pr_report"]["outcome"], "unchanged")
-            self.assertIn("pr_report_unchanged", json.dumps(stopped["human_gate_pending"]))
-            self.assertEqual([e.event_type for e in job.derive_job_event(stopped)], ["user_gate"])
-        self.assertEqual(len(life.tasks), launched)
-        self.assertEqual(len([r for r in life.reports() if r["pr_report"]["outcome"] == "reported"]), 1)
-        self.assertEqual(len(life.applies()), 1)
-        self.assertIn("the report changed nothing", life.explain_text())
-        self.assertNotIn("no_progress_repeated", life.stops())
 
     def reach_38g(self, life: "LoopLifecycle") -> None:
         """Acceptance refused for the missing approval, the unapproved fact stored, the answer row 38g; the
@@ -1239,28 +1144,98 @@ class PrDefectLoopLifecycleTest(unittest.TestCase):
         self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
         self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
 
-    def test_row_38g_needs_a_person_and_costs_one_refused_launch(self) -> None:
-        self.approval_run(LoopLifecycle(self, checks="green", acceptance={"requires_pr_approved": True}))
+
+class PrDefectLoopLifecycleReopenTest(_PrDefectLoopLifecycleHelpers, unittest.TestCase):
+    def test_a_red_pull_request_reopens_the_item_and_the_run_returns_to_acceptance(self) -> None:
+        life = LoopLifecycle(self, checks="pending")
+        life.to_refused_acceptance()
+        before = len(life.job_records())
+        life.world.set(checks="green", decision="CHANGES_REQUESTED")
+        reported = life.step()
+        self.assertEqual(reported["pr_report"]["outcome"], "reported")
+        self.assertEqual(life.row(), "38d")
+        reopened = life.step()
+        self.assertEqual(reopened["protocol"]["action_id"], "pr.apply_review")
+        self.assertEqual(reopened["protocol"]["reconcile"]["class"], "progress")
+        self.assertEqual([a["result"] for a in life.applied], ["reopened"])
+        self.assertEqual(life.applied[0]["cause"], "changes_requested")
+        self.assertEqual(self.notifications([reopened]), ["step_done"])
+        # The fix is pushed and the reviewer's request is resolved: the ordinary rows carry the item back to acceptance.
+        life.world.set(checks="green", decision="")
+        life.back_to_acceptance()
+        self.assertEqual(life.row(), "38f")
+        self.assertEqual(life.step()["pr_report"]["outcome"], "reported")
+        self.assertEqual(life.row(), "38d")
+        self.assertEqual(life.step()["protocol"]["reconcile"]["class"], "no_progress")
+        self.assertEqual([a["result"] for a in life.applied], ["reopened", "pr_fact_refreshed"])
+        self.assertEqual(life.row(), "38h")
+        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
+        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
+        self.assertEqual(len(life.applies()), 2)
+        self.assertNotIn("no_progress_repeated", life.stops())
+        self.assertTrue(all(r["status"] == job.STATUS_FINISHED for r in life.job_records()[before:]
+                            if r.get("kind") == job.PR_REPORT_KIND or r.get("protocol", {}).get("action_id") in (
+                                "pr.apply_review", "acceptance.satisfy")))
+
+    def test_an_output_that_changes_nothing_is_not_reported_again_and_the_apply_is_not_repeated(self) -> None:
+        # Approval required: the first report differs from the stored fact (checks turned green), so row 38d refreshes
+        # it with no progress, and the gate that is still unmet is the approval -- the Workflow's own stop.
+        life = LoopLifecycle(self, checks="pending", acceptance={"requires_pr_approved": True})
+        life.to_refused_acceptance()
+        life.world.set(checks="green")
+        self.assertEqual(life.step()["pr_report"]["outcome"], "reported")
+        # The fact is refreshed and the answer moves on to the next gate (38g), which the Workflow classes gate_reached.
+        self.assertEqual(life.step()["protocol"]["reconcile"]["class"], "gate_reached")
+        self.assertEqual(life.row(), "38g")
+        launched = len(life.tasks)
+        for _ in range(2):
+            stopped = life.step()
+            self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
+            self.assertEqual(stopped["pr_report"]["outcome"], "unchanged")
+            self.assertIn("pr_report_unchanged", json.dumps(stopped["human_gate_pending"]))
+            self.assertEqual([e.event_type for e in job.derive_job_event(stopped)], ["user_gate"])
+        self.assertEqual(len(life.tasks), launched)
+        self.assertEqual(len([r for r in life.reports() if r["pr_report"]["outcome"] == "reported"]), 1)
+        self.assertEqual(len(life.applies()), 1)
+        self.assertIn("the report changed nothing", life.explain_text())
+        self.assertNotIn("no_progress_repeated", life.stops())
+
+
+class PrDefectLoopLifecycleReportTest(_PrDefectLoopLifecycleHelpers, unittest.TestCase):
+    def test_pending_checks_clear_themselves_and_the_run_ends_complete(self) -> None:
+        life = LoopLifecycle(self, checks="pending")
+        life.to_refused_acceptance()
+        self.assertEqual(life.row(), "38f")
+        # explain says what the next step does, not only the Workflow's by-hand remedy.
+        self.assertEqual(life.explain()["pr_report"], {
+            "row": "38f", "queried_commit": life.explain()["pr_report"]["queried_commit"], "pull_request": 7,
+            "waits": True, "last_report": None})
+        self.assertIn("pull request report: the next step queries pull request #7", life.explain_text())
+        self.assertIn("waits while the checks are pending", life.explain_text().replace("It first waits", "waits"))
+        life.wait_seconds = 100
+        # The checks turn green while the step waits for them.
+        life.world.on_query = lambda n: life.world.set(checks="green") if n == 3 else None
+        waited = life.step()
+        self.assertEqual(waited["kind"], job.PR_REPORT_KIND)
+        self.assertEqual(waited["status"], job.STATUS_FINISHED, waited)
+        self.assertEqual(waited["pr_report"]["outcome"], "reported")
+        self.assertEqual(len(life.sleeps), 2)
+        self.assertEqual(life.row(), "38d")
+        self.assertIn(f"next automatic action: /apply-pr-review {WID}", life.explain_text())
+        applied = life.step()
+        self.assertEqual(applied["protocol"]["action_id"], "pr.apply_review")
+        self.assertEqual(applied["protocol"]["reconcile"]["class"], "no_progress")
+        self.assertEqual([a["result"] for a in life.applied], ["pr_fact_refreshed"])
+        self.assertEqual(life.row(), "38h")
+        self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
+        self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
+        self.assertEqual(life.tasks[-3:], ["satisfy-gate acceptance", "apply-pr-review", "satisfy-gate acceptance"])
 
     def test_approval_without_ci_is_reported_and_not_held_back_by_an_empty_rollup(self) -> None:
         life = LoopLifecycle(self, checks="empty", acceptance={"require_ci": False, "requires_pr_approved": True})
         life.wait_seconds = 100
         self.approval_run(life)
         self.assertEqual(life.sleeps, [])  # row 38g never waits
-
-    def test_a_target_without_a_binding_keeps_the_old_stop_at_row_38f(self) -> None:
-        life = LoopLifecycle(self, checks="pending", bind=False)
-        life.to_refused_acceptance()
-        self.assertEqual(life.row(), "38f")
-        self.assertNotIn("pr_report", life.explain())  # nothing is reported for a target without a binding
-        launched = len(life.tasks)
-        life.world.set(checks="green")
-        stopped = life.step()
-        self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
-        self.assertNotIn("kind", stopped)
-        self.assertEqual(len(life.tasks), launched)
-        self.assertEqual(life.world.queries, [])
-        self.assertEqual(life.reports(), [])
 
     def test_a_human_acceptance_gate_at_row_38g_reports_nothing_and_stays_a_user_gate(self) -> None:
         life = LoopLifecycle(self, checks="green", acceptance={"requires_pr_approved": True})
@@ -1281,6 +1256,40 @@ class PrDefectLoopLifecycleTest(unittest.TestCase):
         self.assertEqual(life.world.queries, [])
         self.assertEqual(life.reports(), [])
         self.assertEqual(life.applies(), [])
+
+
+class PrDefectLoopLifecycleStopTest(_PrDefectLoopLifecycleHelpers, unittest.TestCase):
+    def test_an_objection_is_not_hidden_by_pending_checks(self) -> None:
+        life = LoopLifecycle(self, checks="pending")
+        life.to_refused_acceptance()
+        life.world.set(checks="pending", decision="CHANGES_REQUESTED")
+        life.wait_seconds = 100
+        reported = life.step()
+        self.assertEqual(reported["pr_report"]["outcome"], "reported")
+        self.assertEqual(life.sleeps, [])  # no wait: D6 (c)
+        self.assertEqual(len(life.world.queries), 1)
+        self.assertEqual(life.row(), "38d")
+        reopened = life.step()
+        self.assertEqual(reopened["protocol"]["reconcile"]["class"], "progress")
+        self.assertEqual([a["result"] for a in life.applied], ["reopened"])
+        self.assertEqual(life.applied[0]["cause"], "changes_requested")
+
+    def test_row_38g_needs_a_person_and_costs_one_refused_launch(self) -> None:
+        self.approval_run(LoopLifecycle(self, checks="green", acceptance={"requires_pr_approved": True}))
+
+    def test_a_target_without_a_binding_keeps_the_old_stop_at_row_38f(self) -> None:
+        life = LoopLifecycle(self, checks="pending", bind=False)
+        life.to_refused_acceptance()
+        self.assertEqual(life.row(), "38f")
+        self.assertNotIn("pr_report", life.explain())  # nothing is reported for a target without a binding
+        launched = len(life.tasks)
+        life.world.set(checks="green")
+        stopped = life.step()
+        self.assertEqual(stopped["status"], job.STATUS_GATE_BLOCKED)
+        self.assertNotIn("kind", stopped)
+        self.assertEqual(len(life.tasks), launched)
+        self.assertEqual(life.world.queries, [])
+        self.assertEqual(life.reports(), [])
 
     def test_a_red_pull_request_after_acceptance_ends_at_the_merge_flows_stop_and_is_not_looped(self) -> None:
         # The deferral to C10d: a MILESTONE_COMPLETE item is stopped by the merge flow before the Workflow is asked.

@@ -449,7 +449,7 @@ items:
     detail: docs/items/workflow-controller-h4e2.md
   - id: workflow-controller-ci1a
     title: "CI: skip the test shards for docs-only changes"
-    status: next
+    status: done
     order: 77
     detail: docs/items/workflow-controller-ci1a.md
   - id: workflow-controller-ci1b

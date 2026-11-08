@@ -2,6 +2,16 @@
 
 ## Status
 
+**In progress.** `workflow-controller-ci1c` (CI1c, issue
+[#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md`
+(revision 5), three checkpoints. CP1 is complete: the measurements are in `docs/items/workflow-controller-ci1c.md`. Two
+workers cut the shard wall by 24-46% on every shard and leave the six-shard maximum at 514 s against 712 s, with no worker-only
+failure or leak; the CPU rise is +5% to +22% on five shards but +32.7% on shard 1, over D4's 25% limit. Read literally, two
+workers fail D4(d) and CP2 would commit nothing; three workers fail the CPU limit on shards 0 and 4. The reading of (d) is
+left to the reviewer and the owner. No source file changed.
+
+## Previous milestone (CI1b)
+
 **Complete.** `workflow-controller-ci1b` (CI1b, issue
 [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): the plan is `docs/ai-workflow/CONTROLLER_CI1B_PLAN.md`
 (revision 5), three checkpoints, all complete. CP1 split six multi-test classes along their test methods into fourteen, with
